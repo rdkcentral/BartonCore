@@ -1,0 +1,160 @@
+#------------------------------ tabstop = 4 ----------------------------------
+#
+# Copyright (C) 2024 Comcast
+#
+# All rights reserved.
+#
+# This software is protected by copyright laws of the United States
+# and of foreign countries. This material may also be protected by
+# patent laws of the United States and of foreign countries.
+#
+# This software is furnished under a license agreement and/or a
+# nondisclosure agreement and may only be used or copied in accordance
+# with the terms of those agreements.
+#
+# The mere transfer of this software does not imply any licenses of trade
+# secrets, proprietary technology, copyrights, patents, trademarks, or
+# any other form of intellectual property whatsoever.
+#
+# Comcast retains all ownership rights.
+#
+#------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 09/11/2024
+#
+
+From 0b8d966a12415e949209bc579274bece50bf5244 Mon Sep 17 00:00:00 2001
+From: Christian Leithner <christian_leithner@comcast.com>
+Date: Thu, 25 Jan 2024 22:48:48 -0600
+Subject: [PATCH] Add install cmake command for dbus client library
+
+---
+ CMakeLists.txt                 |  3 +++
+ src/agent/CMakeLists.txt       |  6 +++---
+ src/common/CMakeLists.txt      | 15 ++++++---------
+ src/dbus/client/CMakeLists.txt |  7 +++++--
+ src/dbus/common/CMakeLists.txt |  6 ++++++
+ 5 files changed, 23 insertions(+), 14 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4fefd2798b..7f49dff5c5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -102,6 +102,9 @@ endif()
+
+ include(GNUInstallDirs)
+
++install(FILES ${PROJECT_SOURCE_DIR}/include/openthread-br/config.h
++        DESTINATION include/otbr/openthread-br)
++
+ pkg_check_modules(SYSTEMD systemd)
+
+ if(SYSTEMD_FOUND)
+diff --git a/src/agent/CMakeLists.txt b/src/agent/CMakeLists.txt
+index 9a8b710238..cce2b34176 100644
+--- a/src/agent/CMakeLists.txt
++++ b/src/agent/CMakeLists.txt
+@@ -85,9 +85,9 @@ endif()
+
+ if(OTBR_SYSTEMD_UNIT_DIR)
+     configure_file(otbr-agent.service.in otbr-agent.service)
+-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.service
+-        DESTINATION ${OTBR_SYSTEMD_UNIT_DIR}
+-    )
++#    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.service
++#        DESTINATION ${OTBR_SYSTEMD_UNIT_DIR}
++#    )
+ elseif(NOT OTBR_OPENWRT)
+     configure_file(otbr-agent.init.in otbr-agent.init)
+     install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.init
+diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
+index d5bc1d31c5..6e6a5a5312 100644
+--- a/src/common/CMakeLists.txt
++++ b/src/common/CMakeLists.txt
+@@ -26,23 +26,17 @@
+ #  POSSIBILITY OF SUCH DAMAGE.
+ #
+
++file(GLOB otbr-common-headers "*.hpp")
++
+ add_library(otbr-common
+     api_strings.cpp
+-    byteswap.hpp
+-    code_utils.hpp
+     dns_utils.cpp
+     logging.cpp
+-    logging.hpp
+     mainloop.cpp
+-    mainloop.hpp
+     mainloop_manager.cpp
+-    mainloop_manager.hpp
+     task_runner.cpp
+-    task_runner.hpp
+-    time.hpp
+-    tlv.hpp
+     types.cpp
+-    types.hpp
++    ${otbr-common-headers}
+ )
+
+ target_link_libraries(otbr-common
+@@ -50,3 +44,6 @@ target_link_libraries(otbr-common
+     openthread-ftd
+     openthread-posix
+ )
++
++install(TARGETS otbr-common)
++install(FILES ${otbr-common-headers} DESTINATION include/otbr/common)
+diff --git a/src/dbus/client/CMakeLists.txt b/src/dbus/client/CMakeLists.txt
+index ae0ae50441..01dd015ced 100644
+--- a/src/dbus/client/CMakeLists.txt
++++ b/src/dbus/client/CMakeLists.txt
+@@ -26,14 +26,17 @@
+ #  POSSIBILITY OF SUCH DAMAGE.
+ #
+
++file(GLOB otbr-dbus-client-headers "*.hpp")
++
+ add_library(otbr-dbus-client
+     client_error.cpp
+-    client_error.hpp
+     thread_api_dbus.cpp
+-    thread_api_dbus.hpp
++    ${otbr-dbus-client-headers}
+ )
+
+ target_link_libraries(otbr-dbus-client PUBLIC
+     otbr-dbus-common
+ )
+
++install(TARGETS otbr-dbus-client)
++install(FILES ${otbr-dbus-client-headers} DESTINATION include/otbr/dbus/client)
+diff --git a/src/dbus/common/CMakeLists.txt b/src/dbus/common/CMakeLists.txt
+index d4339270f0..005c85abea 100644
+--- a/src/dbus/common/CMakeLists.txt
++++ b/src/dbus/common/CMakeLists.txt
+@@ -26,11 +26,15 @@
+ #  POSSIBILITY OF SUCH DAMAGE.
+ #
+
++
++file(GLOB otbr-dbus-common-headers "*.hpp")
++
+ add_library(otbr-dbus-common
+     dbus_message_dump.cpp
+     dbus_message_helper.cpp
+     error.cpp
+     dbus_message_helper_openthread.cpp
++    ${otbr-dbus-common-headers}
+ )
+ target_include_directories(otbr-dbus-common PUBLIC
+     ${DBUS_INCLUDE_DIRS}
+@@ -43,3 +47,5 @@ target_link_libraries(otbr-dbus-common PUBLIC
+     ${DBUS_LIBRARIES}
+ )
+
++install(TARGETS otbr-dbus-common)
++install(FILES ${otbr-dbus-common-headers} DESTINATION include/otbr/dbus/common)
+--
+2.34.1

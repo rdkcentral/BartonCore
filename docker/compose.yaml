@@ -1,0 +1,65 @@
+#------------------------------ tabstop = 4 ----------------------------------
+#
+# Copyright (C) 2024 Comcast
+#
+# All rights reserved.
+#
+# This software is protected by copyright laws of the United States
+# and of foreign countries. This material may also be protected by
+# patent laws of the United States and of foreign countries.
+#
+# This software is furnished under a license agreement and/or a
+# nondisclosure agreement and may only be used or copied in accordance
+# with the terms of those agreements.
+#
+# The mere transfer of this software does not imply any licenses of trade
+# secrets, proprietary technology, copyrights, patents, trademarks, or
+# any other form of intellectual property whatsoever.
+#
+# Comcast retains all ownership rights.
+#
+#------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 09/20/2024
+#
+
+# Setting the name element to the user helps keep the container name easy to identify
+# by namespacing it with the user's name. Example: $USER-barton-1
+name: $BUILDER_USER
+
+services:
+    barton:
+        image: barton_builder
+
+        # If the the image must be built, a few environment variables must be set. The devcontainer
+        # will take care of this for you, but if you want to build from the CLI, leverage dockerw
+        # to handle setting these variables and the compose commands.
+        build:
+            context: .
+            dockerfile: Dockerfile
+
+            # Provide the hosts $HOME directory as an additional context to the builder so it can have
+            # access to the ssh directory.
+            additional_contexts:
+                - home=$BUILDER_HOME
+
+            # This top level compose build target will set up the barton environment, but specifically exludes
+            # non-root user creation. Non-root user creation is handled in the extended compose.devcontainer.yaml.
+            # The primary reason to separate the two is to allow for a Barton image to be built
+            # on the CLI without hardcoding a specific user into the image. Useful when operating
+            # on a shared machine.
+            target: third_party_builder
+
+        cap_add:
+            - SYS_PTRACE
+        device_cgroup_rules:
+            - 'a 189:* rmw'
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        privileged: true
+        security_opt:
+            - seccomp:unconfined
+        volumes:
+            # Mount the barton source code on the host into the same path within container.
+            - ..:/$BARTON_TOP:cached

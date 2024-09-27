@@ -1,0 +1,14 @@
+LONG_VERSION: 10.04.00.000000 (Build 200805-zilker)
+version: 10.04.00.000000
+release_ver: 10
+service_ver: 04
+maintenance_ver: 00
+hot_fix_ver: 000000
+display_version: 10_04_00_000000_0200805
+server_version: 10_04_00_000000_200805
+lastCompatibleVersion: 10_00_00_000000_0
+svn_build: 200805
+svn_date: 2020-08-05 19:16:31
+build_id:
+build_date: 2020-08-05 19:16:31
+build_by: cleith065

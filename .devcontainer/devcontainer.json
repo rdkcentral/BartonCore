@@ -1,0 +1,115 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// Copyright (C) 2024 Comcast
+//
+// All rights reserved.
+//
+// This software is protected by copyright laws of the United States
+// and of foreign countries. This material may also be protected by
+// patent laws of the United States and of foreign countries.
+//
+// This software is furnished under a license agreement and/or a
+// nondisclosure agreement and may only be used or copied in accordance
+// with the terms of those agreements.
+//
+// The mere transfer of this software does not imply any licenses of trade
+// secrets, proprietary technology, copyrights, patents, trademarks, or
+// any other form of intellectual property whatsoever.
+//
+// Comcast retains all ownership rights.
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+//
+// Created by Kevin Funderburg on 09/11/2024
+//
+
+{
+    "name": "Barton Ubuntu Development Environment",
+    "initializeCommand": "docker/setupUserEnv.sh",
+    "dockerComposeFile": [
+        "../docker/compose.yaml",
+        "./compose.devcontainer.yaml"
+    ],
+    "service": "devcontainer",
+
+    // keep the local path of our tree the same within the container
+    "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+    "workspaceFolder": "${localWorkspaceFolder}",
+
+    // ensure special files from local home are available in the container
+    // NOTE: assumes /home/$USER as a homedir within the container
+    // NOTE: VSC will copy some files post-config; .ssh/known_hosts, .gitconfig, etc
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+        "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind",
+        "source=/var/run/dbus/system_bus_socket,target=/var/run/dbus/system_bus_socket,type=bind",
+        "target=/tmp,type=tmpfs"
+    ],
+
+    // leave the container running when VS Code closes
+    "shutdownAction": "none",
+
+    // A set of name-value pairs that sets or overrides environment variables for VS Code
+    // (or sub-processes like terminals) but not the container as a whole
+    "remoteEnv":
+    {
+        "BUILDER_USER": "${localEnv:USER}",
+        "HOME": "/home/${localEnv:USER}",
+        "GIT_PS1_SHOWDIRTYSTATE": "1",
+        "GIT_PS1_SHOWSTASHSTATE": "1",
+        "GIT_PS1_SHOWCOLORHINTS": "true",
+        "PROMPT_COMMAND": "${localEnv:PROMPT_COMMAND}"
+    },
+
+    // specify the non-root user to use in the container
+    "remoteUser": "${localEnv:USER}",
+
+    "customizations":
+    {
+        "vscode":
+        {
+            "extensions": [
+                // Docker and Container Management
+                "ms-azuretools.vscode-docker",           // Docker support for managing containers
+
+                // C/C++ Development
+                "ms-vscode.cmake-tools",                 // CMake support for build configuration
+                "ms-vscode.cpptools",                    // C/C++ language support with IntelliSense and debugging
+                "ms-vscode.cpptools-extension-pack",     // Additional tools for C/C++ development
+                "llvm-vs-code-extensions.vscode-clangd", // Enhanced C/C++ language support using Clangd
+                "xaver.clang-format",                    // Manually triggered Clang-formatter for C/C++ code
+
+                // Python Development
+                "ms-python.python",                      // Comprehensive Python support with IntelliSense and debugging
+                "ms-python.vscode-pylance",              // Fast, feature-rich language support for Python using Pylance
+                "ms-python.debugpy",                     // Python debugging support
+                "ms-python.vscode-pyright",              // Type checking and IntelliSense for Python
+                "ms-python.black-formatter",             // Python code formatter
+                "KevinRose.vsc-python-indent",           // Correct Python indentation
+
+                // Markdown and Documentation
+                "yzhang.markdown-all-in-one",            // All-in-one Markdown support with preview and shortcuts
+
+                // Git and Version Control
+                "eamodio.gitlens",                       // Git enhancements for better insights and navigation
+                "GitHub.vscode-github-actions",          // GitHub Actions support
+                "GitHub.vscode-pull-request-github",     // GitHub Pull Requests and Issues support]
+
+                // Code Formatting and Style
+                "aaron-bond.better-comments",            // Enhanced comment formatting
+                "christian-kohler.path-intellisense",    // Filename completion for better navigation
+                "esbenp.prettier-vscode",                // Code formatter for various languages
+                "foxundermoon.shell-format",             // Shell script formatting
+
+                // Build and Project Management
+                "npclaudiu.vscode-gn"                    // Ninja build system support
+            ],
+
+            "settings":
+            {
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    }
+}

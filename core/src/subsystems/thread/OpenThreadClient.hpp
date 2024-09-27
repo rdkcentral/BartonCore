@@ -1,0 +1,134 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// Copyright (C) 2024 Comcast Corporation
+//
+// All rights reserved.
+//
+// This software is protected by copyright laws of the United States
+// and of foreign countries. This material may also be protected by
+// patent laws of the United States and of foreign countries.
+//
+// This software is furnished under a license agreement and/or a
+// nondisclosure agreement and may only be used or copied in accordance
+// with the terms of those agreements.
+//
+// The mere transfer of this software does not imply any licenses of trade
+// secrets, proprietary technology, copyrights, patents, trademarks, or
+// any other form of intellectual property whatsoever.
+//
+// Comcast Corporation retains all ownership rights.
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by Christian Leithner on 2/8/24.
+ */
+
+#pragma once
+
+#include "otbr/dbus/common/types.hpp"
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <otbr/dbus/client/thread_api_dbus.hpp>
+#include <stdbool.h>
+
+namespace zilker
+{
+    class OpenThreadClient
+    {
+    public:
+        OpenThreadClient() : ready(false) { Connect(); }
+
+        enum DeviceRole
+        {
+            DEVICE_ROLE_UNKNOWN,
+            DEVICE_ROLE_DISABLED,
+            DEVICE_ROLE_DETACHED,
+            DEVICE_ROLE_CHILD,
+            DEVICE_ROLE_ROUTER,
+            DEVICE_ROLE_LEADER
+        };
+
+        /**
+         * @brief Command OTBR to create a new thread network.
+         *
+         * @note This is a potentially long-running, synchronous operation
+         *
+         * @param[in] networkName - The name of the network the caller wishes to create. Must be 16 characters or less.
+         * @param[in] desiredChannel - The channel to create the network on. Must be in the interval [11-26], or any
+         * other value to allow OTBR to choose.
+         * @return The created network data tlvs or empty on error
+         */
+        std::vector<uint8_t> CreateNetwork(const std::string &networkName, uint8_t desiredChannel);
+
+        /**
+         * @brief Command OTBR to create an active network from the provided dataset tlvs.
+         *
+         * @param[in] networkDataTlvs - The network tlvs to restore when this method returns true
+         * @return true - On successful network restoration
+         * @return false - When an error occurs
+         */
+        bool RestoreNetwork(const std::vector<uint8_t> &networkDataTlvs);
+
+        /**
+         * @brief Get the active dataset tlvs.
+         *
+         * @return The active network dataset tlvs or empty on error
+         */
+        std::vector<uint8_t> GetActiveDatasetTlvs();
+
+        /**
+         * @brief Get the current channel
+         *
+         * @return The current channel of the interval [11-26] or UINT16_MAX on error
+         */
+        uint16_t GetChannel();
+
+        /**
+         * @brief Get the current pan id.
+         *
+         * @return The current pan id or UINT16_MAX on error
+         */
+        uint16_t GetPanId();
+
+        /**
+         * @brief Get the extended pan id.
+         *
+         * @return The current extended pan id or UINT64_MAX on error
+         */
+        uint64_t GetExtPanId();
+
+        /**
+         * @brief Get the current active network key.
+         *
+         * @return The current network key or empty on error
+         */
+        std::vector<uint8_t> GetNetworkKey();
+
+        /**
+         * @brief Get the current active network name
+         *
+         * @return The current network name or empty string on error
+         */
+        std::string GetNetworkName();
+
+        /**
+         * @brief Get the current device role in the active network
+         *
+         * @return The current device role or DEVICE_ROLE_UNKNOWN on error
+         */
+        DeviceRole GetDeviceRole();
+
+
+    private:
+        std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> dbusConnection;
+        std::unique_ptr<otbr::DBus::ThreadApiDBus> threadApiBus;
+        std::atomic_bool ready;
+
+        void Connect();
+
+        static void ReleaseDBusConnection(DBusConnection *connection);
+        static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);
+    };
+} // namespace zilker

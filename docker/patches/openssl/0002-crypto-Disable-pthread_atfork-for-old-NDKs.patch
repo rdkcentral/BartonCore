@@ -1,0 +1,68 @@
+#------------------------------ tabstop = 4 ----------------------------------
+#
+# Copyright (C) 2024 Comcast
+#
+# All rights reserved.
+#
+# This software is protected by copyright laws of the United States
+# and of foreign countries. This material may also be protected by
+# patent laws of the United States and of foreign countries.
+#
+# This software is furnished under a license agreement and/or a
+# nondisclosure agreement and may only be used or copied in accordance
+# with the terms of those agreements.
+#
+# The mere transfer of this software does not imply any licenses of trade
+# secrets, proprietary technology, copyrights, patents, trademarks, or
+# any other form of intellectual property whatsoever.
+#
+# Comcast retains all ownership rights.
+#
+#------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 09/11/2024
+#
+
+From a74fc21d568731fb8262a634a08e11c4f102b75f Mon Sep 17 00:00:00 2001
+From: Jesse Crews <jesse_crews@comcast.com>
+Date: Mon, 4 May 2020 11:41:17 -0500
+Subject: [PATCH] crypto: Disable pthread_atfork for old NDKs
+
+Ancient NDKs (e.g., 9) will fail to build openSSL due to nonexistent
+pthread_atfork() support.
+
+ * Disable pthread_atfork when android SDK is < 12
+ * Ensure pthread_atfork registration fails when requested and not supported
+---
+ crypto/threads_pthread.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/crypto/threads_pthread.c b/crypto/threads_pthread.c
+index 1774a2b2ac..f929e20333 100644
+--- a/crypto/threads_pthread.c
++++ b/crypto/threads_pthread.c
+@@ -185,16 +185,20 @@ static pthread_once_t fork_once_control = PTHREAD_ONCE_INIT;
+
+ static void fork_once_func(void)
+ {
++#if !defined(__ANDROID__) || __ANDROID_API__ >= 12
+     pthread_atfork(OPENSSL_fork_prepare,
+                    OPENSSL_fork_parent, OPENSSL_fork_child);
++#endif
+ }
+ # endif
+
+ int openssl_init_fork_handlers(void)
+ {
+ # ifdef OPENSSL_SYS_UNIX
++# if !defined(__ANDROID__) || __ANDROID_API__ >= 12
+     if (pthread_once(&fork_once_control, fork_once_func) == 0)
+         return 1;
++# endif
+ # endif
+     return 0;
+ }
+--
+2.25.1
+

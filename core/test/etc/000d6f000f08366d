@@ -1,0 +1,1385 @@
+{
+	"deviceDriver":	"pimDD",
+	"deviceClass":	"pim",
+	"deviceClassVersion":	1,
+	"uri":	"/000d6f000f08366d",
+	"uuid":	"000d6f000f08366d",
+	"deviceEndpoints":	{
+		"1":	{
+			"uri":	"/000d6f000f08366d/ep/1",
+			"id":	"1",
+			"profile":	"pim",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"securityState":	{
+					"id":	"securityState",
+					"uri":	"/000d6f000f08366d/ep/1/r/securityState",
+					"mode":	2,
+					"cachingPolicy":	0,
+					"dateOfLastSyncMillis":	0,
+					"type":	"com.icontrol.securityState"
+				},
+				"zoneChanged":	{
+					"id":	"zoneChanged",
+					"uri":	"/000d6f000f08366d/ep/1/r/zoneChanged",
+					"mode":	2,
+					"cachingPolicy":	0,
+					"dateOfLastSyncMillis":	0,
+					"type":	"com.icontrol.zoneChanged"
+				},
+				"initiateBrainsuck":	{
+					"id":	"initiateBrainsuck",
+					"uri":	"/000d6f000f08366d/ep/1/r/initiateBrainsuck",
+					"mode":	4,
+					"cachingPolicy":	0,
+					"dateOfLastSyncMillis":	0,
+					"type":	"com.icontrol.brainsuckControl"
+				},
+				"findInstallerCode":	{
+					"id":	"findInstallerCode",
+					"uri":	"/000d6f000f08366d/ep/1/r/findInstallerCode",
+					"mode":	4,
+					"cachingPolicy":	0,
+					"dateOfLastSyncMillis":	0,
+					"type":	"com.icontrol.installerCodeControl"
+				},
+				"brainsuckStatus":	{
+					"id":	"brainsuckStatus",
+					"uri":	"/000d6f000f08366d/ep/1/r/brainsuckStatus",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"completed",
+					"type":	"com.icontrol.brainsuckStatus"
+				},
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/1/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Takeover",
+					"type":	"com.icontrol.label"
+				}
+			},
+			"metadatas":	{
+				"zigbee_epid":	{
+					"id":	"zigbee_epid",
+					"uri":	"/000d6f000f08366d/ep/1/m/zigbee_epid",
+					"value":	"1"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/1/m/migratedUserProperties",
+					"value":	{
+						"pim.sirenEnabled":	"true",
+						"pim.panelType":	"",
+						"godparentLQI":	"255",
+						"pim.isValid":	"true",
+						"serialNum":	"R.AD876S0A9D����",
+						"label":	"Takeover",
+						"pim.installerCode":	"4112",
+						"paired":	"true",
+						"pim.brainsuckVersion":	"version4",
+						"pim.panelId":	"Vista",
+						"batteryLowTime":	"-1",
+						"pim.deviceNumber":	"1",
+						"NearEndRssi":	"-64",
+						"batteryLow":	"false",
+						"pim.atmelFwVersion":	"0x00010015",
+						"pim.keypadAddress":	"17",
+						"pim.isAlphaMale":	"IsAlpha",
+						"sensorType":	"12",
+						"mainACPowerLost":	"false",
+						"godparent":	"0",
+						"deviceNumber":	"1",
+						"NearEndLqi":	"255",
+						"inBootloader":	"false",
+						"godparentRSSI":	"-35",
+						"pim.boardName":	"02.00 SerComm",
+						"pim.panelAcPowerAvailable":	"true",
+						"pim.panelFwVersion":	"01041809"
+					}
+				},
+				"migrationAlias":	{
+					"id":	"migrationAlias",
+					"uri":	"/000d6f000f08366d/ep/1/m/migrationAlias",
+					"value":	"000d6f000f08366d.1"
+				}
+			}
+		},
+		"2":	{
+			"uri":	"/000d6f000f08366d/ep/2",
+			"id":	"2",
+			"profile":	"warningDevice",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"tone":	{
+					"id":	"tone",
+					"uri":	"/000d6f000f08366d/ep/2/r/tone",
+					"mode":	3,
+					"cachingPolicy":	0,
+					"dateOfLastSyncMillis":	1587763148644,
+					"value":	"warble",
+					"type":	"com.icontrol.warningTone"
+				},
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/2/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"type":	"com.icontrol.label"
+				}
+			},
+			"metadatas":	{
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/2/m/migratedUserProperties",
+					"value":	{
+						"panelId":	"Vista",
+						"IASZoneStatus":	"0",
+						"Zone.ZoneNumber":	"1",
+						"pimVirtual":	"true",
+						"NearEndLqi":	"255",
+						"NearEndRssi":	"-64"
+					}
+				}
+			}
+		},
+		"zone2":	{
+			"uri":	"/000d6f000f08366d/ep/zone2",
+			"id":	"zone2",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Front/Garage Door",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595543162278,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595543162369,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"contactSwitch",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone2/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone2/m/zoneNumber",
+					"value":	"2"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone2/m/zoneType",
+					"value":	"1"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone2/m/migratedUserProperties",
+					"value":	{
+						"virtualZone.legacyZoneNumber":	"2",
+						"NearEndRssi":	"-63",
+						"pimVirtual":	"true",
+						"Zone.SensorId":	"1",
+						"virtualZone.legacyZoneLabel":	"",
+						"NearEndLqi":	"255",
+						"Zone.ZoneType":	"1",
+						"Zone.FunctionType":	"1",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"Zone.Bypassed":	"false",
+						"Zone.SwingerShutdown":	"false",
+						"Zone.TestMode":	"false",
+						"virtualZone.legacyZoneInputType":	"1",
+						"label":	"Front/Garage Door",
+						"Zone.Edited":	"true",
+						"virtualZone.zoneType":	"1",
+						"IASZoneStatus":	"0",
+						"Zone.ZoneNumber":	"3",
+						"virtualZone.zoneFunction":	"1",
+						"virtualZone.legacyZoneType":	"1",
+						"orderIndex":	"0"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone2/m/secZone",
+					"value":	{
+						"zoneNumber":	3,
+						"sensorId":	1,
+						"displayIndex":	1,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	1,
+						"zoneFunction":	1,
+						"zoneMute":	3
+					}
+				}
+			}
+		},
+		"zone3":	{
+			"uri":	"/000d6f000f08366d/ep/zone3",
+			"id":	"zone3",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Family Rm Windows",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595544746601,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595544746689,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"contactSwitch",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone3/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone3/m/zoneNumber",
+					"value":	"3"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone3/m/zoneType",
+					"value":	"3"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone3/m/migratedUserProperties",
+					"value":	{
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"IASZoneStatus":	"0",
+						"virtualZone.legacyZoneInputType":	"1",
+						"orderIndex":	"1",
+						"NearEndRssi":	"-62",
+						"pimVirtual":	"true",
+						"label":	"Family Rm Windows",
+						"virtualZone.legacyZoneNumber":	"3",
+						"virtualZone.zoneFunction":	"2",
+						"NearEndLqi":	"255",
+						"Zone.SwingerShutdown":	"false",
+						"Zone.FunctionType":	"2",
+						"Zone.ZoneType":	"2",
+						"Zone.SensorId":	"2",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"virtualZone.legacyZoneType":	"3",
+						"Zone.ZoneNumber":	"4",
+						"Zone.Bypassed":	"false",
+						"virtualZone.zoneType":	"2",
+						"virtualZone.legacyZoneLabel":	"",
+						"Zone.TestMode":	"false",
+						"Zone.Edited":	"true"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone3/m/secZone",
+					"value":	{
+						"zoneNumber":	4,
+						"sensorId":	2,
+						"displayIndex":	2,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	2,
+						"zoneFunction":	2,
+						"zoneMute":	3
+					}
+				}
+			}
+		},
+		"zone4":	{
+			"uri":	"/000d6f000f08366d/ep/zone4",
+			"id":	"zone4",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Bedrm Windows",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595243293780,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"contactSwitch",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone4/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone4/m/zoneNumber",
+					"value":	"4"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone4/m/zoneType",
+					"value":	"3"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone4/m/migratedUserProperties",
+					"value":	{
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"virtualZone.zoneFunction":	"2",
+						"virtualZone.zoneType":	"2",
+						"NearEndRssi":	"-64",
+						"virtualZone.legacyZoneInputType":	"1",
+						"Zone.ZoneNumber":	"5",
+						"virtualZone.legacyZoneType":	"3",
+						"Zone.ZoneType":	"2",
+						"Zone.SensorId":	"3",
+						"label":	"Bedrm Windows",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"Zone.Bypassed":	"false",
+						"virtualZone.legacyZoneNumber":	"4",
+						"virtualZone.legacyZoneLabel":	"",
+						"Zone.TestMode":	"false",
+						"orderIndex":	"2",
+						"Zone.SwingerShutdown":	"false",
+						"pimVirtual":	"true",
+						"Zone.Edited":	"true",
+						"IASZoneStatus":	"0",
+						"NearEndLqi":	"255",
+						"Zone.FunctionType":	"2"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone4/m/secZone",
+					"value":	{
+						"zoneNumber":	5,
+						"sensorId":	3,
+						"displayIndex":	3,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	2,
+						"zoneFunction":	2,
+						"zoneMute":	3
+					}
+				}
+			}
+		},
+		"zone5":	{
+			"uri":	"/000d6f000f08366d/ep/zone5",
+			"id":	"zone5",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Kitchen Windows",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595291090869,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"contactSwitch",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone5/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone5/m/zoneNumber",
+					"value":	"5"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone5/m/zoneType",
+					"value":	"3"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone5/m/migratedUserProperties",
+					"value":	{
+						"virtualZone.legacyZoneNumber":	"5",
+						"IASZoneStatus":	"0",
+						"Zone.Edited":	"true",
+						"virtualZone.legacyZoneInputType":	"1",
+						"Zone.SwingerShutdown":	"false",
+						"Zone.ZoneNumber":	"6",
+						"Zone.SensorId":	"4",
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"NearEndRssi":	"-58",
+						"Zone.ZoneType":	"2",
+						"virtualZone.zoneType":	"2",
+						"Zone.FunctionType":	"2",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"virtualZone.legacyZoneLabel":	"",
+						"orderIndex":	"3",
+						"virtualZone.legacyZoneType":	"3",
+						"Zone.Bypassed":	"false",
+						"pimVirtual":	"true",
+						"Zone.TestMode":	"false",
+						"NearEndLqi":	"255",
+						"virtualZone.zoneFunction":	"2",
+						"label":	"Kitchen Windows"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone5/m/secZone",
+					"value":	{
+						"zoneNumber":	6,
+						"sensorId":	8,
+						"displayIndex":	7,
+						"isTroubled":	false,
+						"isConfigured":	false,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	1,
+						"zoneFunction":	1,
+						"zoneMute":	0
+					}
+				}
+			}
+		},
+		"zone6":	{
+			"uri":	"/000d6f000f08366d/ep/zone6",
+			"id":	"zone6",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Living Rm Motion",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1605062227824,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1605062226673,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"motion",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone6/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone6/m/zoneNumber",
+					"value":	"6"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone6/m/zoneType",
+					"value":	"4"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone6/m/migratedUserProperties",
+					"value":	{
+						"IASZoneStatus":	"0",
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"Zone.FunctionType":	"10",
+						"Zone.SensorId":	"5",
+						"Zone.ZoneNumber":	"7",
+						"virtualZone.legacyZoneLabel":	"",
+						"virtualZone.legacyZoneType":	"4",
+						"Zone.ZoneType":	"3",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"virtualZone.zoneFunction":	"10",
+						"Zone.SwingerShutdown":	"false",
+						"virtualZone.legacyZoneInputType":	"1",
+						"Zone.Edited":	"true",
+						"Zone.Bypassed":	"false",
+						"label":	"Living Rm Motion",
+						"Zone.TestMode":	"false",
+						"orderIndex":	"4",
+						"virtualZone.legacyZoneNumber":	"6",
+						"NearEndRssi":	"-63",
+						"virtualZone.zoneType":	"3",
+						"pimVirtual":	"true",
+						"NearEndLqi":	"255"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone6/m/secZone",
+					"value":	{
+						"zoneNumber":	7,
+						"sensorId":	5,
+						"displayIndex":	4,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	3,
+						"zoneFunction":	10,
+						"zoneMute":	3
+					}
+				}
+			}
+		},
+		"zone7":	{
+			"uri":	"/000d6f000f08366d/ep/zone7",
+			"id":	"zone7",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Basement Motion",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	1595283407774,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"motion",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone7/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone7/m/zoneNumber",
+					"value":	"7"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone7/m/zoneType",
+					"value":	"4"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone7/m/migratedUserProperties",
+					"value":	{
+						"Zone.SensorId":	"6",
+						"orderIndex":	"5",
+						"Zone.ZoneType":	"3",
+						"Zone.Silenced":	"ZONE_ALL_EVENT_MUTED",
+						"virtualZone.legacyZoneInputType":	"1",
+						"label":	"Basement Motion",
+						"pimVirtual":	"true",
+						"NearEndLqi":	"255",
+						"Zone.Bypassed":	"false",
+						"Zone.Edited":	"true",
+						"Zone.TestMode":	"false",
+						"Zone.ZoneNumber":	"8",
+						"Zone.FunctionType":	"12",
+						"Zone.SwingerShutdown":	"false",
+						"virtualZone.legacyZoneNumber":	"7",
+						"IASZoneStatus":	"0",
+						"virtualZone.legacyZoneType":	"4",
+						"NearEndRssi":	"-64",
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"virtualZone.zoneType":	"3",
+						"virtualZone.legacyZoneLabel":	"",
+						"virtualZone.zoneFunction":	"10"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone7/m/secZone",
+					"value":	{
+						"zoneNumber":	8,
+						"sensorId":	6,
+						"displayIndex":	5,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	3,
+						"zoneFunction":	12,
+						"zoneMute":	3
+					}
+				}
+			}
+		},
+		"zone8":	{
+			"uri":	"/000d6f000f08366d/ep/zone8",
+			"id":	"zone8",
+			"profile":	"sensor",
+			"enabled":	true,
+			"profileVersion":	0,
+			"resources":	{
+				"label":	{
+					"id":	"label",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/label",
+					"mode":	59,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"Hallway Smoke",
+					"type":	"com.icontrol.label"
+				},
+				"bypassed":	{
+					"id":	"bypassed",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/bypassed",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"faulted":	{
+					"id":	"faulted",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/faulted",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"tampered":	{
+					"id":	"tampered",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/tampered",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.boolean"
+				},
+				"endOfLineFault":	{
+					"id":	"endOfLineFault",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/endOfLineFault",
+					"mode":	57,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"false",
+					"type":	"com.icontrol.sensorTrouble"
+				},
+				"type":	{
+					"id":	"type",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/type",
+					"mode":	3,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"smoke",
+					"type":	"com.icontrol.sensorType"
+				},
+				"qualified":	{
+					"id":	"qualified",
+					"uri":	"/000d6f000f08366d/ep/zone8/r/qualified",
+					"mode":	1,
+					"cachingPolicy":	1,
+					"dateOfLastSyncMillis":	0,
+					"value":	"true",
+					"type":	"com.icontrol.boolean"
+				}
+			},
+			"metadatas":	{
+				"zoneNumber":	{
+					"id":	"zoneNumber",
+					"uri":	"/000d6f000f08366d/ep/zone8/m/zoneNumber",
+					"value":	"8"
+				},
+				"zoneType":	{
+					"id":	"zoneType",
+					"uri":	"/000d6f000f08366d/ep/zone8/m/zoneType",
+					"value":	"9"
+				},
+				"migratedUserProperties":	{
+					"id":	"migratedUserProperties",
+					"uri":	"/000d6f000f08366d/ep/zone8/m/migratedUserProperties",
+					"value":	{
+						"virtualZone.legacyZoneNumber":	"8",
+						"IASZoneStatus":	"0",
+						"virtualZone.zoneFunction":	"6",
+						"orderIndex":	"6",
+						"pimVirtual":	"true",
+						"Zone.SwingerShutdown":	"false",
+						"NearEndLqi":	"255",
+						"Zone.ZoneType":	"5",
+						"virtualZone.legacyZoneLabel":	"",
+						"Zone.SensorId":	"7",
+						"Zone.ZoneNumber":	"9",
+						"virtualZone.legacyZoneType":	"9",
+						"virtualZone.zoneType":	"5",
+						"virtualZone.legacyZoneSerialNumber":	"00000000",
+						"Zone.Bypassed":	"false",
+						"Zone.Edited":	"true",
+						"Zone.TestMode":	"false",
+						"virtualZone.legacyZoneInputType":	"1",
+						"label":	"Hallway Smoke",
+						"NearEndRssi":	"-59",
+						"Zone.FunctionType":	"6"
+					}
+				},
+				"secZone":	{
+					"id":	"secZone",
+					"uri":	"/000d6f000f08366d/ep/zone8/m/secZone",
+					"value":	{
+						"zoneNumber":	9,
+						"sensorId":	7,
+						"displayIndex":	6,
+						"isTroubled":	false,
+						"isConfigured":	true,
+						"inSwingerShutdown":	false,
+						"isInTestMode":	false,
+						"isWirelessDevice":	false,
+						"isBatteryDevice":	false,
+						"hasTemperature":	false,
+						"zoneType":	5,
+						"zoneFunction":	6,
+						"zoneMute":	0
+					}
+				}
+			}
+		},
+		"�\u000fX\u0001@\u000fX\u0001":	{
+			"uri":	"@\u000fX\u0001��[\u0001",
+			"id":	"�\u000fX\u0001@\u000fX\u0001",
+			"enabled":	true,
+			"profileVersion":	8,
+			"resources":	{
+			},
+			"metadatas":	{
+			}
+		}
+	},
+	"deviceResources":	{
+		"manufacturer":	{
+			"id":	"manufacturer",
+			"uri":	"/000d6f000f08366d/r/manufacturer",
+			"mode":	1,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	0,
+			"value":	"SMC",
+			"type":	"com.icontrol.string"
+		},
+		"model":	{
+			"id":	"model",
+			"uri":	"/000d6f000f08366d/r/model",
+			"mode":	1,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	0,
+			"value":	"SMCTB01-Z",
+			"type":	"com.icontrol.string"
+		},
+		"hardwareVersion":	{
+			"id":	"hardwareVersion",
+			"uri":	"/000d6f000f08366d/r/hardwareVersion",
+			"mode":	1,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	0,
+			"value":	"1",
+			"type":	"com.icontrol.version"
+		},
+		"firmwareVersion":	{
+			"id":	"firmwareVersion",
+			"uri":	"/000d6f000f08366d/r/firmwareVersion",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	0,
+			"value":	"0x0001001f",
+			"type":	"com.icontrol.version"
+		},
+		"firmwareUpdateStatus":	{
+			"id":	"firmwareUpdateStatus",
+			"uri":	"/000d6f000f08366d/r/firmwareUpdateStatus",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1595543199196,
+			"value":	"upToDate",
+			"type":	"com.icontrol.firmwareVersionStatus"
+		},
+		"dateAdded":	{
+			"id":	"dateAdded",
+			"uri":	"/000d6f000f08366d/r/dateAdded",
+			"mode":	1,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	0,
+			"value":	"1510852970693",
+			"type":	"com.icontrol.dateTime"
+		},
+		"dateLastContacted":	{
+			"id":	"dateLastContacted",
+			"uri":	"/000d6f000f08366d/r/dateLastContacted",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1600368296827,
+			"value":	"1600368296827",
+			"type":	"com.icontrol.dateTime"
+		},
+		"communicationFailure":	{
+			"id":	"communicationFailure",
+			"uri":	"/000d6f000f08366d/r/communicationFailure",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1587763777638,
+			"value":	"false",
+			"type":	"com.icontrol.trouble"
+		},
+		"resetToFactoryDefaults":	{
+			"id":	"resetToFactoryDefaults",
+			"uri":	"/000d6f000f08366d/r/resetToFactoryDefaults",
+			"mode":	4,
+			"cachingPolicy":	0,
+			"dateOfLastSyncMillis":	0,
+			"type":	"com.icontrol.resetToFactoryOperation"
+		},
+		"initiateUpgrade":	{
+			"id":	"initiateUpgrade",
+			"uri":	"/000d6f000f08366d/r/initiateUpgrade",
+			"mode":	4,
+			"cachingPolicy":	0,
+			"dateOfLastSyncMillis":	0,
+			"type":	"com.icontrol.upgradePimFirmware"
+		},
+		"feRssi":	{
+			"id":	"feRssi",
+			"uri":	"/000d6f000f08366d/r/feRssi",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1595543322057,
+			"value":	"-65",
+			"type":	"rssi"
+		},
+		"feLqi":	{
+			"id":	"feLqi",
+			"uri":	"/000d6f000f08366d/r/feLqi",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1595543322056,
+			"value":	"255",
+			"type":	"lqi"
+		},
+		"neRssi":	{
+			"id":	"neRssi",
+			"uri":	"/000d6f000f08366d/r/neRssi",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062227821,
+			"value":	"-76",
+			"type":	"rssi"
+		},
+		"neLqi":	{
+			"id":	"neLqi",
+			"uri":	"/000d6f000f08366d/r/neLqi",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062227821,
+			"value":	"255",
+			"type":	"lqi"
+		},
+		"temp":	{
+			"id":	"temp",
+			"uri":	"/000d6f000f08366d/r/temp",
+			"mode":	89,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1595543322057,
+			"value":	"2600",
+			"type":	"com.icontrol.temperature"
+		},
+		"lowBatt":	{
+			"id":	"lowBatt",
+			"uri":	"/000d6f000f08366d/r/lowBatt",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062224658,
+			"value":	"false",
+			"type":	"com.icontrol.boolean"
+		},
+		"battVolts":	{
+			"id":	"battVolts",
+			"uri":	"/000d6f000f08366d/r/battVolts",
+			"mode":	121,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1595543322057,
+			"value":	"3319",
+			"type":	"battery.voltage"
+		},
+		"acMainsDisconnected":	{
+			"id":	"acMainsDisconnected",
+			"uri":	"/000d6f000f08366d/r/acMainsDisconnected",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062224657,
+			"value":	"false",
+			"type":	"com.icontrol.boolean"
+		},
+		"badBatt":	{
+			"id":	"badBatt",
+			"uri":	"/000d6f000f08366d/r/badBatt",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062224658,
+			"value":	"false",
+			"type":	"com.icontrol.boolean"
+		},
+		"missingBatt":	{
+			"id":	"missingBatt",
+			"uri":	"/000d6f000f08366d/r/missingBatt",
+			"mode":	57,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1605062224657,
+			"value":	"false",
+			"type":	"com.icontrol.boolean"
+		},
+		"lastUserInteractionDate":	{
+			"id":	"lastUserInteractionDate",
+			"uri":	"/000d6f000f08366d/r/lastUserInteractionDate",
+			"mode":	121,
+			"cachingPolicy":	1,
+			"dateOfLastSyncMillis":	1594767294089,
+			"value":	"1594767294089",
+			"type":	"com.icontrol.dateTime"
+		}
+	},
+	"metadatas":	{
+		"legacyDevNum":	{
+			"id":	"legacyDevNum",
+			"uri":	"/000d6f000f08366d/m/legacyDevNum",
+			"value":	"1"
+		},
+		"legacyDevType":	{
+			"id":	"legacyDevType",
+			"uri":	"/000d6f000f08366d/m/legacyDevType",
+			"value":	"12"
+		},
+		"discoveredDetails":	{
+			"id":	"discoveredDetails",
+			"uri":	"/000d6f000f08366d/m/discoveredDetails",
+			"value":	{
+				"eui64":	"000d6f000f08366d",
+				"manufacturer":	"SMC",
+				"model":	"SMCTB01-Z",
+				"hwVer":	1,
+				"fwVer":	65567,
+				"appVer":	1,
+				"type":	"unknown",
+				"power":	"unknown",
+				"endpoints":	[{
+						"id":	1,
+						"profileId":	260,
+						"deviceId":	65535,
+						"deviceVer":	0,
+						"serverClusterInfos":	[{
+								"id":	0,
+								"isServer":	true,
+								"attributeIds":	[]
+							}, {
+								"id":	1280,
+								"isServer":	true,
+								"attributeIds":	[]
+							}],
+						"clientClusterInfos":	[]
+					}]
+			}
+		},
+		"migratedDevice":	{
+			"id":	"migratedDevice",
+			"uri":	"/000d6f000f08366d/m/migratedDevice",
+			"value":	"true"
+		},
+		"brainsuckVersion":	{
+			"id":	"brainsuckVersion",
+			"uri":	"/000d6f000f08366d/m/brainsuckVersion",
+			"value":	"4"
+		},
+		"pimDeviceNumber":	{
+			"id":	"pimDeviceNumber",
+			"uri":	"/000d6f000f08366d/m/pimDeviceNumber",
+			"value":	"1"
+		},
+		"keypadAddress":	{
+			"id":	"keypadAddress",
+			"uri":	"/000d6f000f08366d/m/keypadAddress",
+			"value":	"16"
+		},
+		"installerCode":	{
+			"id":	"installerCode",
+			"uri":	"/000d6f000f08366d/m/installerCode",
+			"value":	"4112"
+		},
+		"panelFwVer":	{
+			"id":	"panelFwVer",
+			"uri":	"/000d6f000f08366d/m/panelFwVer",
+			"value":	"09180401"
+		},
+		"atmelFwVer":	{
+			"id":	"atmelFwVer",
+			"uri":	"/000d6f000f08366d/m/atmelFwVer",
+			"value":	"150001"
+		},
+		"panelType":	{
+			"id":	"panelType",
+			"uri":	"/000d6f000f08366d/m/panelType",
+			"value":	"Vista"
+		},
+		"lpmPolicy":	{
+			"id":	"lpmPolicy",
+			"uri":	"/000d6f000f08366d/m/lpmPolicy",
+			"value":	"always"
+		},
+		"recentTamperRestore":	{
+			"id":	"recentTamperRestore",
+			"uri":	"/000d6f000f08366d/m/recentTamperRestore",
+			"value":	"false"
+		},
+		"recentTamper":	{
+			"id":	"recentTamper",
+			"uri":	"/000d6f000f08366d/m/recentTamper",
+			"value":	"false"
+		},
+		"godparent":	{
+			"id":	"godparent",
+			"uri":	"/000d6f000f08366d/m/godparent",
+			"value":	"0"
+		},
+		"godparentRssi":	{
+			"id":	"godparentRssi",
+			"uri":	"/000d6f000f08366d/m/godparentRssi",
+			"value":	"-63"
+		},
+		"godparentLqi":	{
+			"id":	"godparentLqi",
+			"uri":	"/000d6f000f08366d/m/godparentLqi",
+			"value":	"255"
+		},
+		"usesHashBasedLinkKey":	{
+			"id":	"usesHashBasedLinkKey",
+			"uri":	"/000d6f000f08366d/m/usesHashBasedLinkKey",
+			"value":	"false"
+		}
+	}
+}

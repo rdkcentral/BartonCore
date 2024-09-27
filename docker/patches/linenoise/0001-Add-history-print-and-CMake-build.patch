@@ -1,0 +1,74 @@
+From 144be38a9e19b34fd028c1db5b0acb42f2e916c6 Mon Sep 17 00:00:00 2001
+From: Micah Koch <micah_koch@comcast.com>
+Date: Mon, 23 Sep 2024 19:17:01 +0000
+Subject: [PATCH] Add history print and CMake build
+
+Add API to print history and also a CMake build file to build as library
+---
+ CMakeLists.txt | 19 +++++++++++++++++++
+ linenoise.c    | 10 ++++++++++
+ linenoise.h    |  1 +
+ 3 files changed, 30 insertions(+)
+ create mode 100644 CMakeLists.txt
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+new file mode 100644
+index 0000000..52198f9
+--- /dev/null
++++ b/CMakeLists.txt
+@@ -0,0 +1,19 @@
++#--------------------------------------------------------------------------------------
++#
++# CMake definition to compile linenoise as a library.
++# The opensource code does not provide a makefile, configure, or cmake
++#
++#--------------------------------------------------------------------------------------
++
++# setup include paths
++include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
++
++# build as shared library
++add_library(linenoise SHARED linenoise.c)
++
++# install .so in /usr/local/lib
++set(CMAKE_INSTALL_PREFIX /usr/local)
++install(TARGETS linenoise DESTINATION lib)
++
++# install header in /usr/local/include
++install(FILES linenoise.h DESTINATION include)
+diff --git a/linenoise.c b/linenoise.c
+index cfe51e7..e0f7a7e 100644
+--- a/linenoise.c
++++ b/linenoise.c
+@@ -1152,6 +1152,16 @@ int linenoiseHistoryAdd(const char *line) {
+     return 1;
+ }
+ 
++int linenoiseHistoryPrint(void)
++{
++    int i;
++    for (i = 0; i < history_len; i++)
++    {
++        printf("%s\n", history[i]);
++    }
++    return 0;
++}
++
+ /* Set the maximum length for the history. This function can be called even
+  * if there is already some history, the function will make sure to retain
+  * just the latest 'len' elements if the new history length value is smaller
+diff --git a/linenoise.h b/linenoise.h
+index 6dfee73..6d9f7bc 100644
+--- a/linenoise.h
++++ b/linenoise.h
+@@ -62,6 +62,7 @@ int linenoiseHistoryAdd(const char *line);
+ int linenoiseHistorySetMaxLen(int len);
+ int linenoiseHistorySave(const char *filename);
+ int linenoiseHistoryLoad(const char *filename);
++int linenoiseHistoryPrint(void);
+ void linenoiseClearScreen(void);
+ void linenoiseSetMultiLine(int ml);
+ void linenoisePrintKeyCodes(void);
+-- 
+2.43.0
+

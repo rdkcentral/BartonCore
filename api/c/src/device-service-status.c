@@ -1,0 +1,237 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// Copyright (C) 2024 Comcast Corporation
+//
+// All rights reserved.
+//
+// This software is protected by copyright laws of the United States
+// and of foreign countries. This material may also be protected by
+// patent laws of the United States and of foreign countries.
+//
+// This software is furnished under a license agreement and/or a
+// nondisclosure agreement and may only be used or copied in accordance
+// with the terms of those agreements.
+//
+// The mere transfer of this software does not imply any licenses of trade
+// secrets, proprietary technology, copyrights, patents, trademarks, or
+// any other form of intellectual property whatsoever.
+//
+// Comcast Corporation retains all ownership rights.
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by Thomas Lea on 6/6/2024.
+ */
+
+#include "device-service-status.h"
+#include "device-service-discovery-type.h"
+#include "glibconfig.h"
+#include <inttypes.h>
+
+struct _BDeviceServiceStatus
+{
+    GObject parent_instance;
+
+    GList *device_classes;
+    BDeviceServiceDiscoveryType discovery_type;
+    GList *searching_device_classes;
+    guint32 discovery_seconds;
+    gboolean ready_for_operation;
+    gboolean ready_for_pairing;
+    GHashTable *subsystems;
+    gchar *json;
+};
+
+G_DEFINE_TYPE(BDeviceServiceStatus, b_device_service_status, G_TYPE_OBJECT)
+
+static GParamSpec *properties[N_B_DEVICE_SERVICE_STATUS_PROPERTIES];
+
+static gpointer gcopy_func_strdup(gconstpointer src, gpointer data)
+{
+    return g_strdup((gpointer)src);
+}
+
+static void
+b_device_service_status_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec)
+{
+    BDeviceServiceStatus *status = B_DEVICE_SERVICE_STATUS(object);
+
+    switch (property_id)
+    {
+        case B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES:
+            g_list_free_full(status->device_classes, g_free);
+            status->device_classes = g_list_copy_deep(g_value_get_pointer(value), gcopy_func_strdup, NULL);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_TYPE:
+            status->discovery_type = g_value_get_enum(value);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES:
+            g_list_free_full(status->searching_device_classes, g_free);
+            status->searching_device_classes = g_list_copy_deep(g_value_get_pointer(value), gcopy_func_strdup, NULL);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS:
+            status->discovery_seconds = g_value_get_uint(value);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_OPERATION:
+            status->ready_for_operation = g_value_get_boolean(value);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_PAIRING:
+            status->ready_for_pairing = g_value_get_boolean(value);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_SUBSYSTEMS:
+            g_hash_table_unref(status->subsystems);
+            status->subsystems = g_value_dup_boxed(value);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_JSON:
+            g_free(status->json);
+            status->json = g_strdup(g_value_get_string(value));
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
+
+static void b_device_service_status_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec)
+{
+    BDeviceServiceStatus *status = B_DEVICE_SERVICE_STATUS(object);
+
+    switch (property_id)
+    {
+        //implement get property for all properties
+        case B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES:
+            g_value_set_pointer(value, g_list_copy_deep(status->device_classes, gcopy_func_strdup, NULL));
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_TYPE:
+            g_value_set_enum(value, status->discovery_type);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES:
+            g_value_set_pointer(value, g_list_copy_deep(status->searching_device_classes, gcopy_func_strdup, NULL));
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS:
+            g_value_set_uint(value, status->discovery_seconds);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_OPERATION:
+            g_value_set_boolean(value, status->ready_for_operation);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_PAIRING:
+            g_value_set_boolean(value, status->ready_for_pairing);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_SUBSYSTEMS:
+            g_value_set_boxed(value, status->subsystems);
+            break;
+        case B_DEVICE_SERVICE_STATUS_PROP_JSON:
+            g_value_set_string(value, status->json);
+            break;
+
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
+
+static void b_device_service_status_finalize(GObject *object)
+{
+    BDeviceServiceStatus *status = B_DEVICE_SERVICE_STATUS(object);
+
+    g_list_free_full(status->device_classes, g_free);
+    g_list_free_full(status->searching_device_classes, g_free);
+    g_hash_table_unref(status->subsystems);
+    g_free(status->json);
+
+    G_OBJECT_CLASS(b_device_service_status_parent_class)->finalize(object);
+}
+
+static void b_device_service_status_class_init(BDeviceServiceStatusClass *klass)
+{
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
+
+    object_class->set_property = b_device_service_status_set_property;
+    object_class->get_property = b_device_service_status_get_property;
+    object_class->finalize = b_device_service_status_finalize;
+
+    /**
+     * BDeviceServiceStatus:device-classes: (type GLib.List(utf8))
+     */
+    properties[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES] =
+        g_param_spec_pointer(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
+                             "Device Classes",
+                             "Registered Device Classes",
+                             G_PARAM_READWRITE);
+
+    properties[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_TYPE] =
+        g_param_spec_enum(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_TYPE],
+                          "Discovery Type",
+                          "Discovery Type",
+                          B_DEVICE_SERVICE_DISCOVERY_TYPE_TYPE,
+                          B_DEVICE_SERVICE_DISCOVERY_TYPE_NONE,
+                          G_PARAM_READWRITE);
+
+    /**
+     * BDeviceServiceStatus:searching-device-classes: (type GLib.List(utf8))
+     */
+    properties[B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES] = g_param_spec_pointer(
+        B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES],
+        "Searching Device Classes",
+        "Searching Device Classes",
+        G_PARAM_READWRITE);
+
+    properties[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS] =
+        g_param_spec_uint(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS],
+                          "Discovery Seconds",
+                          "Discovery Seconds",
+                          0,
+                          G_MAXUINT32,
+                          0,
+                          G_PARAM_READWRITE);
+
+    properties[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_OPERATION] =
+        g_param_spec_boolean(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_OPERATION],
+                             "Ready for Operation",
+                             "Ready for Operation",
+                             FALSE,
+                             G_PARAM_READWRITE);
+
+    properties[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_PAIRING] =
+        g_param_spec_boolean(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_PAIRING],
+                             "Ready for Pairing",
+                             "Ready for Pairing",
+                             FALSE,
+                             G_PARAM_READWRITE);
+
+    /**
+     * BDeviceServiceStatus:subsystems: (type GLib.HashTable(utf8,utf8))
+     */
+    properties[B_DEVICE_SERVICE_STATUS_PROP_SUBSYSTEMS] =
+        g_param_spec_boxed(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_SUBSYSTEMS],
+                           "Subsystems",
+                           "Subsystems",
+                           G_TYPE_HASH_TABLE,
+                           G_PARAM_READWRITE);
+
+    properties[B_DEVICE_SERVICE_STATUS_PROP_JSON] =
+        g_param_spec_string(B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON],
+                            "JSON",
+                            "JSON representation of the status object",
+                            NULL,
+                            G_PARAM_READWRITE);
+
+    g_object_class_install_properties(object_class, N_B_DEVICE_SERVICE_STATUS_PROPERTIES, properties);
+}
+
+static void b_device_service_status_init(BDeviceServiceStatus *status)
+{
+    status->device_classes = NULL;
+    status->discovery_type = B_DEVICE_SERVICE_DISCOVERY_TYPE_NONE;
+    status->searching_device_classes = NULL;
+    status->discovery_seconds = 0;
+    status->ready_for_operation = FALSE;
+    status->ready_for_pairing = FALSE;
+    status->subsystems = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+}
+
+BDeviceServiceStatus *b_device_service_status_new(void)
+{
+    return g_object_new(B_DEVICE_SERVICE_STATUS_TYPE, NULL);
+}

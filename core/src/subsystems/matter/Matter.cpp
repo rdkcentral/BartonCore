@@ -1,0 +1,1299 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// Copyright (C) 2021 Comcast Corporation
+//
+// All rights reserved.
+//
+// This software is protected by copyright laws of the United States
+// and of foreign countries. This material may also be protected by
+// patent laws of the United States and of foreign countries.
+//
+// This software is furnished under a license agreement and/or a
+// nondisclosure agreement and may only be used or copied in accordance
+// with the terms of those agreements.
+//
+// The mere transfer of this software does not imply any licenses of trade
+// secrets, proprietary technology, copyrights, patents, trademarks, or
+// any other form of intellectual property whatsoever.my
+//
+// Comcast Corporation retains all ownership rights.
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by Thomas Lea on 10/6/21.
+ */
+
+#define LOG_TAG     "Matter"
+#define logFmt(fmt) "(%s): " fmt, __func__
+
+#include <glib-object.h>
+
+extern "C" {
+#include "deviceServiceConfiguration.h"
+#include "icUtil/fileUtils.h"
+#include "provider/device-service-property-provider.h"
+#include "provider/device-service-token-provider.h"
+#include <deviceServicePrivate.h>
+#include <icLog/logging.h>
+#include <icTypes/sbrm.h>
+#include <icUtil/base64.h>
+}
+
+#include <condition_variable>
+#include <filesystem>
+#include <mutex>
+
+#ifdef BARTON_CONFIG_THREAD
+#include <subsystems/thread/threadSubsystem.hpp>
+#endif
+
+#include <ZilkerProjectConfig.h>
+#include <app/clusters/ota-provider/ota-provider.h>
+#include <app/server/Dnssd.h>
+#include <controller-clusters/zap-generated/CHIPClusters.h>
+#include <controller/CHIPDeviceController.h>
+#include <controller/CHIPDeviceControllerFactory.h>
+#include <credentials/DeviceAttestationCredsProvider.h>
+#include <credentials/FabricTable.h>
+#include <credentials/attestation_verifier/DefaultDeviceAttestationVerifier.h>
+#include <crypto/CHIPCryptoPAL.h>
+#include <lib/core/CHIPError.h>
+#include <lib/support/CodeUtils.h>
+#include <messaging/ExchangeMgr.h>
+#include <platform/Linux/ConfigurationManagerImpl.h>
+#include <platform/TestOnlyCommissionableDataProvider.h>
+#include <protocols/secure_channel/RendezvousParameters.h>
+#include <transport/SessionMessageDelegate.h>
+
+#include <lib/support/TestGroupData.h>
+
+#include <lib/core/NodeId.h>
+#include <matter/MatterDriverFactory.h>
+
+#include "Matter.h"
+#include "PersistentStorageDelegate.h"
+#include "credentials/attestation_verifier/DeviceAttestationVerifier.h"
+
+#include <CertifierOperationalCredentialsIssuer.hpp>
+
+#include "AccessControlDelegate.h"
+#include "rdkb-cluster-server.hpp"
+#include "RdkbClusterServer.h"
+
+#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
+// Only used in development environments
+#define SELF_SIGNED_CA_COMMON_NAME "My Zilker Test ECC Class I"
+#endif
+
+#define CONNECT_DEVICE_TIMEOUT_SECONDS          15
+#define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
+
+#define BLE_CONTROLLER_ADAPTER_ID           0
+#define BLE_CONTROLLER_DEVICE_NAME          "Xfinity-Gateway"
+
+#define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME "localMatterNodeId"
+#define MATTER_RCA_SYSTEM_PROPERTY_NAME "matterRCA"
+#define MATTER_ICA_SYSTEM_PROPERTY_NAME "matterICA"
+#define MATTER_NOC_SYSTEM_PROPERTY_NAME "matterNOC"
+
+#define KV_STORAGE_NAMESPACE "matterkv"
+#define MATTER_CONFIG_DIR "matter"
+
+#define MATTER_TOKEN_COMM_TOKEN_ID "xpki"
+
+#define OPARTIONAL_ENVIRONMENT_STRING_PROD "prod"
+#define OPARTIONAL_ENVIRONMENT_STRING_STAGE "stage"
+#define DEFAULT_OPERATIONAL_ENVIRONMENT OPARTIONAL_ENVIRONMENT_STRING_PROD
+
+#define MATTER_COMCAST_VID ((chip::VendorId) 0x111D)
+
+using namespace std;
+using namespace ::zilker;
+using namespace std::chrono_literals;
+using namespace chip;
+using chip::Callback::Callback;
+using chip::Controller::DescriptorCluster;
+
+#include <credentials/attestation_verifier/FileAttestationTrustStore.h>
+#include <credentials/examples/DeviceAttestationCredsExample.h>
+
+static constexpr uint16_t kMaxGroupsPerFabric = 5;
+static constexpr uint16_t kMaxGroupKeysPerFabric = 8;
+
+namespace
+{
+    constexpr uint8_t COMCAST_TEST_CD_KID[20] = {0x9C, 0x60, 0x2C, 0x46, 0x48, 0xE8, 0x7D, 0xD8, 0x26, 0x47,
+                                                 0xF4, 0x5E, 0x94, 0x39, 0xB3, 0x85, 0x16, 0xC2, 0xF2, 0x4F};
+
+    constexpr uint8_t COMCAST_TEST_CD_PKEY[65] = {
+        0x04, 0xa0, 0x1c, 0x5a, 0x28, 0x71, 0x86, 0x67, 0x22, 0x88, 0x49, 0x6e, 0x22, 0x12, 0x99, 0x9f, 0x18,
+        0xae, 0xe3, 0x5a, 0x7c, 0xf3, 0x74, 0x8e, 0x0c, 0xfe, 0x0b, 0x6b, 0x45, 0xda, 0xc2, 0x70, 0x29, 0x0b,
+        0xad, 0xcd, 0x91, 0xb9, 0x43, 0xd8, 0x58, 0x1e, 0x03, 0x63, 0xa1, 0xba, 0x18, 0xa6, 0x1d, 0xe7, 0xc7,
+        0x6a, 0xbb, 0x2a, 0x0b, 0xdc, 0xef, 0x39, 0xfb, 0xb7, 0x37, 0x1f, 0x83, 0xca, 0x65};
+
+    RdkbClusterServer rdkbClusterServer;
+} // namespace
+
+#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
+Matter::Matter() :
+    operationalCredentialsIssuer(storageDelegate), groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
+#else
+Matter::Matter() :
+    groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
+#endif
+{
+    myNodeId = LoadOrGenerateLocalNodeId();
+
+    MatterDriverFactory::Instance();
+
+    commissionerController = std::make_unique<chip::Controller::DeviceCommissioner>();
+
+#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
+    operationalCredentialsIssuer.SetRootCommonName(SELF_SIGNED_CA_COMMON_NAME);
+    operationalCredentialsIssuer.SetClientCommonName(SELF_SIGNED_CA_COMMON_NAME);
+#endif
+}
+
+Matter::~Matter()
+{
+    free(wifiSsid);
+    free(wifiPass);
+}
+
+void EventHandler(const DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
+{
+    (void) arg;
+    icDebug("EventType=%" PRIx16, event->Type);
+}
+
+bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
+{
+    bool result = true;
+
+    CHIP_ERROR err = CHIP_NO_ERROR;
+
+    icDebug();
+
+    logger.Connect();
+
+    mkdir_p(CHIP_ZILKER_CONF_DIR, 0700);
+
+    myFabricId = accountId;
+
+    paaTrustStorePath = std::string(std::move(attestationTrustStorePath));
+
+    if ((err = chip::Platform::MemoryInit()) != CHIP_NO_ERROR)
+    {
+        icError("MemoryInit failed: %s", err.AsString());
+        return false;
+    }
+
+    chip::Logging::SetLogFilter(chip::Logging::kLogCategory_Max);
+
+    if ((err = chip::DeviceLayer::PlatformMgr().InitChipStack()) != CHIP_NO_ERROR)
+    {
+        icError("InitChipStack failed: %s", err.AsString());
+        return false;
+    }
+
+    // We assign new objects here just to guarantee that we're working with uninitialized objects
+    opCertStore = std::make_unique<chip::Credentials::PersistentStorageOpCertStore>();
+    err = opCertStore->Init(&storageDelegate);
+
+    if (!ChipError::IsSuccess(err))
+    {
+        icError("Operational cert store init failed: %s", err.AsString());
+        return false;
+    }
+
+    operationalKeystore = std::make_unique<chip::PersistentStorageOperationalKeystore>();
+    err = operationalKeystore->Init(&storageDelegate);
+
+    if (!ChipError::IsSuccess(err))
+    {
+        icError("Operational keystore init failed: %s", err.AsString());
+        return false;
+    }
+
+    static chip::DeviceLayer::TestOnlyCommissionableDataProvider TestOnlyCommissionableDataProvider;
+    chip::DeviceLayer::SetCommissionableDataProvider(&TestOnlyCommissionableDataProvider);
+
+    chip::DeviceLayer::ConfigurationMgr().LogDeviceConfig();
+
+    if ((err = DeviceLayer::PlatformMgrImpl().AddEventHandler(EventHandler, 0)) != CHIP_NO_ERROR)
+    {
+        icError("AddEventHandler failed: %s", err.AsString());
+        return false;
+    }
+
+    chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
+    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
+    chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
+
+    if ((err = attributePersistenceProvider.Init(&storageDelegate)) != CHIP_NO_ERROR)
+    {
+        icError("attributePersistenceProvider.Init() failed: %s", err.AsString());
+        return false;
+    }
+    chip::app::SetAttributePersistenceProvider(&attributePersistenceProvider);
+
+    MatterRDKBGatewayPluginServerSetDelegate(&rdkbClusterServer);
+
+    return result;
+}
+
+bool Matter::Start()
+{
+    icDebug();
+
+    CHIP_ERROR err;
+
+    if (state.load() == State::stopping)
+    {
+        icWarn("QA: stop already in progress");
+        return false;
+    }
+
+    if (state.load() == State::running)
+    {
+        icWarn("QA: already running");
+        return true;
+    }
+
+    if ((err = serverInitParams.InitializeStaticResourcesBeforeServerInit()) != CHIP_NO_ERROR)
+    {
+        icError("InitializeStaticResourcesBeforeServerInit failed: %s", err.AsString());
+        return false;
+    }
+
+    // We need to set DeviceInfoProvider before Server::Init to setup the storage of DeviceInfoProvider properly.
+    deviceInfoProvider.SetStorageDelegate(&storageDelegate);
+    chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
+
+    if ((err = InitCommissioner()) != CHIP_NO_ERROR)
+    {
+        icError("InitCommissioner failed: %s", err.AsString());
+        return false;
+    }
+
+    state.store(State::running);
+
+    stackThread = new std::thread(&Matter::StackThreadProc, this);
+
+    return true;
+}
+
+// block until shutdown
+void Matter::StackThreadProc()
+{
+    icDebug();
+
+    // This blocks until Stop
+    chip::DeviceLayer::PlatformMgr().RunEventLoop();
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    commissionerController->Shutdown();
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    icInfo("Shut down");
+}
+
+bool Matter::Stop()
+{
+    icDebug();
+
+    state.store(State::stopping);
+
+    chip::DeviceLayer::PlatformMgr().StopEventLoopTask();
+
+    if (stackThread != nullptr)
+    {
+        stackThread->join();
+    }
+
+    // If/when Matter starts up again, we want to guarantee that this is uninitialized
+    chip::Access::AccessControl &accessControl = chip::Access::GetAccessControl();
+    accessControl.Finish();
+    chip::Access::SetAccessControl(accessControl);
+
+    state.store(State::stopped);
+
+    return true;
+}
+
+CHIP_ERROR Matter::InitCommissioner()
+{
+    Controller::FactoryInitParams factoryParams;
+    chip::Controller::SetupParams params;
+    FabricTable *fabricTable = &Server::GetInstance().GetFabricTable();
+
+    if (myNodeId == kUndefinedNodeId)
+    {
+        myNodeId = LoadOrGenerateLocalNodeId();
+    }
+
+    factoryParams.fabricIndependentStorage = &storageDelegate;
+    factoryParams.fabricTable = fabricTable;
+    factoryParams.sessionKeystore = &sessionKeystore;
+
+    groupDataProvider.SetStorageDelegate(&storageDelegate);
+    groupDataProvider.SetSessionKeystore(&sessionKeystore);
+    factoryParams.groupDataProvider = &groupDataProvider;
+    factoryParams.enableServerInteractions = true;
+
+#ifdef BARTON_CONFIG_MATTER_USE_RANDOM_PORT
+    factoryParams.listenPort = 0;
+#else
+    factoryParams.listenPort = CHIP_PORT;
+#endif
+
+    chip::FabricTable::InitParams fabricTableInitParams;
+    fabricTableInitParams.opCertStore = opCertStore.get();
+    fabricTableInitParams.operationalKeystore = operationalKeystore.get();
+    fabricTableInitParams.storage = &storageDelegate;
+
+    ReturnLogErrorOnFailure(factoryParams.fabricTable->Init(fabricTableInitParams));
+
+    factoryParams.opCertStore = opCertStore.get();
+
+    params.operationalCredentialsDelegate = &operationalCredentialsIssuer;
+    params.controllerVendorId = MATTER_COMCAST_VID;
+    params.permitMultiControllerFabrics = false;
+
+    const chip::Credentials::AttestationTrustStore *paaRootStore;
+
+    // The attestation trust store is file backed and populated with appropriate per-product roots.
+    // angelsenvy contains test+prod certificates and all others only trust production certs.
+    chip::Credentials::DeviceAttestationVerifier *dacVerifier = GetDefaultDACVerifier(&GetAttestationTrustStore());
+    dacVerifier->EnableCdTestKeySupport(IsDevelopmentMode());
+
+    if (IsDevelopmentMode())
+    {
+        scoped_generic uint8_t *tmp = NULL;
+        uint16_t decodedLen;
+
+        FixedByteSpan<kP256_PublicKey_Length> comcastTestCDRawPKey(COMCAST_TEST_CD_PKEY);
+        chip::Crypto::P256PublicKey comcastTestCDPKey(comcastTestCDRawPKey);
+
+        ByteSpan comcastTestCDKID(COMCAST_TEST_CD_KID, sizeof(COMCAST_TEST_CD_KID));
+
+        // Adding a DER certificate forces validation against its chain, but adding
+        // the key ID and public key bypasses that mechanism entirely
+
+        CHIP_ERROR addKeyErr =
+            dacVerifier->GetCertificationDeclarationTrustStore()->AddTrustedKey(comcastTestCDKID, comcastTestCDPKey);
+
+        ReturnErrorOnFailure(addKeyErr);
+    }
+
+    SetDeviceAttestationVerifier(dacVerifier);
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> noc;
+    VerifyOrReturnError(noc.Alloc(chip::Controller::kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+    chip::MutableByteSpan nocSpan(noc.Get(), chip::Controller::kMaxCHIPDERCertLength);
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> icac;
+    VerifyOrReturnError(icac.Alloc(chip::Controller::kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+    chip::MutableByteSpan icacSpan(icac.Get(), chip::Controller::kMaxCHIPDERCertLength);
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> rcac;
+    VerifyOrReturnError(rcac.Alloc(chip::Controller::kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+    chip::MutableByteSpan rcacSpan(rcac.Get(), chip::Controller::kMaxCHIPDERCertLength);
+
+    CHIP_ERROR chainAvailable = LoadNOCChain(rcacSpan, icacSpan, nocSpan);
+    bool fabricFound;
+
+    if (ChipError::IsSuccess(chainAvailable))
+    {
+        FabricIndex controllerIndex;
+        ReturnErrorOnFailure(GetFabricIndex(fabricTable, params.permitMultiControllerFabrics, rcacSpan, nocSpan, controllerIndex));
+        fabricFound = controllerIndex != kUndefinedFabricIndex;
+    }
+
+    if (chainAvailable == CHIP_ERROR_NOT_FOUND || !fabricFound)
+    {
+        ChipLogProgress(Support, "No Commissioner NOC chain or no fabric, requesting a new NOC and creating new fabric");
+
+#ifndef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
+        std::string token = GetAuthToken();
+        if (token.empty())
+        {
+            ChipLogError(Controller, "Failed to get authorization token for operational credentials issuer.");
+            return CHIP_ERROR_INCORRECT_STATE;
+        }
+        operationalCredentialsIssuer.SetAuthToken(token);
+#endif
+        operationalCredentialsIssuer.SetCAProfile("XFN_Matter_OP_ICA");
+        SetOperationalCredsIssuerApiEnv();
+
+        chip::Platform::ScopedMemoryBuffer<uint8_t> csr;
+        VerifyOrReturnError(csr.Alloc(kMAX_CSR_Length), CHIP_ERROR_NO_MEMORY);
+
+        chip::MutableByteSpan csrSpan(csr.Get(), kMAX_CSR_Length);
+        Optional<FabricIndex> nextAvailableIndex;
+
+        /*
+         * Key will be committed when SDK creates commissioner fabric
+         * This will become the new controller fabric's operational key.
+         */
+        ReturnErrorOnFailure(fabricTable->AllocatePendingOperationalKey(nextAvailableIndex, csrSpan));
+
+        chip::Platform::ScopedMemoryBuffer<uint8_t> nonce;
+        VerifyOrReturnError(nonce.Alloc(Controller::kCSRNonceLength), CHIP_ERROR_NO_MEMORY);
+        chip::MutableByteSpan nonceSpan(nonce.Get(), Controller::kCSRNonceLength);
+
+        if (myFabricId != chip::kUndefinedFabricId)
+        {
+            operationalCredentialsIssuer.SetFabricIdForNextNOCRequest(myFabricId);
+        }
+
+        operationalCredentialsIssuer.ObtainCsrNonce(nonceSpan);
+
+        nocSpan = MutableByteSpan(noc.Get(), chip::Controller::kMaxCHIPDERCertLength);
+        icacSpan = MutableByteSpan(icac.Get(), chip::Controller::kMaxCHIPDERCertLength);
+        rcacSpan = MutableByteSpan(rcac.Get(), chip::Controller::kMaxCHIPDERCertLength);
+
+        ReturnErrorOnFailure(operationalCredentialsIssuer.GenerateNOCChainAfterValidation(
+            myNodeId, myFabricId, csrSpan, nonceSpan, rcacSpan, icacSpan, nocSpan));
+
+        ReturnErrorOnFailure(SaveNOCChain(rcacSpan, icacSpan, nocSpan));
+    }
+    else
+    {
+        ReturnErrorOnFailure(chainAvailable);
+    }
+
+    params.controllerRCAC = rcacSpan;
+    params.controllerICAC = icacSpan;
+    params.controllerNOC = nocSpan;
+    params.operationalCredentialsDelegate = &operationalCredentialsIssuer;
+    params.deviceAttestationVerifier = dacVerifier;
+    params.enableServerInteractions = true;
+
+    auto &factory = chip::Controller::DeviceControllerFactory::GetInstance();
+    ReturnErrorOnFailure(factory.Init(factoryParams));
+    ReturnErrorOnFailure(factory.SetupCommissioner(params, *commissionerController));
+
+    chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager()->GetSessionManager()->SetMessageDelegate(
+        &sessionMessageHandler);
+
+    chip::FabricIndex fabricIndex = commissionerController->GetFabricIndex();
+    VerifyOrReturnError(fabricIndex != chip::kUndefinedFabricIndex, CHIP_ERROR_INTERNAL);
+    myFabricIndex = fabricIndex;
+
+    ReturnLogErrorOnFailure(SetIPKOnce());
+
+    auto ipk = GetCurrentIPK();
+
+    if (ipk != nullptr)
+    {
+        ReturnLogErrorOnFailure(operationalCredentialsIssuer.SetIPKForNextNOCRequest(ipk.get()->Span()));
+    }
+
+    /*
+     * Matter has a defect where loading a fabric with no label at all will
+     * cause a NULL dereference.
+     */
+    chip::CharSpan labelSpan = CharSpan::fromCharString("controller");
+    fabricTable->SetFabricLabel(fabricIndex, labelSpan);
+
+    chip::Access::AccessControl::Delegate *aclDelegate = GetAccessControlDelegate();
+    chip::Access::AccessControl &accessControl = chip::Access::GetAccessControl();
+    ReturnErrorOnFailure(accessControl.Init(aclDelegate, deviceTypeResolver));
+    chip::Access::SetAccessControl(accessControl);
+
+    ReturnErrorOnFailure(aclStorage.Init(storageDelegate, fabricTable->begin(), fabricTable->end()));
+    ReturnErrorOnFailure(ConfigureOTAProviderNode());
+
+    ReturnLogErrorOnFailure(fabricTable->CommitPendingFabricData());
+
+    // Initialize event logging subsystem
+    ReturnErrorOnFailure(globalEventIdCounter.Init(&storageDelegate, chip::DefaultStorageKeyAllocator::IMEventNumber(),
+                                                   CHIP_DEVICE_CONFIG_EVENT_ID_COUNTER_EPOCH));
+    chip::app::LogStorageResources logStorageResources[] = {
+        { debugEventBuffer, sizeof(debugEventBuffer), chip::app::PriorityLevel::Debug },
+        { infoEventBuffer, sizeof(infoEventBuffer), chip::app::PriorityLevel::Info },
+        { critEventBuffer, sizeof(critEventBuffer), chip::app::PriorityLevel::Critical }
+    };
+
+    chip::app::EventManagement::GetInstance().Init(&chip::Server::GetInstance().GetExchangeManager(),
+                                                   CHIP_NUM_EVENT_LOGGING_BUFFERS,
+                                                   &loggingBuffer[0],
+                                                   &logStorageResources[0],
+                                                   &globalEventIdCounter,
+                                                   System::SystemClock().GetMonotonicMilliseconds64());
+
+    // advertise operational since we are an admin
+    chip::app::DnssdServer::Instance().AdvertiseOperational();
+
+    ChipLogProgress(Support,
+                    "InitCommissioner nodeId=0x" ChipLogFormatX64 " fabric.fabricId=0x" ChipLogFormatX64
+                    " fabricIndex=0x%x",
+                    ChipLogValueX64(commissionerController->GetNodeId()),
+                    ChipLogValueX64(myFabricId),
+                    static_cast<unsigned>(fabricIndex));
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR Matter::SetIPKOnce()
+{
+    chip::Credentials::GroupDataProvider::KeySet ipkSet;
+    FabricIndex fabricIndex = commissionerController->GetFabricIndex();
+    CHIP_ERROR ipkStatus = groupDataProvider.GetIpkKeySet(fabricIndex, ipkSet);
+
+    // TODO: add and use getSensitiveProperty
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+    scoped_generic char *base64Ipk = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
+    uint8_t compressedFabricId[sizeof(uint64_t)] = {0};
+    chip::MutableByteSpan compressedFabricIdSpan(compressedFabricId);
+    ReturnErrorOnFailure(commissionerController->GetCompressedFabricIdBytes(compressedFabricIdSpan));
+
+    /*
+     * Only new fabrics will ever be unkeyed. If the system property were to go away,
+     * resetting the IPK would disable the entire fabric.
+     * The fabric itself stores the operational IPK and leaving it alone will at least
+     * allow continued communication between this node and others on the fabric.
+     * Force old fabrics initialized with the default IPK to re-key, which will
+     * invalidate communications between this and other nodes on the fabric.
+     */
+
+    if (ipkStatus == CHIP_NO_ERROR)
+    {
+        ByteSpan defaultIpk = chip::GroupTesting::DefaultIpkValue::GetDefaultIpk();
+
+        /*
+         * This is an operational key, not an epoch key. The structure member
+         * name is misleading here. To be able to compare the default key
+         * with what's in the fabric, the default IPK (an epoch key) needs
+         * to be run through standard key derivation first to make an
+         * operational key to test against.
+         */
+
+        ByteSpan currentIpk(ipkSet.epoch_keys[0].key);
+        Crypto::GroupOperationalCredentials defaultOperationalIpk;
+        VerifyOrReturnError(currentIpk.size() == Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES,
+                            CHIP_ERROR_BUFFER_TOO_SMALL);
+
+        ReturnErrorOnFailure(
+            Crypto::DeriveGroupOperationalCredentials(defaultIpk, compressedFabricIdSpan, defaultOperationalIpk));
+
+        if (memcmp(defaultOperationalIpk.encryption_key,
+                   currentIpk.data(),
+                   Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES) == 0)
+        {
+            icWarn("Fabric index %" PRIx8 " was initialized with the default IPK."
+                   " A new, random IPK will be created. Existing paired Matter devices will no longer work.",
+                   fabricIndex);
+
+            ipkStatus = CHIP_ERROR_NOT_FOUND;
+        }
+    }
+
+    if (!base64Ipk && ipkStatus == CHIP_NO_ERROR)
+    {
+        icError("Fabric index %" PRIx8 " has an operational IPK but there is no system IPK!"
+                " Commissioning is unavailable!",
+                fabricIndex);
+
+        /*
+         * Instead of aborting completely, let the fabric at least
+         * work with its operational IPK
+         */
+        return CHIP_NO_ERROR;
+    }
+
+    if (ipkStatus == CHIP_NO_ERROR)
+    {
+        return CHIP_NO_ERROR;
+    }
+    else if (ipkStatus != CHIP_ERROR_NOT_FOUND)
+    {
+        return ipkStatus;
+    }
+
+    ChipLogProgress(Support,
+                    "Setting up new IPK for Fabric Index %u with Compressed Fabric ID:",
+                    static_cast<unsigned>(fabricIndex));
+
+    ChipLogByteSpan(Support, compressedFabricIdSpan);
+
+    chip::Crypto::IdentityProtectionKey ipk;
+    ReturnErrorOnFailure(chip::Crypto::DRBG_get_bytes(ipk.Bytes(), ipk.Length()));
+
+    /*
+     * GroupDataProvider is tricky and derives and stores _operational_ keys.
+     * API documentation and object declarations are misleading/unclear about this, but
+     * Set/GetKeySet will _always_ store/load operational keys. The input epoch keys are
+     * discarded by the SetKeySet API.
+     * See Matter 1.0 4.15.2.
+     */
+    const IdentityProtectionKeySpan ipkSpan = ipk.Span();
+
+    ReturnErrorOnFailure(
+        chip::Credentials::SetSingleIpkEpochKey(&groupDataProvider, fabricIndex, ipk.Span(), compressedFabricIdSpan));
+
+    free(base64Ipk);
+    base64Ipk = icEncodeBase64(const_cast<uint8_t *>(ipkSpan.data()), ipkSpan.size());
+
+    // Any specific errors are logged by the encoder
+    VerifyOrReturnError(base64Ipk != NULL, CHIP_ERROR_INTERNAL);
+
+    // TODO: add and use setSensitiveProperty
+    VerifyOrReturnError(b_device_service_property_provider_set_property_string(
+                            propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, base64Ipk),
+                        CHIP_ERROR_INTERNAL);
+
+    return CHIP_NO_ERROR;
+}
+
+std::unique_ptr<chip::Crypto::IdentityProtectionKey> Matter::GetCurrentIPK()
+{
+    chip::FabricIndex fabricIndex = commissionerController->GetFabricIndex();
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *base64Ipk = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
+
+    if (base64Ipk == NULL)
+    {
+        icError("Can not get current IPK set for fabric index %#" PRIx8 "!", fabricIndex);
+        return nullptr;
+    }
+
+    scoped_generic uint8_t *tmp = NULL;
+    uint16_t tmpLen;
+
+    if (!icDecodeBase64(base64Ipk, &tmp, &tmpLen))
+    {
+        // Failure reason is reported by decoder
+        return nullptr;
+    }
+
+    if (tmpLen != chip::Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES)
+    {
+        icError("IPK corrupt: invalid key length '%" PRIu16 " bytes (must be %zu bytes)",
+                tmpLen,
+                chip::Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES);
+
+        return nullptr;
+    }
+
+    uint8_t keyBytes[chip::Crypto::CHIP_CRYPTO_SYMMETRIC_KEY_LENGTH_BYTES];
+    memcpy(keyBytes, tmp, sizeof(keyBytes));
+
+    return make_unique<IdentityProtectionKey>(keyBytes);
+}
+
+//
+//  Start private stuff
+//
+
+CHIP_ERROR Matter::GetCommissioningParams(chip::Controller::CommissioningParameters &params)
+{
+    icDebug();
+
+    CHIP_ERROR err = CHIP_NO_ERROR;
+
+    params.SetDeviceAttestationDelegate(this);
+
+#ifdef BARTON_CONFIG_THREAD
+    if (threadOperationalDataset == nullptr)
+    {
+        g_autoptr(ThreadNetworkInfo) info = threadNetworkInfoCreate();
+        if (threadSubsystemGetNetworkInfo(info) && info->datasetLen > 0)
+        {
+            threadOperationalDataset = std::make_unique<std::vector<uint8_t>>();
+            for (size_t i = 0; i < info->datasetLen; i++)
+            {
+                threadOperationalDataset->push_back(info->dataset[i]);
+            }
+        }
+        else
+        {
+            icWarn("Was unable to get thread operational dataset from the subsystem");
+        }
+    }
+
+    if (threadOperationalDataset != nullptr)
+    {
+        chip::ByteSpan opDsBs(threadOperationalDataset->data(), threadOperationalDataset->size());
+        params.SetThreadOperationalDataset(opDsBs);
+    }
+#endif
+
+    g_autoptr(GError) error = NULL;
+    g_autoptr(BDeviceServiceNetworkCredentialsProvider) provider =
+        deviceServiceConfigurationGetNetworkCredentialsProvider();
+    g_autoptr(BDeviceServiceWifiNetworkCredentials) wifiCredentials =
+        b_device_service_network_credentials_provider_get_wifi_network_credentials(provider, &error);
+
+    if (error == NULL && wifiCredentials != NULL)
+    {
+        free(wifiSsid);
+        free(wifiPass);
+        g_object_get(wifiCredentials,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     &wifiSsid,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     &wifiPass,
+                     NULL);
+
+        params.SetWiFiCredentials(
+            chip::Controller::WiFiCredentials(ByteSpan(chip::Uint8::from_const_char(wifiSsid), strlen(wifiSsid) + 1),
+                                              ByteSpan(chip::Uint8::from_const_char(wifiPass), strlen(wifiPass) + 1)));
+    }
+    else
+    {
+        icWarn("Failed to get wifi creds.  Commissioning to wifi operational network will fail, but on-network devices "
+               "should work. [%d] %s",
+               error->code,
+               stringCoalesce(error->message));
+    }
+
+    return err;
+}
+
+void Matter::OnDeviceAttestationCompleted(
+    Controller::DeviceCommissioner *deviceCommissioner,
+    DeviceProxy *device,
+    const chip::Credentials::DeviceAttestationVerifier::AttestationDeviceInfo &info,
+    chip::Credentials::AttestationVerificationResult attestationResult)
+{
+    using namespace chip::Controller;
+    icDebug();
+
+    // An error message with code will have been logged by the SDK at this point
+
+    if (IsDevelopmentMode())
+    {
+        icWarn("Attestation failed, but we are allowing it anyway");
+        deviceCommissioner->CommissioningStageComplete(CHIP_NO_ERROR);
+    }
+    else
+    {
+        CommissioningDelegate::CommissioningReport report;
+        report.Set<AttestationErrorInfo>(attestationResult);
+
+        deviceCommissioner->CommissioningStageComplete(CHIP_ERROR_INTERNAL, report);
+    }
+}
+
+bool Matter::isQRCode(const std::string &codeString)
+{
+    return codeString.rfind(chip::kQRCodePrefix) == 0;
+}
+
+CHIP_ERROR Matter::ParseSetupPayload(const std::string &codeString, chip::SetupPayload &payload)
+{
+    CHIP_ERROR err = CHIP_NO_ERROR;
+    if (isQRCode(codeString))
+    {
+        err = chip::QRCodeSetupPayloadParser(codeString).populatePayload(payload);
+    }
+    else
+    {
+        err = chip::ManualSetupPayloadParser(codeString).populatePayload(payload);
+    }
+
+    return err;
+}
+
+chip::NodeId Matter::GetRandomOperationalNodeId()
+{
+    NodeId result = kUndefinedNodeId;
+    //logic taken from ExampleOperationalCredentialsIssuer::GetRandomOperationalNodeId
+    // it makes up to 10 passes at generating a random and valid node id
+
+    for (int i = 0; i < 10; ++i)
+    {
+        CHIP_ERROR err = DRBG_get_bytes(reinterpret_cast<uint8_t *>(&result), sizeof(result));
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icError("Failed to DRBG_get_bytes");
+            result = kUndefinedNodeId;
+            break;
+        }
+    }
+
+    return result;
+}
+
+chip::NodeId Matter::LoadOrGenerateLocalNodeId()
+{
+    chip::NodeId result = kUndefinedNodeId;
+
+    // load what we have from storage, otherwise generate a new random one and persist
+    scoped_generic char *localNodeIdStr = nullptr;
+    if (!deviceServiceGetSystemProperty(LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME, &localNodeIdStr) ||
+        !stringToUnsignedNumberWithinRange(localNodeIdStr, &result, 16, 0, UINT64_MAX))
+    {
+        result = GetRandomOperationalNodeId();
+
+        if (IsOperationalNodeId(result))
+        {
+            //persist it
+            free(localNodeIdStr);
+            localNodeIdStr = stringBuilder("%" PRIx64, result);
+            deviceServiceSetSystemProperty(LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME, localNodeIdStr);
+        }
+    }
+
+    return result;
+}
+
+CHIP_ERROR Matter::LoadNOCChain(MutableByteSpan &rCA, MutableByteSpan &iCA, MutableByteSpan &NOC)
+{
+    {
+        scoped_generic char *b64RCA = NULL;
+
+        if (deviceServiceGetSystemProperty(MATTER_RCA_SYSTEM_PROPERTY_NAME, &b64RCA))
+        {
+            if (rCA.size() < BASE64_MAX_DECODED_LEN(strlen(b64RCA)))
+            {
+                return CHIP_ERROR_BUFFER_TOO_SMALL;
+            }
+
+            if (strlen(b64RCA) == 0)
+            {
+                return CHIP_ERROR_NOT_FOUND;
+            }
+
+            rCA.reduce_size(chip::Base64Decode(b64RCA, std::strlen(b64RCA), rCA.data()));
+        }
+        else
+        {
+            return CHIP_ERROR_NOT_FOUND;
+        }
+    }
+
+    {
+        /* Optional */
+        scoped_generic char *b64ICA = NULL;
+
+        if (deviceServiceGetSystemProperty(MATTER_ICA_SYSTEM_PROPERTY_NAME, &b64ICA))
+        {
+            if (iCA.size() < BASE64_MAX_DECODED_LEN(strlen(b64ICA)))
+            {
+                return CHIP_ERROR_BUFFER_TOO_SMALL;
+            }
+
+            if (strlen(b64ICA) != 0)
+            {
+                iCA.reduce_size(chip::Base64Decode(b64ICA, std::strlen(b64ICA), iCA.data()));
+            }
+            else
+            {
+                iCA.reduce_size(0);
+            }
+        }
+        else
+        {
+            iCA.reduce_size(0);
+        }
+    }
+
+    {
+        scoped_generic char *b64NOC = NULL;
+
+        if (deviceServiceGetSystemProperty(MATTER_NOC_SYSTEM_PROPERTY_NAME, &b64NOC))
+        {
+            if (NOC.size() < BASE64_MAX_DECODED_LEN(strlen(b64NOC)))
+            {
+                return CHIP_ERROR_BUFFER_TOO_SMALL;
+            }
+
+            if (strlen(b64NOC) == 0)
+            {
+                return CHIP_ERROR_NOT_FOUND;
+            }
+
+            NOC.reduce_size(chip::Base64Decode(b64NOC, std::strlen(b64NOC), NOC.data()));
+        }
+        else
+        {
+            return CHIP_ERROR_NOT_FOUND;
+        }
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR Matter::SaveNOCChain(ByteSpan rCA, ByteSpan iCA, ByteSpan NOC)
+{
+    {
+        chip::Platform::ScopedMemoryBuffer<char> b64RCA;
+        const uint16_t maxLen = BASE64_ENCODED_LEN(rCA.size());
+        b64RCA.Alloc(maxLen + 1);
+        uint16_t len = Base64Encode(rCA.data(), rCA.size(), b64RCA.Get());
+
+        VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
+        b64RCA[len] = '\0';
+
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_RCA_SYSTEM_PROPERTY_NAME, b64RCA.Get()), CHIP_ERROR_INTERNAL);
+    }
+
+    if (iCA.size() != 0)
+    {
+        chip::Platform::ScopedMemoryBuffer<char> b64ICA;
+        const uint16_t maxLen = BASE64_ENCODED_LEN(iCA.size());
+        b64ICA.Alloc(maxLen + 1);
+        uint16_t len = Base64Encode(iCA.data(), iCA.size(), b64ICA.Get());
+
+        VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
+        b64ICA[len] = '\0';
+
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_ICA_SYSTEM_PROPERTY_NAME, b64ICA.Get()), CHIP_ERROR_INTERNAL);
+    }
+
+    {
+        chip::Platform::ScopedMemoryBuffer<char> b64NOC;
+        const uint16_t maxLen = BASE64_ENCODED_LEN(NOC.size());
+        b64NOC.Alloc(maxLen + 1);
+        uint16_t len = Base64Encode(NOC.data(), NOC.size(), b64NOC.Get());
+
+        VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
+        b64NOC[len] = '\0';
+
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_NOC_SYSTEM_PROPERTY_NAME, b64NOC.Get()), CHIP_ERROR_INTERNAL);
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR Matter::GetFabricIndex(FabricTable *fabricTable, bool mutliControllerAllowed, ByteSpan rCA, ByteSpan NOC, FabricIndex &idxOut)
+{
+    NodeId nodeId;
+    FabricId tmpFabricId;
+    Credentials::P256PublicKeySpan rootPublicKeySpan;
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> chipNOC;
+
+    VerifyOrReturnError(chipNOC.Alloc(chip::Credentials::kMaxCHIPCertLength), CHIP_ERROR_NO_MEMORY);
+    chip::MutableByteSpan chipNOCSpan(chipNOC.Get(), chip::Credentials::kMaxCHIPCertLength);
+    ReturnErrorOnFailure(Credentials::ConvertX509CertToChipCert(NOC, chipNOCSpan));
+    ReturnErrorOnFailure(Credentials::ExtractNodeIdFabricIdFromOpCert(chipNOCSpan, &nodeId, &tmpFabricId));
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> chipRCA;
+    VerifyOrReturnError(chipRCA.Alloc(chip::Controller::kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+    chip::MutableByteSpan chipRCASpan(chipRCA.Get(), chip::Credentials::kMaxCHIPCertLength);
+    ReturnErrorOnFailure(Credentials::ConvertX509CertToChipCert(rCA, chipRCASpan));
+    ReturnErrorOnFailure(Credentials::ExtractPublicKeyFromChipCert(chipRCASpan, rootPublicKeySpan));
+    Crypto::P256PublicKey rootPublicKey{ rootPublicKeySpan };
+
+    const FabricInfo *controllerFabric = nullptr;
+
+    if (mutliControllerAllowed)
+    {
+        controllerFabric = fabricTable->FindIdentity(rootPublicKey, nodeId, tmpFabricId);
+    }
+    else
+    {
+        controllerFabric = fabricTable->FindFabric(rootPublicKey, tmpFabricId);
+    }
+
+    if (controllerFabric != nullptr)
+    {
+        idxOut = controllerFabric->GetFabricIndex();
+    }
+    else
+    {
+        idxOut = kUndefinedFabricIndex;
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+bool Matter::IsAccessibleByOTARequestors()
+{
+    icDebug();
+
+    bool result = false;
+
+    // This will always return false if the node isn't initialized
+
+    if (myFabricId == chip::kUndefinedFabricId || myNodeId == chip::kUndefinedNodeId)
+    {
+        icWarn("Node isn't initialized");
+        return result;
+    }
+
+    size_t index = 0;
+    CHIP_ERROR aclCountErr = chip::Access::GetAccessControl().GetEntryCount(myFabricIndex, index);
+
+    if (aclCountErr != CHIP_NO_ERROR)
+    {
+        icError("Failed to get ACL entry count for fabric index %" PRIu8 ": %s", myFabricIndex, aclCountErr.AsString());
+        return false;
+    }
+
+    while (index)
+    {
+        Access::AccessControl::Entry entry;
+        CHIP_ERROR err = Access::GetAccessControl().ReadEntry(myFabricIndex, --index, entry);
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icWarn("Unable to read ACL entry at index: %zu", index);
+            continue;
+        }
+
+        chip::FabricIndex currFabricIndex;
+        chip::Access::Privilege currPrivilege;
+        chip::Access::AuthMode currAuthMode;
+
+        LogErrorOnFailure(AccessControlDump(entry));
+
+        if (entry.GetFabricIndex(currFabricIndex) == CHIP_NO_ERROR &&
+            entry.GetPrivilege(currPrivilege) == CHIP_NO_ERROR && entry.GetAuthMode(currAuthMode) == CHIP_NO_ERROR)
+        {
+            if (currFabricIndex == myFabricIndex && currPrivilege >= chip::Access::Privilege::kOperate &&
+                currAuthMode == chip::Access::AuthMode::kCase)
+            {
+                // OTA Requestors need at least the "operate" privilege over CASE
+                result = true;
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+CHIP_ERROR Matter::AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex)
+{
+    icDebug();
+
+    CHIP_ERROR err = CHIP_NO_ERROR;
+
+    if (fabricIndex == chip::kUndefinedFabricIndex)
+    {
+        icError("No such entry on fabric table for fabricId: %" PRIu64, fabricId);
+        return CHIP_ERROR_INVALID_FABRIC_INDEX;
+    }
+
+    chip::Access::SubjectDescriptor subjectDescriptor = {
+        .fabricIndex = fabricIndex,
+        .authMode = Access::AuthMode::kCase,
+    };
+
+    icDebug("fabricIndex = %d", fabricIndex);
+    chip::Access::AccessControl::Entry::Target target = {
+        .flags = chip::Access::AccessControl::Entry::Target::kCluster,
+        .cluster = chip::app::Clusters::OtaSoftwareUpdateProvider::Id,
+    };
+
+    chip::Access::AccessControl::Entry entry;
+    ReturnErrorOnFailure(Access::GetAccessControl().PrepareEntry(entry));
+    ReturnErrorOnFailure(entry.SetFabricIndex(fabricIndex));
+    ReturnErrorOnFailure(entry.SetPrivilege(Access::Privilege::kOperate));
+    ReturnErrorOnFailure(entry.SetAuthMode(Access::AuthMode::kCase));
+    ReturnErrorOnFailure(entry.AddTarget(nullptr, target));
+
+    LogErrorOnFailure(AccessControlDump(entry));
+
+    err = Access::GetAccessControl().CreateEntry(&subjectDescriptor, fabricIndex, nullptr, entry);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to add ACL entry: %" CHIP_ERROR_FORMAT, err.Format());
+        return err;
+    }
+
+    return err;
+}
+
+CHIP_ERROR Matter::ConfigureOTAProviderNode()
+{
+    icDebug();
+
+    if (IsAccessibleByOTARequestors() == false)
+    {
+        icDebug("Adding ACL entries so that OTA Requestors can poll our node");
+        ReturnErrorOnFailure(AppendOTARequestorsACLEntry(myFabricId, myFabricIndex));
+    }
+
+    chip::app::Clusters::OTAProvider::SetDelegate(otaProviderEndpointId, &otaProvider);
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry & entry)
+#if defined(CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED) && CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED == 1
+{
+    CHIP_ERROR err;
+
+    ChipLogDetail(DataManagement, "----- BEGIN ENTRY -----");
+
+    {
+        chip::FabricIndex fabricIndex;
+        SuccessOrExit(err = entry.GetFabricIndex(fabricIndex));
+        ChipLogDetail(DataManagement, "fabricIndex: %u", fabricIndex);
+    }
+
+    {
+        chip::Access::Privilege privilege;
+        SuccessOrExit(err = entry.GetPrivilege(privilege));
+        ChipLogDetail(DataManagement, "privilege: %d", to_underlying(privilege));
+    }
+
+    {
+        chip::Access::AuthMode authMode;
+        SuccessOrExit(err = entry.GetAuthMode(authMode));
+        ChipLogDetail(DataManagement, "authMode: %d", to_underlying(authMode));
+    }
+
+    {
+        size_t count;
+        SuccessOrExit(err = entry.GetSubjectCount(count));
+        if (count)
+        {
+            ChipLogDetail(DataManagement, "subjects: %u", static_cast<unsigned>(count));
+            for (size_t i = 0; i < count; ++i)
+            {
+                chip::NodeId subject;
+                SuccessOrExit(err = entry.GetSubject(i, subject));
+                ChipLogDetail(DataManagement, "  %u: 0x" ChipLogFormatX64, static_cast<unsigned>(i), ChipLogValueX64(subject));
+            }
+        }
+    }
+
+    {
+        size_t count;
+        SuccessOrExit(err = entry.GetTargetCount(count));
+        if (count)
+        {
+            ChipLogDetail(DataManagement, "targets: %u", static_cast<unsigned>(count));
+            for (size_t i = 0; i < count; ++i)
+            {
+                chip::Access::AccessControl::Entry::Target target;
+                SuccessOrExit(err = entry.GetTarget(i, target));
+                if (target.flags & chip::Access::AccessControl::Entry::Target::kCluster)
+                {
+                    ChipLogDetail(DataManagement, "  %u: cluster: 0x" ChipLogFormatMEI, static_cast<unsigned>(i),
+                                  ChipLogValueMEI(target.cluster));
+                }
+                if (target.flags & chip::Access::AccessControl::Entry::Target::kEndpoint)
+                {
+                    ChipLogDetail(DataManagement, "  %u: endpoint: %u", static_cast<unsigned>(i), target.endpoint);
+                }
+                if (target.flags & chip::Access::AccessControl::Entry::Target::kDeviceType)
+                {
+                    ChipLogDetail(DataManagement, "  %u: deviceType: 0x" ChipLogFormatMEI, static_cast<unsigned>(i),
+                                  ChipLogValueMEI(target.deviceType));
+                }
+            }
+        }
+    }
+
+    ChipLogDetail(DataManagement, "----- END ENTRY -----");
+
+    return CHIP_NO_ERROR;
+
+exit:
+    ChipLogError(DataManagement, "AccessControl: dump failed %" CHIP_ERROR_FORMAT, err.Format());
+    return err;
+}
+#else
+{
+    return CHIP_NO_ERROR;
+}
+#endif
+
+std::string Matter::GetAuthToken()
+{
+    g_autoptr(BDeviceServiceTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
+
+    std::string retVal = "";
+    if (tokenProvider)
+    {
+        g_autoptr(GError) error = nullptr;
+        g_autofree gchar *token =
+            b_device_service_token_provider_get_token(tokenProvider, B_DEVICE_SERVICE_TOKEN_TYPE_XPKI_MATTER, &error);
+
+        if (error)
+        {
+            icError("Failed to get auth token: [%d] - %s", error->code, error->message);
+        }
+        else if (token)
+        {
+            retVal = token;
+        }
+    }
+
+    return retVal;
+}
+
+bool Matter::PrimeNewAuthorizationToken()
+{
+    bool retVal = false;
+    std::string token = GetAuthToken();
+    if (!token.empty())
+    {
+        operationalCredentialsIssuer.SetAuthToken(token);
+        // Additionally, update our Issuer API env in case that changed.
+        SetOperationalCredsIssuerApiEnv();
+        retVal = true;
+    }
+
+    return retVal;
+}
+
+Matter::OperationalEnvironment Matter::GetOperationalEnvironment(std::string env)
+{
+    OperationalEnvironment retVal = OPERATIONAL_ENV_UNKNOWN;
+
+    if (env == OPARTIONAL_ENVIRONMENT_STRING_PROD)
+    {
+        retVal = OPERATIONAL_ENV_PROD;
+    }
+    else if (env == OPARTIONAL_ENVIRONMENT_STRING_STAGE)
+    {
+        retVal = OPERATIONAL_ENV_STAGE;
+    }
+
+    return retVal;
+}
+
+Controller::CertifierOperationalCredentialsIssuer::ApiEnv Matter::GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv)
+{
+    Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv;
+    switch(operationalEnv)
+    {
+        case OPERATIONAL_ENV_PROD:
+        {
+            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::prod;
+            break;
+        }
+        case OPERATIONAL_ENV_STAGE:
+        {
+            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::stage;
+            break;
+        }
+        //TODO: qa, dev
+        case OPERATIONAL_ENV_UNKNOWN:
+        default:
+        {
+            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::prod;
+            break;
+        }
+    }
+
+    return apiEnv;
+}
+
+void Matter::SetOperationalCredsIssuerApiEnv()
+{
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *propValue = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT, DEFAULT_OPERATIONAL_ENVIRONMENT);
+    std::string envString(propValue);
+    Matter::OperationalEnvironment env = GetOperationalEnvironment(envString);
+    Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv = GetIssuerApiEnv(env);
+    operationalCredentialsIssuer.SetApiEnv(apiEnv);
+}

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DeviceDescriptorList version="7.1.0-071715" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="AllowList.xsd">
+    <!-- Touchstone DDL -->
+
+    <!-- Matter Devices -->
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070a5</uuid>
+       <description>Comcast Wireless Chime (Wi-Fi)</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <latestFirmware>
+          <version>0x00000001</version>
+          <filename checksum="ABCDEF0123456789ABCDEF">test.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+       <matter>
+          <vendorId>0x111D</vendorId>
+          <productId>0x8001</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b0</uuid>
+       <description>Chime with no VID and PID</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070d5</uuid>
+       <description>Chime with category without matter technology</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070e5</uuid>
+       <description>Chime without category with matter technology</description>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x111D</vendorId>
+          <productId>0x8001</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b1</uuid>
+       <description>Chime with VID but no PID</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x111D</vendorId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b2</uuid>
+       <description>Chime with PID but no VID</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <productId>0x8001</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070c3</uuid>
+       <description>Chime with valid VID and PID range</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x111D</vendorId>
+          <productId>0xFFFF</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b3</uuid>
+       <description>Chime with valid VID but invalid PID range</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x111D</vendorId>
+          <productId>0x10000</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b4</uuid>
+       <description>Chime with valid PID but invalid VID range</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x10000</vendorId>
+          <productId>0x8001</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130040d4</uuid>
+       <description>Chime with valid PID and valid VID range</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0xFFFF</vendorId>
+          <productId>0xFFFF</productId>
+       </matter>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>663e661e-9c6b-4184-b4d3-8739130070b5</uuid>
+       <description>Chime with invalid PID range, invalid VID range</description>
+       <category>matter</category>
+       <manufacturer>COMCAST</manufacturer>
+       <model>XFINITY_CHIME</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x00000001</firmwareVersions>
+       <matter>
+          <vendorId>0x10000</vendorId>
+          <productId>0x10000</productId>
+       </matter>
+    </DeviceDescriptor>
+    <!-- Matter Devices -->
+
+</DeviceDescriptorList>

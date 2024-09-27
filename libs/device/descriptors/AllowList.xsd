@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+<xs:simpleType name="stringtype">
+    <xs:restriction base="xs:string">
+        <xs:minLength value = "1"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="inttype">
+    <xs:restriction base="xs:positiveInteger"/>
+</xs:simpleType>
+
+<xs:simpleType name="dectype">
+    <xs:restriction base="xs:decimal"/>
+</xs:simpleType>
+
+<xs:simpleType name="uritype">
+    <xs:restriction base="xs:anyURI">
+        <xs:pattern value="http://.*"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="versiontype">
+    <xs:restriction base="xs:string">
+        <xs:minLength value = "1"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="matterProductIdtype">
+    <xs:restriction base="xs:string">
+        <xs:minLength value = "1"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="matterVendorIdtype">
+    <xs:restriction base="xs:string">
+        <xs:minLength value = "1"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="cameraProtocoltype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="legacy"/>
+        <xs:pattern value="openHome"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="cameraSSIDtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="\(\((.+)\)_\(\[0\-9a\-fA\-F\]\)\{6\}\)"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="versionformattype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="legacyCamera"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="listtype">
+    <xs:sequence>
+        <xs:element type="versiontype" name="version" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="versionrangetype">
+    <xs:sequence>
+        <xs:element type="versiontype" name="from" minOccurs="1" maxOccurs="1"/>
+        <xs:element type="versiontype" name="to" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="wildcardtype">
+</xs:complexType>
+
+<xs:complexType name="versionlisttype">
+    <xs:choice>
+        <xs:element type="listtype" name="list" maxOccurs="1"/>
+        <xs:element type="wildcardtype" name="any" minOccurs="1" maxOccurs="1"/>
+        <xs:element type="versionrangetype" name="range" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:choice>
+    <xs:attribute name="format" type="versionformattype" use="optional"/>
+</xs:complexType>
+
+<xs:simpleType name="fimwarestringtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="ota|legacy"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="categorystringtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="zigbee|camera|PhilipsHue|matter"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="restrictionstringtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="denylist"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="rolestringtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="client|server"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="booleanstringtype">
+    <xs:restriction base="xs:string">
+        <xs:pattern value="true|false"/>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="firmwarefiletype">
+    <xs:simpleContent>
+        <xs:extension base="stringtype">
+            <xs:attribute name="checksum" type="stringtype" use="optional"/>
+        </xs:extension>
+    </xs:simpleContent>
+</xs:complexType>
+
+<xs:complexType name="clustertype">
+    <xs:sequence>
+        <xs:element name="clusterId" type="stringtype" />
+        <xs:element name="endpointId" type="stringtype" />
+    </xs:sequence>
+
+    <xs:attribute name="role" type="rolestringtype" use="required" />
+</xs:complexType>
+
+<xs:complexType name="attributetype">
+    <xs:sequence>
+        <xs:element name="attributeId" type="stringtype" />
+        <xs:element name="clusterId" type="stringtype" />
+        <xs:element name="endpointId" type="stringtype" />
+    </xs:sequence>
+
+    <xs:attribute name="role" type="rolestringtype" use="required" />
+</xs:complexType>
+
+<xs:complexType name="commandtype">
+    <xs:sequence>
+        <xs:element name="commandId" type="stringtype" />
+        <xs:element name="clusterId" type="stringtype" />
+        <xs:element name="endpointId" type="stringtype" />
+    </xs:sequence>
+
+    <xs:attribute name="role" type="rolestringtype" use="required" />
+    <xs:attribute name="isManufacturerSpecific" type="booleanstringtype" />
+    <xs:attribute name="manufacturerId" type="inttype" />
+</xs:complexType>
+
+<xs:complexType name="metadatatype">
+    <xs:attribute name="name" type="stringtype" />
+    <xs:attribute name="value" type="stringtype" />
+</xs:complexType>
+
+<xs:complexType name="firmwaretype">
+    <xs:sequence>
+        <xs:element name="version" type="versiontype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="filename" type="firmwarefiletype" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="zigbeefirmwaretype">
+    <xs:complexContent>
+        <xs:extension base="firmwaretype">
+            <xs:sequence>
+                <xs:element name="type" type="fimwarestringtype" minOccurs="1" maxOccurs="1"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="endpointidstype">
+    <xs:sequence>
+        <xs:element name="endpointId" type="stringtype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="clusterstype">
+    <xs:sequence>
+        <xs:element name="cluster" type="clustertype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="attributestype">
+    <xs:sequence>
+        <xs:element name="attribute" type="attributetype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="commandstype">
+    <xs:sequence>
+        <xs:element name="command" type="commandtype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="metadatalisttype">
+    <xs:sequence>
+        <xs:element name="metadata" type="metadatatype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="zigbeerestrictionstype">
+    <xs:sequence>
+        <xs:element name="endpointIds" type="endpointidstype"  minOccurs="0"/>
+        <xs:element name="clusters" type="clusterstype"  minOccurs="0"/>
+        <xs:element name="attributes" type="attributestype"  minOccurs="0"/>
+        <xs:element name="commands" type="commandstype"  minOccurs="0"/>
+    </xs:sequence>
+
+    <xs:attribute name="restrictionType" type="restrictionstringtype" use="required" />
+</xs:complexType>
+
+<xs:complexType name="firmwareversionlisttype">
+    <xs:sequence>
+        <xs:element name="version" type="versiontype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="clusterlisttype">
+    <xs:sequence>
+        <xs:element name="mfgId" type="xs:string"></xs:element>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string"></xs:attribute>
+</xs:complexType>
+
+<xs:complexType name="zigbeemfgidstype">
+    <xs:sequence>
+        <xs:element name="cluster" type="clusterlisttype" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="mattertechnologytype">
+    <xs:sequence>
+        <xs:element name="vendorId" type="matterVendorIdtype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="productId" type="matterProductIdtype" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="devicedescriptortypebase">
+    <xs:sequence>
+        <xs:element name="uuid" type="stringtype" minOccurs="1"/>
+        <xs:element name="description" type="stringtype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="manufacturer" type="stringtype"/>
+        <xs:element name="model" type="stringtype"/>
+        <xs:element name="hardwareVersions" type="versionlisttype"/>
+        <xs:element name="firmwareVersions" type="versionlisttype"/>
+        <xs:element name="minSupportedFirmwareVersion" type="versiontype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="metadataList" type="metadatalisttype" minOccurs="0"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="legacyzigbeedevicedescriptortype">
+    <xs:sequence>
+        <xs:element name="uuid" type="stringtype" minOccurs="1"/>
+        <xs:element name="description" type="stringtype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="category" type="categorystringtype"/>
+        <xs:element name="manufacturer" type="stringtype"/>
+        <xs:element name="model" type="stringtype"/>
+        <xs:element name="hardwareVersions" type="versiontype"/>
+        <xs:element name="firmwareVersions" type="versiontype"/>
+        <xs:element name="minSupportedFirmwareVersion" type="versiontype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="metadataList" type="metadatalisttype" minOccurs="0"/>
+        <xs:element name="latestFirmware" type="zigbeefirmwaretype" minOccurs="0"/>
+        <xs:element name="restrictions" type="zigbeerestrictionstype" minOccurs="0"/>
+        <xs:element name="mfgIds" type="zigbeemfgidstype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="cascadeAddDeleteEndpoints" type="booleanstringtype" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="matter" type="mattertechnologytype" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="cameradevicedescriptortype">
+    <xs:complexContent>
+        <xs:extension base="devicedescriptortypebase">
+            <xs:sequence>
+                <xs:element name="latestFirmware" type="firmwaretype" minOccurs="0"/>
+                <xs:element name="protocol" type="cameraProtocoltype" minOccurs="1" maxOccurs = "1"/>
+                <xs:element name="motion" type="cameramotiondescriptortype" minOccurs="0" maxOccurs = "1"/>
+                <xs:element name="ssid" type="cameraSSIDtype" minOccurs="0" maxOccurs="1"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="cameramotiondescriptortype">
+    <xs:sequence>
+        <xs:element name="enabled" type="booleanstringtype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="sensitivityLevel" type="motionsensitivitydescriptortype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="detectionThreshold" type="motiondetectthreshdescriptortype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="regionOfInterest" type="motionroidescriptortype" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="motionsensitivitydescriptortype">
+    <xs:sequence>
+        <xs:element name="low" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="med" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="high" type="inttype" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+<xs:complexType name="motiondetectthreshdescriptortype">
+    <xs:sequence>
+        <xs:element name="low" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="med" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="high" type="inttype" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+<xs:complexType name="motionroidescriptortype">
+    <xs:sequence>
+        <xs:element name="width" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="height" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="bottomCoord" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="topCoord" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="leftCoord" type="inttype" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="rightCoord" type="inttype" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="zigbeedevicedescriptortype">
+    <xs:complexContent>
+        <xs:extension base="devicedescriptortypebase">
+            <xs:sequence>
+                <xs:element name="latestFirmware" type="zigbeefirmwaretype" minOccurs="0"/>
+                <xs:element name="restrictions" type="zigbeerestrictionstype" minOccurs="0"/>
+            </xs:sequence>
+        </xs:extension>
+    </xs:complexContent>
+</xs:complexType>
+
+<xs:complexType name="devicedescriptorlisttype">
+    <xs:sequence>
+        <xs:element name="DeviceDescriptor" type="legacyzigbeedevicedescriptortype" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="ZigbeeDeviceDescriptor" type="zigbeedevicedescriptortype" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="CameraDeviceDescriptor" type="cameradevicedescriptortype" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+
+    <xs:attribute name="version" type="stringtype" use="required" />
+</xs:complexType>
+
+<xs:element name="DeviceDescriptorList" type="devicedescriptorlisttype" />
+
+</xs:schema>

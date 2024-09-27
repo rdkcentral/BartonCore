@@ -1,0 +1,1494 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DeviceDescriptorList version="7.1.0-071715" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="AllowList.xsd">
+    <!-- Touchstone DDL -->
+    <!-- SENSORS SECTION BEGIN -->
+    
+    <!-- HA 1.2 Sensors Begin-->
+
+    <!--Accton (SMC) Sensors Begin-->
+    <DeviceDescriptor>
+       <uuid>28A16B90-3E2F-11E4-916C-0800200C9A66</uuid>
+       <description>Connect Sensor Door Windor(EM3585)</description>
+       <category>zigbee</category>
+       <manufacturer>ACCTON</manufacturer>
+       <model>SMCDW30-Z</model>
+       <hardwareVersions>1</hardwareVersions>
+       <firmwareVersions>*</firmwareVersions>
+       <latestFirmware>
+          <version>0x00010006</version>
+          <filename>Accton_SMCDW30-Z_00010006.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--Bosch Sensors Begin-->
+    <DeviceDescriptor>    
+      <uuid>c6b864e3-950d-49da-bd91-2bdc9aab7821</uuid>              
+      <description>Bosch PIR Motion Sensor</description>
+      <category>zigbee</category>              
+      <manufacturer>Bosch</manufacturer>              
+      <model>ISW-ZPR1-WP13</model>              
+      <hardwareVersions>*</hardwareVersions>              
+      <firmwareVersions>0x02020201,0x02030201,0x02040201</firmwareVersions>     
+      <latestFirmware>              
+        <version>0x02040201</version>               
+        <filename>CSS_dev_stm32l1_gp710_v2421_rel.ota</filename>
+        <type>ota</type>               
+      </latestFirmware>              
+    </DeviceDescriptor>            
+
+    <DeviceDescriptor>            
+      <uuid>2fa1ca71-b061-44b5-9fc4-4527e52d2088</uuid>             
+      <description>Bosch DUAL Motion Sensor</description>
+      <category>zigbee</category>             
+      <manufacturer>Bosch</manufacturer>             
+      <model>ISW-ZDL1-WP11G</model>             
+      <hardwareVersions>*</hardwareVersions>             
+      <firmwareVersions>0x02020201,0x02030201,0x02040201</firmwareVersions>    
+      <latestFirmware>             
+        <version>0x02040201</version>              
+        <filename>CSS_dev_stm32l1_gp710_v2421_rel.ota</filename>
+        <type>ota</type>              
+      </latestFirmware>             
+    </DeviceDescriptor> 
+
+        <!--Centralite Sensors-->
+    <DeviceDescriptor>
+        <uuid>718A10CB-36D9-4C5f-91B3-6AABB4316073</uuid>
+        <description>Motion Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>3305</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x10015100</version>
+            <filename>ha-motionsensor-10015100.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>715C56CB-32D9-4C5f-91B3-6ADADD316073</uuid>
+        <description>Door Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>3300</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x10015100</version>
+            <filename>ha-doorsensor-10015100.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>715A10CB-32D9-4C5f-91B3-6ADEAD316073</uuid>
+        <description>Water Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>3315</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x10015100</version>
+            <filename>ha-watersensor-10015100.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--Crow Sensors Begin-->
+    <DeviceDescriptor>
+        <uuid>4434D720-A9E7-11E3-9CF2-0002A5D5C51B</uuid>
+        <description>Flood Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>Crow</manufacturer>
+        <model>FLOOD-ZB</model>
+        <hardwareVersions>0x1C</hardwareVersions>
+        <firmwareVersions>0x01000024,0x01000025</firmwareVersions>
+        <latestFirmware>
+            <version>0x01000025</version>
+            <filename>crow-flood-zb-v1.0.25.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>4b931971-bf2a-11e3-b1b6-0800200c9a66</uuid>
+        <description>Motion (PIR) Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>Crow</manufacturer>
+        <model>PIR-ZB</model>
+        <hardwareVersions>0x1A</hardwareVersions>
+        <firmwareVersions>0x01000024,0x01000025</firmwareVersions>
+        <latestFirmware>
+            <version>0x01000025</version>
+            <filename>crow-pir-zb-v1.0.25.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--Hitron Sensors Begin-->
+    <DeviceDescriptor>
+        <uuid>05994E06-EB36-4F63-BA8E-2765D9F876D9</uuid>
+        <description>Hitron Micro Door/Window Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>Hitron Technologies</manufacturer>
+        <model>HT-DW1</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00090501,0x000A0501</firmwareVersions>
+        <latestFirmware>
+            <version>0x000A0501</version>
+            <filename>Hitron_uDW-000A0501.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>b9dc4ab4-9811-498f-a112-ae1fd5a055a7</uuid>
+       <description>Hitron Garage Door Sensor</description>
+       <category>zigbee</category>
+       <manufacturer>Hitron Technologies</manufacturer>
+       <model>HT-GDS1</model>
+       <hardwareVersions>*</hardwareVersions>
+       <firmwareVersions>0x06050101,0x07050101</firmwareVersions>
+       <latestFirmware>
+          <version>0x07050101</version>
+          <filename>HT-GDS1-07050101.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--Sercomm Sensors Begin-->
+    <DeviceDescriptor>
+        <uuid>652CEC88-09F0-4E24-918F-2D6114E4D753</uuid>
+        <description>Door/Window Sensor(EM358x)</description>
+        <category>zigbee</category>
+        <manufacturer>Sercomm Corp.</manufacturer>
+        <model>SZ-DWS04</model>
+        <hardwareVersions>0x11</hardwareVersions>
+        <firmwareVersions>0x1200335E,0x1400335E,0x1600335E,0x18005121,0x20005121</firmwareVersions>
+        <latestFirmware>
+            <version>0x20005121</version>
+            <filename>DAY3HZ-100-2000.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+      <uuid>FD7D2B00-9803-11E4-BD06-0800200C9A66</uuid>
+      <description>Door/Window Sensor(EM358x)</description>
+      <category>zigbee</category>
+      <manufacturer>Sercomm Corp.</manufacturer>
+      <model>SZ-DWS04</model>
+      <hardwareVersions>0x12</hardwareVersions>
+      <firmwareVersions>0x1200335E,0x1400335E,0x1600335E,0x18005121,0x20005121</firmwareVersions>
+        <latestFirmware>
+           <version>0x20005121</version>
+           <filename>DAY3HZ-100-2000.ota</filename>
+           <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--Visonic Sensors Begin-->
+    <DeviceDescriptor>
+       <uuid>8838c960-0cbe-11e4-ba9e-0002a5d5c51b</uuid>
+       <description>MCT MICRO D/W Sensor with Remote Contact</description>
+       <category>zigbee</category>
+       <manufacturer>Visonic</manufacturer>
+       <model>MCT-340 SMA</model>
+       <hardwareVersions>1</hardwareVersions>
+       <firmwareVersions>0x00000720,0x00000722,0x00000724</firmwareVersions>
+       <latestFirmware>
+             <version>0x00000724</version>
+             <filename>ZB_Vanishing_V7_2b4.ota</filename>
+             <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- HA 1.2 Sensors End-->
+
+    <!-- Legacy Sensors Begin-->
+    <!-- NOTE: changes to this legacy sensors section may require a firmware code change! -->
+    <DeviceDescriptor>
+        <uuid>763F53AB-6081-4FED-A027-0ABCF918F237</uuid>
+        <description>ZigBee Motion Sensor v2</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCMT10-Z</model>
+        <hardwareVersions>*</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040005</version>
+            <filename>SMC_Sensors-00040005.ebl</filename>
+            <filename>bootloader-updaterSiGe-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>FA3BD7CA-D553-48A9-A3CE-85B6D63F0563</uuid>
+        <description>ZigBee CO Sensor v2</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCCO10-Z</model>
+        <hardwareVersions>*</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040005</version>
+            <filename>SMC_Sensors-00040005.ebl</filename>
+            <filename>bootloader-updaterSiGe-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>974097EE-3AB5-4986-8A0F-F3F7D707EB16</uuid>
+        <description>ZigBee Water Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCWA01-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040005</version>
+            <filename>MTL_Window-00040005.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>789335A5-CFC6-4337-AFD9-2BA5277D78B6</uuid>
+        <description>ZigBee CO Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCCO01-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000300-0x00040007</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040007</version>
+            <filename>RF_Module-00040007.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>7E4C7DB2-9528-4278-B581-7AD46BB1CCB0</uuid>
+        <description>ZigBee Door Window Sensor Rev 2</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCDW02-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000300-0x00040005</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040005</version>
+            <filename>MTL_Window-00040005.ebl</filename>
+            <filename>bootloader-updaterSiGe-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>681A278F-3F7E-4F3C-80EF-E75BE04B2825</uuid>
+        <description>ZigBee GE Motion Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCMT03-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000300-0x0004000A</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000A</version>
+            <filename>MTL_RF_Module-0004000A.ebl</filename>
+            <filename>bootloader-updaterSiGe-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+        <uuid>3A5A9A80-C9CC-4B67-8DD3-9466C203BAE9</uuid>
+        <description>ZigBee CO Sensor</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCCO02-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000300-0x0004000A</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000A</version>
+            <filename>MTL_RF_Module-0004000A.ebl</filename>
+            <filename>bootloader-updaterSiGe-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>F99B0AE2-83CB-4195-A2DD-7501A153BC1C</uuid>
+        <description>MCT MINI D/W Sensor - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-320 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x00040008</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040008</version>
+            <filename>Visonic_Window-00040008.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>4999E96F-61B7-4CCA-ABE8-02D4FF5DF2E8</uuid>
+        <description>MCT MINI D/W Sensor - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-320 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040108</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040108</version>
+            <filename>Visonic_Window-00040108.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>2776726F-0E98-40F9-A6A0-C8E179A8F3C9</uuid>
+        <description>Clip Motion - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>CLIP SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x0004000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000B</version>
+            <filename>Visonic_RF-0004000B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>426936FD-B369-40A7-A9C4-59FF507DFCD1</uuid>
+        <description>Clip Motion - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>CLIP SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x0004010B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004010B</version>
+            <filename>Visonic_RF-0004010B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>CF13441E-EA83-400F-95BF-F40356A8E594</uuid>
+        <description>Pet-immune Motion Detector - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>NEXT K85 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x0004000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000B</version>
+            <filename>Visonic_RF-0004000B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>D734EBC2-5A54-4D26-B1BA-3055C350F298</uuid>
+        <description>Pet-immune Motion Detector - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>NEXT K85 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x0004010B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004010B</version>
+            <filename>Visonic_RF-0004010B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>E05F7EEE-922D-437E-A611-01AF1D016A43</uuid>
+        <description>Water Sensor - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-550 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x0004000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000B</version>
+            <filename>Visonic_RF-0004000B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>DBB218AD-F1C2-43EA-980F-CF4C79915565</uuid>
+        <description>Water Sensor - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-550 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x0004010B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004010B</version>
+            <filename>Visonic_RF-0004010B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>99A4DC1B-405D-4114-87DD-A5D338169227</uuid>
+        <description>MCT D/W Sensor with Remote Contact - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-302 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x0004000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000B</version>
+            <filename>Visonic_RF-0004000B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>B565BF1B-B6D4-467B-90E2-9542F68D8399</uuid>
+        <description>MCT D/W Sensor with Remote Contact - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-302 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x0004010B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004010B</version>
+            <filename>Visonic_RF-0004010B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>DCC7D4FA-D0F9-4046-948F-943EEDE5CFD2</uuid>
+        <description>Carbon Monoxide Alarm - US firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-442 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00040001-0x0004000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004000B</version>
+            <filename>Visonic_RF-0004000B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>3D3F5FE9-109E-45C2-B340-3DA25D5A2014</uuid>
+        <description>Carbon Monoxide Alarm - EU/JP firmware</description>
+        <category>zigbee</category>
+        <manufacturer>Visonic</manufacturer>
+        <model>MCT-442 SMA</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x0004010B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0004010B</version>
+            <filename>Visonic_RF-0004010B.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- Out of Production Sensors -->
+    <DeviceDescriptor>
+        <uuid>5414FAE6-541F-41E4-A92A-50B143C45708</uuid>
+        <description>Out of production ZigBee Door Window Sensor (Replaced with SMCDW02-Z)</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCDW01-Z</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>0x00000300-0x00040004</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040004</version>
+            <filename>Window-00040004.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    <DeviceDescriptor>
+        <uuid>FF7BF147-EBD7-4E7B-8ABA-4FB4C2823FDE</uuid>
+        <description>Out of production ZigBee GE Motion Sensor (Replaced with SMCMT03-Z)</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCMT01-Z</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000300-0x00040007</firmwareVersions>
+        <latestFirmware>
+            <version>0x00040007</version>
+            <filename>RF_Module-00040007.ebl</filename>
+            <filename>bootloader-updaterSKY65336-4.5.175.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+    <!-- Out of Production Sensors -->
+
+    <!-- Legacy Sensors End-->
+    <!-- SENSORS SECTION END -->
+
+    <!-- LIGHTS SECTION BEGIN -->
+
+    <!--Jasco Begin-->
+    <DeviceDescriptor>
+      <uuid>249CB918-309C-BF06-E037-D4F78D6A8105</uuid>
+      <description>Plug-In Dimmer</description>
+      <category>zigbee</category>
+      <manufacturer>Jasco Products</manufacturer>
+      <model>45852</model>
+      <hardwareVersions>1</hardwareVersions>
+      <firmwareVersions>0x00000006,0x00000007</firmwareVersions>
+      <latestFirmware>
+        <version>0x00000007</version>
+        <filename>Jasco_5_0_1_Dimmer_45852_v7.ota</filename>
+        <type>ota</type>
+      </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+      <uuid>17321978-F4F1-5EAA-79F5-62A059403737</uuid>
+      <description>Plug-In Relay</description>
+      <category>zigbee</category>
+      <manufacturer>Jasco Products</manufacturer>
+      <model>45853</model>
+      <hardwareVersions>1</hardwareVersions>
+      <firmwareVersions>0x00000005,0x00000006</firmwareVersions>
+      <latestFirmware>
+        <version>0x00000006</version>
+        <filename>Jasco_5_0_1_OnOff_45853_v6.ota</filename>
+        <type>ota</type>
+      </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+      <uuid>220A61F6-0FDD-C873-1D00-A624D7207839</uuid>
+      <description>In-Wall Relay</description>
+      <category>zigbee</category>
+      <manufacturer>Jasco Products</manufacturer>
+      <model>45856</model>
+      <hardwareVersions>1</hardwareVersions>
+      <firmwareVersions>0x00000004,0x00000005</firmwareVersions>
+      <latestFirmware>
+        <version>0x00000005</version>
+        <filename>Jasco_5_0_1_OnOff_45856_v5.ota</filename>
+        <type>ota</type>
+      </latestFirmware>
+    </DeviceDescriptor>
+    
+    <DeviceDescriptor>
+      <uuid>230D75B3-434F-CDD5-872A-3D18F9F4B27D</uuid>
+      <description>In-Wall Dimmer</description>
+      <category>zigbee</category>
+      <manufacturer>Jasco Products</manufacturer>
+      <model>45857</model>
+      <hardwareVersions>1</hardwareVersions>
+      <firmwareVersions>0x00000004,0x00000005</firmwareVersions>
+      <latestFirmware>
+        <version>0x00000005</version>
+        <filename>Jasco_5_0_1_Dimmer_45857_v5.ota</filename>
+        <type>ota</type>
+      </latestFirmware>
+    </DeviceDescriptor>
+
+    <!--LGE Devices -->
+    <DeviceDescriptor>
+        <uuid>6449b5c0-28c8-11e4-8c21-0800200c9a66</uuid>
+        <description>LG ZigBee Smart Bulb V1 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>LG Electronics</manufacturer>
+        <model>B1027EB4Z01</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>0x00000007,0x00000008,0x00000009,0x0000000A,0x0000000B</firmwareVersions>
+        <latestFirmware>
+            <version>0x0000000B</version>
+            <filename>LGE_P1027EA2Z01_B1027EB4Z01_V11.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>db5302d0-d420-11e4-8830-0800200c9a66</uuid>
+       <description>LG ZigBee Smart Bulb (EM35x)</description>
+       <category>zigbee</category>
+       <manufacturer>LG Electronics</manufacturer>
+       <model>P1027EA2Z01</model>
+       <hardwareVersions>1</hardwareVersions>
+       <firmwareVersions>0x0000000A,0x0000000B</firmwareVersions>
+       <latestFirmware>
+         <version>0x0000000B</version>
+         <filename>LGE_P1027EA2Z01_B1027EB4Z01_V11.ota</filename>
+         <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- Sengled Devices -->
+    <DeviceDescriptor>
+        <uuid>E566041A-EF6A-4F7F-9AE5-F1415915FA0E</uuid>
+        <description>sengled element V1(EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>sengled</manufacturer>
+        <model>Z01-CIA19NAE26</model>
+        <hardwareVersions>2</hardwareVersions> 
+        <firmwareVersions>0x0000000f</firmwareVersions>
+        <latestFirmware>
+            <version>0x0000000f</version> 
+            <filename>sengled-Z01-CIA19NAE26-V1.5.ota</filename> 
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- Sylvania Devices -->
+    <DeviceDescriptor>
+        <uuid>3A7D4DD7-7BE1-46A3-AB69-C5C877123728</uuid>
+        <description>ZigBee lightbulb</description>
+        <category>zigbee</category>
+        <manufacturer>OSRAM SYLVANIA</manufacturer>
+        <model>iQBR30C</model>
+        <hardwareVersions>0</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x01020500</version>
+            <filename>HA_DimmableLight-IC-Release_01020500.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+  
+    <!-- Sercomm Devices -->
+    <DeviceDescriptor>
+        <uuid>07e83493-8621-4d45-a26b-62f1fddd5f7f</uuid>
+        <description>Smart Plug(EM358x)</description>
+        <category>zigbee</category>
+        <manufacturer>Sercomm Corp.</manufacturer>
+        <model>SZ-ESW01</model>
+        <hardwareVersions>16</hardwareVersions>
+        <firmwareVersions>0x150032BC,0x170032BC</firmwareVersions>
+        <latestFirmware>
+            <version>0x170032BC</version>
+            <filename>DAJHHZ-100-1700.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- CentraLite Devices -->
+    <DeviceDescriptor>
+        <uuid>86837408-c253-4fe4-907c-b87d9759bbe1</uuid>
+        <description>EU Relay Module pre 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>4256251-RZHAC</model>
+        <hardwareVersions>2</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>203FBFB2-A185-4E81-987F-BAEB3741C445</uuid>
+        <description>EU Relay Module post 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4256251-RZHAC</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>33C2CCFC-2F44-4B0E-8673-D496BC7EDBBB</uuid>
+        <description>EU Dimmer Module pre 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>4256251-ZHAC</model>
+        <hardwareVersions>2</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>F77131EF-9FDE-40DA-B532-F4F440EFDFEA</uuid>
+        <description>EU Dimmer Module post 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4256251-ZHAC</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>618A10CB-36D9-4C77-88D3-6A1BB4706073</uuid>
+        <description>US Relay Module pre 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>4256050-RZHAC</model>
+        <hardwareVersions>2</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>94865662-98CF-4A95-B23F-92B5C16E8E8E</uuid>
+        <description>US Relay Module post 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4256050-RZHAC</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>781D9914-8C90-45F2-B681-812C5B632C23</uuid>
+        <description>US Dimmer Module pre 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>4256050-ZHAC</model>
+        <hardwareVersions>2</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>5D58C9D3-C090-43BB-A83E-EE9257F7598F</uuid>
+        <description>US Dimmer Module post 1.1.0 (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4256050-ZHAC</model>
+        <hardwareVersions>3-4</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>670728A6-87FC-4E4B-B99A-04F8C2474BBF</uuid>
+        <description>US Relay In-wall (EM25x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>Relay Switch</model>
+        <hardwareVersions>1</hardwareVersions>
+        <firmwareVersions>1-6</firmwareVersions>
+        <latestFirmware>
+            <version>0x00000006</version>
+            <filename>CLhaRelaySwitch-6.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>    
+
+    <DeviceDescriptor>
+        <uuid>E3129C72-1A2D-411E-8A66-C97F737D9451</uuid>
+        <description>US Dimmer In-wall (EM25x)</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>Dimmer Switch</model>
+        <hardwareVersions>7</hardwareVersions>
+        <firmwareVersions>1-6</firmwareVersions>
+        <latestFirmware>
+            <version>0x00000006</version>
+            <filename>CLhaDimmerSwitch-6.ebl</filename>
+            <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>    
+
+    <DeviceDescriptor>
+        <uuid>809c7153-0ce8-4d8d-b305-d3570545c2ac</uuid>
+        <description>Next Gen Dimmer Module</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4257050-ZHAC</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>0x12005010,0x13005010,0x14005010,0x15005010</firmwareVersions>
+        <latestFirmware>
+            <version>0x15005010</version>
+            <filename>ha-dimmer-15005010.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>7835ba7d-4908-49be-a6c7-4bf5d5b3acb2</uuid>
+        <description>Next Gen Relay Module</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite</manufacturer>
+        <model>4257050-RZHAC</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>0x12005010,0x13005010,0x15005010</firmwareVersions>
+        <latestFirmware>
+            <version>0x15005010</version>
+            <filename>ha-relay-15005010.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>915A93CB-31D9-5C5f-91B3-6ADFAD316073</uuid>
+       <description>Nightlite</description>
+       <category>zigbee</category>
+       <manufacturer>CentraLite</manufacturer>
+       <model>3420</model>
+       <hardwareVersions>1</hardwareVersions>
+       <firmwareVersions>0x10005110,0x10015110</firmwareVersions>
+       <latestFirmware>
+          <version>0x10015110</version>
+          <filename>ha-nightlight-10015110.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+    <!-- CentraLite Devices -->    
+    <!-- LIGHTS SECTION END -->
+     
+    <!-- THERMOSTATS SECTION BEGIN -->
+    <!-- centralite thermostat -->
+    <DeviceDescriptor>
+        <uuid>253C5884-3BF9-4CED-A108-C42B940D40CE</uuid>
+        <description>Thermostat mimicking the legacy (non HA 1.2) behavior of the RTCoA thermostat</description>
+        <category>zigbee</category>
+        <manufacturer>CentraLite Systems</manufacturer>
+        <model>3156105</model>
+        <hardwareVersions>2</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+        <latestFirmware>
+            <version>0x1418468c</version>
+            <filename>centralite-thermostat-1418468C.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>    
+
+    <DeviceDescriptor>
+        <uuid>b06624f8-dd59-4127-89e7-edcf3261b9c2</uuid>
+        <description>Touch Thermostat Dev (EM35x)</description>
+        <category>zigbee</category>
+        <manufacturer>Centralite</manufacturer>
+        <model>3157100</model>
+        <hardwareVersions>*</hardwareVersions>
+        <firmwareVersions>0x02025010,0x03035010,0x04065010</firmwareVersions>
+        <latestFirmware>
+            <version>0x04065010</version>
+            <filename>ha-thermostat-04065010.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- Computime thermostat -->
+    <DeviceDescriptor>
+      <uuid>28b04120-9424-11e3-baa8-0800200c9a66</uuid>
+      <description>Computime Touch-Ring HA-profile thermostat</description>
+      <category>zigbee</category>
+      <manufacturer>Computime</manufacturer>
+      <model>ST880ZB</model>
+      <hardwareVersions>1</hardwareVersions>
+      <firmwareVersions>0x20140319,0x20140421,0x20141009,0x20141028</firmwareVersions>
+      <latestFirmware>
+         <version>0x20141028</version>
+         <filename>Salus_ST880ZB_V20141028_Z67_M52.ota</filename>
+         <type>ota</type>
+      </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- RTCOA thermostat --> 
+    <DeviceDescriptor>
+        <uuid>E8E072FC-37E0-43D4-8E7A-2D95511C4276</uuid>
+        <description>Thermostat with ZigBee Module (PIC version 1.92 or 1.99)</description>
+        <category>zigbee</category>
+        <manufacturer>RTCOA</manufacturer>
+        <model>CT30S</model>
+        <hardwareVersions>192,199</hardwareVersions>
+        <firmwareVersions>0x00000592</firmwareVersions>
+        <latestFirmware>
+           <version>0x00000592</version>
+           <filename>RTCOAThermostat-1426.ebl</filename>
+           <type>legacy</type>
+        </latestFirmware>
+    </DeviceDescriptor>   
+    <!-- RTCOA thermostats -->    
+
+    <!-- Zen Within thermostats -->
+    <DeviceDescriptor>
+       <uuid>f048c1a0-cc8a-11e3-9c1a-0800200c9a66</uuid>
+       <description>PI ZEN THERMOSATAT (EM35x)</description>
+       <category>zigbee</category>
+       <manufacturer>Zen Within</manufacturer>
+       <model>Zen-01</model>
+       <hardwareVersions>0</hardwareVersions>
+       <firmwareVersions>0x0000000c,0x00000102,0x00000104</firmwareVersions>
+       <latestFirmware>
+         <version>0x00000104</version>
+         <filename>ZenWithin_Zen-01_v1.04.ota</filename>
+         <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>fccb4cf2-ba5e-47e8-8ef8-daede81f4155</uuid>
+       <description>PI ZEN THERMOSATAT (EM35x)</description>
+       <category>zigbee</category>
+       <manufacturer>Zen Within</manufacturer>
+       <model>Zen-01</model>
+       <hardwareVersions>2</hardwareVersions>
+       <firmwareVersions>0x00000200,0x00000204</firmwareVersions>
+       <latestFirmware>
+          <version>0x00000204</version>
+          <filename>ZenWithin_Zen-01_v2.04.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+    <!-- THERMOSTATS SECTION END -->
+
+    <!-- Remote Cell Radio type devices -->
+    <DeviceDescriptor>
+        <uuid>7560472C-679C-4701-9284-85E80539DC5C</uuid>
+        <description>ZigBee Remote Cell Radio</description>
+        <category>zigbee</category>
+        <manufacturer>Technicolor</manufacturer>
+        <model>TCHU1AL0</model>
+        <hardwareVersions>*</hardwareVersions>
+        <firmwareVersions>0x60077076-</firmwareVersions>
+        <metadataList>
+            <metadata name="shouldNotPersistAfterRMA" value="true"/>
+            <metadata name="CommFailOverrideSeconds" value="200"/>
+        </metadataList>
+        <latestFirmware>
+            <version>0x6013a13a</version>
+            <filename>TCHU1AL0-6013A13A.ota</filename>
+            <type>ota</type>
+        </latestFirmware>
+        <mfgIds>
+            <cluster id="0xFD04">
+                <mfgId>0x111D</mfgId>
+            </cluster>
+            <cluster id="0xFD03">
+                <mfgId>0x111D</mfgId>
+            </cluster>
+            <cluster id="0x0001">
+                <mfgId>0x111D</mfgId>
+            </cluster>
+            <cluster id="0x0000">
+                <mfgId>0x111D</mfgId>
+            </cluster>
+        </mfgIds>
+    </DeviceDescriptor>
+    <!-- Remote Cell Radio type devices end -->
+
+    <!-- Door Locks -->
+    <DeviceDescriptor>
+        <uuid>E7626C8C-549B-47C6-BBDE-28CC124AC26F</uuid>
+        <description>Yale Capacitive Door Lock with ZigBee Module</description>
+        <category>zigbee</category>
+        <manufacturer>Yale</manufacturer>
+        <model>YRD220/240 TSDB</model>
+        <hardwareVersions>17</hardwareVersions>
+        <firmwareVersions>0x00750545-0x00840850</firmwareVersions>             
+        <latestFirmware>                                                       
+            <version>0x00840850</version>                                      
+            <filename>evolutionrfzigbee_tsdb_v00840850.ota</filename>          
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>39065C18-851E-486E-83B9-32595F8D67E8</uuid>
+        <description>Yale Push Door Lock with ZigBee Module</description>
+        <category>zigbee</category>
+        <manufacturer>Yale</manufacturer>
+        <model>YRD210 PB DB</model>
+        <hardwareVersions>17</hardwareVersions>
+        <firmwareVersions>0x00750545-0x00840850</firmwareVersions>             
+        <latestFirmware>                                                       
+            <version>0x00840850</version>                                      
+            <filename>evolutionrfzigbee_pbdb_v00840850.ota</filename>          
+            <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>12AE2D46-2D18-446C-8866-9D4506ED2B7A</uuid>
+       <description>Yale Capacitive Door Lock with ZigBee Module</description>
+       <category>zigbee</category>
+       <manufacturer>Yale</manufacturer>
+       <model>YRD220/240 TSDB</model>
+       <hardwareVersions>18</hardwareVersions>
+       <firmwareVersions>*</firmwareVersions>
+       <latestFirmware>
+          <version>0x008b0050</version>
+          <filename>evolutionrfzigbee_tsdb_v008b0050.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>4A15D60D-F037-459D-9E55-1BFF992EE1CB</uuid>
+       <description>Yale Push Door Lock with ZigBee Module</description>
+       <category>zigbee</category>
+       <manufacturer>Yale</manufacturer>
+       <model>YRD210 PB DB</model>
+       <hardwareVersions>18</hardwareVersions>
+       <firmwareVersions>*</firmwareVersions>
+       <latestFirmware>
+          <version>0x008b0050</version>
+          <filename>evolutionrfzigbee_pbdb_v008b0050.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+        <uuid>50ac148e-3997-46dd-84ba-0b8a5f14b67a</uuid>
+        <description>Kwikset Deadbolt Model (910)</description>
+        <category>zigbee</category>
+        <manufacturer>Kwikset</manufacturer>
+        <model>SMARTCODE_DEADBOLT_5</model>
+        <hardwareVersions>3</hardwareVersions>
+        <firmwareVersions>0x30719b01,0x3071CB04,0x3071CB05,0x3071CB06</firmwareVersions>
+        <latestFirmware>
+           <version>0x3071CB06</version>
+           <filename>HC_HA12_3071CB06.ota</filename>
+           <type>ota</type>
+        </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>d321297a-2167-443b-834b-17572ef657c6</uuid>
+       <description>Kwikset Deadbolt Model (914)</description>
+       <category>zigbee</category>
+       <manufacturer>Kwikset</manufacturer>
+       <model>SMARTCODE_DEADBOLT_10</model>
+       <hardwareVersions>3</hardwareVersions>
+       <firmwareVersions>0x30719401,0x3071C404,0x3071C405</firmwareVersions>
+       <latestFirmware>
+          <version>0x3071C405</version>
+          <filename>HC_HA12_3071C405.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>202f15f8-3ec9-11e4-9d9f-164230d1df67</uuid>
+       <description>Kwikset Lever Model(912)</description>
+       <category>zigbee</category>
+       <manufacturer>Kwikset</manufacturer>
+       <model>SMARTCODE_LEVER_5</model>
+       <hardwareVersions>3</hardwareVersions>
+       <firmwareVersions>*</firmwareVersions>
+       <latestFirmware>
+          <version>0x3071CC02</version>
+          <filename>HC_HA12_3071CC02.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <DeviceDescriptor>
+       <uuid>70672533-6827-491a-b894-5c5875ffa7de</uuid>
+       <description>Kwikset Deadbolt Model (916)</description>
+       <category>zigbee</category>
+       <manufacturer>Kwikset</manufacturer>
+       <model>SMARTCODE_DEADBOLT_10T</model>
+       <hardwareVersions>3</hardwareVersions>
+       <firmwareVersions>*</firmwareVersions>
+       <latestFirmware>
+          <version>0x3071C606</version>
+          <filename>HC_HA12_3071C606.ota</filename>
+          <type>ota</type> 
+       </latestFirmware>
+    </DeviceDescriptor>
+
+    <!-- SamsungSDS -->
+    <DeviceDescriptor>
+       <uuid>30A8EB92-0640-4D8D-A967-16F728B161F9</uuid>
+       <description>SAMSUNG SDS Doorlock(EM357)</description>
+       <category>zigbee</category>
+       <manufacturer>SAMSUNG SDS</manufacturer>
+       <model>SHN-WDD510</model>
+       <hardwareVersions>1</hardwareVersions>
+       <firmwareVersions>0x00000001,0x00000002,0x00000004,0x00000005</firmwareVersions>
+       <latestFirmware>
+          <version>0x00000005</version>
+          <filename>20150223_SamsungSDS_5_3_0_doorlock_v.1.2.5.ota</filename>
+          <type>ota</type>
+       </latestFirmware>
+    </DeviceDescriptor>
+    <!-- Door Locks -->
+
+    <!-- Integrations -->
+    <DeviceDescriptor>
+        <uuid>3b968680-64fa-11e4-ae80-14109fd4d30f</uuid>
+        <description>PhilipsHueLights</description>
+        <category>PhilipsHue</category>
+        <manufacturer>Philips</manufacturer>
+        <model>PhilipsHue</model>
+        <hardwareVersions>*</hardwareVersions>
+        <firmwareVersions>*</firmwareVersions>
+    </DeviceDescriptor>
+    
+    <!-- Cameras -->
+    <!-- SerComm Cameras -->
+    <CameraDeviceDescriptor>
+        <uuid>9f24ea08-061b-48f4-876b-54639bd58fd7</uuid>
+        <description>Sercomm OC810</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_OC810</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.02R09</version>
+                <version>1.0.02R10</version>
+                <version>1.0.02R11</version>
+                <version>1.0.02R12</version>
+                <version>1.0.02R13</version>
+                <version>1.0.02R14</version>
+                <version>1.0.02R16</version>
+                <version>1.0.02R17</version>
+                <version>1.0.02R19</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.02R14</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.02R19</version>
+            <filename>DYU6HZ-704-1002R19.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6c1db771-322a-4262-b0a8-ec8901e8e77d</uuid>
+        <description>Sercomm RC8021</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_8021</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.19</version>
+                <version>1.0.20</version>
+                <version>1.0.21</version>
+                <version>1.0.22</version>
+                <version>1.0.24</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.19</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.24</version>
+            <filename>DYL5HZ-811-1024.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>5cd2073c-5d08-43e9-9fb9-3c08c12ad713</uuid>
+        <description>Sercomm iCamera 1000</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_iCamera</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.02</version>
+                <version>1.0.02R08</version>
+                <version>1.0.02R09</version>
+                <version>1.0.02R10</version>
+                <version>1.0.02R11</version>
+                <version>1.0.02R12</version>
+                <version>1.0.02R13</version>
+                <version>1.0.02R14</version>
+                <version>1.0.02R15</version>
+                <version>1.0.02R16</version>
+                <version>1.0.02R17</version>
+                <version>1.0.02R18</version>
+                <version>1.0.02R19</version>
+                <version>1.0.02R22</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.02R08</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.02R22</version>
+            <filename>DYW9HZ-308-1002R22.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6AF82A05-BAB2-46FB-AA11-C2A32AD836D0</uuid>
+        <description>Sercomm 8026</description>
+        <manufacturer>iControl</manufacturer>
+        <model>RC8026</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions>
+            <list>
+                <version>3.0.01.18</version>
+                <version>3.0.01.23</version>
+                <version>3.0.01.24</version>
+                <version>3.0.01.28</version>
+                <version>3.0.01.29</version>
+                <version>3.0.01.30</version>
+                <version>3.0.01.31</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>3.0.01.28</minSupportedFirmwareVersion>
+        <metadataList>
+            <metadata name="metaName1" value="metaValue1"/>
+            <metadata name="metaName2" value="metaValue2"/>
+        </metadataList>
+        <latestFirmware>
+            <version>3.0.01.31</version>
+            <filename>DACMHZ-408-300131.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>25</low>
+                <med>50</med>
+                <high>75</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>40</low>
+                <med>8</med>
+                <high>6</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6B28EAE2-80E3-45A1-81C0-7F48A7B141C6</uuid>
+        <description>Sercomm 431</description>
+        <manufacturer>iControl</manufacturer>
+        <model>OC431</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions>
+            <range>
+                <from>3</from>
+                <to>8</to>
+            </range>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>3.0.01.12</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>3.0.01.19</version>
+            <filename>DAMUHZ-103-300119.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>25</low>
+                <med>50</med>
+                <high>75</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>10</low>
+                <med>8</med>
+                <high>6</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>4d756c74-694d-6564-6961-000e8fd0c97b</uuid>
+        <description>Sercomm iCamera2</description>
+        <manufacturer>iControl</manufacturer>
+        <model>iCamera2</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions><any/></firmwareVersions>
+            <minSupportedFirmwareVersion>3.0.01.14</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>3.0.01.32</version>
+            <filename>DAXNHZ-108-300132.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>60</low>
+                <med>70</med>
+                <high>70</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>27</low>
+                <med>22</med>
+                <high>8</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+       <uuid>46B1F847-3972-43BB-9C39-2D8B4BF82BB4</uuid>
+       <description>Sercomm RC4551 Pan Cam</description>
+       <manufacturer>iControl</manufacturer>
+       <model>RC4551</model>
+       <hardwareVersions><any/></hardwareVersions>
+       <firmwareVersions><any/></firmwareVersions>
+       <minSupportedFirmwareVersion>3.0.01.09</minSupportedFirmwareVersion>
+       <latestFirmware>
+         <version>3.0.01.09</version>
+         <filename>DARPHZ-102-300109.bin</filename>
+       </latestFirmware>
+       <protocol>openHome</protocol>
+       <motion>
+         <enabled>true</enabled>
+         <sensitivityLevel>
+            <low>25</low>
+            <med>50</med>
+            <high>75</high>
+         </sensitivityLevel>
+         <detectionThreshold>
+            <low>10</low>
+            <med>8</med>
+            <high>6</high>
+         </detectionThreshold>
+         <regionOfInterest>
+            <width>16</width>
+            <height>16</height>
+            <bottomCoord>96</bottomCoord>
+            <topCoord>623</topCoord>
+            <leftCoord>96</leftCoord>
+            <rightCoord>1823</rightCoord>
+         </regionOfInterest>
+       </motion>
+    </CameraDeviceDescriptor>
+
+    <!-- Alpha Networks -->
+    <CameraDeviceDescriptor>
+        <uuid>bc329e00-1dd8-11b2-8601-d8eb97d26c7b</uuid>
+        <description>CS-3152</description>
+        <manufacturer>Alphanetworks</manufacturer>
+        <model>CS-3152</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions><any/></firmwareVersions>
+        <minSupportedFirmwareVersion>1.1.0.5030</minSupportedFirmwareVersion>
+        <latestFirmware>
+                <version>1.1.0.5030</version>
+                <filename>update_CS-3152_1.1.0_5030_Alphanetworks.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+                <enabled>true</enabled>
+                <sensitivityLevel>
+                        <low>88</low>
+                        <med>98</med>
+                        <high>100</high>
+                </sensitivityLevel>
+                <detectionThreshold>
+                        <low>6</low>
+                        <med>6</med>
+                        <high>6</high>
+                </detectionThreshold>
+                <regionOfInterest>
+                        <width>16</width>
+                        <height>16</height>
+                        <bottomCoord>1</bottomCoord>
+                        <topCoord>720</topCoord>
+                        <leftCoord>1</leftCoord>
+                        <rightCoord>1280</rightCoord>
+                </regionOfInterest>
+        </motion>
+     </CameraDeviceDescriptor>
+
+    <!-- LG Innotek -->
+    <CameraDeviceDescriptor>
+       <uuid>372AA591-D281-45B5-AAEE-04BCB021C176</uuid>
+       <description>LG Innotek Camera</description>
+       <manufacturer>LGInnotek</manufacturer>
+       <model>Titan</model>
+       <hardwareVersions> <any/> </hardwareVersions>
+       <firmwareVersions><any/></firmwareVersions>
+       <minSupportedFirmwareVersion>0.9.2.1411051</minSupportedFirmwareVersion>
+       <latestFirmware>
+          <version>0.9.2.1507141</version>
+          <filename>LGIT_Titan_0.9.2.1507141PoE.dat</filename>
+       </latestFirmware>
+       <protocol>openHome</protocol>
+       <motion>
+          <enabled>true</enabled>
+          <sensitivityLevel>
+             <low>50</low>
+             <med>75</med>
+             <high>100</high>
+          </sensitivityLevel>
+          <detectionThreshold>
+             <low>10</low>
+             <med>8</med>
+             <high>6</high>
+          </detectionThreshold>
+          <regionOfInterest>
+             <width>16</width>
+             <height>16</height>
+             <bottomCoord>240</bottomCoord>
+             <topCoord>479</topCoord>
+             <leftCoord>96</leftCoord>
+             <rightCoord>1183</rightCoord>
+          </regionOfInterest>
+       </motion>
+    </CameraDeviceDescriptor>
+
+    <!-- test device -->
+    <CameraDeviceDescriptor>
+        <uuid>fsdkljdfslkjf</uuid>
+        <description>Some Fake Test Camera</description>
+        <manufacturer>testsomemanufacturer</manufacturer>
+        <model>testsomemodel</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions><any/></firmwareVersions>
+        <minSupportedFirmwareVersion>0.9.2.1411051</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>0.9.2.1507141</version>
+            <filename>LGIT_Titan_0.9.2.1507141PoE.dat</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>50</low>
+                <med>75</med>
+                <high>100</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>10</low>
+                <med>8</med>
+                <high>6</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>1183</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+<!-- Cameras --> 
+    
+</DeviceDescriptorList>

@@ -1,0 +1,13 @@
+<DeviceDescriptorDenyList version="1.0.0">
+
+        <!-- Carbon Monoxide / CO -->
+        <uuid>FA3BD7CA-D553-48A9-A3CE-85B6D63F0563</uuid>
+   <!-- <description>ZigBee CO Sensor v2</description>
+        <category>zigbee</category>
+        <manufacturer>SMC</manufacturer>
+        <model>SMCCO10-Z</model> -->
+
+        <!-- some bogus/unmatched entry to ensure it doesnt cause problems -->
+        <uuid>sdlfkjsdlfkj</uuid>
+
+</DeviceDescriptorDenyList>
