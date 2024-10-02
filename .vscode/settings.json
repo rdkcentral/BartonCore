@@ -25,92 +25,91 @@
 //
 
 {
-  // clangd has superior auto completion, so disable IntelliSense Engine to avoid clash
-  "C_Cpp.intelliSenseEngine": "disabled",
-  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    // clangd has superior auto completion, so disable IntelliSense Engine to avoid clash
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
 
-  "editor.formatOnSave": true,
-  // Setting this to "modifications" is better, but requires source control, which we don't have yet
-  "editor.formatOnSaveMode": "file",
-  "editor.useTabStops": false,
-  "editor.tabSize": 4,
-  "editor.insertSpaces": true,
-  "editor.minimap.enabled": false,
-  "editor.suggestSelection": "first",
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "modifications",
+    "editor.useTabStops": false,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.minimap.enabled": false,
+    "editor.suggestSelection": "first",
 
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 1000,
-  "files.eol": "\n",
-  "files.insertFinalNewline": true,
-  "files.trimTrailingWhitespace": true,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
 
-  // Set the default formatter for each language
-  "[c]": {
-    "editor.defaultFormatter": "xaver.clang-format"
-  },
-  "[cpp]": {
-    "editor.defaultFormatter": "xaver.clang-format"
-  },
-  "[dockerfile]": {
-    "editor.defaultFormatter": "ms-azuretools.vscode-docker"
-  },
-  "[ignore]": {
-    "editor.defaultFormatter": "foxundermoon.shell-format"
-  },
-  "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter"
-  },
-  "[markdown]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[shellscript]": {
-    "editor.defaultFormatter": "foxundermoon.shell-format"
-  },
-  "[yaml]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "better-comments.tags": [
-    {
-      "tag": "!",
-      "color": "#FF2D00",
-      "strikethrough": false,
-      "backgroundColor": "transparent"
+    "prettier.tabWidth": 4,
+
+    // Set the default formatter for each language
+    "[c]": {
+        "editor.defaultFormatter": "xaver.clang-format"
     },
-    {
-      "tag": "?",
-      "color": "#3498DB",
-      "strikethrough": false,
-      "backgroundColor": "transparent"
+    "[cpp]": {
+        "editor.defaultFormatter": "xaver.clang-format"
     },
-    {
-      "tag": "//",
-      "color": "#474747",
-      "strikethrough": true,
-      "backgroundColor": "transparent"
+    "[dockerfile]": {
+        "editor.defaultFormatter": "ms-azuretools.vscode-docker"
     },
-    {
-      "tag": "todo",
-      "color": "#FF8C00",
-      "strikethrough": false,
-      "backgroundColor": "transparent"
+    "[ignore]": {
+        "editor.defaultFormatter": "foxundermoon.shell-format"
     },
-    {
-      "tag": "fixme",
-      "color": "#FF8C00",
-      "strikethrough": false,
-      "backgroundColor": "transparent"
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    {
-      "tag": "*",
-      "color": "#98C379",
-      "strikethrough": false,
-      "backgroundColor": "transparent"
-    }
-  ],
-  "cmake.configureArgs": [
-        "-DBDS_MATTER_LIB=ZilkerMatter"
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[shellscript]": {
+        "editor.defaultFormatter": "foxundermoon.shell-format"
+    },
+    "[yaml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "better-comments.tags": [
+        {
+            "tag": "!",
+            "color": "#FF2D00",
+            "strikethrough": false,
+            "backgroundColor": "transparent"
+        },
+        {
+            "tag": "?",
+            "color": "#3498DB",
+            "strikethrough": false,
+            "backgroundColor": "transparent"
+        },
+        {
+            "tag": "//",
+            "color": "#474747",
+            "strikethrough": true,
+            "backgroundColor": "transparent"
+        },
+        {
+            "tag": "todo",
+            "color": "#FF8C00",
+            "strikethrough": false,
+            "backgroundColor": "transparent"
+        },
+        {
+            "tag": "fixme",
+            "color": "#FF8C00",
+            "strikethrough": false,
+            "backgroundColor": "transparent"
+        },
+        {
+            "tag": "*",
+            "color": "#98C379",
+            "strikethrough": false,
+            "backgroundColor": "transparent"
+        }
     ],
+    "cmake.configureArgs": ["-DBDS_MATTER_LIB=ZilkerMatter"]
 }
