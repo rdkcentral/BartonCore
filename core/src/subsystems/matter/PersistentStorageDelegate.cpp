@@ -28,8 +28,9 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 #include "subsystems/matter/MatterCommon.h"
 
-extern "C"
-{
+#include <libxml/parser.h>
+
+extern "C" {
 #include <icConfig/storage.h>
 #include <icLog/logging.h>
 #include <icUtil/base64.h>
@@ -38,8 +39,8 @@ extern "C"
 
 #include "PersistentStorageDelegate.h"
 #include <cstring>
-#include <system/SystemConfig.h>
 #include <matter/platform/KeyValueStoreManager.h>
+#include <system/SystemConfig.h>
 
 using namespace chip::DeviceLayer::PersistedStorage;
 
@@ -49,7 +50,7 @@ using namespace chip::DeviceLayer::PersistedStorage;
 namespace zilker
 {
     // synchronous: get a byte buffer value
-    CHIP_ERROR PersistentStorageDelegate::SyncGetKeyValue(const char * key, void * buffer, uint16_t & size)
+    CHIP_ERROR PersistentStorageDelegate::SyncGetKeyValue(const char *key, void *buffer, uint16_t &size)
     {
         CHIP_ERROR err = CHIP_ERROR_PERSISTED_STORAGE_VALUE_NOT_FOUND;
 
@@ -96,7 +97,8 @@ namespace zilker
         err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get(key, buffer, size, &bytesRead);
         if (err == CHIP_NO_ERROR)
         {
-            // Update state only if KeyValueStoreMgr().Get() succeeded. Otherwise we may get 'Incorrect state' errors later
+            // Update state only if KeyValueStoreMgr().Get() succeeded. Otherwise we may get 'Incorrect state' errors
+            // later
             size = static_cast<uint16_t>(bytesRead);
         }
 
@@ -105,7 +107,7 @@ namespace zilker
     }
 
     // synchronous: set a byte buffer value
-    CHIP_ERROR PersistentStorageDelegate::SyncSetKeyValue(const char * key, const void * value, uint16_t size)
+    CHIP_ERROR PersistentStorageDelegate::SyncSetKeyValue(const char *key, const void *value, uint16_t size)
     {
         CHIP_ERROR err = CHIP_ERROR_PERSISTED_STORAGE_FAILED;
 
@@ -117,7 +119,7 @@ namespace zilker
         }
 
 #ifndef PASS_THROUGH
-        scoped_generic char *encodedValue = icEncodeBase64((uint8_t*)value, size);
+        scoped_generic char *encodedValue = icEncodeBase64((uint8_t *) value, size);
         if (encodedValue != nullptr)
         {
             scoped_generic char *scrubbedKey = scrubKey(key);
@@ -137,7 +139,7 @@ namespace zilker
     }
 
     // synchronous: delete a key
-    CHIP_ERROR PersistentStorageDelegate::SyncDeleteKeyValue(const char * key)
+    CHIP_ERROR PersistentStorageDelegate::SyncDeleteKeyValue(const char *key)
     {
         CHIP_ERROR err = CHIP_ERROR_PERSISTED_STORAGE_FAILED;
 
@@ -162,7 +164,7 @@ namespace zilker
         return err;
     }
 
-    //TODO ditch this and make storage work with keys that have slashes.
+    // TODO ditch this and make storage work with keys that have slashes.
     char *PersistentStorageDelegate::scrubKey(const char *key)
     {
         char *result = strdup(key);
@@ -175,4 +177,4 @@ namespace zilker
 
         return result;
     }
-}
+} // namespace zilker

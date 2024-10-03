@@ -84,26 +84,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 ###############################################################################
 FROM base_builder AS third_party_builder
 
-ARG CJSON_VERSION="1.7.14"
-ARG CMAKE_VERSION="3.27.7"
-ARG CMAKE_VERSION_SHORT="3.27"
-ARG CMOCKA_VERSION="1.1.5"
-ARG CMOCKA_VERSION_SHORT="1.1"
-ARG CURL_VERSION="8.4.0"
-ARG GLIB_VERSION="2.70.2"
-ARG GLIB_VERSION_SHORT="2.70"
-ARG GOOGLETEST_VERSION="1.14.0"
-ARG LIBFFI_VERSION="3.3"
 ARG LINENOISE_GIT_TAG="97d2850af13c339369093b78abe5265845d78220"
-ARG MESON_VERSION="0.56.2"
-ARG OPENSSL_VERSION="1.1.1v"
-ARG OPENSSL_VERSION_UNDERSCORED="1_1_1v"
 ARG OTBR_GIT_TAG="790dc775144e33995cd1cb2c15b348849cacf737"
-ARG PCRE_VERSION="8.45"
-ARG UUID_VERSION="1.0.3"
-ARG ZLIB_VERSION="1.2.11"
-ARG XML_VERSION="2.9.8"
-ARG MBEDTLS_VERSION="2.28.4"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -111,181 +93,25 @@ ARG APPLY_PATCHES_PATH="/tmp/patches/applyPatches.sh"
 # Make the apply patches script executable
 RUN chmod +x ${APPLY_PATCHES_PATH}
 
-# packages necessary for building 3rd party libraries from source
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     lsb-release \
     ninja-build \
     python3 \
     python3-venv \
     sudo \
-    jq
-
-# cmake
-RUN wget -O /tmp/cmake.sh "https://cmake.org/files/v${CMAKE_VERSION_SHORT}/cmake-${CMAKE_VERSION}-linux-x86_64.sh" && \
-    chmod 755 /tmp/cmake.sh && \
-    /tmp/cmake.sh --prefix=/usr/local --exclude-subdir
-
-# meson
-RUN cd /tmp && \
-    wget -O meson.tar.gz "https://github.com/mesonbuild/meson/releases/download/${MESON_VERSION}/meson-${MESON_VERSION}.tar.gz" && \
-    bsdtar -xf meson.tar.gz && \
-    cd meson-${MESON_VERSION} && \
-    python3 setup.py install && \
-    cd /tmp && \
-    rm -rf meson-${MESON_VERSION} && \
-    rm meson.tar.gz
-
-# cJSON
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O cjson.tar.gz "https://github.com/DaveGamble/cJSON/archive/refs/tags/v${CJSON_VERSION}.tar.gz" && \
-    bsdtar -xf cjson.tar.gz && \
-    cd cJSON-${CJSON_VERSION} && \
-    mkdir build && \
-    cd build && \
-    cmake -DENABLE_CJSON_TEST=Off .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf cJSON-${CJSON_VERSION} && \
-    rm cjson.tar.gz
-
-# cmocka
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O cmocka.tar.gz "https://cmocka.org/files/${CMOCKA_VERSION_SHORT}/cmocka-${CMOCKA_VERSION}.tar.xz" && \
-    bsdtar -xf cmocka.tar.gz && \
-    cd cmocka-${CMOCKA_VERSION} && \
-    mkdir build && \
-    cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Debug .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf cmocka-${CMOCKA_VERSION} && \
-    rm cmocka.tar.gz
-
-# googletest
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O googletest.tar.gz "https://github.com/google/googletest/archive/refs/tags/v${GOOGLETEST_VERSION}.zip" && \
-    bsdtar -xf googletest.tar.gz && \
-    cd googletest-${GOOGLETEST_VERSION} && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf googletest-${GOOGLETEST_VERSION} && \
-    rm googletest.tar.gz
-
-# openssl
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O openssl.tar.gz "https://github.com/openssl/openssl/releases/download/OpenSSL_${OPENSSL_VERSION_UNDERSCORED}/openssl-${OPENSSL_VERSION}.tar.gz" && \
-    bsdtar -xf openssl.tar.gz && \
-    cd openssl-${OPENSSL_VERSION} && \
-    ${APPLY_PATCHES_PATH} /tmp/patches/openssl . && \
-    ./config -DOPENSSL_NO_HEARTBEATS shared && \
-    make -j `nproc` && \
-    make install && \
-    cd /tmp && \
-    rm -rf openssl-${OPENSSL_VERSION} && \
-    rm openssl.tar.gz
-
-# zlib
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O zlib.tar.gz "https://github.com/madler/zlib/archive/refs/tags/v${ZLIB_VERSION}.tar.gz" && \
-    bsdtar -xf zlib.tar.gz && \
-    cd zlib-${ZLIB_VERSION} && \
-    ./configure --shared --uname=linux && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf zlib-${ZLIB_VERSION} && \
-    rm zlib.tar.gz
-
-# curl
-# Dependencies: openssl, zlib
-RUN cd /tmp && \
-    wget -O curl.tar.gz "https://curl.se/download/curl-${CURL_VERSION}.tar.gz" && \
-    bsdtar -xf curl.tar.gz && \
-    cd curl-${CURL_VERSION} && \
-    ./configure --without-mbedtls \
-    --with-ssl \
-    --with-zlib \
-    --enable-ipv6 \
-    --without-winssl \
-    --without-cyassl \
-    --disable-ldap \
-    --disable-ldaps \
-    --disable-dict \
-    --disable-telnet \
-    --disable-pop3 \
-    --disable-imap \
-    --disable-smb \
-    --disable-smtp \
-    --disable-gopher && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf curl-${CURL_VERSION} && \
-    rm curl.tar.gz
-
-# libffi
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O libffi.tar.gz "https://github.com/libffi/libffi/releases/download/v${LIBFFI_VERSION}/libffi-${LIBFFI_VERSION}.tar.gz" && \
-    bsdtar -xf libffi.tar.gz && \
-    cd libffi-${LIBFFI_VERSION} && \
-    ./configure && \
-    make -j `nproc` && \
-    make install && \
-    cd /tmp && \
-    rm -rf libffi-${LIBFFI_VERSION} && \
-    rm libffi.tar.gz
-
-# pcre
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O pcre.tar.gz "https://sourceforge.net/projects/pcre/files/pcre/${PCRE_VERSION}/pcre-${PCRE_VERSION}.tar.gz/download" && \
-    bsdtar -xf pcre.tar.gz && \
-    mkdir -p pcre-${PCRE_VERSION}/build && \
-    cd pcre-${PCRE_VERSION}/build && \
-    cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
-    make install && \
-    cd /tmp && \
-    rm -rf pcre-${PCRE_VERSION} && \
-    rm pcre.tar.gz
-
-# glib
-# Dependecies: libffi, pcre, zlib
-RUN cd /tmp && \
-    wget -O glib.tar.xz "https://download.gnome.org/sources/glib/${GLIB_VERSION_SHORT}/glib-${GLIB_VERSION}.tar.xz" && \
-    bsdtar -xf glib.tar.xz && \
-    cd glib-${GLIB_VERSION} && \
-    ${APPLY_PATCHES_PATH} /tmp/patches/glib . && \
-    meson _build && \
-    ninja -C _build install && \
-    cd /tmp && \
-    rm -rf glib-${GLIB_VERSION} && \
-    rm glib.tar.xz
-
-# libuuid
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O libuuid.tar.gz "https://sourceforge.net/projects/libuuid/files/libuuid-${UUID_VERSION}.tar.gz/download" && \
-    bsdtar -xf libuuid.tar.gz && \
-    cd libuuid-${UUID_VERSION} && \
-    ./configure && \
-    make -j `nproc` && \
-    make install && \
-    cd /tmp && \
-    rm -rf libuuid-${UUID_VERSION} && \
-    rm libuuid.tar.gz
+    jq \
+    cmake \
+    meson \
+    libglib2.0-dev \
+    libcjson-dev \
+    libcmocka-dev \
+    libgtest-dev \
+    libgmock-dev \
+    libssl-dev \
+    libcurl4-openssl-dev \
+    uuid-dev \
+    libxml2-dev \
+    libmbedtls-dev
 
 # 'gn' (generate ninja)
 RUN cd /tmp && \
@@ -293,32 +119,6 @@ RUN cd /tmp && \
     unzip gn.zip && \
     cp gn /usr/bin && \
     chmod 755 /usr/bin/gn
-
-# xml2
-# Dependencies: none
-RUN cd /tmp && \
-    wget -O xml.tar.gz "https://github.com/GNOME/libxml2/archive/v${XML_VERSION}.tar.gz" && \
-    bsdtar -xf xml.tar.gz && \
-    cd libxml2-${XML_VERSION} && \
-    autoreconf --force --install && \
-    ./configure with_lzma=no with_zlib=no with_python=no && \
-    make install && \
-    cd /tmp && \
-    rm -rf libxml2-${XML_VERSION} && \
-    rm xml.tar.gz
-
-# mbedtls
-# Dependencies: none
-RUN cd /tmp && \
-    git clone https://github.com/ARMmbed/mbedtls.git && \
-    cd mbedtls && \
-    git checkout mbedtls-${MBEDTLS_VERSION} && \
-    scripts/config.pl set MBEDTLS_THREADING_PTHREAD && \
-    scripts/config.pl set MBEDTLS_THREADING_C && \
-    cmake -DUSE_SHARED_MBEDTLS_LIBRARY=On -DENABLE_TESTING=Off -DCMAKE_C_FLAGS=-std=gnu99 && \
-    make install && \
-    cd /tmp && \
-    rm -rf mbedtls
 
 # OTBR
 RUN cd /tmp && \

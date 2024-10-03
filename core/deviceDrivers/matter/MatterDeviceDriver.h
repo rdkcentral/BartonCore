@@ -53,18 +53,20 @@
 #include <unordered_set>
 #include <vector>
 
-#define MATTER_ASYNC_DEVICE_TIMEOUT_SECS 15
+#define MATTER_ASYNC_DEVICE_TIMEOUT_SECS             15
 /*
  * The synchronize operation gets a longer timeout in order to give Matter time to reestablish a CASE session
  * with the device.
  */
 #define MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS 90
 
-#define MATTER_RECONFIGURATION_DELAY_SECS 60
+#define MATTER_RECONFIGURATION_DELAY_SECS            60
 
-#define CLUSTER_SERVERS_MAP_DEVICE_ID_IDX   0
-#define CLUSTER_SERVERS_MAP_ENDPOINT_ID_IDX 1
-#define CLUSTER_SERVERS_MAP_CLUSTER_ID_IDX  2
+#define CLUSTER_SERVERS_MAP_DEVICE_ID_IDX            0
+#define CLUSTER_SERVERS_MAP_ENDPOINT_ID_IDX          1
+#define CLUSTER_SERVERS_MAP_CLUSTER_ID_IDX           2
+
+#include <libxml/parser.h>
 
 extern "C" {
 #include "device/icDeviceResource.h"
@@ -399,7 +401,7 @@ namespace zilker
                                        const std::string &deviceId,
                                        const DeviceDescriptor *deviceDescriptor,
                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                       const chip::SessionHandle &sessionHandle){};
+                                       const chip::SessionHandle &sessionHandle) {};
 
         virtual void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
                                                 const std::string &deviceId,
@@ -466,8 +468,8 @@ namespace zilker
         class DriverSubscribeEventHandler : public SubscribeInteraction::EventHandler
         {
         public:
-            DriverSubscribeEventHandler(MatterDeviceDriver &outer, const std::string &deviceUuid)
-                : driver(outer), deviceId(deviceUuid)
+            DriverSubscribeEventHandler(MatterDeviceDriver &outer, const std::string &deviceUuid) :
+                driver(outer), deviceId(deviceUuid)
             {
             }
 
@@ -475,11 +477,9 @@ namespace zilker
                                            std::promise<bool> &subscriptionPromise,
                                            std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCache) override
             {
-                driver.ForEachServer(
-                    this->deviceId,
-                    [&clusterStateCache](MatterCluster *server) {
-                        server->SetClusterStateCacheRef(clusterStateCache);
-                    });
+                driver.ForEachServer(this->deviceId, [&clusterStateCache](MatterCluster *server) {
+                    server->SetClusterStateCacheRef(clusterStateCache);
+                });
                 driver.OnDeviceWorkCompleted(&subscriptionPromise, true);
             }
 
@@ -614,7 +614,8 @@ namespace zilker
 
         class generalDiagnosticsEventHandler : public zilker::GeneralDiagnostics::EventHandler
         {
-            void OnNetworkInterfacesChanged(GeneralDiagnostics &source, NetworkUtils::NetworkInterfaceInfo info) override
+            void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
+                                            NetworkUtils::NetworkInterfaceInfo info) override
             {
                 updateResource(source.GetDeviceId().c_str(),
                                NULL,
@@ -651,10 +652,10 @@ namespace zilker
          * @param sessionHandle
          */
         void ConfigureSubscription(std::forward_list<std::promise<bool>> &promises,
-                                    const std::string &deviceId,
-                                    DeviceDescriptor *deviceDescriptor,
-                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                    const chip::SessionHandle &sessionHandle);
+                                   const std::string &deviceId,
+                                   DeviceDescriptor *deviceDescriptor,
+                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                   const chip::SessionHandle &sessionHandle);
 
         /**
          * @brief Return a list of common Matter clusters required for base functionality that we wish to subscribe to.
@@ -677,8 +678,7 @@ namespace zilker
                                         std::promise<bool> *r,
                                         T *a,
                                         const std::string &deviceUuid) :
-                driver(d),
-                readComplete(r), attributeData(a), deviceId(deviceUuid)
+                driver(d), readComplete(r), attributeData(a), deviceId(deviceUuid)
             {
             }
             MatterDeviceDriver *driver;
@@ -742,7 +742,6 @@ namespace zilker
                                     chip::FabricIndex &fabricIndex,
                                     chip::Messaging::ExchangeManager &exchangeMgr,
                                     const chip::SessionHandle &sessionHandle);
-
     };
 } // namespace zilker
 

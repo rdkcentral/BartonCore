@@ -28,6 +28,8 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 #include "subsystems/matter/MatterCommon.h"
 
+#include <libxml/parser.h>
+
 #include "MatterChimeDeviceDriver.h"
 #include "MatterDriverFactory.h"
 #include "clusters/LevelControl.h"
@@ -58,15 +60,15 @@ using namespace zilker;
 using chip::Callback::Callback;
 using namespace std::chrono_literals;
 
-#define DEVICE_DRIVER_NAME "matterChime"
+#define DEVICE_DRIVER_NAME            "matterChime"
 
-#define DC_VERSION 1
+#define DC_VERSION                    1
 
 // these are our endpoints, not the device's
-#define CHIME_ENDPOINT "1"
+#define CHIME_ENDPOINT                "1"
 #define CHIME_WARNING_DEVICE_ENDPOINT "2"
 
-#define DEFAULT_SIREN_URI "tag:siren:options?ledPattern=pattern4&volume=100&durationSecs=240&force=true&priority=true"
+#define DEFAULT_SIREN_URI             "tag:siren:options?ledPattern=pattern4&volume=100&durationSecs=240&force=true&priority=true"
 
 namespace
 {
@@ -189,7 +191,8 @@ void MatterChimeDeviceDriver::FetchInitialResourceValues(std::forward_list<std::
         delete readContext;
     }
 
-    auto wifiDiagServer = static_cast<WifiNetworkDiagnostics *>(GetAnyServerById(deviceId, chip::app::Clusters::WiFiNetworkDiagnostics::Id));
+    auto wifiDiagServer = static_cast<WifiNetworkDiagnostics *>(
+        GetAnyServerById(deviceId, chip::app::Clusters::WiFiNetworkDiagnostics::Id));
 
     if (wifiDiagServer == nullptr)
     {
@@ -250,7 +253,8 @@ bool MatterChimeDeviceDriver::RegisterResources(icDevice *device, icInitialResou
         createEndpoint(device, CHIME_WARNING_DEVICE_ENDPOINT, WARNING_DEVICE_PROFILE, true);
     warningDeviceEndpoint->profileVersion = WARNING_DEVICE_PROFILE_VERSION;
 
-    //TODO these are common device resources and should probably be moved up to MatterDeviceDriver if we know its a wifi device
+    // TODO these are common device resources and should probably be moved up to MatterDeviceDriver if we know its a
+    // wifi device
     const char *initialRssi = initialResourceValuesGetDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI);
     result &= createDeviceResource(device,
                                    COMMON_DEVICE_RESOURCE_FERSSI,
@@ -434,11 +438,7 @@ bool MatterChimeDeviceDriver::WriteResource(std::forward_list<std::promise<bool>
             g_autoptr(BDeviceServicePropertyProvider) provider = deviceServiceConfigurationGetPropertyProvider();
             scoped_generic char *uri = b_device_service_property_provider_get_property_as_string(
                 provider, DEVICE_PROP_MATTER_SIREN_URI, DEFAULT_SIREN_URI);
-            PlaySound(promises,
-                      deviceId,
-                      uri,
-                      exchangeMgr,
-                      sessionHandle);
+            PlaySound(promises, deviceId, uri, exchangeMgr, sessionHandle);
         }
         else if (stringCompare(newValue, WARNING_DEVICE_TONE_NONE, false) == 0)
         {
@@ -459,9 +459,8 @@ bool MatterChimeDeviceDriver::WriteResource(std::forward_list<std::promise<bool>
             if (silenced)
             {
                 // There should be no siren going off on a 'silenced' warning device
-                scoped_icDeviceResource *toneRes = deviceServiceGetResourceById(deviceId.c_str(),
-                                                                                CHIME_WARNING_DEVICE_ENDPOINT,
-                                                                                WARNING_DEVICE_RESOURCE_TONE);
+                scoped_icDeviceResource *toneRes = deviceServiceGetResourceById(
+                    deviceId.c_str(), CHIME_WARNING_DEVICE_ENDPOINT, WARNING_DEVICE_RESOURCE_TONE);
                 if (stringCompare(toneRes->value, WARNING_DEVICE_TONE_NONE, false) != 0)
                 {
                     StopSound(promises, deviceId, exchangeMgr, sessionHandle);
@@ -653,11 +652,13 @@ uint8_t MatterChimeDeviceDriver::getLinkScore(int8_t rssi)
     // Clamp rssi to reasonable boundaries
     rssi = (rssi < DBM_FLOOR) ? DBM_FLOOR : (rssi > DBM_CEIL) ? DBM_CEIL : rssi;
 
-    // This will be a number between 0 and 1 where closer to 0 is close to the ceiling (good) and closer to 1 is close to the floor (bad).
+    // This will be a number between 0 and 1 where closer to 0 is close to the ceiling (good) and closer to 1 is close
+    // to the floor (bad).
     double normalizedRSSI = (DBM_CEIL - rssi) / (DBM_CEIL - DBM_FLOOR);
 
-    // A normalizedRSSI close to 0 (good) should cause the second subtraction operand to be small, leading to a percentage close to 100.
-    // A normalizedRSSI close to 1 (bad) should cause the second subtraction operand being close to 100, leading to a percentage close to 0.
+    // A normalizedRSSI close to 0 (good) should cause the second subtraction operand to be small, leading to a
+    // percentage close to 100. A normalizedRSSI close to 1 (bad) should cause the second subtraction operand being
+    // close to 100, leading to a percentage close to 0.
     uint8_t percentage = 100 - (100 * normalizedRSSI);
 
     return percentage;
@@ -765,7 +766,9 @@ void MatterChimeDeviceDriver::LevelControlClusterEventHandler::CurrentLevelReadC
     delete readContext;
 }
 
-void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiChanged(const std::string &deviceUuid, int8_t *rssi, void *asyncContext)
+void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiChanged(const std::string &deviceUuid,
+                                                                              int8_t *rssi,
+                                                                              void *asyncContext)
 {
     icDebug();
 
@@ -781,7 +784,9 @@ void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiChanged(co
     updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_SCORE, scoreStr, nullptr);
 }
 
-void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(const std::string &deviceUuid, int8_t *rssi, void *asyncContext)
+void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(const std::string &deviceUuid,
+                                                                                   int8_t *rssi,
+                                                                                   void *asyncContext)
 {
     auto readContext = static_cast<ClusterReadContext *>(asyncContext);
 
@@ -795,8 +800,7 @@ void MatterChimeDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComple
 
     if (readContext && readContext->initialResourceValues)
     {
-        initialResourceValuesPutDeviceValue(
-            readContext->initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr);
+        initialResourceValuesPutDeviceValue(readContext->initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr);
     }
     else if (readContext)
     {

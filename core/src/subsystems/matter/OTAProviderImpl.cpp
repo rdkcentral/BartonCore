@@ -22,6 +22,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include <glib-object.h>
+#include <libxml/parser.h>
 
 extern "C" {
 #include "devicePrivateProperties.h"

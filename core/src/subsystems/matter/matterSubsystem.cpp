@@ -25,10 +25,12 @@
  */
 
 #define G_LOG_DOMAIN "MatterSubsystem"
-#define logFmt(fmt) "MatterSubsystem (%s): " fmt, __func__
+#define logFmt(fmt)  "MatterSubsystem (%s): " fmt, __func__
 #include "MatterCommon.h"
 #include <cassert>
 #include <iomanip>
+
+#include <libxml/parser.h>
 
 extern "C" {
 #include "deviceServiceConfiguration.h"
@@ -57,12 +59,12 @@ extern "C" {
 using namespace zilker;
 using namespace std;
 
-#define MATTER_CHIP_PREFIX   "chip_"
-#define MATTER_CHIP_CONFIG   MATTER_CHIP_PREFIX "config.ini"
-#define MATTER_CHIP_COUNTERS MATTER_CHIP_PREFIX "counters.ini"
-#define MATTER_CHIP_FACTORY  MATTER_CHIP_PREFIX "factory.ini"
-#define MATTERKV_FILE_NAME   "matterkv"
-#define MIGRATED_FILE_SUFFIX "_0"
+#define MATTER_CHIP_PREFIX                   "chip_"
+#define MATTER_CHIP_CONFIG                   MATTER_CHIP_PREFIX "config.ini"
+#define MATTER_CHIP_COUNTERS                 MATTER_CHIP_PREFIX "counters.ini"
+#define MATTER_CHIP_FACTORY                  MATTER_CHIP_PREFIX "factory.ini"
+#define MATTERKV_FILE_NAME                   "matterkv"
+#define MIGRATED_FILE_SUFFIX                 "_0"
 
 #define MATTER_INIT_ATTEMPT_INTERVAL_SECONDS 15U
 
@@ -90,7 +92,8 @@ static bool matterSubsystemRestoreConfig(const char *tempRestoreDir, const char 
 
 static void matterSubsystemPostRestoreConfig(void);
 
-static void onDeviceCommissioningStatusChanged(void *context, chip::Optional<chip::NodeId> nodeId, CommissioningStatus status);
+static void
+onDeviceCommissioningStatusChanged(void *context, chip::Optional<chip::NodeId> nodeId, CommissioningStatus status);
 
 static void matterInitLoopThreadFunc();
 
@@ -141,7 +144,8 @@ static gboolean maybeInitMatter(void *context)
 
         if (initialized || busy)
         {
-            // If we've already initialized or some other thread is already running this function, then don't run this again.
+            // If we've already initialized or some other thread is already running this function, then don't run this
+            // again.
             return false;
         }
 
@@ -223,16 +227,18 @@ static void matterInitLoopThreadFunc()
         g_main_context_push_thread_default(thisThreadContext);
         matterInitLoop = g_main_loop_new(thisThreadContext, false);
 
-        // Create a timer source. This is what g_timeout_add_* does but it attaches to the global default context. We need to
-        // attach to our new context, so make the source by hand.
+        // Create a timer source. This is what g_timeout_add_* does but it attaches to the global default context. We
+        // need to attach to our new context, so make the source by hand.
         GSource *source = g_timeout_source_new(MATTER_INIT_ATTEMPT_INTERVAL_SECONDS * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
         g_source_set_callback(source, maybeInitMatter, nullptr, nullptr);
         g_source_set_name(source, "maybeInitMatter");
-        sourceId = g_source_attach (source, thisThreadContext);
+        sourceId = g_source_attach(source, thisThreadContext);
         g_source_unref(source); // Forwarded to the context.
 
-        icDebug("Scheduling maybeInitMatter on %u second interval with source id %u", MATTER_INIT_ATTEMPT_INTERVAL_SECONDS, sourceId);
+        icDebug("Scheduling maybeInitMatter on %u second interval with source id %u",
+                MATTER_INIT_ATTEMPT_INTERVAL_SECONDS,
+                sourceId);
 
         g_autoptr(GMainLoop) localLoopCopy = g_main_loop_ref(matterInitLoop);
 
@@ -484,7 +490,8 @@ static void matterSubsystemPostRestoreConfig(void)
     // matterSubsystemInitialize(subsystemInitializedCallback, subsystemDeinitializedCallback);
 }
 
-static void onDeviceCommissioningStatusChanged(void *context, chip::Optional<chip::NodeId> nodeId, CommissioningStatus status)
+static void
+onDeviceCommissioningStatusChanged(void *context, chip::Optional<chip::NodeId> nodeId, CommissioningStatus status)
 {
     std::stringstream ss;
     ss << status;

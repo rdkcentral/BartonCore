@@ -31,6 +31,8 @@
 #include <cstring>
 #include <mutex>
 
+#include <libxml/parser.h>
+
 extern "C" {
 #include "deviceService.h"
 #include "icConcurrent/repeatingTask.h"
@@ -42,11 +44,11 @@ extern "C" {
 #include "threadSubsystem.hpp"
 #include <glib.h>
 
-#define logFmt(fmt) "%s: " fmt, __func__
-#define LOG_TAG     "threadSubsystem"
+#define logFmt(fmt)                                  "%s: " fmt, __func__
+#define LOG_TAG                                      "threadSubsystem"
 
-#define NETWORK_BLOB_PROPERTY_NAME "threadNetworkConfig"
-#define MONITOR_TASK_INTERVAL_SECS 60
+#define NETWORK_BLOB_PROPERTY_NAME                   "threadNetworkConfig"
+#define MONITOR_TASK_INTERVAL_SECS                   60
 
 #define THREAD_OPERATIONAL_DATASET_FALLBACK_PROPERTY "threadOpDataSet"
 
@@ -286,7 +288,8 @@ static bool initializeThreadStack(void)
             result = otClient->RestoreNetwork(tlvsVect);
             if (result == false)
             {
-                icError("Failed to restore network configuration, trying again in %d seconds...", MONITOR_TASK_INTERVAL_SECS);
+                icError("Failed to restore network configuration, trying again in %d seconds...",
+                        MONITOR_TASK_INTERVAL_SECS);
             }
             else
             {

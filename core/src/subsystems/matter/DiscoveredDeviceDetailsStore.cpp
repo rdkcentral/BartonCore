@@ -31,10 +31,12 @@
 
 #include "DiscoveredDeviceDetailsStore.h"
 
+#include <libxml/parser.h>
+
 extern "C" {
-#include <icLog/logging.h>
-#include <deviceService.h>
 #include <deviceHelper.h>
+#include <deviceService.h>
+#include <icLog/logging.h>
 #include <jsonHelper/jsonHelper.h>
 }
 
@@ -46,7 +48,7 @@ std::shared_ptr<DiscoveredDeviceDetails> DiscoveredDeviceDetailsStore::Get(std::
 {
     std::shared_ptr<DiscoveredDeviceDetails> result;
 
-    //first try our common case... from device's metadata
+    // first try our common case... from device's metadata
     scoped_icDevice *device = deviceServiceGetDevice(deviceId.c_str());
     if (device != nullptr)
     {
@@ -85,7 +87,7 @@ std::shared_ptr<DiscoveredDeviceDetails> DiscoveredDeviceDetailsStore::Get(std::
     return result;
 }
 
-void DiscoveredDeviceDetailsStore::Put(const std::string& deviceId, std::shared_ptr<DiscoveredDeviceDetails> details)
+void DiscoveredDeviceDetailsStore::Put(const std::string &deviceId, std::shared_ptr<DiscoveredDeviceDetails> details)
 {
     scoped_icDevice *device = deviceServiceGetDevice(deviceId.c_str());
     if (device != nullptr)
@@ -103,7 +105,8 @@ void DiscoveredDeviceDetailsStore::Put(const std::string& deviceId, std::shared_
     }
 }
 
-void DiscoveredDeviceDetailsStore::PutTemporarily(std::string deviceId, std::shared_ptr<DiscoveredDeviceDetails> details)
+void DiscoveredDeviceDetailsStore::PutTemporarily(std::string deviceId,
+                                                  std::shared_ptr<DiscoveredDeviceDetails> details)
 {
     std::lock_guard<std::mutex> lock(temporaryDeviceDetailsMtx);
     temporaryDeviceDetails[deviceId] = details;

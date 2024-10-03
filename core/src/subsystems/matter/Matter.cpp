@@ -28,6 +28,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include <glib-object.h>
+#include <libxml/parser.h>
 
 extern "C" {
 #include "deviceServiceConfiguration.h"
@@ -78,8 +79,8 @@ extern "C" {
 #include <CertifierOperationalCredentialsIssuer.hpp>
 
 #include "AccessControlDelegate.h"
-#include "rdkb-cluster-server.hpp"
 #include "RdkbClusterServer.h"
+#include "rdkb-cluster-server.hpp"
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 // Only used in development environments
@@ -89,24 +90,24 @@ extern "C" {
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
-#define BLE_CONTROLLER_ADAPTER_ID           0
-#define BLE_CONTROLLER_DEVICE_NAME          "Xfinity-Gateway"
+#define BLE_CONTROLLER_ADAPTER_ID               0
+#define BLE_CONTROLLER_DEVICE_NAME              "Xfinity-Gateway"
 
-#define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME "localMatterNodeId"
-#define MATTER_RCA_SYSTEM_PROPERTY_NAME "matterRCA"
-#define MATTER_ICA_SYSTEM_PROPERTY_NAME "matterICA"
-#define MATTER_NOC_SYSTEM_PROPERTY_NAME "matterNOC"
+#define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME      "localMatterNodeId"
+#define MATTER_RCA_SYSTEM_PROPERTY_NAME         "matterRCA"
+#define MATTER_ICA_SYSTEM_PROPERTY_NAME         "matterICA"
+#define MATTER_NOC_SYSTEM_PROPERTY_NAME         "matterNOC"
 
-#define KV_STORAGE_NAMESPACE "matterkv"
-#define MATTER_CONFIG_DIR "matter"
+#define KV_STORAGE_NAMESPACE                    "matterkv"
+#define MATTER_CONFIG_DIR                       "matter"
 
-#define MATTER_TOKEN_COMM_TOKEN_ID "xpki"
+#define MATTER_TOKEN_COMM_TOKEN_ID              "xpki"
 
-#define OPARTIONAL_ENVIRONMENT_STRING_PROD "prod"
-#define OPARTIONAL_ENVIRONMENT_STRING_STAGE "stage"
-#define DEFAULT_OPERATIONAL_ENVIRONMENT OPARTIONAL_ENVIRONMENT_STRING_PROD
+#define OPARTIONAL_ENVIRONMENT_STRING_PROD      "prod"
+#define OPARTIONAL_ENVIRONMENT_STRING_STAGE     "stage"
+#define DEFAULT_OPERATIONAL_ENVIRONMENT         OPARTIONAL_ENVIRONMENT_STRING_PROD
 
-#define MATTER_COMCAST_VID ((chip::VendorId) 0x111D)
+#define MATTER_COMCAST_VID                      ((chip::VendorId) 0x111D)
 
 using namespace std;
 using namespace ::zilker;
@@ -139,8 +140,7 @@ namespace
 Matter::Matter() :
     operationalCredentialsIssuer(storageDelegate), groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 #else
-Matter::Matter() :
-    groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
+Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 #endif
 {
     myNodeId = LoadOrGenerateLocalNodeId();
@@ -407,13 +407,15 @@ CHIP_ERROR Matter::InitCommissioner()
     if (ChipError::IsSuccess(chainAvailable))
     {
         FabricIndex controllerIndex;
-        ReturnErrorOnFailure(GetFabricIndex(fabricTable, params.permitMultiControllerFabrics, rcacSpan, nocSpan, controllerIndex));
+        ReturnErrorOnFailure(
+            GetFabricIndex(fabricTable, params.permitMultiControllerFabrics, rcacSpan, nocSpan, controllerIndex));
         fabricFound = controllerIndex != kUndefinedFabricIndex;
     }
 
     if (chainAvailable == CHIP_ERROR_NOT_FOUND || !fabricFound)
     {
-        ChipLogProgress(Support, "No Commissioner NOC chain or no fabric, requesting a new NOC and creating new fabric");
+        ChipLogProgress(Support,
+                        "No Commissioner NOC chain or no fabric, requesting a new NOC and creating new fabric");
 
 #ifndef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
         std::string token = GetAuthToken();
@@ -509,12 +511,13 @@ CHIP_ERROR Matter::InitCommissioner()
     ReturnLogErrorOnFailure(fabricTable->CommitPendingFabricData());
 
     // Initialize event logging subsystem
-    ReturnErrorOnFailure(globalEventIdCounter.Init(&storageDelegate, chip::DefaultStorageKeyAllocator::IMEventNumber(),
+    ReturnErrorOnFailure(globalEventIdCounter.Init(&storageDelegate,
+                                                   chip::DefaultStorageKeyAllocator::IMEventNumber(),
                                                    CHIP_DEVICE_CONFIG_EVENT_ID_COUNTER_EPOCH));
     chip::app::LogStorageResources logStorageResources[] = {
-        { debugEventBuffer, sizeof(debugEventBuffer), chip::app::PriorityLevel::Debug },
-        { infoEventBuffer, sizeof(infoEventBuffer), chip::app::PriorityLevel::Info },
-        { critEventBuffer, sizeof(critEventBuffer), chip::app::PriorityLevel::Critical }
+        {debugEventBuffer, sizeof(debugEventBuffer),    chip::app::PriorityLevel::Debug},
+        { infoEventBuffer,  sizeof(infoEventBuffer),     chip::app::PriorityLevel::Info},
+        { critEventBuffer,  sizeof(critEventBuffer), chip::app::PriorityLevel::Critical}
     };
 
     chip::app::EventManagement::GetInstance().Init(&chip::Server::GetInstance().GetExchangeManager(),
@@ -806,8 +809,8 @@ CHIP_ERROR Matter::ParseSetupPayload(const std::string &codeString, chip::SetupP
 chip::NodeId Matter::GetRandomOperationalNodeId()
 {
     NodeId result = kUndefinedNodeId;
-    //logic taken from ExampleOperationalCredentialsIssuer::GetRandomOperationalNodeId
-    // it makes up to 10 passes at generating a random and valid node id
+    // logic taken from ExampleOperationalCredentialsIssuer::GetRandomOperationalNodeId
+    //  it makes up to 10 passes at generating a random and valid node id
 
     for (int i = 0; i < 10; ++i)
     {
@@ -837,7 +840,7 @@ chip::NodeId Matter::LoadOrGenerateLocalNodeId()
 
         if (IsOperationalNodeId(result))
         {
-            //persist it
+            // persist it
             free(localNodeIdStr);
             localNodeIdStr = stringBuilder("%" PRIx64, result);
             deviceServiceSetSystemProperty(LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME, localNodeIdStr);
@@ -935,7 +938,8 @@ CHIP_ERROR Matter::SaveNOCChain(ByteSpan rCA, ByteSpan iCA, ByteSpan NOC)
         VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
         b64RCA[len] = '\0';
 
-        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_RCA_SYSTEM_PROPERTY_NAME, b64RCA.Get()), CHIP_ERROR_INTERNAL);
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_RCA_SYSTEM_PROPERTY_NAME, b64RCA.Get()),
+                            CHIP_ERROR_INTERNAL);
     }
 
     if (iCA.size() != 0)
@@ -948,7 +952,8 @@ CHIP_ERROR Matter::SaveNOCChain(ByteSpan rCA, ByteSpan iCA, ByteSpan NOC)
         VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
         b64ICA[len] = '\0';
 
-        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_ICA_SYSTEM_PROPERTY_NAME, b64ICA.Get()), CHIP_ERROR_INTERNAL);
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_ICA_SYSTEM_PROPERTY_NAME, b64ICA.Get()),
+                            CHIP_ERROR_INTERNAL);
     }
 
     {
@@ -960,13 +965,18 @@ CHIP_ERROR Matter::SaveNOCChain(ByteSpan rCA, ByteSpan iCA, ByteSpan NOC)
         VerifyOrReturnError(len <= maxLen, CHIP_ERROR_INTERNAL);
         b64NOC[len] = '\0';
 
-        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_NOC_SYSTEM_PROPERTY_NAME, b64NOC.Get()), CHIP_ERROR_INTERNAL);
+        VerifyOrReturnError(deviceServiceSetSystemProperty(MATTER_NOC_SYSTEM_PROPERTY_NAME, b64NOC.Get()),
+                            CHIP_ERROR_INTERNAL);
     }
 
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR Matter::GetFabricIndex(FabricTable *fabricTable, bool mutliControllerAllowed, ByteSpan rCA, ByteSpan NOC, FabricIndex &idxOut)
+CHIP_ERROR Matter::GetFabricIndex(FabricTable *fabricTable,
+                                  bool mutliControllerAllowed,
+                                  ByteSpan rCA,
+                                  ByteSpan NOC,
+                                  FabricIndex &idxOut)
 {
     NodeId nodeId;
     FabricId tmpFabricId;
@@ -984,7 +994,7 @@ CHIP_ERROR Matter::GetFabricIndex(FabricTable *fabricTable, bool mutliController
     chip::MutableByteSpan chipRCASpan(chipRCA.Get(), chip::Credentials::kMaxCHIPCertLength);
     ReturnErrorOnFailure(Credentials::ConvertX509CertToChipCert(rCA, chipRCASpan));
     ReturnErrorOnFailure(Credentials::ExtractPublicKeyFromChipCert(chipRCASpan, rootPublicKeySpan));
-    Crypto::P256PublicKey rootPublicKey{ rootPublicKeySpan };
+    Crypto::P256PublicKey rootPublicKey {rootPublicKeySpan};
 
     const FabricInfo *controllerFabric = nullptr;
 
@@ -1123,7 +1133,7 @@ CHIP_ERROR Matter::ConfigureOTAProviderNode()
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry & entry)
+CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry &entry)
 #if defined(CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED) && CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED == 1
 {
     CHIP_ERROR err;
@@ -1158,7 +1168,8 @@ CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry & 
             {
                 chip::NodeId subject;
                 SuccessOrExit(err = entry.GetSubject(i, subject));
-                ChipLogDetail(DataManagement, "  %u: 0x" ChipLogFormatX64, static_cast<unsigned>(i), ChipLogValueX64(subject));
+                ChipLogDetail(
+                    DataManagement, "  %u: 0x" ChipLogFormatX64, static_cast<unsigned>(i), ChipLogValueX64(subject));
             }
         }
     }
@@ -1175,7 +1186,9 @@ CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry & 
                 SuccessOrExit(err = entry.GetTarget(i, target));
                 if (target.flags & chip::Access::AccessControl::Entry::Target::kCluster)
                 {
-                    ChipLogDetail(DataManagement, "  %u: cluster: 0x" ChipLogFormatMEI, static_cast<unsigned>(i),
+                    ChipLogDetail(DataManagement,
+                                  "  %u: cluster: 0x" ChipLogFormatMEI,
+                                  static_cast<unsigned>(i),
                                   ChipLogValueMEI(target.cluster));
                 }
                 if (target.flags & chip::Access::AccessControl::Entry::Target::kEndpoint)
@@ -1184,7 +1197,9 @@ CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry & 
                 }
                 if (target.flags & chip::Access::AccessControl::Entry::Target::kDeviceType)
                 {
-                    ChipLogDetail(DataManagement, "  %u: deviceType: 0x" ChipLogFormatMEI, static_cast<unsigned>(i),
+                    ChipLogDetail(DataManagement,
+                                  "  %u: deviceType: 0x" ChipLogFormatMEI,
+                                  static_cast<unsigned>(i),
                                   ChipLogValueMEI(target.deviceType));
                 }
             }
@@ -1260,10 +1275,11 @@ Matter::OperationalEnvironment Matter::GetOperationalEnvironment(std::string env
     return retVal;
 }
 
-Controller::CertifierOperationalCredentialsIssuer::ApiEnv Matter::GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv)
+Controller::CertifierOperationalCredentialsIssuer::ApiEnv
+Matter::GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv)
 {
     Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv;
-    switch(operationalEnv)
+    switch (operationalEnv)
     {
         case OPERATIONAL_ENV_PROD:
         {
@@ -1275,7 +1291,7 @@ Controller::CertifierOperationalCredentialsIssuer::ApiEnv Matter::GetIssuerApiEn
             apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::stage;
             break;
         }
-        //TODO: qa, dev
+        // TODO: qa, dev
         case OPERATIONAL_ENV_UNKNOWN:
         default:
         {
