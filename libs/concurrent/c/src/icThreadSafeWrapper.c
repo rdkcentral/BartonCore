@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -25,10 +25,10 @@
 
 #include "icConcurrent/icThreadSafeWrapper.h"
 
-#include <stdint.h>
-#include <icTypes/icLinkedList.h>
 #include <icConcurrent/icThreadSafeWrapper.h>
 #include <icConcurrent/timedWait.h>
+#include <icTypes/icLinkedList.h>
+#include <stdint.h>
 
 /**
  * The main structure of this is a icThreadSafeWrapper object, which contains a icThreadSafeWrapperItemRef object that
@@ -157,7 +157,8 @@ void threadSafeWrapperReleaseItem(icThreadSafeWrapper *wrapper)
  * @param releaseCheckFunc the function to use check whether to release
  * @return true if the release was performed
  */
-bool threadSafeWrapperConditionalReleaseItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperReleaseCheckFunc releaseCheckFunc)
+bool threadSafeWrapperConditionalReleaseItem(icThreadSafeWrapper *wrapper,
+                                             ThreadSafeWrapperReleaseCheckFunc releaseCheckFunc)
 {
     bool released = false;
     if (wrapper != NULL && (releaseCheckFunc != NULL || wrapper->privateData.autoReleaseCheckFunc != NULL))
@@ -254,11 +255,11 @@ bool threadSafeWrapperReadItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperRe
  * will be used.
  * @return true if the modification was successfully enqueued(or applied)
  */
-bool
-threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper, ThreadSafeWrapperModificationFunc modificationFunc,
-                                  void *context,
-                                  ThreadSafeWrapperDestroyContextFunc destroyContextFunc,
-                                  icThreadSafeWrapperFuture *future)
+bool threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper,
+                                          ThreadSafeWrapperModificationFunc modificationFunc,
+                                          void *context,
+                                          ThreadSafeWrapperDestroyContextFunc destroyContextFunc,
+                                          icThreadSafeWrapperFuture *future)
 {
     bool didEnqueue = false;
     if (wrapper != NULL && modificationFunc != NULL)
@@ -297,8 +298,8 @@ threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper, ThreadSafeWra
                 {
                     wrapper->privateData.ref->pendingModifications = linkedListCreate();
                 }
-                PendingModificationInfo *pendingModificationInfo = (PendingModificationInfo *) calloc(1,
-                                                                                                      sizeof(PendingModificationInfo));
+                PendingModificationInfo *pendingModificationInfo =
+                    (PendingModificationInfo *) calloc(1, sizeof(PendingModificationInfo));
                 pendingModificationInfo->modificationFunc = modificationFunc;
                 pendingModificationInfo->context = context;
                 pendingModificationInfo->destroyContextFunc = destroyContextFunc;
@@ -324,18 +325,17 @@ threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper, ThreadSafeWra
  * @param context a context argument to be passed to the modification callback function
  * @return true if the modification was successfully performed
  */
-bool
-threadSafeWrapperModifyItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperModificationFunc modificationFunc,
-                            void *context)
+bool threadSafeWrapperModifyItem(icThreadSafeWrapper *wrapper,
+                                 ThreadSafeWrapperModificationFunc modificationFunc,
+                                 void *context)
 {
     bool didModify = false;
 
     if (wrapper != NULL && modificationFunc != NULL)
     {
         icThreadSafeWrapperFuture future = THREAD_SAFE_WRAPPER_FUTURE_INIT;
-        if (threadSafeWrapperEnqueueModification(wrapper, modificationFunc, context,
-                                                 threadSafeWrapperDoNotFreeContextFunc,
-                                                 &future) == true)
+        if (threadSafeWrapperEnqueueModification(
+                wrapper, modificationFunc, context, threadSafeWrapperDoNotFreeContextFunc, &future) == true)
         {
             // Wait for it to complete
             while (threadSafeWrapperFutureAwait(&future, 10) == false) {}
@@ -367,9 +367,7 @@ void *threadSafeWrapperItemDeref(icThreadSafeWrapperItemRef *ref)
  * Helper for context items which do not require any cleanup
  * @param context the context
  */
-void threadSafeWrapperDoNotFreeContextFunc(void *context)
-{
-}
+void threadSafeWrapperDoNotFreeContextFunc(void *context) {}
 
 /**
  * Initializer if future is not statically initialized
@@ -435,7 +433,6 @@ bool threadSafeWrapperFutureAwait(icThreadSafeWrapperFuture *future, uint32_t ti
     }
 
     return complete;
-
 }
 
 /**
@@ -546,10 +543,10 @@ static void applyModifications(icThreadSafeWrapperItemRef *ref)
         icLinkedListIterator *iter = linkedListIteratorCreate(ref->pendingModifications);
         while (linkedListIteratorHasNext(iter))
         {
-            PendingModificationInfo *pendingModificationInfo = (PendingModificationInfo *) linkedListIteratorGetNext(iter);
+            PendingModificationInfo *pendingModificationInfo =
+                (PendingModificationInfo *) linkedListIteratorGetNext(iter);
             pendingModificationInfo->modificationFunc(ref->wrappedItem, pendingModificationInfo->context);
             setFutureComplete(pendingModificationInfo, true);
-
         }
         linkedListIteratorDestroy(iter);
 

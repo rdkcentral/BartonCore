@@ -35,10 +35,10 @@
 #ifndef ZILKER_SIMPLEPROTECTCONFIG_H
 #define ZILKER_SIMPLEPROTECTCONFIG_H
 
-#include <string.h>
 #include <stdbool.h>
+#include <string.h>
 
-#define STORAGE_KEY_FILE_NAME       "store"
+#define STORAGE_KEY_FILE_NAME "store"
 
 typedef struct ProtectSecret ProtectSecret;
 
@@ -63,13 +63,13 @@ char *simpleProtectConfigData(const char *namespace, const char *dataToProtect);
  */
 char *simpleUnprotectConfigData(const char *namespace, const char *protectedData);
 
- /**
-  * Decrypt a string
-  * @param secret
-  * @param protectedData
-  * @return The heap allocated plaintext string (free when done)
-  * @note An incorrect secret will produce garbage. Encrypted data should contain check codes or validatable structure.
-  */
+/**
+ * Decrypt a string
+ * @param secret
+ * @param protectedData
+ * @return The heap allocated plaintext string (free when done)
+ * @note An incorrect secret will produce garbage. Encrypted data should contain check codes or validatable structure.
+ */
 char *simpleProtectDecrypt(const ProtectSecret *secret, const char *protectedData);
 
 /**

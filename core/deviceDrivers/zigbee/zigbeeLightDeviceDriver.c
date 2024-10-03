@@ -24,106 +24,85 @@
 // Created by tlea on 2/12/19.
 //
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
-#include <stdio.h>
-#include <resourceTypes.h>
+#include "device-driver/device-driver-manager.h"
+#include "deviceDrivers/zigbeeDriverCommon.h"
+#include "zigbeeClusters/colorControlCluster.h"
+#include "zigbeeClusters/levelControlCluster.h"
+#include "zigbeeClusters/onOffCluster.h"
 #include <commonDeviceDefs.h>
 #include <device/deviceModelHelper.h>
+#include <deviceServicePrivate.h>
+#include <errno.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <math.h>
 #include <memory.h>
+#include <resourceTypes.h>
+#include <stdio.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <zconf.h>
 #include <zigbeeClusters/electricalMeasurementCluster.h>
 #include <zigbeeClusters/meteringCluster.h>
-#include <zconf.h>
-#include <icUtil/stringUtils.h>
-#include <errno.h>
-#include <math.h>
-#include <deviceServicePrivate.h>
-#include "device-driver/device-driver-manager.h"
-#include "zigbeeClusters/onOffCluster.h"
-#include "zigbeeClusters/levelControlCluster.h"
-#include "zigbeeClusters/colorControlCluster.h"
-#include "deviceDrivers/zigbeeDriverCommon.h"
 
-#define LOG_TAG "zigbeeLightDD"
-#define DRIVER_NAME "zigbeeLight"
-#define DEVICE_CLASS_NAME "light"
-#define MY_DC_VERSION 2
-#define DIVISOR_METADATA "divisor"
-#define MULTIPLIER_METADATA "multiplier"
+#define LOG_TAG                         "zigbeeLightDD"
+#define DRIVER_NAME                     "zigbeeLight"
+#define DEVICE_CLASS_NAME               "light"
+#define MY_DC_VERSION                   2
+#define DIVISOR_METADATA                "divisor"
+#define MULTIPLIER_METADATA             "multiplier"
 #define POWER_MEASUREMENT_TYPE_METADATA "pmtype"
-#define POWER_MEASUREMENT_TYPE_EM "em"
-#define POWER_MEASUREMENT_TYPE_SM "sm"
+#define POWER_MEASUREMENT_TYPE_EM       "em"
+#define POWER_MEASUREMENT_TYPE_SM       "sm"
 
 // only compile if we support zigbee
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#define isSwitchDevice(deviceId) (deviceId == ON_OFF_LIGHT_SWITCH_DEVICE_ID || deviceId == DIMMABLE_LIGHT_SWITCH_DEVICE_ID || deviceId == COLOR_DIMMABLE_LIGHT_SWITCH_DEVICE_ID)
+#define isSwitchDevice(deviceId)                                                                                       \
+    (deviceId == ON_OFF_LIGHT_SWITCH_DEVICE_ID || deviceId == DIMMABLE_LIGHT_SWITCH_DEVICE_ID ||                       \
+     deviceId == COLOR_DIMMABLE_LIGHT_SWITCH_DEVICE_ID)
 
 // The precision error we are allowing to consider updating the value of the bulb.
 #define MAX_RESOUCE_COLOR_ERROR 0.001
 
-static uint16_t myDeviceIds[] =
-        {
-                ON_OFF_LIGHT_DEVICE_ID,
-                DIMMABLE_LIGHT_DEVICE_ID,
-                COLOR_DIMMABLE_LIGHT_DEVICE_ID,
-                COLOR_DIMMABLE2_LIGHT_DEVICE_ID,
-                EXTENDED_COLOR_LIGHT_DEVICE_ID,
-                EXTENDED_COLOR2_LIGHT_DEVICE_ID,
-                COLOR_TEMPERATURE_LIGHT_DEVICE_ID,
-                COLOR_TEMPERATURE2_LIGHT_DEVICE_ID,
-                ON_OFF_PLUGIN_UNIT_DEVICE_ID,
-                DIMMABLE_PLUGIN_UNIT_DEVICE_ID,
-                SMART_PLUG_DEVICE_ID
-        };
+static uint16_t myDeviceIds[] = {ON_OFF_LIGHT_DEVICE_ID,
+                                 DIMMABLE_LIGHT_DEVICE_ID,
+                                 COLOR_DIMMABLE_LIGHT_DEVICE_ID,
+                                 COLOR_DIMMABLE2_LIGHT_DEVICE_ID,
+                                 EXTENDED_COLOR_LIGHT_DEVICE_ID,
+                                 EXTENDED_COLOR2_LIGHT_DEVICE_ID,
+                                 COLOR_TEMPERATURE_LIGHT_DEVICE_ID,
+                                 COLOR_TEMPERATURE2_LIGHT_DEVICE_ID,
+                                 ON_OFF_PLUGIN_UNIT_DEVICE_ID,
+                                 DIMMABLE_PLUGIN_UNIT_DEVICE_ID,
+                                 SMART_PLUG_DEVICE_ID};
 
-static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device,
+static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
+                                       icDevice *device,
                                        IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                        icInitialResourceValues *initialResourceValues);
 
-static bool
-registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *discoveredDeviceDetails,
-                  icInitialResourceValues *initialResourceValues);
+static bool registerResources(ZigbeeDriverCommon *ctx,
+                              icDevice *device,
+                              IcDiscoveredDeviceDetails *discoveredDeviceDetails,
+                              icInitialResourceValues *initialResourceValues);
 
 static char *getColorString(double x, double y);
 
 static bool parseColorString(const char *colorString, double *x, double *y);
 
-static void onOffStateChangedCallback(uint64_t eui64,
-                                      uint8_t endpointId,
-                                      bool isOn,
-                                      const void *ctx);
+static void onOffStateChangedCallback(uint64_t eui64, uint8_t endpointId, bool isOn, const void *ctx);
 
-static void levelChangedCallback(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 uint8_t level,
-                                 const void *ctx);
+static void levelChangedCallback(uint64_t eui64, uint8_t endpointId, uint8_t level, const void *ctx);
 
-static void colorControlXChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double x,
-                                 const void *ctx);
+static void colorControlXChanged(uint64_t eui64, uint8_t endpointId, double x, const void *ctx);
 
-static void colorControlYChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double y,
-                                 const void *ctx);
+static void colorControlYChanged(uint64_t eui64, uint8_t endpointId, double y, const void *ctx);
 
-static void colorControlXYChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double x,
-                                 double y,
-                                 const void *ctx);
+static void colorControlXYChanged(uint64_t eui64, uint8_t endpointId, double x, double y, const void *ctx);
 
-static void activePowerChanged(uint64_t eui64,
-                               uint8_t endpointId,
-                               int16_t watts,
-                               const void *ctx);
+static void activePowerChanged(uint64_t eui64, uint8_t endpointId, int16_t watts, const void *ctx);
 
-static void instantaneousDemandChanged(uint64_t eui64,
-                                       uint8_t endpointId,
-                                       int32_t kilowatts,
-                                       const void *ctx);
+static void instantaneousDemandChanged(uint64_t eui64, uint8_t endpointId, int32_t kilowatts, const void *ctx);
 
 static const char *mapDeviceIdToProfile(ZigbeeDriverCommon *ctx, uint16_t deviceId);
 
@@ -134,52 +113,44 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
                                   const char *newValue,
                                   bool *baseDriverUpdatesResource);
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext);
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext);
 
 static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *details);
 
-static const ZigbeeDriverCommonCallbacks commonCallbacks =
-        {
-                .fetchInitialResourceValues = fetchInitialResourceValues,
-                .registerResources = registerResources,
-                .mapDeviceIdToProfile = mapDeviceIdToProfile,
-                .writeEndpointResource = writeEndpointResource,
-                .preConfigureCluster = preConfigureCluster,
-                .synchronizeDevice = synchronizeDevice,
-        };
+static const ZigbeeDriverCommonCallbacks commonCallbacks = {
+    .fetchInitialResourceValues = fetchInitialResourceValues,
+    .registerResources = registerResources,
+    .mapDeviceIdToProfile = mapDeviceIdToProfile,
+    .writeEndpointResource = writeEndpointResource,
+    .preConfigureCluster = preConfigureCluster,
+    .synchronizeDevice = synchronizeDevice,
+};
 
-static const OnOffClusterCallbacks onOffClusterCallbacks =
-        {
-                .onOffStateChanged = onOffStateChangedCallback,
-        };
+static const OnOffClusterCallbacks onOffClusterCallbacks = {
+    .onOffStateChanged = onOffStateChangedCallback,
+};
 
-static const LevelControlClusterCallbacks levelControlClusterCallbacks =
-        {
-                .levelChanged = levelChangedCallback,
-        };
+static const LevelControlClusterCallbacks levelControlClusterCallbacks = {
+    .levelChanged = levelChangedCallback,
+};
 
-static const ColorControlClusterCallbacks colorControlClusterCallbacks =
-        {
-                .currentXChanged = colorControlXChanged,
-                .currentYChanged = colorControlYChanged,
-                .currentXYChanged = colorControlXYChanged,
-        };
+static const ColorControlClusterCallbacks colorControlClusterCallbacks = {
+    .currentXChanged = colorControlXChanged,
+    .currentYChanged = colorControlYChanged,
+    .currentXYChanged = colorControlXYChanged,
+};
 
-static const ElectricalMeasurementClusterCallbacks electricalMeasurementClusterCallbacks =
-        {
-                .activePowerChanged = activePowerChanged,
-        };
+static const ElectricalMeasurementClusterCallbacks electricalMeasurementClusterCallbacks = {
+    .activePowerChanged = activePowerChanged,
+};
 
-static const MeteringClusterCallbacks meteringClusterCallbacks =
-        {
-                .instantaneousDemandChanged = instantaneousDemandChanged,
-        };
+static const MeteringClusterCallbacks meteringClusterCallbacks = {
+    .instantaneousDemandChanged = instantaneousDemandChanged,
+};
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (250)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(250))) static void driverRegister(void)
 {
     DeviceDriver *myDriver = zigbeeDriverCommonCreateDeviceDriver(DRIVER_NAME,
                                                                   DEVICE_CLASS_NAME,
@@ -197,72 +168,53 @@ static void driverRegister(void)
                                  electricalMeasurementClusterCreate(&electricalMeasurementClusterCallbacks, myDriver));
     zigbeeDriverCommonAddCluster(myDriver, meteringClusterCreate(&meteringClusterCallbacks, myDriver));
 
-    //enable periodic collection of common diagnostics info (rssi, lqi, etc).
+    // enable periodic collection of common diagnostics info (rssi, lqi, etc).
     zigbeeDriverCommonSetDiagnosticsCollectionEnabled(myDriver, true);
 
     deviceDriverManagerRegisterDriver(myDriver);
 }
 
-static void onOffStateChangedCallback(uint64_t eui64,
-                                      uint8_t endpointId,
-                                      bool isOn,
-                                      const void *ctx)
+static void onOffStateChangedCallback(uint64_t eui64, uint8_t endpointId, bool isOn, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s: light is now %s", __FUNCTION__, isOn ? "on" : "off");
 
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
-    updateResource(uuid,
-                   epName,
-                   LIGHT_PROFILE_RESOURCE_IS_ON,
-                   isOn ? "true" : "false",
-                   NULL);
+    updateResource(uuid, epName, LIGHT_PROFILE_RESOURCE_IS_ON, isOn ? "true" : "false", NULL);
 
     free(uuid);
 }
 
-static void levelChangedCallback(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 uint8_t level,
-                                 const void *ctx)
+static void levelChangedCallback(uint64_t eui64, uint8_t endpointId, uint8_t level, const void *ctx)
 {
-    icLogDebug(LOG_TAG, "%s: light is now  at level %"
-            PRIu8, __FUNCTION__, level);
+    icLogDebug(LOG_TAG, "%s: light is now  at level %" PRIu8, __FUNCTION__, level);
 
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
     char *levelStr = levelControlClusterGetLevelString(level);
-    updateResource(uuid,
-                   epName,
-                   LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL,
-                   levelStr,
-                   NULL);
+    updateResource(uuid, epName, LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL, levelStr, NULL);
 
     free(levelStr);
     free(uuid);
 }
 
-static void updateColorResource(uint64_t eui64,
-                                uint8_t endpointId,
-                                double *x,
-                                double *y)
+static void updateColorResource(uint64_t eui64, uint8_t endpointId, double *x, double *y)
 {
     // Here we received an update to either x or y (one may be NULL).  Need to fetch from our saved resource
     // and update them with what we got
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *resource = deviceServiceGetResourceById(uuid,
-                                                                                                epName,
-                                                                                                LIGHT_PROFILE_RESOURCE_COLOR);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *resource = deviceServiceGetResourceById(uuid, epName, LIGHT_PROFILE_RESOURCE_COLOR);
 
     if (resource == NULL || resource->value == NULL)
     {
@@ -292,11 +244,7 @@ static void updateColorResource(uint64_t eui64,
             if (shouldUpdate == true)
             {
                 AUTO_CLEAN(free_generic__auto) char *xyStr = getColorString(tempX, tempY);
-                updateResource(uuid,
-                               epName,
-                               LIGHT_PROFILE_RESOURCE_COLOR,
-                               xyStr,
-                               NULL);
+                updateResource(uuid, epName, LIGHT_PROFILE_RESOURCE_COLOR, xyStr, NULL);
             }
         }
         else
@@ -308,38 +256,28 @@ static void updateColorResource(uint64_t eui64,
     free(uuid);
 }
 
-static void colorControlXChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double x,
-                                 const void *ctx)
+static void colorControlXChanged(uint64_t eui64, uint8_t endpointId, double x, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     updateColorResource(eui64, endpointId, &x, NULL);
 }
 
-static void colorControlYChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double y,
-                                 const void *ctx)
+static void colorControlYChanged(uint64_t eui64, uint8_t endpointId, double y, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     updateColorResource(eui64, endpointId, NULL, &y);
 }
 
-static void colorControlXYChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 double x,
-                                 double y,
-                                 const void *ctx)
+static void colorControlXYChanged(uint64_t eui64, uint8_t endpointId, double x, double y, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     updateColorResource(eui64, endpointId, &x, &y);
 }
 
-//attempt to retrieve from metadata.  If it isnt there, read from device and store in metadata
+// attempt to retrieve from metadata.  If it isnt there, read from device and store in metadata
 static bool getPowerComponent(uint64_t eui64,
                               uint8_t endpointId,
                               bool useElectricalMeasurementCluster,
@@ -354,22 +292,21 @@ static bool getPowerComponent(uint64_t eui64,
     }
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    char *metadata = getMetadata(uuid, epName,
-                                 getDivisor ? DIVISOR_METADATA : MULTIPLIER_METADATA);
+    char *metadata = getMetadata(uuid, epName, getDivisor ? DIVISOR_METADATA : MULTIPLIER_METADATA);
 
     if (metadata != NULL)
     {
-        //we use what we have cached in metadata
+        // we use what we have cached in metadata
         sscanf(metadata, "%" PRIu64, value);
     }
     else
     {
-        //we have to get it from the cluster, then cache as metadata
+        // we have to get it from the cluster, then cache as metadata
 
-        metadata = (char *) malloc(20); //9223372036854775808 \0
+        metadata = (char *) malloc(20); // 9223372036854775808 \0
 
         if (useElectricalMeasurementCluster)
         {
@@ -429,7 +366,6 @@ static bool getPowerComponent(uint64_t eui64,
     free(metadata);
     free(uuid);
     return result;
-
 }
 
 static bool getPowerDivisor(uint64_t eui64, uint8_t endpointId, bool useElectricalMeasurementCluster, uint64_t *divisor)
@@ -437,27 +373,25 @@ static bool getPowerDivisor(uint64_t eui64, uint8_t endpointId, bool useElectric
     return getPowerComponent(eui64, endpointId, useElectricalMeasurementCluster, true, divisor);
 }
 
-static bool getPowerMultiplier(uint64_t eui64,
-                               uint8_t endpointId,
-                               bool useElectricalMeasurementCluster,
-                               uint64_t *multiplier)
+static bool
+getPowerMultiplier(uint64_t eui64, uint8_t endpointId, bool useElectricalMeasurementCluster, uint64_t *multiplier)
 {
     return getPowerComponent(eui64, endpointId, useElectricalMeasurementCluster, false, multiplier);
 }
 
 static void updatePowerResource(uint64_t eui64, uint8_t endpointId, int64_t val)
 {
-    //val is the raw power without having multiplier and divisor applied
-    //  we need to determine which power method we are using
+    // val is the raw power without having multiplier and divisor applied
+    //   we need to determine which power method we are using
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
     char *emtype = getMetadata(uuid, epName, POWER_MEASUREMENT_TYPE_METADATA);
     bool useEm = false;
     uint64_t divisor = 1;
     uint64_t multiplier = 0;
     int64_t watts = 0;
-    char powerStr[20]; //9223372036854775808 \0
+    char powerStr[20]; // 9223372036854775808 \0
 
     if (emtype == NULL)
     {
@@ -484,33 +418,22 @@ static void updatePowerResource(uint64_t eui64, uint8_t endpointId, int64_t val)
 
     snprintf(powerStr, 20, "%" PRIi64, watts);
 
-    updateResource(uuid,
-                   epName,
-                   LIGHT_PROFILE_RESOURCE_CURRENT_POWER,
-                   powerStr,
-                   NULL);
+    updateResource(uuid, epName, LIGHT_PROFILE_RESOURCE_CURRENT_POWER, powerStr, NULL);
 
-    exit:
+exit:
     free(uuid);
 }
 
-static void activePowerChanged(uint64_t eui64,
-                               uint8_t endpointId,
-                               int16_t watts,
-                               const void *ctx)
+static void activePowerChanged(uint64_t eui64, uint8_t endpointId, int16_t watts, const void *ctx)
 {
-    icLogDebug(LOG_TAG, "%s: power %"
-            PRIu16, __FUNCTION__, watts);
+    icLogDebug(LOG_TAG, "%s: power %" PRIu16, __FUNCTION__, watts);
 
     updatePowerResource(eui64, endpointId, watts);
 }
 
-static void instantaneousDemandChanged(uint64_t eui64,
-                                       uint8_t endpointId,
-                                       int32_t kilowatts,
-                                       const void *ctx)
+static void instantaneousDemandChanged(uint64_t eui64, uint8_t endpointId, int32_t kilowatts, const void *ctx)
 {
-    updatePowerResource(eui64, endpointId, (int64_t)kilowatts * 1000); //metering cluster reports in kilowatts
+    updatePowerResource(eui64, endpointId, (int64_t) kilowatts * 1000); // metering cluster reports in kilowatts
 }
 
 static bool getWattsFromDeviceWithType(uint64_t eui64, uint8_t endpointId, bool useEm, uint64_t *watts)
@@ -518,7 +441,7 @@ static bool getWattsFromDeviceWithType(uint64_t eui64, uint8_t endpointId, bool 
     bool result = false;
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     if (watts != NULL)
@@ -535,7 +458,7 @@ static bool getWattsFromDeviceWithType(uint64_t eui64, uint8_t endpointId, bool 
                 goto exit;
             }
 
-            if(emPower != 0xffff) //an invalid value, so just stick with 0 for now
+            if (emPower != 0xffff) // an invalid value, so just stick with 0 for now
             {
                 power = emPower;
             }
@@ -549,7 +472,7 @@ static bool getWattsFromDeviceWithType(uint64_t eui64, uint8_t endpointId, bool 
                 goto exit;
             }
 
-            power = mPower * 1000; //metering cluster reports in kilowatts
+            power = mPower * 1000; // metering cluster reports in kilowatts
         }
 
         if (!getPowerDivisor(eui64, endpointId, useEm, &divisor))
@@ -569,12 +492,12 @@ static bool getWattsFromDeviceWithType(uint64_t eui64, uint8_t endpointId, bool 
 
     result = true;
 
-    exit:
+exit:
     free(uuid);
     return result;
 }
 
-//fetch initial resource values related to a light endpoint (not a switch)
+// fetch initial resource values related to a light endpoint (not a switch)
 static bool fetchInitialLightResourceValues(icDevice *device,
                                             IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                             uint64_t eui64,
@@ -583,7 +506,7 @@ static bool fetchInitialLightResourceValues(icDevice *device,
                                             const char *epName,
                                             icInitialResourceValues *initialResourceValues)
 {
-    //add the on/off stuff
+    // add the on/off stuff
     bool isOn;
     if (onOffClusterIsOn(eui64, endpointId, &isOn) == false)
     {
@@ -591,15 +514,13 @@ static bool fetchInitialLightResourceValues(icDevice *device,
         return false;
     }
 
-    initialResourceValuesPutEndpointValue(initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_IS_ON,
-                                          isOn ? "true" : "false");
+    initialResourceValuesPutEndpointValue(
+        initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_IS_ON, isOn ? "true" : "false");
 
 
-    //add the level stuff
-    if (icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                    endpointId,
-                                                    LEVEL_CONTROL_CLUSTER_ID,
-                                                    true))
+    // add the level stuff
+    if (icDiscoveredDeviceDetailsEndpointHasCluster(
+            discoveredDeviceDetails, endpointId, LEVEL_CONTROL_CLUSTER_ID, true))
     {
         uint8_t level;
         if (levelControlClusterGetLevel(eui64, endpointId, &level) == false)
@@ -609,20 +530,18 @@ static bool fetchInitialLightResourceValues(icDevice *device,
         }
 
         char *levelStr = levelControlClusterGetLevelString(level);
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL,
-                                              levelStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL, levelStr);
         free(levelStr);
 
         // Whether dimming is enabled for this device
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_IS_DIMMABLE_MODE,
-                                              "true");
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_IS_DIMMABLE_MODE, "true");
     }
 
-    //add the color stuff
-    if (icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                    endpointId,
-                                                    COLOR_CONTROL_CLUSTER_ID,
-                                                    true))
+    // add the color stuff
+    if (icDiscoveredDeviceDetailsEndpointHasCluster(
+            discoveredDeviceDetails, endpointId, COLOR_CONTROL_CLUSTER_ID, true))
     {
         double x;
         double y;
@@ -645,14 +564,10 @@ static bool fetchInitialLightResourceValues(icDevice *device,
     }
 
     // set up energy measurement if we have it (either ElectricalMeasurement cluster or SimpleMetering)
-    bool hasEm = icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                             endpointId,
-                                                             ELECTRICAL_MEASUREMENT_CLUSTER_ID,
-                                                             true);
-    bool hasSm = icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                             endpointId,
-                                                             METERING_CLUSTER_ID,
-                                                             true);
+    bool hasEm = icDiscoveredDeviceDetailsEndpointHasCluster(
+        discoveredDeviceDetails, endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID, true);
+    bool hasSm =
+        icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails, endpointId, METERING_CLUSTER_ID, true);
 
     if (hasEm || hasSm)
     {
@@ -663,14 +578,15 @@ static bool fetchInitialLightResourceValues(icDevice *device,
             return false;
         }
 
-        char powerStr[20]; //9223372036854775808 \0
+        char powerStr[20]; // 9223372036854775808 \0
         snprintf(powerStr, 20, "%" PRIu64, watts);
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_CURRENT_POWER, powerStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, LIGHT_PROFILE_RESOURCE_CURRENT_POWER, powerStr);
     }
     return true;
 }
 
-//register resources related to a light endpoint (not a switch)
+// register resources related to a light endpoint (not a switch)
 static bool registerLightResources(icDevice *device,
                                    IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                    uint64_t eui64,
@@ -686,16 +602,16 @@ static bool registerLightResources(icDevice *device,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                                        RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
-    //add the level stuff: optional
+    // add the level stuff: optional
     createEndpointResourceIfAvailable(endpoint,
                                       LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL,
                                       initialResourceValues,
                                       RESOURCE_TYPE_LIGHT_LEVEL,
-                                      RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                      RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS |
+                                          RESOURCE_MODE_LAZY_SAVE_NEXT,
                                       CACHING_POLICY_ALWAYS);
 
     // Whether dimming is enabled for this device: optional
@@ -706,31 +622,26 @@ static bool registerLightResources(icDevice *device,
                                       RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS,
                                       CACHING_POLICY_ALWAYS);
 
-    //add the color stuff: optional
+    // add the color stuff: optional
     createEndpointResourceIfAvailable(endpoint,
                                       LIGHT_PROFILE_RESOURCE_COLOR,
                                       initialResourceValues,
                                       RESOURCE_TYPE_CIE_1931_COLOR,
-                                      RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                      RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS |
+                                          RESOURCE_MODE_LAZY_SAVE_NEXT,
                                       CACHING_POLICY_ALWAYS);
 
     // set up energy measurement if we have it (either ElectricalMeasurement cluster or SimpleMetering)
-    bool hasEm = icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                             endpointId,
-                                                             ELECTRICAL_MEASUREMENT_CLUSTER_ID,
-                                                             true);
-    bool hasSm = icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails,
-                                                             endpointId,
-                                                             METERING_CLUSTER_ID,
-                                                             true);
+    bool hasEm = icDiscoveredDeviceDetailsEndpointHasCluster(
+        discoveredDeviceDetails, endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID, true);
+    bool hasSm =
+        icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails, endpointId, METERING_CLUSTER_ID, true);
 
     // Power: optional
     if (hasEm || hasSm)
     {
-        createEndpointMetadata(endpoint,
-                               POWER_MEASUREMENT_TYPE_METADATA,
-                               hasEm ? POWER_MEASUREMENT_TYPE_EM : POWER_MEASUREMENT_TYPE_SM);
+        createEndpointMetadata(
+            endpoint, POWER_MEASUREMENT_TYPE_METADATA, hasEm ? POWER_MEASUREMENT_TYPE_EM : POWER_MEASUREMENT_TYPE_SM);
     }
 
     // power usage: optional
@@ -738,8 +649,8 @@ static bool registerLightResources(icDevice *device,
                                       LIGHT_PROFILE_RESOURCE_CURRENT_POWER,
                                       initialResourceValues,
                                       RESOURCE_TYPE_WATTS,
-                                      RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                      RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS |
+                                          RESOURCE_MODE_LAZY_SAVE_NEXT,
                                       CACHING_POLICY_ALWAYS);
 
     zigbeeDriverCommonSetEndpointNumber(endpoint, endpointId);
@@ -747,7 +658,7 @@ static bool registerLightResources(icDevice *device,
     return result;
 }
 
-//fetch intial resource values related to the switch endpoint
+// fetch intial resource values related to the switch endpoint
 static bool fetchInitialSwitchResourceValues(icDevice *device,
                                              IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                              uint64_t eui64,
@@ -760,7 +671,7 @@ static bool fetchInitialSwitchResourceValues(icDevice *device,
     return true;
 }
 
-//register resources related to the switch endpoint
+// register resources related to the switch endpoint
 static bool registerSwitchResources(icDevice *device,
                                     IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                     uint64_t eui64,
@@ -776,7 +687,8 @@ static bool registerSwitchResources(icDevice *device,
     return true;
 }
 
-static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device,
+static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
+                                       icDevice *device,
                                        IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                        icInitialResourceValues *initialResourceValues)
 {
@@ -784,7 +696,7 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
 
-    //get the eui64 for the device, which is the uuid
+    // get the eui64 for the device, which is the uuid
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     for (uint8_t i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
@@ -792,18 +704,13 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
         uint16_t deviceId = discoveredDeviceDetails->endpointDetails[i].appDeviceId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
 
         if (isSwitchDevice(deviceId))
         {
-            if (!(result = fetchInitialSwitchResourceValues(device,
-                                                            discoveredDeviceDetails,
-                                                            eui64,
-                                                            endpointId,
-                                                            deviceId,
-                                                            epName,
-                                                            initialResourceValues)))
+            if (!(result = fetchInitialSwitchResourceValues(
+                      device, discoveredDeviceDetails, eui64, endpointId, deviceId, epName, initialResourceValues)))
             {
                 icLogError(LOG_TAG, "%s: failed to fetch initial switch resource values", __FUNCTION__);
                 result = false;
@@ -812,13 +719,8 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device
         }
         else
         {
-            if (!(result = fetchInitialLightResourceValues(device,
-                                                           discoveredDeviceDetails,
-                                                           eui64,
-                                                           endpointId,
-                                                           deviceId,
-                                                           epName,
-                                                           initialResourceValues)))
+            if (!(result = fetchInitialLightResourceValues(
+                      device, discoveredDeviceDetails, eui64, endpointId, deviceId, epName, initialResourceValues)))
             {
                 icLogError(LOG_TAG, "%s: failed to fetch initial light resource values", __FUNCTION__);
                 result = false;
@@ -830,15 +732,16 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device
     return result;
 }
 
-static bool
-registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *discoveredDeviceDetails,
-                  icInitialResourceValues *initialResourceValues)
+static bool registerResources(ZigbeeDriverCommon *ctx,
+                              icDevice *device,
+                              IcDiscoveredDeviceDetails *discoveredDeviceDetails,
+                              icInitialResourceValues *initialResourceValues)
 {
     bool result = true;
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
 
-    //get the eui64 for the device, which is the uuid
+    // get the eui64 for the device, which is the uuid
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     for (uint8_t i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
@@ -846,18 +749,13 @@ registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceD
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
         uint16_t deviceId = discoveredDeviceDetails->endpointDetails[i].appDeviceId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
 
         if (isSwitchDevice(deviceId))
         {
-            if (!(result = registerSwitchResources(device,
-                                                   discoveredDeviceDetails,
-                                                   eui64,
-                                                   endpointId,
-                                                   deviceId,
-                                                   epName,
-                                                   initialResourceValues)))
+            if (!(result = registerSwitchResources(
+                      device, discoveredDeviceDetails, eui64, endpointId, deviceId, epName, initialResourceValues)))
             {
                 icLogError(LOG_TAG, "%s: failed to register switch resources", __FUNCTION__);
                 result = false;
@@ -866,12 +764,8 @@ registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceD
         }
         else
         {
-            if (!(result = registerLightResources(device,
-                                                  discoveredDeviceDetails,
-                                                  eui64,
-                                                  endpointId,
-                                                  epName,
-                                                  initialResourceValues)))
+            if (!(result = registerLightResources(
+                      device, discoveredDeviceDetails, eui64, endpointId, epName, initialResourceValues)))
             {
                 icLogError(LOG_TAG, "%s: failed to register light resources", __FUNCTION__);
                 result = false;
@@ -943,12 +837,16 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
         return false;
     }
 
-    icLogDebug(LOG_TAG, "writeEndpointResource on endpoint %s: id=%s, previousValue=%s, newValue=%s",
-               resource->endpointId, resource->id, previousValue, newValue);
+    icLogDebug(LOG_TAG,
+               "writeEndpointResource on endpoint %s: id=%s, previousValue=%s, newValue=%s",
+               resource->endpointId,
+               resource->id,
+               previousValue,
+               newValue);
 
     uint64_t eui64 = zigbeeSubsystemIdToEui64(resource->deviceUuid);
 
-    //by default, resources are updated via attribute report.
+    // by default, resources are updated via attribute report.
     *baseDriverUpdatesResource = false;
 
     if (strcmp(LIGHT_PROFILE_RESOURCE_IS_ON, resource->id) == 0)
@@ -957,7 +855,8 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
     }
     else if (strcmp(LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL, resource->id) == 0)
     {
-        result = levelControlClusterSetLevel(eui64, (uint8_t) endpointNumber, levelControlClusterGetLevelFromString(newValue));
+        result = levelControlClusterSetLevel(
+            eui64, (uint8_t) endpointNumber, levelControlClusterGetLevelFromString(newValue));
     }
     else if (strcmp(LIGHT_PROFILE_RESOURCE_COLOR, resource->id) == 0)
     {
@@ -972,7 +871,7 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: invalid color coordinates %s", __FUNCTION__, newValue);
         }
     }
-    else if(strcmp(LIGHT_PROFILE_RESOURCE_IS_DIMMABLE_MODE, resource->id) == 0)
+    else if (strcmp(LIGHT_PROFILE_RESOURCE_IS_DIMMABLE_MODE, resource->id) == 0)
     {
         // common driver will update the resource in db
         *baseDriverUpdatesResource = true;
@@ -982,9 +881,8 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
     return result;
 }
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext)
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext)
 {
     bool configureCluster = true;
     uint16_t deviceId = 0;
@@ -992,7 +890,8 @@ static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
     // check if the current endpoint is a switch device, if it is a switch device, then
     // do not configure its clusters as this would bind the switch endpoint to us, (zilker)
     // breaking the default binding between the switch and light endpoint on the device.
-    if (icDiscoveredDeviceDetailsEndpointGetDeviceId(deviceConfigContext->discoveredDeviceDetails, deviceConfigContext->endpointId, &deviceId) &&
+    if (icDiscoveredDeviceDetailsEndpointGetDeviceId(
+            deviceConfigContext->discoveredDeviceDetails, deviceConfigContext->endpointId, &deviceId) &&
         isSwitchDevice(deviceId) == true)
     {
         configureCluster = false;
@@ -1020,40 +919,34 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     icLinkedListIterator *it = linkedListIteratorCreate(device->endpoints);
-    while(linkedListIteratorHasNext(it) && deviceServiceIsShuttingDown() == false)
+    while (linkedListIteratorHasNext(it) && deviceServiceIsShuttingDown() == false)
     {
-        icDeviceEndpoint *endpoint = (icDeviceEndpoint*) linkedListIteratorGetNext(it);
+        icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(it);
         uint8_t endpointNumber = zigbeeDriverCommonGetEndpointNumber(ctx, endpoint);
 
-        if(icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, ON_OFF_CLUSTER_ID, true))
+        if (icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, ON_OFF_CLUSTER_ID, true))
         {
             bool isOn;
             if (onOffClusterIsOn(eui64, endpointNumber, &isOn))
             {
-                updateResource(device->uuid,
-                               endpoint->id,
-                               LIGHT_PROFILE_RESOURCE_IS_ON,
-                               isOn ? "true" : "false",
-                               NULL);
+                updateResource(device->uuid, endpoint->id, LIGHT_PROFILE_RESOURCE_IS_ON, isOn ? "true" : "false", NULL);
             }
         }
 
-        if(icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, LEVEL_CONTROL_CLUSTER_ID, true) && deviceServiceIsShuttingDown() == false)
+        if (icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, LEVEL_CONTROL_CLUSTER_ID, true) &&
+            deviceServiceIsShuttingDown() == false)
         {
             uint8_t level;
             if (levelControlClusterGetLevel(eui64, endpointNumber, &level))
             {
                 char *levelStr = levelControlClusterGetLevelString(level);
-                updateResource(device->uuid,
-                               endpoint->id,
-                               LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL,
-                               levelStr,
-                               NULL);
+                updateResource(device->uuid, endpoint->id, LIGHT_PROFILE_RESOURCE_CURRENT_LEVEL, levelStr, NULL);
                 free(levelStr);
             }
         }
 
-        if(icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, COLOR_CONTROL_CLUSTER_ID, true) && deviceServiceIsShuttingDown() == false)
+        if (icDiscoveredDeviceDetailsEndpointHasCluster(details, endpointNumber, COLOR_CONTROL_CLUSTER_ID, true) &&
+            deviceServiceIsShuttingDown() == false)
         {
             double x;
             double y;
@@ -1061,11 +954,7 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
                 colorControlClusterGetY(eui64, endpointNumber, &y))
             {
                 char *xyStr = getColorString(x, y);
-                updateResource(device->uuid,
-                               endpoint->id,
-                               LIGHT_PROFILE_RESOURCE_COLOR,
-                               xyStr,
-                               NULL);
+                updateResource(device->uuid, endpoint->id, LIGHT_PROFILE_RESOURCE_COLOR, xyStr, NULL);
                 free(xyStr);
             }
         }

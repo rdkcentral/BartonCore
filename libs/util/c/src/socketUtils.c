@@ -28,16 +28,15 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/un.h>
-#include <netinet/in.h>
 #include <unistd.h>
 
 #include <icLog/logging.h>
-#include <icUtil/stringUtils.h>
 #include <icUtil/socketUtils.h>
+#include <icUtil/stringUtils.h>
 
 #define LOG_TAG "socketUtils"
 
@@ -159,7 +158,7 @@ int canReadFromServiceSocket(int32_t serviceSock, int32_t shutdownSock, time_t t
     timeout.tv_usec = 0;
 
     // wait up to 'timeout seconds' for something to appear on the 'serviceSock'
-    rc = select(maxFD+1, &readFds, &writeFds, &exceptFds, &timeout);
+    rc = select(maxFD + 1, &readFds, &writeFds, &exceptFds, &timeout);
     if (rc == 0)
     {
         return ETIMEDOUT;
@@ -222,7 +221,7 @@ bool canWriteToSocket(int32_t sockFD, time_t timeoutSecs)
     timeout.tv_sec = timeoutSecs;
     timeout.tv_usec = 0;
 
-    rc = select(sockFD+1, &readFds, &writeFds, &exceptFds, &timeout);
+    rc = select(sockFD + 1, &readFds, &writeFds, &exceptFds, &timeout);
     if (rc > 0)
     {
         // see if our socket is set
@@ -246,7 +245,7 @@ bool canWriteToSocket(int32_t sockFD, time_t timeoutSecs)
 bool setTCPUserTimeout(int socket, unsigned int timeoutMillis)
 {
 #ifndef CONFIG_PRODUCT_FLEX
-    int status = setsockopt(socket, IPPROTO_TCP , TCP_USER_TIMEOUT, &timeoutMillis, sizeof(timeoutMillis));
+    int status = setsockopt(socket, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeoutMillis, sizeof(timeoutMillis));
     if (status != 0)
     {
         char *errStr = strerrorSafe(errno);
@@ -260,5 +259,3 @@ bool setTCPUserTimeout(int socket, unsigned int timeoutMillis)
     return false;
 #endif
 }
-
-

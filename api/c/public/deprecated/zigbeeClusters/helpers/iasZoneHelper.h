@@ -27,8 +27,8 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <deviceDrivers/zigbeeDriverCommon.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 /**
  * Cluster helper for handling a zone status changed event.
@@ -40,10 +40,7 @@
  * @param ctx
  * @see ZCL specifications for alarm1/alarm2 meaning by zone type
  */
-void iasZoneStatusChangedHelper(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t zoneStatus,
-                                const ZigbeeDriverCommon *ctx);
+void iasZoneStatusChangedHelper(uint64_t eui64, uint8_t endpointId, uint16_t zoneStatus, const ZigbeeDriverCommon *ctx);
 
 /**
  * Driver helper for fetching intial zone resource values
@@ -102,4 +99,4 @@ const char *iasZoneHelperGetTroubleResource(const char *deviceClass, const char 
 void iasZoneHelperSyncZoneStatus(const char *uuid, const uint8_t endpointId, ZigbeeDriverCommon *ctx);
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif //ZILKER_IASZONEHELPER_H
+#endif // ZILKER_IASZONEHELPER_H

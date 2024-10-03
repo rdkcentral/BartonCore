@@ -31,21 +31,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <icLog/logging.h>
 #include "icTypes/icSortedLinkedList.h"
 #include "sortedTest.h"
+#include <icLog/logging.h>
 
-#define LOG_CAT     "logTEST"
+#define LOG_CAT "logTEST"
 
 typedef struct _sample
 {
-    int     num;
-    char    label[50];
+    int num;
+    char label[50];
 } sample;
 
 static sample *createSample()
 {
-    sample *retVal = (sample *)malloc(sizeof(sample));
+    sample *retVal = (sample *) malloc(sizeof(sample));
     memset(retVal, 0, sizeof(sample));
     return retVal;
 }
@@ -58,7 +58,7 @@ static void printSample(sample *curr)
 static bool printIterator(void *item, void *arg)
 {
     // typecast to 'sample'
-    sample *curr = (sample *)item;
+    sample *curr = (sample *) item;
     printSample(curr);
     return true;
 }
@@ -72,20 +72,20 @@ static void printList(icLinkedList *list)
 
 static int8_t sortToAddFunct(void *newItem, void *element)
 {
-    sample *there = (sample *)element;
-    sample *add = (sample *)newItem;
+    sample *there = (sample *) element;
+    sample *add = (sample *) newItem;
 
     // looks strange, but Coverity complained about typecasting the return from strcmp()
     int rc = strcmp(add->label, there->label);
     if (rc < 0)
     {
-        return (int8_t)-1;
+        return (int8_t) -1;
     }
     else if (rc > 0)
     {
-        return (int8_t)1;
+        return (int8_t) 1;
     }
-    return (int8_t)0;
+    return (int8_t) 0;
 }
 
 static bool canAddToEmptyList()

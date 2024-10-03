@@ -24,11 +24,12 @@
 // Created by Christian Leithner on 12/9/20
 //
 
-#include <stdlib.h>
 #include "icConcurrent/icDebounce.h"
 #include "icConcurrent/delayedTask.h"
+#include <stdlib.h>
 
-struct _icDebounce {
+struct _icDebounce
+{
     uint32_t taskHandle;
 
     debounceExpiredFunc expiredCallback;
@@ -112,8 +113,8 @@ bool debounce(icDebounce *debounce)
         if ((retVal = rescheduleDelayTask(debounce->taskHandle, debounce->timeoutMillis, DELAY_MILLIS)) == false)
         {
             // Handle doesn't exist, so schedule a new one
-            debounce->taskHandle = scheduleDelayTask(debounce->timeoutMillis, DELAY_MILLIS, debounce->expiredCallback,
-                                                     debounce->context);
+            debounce->taskHandle =
+                scheduleDelayTask(debounce->timeoutMillis, DELAY_MILLIS, debounce->expiredCallback, debounce->context);
             retVal = (debounce->taskHandle != 0);
         }
     }

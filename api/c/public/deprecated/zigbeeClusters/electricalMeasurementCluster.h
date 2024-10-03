@@ -34,14 +34,12 @@
 
 typedef struct
 {
-    void (*activePowerChanged)(uint64_t eui64,
-                         uint8_t endpointId,
-                         int16_t watts,
-                         const void *ctx);
+    void (*activePowerChanged)(uint64_t eui64, uint8_t endpointId, int16_t watts, const void *ctx);
 } ElectricalMeasurementClusterCallbacks;
 
 
-ZigbeeCluster *electricalMeasurementClusterCreate(const ElectricalMeasurementClusterCallbacks *callbacks, void *callbackContext);
+ZigbeeCluster *electricalMeasurementClusterCreate(const ElectricalMeasurementClusterCallbacks *callbacks,
+                                                  void *callbackContext);
 
 bool electricalMeasurementClusterGetActivePower(uint64_t eui64, uint8_t endpointId, int16_t *watts);
 bool electricalMeasurementClusterGetAcPowerDivisor(uint64_t eui64, uint8_t endpointId, uint16_t *divisor);
@@ -49,4 +47,4 @@ bool electricalMeasurementClusterGetAcPowerMultiplier(uint64_t eui64, uint8_t en
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_ELECTRICALMEASUREMENTCLUSTER_H
+#endif // ZILKER_ELECTRICALMEASUREMENTCLUSTER_H

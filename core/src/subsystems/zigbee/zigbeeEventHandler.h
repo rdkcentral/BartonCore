@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -48,4 +48,3 @@ int zigbeeEventHandlerSystemReady();
 void zigbeeEventHandlerDiscoveryRunning(bool isRunning);
 
 #endif // FLEXCORE_ZHALEVENTHANDLER_H
-

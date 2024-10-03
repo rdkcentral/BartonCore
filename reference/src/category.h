@@ -37,8 +37,7 @@ typedef struct _Category Category;
  * @param description the description of the Category
  * @return the newly created Category
  */
-Category *categoryCreate(const gchar *name,
-                         const gchar *description);
+Category *categoryCreate(const gchar *name, const gchar *description);
 
 /**
  * Destroy a Category, releasing any related resources.
@@ -59,8 +58,7 @@ void categorySetAdvanced(Category *category);
  * @param category
  * @param command
  */
-void categoryAddCommand(Category *category,
-                        Command *command);
+void categoryAddCommand(Category *category, Command *command);
 
 /**
  * Retrieve a Command instance from this Category (searching long and short names).
@@ -69,8 +67,7 @@ void categoryAddCommand(Category *category,
  * @param name
  * @return the matching Command or NULL if not found
  */
-Command *categoryGetCommand(const Category *category,
-                            const gchar *name);
+Command *categoryGetCommand(const Category *category, const gchar *name);
 
 /**
  * Retrieve a list of possible matches (completions) for the provided partial command.
@@ -78,8 +75,7 @@ Command *categoryGetCommand(const Category *category,
  * @param buf
  * @return a linked list of completion strings.   Caller destroys.
  */
-GList *categoryGetCompletions(const Category *category,
-                              const gchar *buf);
+GList *categoryGetCompletions(const Category *category, const gchar *buf);
 
 /**
  * Print the end-user help for this Category.
@@ -88,6 +84,4 @@ GList *categoryGetCompletions(const Category *category,
  * @param isInteractive true if we are in interactive mode
  * @param showAdvanced true if we are in advanced mode
  */
-void categoryPrint(const Category *category,
-                   bool isInteractive,
-                   bool showAdvanced);
+void categoryPrint(const Category *category, bool isInteractive, bool showAdvanced);

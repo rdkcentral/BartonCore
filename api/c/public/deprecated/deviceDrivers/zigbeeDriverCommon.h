@@ -42,13 +42,14 @@ typedef struct ZigbeeDriverCommon ZigbeeDriverCommon;
 // Sleepy        - Rx is on only for a short duration after poll control checkin arrives
 // Pseudo-sleepy - Rx is on periodically such that APS retries will deliver a message to it
 // Non-sleepy    - Rx is always on
-typedef enum {
+typedef enum
+{
     RX_MODE_SLEEPY,
     RX_MODE_PSEUDO_SLEEPY,
     RX_MODE_NON_SLEEPY
 } zigbeeReceiverMode;
 
-//These callbacks will be invoked at the proper time if they are non-null
+// These callbacks will be invoked at the proper time if they are non-null
 typedef struct
 {
     bool (*claimDevice)(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details);
@@ -59,7 +60,9 @@ typedef struct
 
     void (*deviceRejected)(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details);
 
-    bool (*getDiscoveredDeviceMetadata)(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details, icStringHashMap *metadata);
+    bool (*getDiscoveredDeviceMetadata)(ZigbeeDriverCommon *ctx,
+                                        IcDiscoveredDeviceDetails *details,
+                                        icStringHashMap *metadata);
 
     bool (*configureDevice)(ZigbeeDriverCommon *ctx,
                             icDevice *device,
@@ -78,12 +81,15 @@ typedef struct
 
     bool (*devicePersisted)(ZigbeeDriverCommon *ctx, icDevice *device);
 
-    bool (*readEndpointResource)(ZigbeeDriverCommon *ctx, uint32_t endpointNumber, icDeviceResource *resource, char **value);
+    bool (*readEndpointResource)(ZigbeeDriverCommon *ctx,
+                                 uint32_t endpointNumber,
+                                 icDeviceResource *resource,
+                                 char **value);
 
     bool (*readDeviceResource)(ZigbeeDriverCommon *ctx, icDeviceResource *resource, char **value);
 
-    //baseDriverUpdatesResource can be set to false by the higher level driver to prevent the base driver from updating
-    // the resource
+    // baseDriverUpdatesResource can be set to false by the higher level driver to prevent the base driver from updating
+    //  the resource
     bool (*writeEndpointResource)(ZigbeeDriverCommon *ctx,
                                   uint32_t endpointNumber,
                                   icDeviceResource *resource,
@@ -109,7 +115,7 @@ typedef struct
 
     const char *(*mapDeviceIdToProfile)(ZigbeeDriverCommon *ctx, uint16_t deviceId);
 
-    //Additional hooks available if needed
+    // Additional hooks available if needed
 
     /**
      * Configure the driver before startup
@@ -127,11 +133,11 @@ typedef struct
 
     void (*preDeleteDriver)(ZigbeeDriverCommon *ctx);
 
-    //This hook can be used to process metadata found in the device descriptor.  The base driver already stored
-    // this in the device's metadata.
+    // This hook can be used to process metadata found in the device descriptor.  The base driver already stored
+    //  this in the device's metadata.
     void (*processDeviceDescriptorMetadata)(ZigbeeDriverCommon *ctx, icDevice *device, icStringHashMap *metadata);
 
-    //returning true means we are accepting this device without the normal processing
+    // returning true means we are accepting this device without the normal processing
     bool (*preDeviceDiscovered)(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details);
 
     void (*preDiscoverStart)(ZigbeeDriverCommon *ctx, const char *deviceClass);
@@ -146,7 +152,7 @@ typedef struct
 
     void (*postDeviceRemoved)(ZigbeeDriverCommon *ctx, icDevice *device);
 
-    //list of icDevice.  List and items will be destroyed after callback invocation
+    // list of icDevice.  List and items will be destroyed after callback invocation
     void (*devicesLoaded)(ZigbeeDriverCommon *ctx, icLinkedList *devices);
 
     void (*communicationFailed)(ZigbeeDriverCommon *ctx, icDevice *device);
@@ -165,10 +171,10 @@ typedef struct
 
     void (*initiateFirmwareUpgrade)(ZigbeeDriverCommon *ctx, const char *deviceUuid, const DeviceDescriptor *dd);
 
-    //callback frees report with freeReceivedAttributeReport()
+    // callback frees report with freeReceivedAttributeReport()
     void (*handleAttributeReport)(ZigbeeDriverCommon *ctx, ReceivedAttributeReport *report);
 
-    //callback frees command with freeReceivedClusterCommand()
+    // callback frees command with freeReceivedClusterCommand()
     void (*handleClusterCommand)(ZigbeeDriverCommon *ctx, ReceivedClusterCommand *command);
 
     void (*setEndpointNumber)(ZigbeeDriverCommon *ctx, icDeviceEndpoint *endpoint, uint8_t endpointNumber);
@@ -179,7 +185,10 @@ typedef struct
 
     void (*synchronizeDevice)(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *details);
 
-    bool (*firmwareUpgradeRequired)(ZigbeeDriverCommon *ctx, const char *deviceUuid, const char *latestVersion, const char *currentVersion);
+    bool (*firmwareUpgradeRequired)(ZigbeeDriverCommon *ctx,
+                                    const char *deviceUuid,
+                                    const char *latestVersion,
+                                    const char *currentVersion);
 
     void (*endpointDisabled)(ZigbeeDriverCommon *ctx, icDeviceEndpoint *endpoint);
 
@@ -224,7 +233,7 @@ const char *zigbeeDriverCommonGetDeviceClass(ZigbeeDriverCommon *ctx);
 // by the standard deviceServiceCommFail module.
 uint32_t zigbeeDriverCommonGetDeviceCommFailTimeout(DeviceDriver *driver);
 
-//configure this instance to not perform any discovery or configuration of devices during pairing
+// configure this instance to not perform any discovery or configuration of devices during pairing
 void zigbeeDriverCommonSkipConfiguration(DeviceDriver *driver);
 
 bool zigbeeDriverCommonConfigureEndpointClusters(uint64_t eui64,
@@ -247,7 +256,7 @@ bool validateOtaUpgradeMessage(OtaUpgradeEvent *otaEvent);
 void *zigbeeDriverCommonGetDriverPrivateData(ZigbeeDriverCommon *ctx);
 void zigbeeDriverCommonSetDriverPrivateData(ZigbeeDriverCommon *ctx, void *privateData);
 
-//configure this instance as being for devices that are battery backed up
+// configure this instance as being for devices that are battery backed up
 void zigbeeDriverCommonSetBatteryBackedUp(DeviceDriver *driver);
 
 // Common resource update functions
@@ -306,7 +315,7 @@ bool zigbeeDriverCommonDownloadFirmwareFiles(const DeviceDescriptor *dd);
  * @param commonDriver
  * @param uuid the uuid of device (can be NULL)
  */
-void zigbeeDriverCommonCancelPendingUpgrades(ZigbeeDriverCommon *commonDriver,const char* uuid);
+void zigbeeDriverCommonCancelPendingUpgrades(ZigbeeDriverCommon *commonDriver, const char *uuid);
 
 /**
  * Check if this driver is for battery backed up devices
@@ -337,4 +346,4 @@ void zigbeeDriverCommonComcastBatterySavingUpdateResources(uint64_t eui64,
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_ZIGBEEDRIVERCOMMON_H
+#endif // ZILKER_ZIGBEEDRIVERCOMMON_H

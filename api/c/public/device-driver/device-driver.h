@@ -37,7 +37,9 @@
 
 typedef bool (*ConfigureDeviceFunc)(void *ctx, icDevice *device, DeviceDescriptor *descriptor);
 
-typedef bool (*FetchInitialResourceValuesFunc)(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
+typedef bool (*FetchInitialResourceValuesFunc)(void *ctx,
+                                               icDevice *device,
+                                               icInitialResourceValues *initialResourceValues);
 
 /*
  * Register the resources provided by this device.
@@ -162,7 +164,8 @@ struct DeviceDriver
     void (*stopDiscoveringDevices)(void *ctx, const char *deviceClass);
 
     /*
-     * Device Service removed the specified device from inventory.  This allows the device driver to perform any cleanup.
+     * Device Service removed the specified device from inventory.  This allows the device driver to perform any
+     * cleanup.
      *
      * @param ctx the callbackContext value provided by this device driver
      * @param device - the device that was removed
@@ -235,7 +238,8 @@ struct DeviceDriver
      * @param ctx the callbackContext value provided by this device driver
      * @param resource - the resource to write
      * @param arg - optional JSON argument object
-     * @param response - a pointer that will hold the response or null if no response is expected/desired (caller frees if non-null value returned)
+     * @param response - a pointer that will hold the response or null if no response is expected/desired (caller frees
+     * if non-null value returned)
      *
      * returns true on success
      */
@@ -252,9 +256,7 @@ struct DeviceDriver
      *
      * return true on success
      */
-    bool (*processDeviceDescriptor)(void *ctx,
-                                    icDevice *device,
-                                    DeviceDescriptor *dd);
+    bool (*processDeviceDescriptor)(void *ctx, icDevice *device, DeviceDescriptor *dd);
 
     /*
      * The specified device has been identified as in communication failure.
@@ -280,7 +282,7 @@ struct DeviceDriver
      */
     void (*synchronizeDevice)(void *ctx, icDevice *device);
 
-     /*
+    /*
      * Callback to deal with RMA.
      *
      * @param ctx the callbackContext value provided by this device driver
@@ -321,7 +323,7 @@ struct DeviceDriver
      * @param ctx the callbackContext value provided by this device driver
      * @param output the target object for the statistics
      */
-    void (*fetchRuntimeStats)(void *ctx,  icStringHashMap *output);
+    void (*fetchRuntimeStats)(void *ctx, icStringHashMap *output);
 
     /*
      * Callback to deal with pre restore configuration with RMA
@@ -373,25 +375,28 @@ struct DeviceDriver
  * @param profile - A const char * indicating the name of the endpoint profile (eg. DOORLOCK_PROFILE)
  * @param profileVersion - A uint8_t indicating the expected version of this profile
  */
-#define DRIVER_REGISTER_PROFILE_VERSION(driver, profile, profileVersion)                                        \
-do                                                                                                              \
-{                                                                                                               \
-    if (driver != NULL && profile != NULL)                                                                      \
-    {                                                                                                           \
-        if (driver->endpointProfileVersions == NULL)                                                            \
-        {                                                                                                       \
-            driver->endpointProfileVersions = hashMapCreate();                                                  \
-        }                                                                                                       \
-        uint8_t *newProfileVersion = (uint8_t *)malloc(sizeof(uint8_t));                                        \
-        *newProfileVersion = profileVersion;                                                                    \
-        hashMapPut(myDriver->endpointProfileVersions, strdup(profile), strlen(profile)+1, newProfileVersion);   \
-    }                                                                                                           \
-    else                                                                                                        \
-    {                                                                                                           \
-        icLogError(LOG_TAG, "Unable to register profile version %" PRIu8 " for profile %s - Either the driver or" \
-                    " profile name is NULL", profileVersion, stringCoalesce(profile));                          \
-    }                                                                                                           \
-} while (0)                                                                                                     \
+#define DRIVER_REGISTER_PROFILE_VERSION(driver, profile, profileVersion)                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (driver != NULL && profile != NULL)                                                                         \
+        {                                                                                                              \
+            if (driver->endpointProfileVersions == NULL)                                                               \
+            {                                                                                                          \
+                driver->endpointProfileVersions = hashMapCreate();                                                     \
+            }                                                                                                          \
+            uint8_t *newProfileVersion = (uint8_t *) malloc(sizeof(uint8_t));                                          \
+            *newProfileVersion = profileVersion;                                                                       \
+            hashMapPut(myDriver->endpointProfileVersions, strdup(profile), strlen(profile) + 1, newProfileVersion);    \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            icLogError(LOG_TAG,                                                                                        \
+                       "Unable to register profile version %" PRIu8 " for profile %s - Either the driver or"           \
+                       " profile name is NULL",                                                                        \
+                       profileVersion,                                                                                 \
+                       stringCoalesce(profile));                                                                       \
+        }                                                                                                              \
+    } while (0)
 
 typedef struct
 {
@@ -442,7 +447,7 @@ typedef struct
 
 typedef enum
 {
-    updateResourceEventNever, // Never send an event when the resource is updated
+    updateResourceEventNever,  // Never send an event when the resource is updated
     updateResourceEventChanged // Only send an event if the value of the resource actually changed
 } UpdateResourceEventMethod;
 
@@ -484,4 +489,4 @@ typedef enum
     ARM_NOTIF_TROUBLE
 } ArmDisarmNotification;
 
-#endif //FLEXCORE_DEVICEDRIVER_H
+#endif // FLEXCORE_DEVICEDRIVER_H

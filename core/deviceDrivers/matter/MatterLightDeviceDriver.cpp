@@ -52,13 +52,13 @@ using namespace std::chrono_literals;
 #define MATTER_LIGHT_DEVICE_DRIVER_NAME "matterLight"
 
 // this is our endpoint, not the device's
-#define LIGHT_ENDPOINT "1"
+#define LIGHT_ENDPOINT                  "1"
 
 struct ClusterReadContext
 {
-    void *driverContext; // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; //non-null if this read is the initial resource fetch
-    char **value; //non-null if this read is a regular resource read
+    void *driverContext;                            // the context provided to the driver for the operation
+    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
+    char **value;                                   // non-null if this read is a regular resource read
 };
 
 // auto register with the factory
@@ -174,8 +174,8 @@ void MatterLightDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<b
 {
     icDebug();
 
-    //currently we dont do anything during configuration except set up reporting, which also triggers an immediate
-    // report and that takes care of synchronizing state/resources as well.
+    // currently we dont do anything during configuration except set up reporting, which also triggers an immediate
+    //  report and that takes care of synchronizing state/resources as well.
     ConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
 }
 
@@ -232,7 +232,8 @@ bool MatterLightDeviceDriver::RegisterResources(icDevice *device, icInitialResou
     resource->endpointId = strdup(LIGHT_ENDPOINT);
     resource->deviceUuid = strdup(device->uuid);
 
-    const char *initialValue = initialResourceValuesGetEndpointValue(initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON);
+    const char *initialValue =
+        initialResourceValuesGetEndpointValue(initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON);
     if (initialValue)
     {
         resource->value = strdup(

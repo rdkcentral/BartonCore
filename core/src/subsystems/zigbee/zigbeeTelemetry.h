@@ -48,4 +48,4 @@ void zigbeeTelemetrySetProperty(const char *key, const char *value);
 
 #endif // BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
 
-#endif //ZILKER_ZIGBEETELEMETRY_H
+#endif // ZILKER_ZIGBEETELEMETRY_H

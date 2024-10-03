@@ -25,8 +25,8 @@
  */
 
 #include "events/device-service-status-event.h"
-#include "device-service-utils.h"
 #include "device-service-status.h"
+#include "device-service-utils.h"
 #include "events/device-service-event.h"
 
 #include <glib.h>
@@ -58,10 +58,8 @@ static void b_device_service_status_event_finalize(GObject *object)
     G_OBJECT_CLASS(b_device_service_status_event_parent_class)->finalize(object);
 }
 
-static void b_device_service_status_event_get_property(GObject *object,
-                                                     guint property_id,
-                                                     GValue *value,
-                                                     GParamSpec *pspec)
+static void
+b_device_service_status_event_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec)
 {
     BDeviceServiceStatusEvent *self = B_DEVICE_SERVICE_STATUS_EVENT(object);
 
@@ -79,17 +77,16 @@ static void b_device_service_status_event_get_property(GObject *object,
     }
 }
 
-static void b_device_service_status_event_set_property(GObject *object,
-                                                     guint property_id,
-                                                     const GValue *value,
-                                                     GParamSpec *pspec)
+static void
+b_device_service_status_event_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec)
 {
     BDeviceServiceStatusEvent *self = B_DEVICE_SERVICE_STATUS_EVENT(object);
 
     switch (property_id)
     {
         case B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS:
-            if (self->status) g_object_unref(self->status);
+            if (self->status)
+                g_object_unref(self->status);
             self->status = g_value_dup_object(value);
             break;
         case B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON:
@@ -114,16 +111,14 @@ static void b_device_service_status_event_class_init(BDeviceServiceStatusEventCl
      * DeviceServiceStatusEvent:status: (type DeviceServiceStatus)
      */
     properties[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS] =
-        g_param_spec_object(B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES
-                                 [B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
-                             "Device Service Status",
-                             "The overall status of Device Service and its subsystems",
-                             B_DEVICE_SERVICE_STATUS_TYPE,
-                             G_PARAM_READWRITE);
+        g_param_spec_object(B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
+                            "Device Service Status",
+                            "The overall status of Device Service and its subsystems",
+                            B_DEVICE_SERVICE_STATUS_TYPE,
+                            G_PARAM_READWRITE);
 
     properties[B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON] =
-        g_param_spec_enum(B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES
-                              [B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON],
+        g_param_spec_enum(B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON],
                           "Reason",
                           "The reason for the status change",
                           B_DEVICE_SERVICE_STATUS_CHANGED_REASON_TYPE,
@@ -146,11 +141,15 @@ GType b_device_service_status_changed_reason_get_type(void)
     if (g_once_init_enter(&g_define_type_id__volatile))
     {
         static const GEnumValue values[] = {
-            {B_DEVICE_SERVICE_STATUS_CHANGED_REASON_INVALID, "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_INVALID",  "invalid"},
-            {B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_PAIRING, "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_PAIRING",  "ready-for-pairing"},
-            {B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_DEVICE_OPERATION, "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_DEVICE_OPERATION",  "ready-for-device-operation"},
-            {B_DEVICE_SERVICE_STATUS_CHANGED_REASON_SUBSYSTEM_STATUS, "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_SUBSYSTEM_STATUS",  "subsystem-status"},
-            {0,NULL,NULL}
+            {                   B_DEVICE_SERVICE_STATUS_CHANGED_REASON_INVALID,
+             "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_INVALID",                    "invalid"                       },
+            {         B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_PAIRING,
+             "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_PAIRING",          "ready-for-pairing"             },
+            {B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_DEVICE_OPERATION,
+             "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_DEVICE_OPERATION", "ready-for-device-operation"    },
+            {          B_DEVICE_SERVICE_STATUS_CHANGED_REASON_SUBSYSTEM_STATUS,
+             "B_DEVICE_SERVICE_STATUS_CHANGED_REASON_SUBSYSTEM_STATUS",           "subsystem-status"              },
+            {                                                                0, NULL,                         NULL}
         };
 
         GType g_define_type_id =

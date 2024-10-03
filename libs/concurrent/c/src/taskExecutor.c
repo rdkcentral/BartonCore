@@ -29,39 +29,41 @@
  *
  * Author: jelderton -  11/13/18.
  *-----------------------------------------------*/
- 
+
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #include <icConcurrent/icBlockingQueue.h>
 #include <icConcurrent/taskExecutor.h>
 #include <icConcurrent/threadUtils.h>
 
-#define MAX_QUEUE_SIZE  100
+#define MAX_QUEUE_SIZE 100
 
 // possible states of the task executor
-typedef enum {
-    TASK_EXEC_STATE_RUN,        // normal state
-    TASK_EXEC_STATE_FINISH,     // finalizing (wait for all to finish)
-    TASK_EXEC_STATE_CANCEL,     // canceling
+typedef enum
+{
+    TASK_EXEC_STATE_RUN,    // normal state
+    TASK_EXEC_STATE_FINISH, // finalizing (wait for all to finish)
+    TASK_EXEC_STATE_CANCEL, // canceling
 } icTaskExecState;
 
 // detailed definition of our construct
 struct _icTaskExecutor
 {
-    icBlockingQueue *queue;     // queue to hold taskContainers
-    icTaskExecState state;      // current state
-    pthread_t       execThread; // processing thread
-    pthread_mutex_t execMutex;  // mutex for this instance
+    icBlockingQueue *queue;    // queue to hold taskContainers
+    icTaskExecState state;     // current state
+    pthread_t execThread;      // processing thread
+    pthread_mutex_t execMutex; // mutex for this instance
 };
 
 // object that is inserted into the queue
-typedef struct _taskContainer {
-    taskExecRunFunc  runFunc;
+typedef struct _taskContainer
+{
+    taskExecRunFunc runFunc;
     taskExecFreeFunc freeFunc;
-    void    *taskObj;
-    void    *taskArg;
+    void *taskObj;
+    void *taskArg;
 } taskContainer;
 
 // private functions
@@ -85,7 +87,7 @@ icTaskExecutor *createBoundedTaskExecutor(uint16_t maxQueueSize)
 {
     // make the container and give it a decent sized queue
     //
-    icTaskExecutor *retVal = (icTaskExecutor *)calloc(1, sizeof(icTaskExecutor));
+    icTaskExecutor *retVal = (icTaskExecutor *) calloc(1, sizeof(icTaskExecutor));
     retVal->state = TASK_EXEC_STATE_RUN;
     pthread_mutex_init(&retVal->execMutex, NULL);
     retVal->queue = blockingQueueCreate(maxQueueSize);
@@ -235,8 +237,11 @@ void clearTaskExecutor(icTaskExecutor *executor)
  * @param runFunc - function to perform the task execution
  * @param freeFunc - function to call after runFunc to perform cleanup
  */
-bool appendTaskToExecutor(icTaskExecutor *executor, void *taskObj, void *taskArg,
-                          taskExecRunFunc runFunc, taskExecFreeFunc freeFunc)
+bool appendTaskToExecutor(icTaskExecutor *executor,
+                          void *taskObj,
+                          void *taskArg,
+                          taskExecRunFunc runFunc,
+                          taskExecFreeFunc freeFunc)
 {
     bool retVal = false;
     if (executor != NULL)
@@ -248,7 +253,7 @@ bool appendTaskToExecutor(icTaskExecutor *executor, void *taskObj, void *taskArg
         {
             // create the container and shove all of this into it
             //
-            taskContainer *container = (taskContainer *)calloc(1, sizeof(taskContainer));
+            taskContainer *container = (taskContainer *) calloc(1, sizeof(taskContainer));
             container->runFunc = runFunc;
             container->freeFunc = freeFunc;
             container->taskObj = taskObj;
@@ -337,7 +342,7 @@ static void freeQueueItemsFunc(void *item)
     // actual data to release as-well-as the function to
     // do that.
     //
-    taskContainer *container = (taskContainer *)item;
+    taskContainer *container = (taskContainer *) item;
     freeTaskContainer(container);
 }
 
@@ -346,7 +351,7 @@ static void freeQueueItemsFunc(void *item)
  */
 static void *execWorkerThread(void *arg)
 {
-    icTaskExecutor *exec = (icTaskExecutor *)arg;
+    icTaskExecutor *exec = (icTaskExecutor *) arg;
 
     // loop until told to cancel
     //
@@ -379,7 +384,7 @@ static void *execWorkerThread(void *arg)
 
         // wait for something to show in our queue
         //
-        taskContainer *task = (taskContainer *)blockingQueuePopTimeout(exec->queue, 10);
+        taskContainer *task = (taskContainer *) blockingQueuePopTimeout(exec->queue, 10);
         if (task == NULL)
         {
             // timeout getting something to do
@@ -408,5 +413,3 @@ static void *execWorkerThread(void *arg)
     //
     return NULL;
 }
-
-

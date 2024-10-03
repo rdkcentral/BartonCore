@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -23,15 +23,15 @@
 // Created by mkoch201 on 2/8/19.
 //
 
-#include <unistd.h>
 #include <icConcurrent/delayedTask.h>
 #include <icLog/logging.h>
+#include <unistd.h>
 
 #define LOG_TAG "delayedTaskTest"
 
-static void delayCallback(void * arg)
+static void delayCallback(void *arg)
 {
-    const char *str = (char *)arg;
+    const char *str = (char *) arg;
     icLogDebug(LOG_TAG, "Delay callback called: %s", str);
 }
 

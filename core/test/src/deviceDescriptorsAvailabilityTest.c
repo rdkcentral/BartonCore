@@ -89,7 +89,7 @@ gchar *__wrap_b_device_service_property_provider_get_property_as_string(BDeviceS
         return strdup(val);
     }
 
-     return NULL;
+    return NULL;
 }
 
 bool __wrap_deviceServiceSetSystemProperty(const char *name, const char *value)
@@ -132,14 +132,14 @@ uint8_t *__wrap_digestFile(const char *filename, CryptoDigest algorithm, uint8_t
     return NULL;
 }
 
-size_t __wrap_urlHelperDownloadFile(const char* url,
-                             long* httpCode,
-                             const char* username,
-                             const char* password,
-                             uint32_t timeoutSecs,
-                             sslVerify verifyFlag,
-                             bool allowCellular,
-                             const char* pathname)
+size_t __wrap_urlHelperDownloadFile(const char *url,
+                                    long *httpCode,
+                                    const char *username,
+                                    const char *password,
+                                    uint32_t timeoutSecs,
+                                    sslVerify verifyFlag,
+                                    bool allowCellular,
+                                    const char *pathname)
 {
     assert_true(copyFileByPath(url, pathname));
     *httpCode = 0;
@@ -207,10 +207,9 @@ int main(int argc, const char **argv)
 {
     initTimedWaitCond(&cond);
 
-    const struct CMUnitTest test[] =
-    {
-            cmocka_unit_test(test_local_device_descriptors_availability),
-            cmocka_unit_test(test_remote_device_descriptors_availability),
+    const struct CMUnitTest test[] = {
+        cmocka_unit_test(test_local_device_descriptors_availability),
+        cmocka_unit_test(test_remote_device_descriptors_availability),
     };
 
     return cmocka_run_group_tests(test, NULL, NULL);

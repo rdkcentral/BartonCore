@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2020 Comcast
 //
 // All rights reserved.
@@ -25,12 +25,12 @@
 
 #include "jsonPointer/jsonPointer.h"
 
+#include <icTypes/icLinkedList.h>
+#include <icUtil/stringUtils.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icTypes/icLinkedList.h>
-#include <icUtil/stringUtils.h>
 
 struct JSONPointer
 {
@@ -49,7 +49,7 @@ JSONPointer *jsonPointerCompile(const char *jsonPointer)
     JSONPointer *result = NULL;
     if (jsonPointer != NULL)
     {
-        result = (JSONPointer *)calloc(1, sizeof(JSONPointer));
+        result = (JSONPointer *) calloc(1, sizeof(JSONPointer));
         result->keys = linkedListCreate();
         result->pointer = strdup(jsonPointer);
         size_t len = strlen(jsonPointer);
@@ -58,7 +58,7 @@ JSONPointer *jsonPointerCompile(const char *jsonPointer)
             char *token;
             // Create a copy, since we want to allow constant strings
             // Skip the leading /
-            char *orig = strdup(jsonPointer+1);
+            char *orig = strdup(jsonPointer + 1);
             char *rest = orig;
 
             while ((token = strtok_r(rest, "/", &rest)) != NULL)
@@ -84,7 +84,7 @@ JSONPointer *jsonPointerCompile(const char *jsonPointer)
             }
 
             // Special case if ends with / then the final key is an empty string
-            if (jsonPointer[len-1] == '/')
+            if (jsonPointer[len - 1] == '/')
             {
                 linkedListAppend(result->keys, strdup(""));
             }
@@ -142,14 +142,14 @@ cJSON *jsonPointerResolve(const cJSON *json, const JSONPointer *jsonPointer)
 
     if (jsonPointer != NULL)
     {
-        // Resolve away the const, required due to C limitations(no overloading to provide const and non-const versions).
-        // In this case the result can be modified however.  We use const on the argument to indicate we won't modify
-        // it ourselves
-        result = (cJSON *)json;
+        // Resolve away the const, required due to C limitations(no overloading to provide const and non-const
+        // versions). In this case the result can be modified however.  We use const on the argument to indicate we
+        // won't modify it ourselves
+        result = (cJSON *) json;
         icLinkedListIterator *iter = linkedListIteratorCreate(jsonPointer->keys);
-        while(result != NULL && linkedListIteratorHasNext(iter))
+        while (result != NULL && linkedListIteratorHasNext(iter))
         {
-            char *item = (char *)linkedListIteratorGetNext(iter);
+            char *item = (char *) linkedListIteratorGetNext(iter);
             if (cJSON_IsArray(result) == true)
             {
                 uint64_t index;
@@ -395,7 +395,8 @@ bool jsonPointerStringResolveDouble(const cJSON *json, const char *jsonPointerSt
  * NOTE: Does not work correctly if the pointer contains array indices
  * @param baseObject the base object to add items to.  Can be NULL in which case the base object is created if necessary
  * @param pointer the pointer to base the structure on
- * @param value the value to add. This memory is owned by jsonPointerCreateObject upon passing as an argument and will be cleaned up in an error scenario.
+ * @param value the value to add. This memory is owned by jsonPointerCreateObject upon passing as an argument and will
+ * be cleaned up in an error scenario.
  * @return the base object
  */
 cJSON *jsonPointerCreateObject(cJSON *baseObject, const JSONPointer *pointer, cJSON *value)
@@ -415,9 +416,9 @@ cJSON *jsonPointerCreateObject(cJSON *baseObject, const JSONPointer *pointer, cJ
         int i = 1;
         cJSON *parent = baseObject;
 
-        while(linkedListIteratorHasNext(iter) == true)
+        while (linkedListIteratorHasNext(iter) == true)
         {
-            char *item = (char *)linkedListIteratorGetNext(iter);
+            char *item = (char *) linkedListIteratorGetNext(iter);
             cJSON *child = cJSON_GetObjectItem(parent, item);
             if (child == NULL)
             {
@@ -456,15 +457,15 @@ cJSON *jsonPointerCreateObject(cJSON *baseObject, const JSONPointer *pointer, cJ
 /*
  * Handy macro for casting non-double types to double before passing to jsonPointerCreateNumber
  */
-#define createNumberWrapper(object, pointer, value)                         \
-    do                                                                      \
-    {                                                                       \
-        if ((value) != NULL)                                                \
-        {                                                                   \
-            double temp = *(value);                                         \
-            (object) = jsonPointerCreateNumber(object, pointer, &temp);     \
-        }                                                                   \
-        return object;                                                      \
+#define createNumberWrapper(object, pointer, value)                                                                    \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if ((value) != NULL)                                                                                           \
+        {                                                                                                              \
+            double temp = *(value);                                                                                    \
+            (object) = jsonPointerCreateNumber(object, pointer, &temp);                                                \
+        }                                                                                                              \
+        return object;                                                                                                 \
     } while (0)
 
 /**

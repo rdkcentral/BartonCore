@@ -17,9 +17,9 @@
 // Comcast retains all ownership rights.
 
 #include "commonDeviceDefs.h"
+#include "device-driver/device-driver.h"
 #include "device/icDevice.h"
 #include "deviceCommunicationWatchdog.h"
-#include "device-driver/device-driver.h"
 #include "deviceServiceCommFail.h"
 #include "deviceServicePrivate.h"
 #include "icTypes/icLinkedList.h"

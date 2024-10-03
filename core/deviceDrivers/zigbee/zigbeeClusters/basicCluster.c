@@ -20,12 +20,12 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include <stdlib.h>
 #include "subsystems/zigbee/zigbeeCommonIds.h"
 #include <icLog/logging.h>
-#include <memory.h>
-#include <icUtil/stringUtils.h>
 #include <icTime/timeUtils.h>
+#include <icUtil/stringUtils.h>
+#include <memory.h>
+#include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
@@ -34,8 +34,8 @@
 
 #include "zigbeeClusters/basicCluster.h"
 
-#define LOG_TAG "basicCluster"
-#define BASIC_CLUSTER_ENABLE_BIND_KEY "basicClusterEnableBind"
+#define LOG_TAG                                   "basicCluster"
+#define BASIC_CLUSTER_ENABLE_BIND_KEY             "basicClusterEnableBind"
 #define BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY "basicClusterConfigureRebootReason"
 
 typedef struct
@@ -65,15 +65,16 @@ ZigbeeCluster *basicClusterCreate(const BasicClusterCallbacks *callbacks, void *
 
 void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, configure);
 }
 
 bool basicClusterRebootDevice(uint64_t eui64, uint8_t endpointId, uint16_t mfgId)
 {
-    icLogDebug(LOG_TAG, "%s: %016"PRIx64" endpoint 0x%02"PRIx8, __FUNCTION__, eui64, endpointId);
+    icLogDebug(LOG_TAG, "%s: %016" PRIx64 " endpoint 0x%02" PRIx8, __FUNCTION__, eui64, endpointId);
 
-    return zigbeeSubsystemSendMfgCommand(eui64, endpointId, BASIC_CLUSTER_ID, true, BASIC_REBOOT_DEVICE_MFG_COMMAND_ID,
-                                        mfgId, NULL, 0) == 0;
+    return zigbeeSubsystemSendMfgCommand(
+               eui64, endpointId, BASIC_CLUSTER_ID, true, BASIC_REBOOT_DEVICE_MFG_COMMAND_ID, mfgId, NULL, 0) == 0;
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -84,7 +85,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     bool configuredReporting = false;
 
     // Check whether to configure reboot reason, default to false
-    if (getBoolConfigurationMetadata(configContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, false))
+    if (getBoolConfigurationMetadata(
+            configContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, false))
     {
         // configure attribute reporting on reboot reason
         zhalAttributeReportingConfig rebootReasonConfigs[1];
@@ -139,7 +141,13 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     uint8_t attributeType = zigbeeIOGetUint8(zio);
     uint8_t attributeValue = zigbeeIOGetUint8(zio);
 
-    icLogDebug(LOG_TAG, "%s: 0x%15"PRIx64" attributeId %"PRIu16" attributeType %"PRIu8" attributeValue %"PRIu16, __FUNCTION__, report->eui64, attributeId, attributeType, attributeValue);
+    icLogDebug(LOG_TAG,
+               "%s: 0x%15" PRIx64 " attributeId %" PRIu16 " attributeType %" PRIu8 " attributeValue %" PRIu16,
+               __FUNCTION__,
+               report->eui64,
+               attributeId,
+               attributeType,
+               attributeValue);
 
     if (report->mfgId == COMCAST_MFG_ID &&
         attributeId == COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID)
@@ -151,11 +159,11 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
                 cluster->callbacks->rebootReasonChanged(cluster->callbackContext,
                                                         report->eui64,
                                                         report->sourceEndpoint,
-                                                        (basicClusterRebootReason)attributeValue);
+                                                        (basicClusterRebootReason) attributeValue);
             }
             else
             {
-                icLogError(LOG_TAG, "%s unsupported reboot reason %"PRIu8, __FUNCTION__, attributeValue);
+                icLogError(LOG_TAG, "%s unsupported reboot reason %" PRIu8, __FUNCTION__, attributeValue);
             }
         }
     }
@@ -164,8 +172,15 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
 int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId)
 {
-    return zigbeeSubsystemWriteNumberMfgSpecific(eui64, endPointId, BASIC_CLUSTER_ID, COMCAST_MFG_ID, true, COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID,
-                                              ZCL_ENUM8_ATTRIBUTE_TYPE, REBOOT_REASON_DEFAULT, 1);
+    return zigbeeSubsystemWriteNumberMfgSpecific(eui64,
+                                                 endPointId,
+                                                 BASIC_CLUSTER_ID,
+                                                 COMCAST_MFG_ID,
+                                                 true,
+                                                 COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID,
+                                                 ZCL_ENUM8_ATTRIBUTE_TYPE,
+                                                 REBOOT_REASON_DEFAULT,
+                                                 1);
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

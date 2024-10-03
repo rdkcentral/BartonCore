@@ -138,7 +138,7 @@ void sendDeviceRemovedEvent(const char *uuid, const char *deviceClass);
  * @param resource - the resource that changed
  * @param metadata - any optional metadata about the resource updated event
  */
-void sendResourceUpdatedEvent(icDeviceResource *resource, cJSON* metadata);
+void sendResourceUpdatedEvent(icDeviceResource *resource, cJSON *metadata);
 
 /*
  * broadcast an endpoint added event to any listeners

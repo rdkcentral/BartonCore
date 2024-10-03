@@ -50,7 +50,6 @@ namespace zilker
         };
 
         return interfaceInfo.Value().macAddress;
-
     }
 
     std::string GeneralDiagnostics::GetNetworkType()
@@ -71,7 +70,6 @@ namespace zilker
         };
 
         return interfaceInfo.Value().networkType;
-
     }
 
     void GeneralDiagnostics::OnAttributeChanged(chip::app::ClusterStateCache *cache,
@@ -89,8 +87,8 @@ namespace zilker
                 auto interfaceInfo = GetInterfaceInfo(cache);
                 if (interfaceInfo.HasValue())
                 {
-                    static_cast<GeneralDiagnostics::EventHandler *>(eventHandler)->OnNetworkInterfacesChanged(*this,
-                                                                                                              interfaceInfo.Value());
+                    static_cast<GeneralDiagnostics::EventHandler *>(eventHandler)
+                        ->OnNetworkInterfacesChanged(*this, interfaceInfo.Value());
                 }
                 else
                 {
@@ -102,27 +100,27 @@ namespace zilker
         }
     }
 
-    chip::Optional<NetworkUtils::NetworkInterfaceInfo> GeneralDiagnostics::GetInterfaceInfo(chip::app::ClusterStateCache *cache)
+    chip::Optional<NetworkUtils::NetworkInterfaceInfo>
+    GeneralDiagnostics::GetInterfaceInfo(chip::app::ClusterStateCache *cache)
     {
         using TypeInfo = Attributes::NetworkInterfaces::TypeInfo;
         TypeInfo::DecodableType value;
         CHIP_ERROR error = cache->Get<TypeInfo>({chip::kRootEndpointId, Id, Attributes::NetworkInterfaces::Id}, value);
         if (error == CHIP_NO_ERROR)
         {
-            auto sessionMgr = chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager()->GetSessionManager();
+            auto sessionMgr =
+                chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager()->GetSessionManager();
             chip::NodeId nodeId = GetNodeId();
             chip::Transport::Session *foundSession = nullptr;
 
-            sessionMgr->GetSecureSessions().ForEachSession(
-                    [nodeId, &foundSession](auto *session)
-                    {
-                        if (session && session->GetPeer().GetNodeId() == nodeId)
-                        {
-                            foundSession = session;
-                            return chip::Loop::Break;
-                        }
-                        return chip::Loop::Continue;
-                    });
+            sessionMgr->GetSecureSessions().ForEachSession([nodeId, &foundSession](auto *session) {
+                if (session && session->GetPeer().GetNodeId() == nodeId)
+                {
+                    foundSession = session;
+                    return chip::Loop::Break;
+                }
+                return chip::Loop::Continue;
+            });
 
             if (foundSession)
             {

@@ -31,17 +31,17 @@
 #define LOG_TAG "Matter"
 #endif
 
+#include "app-common/zap-generated/cluster-objects.h"
+#include "transport/SecureSession.h"
+#include <arpa/inet.h>
 #include <cinttypes>
 #include <cstdint>
 #include <iomanip>
 #include <ios>
 #include <lib/core/NodeId.h>
 #include <lib/core/Optional.h>
-#include "app-common/zap-generated/cluster-objects.h"
 #include <sstream>
 #include <string>
-#include <arpa/inet.h>
-#include "transport/SecureSession.h"
 
 extern "C" {
 #include <commonDeviceDefs.h>
@@ -85,7 +85,7 @@ namespace zilker
                 return chip::kUndefinedNodeId;
             }
         } // namespace Matter
-    }     // namespace Subsystem
+    } // namespace Subsystem
 
     namespace NetworkUtils
     {
@@ -118,7 +118,7 @@ namespace zilker
          */
         chip::Optional<NetworkInterfaceInfo> ExtractOperationalInterfaceInfo(const TypeInfo::DecodableType &value,
                                                                              const char *nodeIpv6Addr);
-    }
+    } // namespace NetworkUtils
 } // namespace zilker
 
 #endif // ZILKER_MATTERCOMMON_H

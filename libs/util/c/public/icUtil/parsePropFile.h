@@ -35,9 +35,9 @@
 #ifndef FLEXCORE_PARSEPROPFILE_H
 #define FLEXCORE_PARSEPROPFILE_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 
 // opaque object definition
 //
@@ -87,4 +87,4 @@ bool propIteratorHasNext(icPropertyIterator *iterator);
 icProperty *propIteratorGetNext(icPropertyIterator *iterator);
 
 
-#endif //FLEXCORE_PARSEPROPFILE_H
+#endif // FLEXCORE_PARSEPROPFILE_H

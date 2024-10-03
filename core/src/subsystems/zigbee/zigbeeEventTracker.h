@@ -43,13 +43,13 @@
 #define ZILKER_ZIGBEEEVENTTRACKER_H
 
 #include <icTypes/icLinkedList.h>
-#include <zhal/zhal.h>
 #include <time.h>
+#include <zhal/zhal.h>
 
 // max number of rejoin values, check-in values and attribute report values
 #define MAX_NUMBER_OF_ATTRIBUTE_REPORTS 8
-#define MAX_NUMBER_OF_REJOINS 5
-#define MAX_NUMBER_OF_CHECK_INS 5
+#define MAX_NUMBER_OF_REJOINS           5
+#define MAX_NUMBER_OF_CHECK_INS         5
 
 /*
  * The device Attribute item
@@ -60,7 +60,7 @@ typedef struct
     char *data;
     char *clusterId;
     char *attributeId;
-}deviceAttributeItem;
+} deviceAttributeItem;
 
 /*
  * The device rejoin item
@@ -69,7 +69,7 @@ typedef struct
 {
     char *rejoinTime;
     char *isSecure;
-}deviceRejoinItem;
+} deviceRejoinItem;
 
 /*
  * The upgrade failure item
@@ -78,7 +78,7 @@ typedef struct
 {
     time_t failureTime;
     char *deviceId;
-}deviceUpgFailureItem;
+} deviceUpgFailureItem;
 
 /*
  * The event counters item
@@ -91,7 +91,7 @@ typedef struct
     uint32_t totalApsAckFailureEvents;
     uint32_t totalDuplicateSeqNumEvents;
     uint32_t cumulativeSensorDelayQS;
-}deviceEventCounterItem;
+} deviceEventCounterItem;
 
 /*
  * The Channel Energy Scan Data result item
@@ -102,7 +102,7 @@ typedef struct
     int8_t max;
     int8_t min;
     int8_t average;
-}channelEnergyScanDataItem;
+} channelEnergyScanDataItem;
 
 /**
  * Adds attribute report for NON-SENSOR Devices into our collection
@@ -135,7 +135,7 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command);
  * @param deviceUuid - the device uuid
  * @param valueString - Magnetic Strength string. Format: <device model,magnetic strength>
  */
-void zigbeeEventTrackerAddMagneticStrengthReport(const char* deviceUuid, const char* valueString);
+void zigbeeEventTrackerAddMagneticStrengthReport(const char *deviceUuid, const char *valueString);
 
 /**
  * Adds apsAckFailure events per device,
@@ -264,7 +264,7 @@ void zigbeeEventTrackerPropertyCallback(const char *propertyName, const char *pr
  *
  * @param item - the item to destroy
  */
- void destroyDeviceAttributeItem(void *item);
+void destroyDeviceAttributeItem(void *item);
 
 /**
  * function for freeing memory for the device rejoin item
@@ -290,4 +290,4 @@ void initEventTracker();
  */
 void shutDownEventTracker();
 
-#endif //ZILKER_ZIGBEEEVENTTRACKER_H
+#endif // ZILKER_ZIGBEEEVENTTRACKER_H

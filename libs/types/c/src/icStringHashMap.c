@@ -39,10 +39,10 @@
  * Author: tlea - 8/12/15
  *-----------------------------------------------*/
 
+#include <cjson/cJSON.h>
+#include <icTypes/icLinkedList.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icTypes/icLinkedList.h>
-#include <cjson/cJSON.h>
 
 #include "icTypes/icHashMap.h"
 #include "icTypes/icStringHashMap.h"
@@ -53,21 +53,21 @@
  * @return a new StringHashMap object
  * @see stringHashMapDestroy()
  */
-icStringHashMap * stringHashMapCreate()
+icStringHashMap *stringHashMapCreate()
 {
     return (icStringHashMap *) hashMapCreate();
 }
 
 static void keyValueStringClone(void *key, void *value, void **clonedKey, void **clonedValue, void *context)
 {
-    (void)context; // Unused
+    (void) context; // Unused
     if (key != NULL)
     {
-        *clonedKey =  strdup((char *)key);
+        *clonedKey = strdup((char *) key);
     }
     if (value != NULL)
     {
-        *clonedValue = strdup((char *)value);
+        *clonedValue = strdup((char *) value);
     }
 }
 
@@ -79,7 +79,7 @@ static void keyValueStringClone(void *key, void *value, void **clonedKey, void *
  */
 icStringHashMap *stringHashMapDeepClone(icStringHashMap *hashMap)
 {
-    return (icStringHashMap *)hashMapDeepClone((icHashMap*)hashMap, keyValueStringClone, NULL);
+    return (icStringHashMap *) hashMapDeepClone((icHashMap *) hashMap, keyValueStringClone, NULL);
 }
 
 /*
@@ -117,7 +117,7 @@ void stringHashMapClear(icStringHashMap *map)
  */
 bool stringHashMapPut(icStringHashMap *map, char *key, char *value)
 {
-    return hashMapPut((icHashMap*)map, key, (uint16_t) (strlen(key)+1), value);
+    return hashMapPut((icHashMap *) map, key, (uint16_t) (strlen(key) + 1), value);
 }
 
 /*
@@ -157,7 +157,7 @@ bool stringHashMapPutCopy(icStringHashMap *map, const char *key, const char *val
  */
 char *stringHashMapGet(icStringHashMap *map, const char *key)
 {
-    return (char*)hashMapGet((icHashMap*)map, (void *) key, (uint16_t)(strlen(key)+1));
+    return (char *) hashMapGet((icHashMap *) map, (void *) key, (uint16_t) (strlen(key) + 1));
 }
 
 /*
@@ -168,7 +168,7 @@ char *stringHashMapGet(icStringHashMap *map, const char *key)
  */
 bool stringHashMapContains(icStringHashMap *map, const char *key)
 {
-    return hashMapContains((icHashMap*)map, (void *) key, (uint16_t)(strlen(key)+1));
+    return hashMapContains((icHashMap *) map, (void *) key, (uint16_t) (strlen(key) + 1));
 }
 
 /*
@@ -180,7 +180,7 @@ bool stringHashMapContains(icStringHashMap *map, const char *key)
  */
 bool stringHashMapDelete(icStringHashMap *map, const char *key, hashMapFreeFunc helper)
 {
-    return hashMapDelete((icHashMap*)map, (void *) key, (uint16_t) (strlen(key) + 1), helper);
+    return hashMapDelete((icHashMap *) map, (void *) key, (uint16_t) (strlen(key) + 1), helper);
 }
 
 /*
@@ -190,7 +190,7 @@ bool stringHashMapDelete(icStringHashMap *map, const char *key, hashMapFreeFunc 
  */
 uint16_t stringHashMapCount(icStringHashMap *map)
 {
-    return hashMapCount((icHashMap*)map);
+    return hashMapCount((icHashMap *) map);
 }
 
 /*
@@ -205,7 +205,7 @@ uint16_t stringHashMapCount(icStringHashMap *map)
  */
 icStringHashMapIterator *stringHashMapIteratorCreate(icStringHashMap *map)
 {
-    return (icStringHashMapIterator*)hashMapIteratorCreate((icHashMap*)map);
+    return (icStringHashMapIterator *) hashMapIteratorCreate((icHashMap *) map);
 }
 
 /*
@@ -213,7 +213,7 @@ icStringHashMapIterator *stringHashMapIteratorCreate(icStringHashMap *map)
  */
 void stringHashMapIteratorDestroy(icStringHashMapIterator *iterator)
 {
-    hashMapIteratorDestroy((icHashMapIterator*)iterator);
+    hashMapIteratorDestroy((icHashMapIterator *) iterator);
 }
 
 DECLARE_DESTRUCTOR(icStringHashMapIterator, stringHashMapIteratorDestroy);
@@ -236,7 +236,7 @@ bool stringHashMapIteratorHasNext(icStringHashMapIterator *iterator)
  */
 bool stringHashMapIteratorGetNext(icStringHashMapIterator *iterator, char **key, char **value)
 {
-    uint16_t keyLen; //unused
+    uint16_t keyLen; // unused
     return hashMapIteratorGetNext((icHashMapIterator *) iterator, (void **) key, &keyLen, (void **) value);
 }
 
@@ -251,7 +251,7 @@ bool stringHashMapIteratorGetNext(icStringHashMapIterator *iterator, char **key,
  */
 bool stringHashMapIteratorDeleteCurrent(icStringHashMapIterator *iterator, hashMapFreeFunc helper)
 {
-    return hashMapIteratorDeleteCurrent((icHashMapIterator *)iterator, helper);
+    return hashMapIteratorDeleteCurrent((icHashMapIterator *) iterator, helper);
 }
 
 /**
@@ -388,4 +388,3 @@ icStringHashMap *stringHashMapFromJSON(const cJSON *in)
 
     return map;
 }
-

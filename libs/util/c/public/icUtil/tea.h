@@ -14,12 +14,12 @@
 #include <stdint.h>
 
 #define KEY_SIZE 4
-#define TRUE 1
-#define FALSE 0
+#define TRUE     1
+#define FALSE    0
 
-extern int teaEncrypt(unsigned char* data, char *keyStr, int dataSize);
+extern int teaEncrypt(unsigned char *data, char *keyStr, int dataSize);
 
-extern int teaDecrypt(unsigned char* data, char *keyStr, int dataSize);
+extern int teaDecrypt(unsigned char *data, char *keyStr, int dataSize);
 
 /* decryptBlock
  *   Decrypts byte array data of length len with key using TEA
@@ -32,6 +32,6 @@ extern int teaDecrypt(unsigned char* data, char *keyStr, int dataSize);
  * Side effects:
  *   Modifies data
  */
-int teaDecryptBlock(uint8_t * data, uint32_t * key, int len);
+int teaDecryptBlock(uint8_t *data, uint32_t *key, int len);
 
 #endif /* IC_TEA_H_*/

@@ -24,12 +24,12 @@
  * Created by Raiyan Chowdhury on 4/29/24.
  */
 
-#define TEST_DEVICE_ID "0x1111"
+#define TEST_DEVICE_ID               "0x1111"
 #define RESUBSCRIBE_ATTEMPTS_TO_TEST 100
 
 #include "matter/subscriptions/SubscribeInteraction.h"
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 namespace zilker
 {
@@ -44,10 +44,7 @@ namespace zilker
             subscribeInteraction = std::unique_ptr<SubscribeInteraction>(subInteractionPtr);
         }
 
-        void SetUp() override
-        {
-            subscribeInteraction->mOnResubscriptionsAttempted = 0;
-        }
+        void SetUp() override { subscribeInteraction->mOnResubscriptionsAttempted = 0; }
 
         uint32_t CustomComputeTimeTillNextSubscription()
         {

@@ -31,17 +31,17 @@
  * Author: jelderton - 4/18/16
  *-----------------------------------------------*/
 
+#include "../../../../config/c/public/icConfig/obfuscation.h"
+#include <icUtil/base64.h>
+#include <icUtil/md5.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icUtil/base64.h>
-#include <icUtil/md5.h>
-#include "../../../../config/c/public/icConfig/obfuscation.h"
 
 #include "encodeTest.h"
 
-#define BASE_STR_TO_DECODE  "dGhpcyBpcyB0aGUgMXN0IGZyZWFraW5nIHRlc3Q="
-#define BAD_STR_TO_DECODE "notbase64"
+#define BASE_STR_TO_DECODE "dGhpcyBpcyB0aGUgMXN0IGZyZWFraW5nIHRlc3Q="
+#define BAD_STR_TO_DECODE  "notbase64"
 
 bool base64EncodeTest(char *testString)
 {
@@ -49,7 +49,7 @@ bool base64EncodeTest(char *testString)
     // first the old way
     //
     size_t buffLen = strlen(testString);
-    char *result = icEncodeBase64((uint8_t *)testString, (uint16_t)buffLen);
+    char *result = icEncodeBase64((uint8_t *) testString, (uint16_t) buffLen);
     if (result == NULL)
     {
         printf("unable to BASE-64 encode '%s'\n", testString);
@@ -77,7 +77,7 @@ bool base64DecodeTest(char *testString)
     // for our test, this should be a string...so print it
     //
     array[arrayLen] = '\0';
-    printf("decoded string to be '%s'\n", (char *)array);
+    printf("decoded string to be '%s'\n", (char *) array);
     free(array);
     return true;
 }
@@ -110,7 +110,7 @@ bool runEncodeTests()
         return false;
     }
 
-    if(base64DecodeTest(BAD_STR_TO_DECODE) == true)
+    if (base64DecodeTest(BAD_STR_TO_DECODE) == true)
     {
         printf("base64 decode test with bad input FAILED\n");
         return false;
@@ -124,4 +124,3 @@ bool runEncodeTests()
 
     return true;
 }
-

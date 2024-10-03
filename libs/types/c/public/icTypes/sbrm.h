@@ -31,8 +31,8 @@
 #ifndef ZILKER_SBRM_H
 #define ZILKER_SBRM_H
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef __GNUC__
 
@@ -46,7 +46,7 @@
  *      …
  * OK: AUTO_CLEAN(free_generic__auto) char *buf = NULL;
  */
-#define AUTO_CLEAN(d) __attribute__ ((cleanup (d)))
+#define AUTO_CLEAN(d) __attribute__((cleanup(d)))
 
 /**
  * Convenience function to free a trivial pointer type (e.g., string)
@@ -64,28 +64,28 @@ inline void free_generic__auto(void *p)
  * @example #define scoped_Foo DECLARE_SCOPED(type, fooDestroy)
  *          scoped_Foo *foo = foo_new();
  */
-#define DECLARE_SCOPED(type, d) AUTO_CLEAN(DESTRUCTOR_NAME(d)) type
+#define DECLARE_SCOPED(type, d)  AUTO_CLEAN(DESTRUCTOR_NAME(d)) type
 
 /**
  * Invoke free() on a heap pointer when it leaves the declaring scope.
  */
-#define scoped_generic AUTO_CLEAN(free_generic__auto)
+#define scoped_generic           AUTO_CLEAN(free_generic__auto)
 
 /**
  * Define a trivial inline destructor for AUTO_CLEAN
  * Put this in your header.
  */
-#define DEFINE_DESTRUCTOR(type, d)  \
-inline void DESTRUCTOR_NAME(d)(type **p)     \
-{                                            \
-     d(*p);                                  \
-}
+#define DEFINE_DESTRUCTOR(type, d)                                                                                     \
+    inline void DESTRUCTOR_NAME(d)(type * *p)                                                                          \
+    {                                                                                                                  \
+        d(*p);                                                                                                         \
+    }
 
 /**
  * Declare a trivial inline destructor for AUTO_CLEAN
  * Put this in your implementation _once_.
  */
-#define DECLARE_DESTRUCTOR(type, d) extern inline void DESTRUCTOR_NAME(d)(type **p)
+#define DECLARE_DESTRUCTOR(type, d) extern inline void DESTRUCTOR_NAME(d)(type * *p)
 
 /**
  * Convenience function to auto-close a file. Files opened in a write mode will by fsynced.
@@ -98,4 +98,4 @@ void fclose__auto(FILE **fp);
 #else
 #error "GCC is required for SBRM"
 #endif //__GNUC__
-#endif //ZILKER_SBRM_H
+#endif // ZILKER_SBRM_H

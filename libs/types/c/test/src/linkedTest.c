@@ -1,25 +1,25 @@
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 
-#include <icTypes/icLinkedList.h>
-#include <icLog/logging.h>
-#include <icUtil/stringUtils.h>
 #include "linkedTest.h"
+#include <icLog/logging.h>
+#include <icTypes/icLinkedList.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_CAT     "logTEST"
+#define LOG_CAT "logTEST"
 
 typedef struct _sample
 {
-    int     num;
-    char    label[50];
+    int num;
+    char label[50];
 } sample;
 
 static sample *createSample()
 {
-    sample *retVal = (sample *)malloc(sizeof(sample));
+    sample *retVal = (sample *) malloc(sizeof(sample));
     memset(retVal, 0, sizeof(sample));
     return retVal;
 }
@@ -32,7 +32,7 @@ static void printSample(sample *curr)
 static bool printIterator(void *item, void *arg)
 {
     // typecast to 'sample'
-    sample *curr = (sample *)item;
+    sample *curr = (sample *) item;
     printSample(curr);
     return true;
 }
@@ -50,7 +50,7 @@ static icLinkedList *makePopulatedList(int entryCount)
 
     int i = 0;
     sample *item = NULL;
-    for (i = 0 ; i < entryCount ; i++)
+    for (i = 0; i < entryCount; i++)
     {
         item = createSample();
         item->num = (i + 1);
@@ -161,7 +161,7 @@ bool canAppend()
 
     // add 4 more
     //
-    for (i = 0 ; i < 4 ; i++)
+    for (i = 0; i < 4; i++)
     {
         item = createSample();
         item->num = (i + 1);
@@ -219,7 +219,7 @@ bool canPrepend()
 
     // add 4 more
     //
-    for (i = 0 ; i < 4 ; i++)
+    for (i = 0; i < 4; i++)
     {
         item = createSample();
         item->num = (i + 1);
@@ -246,8 +246,8 @@ bool canPrepend()
 bool sampleSearch(void *searchVal, void *item)
 {
     // typecast to 'sample'
-    sample *curr = (sample *)item;
-    int search = *((int *)searchVal);
+    sample *curr = (sample *) item;
+    int search = *((int *) searchVal);
 
     // looking for matching 'num'
     if (search == curr->num)
@@ -281,7 +281,7 @@ bool canFind()
         linkedListDestroy(list, NULL);
         return false;
     }
-    printSample((sample *)found);
+    printSample((sample *) found);
 
     // try to find the one with "num=2"
     //
@@ -293,7 +293,7 @@ bool canFind()
         linkedListDestroy(list, NULL);
         return false;
     }
-    printSample((sample *)found);
+    printSample((sample *) found);
 
     linkedListDestroy(list, NULL);
 
@@ -417,7 +417,7 @@ bool canIterateAlternative()
     //
     int i = 0;
     icLinkedList *list = makePopulatedList(5);
-//    printList(list);
+    //    printList(list);
 
     // get an iterator
     //
@@ -425,7 +425,7 @@ bool canIterateAlternative()
     while (linkedListIteratorHasNext(loop) == true)
     {
         void *item = linkedListIteratorGetNext(loop);
-        sample *curr = (sample *)item;
+        sample *curr = (sample *) item;
         printSample(curr);
         i++;
     }
@@ -483,7 +483,7 @@ bool canDeleteFromIterator()
     while (linkedListIteratorHasNext(loop) == true)
     {
         void *item = linkedListIteratorGetNext(loop);
-        sample *curr = (sample *)item;
+        sample *curr = (sample *) item;
         printSample(curr);
         i++;
 
@@ -520,10 +520,10 @@ static void *cloneItem(void *item, void *context)
         return NULL;
     }
 
-    sample *orig = (sample *)item;
+    sample *orig = (sample *) item;
     sample *copy = createSample();
     copy->num = orig->num;
-    strcpy(copy->label,orig->label);
+    strcpy(copy->label, orig->label);
 
     return copy;
 }
@@ -548,7 +548,7 @@ bool canDeepClone()
     bool retVal = true;
     icLinkedListIterator *origIter = linkedListIteratorCreate(list);
     icLinkedListIterator *copyIter = linkedListIteratorCreate(copy);
-    while(linkedListIteratorHasNext(origIter) && linkedListIteratorHasNext(copyIter))
+    while (linkedListIteratorHasNext(origIter) && linkedListIteratorHasNext(copyIter))
     {
         sample *origItem = linkedListIteratorGetNext(origIter);
         sample *copyItem = linkedListIteratorGetNext(copyIter);
@@ -560,7 +560,7 @@ bool canDeepClone()
             break;
         }
 
-        if (strcmp(origItem->label,copyItem->label) != 0)
+        if (strcmp(origItem->label, copyItem->label) != 0)
         {
             icLogError(LOG_CAT, "Copied item label does not match");
             retVal = false;
@@ -578,11 +578,10 @@ bool canDeepClone()
 
     // Test can still use after deleting of original list
     copyIter = linkedListIteratorCreate(copy);
-    while(linkedListIteratorHasNext(copyIter))
+    while (linkedListIteratorHasNext(copyIter))
     {
         sample *copyItem = linkedListIteratorGetNext(copyIter);
         icLogDebug(LOG_CAT, "at item #%d with label %s", copyItem->num, copyItem->label);
-
     }
     linkedListIteratorDestroy(copyIter);
     linkedListDestroy(copy, NULL);
@@ -597,7 +596,7 @@ bool canShallowCloneList()
     icLinkedList *list = makePopulatedList(5);
     icLinkedList *clonedList = linkedListClone(list);
 
-    if(linkedListIsClone(clonedList) == false)
+    if (linkedListIsClone(clonedList) == false)
     {
         icLogError(LOG_CAT, "Shallow cloned list is not marked as cloned");
         linkedListDestroy(list, NULL);
@@ -617,7 +616,7 @@ bool canShallowCloneList()
     icLinkedListIterator *copyIter = linkedListIteratorCreate(clonedList);
 
     bool retVal = true;
-    while(linkedListIteratorHasNext(origIter) && linkedListIteratorHasNext(copyIter))
+    while (linkedListIteratorHasNext(origIter) && linkedListIteratorHasNext(copyIter))
     {
         sample *origItem = linkedListIteratorGetNext(origIter);
         sample *copyItem = linkedListIteratorGetNext(copyIter);
@@ -672,7 +671,7 @@ bool canGetElementAt()
     icLinkedListIterator *listIter = linkedListIteratorCreate(list);
     size_t i = 0;
     bool isCorrect = false;
-    while(linkedListIteratorHasNext(listIter))
+    while (linkedListIteratorHasNext(listIter))
     {
         sample *element = linkedListIteratorGetNext(listIter);
         if (i == 3 && element == retVal)
@@ -686,8 +685,8 @@ bool canGetElementAt()
     bool rc = true;
     if (isCorrect == false)
     {
-       icLogError(LOG_CAT, "Did not get the correct element");
-       rc = false;
+        icLogError(LOG_CAT, "Did not get the correct element");
+        rc = false;
     }
     linkedListDestroy(list, NULL);
 
@@ -741,10 +740,10 @@ bool canRemovElementAt()
     return true;
 }
 
-//Helper function for iterate. Adds seven to each element.
+// Helper function for iterate. Adds seven to each element.
 bool addSevenToAll(void *item, void *arg)
 {
-    sample *element = (sample*) item;
+    sample *element = (sample *) item;
 
     if (element == NULL)
     {
@@ -764,7 +763,7 @@ bool canIterateList()
     int numbers[5];
     icLinkedListIterator *iter = linkedListIteratorCreate(list);
     size_t i = 0;
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
         sample *elem = linkedListIteratorGetNext(iter);
         if (elem != NULL)
@@ -779,12 +778,12 @@ bool canIterateList()
 
     iter = linkedListIteratorCreate(list);
     i = 0;
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
         sample *elem = linkedListIteratorGetNext(iter);
         if (elem != NULL)
         {
-            if (elem->num != numbers[i]+7)
+            if (elem->num != numbers[i] + 7)
             {
                 icLogError(LOG_CAT, "The iteration function didn't apply");
                 return false;
@@ -833,7 +832,7 @@ bool canClearList()
 
     size_t size = 5;
     icLinkedList *list = makePopulatedList(size);
-    //Will use later. Assume cloning is fully tested already
+    // Will use later. Assume cloning is fully tested already
     icLinkedList *clonedList = linkedListClone(list);
 
     if (linkedListIsClone(clonedList) == false)
@@ -846,10 +845,10 @@ bool canClearList()
 
     icLinkedListIterator *iter = linkedListIteratorCreate(list);
     size_t count = 0;
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
         linkedListIteratorGetNext(iter);
-        count+=1;
+        count += 1;
     }
     linkedListIteratorDestroy(iter);
 
@@ -872,10 +871,10 @@ bool canClearList()
 
     iter = linkedListIteratorCreate(list);
     count = 0;
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
         linkedListIteratorGetNext(iter);
-        count+=1;
+        count += 1;
     }
     linkedListIteratorDestroy(iter);
 
@@ -906,10 +905,10 @@ bool canClearList()
 
     iter = linkedListIteratorCreate(clonedList);
     count = 0;
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
         linkedListIteratorGetNext(iter);
-        count+=1;
+        count += 1;
     }
     linkedListIteratorDestroy(iter);
 
@@ -935,10 +934,10 @@ bool canReverse(void)
     icLinkedList *list = makePopulatedList(size);
     icLinkedList *reverse = linkedListReverse(list);
 
-    for (int i = 0; i<size; i++)
+    for (int i = 0; i < size; i++)
     {
         const sample *sample1 = linkedListGetElementAt(list, i);
-        const sample *sample2 = linkedListGetElementAt(reverse, size-i-1);
+        const sample *sample2 = linkedListGetElementAt(reverse, size - i - 1);
         if (memcmp(sample1, sample2, sizeof(sample)) != 0)
         {
             icLogError(LOG_CAT, "List order is not reversed properly");
@@ -994,7 +993,7 @@ bool canFilter(void)
         return false;
     }
 
-    for (int i = 0; i<size; i++)
+    for (int i = 0; i < size; i++)
     {
         sample *sample1 = linkedListGetElementAt(list, i);
         char *sample2 = linkedListGetElementAt(sampleLabels, i);
@@ -1055,7 +1054,7 @@ bool canMap(void)
         return false;
     }
 
-    for (int i = 0; i<size; i++)
+    for (int i = 0; i < size; i++)
     {
         sample *sample1 = linkedListGetElementAt(list, i);
 
@@ -1081,7 +1080,7 @@ bool canMap(void)
         return false;
     }
 
-    for (int i = 0; i<size; i++)
+    for (int i = 0; i < size; i++)
     {
         sample *sample1 = linkedListGetElementAt(list, i);
 
@@ -1096,7 +1095,7 @@ bool canMap(void)
 
     // Causing issues with duplicate keys
     hashMapDestroy(labelToSamples, freeLabelAndSampleFromMap);
-    sample *original = linkedListGetElementAt(list, size/2);
+    sample *original = linkedListGetElementAt(list, size / 2);
     sample *duplicate = calloc(1, sizeof(sample));
     memcpy(original, duplicate, sizeof(sample));
     linkedListAppend(list, duplicate);

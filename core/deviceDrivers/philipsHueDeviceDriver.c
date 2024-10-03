@@ -26,31 +26,31 @@
  * Created by Thomas Lea on 7/28/15.
  */
 
-#include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "../../src/deviceModelHelper.h"
+#include <commonDeviceDefs.h>
 #include <deviceDriver.h>
 #include <icLog/logging.h>
-#include <philipsHue/philipsHue.h>
-#include <commonDeviceDefs.h>
-#include <resourceTypes.h>
 #include <icUtil/macAddrUtils.h>
 #include <inttypes.h>
-#include "../../src/deviceModelHelper.h"
+#include <philipsHue/philipsHue.h>
+#include <resourceTypes.h>
 
-#define LOG_TAG "PHueDD"
-#define DEVICE_DRIVER_NAME "PHueDD"
-#define DEVICE_CLASS_NAME "light"
+#define LOG_TAG             "PHueDD"
+#define DEVICE_DRIVER_NAME  "PHueDD"
+#define DEVICE_CLASS_NAME   "light"
 #define DEVICE_PROFILE_NAME "light"
 
-#define MANUFACTURER "Philips"
-#define MODEL "PhilipsHue"
+#define MANUFACTURER        "Philips"
+#define MODEL               "PhilipsHue"
 
-#define USERNAME_RESOURCE "username"
+#define USERNAME_RESOURCE   "username"
 
 #ifdef BARTON_CONFIG_PHILIPS_HUE
 
@@ -89,9 +89,8 @@ icHashMap *pendingBridges = NULL;
 static pthread_mutex_t monitoringDevicesMutex = PTHREAD_MUTEX_INITIALIZER;
 icHashMap *monitoringDevices = NULL;
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (220)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(220))) static void driverRegister(void)
 {
     icLogDebug(LOG_TAG, "philipsHueDeviceDriverInitialize");
 
@@ -121,7 +120,7 @@ static void driverRegister(void)
     deviceDriverManagerRegisterDriver(deviceDriver);
 }
 
-//Start monitoring the already configured bridges
+// Start monitoring the already configured bridges
 static void startup(void *ctx)
 {
     pthread_mutex_lock(&monitoringDevicesMutex);
@@ -130,11 +129,13 @@ static void startup(void *ctx)
 
     icLinkedList *devices = deviceServiceCallbacks->getDevicesByDeviceDriver(DEVICE_DRIVER_NAME);
     icLinkedListIterator *iterator = linkedListIteratorCreate(devices);
-    while(linkedListIteratorHasNext(iterator))
+    while (linkedListIteratorHasNext(iterator))
     {
-        icDevice *device = (icDevice*)linkedListIteratorGetNext(iterator);
-        icDeviceResource *macAddressResource = deviceServiceCallbacks->getResource(device->uuid, 0, COMMON_DEVICE_RESOURCE_MAC_ADDRESS);
-        icDeviceResource *ipAddressResource = deviceServiceCallbacks->getResource(device->uuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
+        icDevice *device = (icDevice *) linkedListIteratorGetNext(iterator);
+        icDeviceResource *macAddressResource =
+            deviceServiceCallbacks->getResource(device->uuid, 0, COMMON_DEVICE_RESOURCE_MAC_ADDRESS);
+        icDeviceResource *ipAddressResource =
+            deviceServiceCallbacks->getResource(device->uuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
         icDeviceResource *usernameResource = deviceServiceCallbacks->getResource(device->uuid, 0, USERNAME_RESOURCE);
 
         startMonitoringBridge(macAddressResource->value, ipAddressResource->value, usernameResource->value);
@@ -149,9 +150,9 @@ static void shutdown(void *ctx)
 
     icLinkedList *devices = deviceServiceCallbacks->getDevicesByDeviceDriver(DEVICE_DRIVER_NAME);
     icLinkedListIterator *iterator = linkedListIteratorCreate(devices);
-    while(linkedListIteratorHasNext(iterator))
+    while (linkedListIteratorHasNext(iterator))
     {
-        icDevice *device = (icDevice*)linkedListIteratorGetNext(iterator);
+        icDevice *device = (icDevice *) linkedListIteratorGetNext(iterator);
         stopMonitoringBridge(device->uuid);
     }
     linkedListIteratorDestroy(iterator);
@@ -177,15 +178,15 @@ static void bridgeFoundCallback(const char *macAddress, const char *ipAddress, c
     icLogDebug(LOG_TAG, "bridge found: %s, %s: user: %s\n", macAddress, ipAddress, username);
 
     pthread_mutex_lock(&pendingBridgeMutex);
-    if(pendingBridges != NULL)
+    if (pendingBridges != NULL)
     {
-        PendingBridge *bridge = (PendingBridge*)calloc(1, sizeof(PendingBridge));
+        PendingBridge *bridge = (PendingBridge *) calloc(1, sizeof(PendingBridge));
 
         bridge->macAddress = strdup(macAddress);
         bridge->ipAddress = strdup(ipAddress);
         bridge->username = strdup(username);
 
-        char *uuid = (char*)calloc(1, 13); //12 plus null
+        char *uuid = (char *) calloc(1, 13); // 12 plus null
         macAddrToUUID(uuid, macAddress);
         hashMapPut(pendingBridges, (void *) uuid, (uint16_t) (strlen(uuid) + 1), bridge);
         pthread_mutex_unlock(&pendingBridgeMutex);
@@ -219,7 +220,7 @@ static bool discoverStart(void *ctx, const char *deviceClass)
 
 static void pendingBridgeFreeFunc(void *key, void *val)
 {
-    PendingBridge *bridge = (PendingBridge*)val;
+    PendingBridge *bridge = (PendingBridge *) val;
     free(bridge->username);
     free(bridge->ipAddress);
     free(bridge->macAddress);
@@ -245,30 +246,56 @@ static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *descr
     icLogDebug(LOG_TAG, "configureDevice: uuid=%s", device->uuid);
 
     pthread_mutex_lock(&pendingBridgeMutex);
-    PendingBridge *bridge = (PendingBridge*)hashMapGet(pendingBridges, device->uuid, (uint16_t) (strlen(device->uuid) + 1));
+    PendingBridge *bridge =
+        (PendingBridge *) hashMapGet(pendingBridges, device->uuid, (uint16_t) (strlen(device->uuid) + 1));
     pthread_mutex_unlock(&pendingBridgeMutex);
 
-    if(bridge == NULL)
+    if (bridge == NULL)
     {
         icLogError(LOG_TAG, "configureDevice: uuid %s not found in pending list", device->uuid);
         return false;
     }
 
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_MAC_ADDRESS, bridge->macAddress, RESOURCE_TYPE_MAC_ADDRESS, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_IP_ADDRESS, bridge->ipAddress, RESOURCE_TYPE_IP_ADDRESS, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, USERNAME_RESOURCE, bridge->username, RESOURCE_TYPE_USER_ID, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_MAC_ADDRESS,
+                         bridge->macAddress,
+                         RESOURCE_TYPE_MAC_ADDRESS,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_IP_ADDRESS,
+                         bridge->ipAddress,
+                         RESOURCE_TYPE_IP_ADDRESS,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         USERNAME_RESOURCE,
+                         bridge->username,
+                         RESOURCE_TYPE_USER_ID,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
 
     icLinkedList *lights = philipsHueGetLights(bridge->ipAddress, bridge->username);
-    if(lights != NULL)
+    if (lights != NULL)
     {
         icLinkedListIterator *iterator = linkedListIteratorCreate(lights);
-        while(linkedListIteratorHasNext(iterator))
+        while (linkedListIteratorHasNext(iterator))
         {
-            PhilipsHueLight *light = (PhilipsHueLight*)linkedListIteratorGetNext(iterator);
+            PhilipsHueLight *light = (PhilipsHueLight *) linkedListIteratorGetNext(iterator);
 
             icDeviceEndpoint *endpoint = createEndpoint(device, light->id, LIGHT_PROFILE, true);
-            createEndpointResource(endpoint, COMMON_ENDPOINT_RESOURCE_LABEL, NULL, RESOURCE_TYPE_LABEL, RESOURCE_MODE_READWRITEABLE, CACHING_POLICY_ALWAYS);
-            createEndpointResource(endpoint, LIGHT_PROFILE_RESOURCE_IS_ON, light->isOn ? "true" : "false", RESOURCE_TYPE_BOOLEAN, RESOURCE_MODE_READWRITEABLE, CACHING_POLICY_NEVER);
+            createEndpointResource(endpoint,
+                                   COMMON_ENDPOINT_RESOURCE_LABEL,
+                                   NULL,
+                                   RESOURCE_TYPE_LABEL,
+                                   RESOURCE_MODE_READWRITEABLE,
+                                   CACHING_POLICY_ALWAYS);
+            createEndpointResource(endpoint,
+                                   LIGHT_PROFILE_RESOURCE_IS_ON,
+                                   light->isOn ? "true" : "false",
+                                   RESOURCE_TYPE_BOOLEAN,
+                                   RESOURCE_MODE_READWRITEABLE,
+                                   CACHING_POLICY_NEVER);
         }
         linkedListIteratorDestroy(iterator);
 
@@ -285,24 +312,24 @@ static bool readResource(void *ctx, icDeviceResource *resource, char **value)
 {
     bool result = false;
 
-    if(resource == NULL || value == NULL)
+    if (resource == NULL || value == NULL)
     {
         return false;
     }
 
     icLogDebug(LOG_TAG, "readResource %s", resource->id);
 
-    if(resource->endpointId == NULL)
+    if (resource->endpointId == NULL)
     {
-        //this resource is on our root device, where everything is cached...
+        // this resource is on our root device, where everything is cached...
     }
     else
     {
         // this resource is on an endpoint
-        if(strcmp(resource->id, LIGHT_PROFILE_RESOURCE_IS_ON) == 0)
+        if (strcmp(resource->id, LIGHT_PROFILE_RESOURCE_IS_ON) == 0)
         {
             PhilipsHueLight *light = getLight(resource->deviceUuid, resource->endpointId);
-            if(light != NULL)
+            if (light != NULL)
             {
                 *value = (light->isOn == true) ? strdup("true") : strdup("false");
                 philipsHueLightDestroy(light);
@@ -318,44 +345,58 @@ static bool writeResource(void *ctx, icDeviceResource *resource, const char *pre
 {
     bool result = false;
 
-    if(resource == NULL)
+    if (resource == NULL)
     {
         icLogDebug(LOG_TAG, "writeResource: invalid arguments");
         return false;
     }
 
-    if(resource->endpointId == NULL)
+    if (resource->endpointId == NULL)
     {
-        icLogDebug(LOG_TAG, "writeResource on device: id=%s, previousValue=%s, newValue=%s", resource->id, previousValue, newValue);
+        icLogDebug(LOG_TAG,
+                   "writeResource on device: id=%s, previousValue=%s, newValue=%s",
+                   resource->id,
+                   previousValue,
+                   newValue);
     }
     else
     {
-        icLogDebug(LOG_TAG, "writeResource on endpoint %s: id=%s, previousValue=%s, newValue=%s", resource->endpointId, resource->id, previousValue, newValue);
+        icLogDebug(LOG_TAG,
+                   "writeResource on endpoint %s: id=%s, previousValue=%s, newValue=%s",
+                   resource->endpointId,
+                   resource->id,
+                   previousValue,
+                   newValue);
 
-        icDeviceResource *ipAddressResource = deviceServiceCallbacks->getResource(resource->deviceUuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
-        icDeviceResource *usernameResource = deviceServiceCallbacks->getResource(resource->deviceUuid, 0, USERNAME_RESOURCE);
+        icDeviceResource *ipAddressResource =
+            deviceServiceCallbacks->getResource(resource->deviceUuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
+        icDeviceResource *usernameResource =
+            deviceServiceCallbacks->getResource(resource->deviceUuid, 0, USERNAME_RESOURCE);
 
-        if(strcmp(resource->id, LIGHT_PROFILE_RESOURCE_IS_ON) == 0)
+        if (strcmp(resource->id, LIGHT_PROFILE_RESOURCE_IS_ON) == 0)
         {
             if (strcmp("true", newValue) == 0)
             {
-                result = philipsHueSetLight(ipAddressResource->value, usernameResource->value, resource->endpointId, true);
+                result =
+                    philipsHueSetLight(ipAddressResource->value, usernameResource->value, resource->endpointId, true);
             }
             else
             {
-                result = philipsHueSetLight(ipAddressResource->value, usernameResource->value, resource->endpointId, false);
+                result =
+                    philipsHueSetLight(ipAddressResource->value, usernameResource->value, resource->endpointId, false);
             }
         }
-        else if(strcmp(resource->id, COMMON_ENDPOINT_RESOURCE_LABEL) == 0)
+        else if (strcmp(resource->id, COMMON_ENDPOINT_RESOURCE_LABEL) == 0)
         {
-            result = true; //the updateResource call below will handle the change.
+            result = true; // the updateResource call below will handle the change.
         }
 
         resourceDestroy(ipAddressResource);
         resourceDestroy(usernameResource);
     }
 
-    deviceServiceCallbacks->updateResource(resource->deviceUuid, resource->endpointId, resource->id, newValue, updateResourceEventChanged);
+    deviceServiceCallbacks->updateResource(
+        resource->deviceUuid, resource->endpointId, resource->id, newValue, updateResourceEventChanged);
 
     return result;
 }
@@ -364,9 +405,10 @@ static void lightChangedCallback(const char *macAddress, const char *lightId, bo
 {
     icLogDebug(LOG_TAG, "lightChanged: %s.%s is now %s\n", macAddress, lightId, (isOn == true) ? "on" : "off");
 
-    char *uuid = (char*)calloc(1, 13); //12 plus null
+    char *uuid = (char *) calloc(1, 13); // 12 plus null
     macAddrToUUID(uuid, macAddress);
-    deviceServiceCallbacks->updateResource(uuid, lightId, LIGHT_PROFILE_RESOURCE_IS_ON, (isOn == true) ? "true" : "false", updateResourceEventChanged);
+    deviceServiceCallbacks->updateResource(
+        uuid, lightId, LIGHT_PROFILE_RESOURCE_IS_ON, (isOn == true) ? "true" : "false", updateResourceEventChanged);
     free(uuid);
 }
 
@@ -374,15 +416,16 @@ static void ipAddressChangedCallback(const char *macAddress, char *newIpAddress)
 {
     icLogDebug(LOG_TAG, "ipAddressChanged: %s is now at %s", macAddress, newIpAddress);
 
-    char *uuid = (char*)calloc(1, 13); //12 plus null
+    char *uuid = (char *) calloc(1, 13); // 12 plus null
     macAddrToUUID(uuid, macAddress);
-    deviceServiceCallbacks->updateResource(uuid, NULL, COMMON_DEVICE_RESOURCE_IP_ADDRESS, newIpAddress, updateResourceEventChanged);
+    deviceServiceCallbacks->updateResource(
+        uuid, NULL, COMMON_DEVICE_RESOURCE_IP_ADDRESS, newIpAddress, updateResourceEventChanged);
     free(uuid);
 }
 
 static void startMonitoringBridge(const char *macAddress, const char *ipAddress, const char *username)
 {
-    char *uuid = (char*)calloc(1, 13); //12 plus null
+    char *uuid = (char *) calloc(1, 13); // 12 plus null
     macAddrToUUID(uuid, macAddress);
     pthread_mutex_lock(&monitoringDevicesMutex);
     hashMapPut(monitoringDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1), strdup(ipAddress));
@@ -394,7 +437,7 @@ static void startMonitoringBridge(const char *macAddress, const char *ipAddress,
 static void stopMonitoringBridge(const char *uuid)
 {
     pthread_mutex_lock(&monitoringDevicesMutex);
-    char *ipAddress = (char *)hashMapGet(monitoringDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
+    char *ipAddress = (char *) hashMapGet(monitoringDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
     pthread_mutex_unlock(&monitoringDevicesMutex);
 
     philipsHueStopMonitoring(ipAddress);
@@ -402,7 +445,7 @@ static void stopMonitoringBridge(const char *uuid)
 
 static void deviceRemoved(void *ctx, icDevice *device)
 {
-    if(device != NULL && device->uuid != NULL)
+    if (device != NULL && device->uuid != NULL)
     {
         stopMonitoringBridge(device->uuid);
     }
@@ -412,15 +455,16 @@ static PhilipsHueLight *getLight(const char *deviceUuid, const char *endpointId)
 {
     PhilipsHueLight *result = NULL;
 
-    icDeviceResource *ipAddressResource = deviceServiceCallbacks->getResource(deviceUuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
+    icDeviceResource *ipAddressResource =
+        deviceServiceCallbacks->getResource(deviceUuid, 0, COMMON_DEVICE_RESOURCE_IP_ADDRESS);
     icDeviceResource *usernameResource = deviceServiceCallbacks->getResource(deviceUuid, 0, USERNAME_RESOURCE);
 
     icLinkedList *lights = philipsHueGetLights(ipAddressResource->value, usernameResource->value);
     icLinkedListIterator *iterator = linkedListIteratorCreate(lights);
     while (linkedListIteratorHasNext(iterator))
     {
-        PhilipsHueLight *item = (PhilipsHueLight*)linkedListIteratorGetNext(iterator);
-        if(strcmp(item->id, endpointId) == 0)
+        PhilipsHueLight *item = (PhilipsHueLight *) linkedListIteratorGetNext(iterator);
+        if (strcmp(item->id, endpointId) == 0)
         {
             result = item;
         }

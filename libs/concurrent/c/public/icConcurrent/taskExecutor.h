@@ -33,9 +33,9 @@
 #ifndef ZILKER_TASKEXECUTOR_H
 #define ZILKER_TASKEXECUTOR_H
 
-#include <stdlib.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 // opaque definition of our construct
 typedef struct _icTaskExecutor icTaskExecutor;
@@ -83,8 +83,11 @@ void clearTaskExecutor(icTaskExecutor *executor);
  * @param runFunc - function to perform the task execution
  * @param freeFunc - function to call after runFunc to perform cleanup
  */
-bool appendTaskToExecutor(icTaskExecutor *executor, void *taskObj, void *taskArg,
-                          taskExecRunFunc runFunc, taskExecFreeFunc freeFunc);
+bool appendTaskToExecutor(icTaskExecutor *executor,
+                          void *taskObj,
+                          void *taskArg,
+                          taskExecRunFunc runFunc,
+                          taskExecFreeFunc freeFunc);
 
 /*
  * returns the number of items in the backlog to execute

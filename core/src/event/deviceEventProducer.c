@@ -68,10 +68,10 @@
 #include <icTypes/icHashMap.h>
 #include <jsonHelper/jsonHelper.h>
 
-#define LOG_TAG "deviceServiceEventProducer"
+#define LOG_TAG           "deviceServiceEventProducer"
 #define G_LOG_DOMAIN_NAME LOG_TAG
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*a))
+#define ARRAY_SIZE(a)     (sizeof(a) / sizeof(*a))
 
 typedef enum
 {
@@ -115,15 +115,15 @@ static guint signals[SIGNAL_MAX];
 void deviceEventProducerClassInit(BDeviceServiceClientClass *deviceServiceClass)
 {
     signals[SIGNAL_STATUS_CHANGED] = g_signal_new(B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_STATUS_CHANGED,
-                                                   G_TYPE_FROM_CLASS(deviceServiceClass),
-                                                   G_SIGNAL_RUN_LAST,
-                                                   0,
-                                                   NULL,
-                                                   NULL,
-                                                   NULL,
-                                                   G_TYPE_NONE,
-                                                   1,
-                                                   B_DEVICE_SERVICE_STATUS_EVENT_TYPE);
+                                                  G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                  G_SIGNAL_RUN_LAST,
+                                                  0,
+                                                  NULL,
+                                                  NULL,
+                                                  NULL,
+                                                  G_TYPE_NONE,
+                                                  1,
+                                                  B_DEVICE_SERVICE_STATUS_EVENT_TYPE);
 
     signals[SIGNAL_DISCOVERY_STARTED] = g_signal_new(B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED,
                                                      G_TYPE_FROM_CLASS(deviceServiceClass),
@@ -685,13 +685,12 @@ void sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReason reason)
     scoped_DeviceServiceStatus *system_status = deviceServiceGetStatus();
     g_autoptr(BDeviceServiceStatus) status = convertDeviceServiceStatusToGObject(system_status);
 
-    g_object_set(
-        event,
-        B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
-        status,
-        B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON],
-        convertStatusChangedReasonToGObject(reason),
-        NULL);
+    g_object_set(event,
+                 B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
+                 status,
+                 B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_REASON],
+                 convertStatusChangedReasonToGObject(reason),
+                 NULL);
 
     g_signal_emit(service, signals[SIGNAL_STATUS_CHANGED], 0, event);
 }
@@ -703,14 +702,14 @@ void sendZigbeeChannelChangedEvent(bool success, uint8_t currentChannel, uint8_t
     g_object_set(event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED],
-                     success,
+                 success,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
-                     currentChannel,
+                 currentChannel,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],
-                     targetedChannel,
-                     NULL);
+                 targetedChannel,
+                 NULL);
 
     g_signal_emit(service, signals[SIGNAL_ZIGBEE_CHANNEL_CHANGED], 0, event);
 }
@@ -722,8 +721,8 @@ void sendZigbeeNetworkInterferenceEvent(bool interferenceDetected)
     g_object_set(event,
                  B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROP_INTERFERENCE_DETECTED],
-                     interferenceDetected,
-                     NULL);
+                 interferenceDetected,
+                 NULL);
 
     g_signal_emit(service, signals[SIGNAL_ZIGBEE_INTERFERENCE], 0, event);
 }

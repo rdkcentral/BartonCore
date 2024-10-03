@@ -34,10 +34,10 @@
 #include <stdint.h>
 #include <zhal/zhal.h>
 
-#define LOG_TAG "zigbeeDefender"
+#define LOG_TAG                                       "zigbeeDefender"
 
-#define DEFENDER_PAN_ID_CHANGE_THRESHOLD_DEFAULT 0
-#define DEFENDER_PAN_ID_CHANGE_WINDOW_MILLIS_DEFAULT 1000
+#define DEFENDER_PAN_ID_CHANGE_THRESHOLD_DEFAULT      0
+#define DEFENDER_PAN_ID_CHANGE_WINDOW_MILLIS_DEFAULT  1000
 #define DEFENDER_PAN_ID_CHANGE_RESTORE_MILLIS_DEFAULT 1000
 
 static pthread_mutex_t problemMtx = PTHREAD_MUTEX_INITIALIZER;
@@ -66,18 +66,18 @@ void zigbeeDefenderConfigure()
                                                                   ZIGBEE_DEFENDER_PAN_ID_CHANGE_RESTORE_MILLIS_OPTION,
                                                                   DEFENDER_PAN_ID_CHANGE_RESTORE_MILLIS_DEFAULT);
 
-    if(zhalDefenderConfigure(panIdChangeThreshold, panIdChangeWindowMillis, panIdChangeRestoreMillis) != true)
+    if (zhalDefenderConfigure(panIdChangeThreshold, panIdChangeWindowMillis, panIdChangeRestoreMillis) != true)
     {
         icLogError(LOG_TAG, "%s: failed to configure defender", __FUNCTION__);
     }
 
-    if(panIdChangeThreshold == 0)
+    if (panIdChangeThreshold == 0)
     {
         icLogDebug(LOG_TAG, "%s: not monitoring, feature disabled", __FUNCTION__);
 
-        //if there was a problem before, we need to send a clear event since we are stopping monitoring
+        // if there was a problem before, we need to send a clear event since we are stopping monitoring
         pthread_mutex_lock(&problemMtx);
-        if(panIdAttackDetected == true)
+        if (panIdAttackDetected == true)
         {
             panIdAttackDetected = false;
             sendZigbeePanIdAttackEvent(false);

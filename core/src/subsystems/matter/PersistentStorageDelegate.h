@@ -43,13 +43,13 @@ namespace zilker
         CHIP_ERROR Init(const char *identity) { return CHIP_NO_ERROR; }
 
         // These are from the PersistentStorageDelegate interface
-        CHIP_ERROR SyncGetKeyValue(const char * key, void * buffer, uint16_t & size) override;
-        CHIP_ERROR SyncSetKeyValue(const char * key, const void * value, uint16_t size) override;
-        CHIP_ERROR SyncDeleteKeyValue(const char * key) override;
+        CHIP_ERROR SyncGetKeyValue(const char *key, void *buffer, uint16_t &size) override;
+        CHIP_ERROR SyncSetKeyValue(const char *key, const void *value, uint16_t size) override;
+        CHIP_ERROR SyncDeleteKeyValue(const char *key) override;
 
     private:
-        static char *scrubKey(const char *key); //caller must free
+        static char *scrubKey(const char *key); // caller must free
     };
-}
+} // namespace zilker
 
 #endif // ZILKER_PERSISTENTSTORAGEDELEGATE_H

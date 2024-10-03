@@ -82,8 +82,8 @@
 // we allocated in the hash, but also used to determine
 // the "hash - to - bucket" distribution
 //
-#define NUM_BUCKETS         31
-#define USEC_PER_SEC        1000000
+#define NUM_BUCKETS  31
+#define USEC_PER_SEC 1000000
 
 extern inline void hashMapIteratorDestroy__auto(icHashMapIterator **iter);
 
@@ -93,8 +93,8 @@ extern inline void hashMapIteratorDestroy__auto(icHashMapIterator **iter);
  */
 typedef struct _mapBucket
 {
-//    unsigned int hashedKey;
-    icLinkedList   *values;    // lazy load; NULL until something appears in the bucket
+    //    unsigned int hashedKey;
+    icLinkedList *values; // lazy load; NULL until something appears in the bucket
 } mapBucket;
 
 /*
@@ -102,9 +102,9 @@ typedef struct _mapBucket
  */
 typedef struct _mapItem
 {
-    void     *key;      // original key
-    uint16_t keyLen;    // length (in bytes) of the key
-    void     *value;    // original value
+    void *key;       // original key
+    uint16_t keyLen; // length (in bytes) of the key
+    void *value;     // original value
 } mapItem;
 
 /*
@@ -112,10 +112,10 @@ typedef struct _mapItem
  */
 struct _icHashMap
 {
-    uint16_t  count;                // total number of mapItem instances in the hash
-    uint32_t  seed;                 // random seed for this map
+    uint16_t count;                 // total number of mapItem instances in the hash
+    uint32_t seed;                  // random seed for this map
     mapBucket buckets[NUM_BUCKETS]; // array of buckets
-    bool      cloned;
+    bool cloned;
 };
 
 /*
@@ -123,11 +123,11 @@ struct _icHashMap
  */
 struct _icHashMapIterator
 {
-    icHashMap *head;                      // top of the hash map
-    int       currBucket;                 // bucket currently being iterated
-    icLinkedListIterator *currIterator;   // linkedList iterator helper
-//    icLinkedList *prevList;               // used for 'delete'
-    mapItem      *prevItem;               // used for 'delete'
+    icHashMap *head;                    // top of the hash map
+    int currBucket;                     // bucket currently being iterated
+    icLinkedListIterator *currIterator; // linkedList iterator helper
+                                        //    icLinkedList *prevList;               // used for 'delete'
+    mapItem *prevItem;                  // used for 'delete'
 };
 
 /*
@@ -142,7 +142,8 @@ typedef struct _searchContainer
 /*
  * Helper structure to use when deep cloning the list of mapItems
  */
-typedef struct {
+typedef struct
+{
     hashMapCloneFunc hashMapCloneFunc;
     void *hashMapCloneContext;
 } deepCloneMapItemContext;
@@ -172,7 +173,7 @@ static void *hashMapDeepCloneHelper(void *item, void *context);
  * @return a new HashMap object
  * @see hashMapDestroy()
  */
-icHashMap * hashMapCreate()
+icHashMap *hashMapCreate()
 {
     // allocate mem, and clear it all out
     //
@@ -216,7 +217,7 @@ icHashMap *hashMapClone(icHashMap *src)
     // and copy each, but not the item within
     //
     int i;
-    for (i = 0 ; i < NUM_BUCKETS ; i++)
+    for (i = 0; i < NUM_BUCKETS; i++)
     {
         if (src->buckets[i].values != NULL)
         {
@@ -248,16 +249,13 @@ icHashMap *hashMapDeepClone(icHashMap *src, hashMapCloneFunc cloneFunc, void *co
     retVal->seed = src->seed;
 
     // Setup the context object for when we deep clone the mapItems
-    deepCloneMapItemContext ctx = {
-            .hashMapCloneFunc = cloneFunc,
-            .hashMapCloneContext = context
-    };
+    deepCloneMapItemContext ctx = {.hashMapCloneFunc = cloneFunc, .hashMapCloneContext = context};
 
     // iterate through the containers within 'src'
     // and copy each
     //
     int i;
-    for (i = 0 ; i < NUM_BUCKETS ; i++)
+    for (i = 0; i < NUM_BUCKETS; i++)
     {
         if (src->buckets[i].values != NULL)
         {
@@ -275,7 +273,7 @@ icHashMap *hashMapDeepClone(icHashMap *src, hashMapCloneFunc cloneFunc, void *co
  */
 void standardDoNotFreeHashMapFunc(void *key, void *value)
 {
-    //do nothing
+    // do nothing
 }
 
 /*
@@ -288,7 +286,7 @@ void standardDoNotFreeHashMapFunc(void *key, void *value)
  */
 void hashMapDestroy(icHashMap *map, hashMapFreeFunc helper)
 {
-    if(map == NULL)
+    if (map == NULL)
     {
         return;
     }
@@ -388,10 +386,7 @@ bool hashMapPutCopy(icHashMap *map, const void *key, uint16_t keyLen, const void
         memcpy(vp, value, valueLen);
     }
 
-    bool ok = hashMapPut(map,
-                         memcpy(kp, key, keyLen),
-                         keyLen,
-                         vp);
+    bool ok = hashMapPut(map, memcpy(kp, key, keyLen), keyLen, vp);
     if (!ok)
     {
         free(kp);
@@ -516,7 +511,7 @@ uint16_t hashMapCount(icHashMap *map)
  */
 void hashMapClear(icHashMap *map, hashMapFreeFunc helper)
 {
-    if(map == NULL)
+    if (map == NULL)
     {
         return;
     }
@@ -524,7 +519,7 @@ void hashMapClear(icHashMap *map, hashMapFreeFunc helper)
     // loop through all of our buckets, freeing the linked lists, keys, and values
     //
     int i;
-    for (i = 0 ; i < NUM_BUCKETS ; i++)
+    for (i = 0; i < NUM_BUCKETS; i++)
     {
         if (map->buckets[i].values != NULL)
         {
@@ -625,8 +620,8 @@ static bool searchLinkedList(void *searchVal, void *item)
     // item should be a 'mapItem'
     // searchVal should be a 'searchContainer'
     //
-    mapItem *node = (mapItem *)item;
-    searchContainer *wrap = (searchContainer *)searchVal;
+    mapItem *node = (mapItem *) item;
+    searchContainer *wrap = (searchContainer *) searchVal;
 
     // first compare lengths
     //
@@ -654,7 +649,7 @@ static unsigned int createSeed()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (unsigned int)(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
+    return (unsigned int) (tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
 }
 
 /*
@@ -664,7 +659,7 @@ static uint32_t defaultHash(const char *key, uint16_t keyLen, uint32_t seed)
 {
     // similar to the 'times 33' hash algo used by Perl and Berkley DB
     //
-    unsigned char *ptr = (unsigned char *)key;
+    unsigned char *ptr = (unsigned char *) key;
     uint16_t i = 0;
     uint32_t hash = seed;
 
@@ -693,7 +688,7 @@ static uint16_t assignedBucket(unsigned int hash)
     // probably a better way to do this, but simply
     // divide by the max slots (actually modulus)
     //
-    return (uint16_t )(hash % NUM_BUCKETS);
+    return (uint16_t) (hash % NUM_BUCKETS);
 }
 
 /*
@@ -701,7 +696,7 @@ static uint16_t assignedBucket(unsigned int hash)
  */
 static mapItem *createItem()
 {
-    mapItem *node = (mapItem *)malloc(sizeof(mapItem));
+    mapItem *node = (mapItem *) malloc(sizeof(mapItem));
     memset(node, 0, sizeof(mapItem));
     return node;
 }
@@ -752,14 +747,14 @@ static void destroyItem(mapItem *item, hashMapFreeFunc helper)
  */
 icHashMapIterator *hashMapIteratorCreate(icHashMap *map)
 {
-    if(map == NULL)
+    if (map == NULL)
     {
         return NULL;
     }
 
     // create the bare struct
     //
-    icHashMapIterator *retVal = (icHashMapIterator *)malloc(sizeof(icHashMapIterator));
+    icHashMapIterator *retVal = (icHashMapIterator *) malloc(sizeof(icHashMapIterator));
     memset(retVal, 0, sizeof(icHashMapIterator));
 
     // fill in minimal needed
@@ -775,7 +770,7 @@ icHashMapIterator *hashMapIteratorCreate(icHashMap *map)
  */
 void hashMapIteratorDestroy(icHashMapIterator *iterator)
 {
-    if(iterator != NULL)
+    if (iterator != NULL)
     {
         // kill linked list iterator helpers
         //
@@ -785,7 +780,7 @@ void hashMapIteratorDestroy(icHashMapIterator *iterator)
             iterator->currIterator = NULL;
         }
         iterator->prevItem = NULL;
-//    iterator->prevList = NULL;
+        //    iterator->prevList = NULL;
         iterator->head = NULL;
         free(iterator);
     }
@@ -805,8 +800,7 @@ static int findNextOccupiedSlot(icHashMapIterator *node)
     //
     while (bucket < NUM_BUCKETS)
     {
-        if (node->head != NULL &&
-            node->head->buckets[bucket].values != NULL &&
+        if (node->head != NULL && node->head->buckets[bucket].values != NULL &&
             linkedListCount(node->head->buckets[bucket].values) > 0)
         {
             // this bucket has data, return this bucket number
@@ -854,7 +848,7 @@ static void useSlot(icHashMapIterator *node, int bucket)
  */
 bool hashMapIteratorHasNext(icHashMapIterator *iterator)
 {
-    if(iterator == NULL)
+    if (iterator == NULL)
     {
         return false;
     }
@@ -932,7 +926,7 @@ bool hashMapIteratorHasNext(icHashMapIterator *iterator)
  */
 bool hashMapIteratorGetNext(icHashMapIterator *iterator, void **key, uint16_t *keyLen, void **value)
 {
-    if(iterator == NULL)
+    if (iterator == NULL)
     {
         return false;
     }
@@ -942,7 +936,7 @@ bool hashMapIteratorGetNext(icHashMapIterator *iterator, void **key, uint16_t *k
     //
     if (iterator->currIterator != NULL)
     {
-        mapItem *element = (mapItem *)linkedListIteratorGetNext(iterator->currIterator);
+        mapItem *element = (mapItem *) linkedListIteratorGetNext(iterator->currIterator);
         if (element != NULL)
         {
             // apply values from 'mapItem' to the in/out parms
@@ -956,7 +950,7 @@ bool hashMapIteratorGetNext(icHashMapIterator *iterator, void **key, uint16_t *k
             // we are choosing NOT to use the delete with in the linked list iterator
             // due to the complexity of multiple lists/iterators to synchronize on
             //
-//            iterator->prevList = iterator->head->buckets[iterator->currBucket].values;
+            //            iterator->prevList = iterator->head->buckets[iterator->currBucket].values;
             iterator->prevItem = element;
 
             return true;
@@ -965,7 +959,7 @@ bool hashMapIteratorGetNext(icHashMapIterator *iterator, void **key, uint16_t *k
 
     // problem retrieving the next element
     //
-//    iterator->prevList = NULL;
+    //    iterator->prevList = NULL;
     iterator->prevItem = NULL;
     return false;
 }
@@ -981,14 +975,14 @@ bool hashMapIteratorGetNext(icHashMapIterator *iterator, void **key, uint16_t *k
  */
 bool hashMapIteratorDeleteCurrent(icHashMapIterator *iterator, hashMapFreeFunc helper)
 {
-    if(iterator == NULL)
+    if (iterator == NULL)
     {
         return false;
     }
 
     // only valid if 'getNext' was successfully called
     //
-//    if (iterator->prevList != NULL && iterator->prevItem != NULL)
+    //    if (iterator->prevList != NULL && iterator->prevItem != NULL)
     if (iterator->prevItem != NULL)
     {
         // inform the linked list iterator that we're deleting what it
@@ -1016,12 +1010,11 @@ bool hashMapIteratorDeleteCurrent(icHashMapIterator *iterator, hashMapFreeFunc h
  */
 static void *hashMapDeepCloneHelper(void *item, void *context)
 {
-    deepCloneMapItemContext *ctx = (deepCloneMapItemContext *)context;
-    mapItem *node = (mapItem *)item;
+    deepCloneMapItemContext *ctx = (deepCloneMapItemContext *) context;
+    mapItem *node = (mapItem *) item;
     mapItem *newNode = createItem();
     ctx->hashMapCloneFunc(node->key, node->value, &(newNode->key), &(newNode->value), ctx->hashMapCloneContext);
     newNode->keyLen = node->keyLen;
 
     return newNode;
 }
-

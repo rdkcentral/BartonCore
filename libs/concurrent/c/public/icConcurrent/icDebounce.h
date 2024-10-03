@@ -27,9 +27,9 @@
 #ifndef ZILKER_ICDEBOUNCE_H
 #define ZILKER_ICDEBOUNCE_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <icTypes/sbrm.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /**
  * icDebounce type. Provides a reusable timer to run and reset on debounce. Allows a
@@ -84,4 +84,4 @@ inline void debounceDestroy__auto(icDebounce **debounce)
 
 #define scoped_icDebounce AUTO_CLEAN(debounceDestroy__auto) icDebounce
 
-#endif //ZILKER_ICDEBOUNCE_H
+#endif // ZILKER_ICDEBOUNCE_H

@@ -21,47 +21,47 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*-----------------------------------------------
-* macAddrUtils.c
-*
-* Utilities for finding the MAC address of a device
-*
-* Author: jgleason
-*-----------------------------------------------*/
+ * macAddrUtils.c
+ *
+ * Utilities for finding the MAC address of a device
+ *
+ * Author: jgleason
+ *-----------------------------------------------*/
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <net/if_arp.h>
 #include <arpa/inet.h>
-#include <sys/ioctl.h>
 #include <errno.h>
+#include <net/if_arp.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-#include <icUtil/macAddrUtils.h>
 #include <icLog/logging.h>
+#include <icUtil/macAddrUtils.h>
 #include <icUtil/stringUtils.h>
 #include <icUtil/systemCommandUtils.h>
 
 #ifndef CONFIG_OS_DARWIN
-#define PROC_ARP_FILE	"/proc/net/arp"
+#define PROC_ARP_FILE "/proc/net/arp"
 #endif
 
-#define LOG_TAG     "macUtil"
-#define DELIMETER   ":"
+#define LOG_TAG   "macUtil"
+#define DELIMETER ":"
 
 #ifdef CONFIG_OS_DARWIN
 /*-------------------------------------------------
-* removeChar : remove a character from the string
-*--------------------------------------------------*/
+ * removeChar : remove a character from the string
+ *--------------------------------------------------*/
 static void removeChar(char *s, char chr)
 {
     int i, j = 0;
     /* 'i' moves through all of the string, 's' */
-    for ( i = 0; s[i] != '\0'; i++ )
+    for (i = 0; s[i] != '\0'; i++)
     {
-        if ( s[i] != chr )
+        if (s[i] != chr)
         {
             /* 'j' only moves through 's' when 'chr' is not encountered */
             s[j++] = s[i];
@@ -73,12 +73,12 @@ static void removeChar(char *s, char chr)
 #endif
 
 /*----------------------------------------------------------------------
-* lookupMacAddressByIpAddress - gets the hardware address (MAC address) of the device
-* using the Address Resolution Protocol (ARP)
-*
-* The ARP allows a host to find the MAC address of a node
-* with an IP address on the same physical network
-*-----------------------------------------------------------------------*/
+ * lookupMacAddressByIpAddress - gets the hardware address (MAC address) of the device
+ * using the Address Resolution Protocol (ARP)
+ *
+ * The ARP allows a host to find the MAC address of a node
+ * with an IP address on the same physical network
+ *-----------------------------------------------------------------------*/
 macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
 {
     FILE *fp;
@@ -110,9 +110,9 @@ macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
     while (fgets(line, sizeof(line) - 1, fp) != NULL)
     {
         char *ctx;
-        strtok_r(line, " ", &ctx); //discard...
+        strtok_r(line, " ", &ctx);                // discard...
         char *token2 = strtok_r(NULL, " ", &ctx); // ip address wrapped in parenthesis
-        strtok_r(NULL, " ", &ctx); // the 'at' word... discard
+        strtok_r(NULL, " ", &ctx);                // the 'at' word... discard
         char *token4 = strtok_r(NULL, " ", &ctx); // the mac address
 
         removeChar(token2, '(');
@@ -120,7 +120,7 @@ macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
 
         if (strcmp(token2, ipAddress) == 0)
         {
-            strcpy(macAddress,token4);
+            strcpy(macAddress, token4);
             icLogTrace(LOG_TAG, "found macAddress = %s for ip = %s\n", token4, ipAddress);
             code = MAC_ADDR_CODE_SUCCESS;
             break;
@@ -157,8 +157,7 @@ macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
             char mask[256];
             char dev[256];
             int type, flags;
-            int num = sscanf(line, "%s 0x%x 0x%x %255s %255s %255s\n",
-                             ip, &type, &flags, hwa, mask, dev);
+            int num = sscanf(line, "%s 0x%x 0x%x %255s %255s %255s\n", ip, &type, &flags, hwa, mask, dev);
             if (num < 4)
             {
                 /* ARP file does not have MAC address */
@@ -166,10 +165,10 @@ macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
                 icLogWarn(LOG_TAG, "no macAddress for IP %s", ipAddress);
                 break;
             }
-            if (strcmp(ip,ipAddress) == 0)
+            if (strcmp(ip, ipAddress) == 0)
             {
                 /* we found our address */
-                strcpy(macAddress,hwa);
+                strcpy(macAddress, hwa);
                 icLogTrace(LOG_TAG, "found macAddress = %s for ip = %s\n", hwa, ipAddress);
                 code = MAC_ADDR_CODE_SUCCESS;
                 break;
@@ -183,18 +182,18 @@ macAddrCode lookupMacAddressByIpAddress(char *ipAddress, char *macAddress)
 }
 
 /*-------------------------------------------------------
-* ensureTwoChars - prepend with '0' when necessary
-*
-* takes a token input which should be 2 characters, and
-* prepends it with a '0' if it is one character
-* useful when converting the MAC address to a UUID
-*  e.g. '0:e:8f:e9:93:f9' is converted to '000e8fe993f9'
-*--------------------------------------------------------*/
+ * ensureTwoChars - prepend with '0' when necessary
+ *
+ * takes a token input which should be 2 characters, and
+ * prepends it with a '0' if it is one character
+ * useful when converting the MAC address to a UUID
+ *  e.g. '0:e:8f:e9:93:f9' is converted to '000e8fe993f9'
+ *--------------------------------------------------------*/
 static void ensureTwoChars(char *output, const char *input)
 {
     /* if input is only 1 character */
-    if(strlen(input) == 1)
-    {   /* then prepend a '0' to it */
+    if (strlen(input) == 1)
+    { /* then prepend a '0' to it */
         sprintf(output, "%s%s", "0", input);
     }
     else
@@ -205,12 +204,12 @@ static void ensureTwoChars(char *output, const char *input)
 }
 
 /*----------------------------------------------------------------------
-* macAddrToUUID - remove the colons in MAC address to make UUID string
-*
-* parse the source MAC address string, and populate a string version with
-* the :'s removed and leading 0's filled in
-*  e.g. '0:e:8f:e9:93:f9' is converted to '000e8fe993f9'
-*-----------------------------------------------------------------------*/
+ * macAddrToUUID - remove the colons in MAC address to make UUID string
+ *
+ * parse the source MAC address string, and populate a string version with
+ * the :'s removed and leading 0's filled in
+ *  e.g. '0:e:8f:e9:93:f9' is converted to '000e8fe993f9'
+ *-----------------------------------------------------------------------*/
 bool macAddrToUUID(char *destinationUUID, const char *sourceMacAddress)
 {
     bool retVal = false;
@@ -223,7 +222,7 @@ bool macAddrToUUID(char *destinationUUID, const char *sourceMacAddress)
 
         /* make the string end with the delimiter to allow */
         /* a token to represent the last characters */
-        char *copy = (char *)malloc(strlen(sourceMacAddress) + strlen(DELIMETER) + 1);
+        char *copy = (char *) malloc(strlen(sourceMacAddress) + strlen(DELIMETER) + 1);
         sprintf(copy, "%s%s", sourceMacAddress, DELIMETER);
 
         /* loop through the MAC address string, copying the tokens to the UUID string*/
@@ -232,7 +231,7 @@ bool macAddrToUUID(char *destinationUUID, const char *sourceMacAddress)
         for (token = strtok_r(copy, DELIMETER, &ctx); token != NULL; token = strtok_r(NULL, DELIMETER, &ctx))
         {
             /* prepend a '0' if it is missing */
-            ensureTwoChars(destinationUUID+strlen(destinationUUID), token);
+            ensureTwoChars(destinationUUID + strlen(destinationUUID), token);
         }
         /* update return value */
         retVal = true;
@@ -271,7 +270,7 @@ bool macAddrToBytes(const char *macAddress, uint8_t *destArray, bool hasColonCha
         {
             // convert the token to byte, and assign to the array at 'offset'
             //
-            destArray[offset] = (uint8_t)strtol(tok, NULL, 16);
+            destArray[offset] = (uint8_t) strtol(tok, NULL, 16);
         }
         free(copy);
     }
@@ -285,7 +284,7 @@ bool macAddrToBytes(const char *macAddress, uint8_t *destArray, bool hasColonCha
         }
 
         int offset = 0;
-        char *ptr = (char *)macAddress;
+        char *ptr = (char *) macAddress;
         char tok[3];
         while (offset < 6)
         {
@@ -299,7 +298,7 @@ bool macAddrToBytes(const char *macAddress, uint8_t *destArray, bool hasColonCha
 
             // convert to byte, and assign to the array at 'offset'
             //
-            destArray[offset] = (uint8_t)strtol(tok, NULL, 16);
+            destArray[offset] = (uint8_t) strtol(tok, NULL, 16);
             offset++;
         }
     }

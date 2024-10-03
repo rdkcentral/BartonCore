@@ -36,28 +36,28 @@
 
 #ifdef CONFIG_LIB_LOG_RDKLOG
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <stdbool.h>
 #include <pthread.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include <rdk_debug.h>
 #include <icLog/logging.h>
+#include <rdk_debug.h>
 
 #include "loggingCommon.h"
 
 
 #define MODULE_NAME "LOG.RDK.TOUCHSTONE"
 
-#define BUFFER_SIZE 16*1024
+#define BUFFER_SIZE 16 * 1024
 static char buffer[BUFFER_SIZE];
 
 /*
  * initialize the logger
  */
-__attribute__ ((constructor)) static void initIcLogger(void)
+__attribute__((constructor)) static void initIcLogger(void)
 {
     // init RDK
     rdk_logger_init("/etc/debug.ini");
@@ -66,12 +66,17 @@ __attribute__ ((constructor)) static void initIcLogger(void)
 /*
  * Issue logging message based on a 'categoryName' and 'priority'
  */
-void icLogMsg(const char *file, size_t filelen,
-              const char *func, size_t funclen,
+void icLogMsg(const char *file,
+              size_t filelen,
+              const char *func,
+              size_t funclen,
               long line,
-              const char *categoryName, logPriority priority, const char *format, ...)
+              const char *categoryName,
+              logPriority priority,
+              const char *format,
+              ...)
 {
-    va_list     arglist;
+    va_list arglist;
 
     // skip if priority is > logLevel or never initialized
     //
@@ -85,7 +90,7 @@ void icLogMsg(const char *file, size_t filelen,
     rdk_LogLevel rdkLevel = RDK_LOG_INFO;
     switch (priority)
     {
-        case IC_LOG_TRACE:  // no TRACE, so use DEBUG
+        case IC_LOG_TRACE: // no TRACE, so use DEBUG
         case IC_LOG_DEBUG:
             rdkLevel = RDK_LOG_DEBUG;
             break;
@@ -110,7 +115,10 @@ void icLogMsg(const char *file, size_t filelen,
     //
     int prefixLen = sprintf(buffer, "[%s] ", categoryName);
     va_start(arglist, format);
-    vsnprintf(buffer + prefixLen, BUFFER_SIZE-1, format, arglist); //guaranteed to be null terminated, but save an extra char for \n
+    vsnprintf(buffer + prefixLen,
+              BUFFER_SIZE - 1,
+              format,
+              arglist); // guaranteed to be null terminated, but save an extra char for \n
     int len = strlen(buffer);
     buffer[len++] = '\n';
     buffer[len++] = '\0';

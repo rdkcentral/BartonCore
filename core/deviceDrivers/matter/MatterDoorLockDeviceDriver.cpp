@@ -52,7 +52,7 @@ using namespace std::chrono_literals;
 #define MATTER_DOOR_LOCK_DEVICE_DRIVER_NAME "matterDoorLock"
 
 // this is our endpoint, not the device's
-#define DOOR_LOCK_ENDPOINT "1"
+#define DOOR_LOCK_ENDPOINT                  "1"
 
 struct ClusterReadContext
 {
@@ -130,8 +130,7 @@ void MatterDoorLockDeviceDriver::LockStateReadComplete(std::string &deviceUuid,
     delete readContext;
 }
 
-std::vector<MatterCluster *>
-MatterDoorLockDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
+std::vector<MatterCluster *> MatterDoorLockDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
 {
     icDebug();
 

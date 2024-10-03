@@ -19,14 +19,16 @@
 // Comcast Corporation retains all ownership rights.
 //
 //------------------------------ tabstop = 4 ----------------------------------
-#include <stddef.h>
+
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stddef.h>
+
 #include <cmocka.h>
-#include <icLog/logging.h>
-#include <icConcurrent/timedWait.h>
-#include <signal.h>
 #include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
+#include <signal.h>
 #include <unistd.h>
 #include <wait.h>
 
@@ -51,12 +53,10 @@ static void forkExpectSignal(void (*test)(void **state), void **state, int signa
         waitpid(pid, &status, 0);
         if (WIFSIGNALED(status) == 0 || WTERMSIG(status) != signal)
         {
-            fail_msg("Child did not receive signal: signaled: %d signo: %d",
-                     WIFSIGNALED(status),
-                     WTERMSIG(status));
+            fail_msg("Child did not receive signal: signaled: %d signo: %d", WIFSIGNALED(status), WTERMSIG(status));
         }
     }
-    else if (pid ==0)
+    else if (pid == 0)
     {
         test(state);
         /* Abort! */
@@ -160,17 +160,15 @@ static void test_readWriteLockScope(void **state)
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test_teardown(test_mutexReentrant, teardown),
-                    cmocka_unit_test_teardown(test_mutexErrorCheck, teardown),
-                    cmocka_unit_test_teardown(test_mutexUninitialized, teardown),
-                    cmocka_unit_test_teardown(test_mutexLockScope, teardown),
-                    cmocka_unit_test(test_readWriteLockScope),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_teardown(test_mutexReentrant, teardown),
+        cmocka_unit_test_teardown(test_mutexErrorCheck, teardown),
+        cmocka_unit_test_teardown(test_mutexUninitialized, teardown),
+        cmocka_unit_test_teardown(test_mutexLockScope, teardown),
+        cmocka_unit_test(test_readWriteLockScope),
+    };
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 
     return retval;
 }
-

@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -23,20 +23,21 @@
 // Created by mkoch201 on 6/11/19.
 //
 
-#include <stdio.h>
-#include <icLog/logging.h>
-#include <memory.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+#include <icLog/logging.h>
 #include <icTime/timeUtils.h>
 #include <inttypes.h>
+#include <memory.h>
+#include <stdio.h>
 
-#define LOG_CAT     "logTEST"
+#define LOG_CAT        "logTEST"
 
-#define KEY_PREFIX_STR  "test %d"
-#define VAL_PREFIX_STR  "test %d val"
+#define KEY_PREFIX_STR "test %d"
+#define VAL_PREFIX_STR "test %d val"
 
 static void test_unixTimeConversions(void **state)
 {
@@ -60,10 +61,9 @@ static void test_unixTimeConversions(void **state)
 
 int main(int argc, char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_unixTimeConversions),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_unixTimeConversions),
+    };
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

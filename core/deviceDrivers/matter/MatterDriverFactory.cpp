@@ -13,8 +13,8 @@
 using namespace zilker;
 
 extern "C" {
-#include <icLog/logging.h>
 #include <device-driver/device-driver-manager.h>
+#include <icLog/logging.h>
 }
 
 bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
@@ -39,7 +39,7 @@ MatterDeviceDriver *zilker::MatterDriverFactory::GetDriver(DiscoveredDeviceDetai
     {
         // iterate over the drivers and allow them to claim the device.  First one to claim it gets it.  Order
         // of drivers is deterministic since we store in std::map.
-        for (auto const& entry : drivers)
+        for (auto const &entry : drivers)
         {
             if (entry.second->ClaimDevice(details))
             {

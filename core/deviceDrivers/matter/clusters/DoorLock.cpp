@@ -37,7 +37,7 @@ extern "C" {
 #include "app/BufferedReadCallback.h"
 #include "app/InteractionModelEngine.h"
 
-//TODO we have a smattering of timeouts that need to be coordinated
+// TODO we have a smattering of timeouts that need to be coordinated
 #define INTERACTION_TIMEOUT_SECONDS 15
 
 namespace zilker
@@ -85,9 +85,8 @@ namespace zilker
         using namespace chip::app::Clusters::DoorLock;
         using TypeInfo = Attributes::LockState::TypeInfo;
 
-        chip::app::ConcreteAttributePath path(endpointId,
-                                              chip::app::Clusters::DoorLock::Id,
-                                              chip::app::Clusters::DoorLock::Attributes::LockState::Id);
+        chip::app::ConcreteAttributePath path(
+            endpointId, chip::app::Clusters::DoorLock::Id, chip::app::Clusters::DoorLock::Attributes::LockState::Id);
         {
             TypeInfo::DecodableType value;
             error = cache->Get<TypeInfo>(path, value);

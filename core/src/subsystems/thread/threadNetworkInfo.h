@@ -31,8 +31,8 @@
 #include <glib.h>
 #include <stdint.h>
 
-#define THREAD_OPERATIONAL_DATASET_MAX_LEN 254
-#define THREAD_NETWORK_KEY_MAX_LEN         32
+#define THREAD_OPERATIONAL_DATASET_MAX_LEN   254
+#define THREAD_NETWORK_KEY_MAX_LEN           32
 
 #define THREAD_NETWORK_INFO_CHANNEL_KEY      "channel"
 #define THREAD_NETWORK_INFO_PAN_ID_KEY       "panId"

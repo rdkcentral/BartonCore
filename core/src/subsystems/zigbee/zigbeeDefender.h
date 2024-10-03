@@ -42,4 +42,4 @@ void zigbeeDefenderConfigure();
  */
 void zigbeeDefenderSetPanIdAttack(bool attackDetected);
 
-#endif //ZILKER_ZIGBEEDEFENDER_H
+#endif // ZILKER_ZIGBEEDEFENDER_H

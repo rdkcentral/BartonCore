@@ -27,7 +27,7 @@
 #include "provider/device-service-token-provider.h"
 
 G_DEFINE_INTERFACE(BDeviceServiceTokenProvider, b_device_service_token_provider, G_TYPE_OBJECT)
-G_DEFINE_QUARK(b-device-service-token-provider-error-quark, b_device_service_token_provider_error)
+G_DEFINE_QUARK(b - device - service - token - provider - error - quark, b_device_service_token_provider_error)
 
 static void b_device_service_token_provider_default_init(BDeviceServiceTokenProviderInterface *iface)
 {

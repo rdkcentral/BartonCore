@@ -38,7 +38,7 @@
  * this returns a deep clone, but updates the current delay amount.
  * Solely used by changeRepeatingTask
  */
-RepeatingTaskPolicy *cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskPolicy *orig,
-                                                                  uint32_t delayAmount, delayUnits units);
+RepeatingTaskPolicy *
+cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskPolicy *orig, uint32_t delayAmount, delayUnits units);
 
-#endif //ZILKER_REPEATINGTASKPOLICYPRIVATE_H
+#endif // ZILKER_REPEATINGTASKPOLICYPRIVATE_H

@@ -30,30 +30,31 @@
 
 
 // cmocka & it's dependencies
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
-#include <stdlib.h>
-#include <string.h>
+#include <cmocka.h>
+#include <inttypes.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <inttypes.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 
-#include <icLog/logging.h>
 #include <icConcurrent/taskExecutor.h>
 #include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
 
-#define LOG_CAT     "taskExecTEST"
+#define LOG_CAT "taskExecTEST"
 
 static uint16_t ranSimple = 0;
 static pthread_mutex_t simpleMTX = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t simpleCOND;
 
-typedef struct _simple {
+typedef struct _simple
+{
     char *name;
     uint16_t val;
 } simple;
@@ -66,8 +67,8 @@ static void runSimpleFunc(void *taskObj, void *taskArg)
     if (taskObj != NULL)
     {
         // just echo the name & val
-        simple *s = (simple *)taskObj;
-        icLogDebug(LOG_CAT, "got SIMPLE name=%s value=%"PRIu16, s->name, s->val);
+        simple *s = (simple *) taskObj;
+        icLogDebug(LOG_CAT, "got SIMPLE name=%s value=%" PRIu16, s->name, s->val);
 
         // update the counter, then broadcast on the conditional
         pthread_mutex_lock(&simpleMTX);
@@ -84,16 +85,16 @@ static void freeSimpleFunc(void *taskObj, void *taskArg)
 {
     if (taskObj != NULL)
     {
-        simple *s = (simple *)taskObj;
+        simple *s = (simple *) taskObj;
         free(s->name);
         free(s);
     }
-    free(taskArg);      // should be NULL
+    free(taskArg); // should be NULL
 }
 
 static simple *createSimple(const char *name, uint16_t value)
 {
-    simple *retVal = (simple *)calloc(1, sizeof(simple));
+    simple *retVal = (simple *) calloc(1, sizeof(simple));
     retVal->name = strdup(name);
     retVal->val = value;
 
@@ -125,7 +126,7 @@ static void test_singleTask(void **state)
     destroyTaskExecutor(exec);
 
     // see that it worked
-    icLogDebug(LOG_CAT, "ran %"PRIu16" tests", ranSimple);
+    icLogDebug(LOG_CAT, "ran %" PRIu16 " tests", ranSimple);
     assert_true(ranSimple > 0);
 }
 
@@ -144,10 +145,10 @@ static void test_multipleTasks(void **state)
     // add 10 tasks
     //
     int i;
-    for (i = 0 ; i < 10 ; i++)
+    for (i = 0; i < 10; i++)
     {
         // add a 'simple' object to the executor
-        simple *s = createSimple("multi task test", (uint16_t)i);
+        simple *s = createSimple("multi task test", (uint16_t) i);
         appendTaskToExecutor(exec, s, NULL, runSimpleFunc, freeSimpleFunc);
     }
 
@@ -160,7 +161,7 @@ static void test_multipleTasks(void **state)
     destroyTaskExecutor(exec);
 
     // see that all of them ran
-    icLogDebug(LOG_CAT, "ran %"PRIu16" tests", ranSimple);
+    icLogDebug(LOG_CAT, "ran %" PRIu16 " tests", ranSimple);
     assert_true(ranSimple >= 1);
 }
 
@@ -178,11 +179,10 @@ int main(int argc, const char **argv)
     initTimedWaitCond(&simpleCOND);
 
     // make our array of tests to run
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_singleTask),
-                    cmocka_unit_test(test_multipleTasks),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_singleTask),
+        cmocka_unit_test(test_multipleTasks),
+    };
 
     // fire off the suite of tests
     int retval = cmocka_run_group_tests(tests, NULL, NULL);

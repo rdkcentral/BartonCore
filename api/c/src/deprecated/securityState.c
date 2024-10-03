@@ -20,13 +20,13 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include <memory.h>
+#include "resourceContainer.h"
+#include <deviceService/securityState.h>
 #include <errno.h>
 #include <icLog/logging.h>
-#include <jsonHelper/jsonHelper.h>
 #include <icTypes/sbrm.h>
-#include <deviceService/securityState.h>
-#include "resourceContainer.h"
+#include <jsonHelper/jsonHelper.h>
+#include <memory.h>
 
 #define LOG_TAG "SecurityState"
 
@@ -49,12 +49,10 @@ SecurityState *securityStateCreate(const PanelStatus panelStatus,
         icLogWarn(LOG_TAG, "Creating state with invalid panel status");
     }
 
-    SecurityState event = {
-            .indication = indication,
-            .panelStatus = panelStatus,
-            .timeLeft = (uint8_t) timeLeft,
-            .bypassActive = bypassActive
-    };
+    SecurityState event = {.indication = indication,
+                           .panelStatus = panelStatus,
+                           .timeLeft = (uint8_t) timeLeft,
+                           .bypassActive = bypassActive};
 
     SecurityState *retVal = malloc(sizeof(event));
     memcpy(retVal, &event, sizeof(event));
@@ -68,7 +66,7 @@ SecurityState *securityStateClone(const SecurityState *event)
     if (event != NULL)
     {
         retVal = malloc(sizeof(SecurityState));
-        if(securityStateCopy(retVal, event) != 0)
+        if (securityStateCopy(retVal, event) != 0)
         {
             free(retVal);
             retVal = NULL;
@@ -137,7 +135,8 @@ SecurityState *securityStateFromJSON(const char *json)
     {
         AUTO_CLEAN(cJSON_Delete__auto) cJSON *parsed = cJSON_Parse(json);
         AUTO_CLEAN(free_generic__auto) const char *indicationLabel = getCJSONString(parsed, SECURITY_STATE_INDICATION);
-        AUTO_CLEAN(free_generic__auto) const char *panelStatusLabel = getCJSONString(parsed, SECURITY_STATE_PANEL_STATUS);
+        AUTO_CLEAN(free_generic__auto)
+        const char *panelStatusLabel = getCJSONString(parsed, SECURITY_STATE_PANEL_STATUS);
         uint32_t timeLeft = 0;
         bool bypassActive = false;
         bool ok = true;
@@ -184,7 +183,8 @@ SecurityState *securityStateFromJSON(const char *json)
 
 SecurityIndication securityIndicationValueOf(const char *indicationLabel)
 {
-    return (SecurityIndication) findEnumForLabel(indicationLabel, SecurityIndicationLabels, ARRAY_LENGTH(SecurityIndicationLabels));
+    return (SecurityIndication) findEnumForLabel(
+        indicationLabel, SecurityIndicationLabels, ARRAY_LENGTH(SecurityIndicationLabels));
 }
 
 PanelStatus panelStatusValueOf(const char *panelStatusLabel)

@@ -30,20 +30,21 @@
 
 
 // cmocka & it's dependencies
-#include <stddef.h>
 #include <setjmp.h>
-#include <stdio.h>
-#include <cmocka.h>
+#include <stdarg.h>
+#include <stddef.h>
 
-#include <stdlib.h>
-#include <stdint.h>
+#include <cmocka.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include <icLog/logging.h>
-#include <icUtil/icStateMachine.h>
 #include <icTypes/icStringBuffer.h>
+#include <icUtil/icStateMachine.h>
 
-typedef enum {
+typedef enum
+{
     STATE_A,
     STATE_B,
     STATE_C,
@@ -52,15 +53,7 @@ typedef enum {
     STATE_F,
 } myStates;
 
-static const char *myStateLabels[] = {
-     "A",
-     "B",
-     "C",
-     "D",
-     "E",
-     "F",
-     NULL
-};
+static const char *myStateLabels[] = {"A", "B", "C", "D", "E", "F", NULL};
 
 /*
  * simple test to create a state machine, add some states, get/set state (no action callbacks)
@@ -105,8 +98,8 @@ static void test_fsmDupState(void **state)
     stateMachineDestroy(fsm);
 }
 
-//static bool ranExitA = false;
-//static bool ranEnterB = false;
+// static bool ranExitA = false;
+// static bool ranEnterB = false;
 
 // stateChangeNotifyFunc callback
 static void stateChangedNotif(int oldStateValue, int newStateValue, void *userArg)
@@ -143,7 +136,7 @@ static void travelStateNotif(int oldStateValue, int newStateValue, void *userArg
     // userArg should be a string buffer
     // append a "-" then 'old' state char/ to provide a trail of each state we traveled "from"
     // append a "+" then 'new' state char/ to provide a trail of each state we traveled "to"
-    icStringBuffer *buff = (icStringBuffer *)userArg;
+    icStringBuffer *buff = (icStringBuffer *) userArg;
     stringBufferAppend(buff, " -");
     stringBufferAppend(buff, myStateLabels[oldStateValue]);
     stringBufferAppend(buff, " +");
@@ -209,14 +202,11 @@ int main(int argc, const char **argv)
     setIcLogPriorityFilter(IC_LOG_DEBUG);
 
     // make our array of tests to run
-    const struct CMUnitTest tests[] =
-    {
-        cmocka_unit_test(test_fsmCreate),
-        cmocka_unit_test(test_fsmDupState),
-        cmocka_unit_test(test_fsmActions),
-        cmocka_unit_test(test_fsmTravelForward),
-        cmocka_unit_test(test_fsmTravelBackward)
-    };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_fsmCreate),
+                                       cmocka_unit_test(test_fsmDupState),
+                                       cmocka_unit_test(test_fsmActions),
+                                       cmocka_unit_test(test_fsmTravelForward),
+                                       cmocka_unit_test(test_fsmTravelBackward)};
 
     // fire off the suite of tests
     int retval = cmocka_run_group_tests(tests, NULL, NULL);

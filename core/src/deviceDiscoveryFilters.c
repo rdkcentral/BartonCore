@@ -35,14 +35,14 @@ static void destroyDiscoveryFilter(discoveryFilter *filter);
  */
 void *cloneDiscoveryFilterItems(void *item, void *context)
 {
-    (void)context; //unused
+    (void) context; // unused
 
     if (item != NULL)
     {
-        discoveryFilter *filter = (discoveryFilter *)item;
+        discoveryFilter *filter = (discoveryFilter *) item;
         discoveryFilter *retval = discoveryFilterCreate(filter->uriPattern, filter->valuePattern);
 
-        return (void *)retval;
+        return (void *) retval;
     }
     return NULL;
 }

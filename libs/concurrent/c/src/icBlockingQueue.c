@@ -2,10 +2,10 @@
 // Created by wboyd747 on 5/30/18.
 //
 
+#include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
-#include <errno.h>
 
 #include <icTime/timeUtils.h>
 #include <icTypes/icQueue.h>
@@ -15,9 +15,9 @@
 
 struct _icBlockingQueue
 {
-    uint16_t  capacity;
+    uint16_t capacity;
 
-    icQueue* queue;
+    icQueue *queue;
 
     pthread_mutex_t mutex;
     pthread_cond_t fullCondition;
@@ -26,34 +26,43 @@ struct _icBlockingQueue
     bool enabled;
 };
 
-static int timed_wait(pthread_cond_t* cond, pthread_mutex_t* mutex, struct timespec *timeout)
+static int timed_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, struct timespec *timeout)
 {
     int ret = 0;
 
-    if (timeout->tv_sec == BLOCKINGQUEUE_TIMEOUT_INFINITE && timeout->tv_nsec == 0) {
+    if (timeout->tv_sec == BLOCKINGQUEUE_TIMEOUT_INFINITE && timeout->tv_nsec == 0)
+    {
         pthread_cond_wait(cond, mutex);
-    } else if (timeout->tv_sec < 0 || (timeout->tv_sec == 0 && timeout->tv_nsec == 0)) {
+    }
+    else if (timeout->tv_sec < 0 || (timeout->tv_sec == 0 && timeout->tv_nsec == 0))
+    {
         ret = ETIMEDOUT;
-    } else {
+    }
+    else
+    {
         ret = granularIncrementalCondTimedWait(cond, mutex, timeout);
     }
 
     return ret;
 }
 
-icBlockingQueue* blockingQueueCreate(uint16_t maxCapacity)
+icBlockingQueue *blockingQueueCreate(uint16_t maxCapacity)
 {
-    icBlockingQueue* bq = malloc(sizeof(struct _icBlockingQueue));
-    if (bq) {
+    icBlockingQueue *bq = malloc(sizeof(struct _icBlockingQueue));
+    if (bq)
+    {
         bq->queue = queueCreate();
-        if (bq->queue) {
+        if (bq->queue)
+        {
             bq->capacity = (maxCapacity > 0) ? maxCapacity : BLOCKINGQUEUE_MAX_CAPACITY;
             bq->enabled = true;
 
             pthread_mutex_init(&bq->mutex, NULL);
             initTimedWaitCond(&bq->fullCondition);
             initTimedWaitCond(&bq->emptyCondition);
-        } else {
+        }
+        else
+        {
             free(bq);
             bq = NULL;
         }
@@ -64,7 +73,8 @@ icBlockingQueue* blockingQueueCreate(uint16_t maxCapacity)
 
 void blockingQueueDestroy(icBlockingQueue *queue, blockingQueueItemFreeFunc helper)
 {
-    if (queue) {
+    if (queue)
+    {
         pthread_mutex_lock(&queue->mutex);
         queue->enabled = false;
         pthread_cond_broadcast(&queue->fullCondition);
@@ -90,7 +100,8 @@ uint16_t blockingQueueCount(icBlockingQueue *queue)
 {
     uint16_t ret = 0;
 
-    if (queue) {
+    if (queue)
+    {
         pthread_mutex_lock(&queue->mutex);
         ret = queueCount(queue->queue);
         pthread_mutex_unlock(&queue->mutex);
@@ -106,7 +117,7 @@ bool blockingQueuePush(icBlockingQueue *queue, void *item)
 
 bool blockingQueuePushTimeout(icBlockingQueue *queue, void *item, int timeout)
 {
-    struct timespec timeoutSpec = { .tv_sec = timeout, .tv_nsec = 0 };
+    struct timespec timeoutSpec = {.tv_sec = timeout, .tv_nsec = 0};
     return blockingQueuePushTimeoutGranular(queue, item, &timeoutSpec);
 }
 
@@ -114,7 +125,8 @@ bool blockingQueuePushTimeoutGranular(icBlockingQueue *queue, void *item, struct
 {
     bool ret = false;
 
-    if (queue && item) {
+    if (queue && item)
+    {
         int condRet = 0;
         uint16_t count;
 
@@ -125,15 +137,20 @@ bool blockingQueuePushTimeoutGranular(icBlockingQueue *queue, void *item, struct
         struct timespec startTime;
         // We can get woken up but the queue is still full, so we should loop and try again
         // until our timeout expires
-        while(keepWaiting) {
-            if (queue->enabled && (count == queue->capacity)) {
+        while (keepWaiting)
+        {
+            if (queue->enabled && (count == queue->capacity))
+            {
                 struct timespec remainingTime = *timeout;
-                if (!firstTime) {
+                if (!firstTime)
+                {
                     struct timespec currTime;
                     getCurrentTime(&currTime, true);
                     timespecDiff(&currTime, &startTime, &remainingTime);
                     timespecDiff(timeout, &remainingTime, &remainingTime);
-                } else {
+                }
+                else
+                {
                     getCurrentTime(&startTime, true);
                     firstTime = false;
                 }
@@ -143,11 +160,13 @@ bool blockingQueuePushTimeoutGranular(icBlockingQueue *queue, void *item, struct
             }
 
             /* If we are being destroyed then we just want to bail out. */
-            if (!queue->enabled) {
+            if (!queue->enabled)
+            {
                 condRet = EINTR;
             }
 
-            if ((condRet == 0) && (count < queue->capacity)) {
+            if ((condRet == 0) && (count < queue->capacity))
+            {
                 queuePush(queue->queue, item);
 
                 // Unblock a single waiting thread if there is one waiting
@@ -155,10 +174,14 @@ bool blockingQueuePushTimeoutGranular(icBlockingQueue *queue, void *item, struct
 
                 ret = true;
                 keepWaiting = false;
-            } else if (condRet == ETIMEDOUT) {
+            }
+            else if (condRet == ETIMEDOUT)
+            {
                 errno = ETIMEDOUT;
                 keepWaiting = false;
-            } else if (condRet == EINTR) {
+            }
+            else if (condRet == EINTR)
+            {
                 errno = EINTR;
                 keepWaiting = false;
             }
@@ -176,15 +199,16 @@ void *blockingQueuePop(icBlockingQueue *queue)
 
 void *blockingQueuePopTimeout(icBlockingQueue *queue, int timeout)
 {
-    struct timespec timeoutSpec = { .tv_sec = timeout, .tv_nsec = 0 };
+    struct timespec timeoutSpec = {.tv_sec = timeout, .tv_nsec = 0};
     return blockingQueuePopTimeoutGranular(queue, &timeoutSpec);
 }
 
 void *blockingQueuePopTimeoutGranular(icBlockingQueue *queue, struct timespec *timeout)
 {
-    void* ret = NULL;
+    void *ret = NULL;
 
-    if (queue) {
+    if (queue)
+    {
         int condRet = 0;
         uint16_t count;
 
@@ -195,15 +219,20 @@ void *blockingQueuePopTimeoutGranular(icBlockingQueue *queue, struct timespec *t
         struct timespec startTime;
         // We can get woken up but the queue is still full, so we should loop and try again
         // until our timeout expires
-        while(keepWaiting) {
-            if (queue->enabled && (count == 0)) {
+        while (keepWaiting)
+        {
+            if (queue->enabled && (count == 0))
+            {
                 struct timespec remainingTime = *timeout;
-                if (!firstTime) {
+                if (!firstTime)
+                {
                     struct timespec currTime;
                     getCurrentTime(&currTime, true);
                     timespecDiff(&currTime, &startTime, &remainingTime);
                     timespecDiff(timeout, &remainingTime, &remainingTime);
-                } else {
+                }
+                else
+                {
                     getCurrentTime(&startTime, true);
                     firstTime = false;
                 }
@@ -212,21 +241,27 @@ void *blockingQueuePopTimeoutGranular(icBlockingQueue *queue, struct timespec *t
             }
 
             /* If we are being destroyed then we just want to bail out. */
-            if (!queue->enabled) {
+            if (!queue->enabled)
+            {
                 condRet = EINTR;
             }
 
-            if ((condRet == 0) && (count > 0)) {
+            if ((condRet == 0) && (count > 0))
+            {
                 ret = queuePop(queue->queue);
 
                 // Unblock a single waiting thread if there is one waiting
                 pthread_cond_signal(&queue->fullCondition);
 
                 keepWaiting = false;
-            } else if (condRet == ETIMEDOUT) {
+            }
+            else if (condRet == ETIMEDOUT)
+            {
                 errno = ETIMEDOUT;
                 keepWaiting = false;
-            } else if (condRet == EINTR) {
+            }
+            else if (condRet == EINTR)
+            {
                 errno = EINTR;
                 keepWaiting = false;
             }
@@ -244,11 +279,13 @@ bool blockingQueueDelete(icBlockingQueue *queue,
 {
     bool ret = false;
 
-    if (queue) {
+    if (queue)
+    {
         pthread_mutex_lock(&queue->mutex);
         ret = queueDelete(queue->queue, searchVal, searchFunc, freeFunc);
 
-        if (ret) {
+        if (ret)
+        {
             // Signal no matter what, we deleted something so if there is a waiter, wake up them up
             pthread_cond_signal(&queue->fullCondition);
         }
@@ -260,7 +297,8 @@ bool blockingQueueDelete(icBlockingQueue *queue,
 
 void blockingQueueIterate(icBlockingQueue *queue, blockingQueueIterateFunc callback, void *arg)
 {
-    if (queue) {
+    if (queue)
+    {
         pthread_mutex_lock(&queue->mutex);
         queueIterate(queue->queue, callback, arg);
         pthread_mutex_unlock(&queue->mutex);
@@ -269,14 +307,16 @@ void blockingQueueIterate(icBlockingQueue *queue, blockingQueueIterateFunc callb
 
 void blockingQueueClear(icBlockingQueue *queue, blockingQueueItemFreeFunc helper)
 {
-    if (queue) {
+    if (queue)
+    {
         uint16_t count;
 
         pthread_mutex_lock(&queue->mutex);
         count = queueCount(queue->queue);
         queueClear(queue->queue, helper);
 
-        if (count == queue->capacity) {
+        if (count == queue->capacity)
+        {
             // Wake up all waiting to push now that we are cleared
             pthread_cond_broadcast(&queue->fullCondition);
         }
@@ -286,7 +326,8 @@ void blockingQueueClear(icBlockingQueue *queue, blockingQueueItemFreeFunc helper
 
 void blockingQueueDisable(icBlockingQueue *queue)
 {
-    if (queue) {
+    if (queue)
+    {
         pthread_mutex_lock(&queue->mutex);
         // Mark the queue disabled
         queue->enabled = false;

@@ -24,31 +24,31 @@
 // Created by Thomas Lea on 7/30/15.
 //
 
-#include <deviceDescriptors.h>
-#include <stdio.h>
-#include <setjmp.h>
+#include "../../src/parser.h"
 #include <cmocka.h>
+#include <deviceDescriptors.h>
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <setjmp.h>
+#include <stdio.h>
 #include <versionUtils.h>
-#include "../../src/parser.h"
 
 /*
  * This tests the internal parser to ensure it parses all device descriptors from AllowList.xml
  */
 static void test_load_all_descriptors(void **state)
 {
-    icLinkedList* descriptors = parseDeviceDescriptors("data/AllowList.xml", NULL);
+    icLinkedList *descriptors = parseDeviceDescriptors("data/AllowList.xml", NULL);
 
     assert_non_null(descriptors);
 
     printf("loaded %d descriptors\n", linkedListCount(descriptors));
-    linkedListIterate(descriptors, (linkedListIterateFunc)deviceDescriptorPrint, NULL);
+    linkedListIterate(descriptors, (linkedListIterateFunc) deviceDescriptorPrint, NULL);
     assert_int_equal(linkedListCount(descriptors), 129);
 
     linkedListDestroy(descriptors, (linkedListItemFreeFunc) deviceDescriptorFree);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -56,17 +56,17 @@ static void test_load_all_descriptors(void **state)
  */
 static void test_load_camera_descriptors(void **state)
 {
-    icLinkedList* descriptors = parseDeviceDescriptors("data/AllowList-9CameraDDs.xml", NULL);
+    icLinkedList *descriptors = parseDeviceDescriptors("data/AllowList-9CameraDDs.xml", NULL);
 
     assert_non_null(descriptors);
 
     printf("loaded %d descriptors\n", linkedListCount(descriptors));
-    linkedListIterate(descriptors, (linkedListIterateFunc)deviceDescriptorPrint, NULL);
+    linkedListIterate(descriptors, (linkedListIterateFunc) deviceDescriptorPrint, NULL);
     assert_int_equal(linkedListCount(descriptors), 9);
 
     linkedListDestroy(descriptors, (linkedListItemFreeFunc) deviceDescriptorFree);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -74,12 +74,12 @@ static void test_load_camera_descriptors(void **state)
  */
 static void test_load_matter_descriptors(void **state)
 {
-    icLinkedList* descriptors = parseDeviceDescriptors("data/AllowList-MatterDDs.xml", NULL);
+    icLinkedList *descriptors = parseDeviceDescriptors("data/AllowList-MatterDDs.xml", NULL);
 
     assert_non_null(descriptors);
 
     printf("loaded %d descriptors\n", linkedListCount(descriptors));
-    linkedListIterate(descriptors, (linkedListIterateFunc)deviceDescriptorPrint, NULL);
+    linkedListIterate(descriptors, (linkedListIterateFunc) deviceDescriptorPrint, NULL);
     assert_int_equal(linkedListCount(descriptors), 4); // Only 4 valid DDLs, others invalid
 
     scoped_icLinkedListIterator *iterator = linkedListIteratorCreate(descriptors);
@@ -128,7 +128,7 @@ static void test_load_matter_descriptors(void **state)
 
     linkedListDestroy(descriptors, (linkedListItemFreeFunc) deviceDescriptorFree);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -136,17 +136,17 @@ static void test_load_matter_descriptors(void **state)
  */
 static void test_load_zigbee_descriptors(void **state)
 {
-    icLinkedList* descriptors = parseDeviceDescriptors("data/AllowList-ZigbeeDDs.xml", NULL);
+    icLinkedList *descriptors = parseDeviceDescriptors("data/AllowList-ZigbeeDDs.xml", NULL);
 
     assert_non_null(descriptors);
 
     printf("loaded %d descriptors\n", linkedListCount(descriptors));
-    linkedListIterate(descriptors, (linkedListIterateFunc)deviceDescriptorPrint, NULL);
+    linkedListIterate(descriptors, (linkedListIterateFunc) deviceDescriptorPrint, NULL);
     assert_int_equal(linkedListCount(descriptors), 122);
 
     linkedListDestroy(descriptors, (linkedListItemFreeFunc) deviceDescriptorFree);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -166,7 +166,7 @@ static void test_can_locate_camera_descriptor_from_version_list(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -184,9 +184,9 @@ static void test_can_locate_zigbee_descriptor_from_version_list(void **state)
 
     deviceDescriptorFree(dd);
 
-    //zigbee descriptors can have hardware versions in decimal or hexidecimal.
-    //  The library handles this by internally converting to decimal strings
-    //  if required.
+    // zigbee descriptors can have hardware versions in decimal or hexidecimal.
+    //   The library handles this by internally converting to decimal strings
+    //   if required.
     dd = deviceDescriptorsGet("Sercomm Corp.", "SZ-DWS04", "18", "0x23005121");
 
     assert_non_null(dd);
@@ -195,7 +195,7 @@ static void test_can_locate_zigbee_descriptor_from_version_list(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -215,7 +215,7 @@ static void test_can_locate_zigbee_descriptor_from_range(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -243,7 +243,7 @@ static void test_can_locate_zigbee_descriptor_with_only_minimum_in_range(void **
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -261,7 +261,7 @@ static void test_cant_locate_zigbee_descriptor_with_only_minimum_in_range(void *
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -289,7 +289,7 @@ static void test_can_locate_zigbee_descriptor_with_only_maximum_in_range(void **
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -307,7 +307,7 @@ static void test_cant_locate_zigbee_descriptor_with_only_maximum_in_range(void *
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -348,7 +348,7 @@ static void test_cant_locate_zigbee_descriptor_from_outside_range(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -368,7 +368,7 @@ static void test_can_locate_zigbee_descriptor_with_wildcard(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -400,7 +400,7 @@ static void test_can_locate_zigbee_descriptor_with_list_and_range(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -432,7 +432,7 @@ static void test_cant_locate_zigbee_descriptor_with_list_and_range(void **state)
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -484,7 +484,7 @@ static void test_can_locate_zigbee_descriptor_with_list_and_range_for_minimum_an
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -512,7 +512,7 @@ static void test_cant_locate_zigbee_descriptor_with_list_and_range_for_minimum_a
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 static void test_cant_locate_zigbee_descriptor_with_bad_input_versions(void **state)
@@ -528,13 +528,13 @@ static void test_cant_locate_zigbee_descriptor_with_bad_input_versions(void **st
 
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 static void printArray(uint32_t *array, uint16_t len)
 {
     int i = 0;
-    for (i = 0 ; i < len ; i++)
+    for (i = 0; i < len; i++)
     {
         printf("array[%d]=%d\n", i, array[i]);
     }
@@ -602,7 +602,7 @@ static void test_version_parsing(void **state)
     assert_int_equal(array[0], 1);
     free(array);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -662,7 +662,7 @@ static void test_version_compare(void **state)
     val = compareVersionStrings("0x0084089a", "0x00840899");
     assert_int_equal(val, -1);
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -671,20 +671,20 @@ static void test_version_compare(void **state)
  */
 static void test_denylist(void **state)
 {
-    //first confirm that we can find it without a denylist
+    // first confirm that we can find it without a denylist
     deviceDescriptorsInit("data/AllowList.xml", NULL);
     DeviceDescriptor *dd = deviceDescriptorsGet("SMC", "SMCCO10-Z", "1", "1");
     assert_non_null(dd);
     deviceDescriptorFree(dd);
     deviceDescriptorsCleanup();
 
-    //now confirm that our denylist, which excludes this device, prevents us from finding the same descriptor
+    // now confirm that our denylist, which excludes this device, prevents us from finding the same descriptor
     deviceDescriptorsInit("data/AllowList.xml", "data/DenyList.xml");
     dd = deviceDescriptorsGet("SMC", "SMCCO10-Z", "1", "1");
     assert_null(dd);
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -698,7 +698,7 @@ static void test_denylist_empty_uuid(void **state)
     deviceDescriptorFree(dd);
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -712,7 +712,7 @@ static void test_denylist_missing_uuid(void **state)
     deviceDescriptorFree(dd);
     deviceDescriptorsCleanup();
 
-    (void)state; //unused
+    (void) state; // unused
 }
 
 /*
@@ -734,35 +734,33 @@ static void test_null_version_compare(void **state)
     (void) state;
 }
 
-int main(int argc, char ** argv)
+int main(int argc, char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_load_camera_descriptors),
-                    cmocka_unit_test(test_load_matter_descriptors),
-                    cmocka_unit_test(test_load_zigbee_descriptors),
-                    cmocka_unit_test(test_load_all_descriptors),
-                    cmocka_unit_test(test_can_locate_camera_descriptor_from_version_list),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_from_version_list),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_with_wildcard),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_from_range),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_with_only_minimum_in_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_only_minimum_in_range),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_with_only_maximum_in_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_only_maximum_in_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_from_outside_range),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_with_list_and_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_list_and_range),
-                    cmocka_unit_test(test_can_locate_zigbee_descriptor_with_list_and_range_for_minimum_and_maximum_in_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_list_and_range_for_minimum_and_maximum_in_range),
-                    cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_bad_input_versions),
-                    cmocka_unit_test(test_version_parsing),
-                    cmocka_unit_test(test_version_compare),
-                    cmocka_unit_test(test_denylist),
-                    cmocka_unit_test(test_denylist_empty_uuid),
-                    cmocka_unit_test(test_denylist_missing_uuid),
-                    cmocka_unit_test(test_null_version_compare)
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_load_camera_descriptors),
+        cmocka_unit_test(test_load_matter_descriptors),
+        cmocka_unit_test(test_load_zigbee_descriptors),
+        cmocka_unit_test(test_load_all_descriptors),
+        cmocka_unit_test(test_can_locate_camera_descriptor_from_version_list),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_from_version_list),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_with_wildcard),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_from_range),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_with_only_minimum_in_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_only_minimum_in_range),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_with_only_maximum_in_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_only_maximum_in_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_from_outside_range),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_with_list_and_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_list_and_range),
+        cmocka_unit_test(test_can_locate_zigbee_descriptor_with_list_and_range_for_minimum_and_maximum_in_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_list_and_range_for_minimum_and_maximum_in_range),
+        cmocka_unit_test(test_cant_locate_zigbee_descriptor_with_bad_input_versions),
+        cmocka_unit_test(test_version_parsing),
+        cmocka_unit_test(test_version_compare),
+        cmocka_unit_test(test_denylist),
+        cmocka_unit_test(test_denylist_empty_uuid),
+        cmocka_unit_test(test_denylist_missing_uuid),
+        cmocka_unit_test(test_null_version_compare)};
 
     int rc = cmocka_run_group_tests(tests, NULL, NULL);
     return rc;

@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -24,23 +24,23 @@
 //
 
 // cmocka & it's dependencies
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
+#include <cmocka.h>
 #include <errno.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <icLog/logging.h>
 #include <icConcurrent/icThreadSafeWrapper.h>
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
-#define LOG_TAG "ThreadSafeWrapperTest"
+#define LOG_TAG              "ThreadSafeWrapperTest"
 #define INITIAL_VALUE_PREFIX "initialValue"
-#define INITIAL_VALUE INITIAL_VALUE_PREFIX" "
+#define INITIAL_VALUE        INITIAL_VALUE_PREFIX " "
 
 static void *autoAssignFunc();
 static bool checkReleaseFunc(void *item);
@@ -59,7 +59,7 @@ static void *autoAssignFunc()
 
 static void *conditionAssignFunc()
 {
-    return strdup(INITIAL_VALUE_PREFIX"X");
+    return strdup(INITIAL_VALUE_PREFIX "X");
 }
 
 static bool checkReleaseFunc(void *item)
@@ -69,9 +69,9 @@ static bool checkReleaseFunc(void *item)
 
 static void modifyFunc(void *item, void *context)
 {
-    char *replaceChar = (char *)context;
-    char *str = (char *)item;
-    str[strlen(INITIAL_VALUE)-1] = *replaceChar;
+    char *replaceChar = (char *) context;
+    char *str = (char *) item;
+    str[strlen(INITIAL_VALUE) - 1] = *replaceChar;
 }
 
 static void readFunc(const void *item, const void *context)
@@ -124,11 +124,11 @@ static void test_asyncModifyAndThenRead(void **state)
     threadSafeWrapperAssignItem(&manualAssignWrapper, strdup(INITIAL_VALUE));
 
     // Write
-    threadSafeWrapperEnqueueModification(&manualAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc,
-                                         NULL);
+    threadSafeWrapperEnqueueModification(
+        &manualAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc, NULL);
 
     // Read
-    assert_true(threadSafeWrapperReadItem(&manualAssignWrapper, readFunc, INITIAL_VALUE_PREFIX"A"));
+    assert_true(threadSafeWrapperReadItem(&manualAssignWrapper, readFunc, INITIAL_VALUE_PREFIX "A"));
 
     // Cleanup
     threadSafeWrapperReleaseItem(&manualAssignWrapper);
@@ -148,7 +148,7 @@ static void test_syncModifyAndThenRead(void **state)
     threadSafeWrapperModifyItem(&manualAssignWrapper, modifyFunc, "A");
 
     // Read
-    assert_true(threadSafeWrapperReadItem(&manualAssignWrapper, readFunc, INITIAL_VALUE_PREFIX"A"));
+    assert_true(threadSafeWrapperReadItem(&manualAssignWrapper, readFunc, INITIAL_VALUE_PREFIX "A"));
 
     // Cleanup
     threadSafeWrapperReleaseItem(&manualAssignWrapper);
@@ -162,11 +162,11 @@ static void test_asyncModifyAndThenReadWithAutoAssign(void **state)
     icLogDebug(LOG_TAG, "running test '%s'", __FUNCTION__);
 
     // Put something in, should auto assign
-    threadSafeWrapperEnqueueModification(&autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc,
-                                         NULL);
+    threadSafeWrapperEnqueueModification(
+        &autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc, NULL);
 
     // Read
-    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX"A"));
+    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX "A"));
 
     // Cleanup
     threadSafeWrapperReleaseItem(&autoAssignWrapper);
@@ -183,7 +183,7 @@ static void test_syncModifyAndThenReadWithAutoAssign(void **state)
     threadSafeWrapperModifyItem(&autoAssignWrapper, modifyFunc, "A");
 
     // Read
-    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX"A"));
+    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX "A"));
 
     // Cleanup
     threadSafeWrapperReleaseItem(&autoAssignWrapper);
@@ -197,13 +197,13 @@ static void test_asyncModifyWhileReadingIsDelayed(void **state)
     icLogDebug(LOG_TAG, "running test '%s'", __FUNCTION__);
 
     // Put something in, should auto assign
-    threadSafeWrapperEnqueueModification(&autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc,
-                                         NULL);
+    threadSafeWrapperEnqueueModification(
+        &autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc, NULL);
 
     // Kick off a thead to do a read
     pthread_mutex_lock(&mutex);
     pthread_t thread;
-    createThread(&thread, readThread, INITIAL_VALUE_PREFIX"A", "readA");
+    createThread(&thread, readThread, INITIAL_VALUE_PREFIX "A", "readA");
     bool failed = false;
 
     if (incrementalCondTimedWait(&readStartCond, &mutex, 5) == ETIMEDOUT)
@@ -212,8 +212,8 @@ static void test_asyncModifyWhileReadingIsDelayed(void **state)
     }
     else
     {
-        threadSafeWrapperEnqueueModification(&autoAssignWrapper, modifyFunc, "B", threadSafeWrapperDoNotFreeContextFunc,
-                                             NULL);
+        threadSafeWrapperEnqueueModification(
+            &autoAssignWrapper, modifyFunc, "B", threadSafeWrapperDoNotFreeContextFunc, NULL);
     }
 
     // Finish the read
@@ -226,7 +226,7 @@ static void test_asyncModifyWhileReadingIsDelayed(void **state)
     pthread_join(thread, NULL);
 
     // Now read again, it should be applied
-    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX"B"));
+    assert_true(threadSafeWrapperReadItem(&autoAssignWrapper, readFunc, INITIAL_VALUE_PREFIX "B"));
 
     // Cleanup
     threadSafeWrapperReleaseItem(&autoAssignWrapper);
@@ -240,13 +240,13 @@ static void test_releaseWhileReadingIsSafe(void **state)
     icLogDebug(LOG_TAG, "running test '%s'", __FUNCTION__);
 
     // Put something in, should auto assign
-    threadSafeWrapperEnqueueModification(&autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc,
-                                         NULL);
+    threadSafeWrapperEnqueueModification(
+        &autoAssignWrapper, modifyFunc, "A", threadSafeWrapperDoNotFreeContextFunc, NULL);
 
     // Kick off a thead to do a read
     pthread_mutex_lock(&mutex);
     pthread_t thread;
-    createThread(&thread, readThread, INITIAL_VALUE_PREFIX"A", "readA");
+    createThread(&thread, readThread, INITIAL_VALUE_PREFIX "A", "readA");
     bool failed = false;
 
     if (incrementalCondTimedWait(&readStartCond, &mutex, 5) == ETIMEDOUT)
@@ -255,8 +255,8 @@ static void test_releaseWhileReadingIsSafe(void **state)
     }
     else
     {
-        threadSafeWrapperEnqueueModification(&autoAssignWrapper, modifyFunc, "B", threadSafeWrapperDoNotFreeContextFunc,
-                                             NULL);
+        threadSafeWrapperEnqueueModification(
+            &autoAssignWrapper, modifyFunc, "B", threadSafeWrapperDoNotFreeContextFunc, NULL);
 
         // release it
         threadSafeWrapperReleaseItem(&autoAssignWrapper);
@@ -308,16 +308,15 @@ int main(int argc, const char **argv)
     initTimedWaitCond(&continueReadCond);
 
     // make our array of tests to run
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_asyncModifyAndThenRead),
-                    cmocka_unit_test(test_syncModifyAndThenRead),
-                    cmocka_unit_test(test_asyncModifyAndThenReadWithAutoAssign),
-                    cmocka_unit_test(test_syncModifyAndThenReadWithAutoAssign),
-                    cmocka_unit_test(test_asyncModifyWhileReadingIsDelayed),
-                    cmocka_unit_test(test_releaseWhileReadingIsSafe),
-                    cmocka_unit_test(test_assignIfReleased),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_asyncModifyAndThenRead),
+        cmocka_unit_test(test_syncModifyAndThenRead),
+        cmocka_unit_test(test_asyncModifyAndThenReadWithAutoAssign),
+        cmocka_unit_test(test_syncModifyAndThenReadWithAutoAssign),
+        cmocka_unit_test(test_asyncModifyWhileReadingIsDelayed),
+        cmocka_unit_test(test_releaseWhileReadingIsSafe),
+        cmocka_unit_test(test_assignIfReleased),
+    };
 
     // fire off the suite of tests
     int retval = cmocka_run_group_tests(tests, NULL, NULL);

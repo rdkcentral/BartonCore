@@ -32,42 +32,43 @@
  * Author: jelderton -  8/30/16.
  *-----------------------------------------------*/
 
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/error.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include <errno.h>
 #include <icConfig/protectedConfig.h>
 #include <icConfig/simpleProtectConfig.h>
 #include <icLog/logging.h>
 #include <icUtil/base64.h>
-#include <errno.h>
 #include <stdio.h>
 
 // the algorithm to use.  needs to stay consistant, however
 // could become an input parm to the public functions
 //
-#define MY_ALGO     GNUTLS_CIPHER_AES_256_CBC
-#define LOG_TAG     "protect"
-#define ERR_LEN     128
+#define MY_ALGO      GNUTLS_CIPHER_AES_256_CBC
+#define LOG_TAG      "protect"
+#define ERR_LEN      128
 /**
  * @var Output separator character for marking encoded message parts.
  */
-#define SEP '$'
+#define SEP          '$'
 /**
  * @var Length for the version conversion buffer. The value is clamped to uint8_t max (3 digits) by extractParts.
  */
-#define VER_LEN 4
+#define VER_LEN      4
 /**
  * @var AES cipher block size in bytes
  */
-#define AES_BLK 16
+#define AES_BLK      16
 #define AES_KEY_BITS 256
 
-enum {
+enum
+{
     MSG_PART_VERSION = 0,
     MSG_PART_IV,
     MSG_PART_DATA,
@@ -79,7 +80,8 @@ enum {
  * @brief Describes b64 encoded encrypted messages
  * @note The message format is "$version$IV$encrypted" where each part is base64 encoded.
  */
-struct encParts {
+struct encParts
+{
     uint_fast8_t version;
     unsigned char *iv;
     unsigned char *data;
@@ -114,7 +116,7 @@ static bool isReady(void);
 static bool extractParts(char *msg, struct encParts *parts)
 {
     char *strtok_state;
-    const char sep[2] = { SEP, '\0' };
+    const char sep[2] = {SEP, '\0'};
     int i = 0;
     char *token = NULL;
     unsigned long tmp = 0;
@@ -127,7 +129,7 @@ static bool extractParts(char *msg, struct encParts *parts)
 
     while ((token = strtok_r(msg, sep, &strtok_state)) != NULL)
     {
-        switch(i)
+        switch (i)
         {
             case MSG_PART_VERSION:
                 errno = 0;
@@ -358,9 +360,9 @@ pcData *protectConfigData(pcData *dataToProtect, pcData *password)
 
     // create buffer to encode into (happens to be our return object)
     //
-    pcData *retVal = (pcData *)malloc(sizeof(pcData));
+    pcData *retVal = (pcData *) malloc(sizeof(pcData));
     retVal->length = len;
-    retVal->data = (unsigned char *)calloc(len, sizeof(unsigned char));
+    retVal->data = (unsigned char *) calloc(len, sizeof(unsigned char));
 
     // make input the same length
     //
@@ -383,7 +385,7 @@ pcData *protectConfigData(pcData *dataToProtect, pcData *password)
     {
         // good encrypt, so base64 encode
         //
-        char *encoded = icEncodeBase64(retVal->data, (uint16_t)retVal->length);
+        char *encoded = icEncodeBase64(retVal->data, (uint16_t) retVal->length);
         char *iv_encoded = icEncodeBase64(iv, AES_BLK);
         if (encoded != NULL && iv_encoded != NULL)
         {
@@ -392,9 +394,9 @@ pcData *protectConfigData(pcData *dataToProtect, pcData *password)
             free(retVal->data);
 
             /*
-             * Write the ciphertext with IV as SEP<VER>SEP<b64IV><SEP><b64CT>. If the decrypter finds this (it should), it will
-             * feed the IV back into the symmetric algorithm to enable decryption. NB: The decrypter will read the version
-             * if it exists and act accordingly. Legacy values have a zero IV that is not written out.
+             * Write the ciphertext with IV as SEP<VER>SEP<b64IV><SEP><b64CT>. If the decrypter finds this (it should),
+             * it will feed the IV back into the symmetric algorithm to enable decryption. NB: The decrypter will read
+             * the version if it exists and act accordingly. Legacy values have a zero IV that is not written out.
              */
             if (enc_ver > PROTECT_AES_CBC_NO_IV)
             {
@@ -415,7 +417,8 @@ pcData *protectConfigData(pcData *dataToProtect, pcData *password)
             }
             else
             {
-                /* Legacy code does not understand the multipart format; only give the encrypted value (IV was zeroized) */
+                /* Legacy code does not understand the multipart format; only give the encrypted value (IV was zeroized)
+                 */
                 retVal->length = (uint32_t) strlen(encoded);
                 retVal->data = encoded;
             }
@@ -466,7 +469,7 @@ pcData *unprotectConfigData(pcData *protectedData, pcData *password)
     uint32_t inputLen = 0;
     uint8_t *decoded = NULL;
     uint16_t decodedLen = 0;
-    struct encParts parts = { .data = "", .version = PROTECT_ID_UNDEFINED, .iv = "" };
+    struct encParts parts = {.data = "", .version = PROTECT_ID_UNDEFINED, .iv = ""};
     unsigned char *b64_ct = NULL;
     unsigned char *msg = NULL;
     /* Least significant bits of block size (e.g., 0000 1111b) for block alignment computation */
@@ -532,13 +535,17 @@ pcData *unprotectConfigData(pcData *protectedData, pcData *password)
         pthread_mutex_lock(&INIT_MUTEX);
         if (!ver_was_set)
         {
-            icLogWarn(LOG_TAG, "Found encrypted value with version: %d, future writes will not upgrade it.", parts.version);
+            icLogWarn(
+                LOG_TAG, "Found encrypted value with version: %d, future writes will not upgrade it.", parts.version);
             use_ver = PROTECT_AES_CBC_NO_IV;
             parts.version = use_ver;
         }
         else
         {
-            icLogInfo(LOG_TAG, "Found encrypted value with version: %d, future writes will upgrade it to %d", parts.version, use_ver);
+            icLogInfo(LOG_TAG,
+                      "Found encrypted value with version: %d, future writes will upgrade it to %d",
+                      parts.version,
+                      use_ver);
         }
         pthread_mutex_unlock(&INIT_MUTEX);
     }
@@ -547,7 +554,7 @@ pcData *unprotectConfigData(pcData *protectedData, pcData *password)
         // decoded, so use 'decoded' as input to decrypt
         //
         input = decoded;
-        inputLen = (uint32_t)decodedLen;
+        inputLen = (uint32_t) decodedLen;
     }
     else
     {
@@ -581,9 +588,9 @@ pcData *unprotectConfigData(pcData *protectedData, pcData *password)
     // create output buffer (assume same length as input), however add
     // one extra character to the calloc to allow for the terminating NULL char
     //
-    retVal = (pcData *)malloc(sizeof(pcData));
+    retVal = (pcData *) malloc(sizeof(pcData));
     retVal->length = inputLen;
-    retVal->data = (unsigned char *)calloc(inputLen + 1, sizeof(unsigned char));
+    retVal->data = (unsigned char *) calloc(inputLen + 1, sizeof(unsigned char));
     retVal->version = parts.version;
 
     // decrypt, saving result into 'retVal'
@@ -606,9 +613,9 @@ pcData *unprotectConfigData(pcData *protectedData, pcData *password)
         retVal->length--;
     }
 
-    // cleanup and return
-    //
-    cleanup:
+// cleanup and return
+//
+cleanup:
     if (decoded != NULL)
     {
         free(decoded);
@@ -639,9 +646,9 @@ pcData *generateProtectPassword(void)
 
     // good to go, so place in a pcData container
     //
-    pcData *retVal = (pcData *)malloc(sizeof(pcData));
+    pcData *retVal = (pcData *) malloc(sizeof(pcData));
     retVal->data = key;
-    retVal->length = (uint32_t)len;
+    retVal->length = (uint32_t) len;
 
     return retVal;
 }
@@ -685,4 +692,3 @@ void destroyProtectConfigData(pcData *data, bool includeData)
         free(data);
     }
 }
-

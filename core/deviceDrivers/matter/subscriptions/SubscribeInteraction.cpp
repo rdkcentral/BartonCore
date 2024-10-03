@@ -50,9 +50,8 @@ CHIP_ERROR SubscribeInteraction::OnResubscriptionNeeded(chip::app::ReadClient *a
                     timeTillNextResubscription,
                     aTerminationCause.Format());
 
-    return apReadClient->ScheduleResubscription(timeTillNextResubscription,
-                                                chip::NullOptional,
-                                                aTerminationCause == CHIP_ERROR_TIMEOUT);
+    return apReadClient->ScheduleResubscription(
+        timeTillNextResubscription, chip::NullOptional, aTerminationCause == CHIP_ERROR_TIMEOUT);
 }
 
 uint32_t SubscribeInteraction::CustomComputeTimeTillNextSubscription()

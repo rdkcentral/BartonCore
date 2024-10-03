@@ -86,4 +86,4 @@ bool canWriteToSocket(int32_t sockFD, time_t timeoutSecs);
  */
 bool setTCPUserTimeout(int socket, unsigned int timeoutMillis);
 
-#endif //ZILKER_SOCKETUTILS_H
+#endif // ZILKER_SOCKETUTILS_H

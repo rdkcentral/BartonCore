@@ -49,20 +49,21 @@
  * Author: jelderton - 10/19/22
  *-----------------------------------------------*/
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
-#include <icUtil/icStateMachine.h>
 #include <icTypes/icLinkedList.h>
+#include <icUtil/icStateMachine.h>
 
 /*
  * each "state" has a numeric value (allows for enums) and transition actions.
  */
-typedef struct fsmState {
-    int stateValue;                          // numeric value of the state
-    int offset;                              // reflect position within list.  primarily used for "traveling"
-    stateTransitionActionFunc transitionFunc;// optional
-    stateChangeNotifyFunc notifyFunc;        // optional
+typedef struct fsmState
+{
+    int stateValue;                           // numeric value of the state
+    int offset;                               // reflect position within list.  primarily used for "traveling"
+    stateTransitionActionFunc transitionFunc; // optional
+    stateChangeNotifyFunc notifyFunc;         // optional
 } fsmState;
 
 /*
@@ -71,18 +72,20 @@ typedef struct fsmState {
  */
 struct icStateMachine
 {
-    fsmState            *currState;     // pointer to an element in stateList
-    icLinkedList        *stateList;     // list of fsmState objects in "added" order
+    fsmState *currState;     // pointer to an element in stateList
+    icLinkedList *stateList; // list of fsmState objects in "added" order
 };
 
 // used by stateMachineTravelToState when "folding" the stateList
-typedef struct travelBounds {
+typedef struct travelBounds
+{
     int startOffset;
     int endOffset;
 } travelBounds;
 
 // private functions
-static fsmState *createState(int value, stateTransitionActionFunc transitionActionFunc, stateChangeNotifyFunc notificationFunc);
+static fsmState *
+createState(int value, stateTransitionActionFunc transitionActionFunc, stateChangeNotifyFunc notificationFunc);
 static void destroyState(fsmState *state);
 static void destroyStateFromList(void *item);
 static fsmState *findStateFromList(icLinkedList *list, int stateValue);
@@ -97,7 +100,7 @@ static void *filterStatesWithinRange(void *item, void *context);
  **/
 icStateMachine *stateMachineCreate(void)
 {
-    icStateMachine *retVal = (icStateMachine *)calloc(1, sizeof(icStateMachine));
+    icStateMachine *retVal = (icStateMachine *) calloc(1, sizeof(icStateMachine));
     retVal->stateList = linkedListCreate();
 
     return retVal;
@@ -134,7 +137,8 @@ void stateMachineDestroy(icStateMachine *machine)
  *
  * @see stateMachineSetCurrentState()
  **/
-bool stateMachineAppendState(icStateMachine *machine, int stateValue,
+bool stateMachineAppendState(icStateMachine *machine,
+                             int stateValue,
                              stateTransitionActionFunc transitionActionFunc,
                              stateChangeNotifyFunc notificationFunc)
 {
@@ -168,7 +172,8 @@ bool stateMachineAppendState(icStateMachine *machine, int stateValue,
         search = NULL;
     }
 
-    return retVal;;
+    return retVal;
+    ;
 }
 
 /**
@@ -290,15 +295,13 @@ fsmSetStateResult stateMachineTravelToState(icStateMachine *machine, int targetS
     if (startOffset < endOffset)
     {
         // left-to-right
-        travelBounds range = { .startOffset = startOffset,
-                               .endOffset = endOffset };
+        travelBounds range = {.startOffset = startOffset, .endOffset = endOffset};
         travelStates = linkedListFilter(machine->stateList, filterStatesWithinRange, &range);
     }
     else
     {
         // right-to-left
-        travelBounds range = { .startOffset = endOffset,
-                               .endOffset = startOffset };
+        travelBounds range = {.startOffset = endOffset, .endOffset = startOffset};
         icLinkedList *reverse = linkedListFilter(machine->stateList, filterStatesWithinRange, &range);
         travelStates = linkedListReverse(reverse);
         linkedListDestroy(reverse, standardDoNotFreeFunc);
@@ -308,10 +311,9 @@ fsmSetStateResult stateMachineTravelToState(icStateMachine *machine, int targetS
     fsmSetStateResult rc = FSM_SET_STATE_SUCCESS;
     bool didSkip = false;
     icLinkedListIterator *loop = linkedListIteratorCreate(travelStates);
-    while (linkedListIteratorHasNext(loop) == true &&
-           rc == FSM_SET_STATE_SUCCESS)
+    while (linkedListIteratorHasNext(loop) == true && rc == FSM_SET_STATE_SUCCESS)
     {
-        fsmState *curr = (fsmState *)linkedListIteratorGetNext(loop);
+        fsmState *curr = (fsmState *) linkedListIteratorGetNext(loop);
         if (didSkip == false)
         {
             // no need to 'set state' to where we start
@@ -331,11 +333,10 @@ fsmSetStateResult stateMachineTravelToState(icStateMachine *machine, int targetS
 /**
  * allocate a single state object
  **/
-static fsmState *createState(int value,
-                             stateTransitionActionFunc transitionActionFunc,
-                             stateChangeNotifyFunc notificationFunc)
+static fsmState *
+createState(int value, stateTransitionActionFunc transitionActionFunc, stateChangeNotifyFunc notificationFunc)
 {
-    fsmState *retVal = (fsmState *)calloc(1, sizeof(fsmState));
+    fsmState *retVal = (fsmState *) calloc(1, sizeof(fsmState));
     retVal->stateValue = value;
     retVal->transitionFunc = transitionActionFunc;
     retVal->notifyFunc = notificationFunc;
@@ -357,7 +358,7 @@ static void destroyState(fsmState *state)
  **/
 static void destroyStateFromList(void *item)
 {
-    destroyState((fsmState *)item);
+    destroyState((fsmState *) item);
 }
 
 /**
@@ -365,8 +366,8 @@ static void destroyStateFromList(void *item)
  **/
 static bool compareStateByValue(void *searchVal, void *item)
 {
-    int *searchStateValue = (int *)searchVal;
-    fsmState *stateObj = (fsmState *)item;
+    int *searchStateValue = (int *) searchVal;
+    fsmState *stateObj = (fsmState *) item;
 
     if (stateObj->stateValue == *searchStateValue)
     {
@@ -380,7 +381,7 @@ static bool compareStateByValue(void *searchVal, void *item)
  **/
 static fsmState *findStateFromList(icLinkedList *list, int stateValue)
 {
-    return (fsmState *)linkedListFind(list, &stateValue, compareStateByValue);
+    return (fsmState *) linkedListFind(list, &stateValue, compareStateByValue);
 }
 
 /**
@@ -403,15 +404,13 @@ static int findStateOffsetFromList(icLinkedList *list, int stateValue)
  **/
 static void *filterStatesWithinRange(void *item, void *context)
 {
-    fsmState *state = (fsmState *)item;
-    travelBounds *range = (travelBounds *)context;
+    fsmState *state = (fsmState *) item;
+    travelBounds *range = (travelBounds *) context;
 
-    if (state->offset >= range->startOffset &&
-        state->offset <= range->endOffset)
+    if (state->offset >= range->startOffset && state->offset <= range->endOffset)
     {
-            return state;
+        return state;
     }
 
     return NULL;
 }
-

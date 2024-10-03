@@ -30,7 +30,8 @@
 
 typedef struct _ZigbeeIOContext ZigbeeIOContext;
 
-typedef enum {
+typedef enum
+{
     ZIO_READ,
     ZIO_WRITE
 } ZigbeeIOMode;
@@ -63,7 +64,7 @@ inline void zigbeeIODestroy__auto(ZigbeeIOContext **ctx)
  * Convenience macro to declare a scope bound ZIO context. The context will be
  * destroyed as soon as it leaves the scope it was declared in.
  */
-#define sbZigbeeIOContext AUTO_CLEAN(zigbeeIODestroy__auto) ZigbeeIOContext
+#define sbZigbeeIOContext      AUTO_CLEAN(zigbeeIODestroy__auto) ZigbeeIOContext
 #define scoped_ZigbeeIOContext sbZigbeeIOContext
 
 /**
@@ -172,4 +173,4 @@ void zigbeeIOPutInt32(ZigbeeIOContext *ctx, int32_t val);
  */
 size_t zigbeeIOGetRemainingSize(ZigbeeIOContext *ctx);
 
-#endif //ZILKER_ZIGBEE_IO_H
+#endif // ZILKER_ZIGBEE_IO_H

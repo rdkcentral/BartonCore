@@ -82,9 +82,8 @@ namespace zilker
         using namespace chip::app::Clusters::OnOff;
         using TypeInfo = Attributes::OnOff::TypeInfo;
 
-        chip::app::ConcreteAttributePath path(endpointId,
-                                              chip::app::Clusters::OnOff::Id,
-                                              chip::app::Clusters::OnOff::Attributes::OnOff::Id);
+        chip::app::ConcreteAttributePath path(
+            endpointId, chip::app::Clusters::OnOff::Id, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
         {
             TypeInfo::DecodableType value;
             error = cache->Get<TypeInfo>(path, value);
@@ -131,7 +130,7 @@ namespace zilker
             commandSender->AddRequestData(commandPath, data);
         }
 
-        //hand off the commandSender to the base class
+        // hand off the commandSender to the base class
         return SendCommand(commandSender, sessionHandle, context);
     };
 } // namespace zilker

@@ -34,10 +34,7 @@
 
 typedef struct
 {
-    void (*levelChanged)(uint64_t eui64,
-                         uint8_t endpointId,
-                         uint8_t level,
-                         const void *ctx);
+    void (*levelChanged)(uint64_t eui64, uint8_t endpointId, uint8_t level, const void *ctx);
 } LevelControlClusterCallbacks;
 
 
@@ -51,11 +48,11 @@ void levelControlClusterSetBindingEnabled(const DeviceConfigurationContext *devi
 
 bool levelControlClusterSetAttributeReporting(uint64_t eui64, uint8_t endpointId);
 
-//caller frees
+// caller frees
 char *levelControlClusterGetLevelString(uint8_t level);
 
 uint8_t levelControlClusterGetLevelFromString(const char *level);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_LEVELCONTROLCLUSTER_H
+#endif // ZILKER_LEVELCONTROLCLUSTER_H

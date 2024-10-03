@@ -44,24 +44,25 @@
 #include <string.h>
 #include <unistd.h>
 
-#define LOG_TAG "deviceCommunicationWatchdog"
-#define logFmt(fmt) "%s: " fmt, __func__
+#define LOG_TAG                    "deviceCommunicationWatchdog"
+#define logFmt(fmt)                "%s: " fmt, __func__
 
-#define MONITOR_THREAD_SLEEP_SECS 60
+#define MONITOR_THREAD_SLEEP_SECS  60
 #define MIN_UPDATE_INTERVAL_MILLIS 5000
 
 typedef struct
 {
-    char* uuid;                                     // device id
-    uint32_t commFailTimeoutSeconds;                // default timeout for device (in seconds)
-    uint32_t commFailTimeRemainingMillis;           // Time remaining until comm fail. Read with getMillisUntilCommFail
-    uint64_t commFailRemainingLastSyncMillis;       // Monotonic timestamp of last time remaining update. set with setMillisUntilCommFail
-    bool inCommFail;                                // flag for if in commFail (true) or not (false)
+    char *uuid;                               // device id
+    uint32_t commFailTimeoutSeconds;          // default timeout for device (in seconds)
+    uint32_t commFailTimeRemainingMillis;     // Time remaining until comm fail. Read with getMillisUntilCommFail
+    uint64_t commFailRemainingLastSyncMillis; // Monotonic timestamp of last time remaining update. set with
+                                              // setMillisUntilCommFail
+    bool inCommFail;                          // flag for if in commFail (true) or not (false)
 } MonitoredDeviceInfo;
 
 static pthread_mutex_t monitoredDevicesMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t monitorThreadId;
-static icHashMap* monitoredDevices = NULL;
+static icHashMap *monitoredDevices = NULL;
 static void monitoredDevicesEntryDestroy(void *key, void *value);
 static uint32_t getMillisUntilCommFail(const MonitoredDeviceInfo *info);
 static uint64_t setMillisUntilCommFail(MonitoredDeviceInfo *info, uint32_t millisUntilCommFail);
@@ -73,7 +74,7 @@ static pthread_mutex_t controlMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t controlCond = PTHREAD_COND_INITIALIZER;
 static bool fastCommFailTimer = false;
 
-static void* commFailWatchdogThreadProc(void* arg);
+static void *commFailWatchdogThreadProc(void *arg);
 static bool running = false;
 static uint32_t monitorThreadSleepSeconds = MONITOR_THREAD_SLEEP_SECS;
 
@@ -137,7 +138,7 @@ void deviceCommunicationWatchdogTerm()
     pthread_join(monitorThreadId, NULL);
 }
 
-void deviceCommunicationWatchdogMonitorDevice(const char* uuid, const uint32_t commFailTimeoutSeconds, bool inCommFail)
+void deviceCommunicationWatchdogMonitorDevice(const char *uuid, const uint32_t commFailTimeoutSeconds, bool inCommFail)
 {
     icLogDebug(LOG_TAG,
                "%s: start monitoring %s with commFailTimeoutSeconds %d, inCommFail %s",
@@ -156,7 +157,7 @@ void deviceCommunicationWatchdogMonitorDevice(const char* uuid, const uint32_t c
 
     if (running == true)
     {
-        MonitoredDeviceInfo* info = (MonitoredDeviceInfo*) calloc(1, sizeof(MonitoredDeviceInfo));
+        MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) calloc(1, sizeof(MonitoredDeviceInfo));
         info->uuid = strdup(uuid);
         info->commFailTimeoutSeconds = commFailTimeoutSeconds;
         info->inCommFail = inCommFail;
@@ -177,16 +178,16 @@ void deviceCommunicationWatchdogMonitorDevice(const char* uuid, const uint32_t c
     pthread_mutex_unlock(&monitoredDevicesMutex);
 }
 
-void deviceCommunicationWatchdogStopMonitoringDevice(const char* uuid)
+void deviceCommunicationWatchdogStopMonitoringDevice(const char *uuid)
 {
     icLogDebug(LOG_TAG, "%s: stop monitoring %s", __FUNCTION__, uuid);
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    hashMapDelete(monitoredDevices, (void*) uuid, (uint16_t) (strlen(uuid) + 1), monitoredDevicesEntryDestroy);
+    hashMapDelete(monitoredDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1), monitoredDevicesEntryDestroy);
     pthread_mutex_unlock(&monitoredDevicesMutex);
 }
 
-void deviceCommunicationWatchdogPetDevice(const char* uuid)
+void deviceCommunicationWatchdogPetDevice(const char *uuid)
 {
     if (uuid == NULL)
     {
@@ -197,9 +198,8 @@ void deviceCommunicationWatchdogPetDevice(const char* uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo* info = (MonitoredDeviceInfo*) hashMapGet(monitoredDevices,
-                                                                  (void*) uuid,
-                                                                  (uint16_t) (strlen(uuid) + 1));
+    MonitoredDeviceInfo *info =
+        (MonitoredDeviceInfo *) hashMapGet(monitoredDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
     if (info != NULL)
     {
         if (setMillisUntilCommFail(info, info->commFailTimeoutSeconds * 1000) >= MIN_UPDATE_INTERVAL_MILLIS)
@@ -246,9 +246,8 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo*) hashMapGet(monitoredDevices,
-                                                                  (void *) uuid,
-                                                                  (uint16_t) (strlen(uuid) + 1));
+    MonitoredDeviceInfo *info =
+        (MonitoredDeviceInfo *) hashMapGet(monitoredDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -278,8 +277,8 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
 
 int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char *uuid, uint32_t commFailDelaySeconds)
 {
-    //FIXME: int32 is narrower than uint32 and may overflow. In practice, commFailDelaySeconds is < uint16_t
-    // and should just be changed to uint16_t.
+    // FIXME: int32 is narrower than uint32 and may overflow. In practice, commFailDelaySeconds is < uint16_t
+    //  and should just be changed to uint16_t.
     int32_t secsUntilCommFail = -1;
     if (uuid == NULL)
     {
@@ -289,9 +288,8 @@ int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char 
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo*) hashMapGet(monitoredDevices,
-                                                                  (void *) uuid,
-                                                                  (uint16_t) (strlen(uuid) + 1));
+    MonitoredDeviceInfo *info =
+        (MonitoredDeviceInfo *) hashMapGet(monitoredDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
     if (info != NULL)
     {
 
@@ -322,8 +320,7 @@ int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char 
             }
         }
 
-        icLogDebug(LOG_TAG, "%s: device %s has %"PRIi32 "seconds until comm fail",
-                   __func__, uuid, secsUntilCommFail);
+        icLogDebug(LOG_TAG, "%s: device %s has %" PRIi32 "seconds until comm fail", __func__, uuid, secsUntilCommFail);
     }
 
     pthread_mutex_unlock(&monitoredDevicesMutex);
@@ -339,13 +336,16 @@ void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uui
         return;
     }
 
-    icLogDebug(LOG_TAG, "%s: setting new commFail time remaining %d for device %s", __FUNCTION__, commFailTimeRemainingSeconds, uuid);
+    icLogDebug(LOG_TAG,
+               "%s: setting new commFail time remaining %d for device %s",
+               __FUNCTION__,
+               commFailTimeRemainingSeconds,
+               uuid);
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo*) hashMapGet(monitoredDevices,
-                                                                  (void *) uuid,
-                                                                  (uint16_t) (strlen(uuid) + 1));
+    MonitoredDeviceInfo *info =
+        (MonitoredDeviceInfo *) hashMapGet(monitoredDevices, (void *) uuid, (uint16_t) (strlen(uuid) + 1));
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -365,9 +365,9 @@ void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uui
     pthread_mutex_unlock(&monitoredDevicesMutex);
 }
 
-static void monitoredDevicesEntryDestroy(void* key, void* value)
+static void monitoredDevicesEntryDestroy(void *key, void *value)
 {
-    MonitoredDeviceInfo* info = (MonitoredDeviceInfo*) value;
+    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) value;
     free(info->uuid);
     free(info);
 }
@@ -382,7 +382,8 @@ static uint32_t getMillisUntilCommFail(const MonitoredDeviceInfo *info)
         millisUntilCommFail = info->commFailTimeRemainingMillis - millisSinceLastCheck;
     }
 
-    icLogTrace(LOG_TAG, "%s: device %s has %"PRIu32 " millis until commFail", __func__, info->uuid, millisUntilCommFail);
+    icLogTrace(
+        LOG_TAG, "%s: device %s has %" PRIu32 " millis until commFail", __func__, info->uuid, millisUntilCommFail);
 
     return millisUntilCommFail;
 }
@@ -398,7 +399,7 @@ static uint64_t setMillisUntilCommFail(MonitoredDeviceInfo *info, uint32_t milli
     return diffMillis;
 }
 
-static void* commFailWatchdogThreadProc(void* arg)
+static void *commFailWatchdogThreadProc(void *arg)
 {
     icLogDebug(LOG_TAG, "%s: starting up", __FUNCTION__);
 
@@ -426,17 +427,17 @@ static void* commFailWatchdogThreadProc(void* arg)
 
         pthread_mutex_unlock(&controlMutex);
 
-        icLinkedList* uuidsInCommFail = linkedListCreate();
+        icLinkedList *uuidsInCommFail = linkedListCreate();
 
-        //iterate over all monitored devices and check to see if any have hit comm fail
+        // iterate over all monitored devices and check to see if any have hit comm fail
         pthread_mutex_lock(&monitoredDevicesMutex);
-        icHashMapIterator* it = hashMapIteratorCreate(monitoredDevices);
+        icHashMapIterator *it = hashMapIteratorCreate(monitoredDevices);
         while (hashMapIteratorHasNext(it))
         {
-            char* uuid;
+            char *uuid;
             uint16_t uuidLen;
-            MonitoredDeviceInfo* info;
-            if (hashMapIteratorGetNext(it, (void**) &uuid, &uuidLen, (void**) &info))
+            MonitoredDeviceInfo *info;
+            if (hashMapIteratorGetNext(it, (void **) &uuid, &uuidLen, (void **) &info))
             {
                 uint32_t millisUntilCommFail = getMillisUntilCommFail(info);
 
@@ -455,10 +456,13 @@ static void* commFailWatchdogThreadProc(void* arg)
                     linkedListAppend(uuidsInCommFail, strdup(uuid));
                 }
 
-                icLogTrace(LOG_TAG, "%s: device %s; millisLeft=%"PRIu32
-                                     "; lastChecked=%"PRIu64 "; inCommFail=%s",
-                           __FUNCTION__, uuid, millisUntilCommFail,
-                           info->commFailRemainingLastSyncMillis, stringValueOfBool(info->inCommFail));
+                icLogTrace(LOG_TAG,
+                           "%s: device %s; millisLeft=%" PRIu32 "; lastChecked=%" PRIu64 "; inCommFail=%s",
+                           __FUNCTION__,
+                           uuid,
+                           millisUntilCommFail,
+                           info->commFailRemainingLastSyncMillis,
+                           stringValueOfBool(info->inCommFail));
 
                 setMillisUntilCommFail(info, millisUntilCommFail);
             }
@@ -466,10 +470,10 @@ static void* commFailWatchdogThreadProc(void* arg)
         hashMapIteratorDestroy(it);
         pthread_mutex_unlock(&monitoredDevicesMutex);
 
-        icLinkedListIterator* iterator = linkedListIteratorCreate(uuidsInCommFail);
+        icLinkedListIterator *iterator = linkedListIteratorCreate(uuidsInCommFail);
         while (linkedListIteratorHasNext(iterator))
         {
-            char* uuid = (char*) linkedListIteratorGetNext(iterator);
+            char *uuid = (char *) linkedListIteratorGetNext(iterator);
             icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, uuid);
             failedCallback(uuid);
         }

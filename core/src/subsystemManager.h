@@ -26,11 +26,11 @@
 #ifndef FLEXCORE_SUBSYSTEMMANAGER_H
 #define FLEXCORE_SUBSYSTEMMANAGER_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "subsystemManagerCallbacks.h"
 #include <device/icDevice.h>
 #include <icTypes/icLinkedList.h>
-#include "subsystemManagerCallbacks.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef struct Subsystem
 {
@@ -43,10 +43,10 @@ typedef struct Subsystem
     bool (*migrate)(uint16_t oldVersion, uint16_t newVersion);
 
     /**
-     * Initialize. Synchronously perform any initialization required to support subsystem API functions in DeviceDriver::startup().
-     * Asynchronously configure supporting hardware required to support normal device operations.
-     * When the subsystem is ready for normal operations, invoke initializedCallback.
-     * If the subsystem becomes unready for any reason, invoke deInitializedCallback.
+     * Initialize. Synchronously perform any initialization required to support subsystem API functions in
+     * DeviceDriver::startup(). Asynchronously configure supporting hardware required to support normal device
+     * operations. When the subsystem is ready for normal operations, invoke initializedCallback. If the subsystem
+     * becomes unready for any reason, invoke deInitializedCallback.
      * @note required
      */
     bool (*initialize)(subsystemInitializedFunc initializedCallback, subsystemDeInitializedFunc deInitializedCallback);
@@ -204,4 +204,4 @@ icLinkedList *subsystemManagerGetRegisteredSubsystems(void);
  */
 cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName);
 
-#endif //FLEXCORE_SUBSYSTEMMANAGER_H
+#endif // FLEXCORE_SUBSYSTEMMANAGER_H

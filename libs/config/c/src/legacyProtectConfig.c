@@ -33,25 +33,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <icLog/logging.h>
 #include <icConfig/legacyProtectConfig.h>
+#include <icLog/logging.h>
 
 // allow enable/disable support of legacy encryption
 #ifdef CONFIG_LIB_LEGACY_ENCRYPTION
 
-#define LOG_TAG     "decode"
+#define LOG_TAG "decode"
 
-#include <openssl/md5.h>
-#include <openssl/des.h>
-#include <icUtil/base64.h>
 #include <icTypes/sbrm.h>
+#include <icUtil/base64.h>
 #include <icUtil/stringUtils.h>
+#include <openssl/des.h>
+#include <openssl/md5.h>
 
-#define SALT_SIZE       8
-#define DES_BLOCK_SIZE  8
-#define PASSWORD_SIZE   26
-#define ITERATIONS      20
-#define RESULT_SIZE     16
+#define SALT_SIZE      8
+#define DES_BLOCK_SIZE 8
+#define PASSWORD_SIZE  26
+#define ITERATIONS     20
+#define RESULT_SIZE    16
 
 /**
  * @brief Get Derived Key, 21st MD5 of Password & SALT
@@ -62,12 +62,14 @@
  */
 static unsigned char *getDerivedKey(unsigned char *md5)
 {
-    //TODO: Obfuscate/configparamgen? e2 encrypt passwd/salt?
-    unsigned char salt[SALT_SIZE] = { 0xde, 0x33, 0x10, 0x12, 0xde, 0x33, 0x10, 0x12 };
+    // TODO: Obfuscate/configparamgen? e2 encrypt passwd/salt?
+    unsigned char salt[SALT_SIZE] = {0xde, 0x33, 0x10, 0x12, 0xde, 0x33, 0x10, 0x12};
     /* Most important key. We must never share this key to MSO or Partner. */
-    unsigned char passwd[PASSWORD_SIZE] = { 0x71, 0x77, 0x65, 0x72, 0x74, 0x79, 0x75, 0x69, 0x6f, 0x70, 0x61, 0x73, 0x64, 0x66, 0x67, 0x68, 0x6a, 0x6b, 0x6c, 0x7a,0x78, 0x63, 0x76, 0x62, 0x6e, 0x6d };
-    unsigned char result[RESULT_SIZE] = { 0 };
-    unsigned char inresult[RESULT_SIZE] = { 0 };
+    unsigned char passwd[PASSWORD_SIZE] = {0x71, 0x77, 0x65, 0x72, 0x74, 0x79, 0x75, 0x69, 0x6f,
+                                           0x70, 0x61, 0x73, 0x64, 0x66, 0x67, 0x68, 0x6a, 0x6b,
+                                           0x6c, 0x7a, 0x78, 0x63, 0x76, 0x62, 0x6e, 0x6d};
+    unsigned char result[RESULT_SIZE] = {0};
+    unsigned char inresult[RESULT_SIZE] = {0};
     MD5_CTX mdContext, mdContextFor;
     int index = 0;
 
@@ -114,9 +116,9 @@ bool decryptConfigString(const char *input, unsigned char **out, size_t *len)
     }
 
     /* The stored messages strip the padding, fix it so b64 is valid */
-    char *correctInput = (char *)input;
+    char *correctInput = (char *) input;
     bool freeCorrectInput = false;
-    if (stringEndsWith((char *)input, "==", false) == false)
+    if (stringEndsWith((char *) input, "==", false) == false)
     {
         // append the '==' to the input string
         //
@@ -158,7 +160,7 @@ bool decryptConfigString(const char *input, unsigned char **out, size_t *len)
     // load the key we'll need for the decrypting.  this is an MD5 hash
     // of the salt + private string (copied from the legacy Java code)
     //
-    unsigned char md5[MD5_DIGEST_LENGTH] = { 0 };
+    unsigned char md5[MD5_DIGEST_LENGTH] = {0};
     if (getDerivedKey(md5) == NULL)
     {
         icLogWarn(LOG_TAG, "unable to create digest key in %s", __FUNCTION__);
@@ -182,8 +184,8 @@ bool decryptConfigString(const char *input, unsigned char **out, size_t *len)
     // allocate the output memory (add 1 for a NULL char), then
     // perform the DES CBC decryption via openssl using the md5 and schedule
     //
-    *out = (unsigned char *)calloc(size+1, sizeof(unsigned char));
-    DES_cbc_encrypt(outB64, *out, size, &schedule, (unsigned char (*)[8]) &md5 + 1, DES_DECRYPT);
+    *out = (unsigned char *) calloc(size + 1, sizeof(unsigned char));
+    DES_cbc_encrypt(outB64, *out, size, &schedule, (unsigned char(*)[8]) & md5 + 1, DES_DECRYPT);
 
     // cleanup
     //

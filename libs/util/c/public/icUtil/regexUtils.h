@@ -24,32 +24,31 @@
 #ifndef ZILKER_REGEXUTILS_H
 #define ZILKER_REGEXUTILS_H
 
-#include <regex.h>
-#include <stdbool.h>
 #include "array.h"
 #include <icTypes/icLinkedList.h>
+#include <regex.h>
+#include <stdbool.h>
 
 #define REGEX_GLOBAL 1U
 
 /**
  * Convenience macro to create a replacer with replacement flags (e.g., REGEX_GLOBAL)
  */
-#define REGEX_REPLFLAGS_REPLACER(name, rflags, p, r ...)        \
-static const char *name##_REPLACEMENTS[] = { r };               \
-                                                                \
-static RegexReplacer name = {                                   \
-        .pattern = p,                                           \
-        .replacements = name##_REPLACEMENTS,                    \
-        .numReplacements = ARRAY_LENGTH(name##_REPLACEMENTS),   \
-        .replaceFlags = rflags                                  \
-}
+#define REGEX_REPLFLAGS_REPLACER(name, rflags, p, r...)                                                                \
+    static const char *name##_REPLACEMENTS[] = {r};                                                                    \
+                                                                                                                       \
+    static RegexReplacer name = {.pattern = p,                                                                         \
+                                 .replacements = name##_REPLACEMENTS,                                                  \
+                                 .numReplacements = ARRAY_LENGTH(name##_REPLACEMENTS),                                 \
+                                 .replaceFlags = rflags}
 
 /**
  * Convenience macro to create a statically allocated replacer with no flags set.
  */
-#define REGEX_SIMPLE_REPLACER(name, p, r ...) REGEX_REPLFLAGS_REPLACER(name, 0, p, r)
+#define REGEX_SIMPLE_REPLACER(name, p, r...) REGEX_REPLFLAGS_REPLACER(name, 0, p, r)
 
-typedef struct {
+typedef struct
+{
     /**
      * The regular expression to match
      */
@@ -143,4 +142,4 @@ char *regexReplace(const char *text, RegexReplacer **replacers);
 char *regexReplaceForListOfReplacers(const char *data, icLinkedList *replacersList);
 
 
-#endif //ZILKER_REGEXUTILS_H
+#endif // ZILKER_REGEXUTILS_H

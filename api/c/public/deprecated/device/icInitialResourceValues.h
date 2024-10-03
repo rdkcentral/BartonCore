@@ -63,7 +63,8 @@ bool initialResourceValuesPutDeviceValue(icInitialResourceValues *values, const 
  * @param value the value
  * @return true if value was put, false otherwise
  */
-bool initialResourceValuesPutDeviceValueIfNotExists(icInitialResourceValues *values, const char *resourceId,
+bool initialResourceValuesPutDeviceValueIfNotExists(icInitialResourceValues *values,
+                                                    const char *resourceId,
                                                     const char *value);
 
 /**
@@ -108,7 +109,8 @@ bool initialResourceValuesHasDeviceValue(icInitialResourceValues *values, const 
  * @param resourceId the resource id
  * @return true if an entry for the initial value exists(even if the value is NULL), false if it does not exist
  */
-bool initialResourceValuesHasEndpointValue(icInitialResourceValues *values, const char *endpointId,
+bool initialResourceValuesHasEndpointValue(icInitialResourceValues *values,
+                                           const char *endpointId,
                                            const char *resourceId);
 
 /**
@@ -128,12 +130,11 @@ const char *initialResourceValuesGetDeviceValue(icInitialResourceValues *values,
  * @param resourceId the resource id
  * @return the initial value, which may be NULL
  */
-const char *initialResourceValuesGetEndpointValue(icInitialResourceValues *values, const char *endpointId,
-                                                  const char *resourceId);
+const char *
+initialResourceValuesGetEndpointValue(icInitialResourceValues *values, const char *endpointId, const char *resourceId);
 
 /**
  * Log all the initial resources values that have been set
  * @param values the initial values
  */
 void initialResourcesValuesLogValues(icInitialResourceValues *values);
-

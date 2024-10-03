@@ -23,29 +23,30 @@
 //
 // Created by Micah Koch on 5/02/18.
 //
-#include <icLog/logging.h>
-#include "subsystems/zigbee/zigbeeSubsystem.h"
-#include <device/icDevice.h>
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stddef.h>
+
+#include "subsystems/zigbee/zigbeeSubsystem.h"
 #include <cmocka.h>
-#include <device/deviceModelHelper.h>
 #include <commonDeviceDefs.h>
+#include <device-driver/device-driver.h>
+#include <device/deviceModelHelper.h>
+#include <device/icDevice.h>
+#include <errno.h>
+#include <icLog/logging.h>
+#include <icUtil/fileUtils.h>
 #include <resourceTypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <device-driver/device-driver.h>
-#include <sys/stat.h>
-#include <errno.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
+#include <sys/stat.h>
 #include <zhal/zhal.h>
-#include <icUtil/fileUtils.h>
 
 
-#define LOG_TAG "zigbeeSubsystemTest"
+#define LOG_TAG                 "zigbeeSubsystemTest"
 #define DUMMY_OTA_FIRMWARE_FILE "dummy.ota"
-#define LEGACY_FIRMWARE_FILE "dummy.ebl"
+#define LEGACY_FIRMWARE_FILE    "dummy.ebl"
 
 static int counter = 0;
 static char templateTempDir[255] = "/tmp/testDirXXXXXX";
@@ -54,8 +55,14 @@ static char *dynamicDir;
 icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem);
 DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *device);
 gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir();
-static icDevice *createDummyDevice(const char *manufacturer, const char *model, const char *hardwareVersion, const char *firmwareVersion);
-static DeviceDescriptor *createDeviceDescriptor(const char *manufacturer, const char *model, const char *harwareVersion, const char *firmareVersion);
+static icDevice *createDummyDevice(const char *manufacturer,
+                                   const char *model,
+                                   const char *hardwareVersion,
+                                   const char *firmwareVersion);
+static DeviceDescriptor *createDeviceDescriptor(const char *manufacturer,
+                                                const char *model,
+                                                const char *harwareVersion,
+                                                const char *firmareVersion);
 static void createDummyFirmwareFile(DeviceFirmwareType);
 static char *getDummyFirmwareFilePath(DeviceFirmwareType firmwareType);
 
@@ -67,9 +74,9 @@ static void test_zigbeeSubsystemCleanupFirmwareFiles(void **state)
 {
     // Setup dummy device and cooresponding device descriptor
     icLinkedList *devices = linkedListCreate();
-    linkedListAppend(devices, createDummyDevice("dummy","dummy","1","0x00000001"));
+    linkedListAppend(devices, createDummyDevice("dummy", "dummy", "1", "0x00000001"));
     will_return(__wrap_deviceServiceGetDevicesBySubsystem, devices);
-    DeviceDescriptor *dd = createDeviceDescriptor("dummy","dummy","1","0x00000001");
+    DeviceDescriptor *dd = createDeviceDescriptor("dummy", "dummy", "1", "0x00000001");
     will_return(__wrap_deviceServiceGetDeviceDescriptorForDevice, dd);
     // Create some dummy firmware files to remove
     createDummyFirmwareFile(DEVICE_FIRMWARE_TYPE_ZIGBEE_OTA);
@@ -97,15 +104,15 @@ static void test_zigbeeSubsystemCleanupFirmwareFilesDoNothingIfFirmwareNeeded(vo
 {
     // Setup dummy device and cooresponding device descriptor
     icLinkedList *devices = linkedListCreate();
-    linkedListAppend(devices, createDummyDevice("dummy","dummy","1","0x00000001"));
+    linkedListAppend(devices, createDummyDevice("dummy", "dummy", "1", "0x00000001"));
     will_return(__wrap_deviceServiceGetDevicesBySubsystem, devices);
-    DeviceDescriptor *dd = createDeviceDescriptor("dummy","dummy","1","0x00000001");
+    DeviceDescriptor *dd = createDeviceDescriptor("dummy", "dummy", "1", "0x00000001");
     // Add a newer version as latest with the dummy firmware file
-    dd->latestFirmware = (DeviceFirmware *)calloc(1, sizeof(DeviceFirmware));
+    dd->latestFirmware = (DeviceFirmware *) calloc(1, sizeof(DeviceFirmware));
     dd->latestFirmware->type = DEVICE_FIRMWARE_TYPE_ZIGBEE_OTA;
     dd->latestFirmware->version = strdup("0x00000002");
     dd->latestFirmware->fileInfos = linkedListCreate();
-    DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *) calloc(1,sizeof(DeviceFirmwareFileInfo));
+    DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *) calloc(1, sizeof(DeviceFirmwareFileInfo));
     info->fileName = strdup(DUMMY_OTA_FIRMWARE_FILE);
     info->checksum = strdup("F5571D40A3D5F5B4A7901E2C58DCC0B2");
     linkedListAppend(dd->latestFirmware->fileInfos, info);
@@ -126,19 +133,20 @@ static void test_zigbeeSubsystemCleanupFirmwareFilesDoNothingIfFirmwareNeeded(vo
     (void) state;
 }
 
-static void addDummyDiscoveredClusterDetails(IcDiscoveredClusterDetails *clusterDetails, uint16_t clusterId, bool isServer)
+static void
+addDummyDiscoveredClusterDetails(IcDiscoveredClusterDetails *clusterDetails, uint16_t clusterId, bool isServer)
 {
     if (clusterDetails)
     {
         clusterDetails->isServer = isServer;
         clusterDetails->clusterId = clusterId;
         clusterDetails->numAttributeIds = 1;
-        clusterDetails->attributeIds = (uint16_t*)calloc(1, sizeof(uint16_t));
+        clusterDetails->attributeIds = (uint16_t *) calloc(1, sizeof(uint16_t));
         clusterDetails->attributeIds[0] = 3;
     }
 }
 
-static void addDummyDiscoveredEndpointDetails(IcDiscoveredEndpointDetails* endpointDetails)
+static void addDummyDiscoveredEndpointDetails(IcDiscoveredEndpointDetails *endpointDetails)
 {
     static uint8_t endpointId = 1;
 
@@ -150,18 +158,20 @@ static void addDummyDiscoveredEndpointDetails(IcDiscoveredEndpointDetails* endpo
         endpointDetails->appProfileId = 7;
 
         endpointDetails->numServerClusterDetails = 1;
-        endpointDetails->serverClusterDetails = (IcDiscoveredClusterDetails*)calloc(1, sizeof(IcDiscoveredClusterDetails));
+        endpointDetails->serverClusterDetails =
+            (IcDiscoveredClusterDetails *) calloc(1, sizeof(IcDiscoveredClusterDetails));
         addDummyDiscoveredClusterDetails(endpointDetails->serverClusterDetails, 0x0b05, true);
 
         endpointDetails->numClientClusterDetails = 1;
-        endpointDetails->clientClusterDetails = (IcDiscoveredClusterDetails*)calloc(1, sizeof(IcDiscoveredClusterDetails));
+        endpointDetails->clientClusterDetails =
+            (IcDiscoveredClusterDetails *) calloc(1, sizeof(IcDiscoveredClusterDetails));
         addDummyDiscoveredClusterDetails(endpointDetails->clientClusterDetails, 2, false);
     }
 }
 
-static IcDiscoveredDeviceDetails* createDummyDiscoveredDeviceDetails(uint32_t endpointCount)
+static IcDiscoveredDeviceDetails *createDummyDiscoveredDeviceDetails(uint32_t endpointCount)
 {
-    IcDiscoveredDeviceDetails* details = (IcDiscoveredDeviceDetails*)calloc(1, sizeof(IcDiscoveredDeviceDetails));
+    IcDiscoveredDeviceDetails *details = (IcDiscoveredDeviceDetails *) calloc(1, sizeof(IcDiscoveredDeviceDetails));
 
     details->eui64 = 0x1234567887654321;
     details->manufacturer = strdup("acme");
@@ -173,7 +183,8 @@ static IcDiscoveredDeviceDetails* createDummyDiscoveredDeviceDetails(uint32_t en
     details->deviceType = deviceTypeEndDevice;
 
     details->numEndpoints = endpointCount;
-    details->endpointDetails = (IcDiscoveredEndpointDetails*)calloc(endpointCount, sizeof(IcDiscoveredEndpointDetails));
+    details->endpointDetails =
+        (IcDiscoveredEndpointDetails *) calloc(endpointCount, sizeof(IcDiscoveredEndpointDetails));
     for (uint32_t index = 0; index < endpointCount; index++)
     {
         addDummyDiscoveredEndpointDetails(&details->endpointDetails[index]);
@@ -184,12 +195,12 @@ static IcDiscoveredDeviceDetails* createDummyDiscoveredDeviceDetails(uint32_t en
 
 static void test_encodeDecodeIcDiscoveredDeviceDetails(void **state)
 {
-    IcDiscoveredDeviceDetails* details = createDummyDiscoveredDeviceDetails(1);
-    cJSON* detailsJson = icDiscoveredDeviceDetailsToJson(details);
+    IcDiscoveredDeviceDetails *details = createDummyDiscoveredDeviceDetails(1);
+    cJSON *detailsJson = icDiscoveredDeviceDetailsToJson(details);
 
-    IcDiscoveredDeviceDetails* details2 = icDiscoveredDeviceDetailsFromJson(detailsJson);
+    IcDiscoveredDeviceDetails *details2 = icDiscoveredDeviceDetailsFromJson(detailsJson);
 
-    //now see if details1 and details2 are equal!
+    // now see if details1 and details2 are equal!
     assert_int_equal(details->eui64, details2->eui64);
     assert_string_equal(details->manufacturer, details2->manufacturer);
     assert_string_equal(details->model, details2->model);
@@ -204,16 +215,24 @@ static void test_encodeDecodeIcDiscoveredDeviceDetails(void **state)
     assert_int_equal(details->endpointDetails[0].appProfileId, details2->endpointDetails[0].appProfileId);
     assert_int_equal(details->endpointDetails[0].appDeviceVersion, details2->endpointDetails[0].appDeviceVersion);
     assert_int_equal(details->endpointDetails[0].appDeviceId, details2->endpointDetails[0].appDeviceId);
-    assert_int_equal(details->endpointDetails[0].numServerClusterDetails, details2->endpointDetails[0].numServerClusterDetails);
-    assert_int_equal(details->endpointDetails[0].numClientClusterDetails, details2->endpointDetails[0].numClientClusterDetails);
+    assert_int_equal(details->endpointDetails[0].numServerClusterDetails,
+                     details2->endpointDetails[0].numServerClusterDetails);
+    assert_int_equal(details->endpointDetails[0].numClientClusterDetails,
+                     details2->endpointDetails[0].numClientClusterDetails);
 
-    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].clusterId, details2->endpointDetails[0].serverClusterDetails[0].clusterId);
-    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].isServer, details2->endpointDetails[0].serverClusterDetails[0].isServer);
-    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].attributeIds[0], details2->endpointDetails[0].serverClusterDetails[0].attributeIds[0]);
+    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].clusterId,
+                     details2->endpointDetails[0].serverClusterDetails[0].clusterId);
+    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].isServer,
+                     details2->endpointDetails[0].serverClusterDetails[0].isServer);
+    assert_int_equal(details->endpointDetails[0].serverClusterDetails[0].attributeIds[0],
+                     details2->endpointDetails[0].serverClusterDetails[0].attributeIds[0]);
 
-    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].clusterId, details2->endpointDetails[0].clientClusterDetails[0].clusterId);
-    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].isServer, details2->endpointDetails[0].clientClusterDetails[0].isServer);
-    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].attributeIds[0], details2->endpointDetails[0].clientClusterDetails[0].attributeIds[0]);
+    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].clusterId,
+                     details2->endpointDetails[0].clientClusterDetails[0].clusterId);
+    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].isServer,
+                     details2->endpointDetails[0].clientClusterDetails[0].isServer);
+    assert_int_equal(details->endpointDetails[0].clientClusterDetails[0].attributeIds[0],
+                     details2->endpointDetails[0].clientClusterDetails[0].attributeIds[0]);
 
     freeIcDiscoveredDeviceDetails(details);
     freeIcDiscoveredDeviceDetails(details2);
@@ -255,7 +274,7 @@ static int dynamicDirSetup(void **state)
 
     assert_non_null(dynamicDir);
 
-    (void)state;
+    (void) state;
 
     return 0;
 }
@@ -268,7 +287,7 @@ static int dynamicDirTeardown(void **state)
         dynamicDir = NULL;
     }
 
-    (void)state;
+    (void) state;
 
     return 0;
 }
@@ -277,33 +296,57 @@ static int dynamicDirTeardown(void **state)
 // Helpers
 // ******************************
 
-static icDevice *createDummyDevice(const char *manufacturer, const char *model, const char *hardwareVersion, const char *firmwareVersion)
+static icDevice *
+createDummyDevice(const char *manufacturer, const char *model, const char *hardwareVersion, const char *firmwareVersion)
 {
     ++counter;
     char uuid[255];
-    sprintf(uuid,"device%d", counter);
+    sprintf(uuid, "device%d", counter);
     icDevice *device = createDevice(uuid, "dummy", 1, "dummy", NULL);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_MANUFACTURER, manufacturer, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_MODEL, model, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION, hardwareVersion, RESOURCE_TYPE_VERSION, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, firmwareVersion, RESOURCE_TYPE_VERSION, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_MANUFACTURER,
+                         manufacturer,
+                         RESOURCE_TYPE_STRING,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_MODEL,
+                         model,
+                         RESOURCE_TYPE_STRING,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_HARDWARE_VERSION,
+                         hardwareVersion,
+                         RESOURCE_TYPE_VERSION,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION,
+                         firmwareVersion,
+                         RESOURCE_TYPE_VERSION,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
     return device;
 }
 
-static DeviceDescriptor *createDeviceDescriptor(const char *manufacturer, const char *model, const char *hardwareVersion, const char *firmwareVersion)
+static DeviceDescriptor *createDeviceDescriptor(const char *manufacturer,
+                                                const char *model,
+                                                const char *hardwareVersion,
+                                                const char *firmwareVersion)
 {
     ++counter;
     char uuid[255];
-    sprintf(uuid,"dd%d", counter);
-    DeviceDescriptor *dd = (DeviceDescriptor *)calloc(1, sizeof(DeviceDescriptor));
+    sprintf(uuid, "dd%d", counter);
+    DeviceDescriptor *dd = (DeviceDescriptor *) calloc(1, sizeof(DeviceDescriptor));
     dd->uuid = strdup(uuid);
     dd->model = strdup(model);
     dd->manufacturer = strdup(manufacturer);
-    dd->firmwareVersions = (DeviceVersionList *)calloc(1, sizeof(DeviceVersionList));
+    dd->firmwareVersions = (DeviceVersionList *) calloc(1, sizeof(DeviceVersionList));
     dd->firmwareVersions->listType = DEVICE_VERSION_LIST_TYPE_LIST;
     dd->firmwareVersions->list.versionList = linkedListCreate();
     linkedListAppend(dd->firmwareVersions->list.versionList, strdup(firmwareVersion));
-    dd->hardwareVersions = (DeviceVersionList *)calloc(1, sizeof(DeviceVersionList));
+    dd->hardwareVersions = (DeviceVersionList *) calloc(1, sizeof(DeviceVersionList));
     dd->hardwareVersions->listType = DEVICE_VERSION_LIST_TYPE_LIST;
     dd->hardwareVersions->list.versionList = linkedListCreate();
     linkedListAppend(dd->hardwareVersions->list.versionList, strdup(hardwareVersion));
@@ -314,7 +357,7 @@ static DeviceDescriptor *createDeviceDescriptor(const char *manufacturer, const 
 static char *getDummyFirmwareFilePath(DeviceFirmwareType firmwareType)
 {
     char pathBuf[255];
-    char * dir = zigbeeSubsystemGetAndCreateFirmwareFileDirectory(firmwareType);
+    char *dir = zigbeeSubsystemGetAndCreateFirmwareFileDirectory(firmwareType);
     if (firmwareType == DEVICE_FIRMWARE_TYPE_ZIGBEE_OTA)
     {
         sprintf(pathBuf, "%s/" DUMMY_OTA_FIRMWARE_FILE, dir);
@@ -349,7 +392,7 @@ icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem)
 {
     icLogDebug(LOG_TAG, "%s: subsystem=%s", __FUNCTION__, subsystem);
 
-    icLinkedList* result = (icLinkedList*)mock();
+    icLinkedList *result = (icLinkedList *) mock();
     return result;
 }
 
@@ -357,7 +400,7 @@ DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *dev
 {
     icLogDebug(LOG_TAG, "%s: device UUID=%s", __FUNCTION__, device->uuid);
 
-    DeviceDescriptor* result = (DeviceDescriptor*)mock();
+    DeviceDescriptor *result = (DeviceDescriptor *) mock();
     return result;
 }
 
@@ -370,16 +413,14 @@ gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir()
     return strdup(dynamicDir);
 }
 
-int main(int argc, const char ** argv)
+int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-        {
-                cmocka_unit_test(test_zigbeeSubsystemCleanupFirmwareFiles),
-                cmocka_unit_test(test_zigbeeSubsystemCleanupFirmwareFilesDoNothingIfFirmwareNeeded),
-                cmocka_unit_test(test_encodeDecodeIcDiscoveredDeviceDetails),
-                cmocka_unit_test(test_icDiscoveredDeviceDetailsGetClusterEndpoint),
-                cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint)
-        };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_zigbeeSubsystemCleanupFirmwareFiles),
+        cmocka_unit_test(test_zigbeeSubsystemCleanupFirmwareFilesDoNothingIfFirmwareNeeded),
+        cmocka_unit_test(test_encodeDecodeIcDiscoveredDeviceDetails),
+        cmocka_unit_test(test_icDiscoveredDeviceDetailsGetClusterEndpoint),
+        cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint)};
 
     int retval = cmocka_run_group_tests(tests, dynamicDirSetup, dynamicDirTeardown);
 

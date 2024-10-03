@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -23,21 +23,21 @@
  * Created by Thomas Lea on 9/19/16.
  */
 
-#include <icLog/logging.h>
-#include <string.h>
-#include <stdio.h>
-#include <inttypes.h>
-#include <cjson/cJSON.h>
-#include <icUtil/base64.h>
-#include <zhal/zhal.h>
-#include <icUtil/stringUtils.h>
-#include <pthread.h>
-#include <icConcurrent/threadUtils.h>
-#include "zhalPrivate.h"
 #include "zhalEventHandler.h"
+#include "zhalPrivate.h"
+#include <cjson/cJSON.h>
+#include <icConcurrent/threadUtils.h>
+#include <icLog/logging.h>
+#include <icUtil/base64.h>
+#include <icUtil/stringUtils.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+#include <zhal/zhal.h>
 
 static pthread_mutex_t lastApsSeqNumsMtx = PTHREAD_MUTEX_INITIALIZER;
-static icHashMap *lastApsSeqNums = NULL; //a map from eui64 to the last APS sequence number received from the device
+static icHashMap *lastApsSeqNums = NULL; // a map from eui64 to the last APS sequence number received from the device
 
 void zhalEventHandlerInit(void)
 {
@@ -115,25 +115,15 @@ static void handleClusterCommandReceived(cJSON *event)
 
     uint64_t eui64 = 0;
 
-    if (eui64Json == NULL ||
-        sourceEndpointJson == NULL ||
-        profileIdJson == NULL ||
-        directionJson == NULL ||
-        clusterIdJson == NULL ||
-        commandIdJson == NULL ||
-        mfgSpecificJson == NULL ||
-        mfgCodeJson == NULL ||
-        seqNumJson == NULL ||
-        apsSeqNumJson == NULL ||
-        rssiJson == NULL ||
-        lqiJson == NULL ||
-        encodedBufJson == NULL)
+    if (eui64Json == NULL || sourceEndpointJson == NULL || profileIdJson == NULL || directionJson == NULL ||
+        clusterIdJson == NULL || commandIdJson == NULL || mfgSpecificJson == NULL || mfgCodeJson == NULL ||
+        seqNumJson == NULL || apsSeqNumJson == NULL || rssiJson == NULL || lqiJson == NULL || encodedBufJson == NULL)
     {
         icLogError(LOG_TAG, "handleClusterCommandReceived: received incomplete event JSON");
     }
     else if (stringToUnsignedNumberWithinRange(eui64Json->valuestring, &eui64, 16, 0, UINT64_MAX) == true)
     {
-        //drop this command if it has the same APS sequence number as the last one we received from this device
+        // drop this command if it has the same APS sequence number as the last one we received from this device
         if (isDuplicateApsSequenceNumber(eui64, apsSeqNumJson->valueint) == true)
         {
             icLogWarn(LOG_TAG, "%s: duplicate APS sequence number detected!  Ignoring", __func__);
@@ -175,12 +165,8 @@ static void handleAttributeReportReceived(cJSON *event)
     cJSON *lqiJson = cJSON_GetObjectItem(event, "lqi");
     cJSON *mfgCodeJson = cJSON_GetObjectItem(event, "mfgCode");
 
-    if (eui64Json == NULL ||
-        sourceEndpointJson == NULL ||
-        clusterIdJson == NULL ||
-        encodedBufJson == NULL ||
-        rssiJson == NULL ||
-        lqiJson == NULL)
+    if (eui64Json == NULL || sourceEndpointJson == NULL || clusterIdJson == NULL || encodedBufJson == NULL ||
+        rssiJson == NULL || lqiJson == NULL)
     {
         icLogError(LOG_TAG, "handleAttributeReportReceived: received incomplete event JSON");
     }
@@ -220,10 +206,7 @@ static OtaUpgradeEvent *parseOtaUpgradeMessageEventJson(cJSON *event)
 
     cJSON *sentStatusJson = cJSON_GetObjectItem(event, "sentStatus");
 
-    if (otaEventTypeJson == NULL ||
-        eui64Json == NULL ||
-        timestampJson == NULL ||
-        encodedBufJson == NULL)
+    if (otaEventTypeJson == NULL || eui64Json == NULL || timestampJson == NULL || encodedBufJson == NULL)
     {
         icLogError(LOG_TAG, "%s: received incomplete event JSON", __func__);
         return NULL;
@@ -235,8 +218,7 @@ static OtaUpgradeEvent *parseOtaUpgradeMessageEventJson(cJSON *event)
         uint64_t eui64 = 0;
         uint64_t timestamp = 0;
 
-        if (otaEventTypeJson->valuestring == NULL ||
-            eui64Json->valuestring == NULL ||
+        if (otaEventTypeJson->valuestring == NULL || eui64Json->valuestring == NULL ||
             timestampJson->valuestring == NULL)
         {
             icLogError(LOG_TAG, "%s: received NULL JSON value(s)", __func__);
@@ -283,7 +265,7 @@ static OtaUpgradeEvent *parseOtaUpgradeMessageEventJson(cJSON *event)
         if (stringToUnsignedNumberWithinRange(eui64Json->valuestring, &eui64, 16, 0, UINT64_MAX) &&
             stringToUnsignedNumberWithinRange(timestampJson->valuestring, &timestamp, 10, 0, UINT64_MAX))
         {
-            OtaUpgradeEvent *otaEvent = (OtaUpgradeEvent *) calloc (1, sizeof(OtaUpgradeEvent));
+            OtaUpgradeEvent *otaEvent = (OtaUpgradeEvent *) calloc(1, sizeof(OtaUpgradeEvent));
 
             otaEvent->eui64 = eui64;
             otaEvent->timestamp = timestamp;
@@ -309,8 +291,11 @@ static OtaUpgradeEvent *parseOtaUpgradeMessageEventJson(cJSON *event)
         }
         else
         {
-            icLogError(LOG_TAG, "%s: received invalid event JSON. Value out of bounds for input [eui64]: %s, [timestamp]: %s",
-                       __func__, eui64Json->valuestring, timestampJson->valuestring);
+            icLogError(LOG_TAG,
+                       "%s: received invalid event JSON. Value out of bounds for input [eui64]: %s, [timestamp]: %s",
+                       __func__,
+                       eui64Json->valuestring,
+                       timestampJson->valuestring);
             return NULL;
         }
     }
@@ -322,7 +307,7 @@ static void handleOtaUpgradeMessageSentEventReceived(cJSON *event)
 
     if (otaEvent != NULL)
     {
-        switch(otaEvent->eventType)
+        switch (otaEvent->eventType)
         {
             case ZHAL_OTA_IMAGE_NOTIFY_EVENT:
             case ZHAL_OTA_QUERY_NEXT_IMAGE_RESPONSE_EVENT:
@@ -331,7 +316,10 @@ static void handleOtaUpgradeMessageSentEventReceived(cJSON *event)
                 // Validate sentStatus JSON
                 if (otaEvent->sentStatus == NULL)
                 {
-                    icLogError(LOG_TAG, "%s: received invalid event JSON. otaEventType %d must have sentStatus field", __func__, otaEvent->eventType);
+                    icLogError(LOG_TAG,
+                               "%s: received invalid event JSON. otaEventType %d must have sentStatus field",
+                               __func__,
+                               otaEvent->eventType);
                     break;
                 }
 
@@ -339,7 +327,8 @@ static void handleOtaUpgradeMessageSentEventReceived(cJSON *event)
                 break;
 
             default:
-                icLogError(LOG_TAG, "%s: received invalid event JSON. Invalid otaEventType %d", __func__, otaEvent->eventType);
+                icLogError(
+                    LOG_TAG, "%s: received invalid event JSON. Invalid otaEventType %d", __func__, otaEvent->eventType);
                 break;
         }
 
@@ -353,7 +342,7 @@ static void handleOtaUpgradeMessageReceivedEventReceived(cJSON *event)
 
     if (otaEvent != NULL)
     {
-        switch(otaEvent->eventType)
+        switch (otaEvent->eventType)
         {
             case ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_STARTED_EVENT:
             case ZHAL_OTA_LEGACY_BOOTLOAD_UPGRADE_FAILED_EVENT:
@@ -366,7 +355,8 @@ static void handleOtaUpgradeMessageReceivedEventReceived(cJSON *event)
                 break;
 
             default:
-                icLogError(LOG_TAG, "%s: received invalid event JSON. Invalid otaEventType %d", __func__, otaEvent->eventType);
+                icLogError(
+                    LOG_TAG, "%s: received invalid event JSON. Invalid otaEventType %d", __func__, otaEvent->eventType);
                 break;
         }
 
@@ -509,7 +499,7 @@ static void handleBeaconEventReceived(cJSON *event)
     cJSON *hasRouterCapacityJson = cJSON_GetObjectItem(event, "hasRouterCapacity");
     cJSON *depthJson = cJSON_GetObjectItem(event, "depth");
 
-    if (eui64Json == NULL || panIdJson ==NULL || isOpenJson == NULL || hasEndDeviceCapacityJson == NULL ||
+    if (eui64Json == NULL || panIdJson == NULL || isOpenJson == NULL || hasEndDeviceCapacityJson == NULL ||
         hasRouterCapacityJson == NULL || depthJson == NULL)
     {
         icLogError(LOG_TAG, "%s: received incomplete event JSON", __func__);
@@ -518,8 +508,8 @@ static void handleBeaconEventReceived(cJSON *event)
 
     uint64_t eui64 = 0;
     bool conversionSuccess = stringToUnsignedNumberWithinRange(eui64Json->valuestring, &eui64, 16, 0, UINT64_MAX);
-    conversionSuccess &= (panIdJson->valueint >=0 && panIdJson->valueint <= UINT16_MAX);
-    conversionSuccess &= (depthJson->valueint >=0 && depthJson->valueint <= UINT8_MAX);
+    conversionSuccess &= (panIdJson->valueint >= 0 && panIdJson->valueint <= UINT16_MAX);
+    conversionSuccess &= (depthJson->valueint >= 0 && depthJson->valueint <= UINT8_MAX);
 
     if (conversionSuccess)
     {
@@ -605,11 +595,13 @@ int zhalHandleEvent(cJSON *event)
     {
         handleAttributeReportReceived(event);
     }
-    else if (strcmp(eventType->valuestring, "deviceOtaUpgradeMessageSentEvent") == 0 && getCallbacks()->deviceOtaUpgradeMessageSent != NULL)
+    else if (strcmp(eventType->valuestring, "deviceOtaUpgradeMessageSentEvent") == 0 &&
+             getCallbacks()->deviceOtaUpgradeMessageSent != NULL)
     {
         handleOtaUpgradeMessageSentEventReceived(event);
     }
-    else if (strcmp(eventType->valuestring, "deviceOtaUpgradeMessageReceivedEvent") == 0 && getCallbacks()->deviceOtaUpgradeMessageReceived != NULL)
+    else if (strcmp(eventType->valuestring, "deviceOtaUpgradeMessageReceivedEvent") == 0 &&
+             getCallbacks()->deviceOtaUpgradeMessageReceived != NULL)
     {
         handleOtaUpgradeMessageReceivedEventReceived(event);
     }
@@ -641,7 +633,8 @@ int zhalHandleEvent(cJSON *event)
     {
         handlePanIdAttackClearedEventReceived(event);
     }
-    else if (getCallbacks()->beaconReceived != NULL && stringCompare(eventType->valuestring, "beaconReceived", false) == 0)
+    else if (getCallbacks()->beaconReceived != NULL &&
+             stringCompare(eventType->valuestring, "beaconReceived", false) == 0)
     {
         handleBeaconEventReceived(event);
     }
@@ -649,5 +642,5 @@ int zhalHandleEvent(cJSON *event)
     // Cleanup since we are saying we handled it
     cJSON_Delete(event);
 
-    return 1; //we handled it
+    return 1; // we handled it
 }

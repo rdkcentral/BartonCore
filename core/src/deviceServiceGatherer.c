@@ -49,85 +49,83 @@
 #include <icUtil/stringUtils.h>
 #include <zhal/zhal.h>
 
-#define LOG_TAG "deviceServiceGather"
+#define LOG_TAG                           "deviceServiceGather"
 
 // the device service / zigbee core keys
-#define DEVICE_TITLE_KEY                    "Device"
-#define PAN_ID_KEY                          "panid"
-#define OPEN_FOR_JOIN_KEY                   "openForJoin"
-#define IS_ZIGBEE_NET_CONFIGURED_KEY        "isConfigured"
-#define IS_ZIGBEE_NET_AVAILABLE_KEY         "isAvailable"
-#define IS_ZIGBEE_NETWORK_UP_KEY            "networkUp"
-#define EUI_64_KEY                          "eui64"
-#define CHANNEL_KEY                         "channel"
-#define DEVICE_FW_UPGRADE_FAIL_CNT_KEY      "zigbeeDevFwUpgFails"
-#define DEVICE_FW_UPGRADE_SUCCESS_CNT_KEY   "zigbeeDevFwUpgSuccesses"
-#define DEVICE_FW_UPGRADE_FAILURE_KEY       "zigbeeDevFwUpgFail_"
-#define CHANNEL_SCAN_MAX_KEY                "emaxc"
-#define CHANNEL_SCAN_MIN_KEY                "eminc"
-#define CHANNEL_SCAN_AVG_KEY                "eavgc"
-#define CAMERA_TOTAL_DEVICE_LIST_KEY        "cameraDeviceList"
-#define CAMERA_CONNECTED_LIST_KEY           "cameraConnectedList"
-#define CAMERA_DISCONNECTED_LIST_KEY        "cameraDisconnectedList"
-#define ZIGBEE_NETWORK_MAP_KEY              "zigbeeNetworkMap"
-#define ZIGBEE_DEVICE_NETWORK_HEALTH_KEY    "zigbeeDeviceHealthStats"
-#define ZIGBEE_NETWORK_COUNTERS_KEY         "zigbeeCounters"
-#define MAGNETIC_STRENGTH_KEY               "halleffect"
+#define DEVICE_TITLE_KEY                  "Device"
+#define PAN_ID_KEY                        "panid"
+#define OPEN_FOR_JOIN_KEY                 "openForJoin"
+#define IS_ZIGBEE_NET_CONFIGURED_KEY      "isConfigured"
+#define IS_ZIGBEE_NET_AVAILABLE_KEY       "isAvailable"
+#define IS_ZIGBEE_NETWORK_UP_KEY          "networkUp"
+#define EUI_64_KEY                        "eui64"
+#define CHANNEL_KEY                       "channel"
+#define DEVICE_FW_UPGRADE_FAIL_CNT_KEY    "zigbeeDevFwUpgFails"
+#define DEVICE_FW_UPGRADE_SUCCESS_CNT_KEY "zigbeeDevFwUpgSuccesses"
+#define DEVICE_FW_UPGRADE_FAILURE_KEY     "zigbeeDevFwUpgFail_"
+#define CHANNEL_SCAN_MAX_KEY              "emaxc"
+#define CHANNEL_SCAN_MIN_KEY              "eminc"
+#define CHANNEL_SCAN_AVG_KEY              "eavgc"
+#define CAMERA_TOTAL_DEVICE_LIST_KEY      "cameraDeviceList"
+#define CAMERA_CONNECTED_LIST_KEY         "cameraConnectedList"
+#define CAMERA_DISCONNECTED_LIST_KEY      "cameraDisconnectedList"
+#define ZIGBEE_NETWORK_MAP_KEY            "zigbeeNetworkMap"
+#define ZIGBEE_DEVICE_NETWORK_HEALTH_KEY  "zigbeeDeviceHealthStats"
+#define ZIGBEE_NETWORK_COUNTERS_KEY       "zigbeeCounters"
+#define MAGNETIC_STRENGTH_KEY             "halleffect"
 
 // Zigbee Counter Keys in a list
 // order is important
 //
-static const char *const zigbeeNetworkCountersKeys[] = {
-        "sampleIntervalMillis",
-        "macRxBcast",
-        "macTxBcast",
-        "macRxUcast",
-        "macTxUcastSuccesses",
-        "macTxUcastRetries",
-        "macTxUcastFailures",
-        "apsRxBcast",
-        "apsTxBcast",
-        "apsRxUcast",
-        "apsTxUcastSuccesses",
-        "apsTxUcastRetries",
-        "apsTxUcastFailures",
-        "nwkFrameCounterFailures",
-        "apsFrameCounterFailures",
-        "nwkLinkKeyNotAuthorized",
-        "nwkDecryptionFailures",
-        "apsDecryptionFailures",
-        "bufferAllocationFailures",
-        "queueOverruns",
-        "packetValidationFailures",
-        "nwkRetryQueueOverflows",
-        "phyCcaFailures",
-        "badChanCnt"
-};
+static const char *const zigbeeNetworkCountersKeys[] = {"sampleIntervalMillis",
+                                                        "macRxBcast",
+                                                        "macTxBcast",
+                                                        "macRxUcast",
+                                                        "macTxUcastSuccesses",
+                                                        "macTxUcastRetries",
+                                                        "macTxUcastFailures",
+                                                        "apsRxBcast",
+                                                        "apsTxBcast",
+                                                        "apsRxUcast",
+                                                        "apsTxUcastSuccesses",
+                                                        "apsTxUcastRetries",
+                                                        "apsTxUcastFailures",
+                                                        "nwkFrameCounterFailures",
+                                                        "apsFrameCounterFailures",
+                                                        "nwkLinkKeyNotAuthorized",
+                                                        "nwkDecryptionFailures",
+                                                        "apsDecryptionFailures",
+                                                        "bufferAllocationFailures",
+                                                        "queueOverruns",
+                                                        "packetValidationFailures",
+                                                        "nwkRetryQueueOverflows",
+                                                        "phyCcaFailures",
+                                                        "badChanCnt"};
 
 
 // device types to ignore
-#define IGNORE_INTEGRATED_PIEZO_DEVICE "intPiezoDD"
+#define IGNORE_INTEGRATED_PIEZO_DEVICE      "intPiezoDD"
 
 // null value in device resource
-#define DEVICE_NULL_VALUE "(null)"
-#define VALUE_IS_EMPTY_STRING ""
+#define DEVICE_NULL_VALUE                   "(null)"
+#define VALUE_IS_EMPTY_STRING               ""
 
 // constants
-#define INITIAL_CAMERA_BUFFER_SIZE 18 // size of MAC Address with collons and null char
+#define INITIAL_CAMERA_BUFFER_SIZE          18 // size of MAC Address with collons and null char
 
 // battery state strings
-#define BATTERY_STATE_GOOD_STRING "GOOD"
-#define BATTERY_STATE_LOW_STRING  "LOW"
-#define BATTERY_STATE_BAD_STRING  "BAD"
+#define BATTERY_STATE_GOOD_STRING           "GOOD"
+#define BATTERY_STATE_LOW_STRING            "LOW"
+#define BATTERY_STATE_BAD_STRING            "BAD"
 
-#define MAX_ZIGBEE_NETWORK_MAP_LENGTH 38 // size of two eui64, max lqi and commas
+#define MAX_ZIGBEE_NETWORK_MAP_LENGTH       38 // size of two eui64, max lqi and commas
 
 #define MIN_ZIGBEE_NETWORK_MAP_COLLECT_HOUR 1
 #define MAX_ZIGBEE_NETWORK_MAP_COLLECT_HOUR 24
 
-static pthread_mutex_t ZIGBEE_NETWORK_MAP_MTX  = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t ZIGBEE_NETWORK_MAP_MTX = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t zigbeeMapGathererTask = 0;
-static char* zigbeeNetworkMapStr = NULL;
+static char *zigbeeNetworkMapStr = NULL;
 
 /*
  * structs for all of the device information
@@ -155,13 +153,13 @@ typedef struct
     const char *faulted;
     const char *upgradeStatus;
     const char *batteryState;
-}basicDeviceInfo;
+} basicDeviceInfo;
 
 typedef struct
 {
     const char *macAddress;
     const char *commFail;
-}cameraDeviceInfo;
+} cameraDeviceInfo;
 
 typedef struct
 {
@@ -169,18 +167,18 @@ typedef struct
     const char *clusterId;
     const char *attributeId;
     const char *data;
-}attributeDeviceInfo;
+} attributeDeviceInfo;
 
 typedef struct
 {
     const char *time;
     const char *isSecure;
-}rejoinDeviceInfo;
+} rejoinDeviceInfo;
 
 typedef struct
 {
     const char *time;
-}checkInDeviceInfo;
+} checkInDeviceInfo;
 
 typedef struct
 {
@@ -201,9 +199,13 @@ static void collectCameraResources(cameraDeviceInfo *deviceInfo, const icDevice 
 static void convertAttributeReports(icLinkedList *attList, attributeDeviceInfo *deviceInfo);
 static void convertRejoins(icLinkedList *rejoinList, rejoinDeviceInfo *deviceInfo);
 static void convertCheckIns(icLinkedList *checkInList, checkInDeviceInfo *deviceInfo);
-static char *createDeviceStringList(const char *uuid, basicDeviceInfo *deviceInfo, attributeDeviceInfo *attList,
-                                    rejoinDeviceInfo *rejoinList, checkInDeviceInfo *checkInList,
-                                    deviceEventCounterItem *deviceCounters, const char *deviceClass);
+static char *createDeviceStringList(const char *uuid,
+                                    basicDeviceInfo *deviceInfo,
+                                    attributeDeviceInfo *attList,
+                                    rejoinDeviceInfo *rejoinList,
+                                    checkInDeviceInfo *checkInList,
+                                    deviceEventCounterItem *deviceCounters,
+                                    const char *deviceClass);
 static void gatherZigbeeNetworkMapCallback(void *arg);
 static void gatherZigbeeNetworkMap(void);
 
@@ -270,7 +272,7 @@ void collectAllDeviceStatistics(GHashTable *output)
     scoped_icLinkedListIterator *deviceIter = linkedListIteratorCreate(deviceList);
     int deviceCount = 0;
 
-    while(linkedListIteratorHasNext(deviceIter))
+    while (linkedListIteratorHasNext(deviceIter))
     {
         const icDevice *device = linkedListIteratorGetNext(deviceIter);
 
@@ -304,7 +306,8 @@ void collectAllDeviceStatistics(GHashTable *output)
         collectResources(&statList, device);
         collectEndpointResources(&statList, device);
 
-        scoped_generic deviceEventCounterItem *deviceEventCounters = zigbeeEventTrackerCollectEventCountersForDevice(device->uuid);
+        scoped_generic deviceEventCounterItem *deviceEventCounters =
+            zigbeeEventTrackerCollectEventCountersForDevice(device->uuid);
 
         icLinkedList *attList = zigbeeEventTrackerCollectAttributeReportEventsForDevice(device->uuid);
         convertAttributeReports(attList, attDeviceInfo);
@@ -315,9 +318,8 @@ void collectAllDeviceStatistics(GHashTable *output)
         scoped_icLinkedListGeneric *checkInList = zigbeeEventTrackerCollectCheckInEventsForDevice(device->uuid);
         convertCheckIns(checkInList, checkInInfo);
 
-        scoped_generic char *deviceInfoList = createDeviceStringList(device->uuid, &statList, attDeviceInfo,
-                                                                     rejoinInfo, checkInInfo, deviceEventCounters,
-                                                                     device->deviceClass);
+        scoped_generic char *deviceInfoList = createDeviceStringList(
+            device->uuid, &statList, attDeviceInfo, rejoinInfo, checkInInfo, deviceEventCounters, device->deviceClass);
 
         if (deviceInfoList != NULL)
         {
@@ -326,14 +328,17 @@ void collectAllDeviceStatistics(GHashTable *output)
         }
         else
         {
-            icLogWarn(LOG_TAG, "%s: was unable to create device information string list for device %s", __FUNCTION__, device->uuid);
+            icLogWarn(LOG_TAG,
+                      "%s: was unable to create device information string list for device %s",
+                      __FUNCTION__,
+                      device->uuid);
         }
 
         scoped_generic char *magneticStrength = zigbeeEventTrackerCollectMagneticStrengthReportsForDevice(device->uuid);
 
         if (magneticStrength != NULL)
         {
-            if(deviceCount > 1 && stringBufferLength(magStrengthReports) > 0)
+            if (deviceCount > 1 && stringBufferLength(magStrengthReports) > 0)
             {
                 stringBufferAppend(magStrengthReports, "|");
             }
@@ -346,40 +351,40 @@ void collectAllDeviceStatistics(GHashTable *output)
          * This will likely be used to replace the above stuff, as
          * this format is vetted to work with telemetry, where as the
          * information above does not.
-         * String format:  model,NE/FE RSSI, rejoins, duplicate sequence counter, aps ack failure counter, IAS Zone status sensor delay value
-         * Each device is separated by a |
+         * String format:  model,NE/FE RSSI, rejoins, duplicate sequence counter, aps ack failure counter, IAS Zone
+         * status sensor delay value Each device is separated by a |
          */
-        if(deviceCount > 1)
+        if (deviceCount > 1)
         {
             stringBufferAppend(zigbeeDeviceNetworkHealth, "|");
         }
-        stringBufferAppend(zigbeeDeviceNetworkHealth, statList.model);  // model
+        stringBufferAppend(zigbeeDeviceNetworkHealth, statList.model); // model
 
         stringBufferAppend(zigbeeDeviceNetworkHealth, ",");
 
-        stringBufferAppend(zigbeeDeviceNetworkHealth, statList.nearRssi);  // NE/FE RSSI
+        stringBufferAppend(zigbeeDeviceNetworkHealth, statList.nearRssi); // NE/FE RSSI
         stringBufferAppend(zigbeeDeviceNetworkHealth, "/");
         stringBufferAppend(zigbeeDeviceNetworkHealth, statList.farRssi);
 
         stringBufferAppend(zigbeeDeviceNetworkHealth, ",");
 
-        scoped_generic char *rejoins = stringBuilder("%"PRIu32, deviceEventCounters->totalRejoinEvents);
-        stringBufferAppend(zigbeeDeviceNetworkHealth, rejoins);  // rejoin
+        scoped_generic char *rejoins = stringBuilder("%" PRIu32, deviceEventCounters->totalRejoinEvents);
+        stringBufferAppend(zigbeeDeviceNetworkHealth, rejoins); // rejoin
 
         stringBufferAppend(zigbeeDeviceNetworkHealth, ",");
 
-        scoped_generic char *dupSeq = stringBuilder("%"PRIu32, deviceEventCounters->totalDuplicateSeqNumEvents);
-        stringBufferAppend(zigbeeDeviceNetworkHealth, dupSeq);  // Duplicate Sequence Counter
+        scoped_generic char *dupSeq = stringBuilder("%" PRIu32, deviceEventCounters->totalDuplicateSeqNumEvents);
+        stringBufferAppend(zigbeeDeviceNetworkHealth, dupSeq); // Duplicate Sequence Counter
 
         stringBufferAppend(zigbeeDeviceNetworkHealth, ",");
 
-        scoped_generic char *ackFailure = stringBuilder("%"PRIu32, deviceEventCounters->totalApsAckFailureEvents);
-        stringBufferAppend(zigbeeDeviceNetworkHealth, ackFailure);  // Aps Ack failure
+        scoped_generic char *ackFailure = stringBuilder("%" PRIu32, deviceEventCounters->totalApsAckFailureEvents);
+        stringBufferAppend(zigbeeDeviceNetworkHealth, ackFailure); // Aps Ack failure
 
         stringBufferAppend(zigbeeDeviceNetworkHealth, ",");
 
-        scoped_generic char *sensorDelayValue = stringBuilder("%"PRIu32, deviceEventCounters->cumulativeSensorDelayQS);
-        stringBufferAppend(zigbeeDeviceNetworkHealth, sensorDelayValue); //Sensor Fault/Restore Message Delay Value
+        scoped_generic char *sensorDelayValue = stringBuilder("%" PRIu32, deviceEventCounters->cumulativeSensorDelayQS);
+        stringBufferAppend(zigbeeDeviceNetworkHealth, sensorDelayValue); // Sensor Fault/Restore Message Delay Value
 
         zigbeeEventTrackerResetSensorDelayCountersForDevice(device->uuid);
 
@@ -390,10 +395,10 @@ void collectAllDeviceStatistics(GHashTable *output)
         rejoinList = NULL;
     }
 
-    scoped_generic char* magStrengthReportString = stringBufferToString(magStrengthReports);
+    scoped_generic char *magStrengthReportString = stringBufferToString(magStrengthReports);
     g_hash_table_insert(output, g_strdup(MAGNETIC_STRENGTH_KEY), g_steal_pointer(&magStrengthReportString));
 
-    scoped_generic char* zigbeeDeviceNetworkHealthString = stringBufferToString(zigbeeDeviceNetworkHealth);
+    scoped_generic char *zigbeeDeviceNetworkHealthString = stringBufferToString(zigbeeDeviceNetworkHealth);
     g_hash_table_insert(
         output, g_strdup(ZIGBEE_DEVICE_NETWORK_HEALTH_KEY), g_steal_pointer(&zigbeeDeviceNetworkHealthString));
 
@@ -444,8 +449,8 @@ static void destroyDeviceModelListItem(void *item)
 
 static bool searchDeviceModelInList(void *searchVal, void *item)
 {
-    char *model = (char *)searchVal;
-    deviceModelListItem *node = (deviceModelListItem *)item;
+    char *model = (char *) searchVal;
+    deviceModelListItem *node = (deviceModelListItem *) item;
 
     if (stringCompare(model, node->model, false) == 0)
     {
@@ -561,8 +566,8 @@ static bool addDeviceModelsListEntry(icLinkedList *deviceModelsList, const char 
 }
 
 /*
- * Create a hash map with device class(e.g. sensor, etc) as key and value is another hash map with subsystem (e.g. zigbee,
- * etc) as key and linked list as value containing all models(e.g. XHS2-SE, etc) and their corresponding count.
+ * Create a hash map with device class(e.g. sensor, etc) as key and value is another hash map with subsystem (e.g.
+ * zigbee, etc) as key and linked list as value containing all models(e.g. XHS2-SE, etc) and their corresponding count.
  */
 static icHashMap *getOrganizedPairedDeviceInfo(void)
 {
@@ -589,11 +594,13 @@ static icHashMap *getOrganizedPairedDeviceInfo(void)
         {
             const icDevice *device = linkedListIteratorGetNext(devicesIter);
 
-            const icDeviceResource *modelResource = deviceServiceFindDeviceResourceById((icDevice *) device,
-                                                                                        COMMON_DEVICE_RESOURCE_MODEL);
+            const icDeviceResource *modelResource =
+                deviceServiceFindDeviceResourceById((icDevice *) device, COMMON_DEVICE_RESOURCE_MODEL);
             if (modelResource == NULL)
             {
-                icLogWarn(LOG_TAG, "%s: unable to get model resource for a device of deviceClass %s", __FUNCTION__,
+                icLogWarn(LOG_TAG,
+                          "%s: unable to get model resource for a device of deviceClass %s",
+                          __FUNCTION__,
                           device->deviceClass);
                 continue;
             }
@@ -610,7 +617,8 @@ static icHashMap *getOrganizedPairedDeviceInfo(void)
                 continue;
             }
 
-            icLinkedList *deviceModelsList = hashMapGet(subsystemMap, driver->subsystemName, strlen(driver->subsystemName));
+            icLinkedList *deviceModelsList =
+                hashMapGet(subsystemMap, driver->subsystemName, strlen(driver->subsystemName));
             addDeviceModelsListEntry(deviceModelsList, modelResource->value);
         }
     }
@@ -621,7 +629,7 @@ static icHashMap *getOrganizedPairedDeviceInfo(void)
 static inline char *getFormattedDeviceClassString(const char *deviceClass)
 {
     char *formattedDeviceClass = strdup(deviceClass);
-    formattedDeviceClass[0] = (char)toupper(formattedDeviceClass[0]);
+    formattedDeviceClass[0] = (char) toupper(formattedDeviceClass[0]);
 
     return formattedDeviceClass;
 }
@@ -680,7 +688,8 @@ static uint16_t getCameraCount(void)
 /**
  * Add device split markers by subsystem, model and count
  *
- * @param output - the runtimeStatistics hashMap containing connected device split markers by subsytem, model and count e.g.
+ * @param output - the runtimeStatistics hashMap containing connected device split markers by subsytem, model and count
+ * e.g.
  * {"TotalSensorCount_split" "subsystem,14"; }
  * {"TotalSubsytemSensor_split" "XHS2-SE,4;XCAM1,3;XCAM2,3;SMCWK01-Z,4;"}
  *
@@ -696,7 +705,7 @@ void collectPairedDevicesInformation(GHashTable *output)
     // if number of devices are still the same in this iteration, assume nothing has changed and use cached information
     // in deviceClassMap.
     //
-    if ( count != devicesCount )
+    if (count != devicesCount)
     {
         // There is a change in number of devices, flush out cached information.
         // Cleanup iteratively everything in deviceClassMap i.e. including hash map of subsystem for each class and
@@ -769,12 +778,15 @@ static icLinkedList *getPairedCamerasInfo(void)
     {
         const icDevice *device = linkedListIteratorGetNext(devicesIter);
 
-        icDeviceResource *modelResource = deviceServiceFindDeviceResourceById((icDevice *) device,
-                                                                              COMMON_DEVICE_RESOURCE_MODEL);
+        icDeviceResource *modelResource =
+            deviceServiceFindDeviceResourceById((icDevice *) device, COMMON_DEVICE_RESOURCE_MODEL);
         if (modelResource == NULL)
         {
-            icLogWarn(LOG_TAG, "%s: unable to get model resource for a device %s of deviceClass %s", __FUNCTION__,
-                      device->uuid, CAMERA_DC);
+            icLogWarn(LOG_TAG,
+                      "%s: unable to get model resource for a device %s of deviceClass %s",
+                      __FUNCTION__,
+                      device->uuid,
+                      CAMERA_DC);
             continue;
         }
 
@@ -787,7 +799,8 @@ static icLinkedList *getPairedCamerasInfo(void)
 /**
  * Add camera split markers by model and count
  *
- * @param output - the runtimeStatistics hashMap containing connected camera device split markers by model and count e.g.
+ * @param output - the runtimeStatistics hashMap containing connected camera device split markers by model and count
+ * e.g.
  * {"TotalLocalCameraCount": "2"}
  * {"TotalLocalCamera": "XCam1,1;ICam2C,1;"}
  *
@@ -813,7 +826,7 @@ void collectPairedCamerasInformation(GHashTable *output)
         cameraCount = count;
     }
 
-    scoped_generic char* valueString = stringBuilder("%"PRIu16, cameraCount);
+    scoped_generic char *valueString = stringBuilder("%" PRIu16, cameraCount);
     g_hash_table_insert(output, g_strdup("TotalLocalCameraCount"), g_steal_pointer(&valueString));
 
     GString *cameraTypeValue = g_string_new(NULL);
@@ -844,7 +857,7 @@ void collectZigbeeNetworkCounters(GHashTable *strings, GHashTable *ints)
     {
         cJSON *counter = NULL;
 
-        cJSON_ArrayForEach(counter , counters)
+        cJSON_ArrayForEach(counter, counters)
         {
             if (cJSON_IsNumber(counter) && counter->valueint != 0)
             {
@@ -867,7 +880,7 @@ void collectZigbeeNetworkCounters(GHashTable *strings, GHashTable *ints)
         {
             if (index > 0)
             {
-                stringBufferAppend(zigbeeCountersBuffer,",");
+                stringBufferAppend(zigbeeCountersBuffer, ",");
             }
 
             cJSON *item = cJSON_GetObjectItem(counters, zigbeeNetworkCountersKeys[index]);
@@ -878,7 +891,7 @@ void collectZigbeeNetworkCounters(GHashTable *strings, GHashTable *ints)
                 value = (int64_t) cJSON_GetNumberValue(item);
             }
 
-            scoped_generic char* valueString = stringBuilder("%"PRIi64, value);
+            scoped_generic char *valueString = stringBuilder("%" PRIi64, value);
             stringBufferAppend(zigbeeCountersBuffer, valueString);
 
             index++;
@@ -957,7 +970,7 @@ void collectAllDeviceFirmwareEvents(GHashTable *ints, GHashTable *longs)
     {
         scoped_icLinkedListIterator *listIter = linkedListIteratorCreate(failureEvents);
 
-        while(linkedListIteratorHasNext(listIter))
+        while (linkedListIteratorHasNext(listIter))
         {
             const deviceUpgFailureItem *item = linkedListIteratorGetNext(listIter);
 
@@ -1012,15 +1025,15 @@ void collectChannelScanStats(GHashTable *ints)
     {
         scoped_icLinkedListIterator *listIterator = linkedListIteratorCreate(channelStats);
 
-        while(linkedListIteratorHasNext(listIterator))
+        while (linkedListIteratorHasNext(listIterator))
         {
             const channelEnergyScanDataItem *item = linkedListIteratorGetNext(listIterator);
 
             if (item != NULL)
             {
-                scoped_generic char *maxKey = stringBuilder("%s%"PRIu8, CHANNEL_SCAN_MAX_KEY, item->channel);
-                scoped_generic char *minKey = stringBuilder("%s%"PRIu8, CHANNEL_SCAN_MIN_KEY, item->channel);
-                scoped_generic char *avgKey = stringBuilder("%s%"PRIu8, CHANNEL_SCAN_AVG_KEY, item->channel);
+                scoped_generic char *maxKey = stringBuilder("%s%" PRIu8, CHANNEL_SCAN_MAX_KEY, item->channel);
+                scoped_generic char *minKey = stringBuilder("%s%" PRIu8, CHANNEL_SCAN_MIN_KEY, item->channel);
+                scoped_generic char *avgKey = stringBuilder("%s%" PRIu8, CHANNEL_SCAN_AVG_KEY, item->channel);
 
                 int32_t *max = malloc(sizeof(int32_t));
                 *max = item->max;
@@ -1055,7 +1068,8 @@ static void gatherZigbeeNetworkMap(void)
         if (zigbeeNetworkMap != NULL)
         {
             scoped_icLinkedListIterator *iter = linkedListIteratorCreate(zigbeeNetworkMap);
-            scoped_icStringBuffer *zigbeeNetworkMapStrBuf = stringBufferCreate(MAX_ZIGBEE_NETWORK_MAP_LENGTH * numOfDevices);
+            scoped_icStringBuffer *zigbeeNetworkMapStrBuf =
+                stringBufferCreate(MAX_ZIGBEE_NETWORK_MAP_LENGTH * numOfDevices);
 
             while (linkedListIteratorHasNext(iter) == true)
             {
@@ -1066,7 +1080,7 @@ static void gatherZigbeeNetworkMap(void)
                 stringBufferAppendWithComma(zigbeeNetworkMapStrBuf, eui64Str, false);
                 stringBufferAppendWithComma(zigbeeNetworkMapStrBuf, nextCloseHopEui64Str, false);
 
-                scoped_generic char *lqiStr = stringBuilder("%"PRId32, item->lqi);
+                scoped_generic char *lqiStr = stringBuilder("%" PRId32, item->lqi);
                 stringBufferAppend(zigbeeNetworkMapStrBuf, lqiStr);
                 stringBufferAppend(zigbeeNetworkMapStrBuf, ";");
             }
@@ -1109,13 +1123,16 @@ void collectZigbeeNetworkMap(GHashTable *output)
     if (zigbeeMapGathererTask == 0 || isDelayTaskWaiting(zigbeeMapGathererTask) == false)
     {
         uint64_t randomHour;
-        bool isRandomHour = generateRandomNumberInRange(MIN_ZIGBEE_NETWORK_MAP_COLLECT_HOUR,
-                                                        MAX_ZIGBEE_NETWORK_MAP_COLLECT_HOUR,
-                                                        &randomHour);
+        bool isRandomHour = generateRandomNumberInRange(
+            MIN_ZIGBEE_NETWORK_MAP_COLLECT_HOUR, MAX_ZIGBEE_NETWORK_MAP_COLLECT_HOUR, &randomHour);
         if (isRandomHour == true)
         {
-            icLogDebug(LOG_TAG, "%s: scheduling task to gather zigbee network map after %"PRIu8" hour(s)", __FUNCTION__, (uint8_t) randomHour);
-            zigbeeMapGathererTask = scheduleDelayTask((uint8_t) randomHour, DELAY_HOURS, gatherZigbeeNetworkMapCallback, NULL);
+            icLogDebug(LOG_TAG,
+                       "%s: scheduling task to gather zigbee network map after %" PRIu8 " hour(s)",
+                       __FUNCTION__,
+                       (uint8_t) randomHour);
+            zigbeeMapGathererTask =
+                scheduleDelayTask((uint8_t) randomHour, DELAY_HOURS, gatherZigbeeNetworkMapCallback, NULL);
 
             if (zigbeeNetworkMapStr != NULL && stringIsEmpty(zigbeeNetworkMapStr) == false)
             {
@@ -1124,7 +1141,9 @@ void collectZigbeeNetworkMap(GHashTable *output)
         }
         else
         {
-            icLogError(LOG_TAG,"%s Can't generate random number, not scheduling task to gather zigbee network map",__FUNCTION__);
+            icLogError(LOG_TAG,
+                       "%s Can't generate random number, not scheduling task to gather zigbee network map",
+                       __FUNCTION__);
         }
     }
 
@@ -1180,7 +1199,8 @@ void collectCameraDeviceStats(GHashTable *output)
                 }
                 else
                 {
-                    icLogError(LOG_TAG, "%s: unable to determine Comm Failure for camera %s", __FUNCTION__, camera->uuid);
+                    icLogError(
+                        LOG_TAG, "%s: unable to determine Comm Failure for camera %s", __FUNCTION__, camera->uuid);
                 }
 
                 stringBufferAppendWithComma(allCameras, cameraInfo.macAddress, true);
@@ -1213,7 +1233,8 @@ void collectCameraDeviceStats(GHashTable *output)
 
         if (stringIsEmpty(disconnectedCamerasValue) == false)
         {
-            g_hash_table_insert(output, g_strdup(CAMERA_DISCONNECTED_LIST_KEY), g_steal_pointer(&disconnectedCamerasValue));
+            g_hash_table_insert(
+                output, g_strdup(CAMERA_DISCONNECTED_LIST_KEY), g_steal_pointer(&disconnectedCamerasValue));
             disconnectedCamerasValue = NULL;
         }
     }
@@ -1300,7 +1321,7 @@ static void initAttDeviceInfo(attributeDeviceInfo *attDeviceInfo, int size)
 {
     memset(attDeviceInfo, 0, size * sizeof(attributeDeviceInfo));
 
-    for(int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++)
     {
         attDeviceInfo[i].reportTime = customStringToString(NULL);
         attDeviceInfo[i].clusterId = customStringToString(NULL);
@@ -1321,7 +1342,7 @@ static void initRejoinDeviceInfo(rejoinDeviceInfo *rejoinInfo, int size)
 {
     memset(rejoinInfo, 0, size * sizeof(rejoinDeviceInfo));
 
-    for(int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++)
     {
         rejoinInfo[i].time = customStringToString(NULL);
         rejoinInfo[i].isSecure = customStringToString(NULL);
@@ -1357,13 +1378,13 @@ static void collectResources(basicDeviceInfo *deviceInfo, const icDevice *device
 {
     if (device->resources == NULL)
     {
-        icLogError(LOG_TAG, "%s: unable to use resource list for device %s",__FUNCTION__, device->uuid);
+        icLogError(LOG_TAG, "%s: unable to use resource list for device %s", __FUNCTION__, device->uuid);
         return;
     }
 
     scoped_icLinkedListIterator *resourceIter = linkedListIteratorCreate(device->resources);
 
-    while(linkedListIteratorHasNext(resourceIter))
+    while (linkedListIteratorHasNext(resourceIter))
     {
         const icDeviceResource *resource = linkedListIteratorGetNext(resourceIter);
 
@@ -1427,7 +1448,8 @@ static void collectResources(basicDeviceInfo *deviceInfo, const icDevice *device
         }
     }
 
-    const icDeviceResource *badBatteryResource = deviceServiceFindDeviceResourceById((icDevice *) device, COMMON_DEVICE_RESOURCE_BATTERY_BAD);
+    const icDeviceResource *badBatteryResource =
+        deviceServiceFindDeviceResourceById((icDevice *) device, COMMON_DEVICE_RESOURCE_BATTERY_BAD);
 
     if (badBatteryResource != NULL && stringCompare(badBatteryResource->value, "true", false) == 0)
     {
@@ -1437,7 +1459,7 @@ static void collectResources(basicDeviceInfo *deviceInfo, const icDevice *device
     {
         deviceInfo->batteryState = BATTERY_STATE_LOW_STRING;
     }
-    else if(stringCompare(deviceInfo->lowBattery, "false", false) == 0)
+    else if (stringCompare(deviceInfo->lowBattery, "false", false) == 0)
     {
         deviceInfo->batteryState = BATTERY_STATE_GOOD_STRING;
     }
@@ -1453,7 +1475,7 @@ static void collectEndpointResources(basicDeviceInfo *deviceInfo, const icDevice
 {
     scoped_generic icLinkedListIterator *endpointIter = linkedListIteratorCreate(device->endpoints);
 
-    while(linkedListIteratorHasNext(endpointIter))
+    while (linkedListIteratorHasNext(endpointIter))
     {
         const icDeviceEndpoint *endpoint = linkedListIteratorGetNext(endpointIter);
 
@@ -1471,7 +1493,11 @@ static void collectEndpointResources(basicDeviceInfo *deviceInfo, const icDevice
 
             if (resource == NULL)
             {
-                icLogError(LOG_TAG, "%s: unable to find resource for device %s on endpoint %s", __FUNCTION__, device->uuid, endpoint->uri);
+                icLogError(LOG_TAG,
+                           "%s: unable to find resource for device %s on endpoint %s",
+                           __FUNCTION__,
+                           device->uuid,
+                           endpoint->uri);
                 continue;
             }
 
@@ -1506,13 +1532,13 @@ static void collectCameraResources(cameraDeviceInfo *deviceInfo, const icDevice 
 {
     if (device->resources == NULL)
     {
-        icLogError(LOG_TAG, "%s: unable to use resource list for device %s",__FUNCTION__, device->uuid);
+        icLogError(LOG_TAG, "%s: unable to use resource list for device %s", __FUNCTION__, device->uuid);
         return;
     }
 
     scoped_icLinkedListIterator *resourceIter = linkedListIteratorCreate(device->resources);
 
-    while(linkedListIteratorHasNext(resourceIter))
+    while (linkedListIteratorHasNext(resourceIter))
     {
         const icDeviceResource *resource = linkedListIteratorGetNext(resourceIter);
 
@@ -1546,12 +1572,12 @@ static void collectCameraResources(cameraDeviceInfo *deviceInfo, const icDevice 
  */
 static void convertAttributeReports(icLinkedList *attList, attributeDeviceInfo *deviceInfo)
 {
-    if (attList != NULL && deviceInfo !=NULL)
+    if (attList != NULL && deviceInfo != NULL)
     {
         int counter = 0;
         scoped_icLinkedListIterator *listIter = linkedListIteratorCreate(attList);
 
-        while(linkedListIteratorHasNext(listIter))
+        while (linkedListIteratorHasNext(listIter))
         {
             const deviceAttributeItem *currentItem = linkedListIteratorGetNext(listIter);
 
@@ -1696,74 +1722,120 @@ static void convertCheckIns(icLinkedList *checkInList, checkInDeviceInfo *device
  * @param deviceClass - the device type
  * @return - a massive string list containing all of the information above or NULL
  */
-static char *createDeviceStringList(const char *uuid, basicDeviceInfo *deviceInfo, attributeDeviceInfo *attList,
-                                    rejoinDeviceInfo *rejoinList, checkInDeviceInfo *checkInList,
-                                    deviceEventCounterItem *deviceCounters, const char *deviceClass)
+static char *createDeviceStringList(const char *uuid,
+                                    basicDeviceInfo *deviceInfo,
+                                    attributeDeviceInfo *attList,
+                                    rejoinDeviceInfo *rejoinList,
+                                    checkInDeviceInfo *checkInList,
+                                    deviceEventCounterItem *deviceCounters,
+                                    const char *deviceClass)
 {
-    if (uuid == NULL || deviceInfo == NULL || attList == NULL || rejoinList == NULL ||
-        checkInList == NULL || deviceCounters == NULL || deviceClass == NULL)
+    if (uuid == NULL || deviceInfo == NULL || attList == NULL || rejoinList == NULL || checkInList == NULL ||
+        deviceCounters == NULL || deviceClass == NULL)
     {
         return NULL;
     }
 
-    char *listOfValues = stringBuilder(
-            "%s,%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,%s,%s,"
-            "%s,%s,"
-            "%s,%s,"
-            "%s,%s,"
-            "%s,%s,"
-            "%s,%s,"
-            "%s,"
-            "%s,"
-            "%s,"
-            "%s,"
-            "%s,"
-            "%s,%s,%s/%s,"
-            "%s/%s,%s,%s,%s,"
-            "%s,%s,%s,"
-            "%s,%s,%s,"
-            "%d,"
-            "%d,"
-            "%d,"
-            "%d,"
-            "%d",
-            uuid, deviceInfo->manufacturer, deviceInfo->model, deviceInfo->firmVer, deviceInfo->upgradeStatus,
-            attList[0].reportTime, attList[0].clusterId, attList[0].attributeId, attList[0].data,
-            attList[1].reportTime, attList[1].clusterId, attList[1].attributeId, attList[1].data,
-            attList[2].reportTime, attList[2].clusterId, attList[2].attributeId, attList[2].data,
-            attList[3].reportTime, attList[3].clusterId, attList[3].attributeId, attList[3].data,
-            attList[4].reportTime, attList[4].clusterId, attList[4].attributeId, attList[4].data,
-            attList[5].reportTime, attList[5].clusterId, attList[5].attributeId, attList[5].data,
-            attList[6].reportTime, attList[6].clusterId, attList[6].attributeId, attList[6].data,
-            attList[7].reportTime, attList[7].clusterId, attList[7].attributeId, attList[7].data,
-            rejoinList[0].time, rejoinList[0].isSecure,
-            rejoinList[1].time, rejoinList[1].isSecure,
-            rejoinList[2].time, rejoinList[2].isSecure,
-            rejoinList[3].time, rejoinList[3].isSecure,
-            rejoinList[4].time, rejoinList[4].isSecure,
-            checkInList[0].time,
-            checkInList[1].time,
-            checkInList[2].time,
-            checkInList[3].time,
-            checkInList[4].time,
-            deviceClass, deviceInfo->hardVer, deviceInfo->nearLqi, deviceInfo->farLqi,
-            deviceInfo->nearRssi, deviceInfo->farRssi, deviceInfo->temp, deviceInfo->batteryVolts, deviceInfo->batteryState,
-            deviceInfo->lowBattery, deviceInfo->commFail, deviceInfo->troubled,
-            deviceInfo->bypassed, deviceInfo->tampered, deviceInfo->faulted,
-            deviceCounters->totalRejoinEvents,
-            deviceCounters->totalSecureRejoinEvents,
-            deviceCounters->totalUnSecureRejoinEvents,
-            deviceCounters->totalDuplicateSeqNumEvents,
-            deviceCounters->totalDuplicateSeqNumEvents
-            );
+    char *listOfValues = stringBuilder("%s,%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,%s,%s,"
+                                       "%s,%s,"
+                                       "%s,%s,"
+                                       "%s,%s,"
+                                       "%s,%s,"
+                                       "%s,%s,"
+                                       "%s,"
+                                       "%s,"
+                                       "%s,"
+                                       "%s,"
+                                       "%s,"
+                                       "%s,%s,%s/%s,"
+                                       "%s/%s,%s,%s,%s,"
+                                       "%s,%s,%s,"
+                                       "%s,%s,%s,"
+                                       "%d,"
+                                       "%d,"
+                                       "%d,"
+                                       "%d,"
+                                       "%d",
+                                       uuid,
+                                       deviceInfo->manufacturer,
+                                       deviceInfo->model,
+                                       deviceInfo->firmVer,
+                                       deviceInfo->upgradeStatus,
+                                       attList[0].reportTime,
+                                       attList[0].clusterId,
+                                       attList[0].attributeId,
+                                       attList[0].data,
+                                       attList[1].reportTime,
+                                       attList[1].clusterId,
+                                       attList[1].attributeId,
+                                       attList[1].data,
+                                       attList[2].reportTime,
+                                       attList[2].clusterId,
+                                       attList[2].attributeId,
+                                       attList[2].data,
+                                       attList[3].reportTime,
+                                       attList[3].clusterId,
+                                       attList[3].attributeId,
+                                       attList[3].data,
+                                       attList[4].reportTime,
+                                       attList[4].clusterId,
+                                       attList[4].attributeId,
+                                       attList[4].data,
+                                       attList[5].reportTime,
+                                       attList[5].clusterId,
+                                       attList[5].attributeId,
+                                       attList[5].data,
+                                       attList[6].reportTime,
+                                       attList[6].clusterId,
+                                       attList[6].attributeId,
+                                       attList[6].data,
+                                       attList[7].reportTime,
+                                       attList[7].clusterId,
+                                       attList[7].attributeId,
+                                       attList[7].data,
+                                       rejoinList[0].time,
+                                       rejoinList[0].isSecure,
+                                       rejoinList[1].time,
+                                       rejoinList[1].isSecure,
+                                       rejoinList[2].time,
+                                       rejoinList[2].isSecure,
+                                       rejoinList[3].time,
+                                       rejoinList[3].isSecure,
+                                       rejoinList[4].time,
+                                       rejoinList[4].isSecure,
+                                       checkInList[0].time,
+                                       checkInList[1].time,
+                                       checkInList[2].time,
+                                       checkInList[3].time,
+                                       checkInList[4].time,
+                                       deviceClass,
+                                       deviceInfo->hardVer,
+                                       deviceInfo->nearLqi,
+                                       deviceInfo->farLqi,
+                                       deviceInfo->nearRssi,
+                                       deviceInfo->farRssi,
+                                       deviceInfo->temp,
+                                       deviceInfo->batteryVolts,
+                                       deviceInfo->batteryState,
+                                       deviceInfo->lowBattery,
+                                       deviceInfo->commFail,
+                                       deviceInfo->troubled,
+                                       deviceInfo->bypassed,
+                                       deviceInfo->tampered,
+                                       deviceInfo->faulted,
+                                       deviceCounters->totalRejoinEvents,
+                                       deviceCounters->totalSecureRejoinEvents,
+                                       deviceCounters->totalUnSecureRejoinEvents,
+                                       deviceCounters->totalDuplicateSeqNumEvents,
+                                       deviceCounters->totalDuplicateSeqNumEvents);
 
     return listOfValues;
 }

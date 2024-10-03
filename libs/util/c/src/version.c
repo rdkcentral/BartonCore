@@ -30,43 +30,44 @@
  * Author: jelderton - 6/19/15
  *-----------------------------------------------*/
 
-#include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <inttypes.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <icUtil/version.h>
-#include <icUtil/stringUtils.h>
-#include <icUtil/fileUtils.h>
 #include <icLog/logging.h>
 #include <icUtil/array.h>
+#include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
+#include <icUtil/version.h>
 
-#define LOG_TAG    "VERSION"
+#define LOG_TAG                                  "VERSION"
 
-#define UNDERSCORE_DELIMITER   "_"
-#define PERIOD_DELIMITER "."
-#define SNAPSHOT_BUILD_NUMBER   -99
+#define UNDERSCORE_DELIMITER                     "_"
+#define PERIOD_DELIMITER                         "."
+#define SNAPSHOT_BUILD_NUMBER                    -99
 
 // Version file keys
-#define VERSION_FILE_KEY_LONG_VERSION "LONG_VERSION"
-#define VERSION_FILE_KEY_VERSION "version"
-#define VERSION_FILE_KEY_RELEASE_VER "release_ver"
-#define VERSION_FILE_KEY_SERVICE_VER "service_ver"
-#define VERSION_FILE_KEY_MAINTENANCE_VER "maintenance_ver"
-#define VERSION_FILE_KEY_HOT_FIX_VER "hot_fix_ver"
-#define VERSION_FILE_KEY_DISPLAY_VERSION "display_version"
-#define VERSION_FILE_KEY_SERVER_VERSION "server_version"
+#define VERSION_FILE_KEY_LONG_VERSION            "LONG_VERSION"
+#define VERSION_FILE_KEY_VERSION                 "version"
+#define VERSION_FILE_KEY_RELEASE_VER             "release_ver"
+#define VERSION_FILE_KEY_SERVICE_VER             "service_ver"
+#define VERSION_FILE_KEY_MAINTENANCE_VER         "maintenance_ver"
+#define VERSION_FILE_KEY_HOT_FIX_VER             "hot_fix_ver"
+#define VERSION_FILE_KEY_DISPLAY_VERSION         "display_version"
+#define VERSION_FILE_KEY_SERVER_VERSION          "server_version"
 #define VERSION_FILE_KEY_LAST_COMPATIBLE_VERSION "lastCompatibleVersion"
-#define VERSION_FILE_KEY_SVN_BUILD "svn_build"
-#define VERSION_FILE_KEY_SVN_DATE "svn_date"
-#define VERSION_FILE_KEY_BUILD_ID "build_id"
-#define VERSION_FILE_KEY_BUILD_DATE "build_date"
-#define VERSION_FILE_KEY_BUILD_BY "build_by"
+#define VERSION_FILE_KEY_SVN_BUILD               "svn_build"
+#define VERSION_FILE_KEY_SVN_DATE                "svn_date"
+#define VERSION_FILE_KEY_BUILD_ID                "build_id"
+#define VERSION_FILE_KEY_BUILD_DATE              "build_date"
+#define VERSION_FILE_KEY_BUILD_BY                "build_by"
 
 // Enum for easy switch-case of keys. Keep in sync with above list
-typedef enum {
+typedef enum
+{
     VersionFileKeyLongVersion,
     VersionFileKeyVersion,
     VersionFileKeyReleaseVer,
@@ -83,26 +84,27 @@ typedef enum {
     VersionFileKeyBuildBy,
 } VersionFileKeyIndex;
 
-typedef struct {
+typedef struct
+{
     VersionFileKeyIndex index;
     const char *key;
 } VersionFileKeyEntry;
 
 static const VersionFileKeyEntry knownVersionFileKeys[] = {
-        {VersionFileKeyLongVersion, VERSION_FILE_KEY_LONG_VERSION},
-        {VersionFileKeyVersion, VERSION_FILE_KEY_VERSION},
-        {VersionFileKeyReleaseVer, VERSION_FILE_KEY_RELEASE_VER},
-        {VersionFileKeyServiceVer, VERSION_FILE_KEY_SERVICE_VER},
-        {VersionFileKeyMaintenanceVer, VERSION_FILE_KEY_MAINTENANCE_VER},
-        {VersionFileKeyHotFixVer, VERSION_FILE_KEY_HOT_FIX_VER},
-        {VersionFileKeyDisplayVer, VERSION_FILE_KEY_DISPLAY_VERSION},
-        {VersionFileKeyServerVer, VERSION_FILE_KEY_SERVER_VERSION},
-        {VersionFileKeyLastCompatibleVersion, VERSION_FILE_KEY_LAST_COMPATIBLE_VERSION},
-        {VersionFileKeySvnBuild, VERSION_FILE_KEY_SVN_BUILD},
-        {VersionFileKeySvnDate, VERSION_FILE_KEY_SVN_DATE},
-        {VersionFileKeyBuildId, VERSION_FILE_KEY_BUILD_ID},
-        {VersionFileKeyBuildDate, VERSION_FILE_KEY_BUILD_DATE},
-        {VersionFileKeyBuildBy, VERSION_FILE_KEY_BUILD_BY}
+    {          VersionFileKeyLongVersion,            VERSION_FILE_KEY_LONG_VERSION},
+    {              VersionFileKeyVersion,                 VERSION_FILE_KEY_VERSION},
+    {           VersionFileKeyReleaseVer,             VERSION_FILE_KEY_RELEASE_VER},
+    {           VersionFileKeyServiceVer,             VERSION_FILE_KEY_SERVICE_VER},
+    {       VersionFileKeyMaintenanceVer,         VERSION_FILE_KEY_MAINTENANCE_VER},
+    {            VersionFileKeyHotFixVer,             VERSION_FILE_KEY_HOT_FIX_VER},
+    {           VersionFileKeyDisplayVer,         VERSION_FILE_KEY_DISPLAY_VERSION},
+    {            VersionFileKeyServerVer,          VERSION_FILE_KEY_SERVER_VERSION},
+    {VersionFileKeyLastCompatibleVersion, VERSION_FILE_KEY_LAST_COMPATIBLE_VERSION},
+    {             VersionFileKeySvnBuild,               VERSION_FILE_KEY_SVN_BUILD},
+    {              VersionFileKeySvnDate,                VERSION_FILE_KEY_SVN_DATE},
+    {              VersionFileKeyBuildId,                VERSION_FILE_KEY_BUILD_ID},
+    {            VersionFileKeyBuildDate,              VERSION_FILE_KEY_BUILD_DATE},
+    {              VersionFileKeyBuildBy,                VERSION_FILE_KEY_BUILD_BY}
 };
 
 static void parseVersionFileLine(icVersionFile *versionFile, const char *line);
@@ -240,8 +242,10 @@ char *produceDisplayVersionSrtring(icVersion *version)
     // returns a string that looks similar to:
     //  10.07.00.000000
     char *retval = stringBuilder("%02" PRIu8 ".%02" PRIu8 ".%02" PRIu8 ".%06" PRIu64,
-                                 version->releaseNumber, version->serviceUpdateNumber,
-                                 version->maintenanceReleaseNumber, version->hotfixNumber);
+                                 version->releaseNumber,
+                                 version->serviceUpdateNumber,
+                                 version->maintenanceReleaseNumber,
+                                 version->hotfixNumber);
     return retval;
 }
 
@@ -260,15 +264,24 @@ char *produceVersionString(icVersion *info)
     {
         // add numbers + SNAPSHOT
         //
-        sprintf(retVal, "%" PRIu8 "_%" PRIu8 "_%" PRIu8 "_%" PRIu64 "_SNAPSHOT", info->releaseNumber,
-                info->serviceUpdateNumber, info->maintenanceReleaseNumber, info->hotfixNumber);
+        sprintf(retVal,
+                "%" PRIu8 "_%" PRIu8 "_%" PRIu8 "_%" PRIu64 "_SNAPSHOT",
+                info->releaseNumber,
+                info->serviceUpdateNumber,
+                info->maintenanceReleaseNumber,
+                info->hotfixNumber);
     }
     else
     {
         // add basic numbers
         //
-        sprintf(retVal, "%" PRIu8 "_%" PRIu8 "_%" PRIu8 "_%" PRIu64 "_%"PRIi64, info->releaseNumber,
-                info->serviceUpdateNumber, info->maintenanceReleaseNumber, info->hotfixNumber, info->buildNumber);
+        sprintf(retVal,
+                "%" PRIu8 "_%" PRIu8 "_%" PRIu8 "_%" PRIu64 "_%" PRIi64,
+                info->releaseNumber,
+                info->serviceUpdateNumber,
+                info->maintenanceReleaseNumber,
+                info->hotfixNumber,
+                info->buildNumber);
     }
 
     // return copy
@@ -362,11 +375,8 @@ int compareVersions(icVersion *left, icVersion *right)
  */
 bool isVersionEmpty(icVersion *info)
 {
-    if (info->releaseNumber == 0 &&
-        info->serviceUpdateNumber == 0 &&
-        info->maintenanceReleaseNumber == 0 &&
-        info->hotfixNumber == 0 &&
-        (info->buildNumber == 0 || info->buildNumber == SNAPSHOT_BUILD_NUMBER))
+    if (info->releaseNumber == 0 && info->serviceUpdateNumber == 0 && info->maintenanceReleaseNumber == 0 &&
+        info->hotfixNumber == 0 && (info->buildNumber == 0 || info->buildNumber == SNAPSHOT_BUILD_NUMBER))
     {
         return true;
     }
@@ -398,7 +408,7 @@ static void parseVersionFileLine(icVersionFile *versionFile, const char *line)
     }
     else
     {
-        icLogWarn(LOG_TAG, "%s: Encountered line with unexpected syntax", __func__ );
+        icLogWarn(LOG_TAG, "%s: Encountered line with unexpected syntax", __func__);
     }
 }
 
@@ -467,7 +477,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
         // ensure string ends with our token so we don't have
         // do perform some crazy logic to grab the last piece
         //
-        char *copy = (char *)malloc(strlen(versionStr) + strlen(delimiter) + 1);
+        char *copy = (char *) malloc(strlen(versionStr) + strlen(delimiter) + 1);
         sprintf(copy, "%s%s", versionStr, delimiter);
 
         // being getting tokens from the input string
@@ -478,7 +488,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
         if (token != NULL)
         {
             // extract R, then go to next token
-            stringToUnsignedNumberWithinRange((const char *)token, &tmp, 10, 0, UINT8_MAX);
+            stringToUnsignedNumberWithinRange((const char *) token, &tmp, 10, 0, UINT8_MAX);
             target->releaseNumber = tmp;
             token = strtok_r(NULL, delimiter, &ctx);
             tokensProcessed++;
@@ -486,7 +496,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
         if (token != NULL)
         {
             // extract SU, then go to next token
-            stringToUnsignedNumberWithinRange((const char *)token, &tmp, 10, 0, UINT8_MAX);
+            stringToUnsignedNumberWithinRange((const char *) token, &tmp, 10, 0, UINT8_MAX);
             target->serviceUpdateNumber = tmp;
             token = strtok_r(NULL, delimiter, &ctx);
             tokensProcessed++;
@@ -494,7 +504,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
         if (token != NULL)
         {
             // extract MR, then go to next token
-            stringToUnsignedNumberWithinRange((const char *)token, &tmp, 10, 0, UINT8_MAX);
+            stringToUnsignedNumberWithinRange((const char *) token, &tmp, 10, 0, UINT8_MAX);
             target->maintenanceReleaseNumber = tmp;
             token = strtok_r(NULL, delimiter, &ctx);
             tokensProcessed++;
@@ -502,7 +512,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
         if (token != NULL)
         {
             // extract HF, then go to next token
-            stringToUnsignedNumberWithinRange((const char *)token, &target->hotfixNumber, 10, 0, UINT64_MAX);
+            stringToUnsignedNumberWithinRange((const char *) token, &target->hotfixNumber, 10, 0, UINT64_MAX);
             token = strtok_r(NULL, delimiter, &ctx);
             tokensProcessed++;
         }
@@ -518,7 +528,7 @@ static bool parseVersionStringWithDelimiter(const char *versionStr, icVersion *t
             else
             {
                 // extract buildNumber
-                stringToNumberWithinRange((const char *)token, &target->buildNumber, 10, 0, INT64_MAX);
+                stringToNumberWithinRange((const char *) token, &target->buildNumber, 10, 0, INT64_MAX);
             }
             tokensProcessed++;
         }

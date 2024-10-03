@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -26,11 +26,13 @@
 #ifndef FLEXCORE_ZHALASYNCRECEIVER_H
 #define FLEXCORE_ZHALASYNCRECEIVER_H
 
-//These handlers should return non-zero values to indicate that they will handle the payload argument's lifecycle
+#include <cjson/cJSON.h>
+
+// These handlers should return non-zero values to indicate that they will handle the payload argument's lifecycle
 typedef int (*zhalIpcResponseHandler)(cJSON *response);
 typedef int (*zhalEventHandler)(cJSON *event);
 
 int zhalAsyncReceiverStart(const char *host, zhalIpcResponseHandler ipcHandler, zhalEventHandler eventHandler);
 int zhalAsyncReceiverStop();
 
-#endif //FLEXCORE_ZHALASYNCRECEIVER_H
+#endif // FLEXCORE_ZHALASYNCRECEIVER_H

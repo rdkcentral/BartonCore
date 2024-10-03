@@ -45,7 +45,8 @@ extern "C" {
 
 namespace zilker
 {
-    class DescriptorClusterData {
+    class DescriptorClusterData
+    {
 
     public:
         explicit DescriptorClusterData(chip::EndpointId endpointId) : endpointId(endpointId) {};
@@ -122,26 +123,30 @@ namespace zilker
                 cJSON *entry = nullptr;
                 cJSON_ArrayForEach(entry, types)
                 {
-                    if (result->deviceTypes == nullptr) result->deviceTypes = new std::vector<chip::DeviceTypeId>();
+                    if (result->deviceTypes == nullptr)
+                        result->deviceTypes = new std::vector<chip::DeviceTypeId>();
                     cJSON *type = cJSON_GetObjectItem(entry, "type");
                     result->deviceTypes->push_back(type->valueint);
                 }
 
                 cJSON_ArrayForEach(entry, servers)
                 {
-                    if (result->serverList == nullptr) result->serverList = new std::vector<chip::ClusterId>();
+                    if (result->serverList == nullptr)
+                        result->serverList = new std::vector<chip::ClusterId>();
                     result->serverList->push_back(entry->valueint);
                 }
 
                 cJSON_ArrayForEach(entry, clients)
                 {
-                    if (result->clientList == nullptr) result->clientList = new std::vector<chip::ClusterId>();
+                    if (result->clientList == nullptr)
+                        result->clientList = new std::vector<chip::ClusterId>();
                     result->clientList->push_back(entry->valueint);
                 }
 
                 cJSON_ArrayForEach(entry, parts)
                 {
-                    if (result->partsList == nullptr) result->partsList = new std::vector<chip::EndpointId>();
+                    if (result->partsList == nullptr)
+                        result->partsList = new std::vector<chip::EndpointId>();
                     result->partsList->push_back(entry->valueint);
                 }
             }
@@ -152,19 +157,19 @@ namespace zilker
         // the endpoint that this data belongs to
         chip::EndpointId endpointId;
 
-        std::vector<chip::DeviceTypeId> *deviceTypes{};
-        std::vector<chip::ClusterId> *serverList{};
-        std::vector<chip::ClusterId> *clientList{};
-        std::vector<chip::EndpointId> *partsList{};
+        std::vector<chip::DeviceTypeId> *deviceTypes {};
+        std::vector<chip::ClusterId> *serverList {};
+        std::vector<chip::ClusterId> *clientList {};
+        std::vector<chip::EndpointId> *partsList {};
     };
 
-    class DiscoveredDeviceDetails {
+    class DiscoveredDeviceDetails
+    {
     public:
         DiscoveredDeviceDetails() :
-            vendorName(nullptr),
-            productName(nullptr),
-            hardwareVersion(nullptr),
-            softwareVersion(nullptr) {}
+            vendorName(nullptr), productName(nullptr), hardwareVersion(nullptr), softwareVersion(nullptr)
+        {
+        }
         ~DiscoveredDeviceDetails()
         {
             delete vendorName;
@@ -192,8 +197,8 @@ namespace zilker
                                         : cJSON_CreateNull();
 
             scoped_cJSON *networkJson = networkType.HasValue() && !networkType.Value().empty()
-                                        ? cJSON_CreateString(networkType.Value().c_str())
-                                        : cJSON_CreateNull();
+                                            ? cJSON_CreateString(networkType.Value().c_str())
+                                            : cJSON_CreateNull();
 
             cJSON_AddItemToObjectCS(json, "serialNumber", (cJSON *) g_steal_pointer(&serialJson));
             cJSON_AddItemToObjectCS(json, "macAddress", (cJSON *) g_steal_pointer(&macJson));
@@ -237,7 +242,8 @@ namespace zilker
                     std::string(stringCoalesce(cJSON_GetStringValue(cJSON_GetObjectItem(json, "serialNumber")))));
 
                 result->macAddress = chip::MakeOptional(std::string(stringCoalesce(cJSON_GetStringValue(macAddress))));
-                result->networkType = chip::MakeOptional(std::string(stringCoalesce(cJSON_GetStringValue(networkType))));
+                result->networkType =
+                    chip::MakeOptional(std::string(stringCoalesce(cJSON_GetStringValue(networkType))));
 
                 cJSON *entry = nullptr;
                 cJSON_ArrayForEach(entry, endpoints)

@@ -25,24 +25,24 @@
  */
 #pragma once
 
-#include <device/icDeviceResource.h>
+#include <cjson/cJSON.h>
 #include <device/icDeviceEndpoint.h>
+#include <device/icDeviceResource.h>
+#include <glib-object.h>
 #include <icTypes/icLinkedList.h>
 #include <icTypes/icStringHashMap.h>
-#include <stddef.h>
-#include <cjson/cJSON.h>
 #include <serial/icSerDesContext.h>
-#include <glib-object.h>
+#include <stddef.h>
 
-//NOTE: the contents of icDevice is all exposed here for now until we are confident in the data model.
-// Later we may want to hide behind an opaque type.
+// NOTE: the contents of icDevice is all exposed here for now until we are confident in the data model.
+//  Later we may want to hide behind an opaque type.
 typedef struct
 {
-    char    *uuid;
-    char    *deviceClass;
+    char *uuid;
+    char *deviceClass;
     uint8_t deviceClassVersion;
-    char    *uri; // this is likely just "/[device class]/[uuid]"
-    char    *managingDeviceDriver;
+    char *uri; // this is likely just "/[device class]/[uuid]"
+    char *managingDeviceDriver;
     icLinkedList *endpoints;
     icLinkedList *resources;
     icLinkedList *metadata;
@@ -64,7 +64,7 @@ inline void deviceListDestroy__auto(icLinkedList **deviceList)
     deviceListDestroy(*deviceList);
 }
 
-#define scoped_icDevice AUTO_CLEAN(deviceDestroy__auto) icDevice
+#define scoped_icDevice     AUTO_CLEAN(deviceDestroy__auto) icDevice
 #define scoped_icDeviceList AUTO_CLEAN(deviceListDestroy__auto) icLinkedList
 
 void devicePrint(icDevice *device, const char *prefix);
@@ -118,4 +118,4 @@ const char *deviceGetResourceValueById(const icDevice *device, const char *resou
  * @param deviceUuid
  * @return true if valid device uri pattern, otherwise false
  */
-bool deviceUriIsValid(const char* deviceUri, const char* deviceUuid);
+bool deviceUriIsValid(const char *deviceUri, const char *deviceUuid);

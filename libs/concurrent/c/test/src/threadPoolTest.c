@@ -30,25 +30,25 @@
 
 
 // cmocka & it's dependencies
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
-#include <string.h>
+#include <cmocka.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <errno.h>
 
-#include <icLog/logging.h>
-#include <icConcurrent/threadPool.h>
 #include <icConcurrent/icBlockingQueue.h>
-#include <pthread.h>
+#include <icConcurrent/threadPool.h>
 #include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
 #include <inttypes.h>
+#include <pthread.h>
 
-#define LOG_CAT     "poolTEST"
+#define LOG_CAT "poolTEST"
 
 /*
  * test to make sure the pool creation doesn't allow dump values
@@ -61,21 +61,22 @@ static void test_doesPreventStupidity(void **state)
     // create a pool with crazy values
     // and make sure we fail
     //
-    pool = threadPoolCreate("test", 100,99,250);
+    pool = threadPoolCreate("test", 100, 99, 250);
     assert_null(pool);
 
     // cleanup
     threadPoolDestroy(pool);
 }
 
-typedef struct {
+typedef struct
+{
     const char *str;
     icBlockingQueue *resultQueue;
 } TaskArg;
 
 TaskArg *createTaskArg(const char *str, icBlockingQueue *resultQueue)
 {
-    TaskArg *taskArg = (TaskArg *)calloc(1, sizeof(TaskArg));
+    TaskArg *taskArg = (TaskArg *) calloc(1, sizeof(TaskArg));
     taskArg->str = str;
     taskArg->resultQueue = resultQueue;
 
@@ -87,28 +88,24 @@ static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static bool awoken = false;
 static int counter = 0;
 
-static const char *taskStrs[] = {
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f"
-};
+static const char *taskStrs[] = {"a", "b", "c", "d", "e", "f"};
 
 /*
  * simple task to push an item into a queue
  */
 static void simpleTask(void *arg)
 {
-    TaskArg *taskArg = (TaskArg *)arg;
+    TaskArg *taskArg = (TaskArg *) arg;
     pthread_mutex_lock(&mutex);
     ++counter;
-    icLogDebug(LOG_CAT, "simple thread pool task '%s', incremented counter to %d", (taskArg != NULL) ? taskArg->str : "null", counter);
+    icLogDebug(LOG_CAT,
+               "simple thread pool task '%s', incremented counter to %d",
+               (taskArg != NULL) ? taskArg->str : "null",
+               counter);
     pthread_cond_signal(&cond);
     pthread_mutex_unlock(&mutex);
     icLogDebug(LOG_CAT, "simple thread pool task '%s', pushing", (taskArg != NULL) ? taskArg->str : "null");
-    if (blockingQueuePushTimeout(taskArg->resultQueue, (void *)taskArg->str, 10))
+    if (blockingQueuePushTimeout(taskArg->resultQueue, (void *) taskArg->str, 10))
     {
         icLogDebug(LOG_CAT, "simple thread pool task '%s', pushing done", (taskArg != NULL) ? taskArg->str : "null");
     }
@@ -118,10 +115,7 @@ static void simpleTask(void *arg)
     }
 }
 
-static void doNotDestroyQueueItemFunc(void *item)
-{
-
-}
+static void doNotDestroyQueueItemFunc(void *item) {}
 
 /*
  * simple test to create a pool, add some tasks, and tear it down
@@ -150,7 +144,7 @@ static void test_canRunJobs(void **state)
     //
     uint32_t size = threadPoolGetBacklogCount(pool);
     icLogDebug(LOG_CAT, "pool size is %d", size);
-    assert_int_equal(size,0);
+    assert_int_equal(size, 0);
 
     // destroy the pool
     threadPoolDestroy(pool);
@@ -181,9 +175,9 @@ static void test_canQueueJobs(void **state)
     TaskArg *taskArgE = createTaskArg("e", blockingQueue);
     threadPoolAddTask(pool, simpleTask, taskArgA, NULL);
     threadPoolAddTask(pool, simpleTask, taskArgB, NULL);
-    threadPoolAddTask(pool, simpleTask, taskArgC, NULL);   // at min
+    threadPoolAddTask(pool, simpleTask, taskArgC, NULL); // at min
     threadPoolAddTask(pool, simpleTask, taskArgD, NULL);
-    threadPoolAddTask(pool, simpleTask, taskArgE, NULL);  // at max
+    threadPoolAddTask(pool, simpleTask, taskArgE, NULL); // at max
 
     // since the queue can only hold 3 some will be waiting still
     //
@@ -192,9 +186,9 @@ static void test_canQueueJobs(void **state)
     assert_in_range(size, 1, UINT32_MAX);
 
     // let the tasks go
-    for(int i = 0; i < 5; ++i)
+    for (int i = 0; i < 5; ++i)
     {
-        assert_non_null(blockingQueuePopTimeout(blockingQueue,10));
+        assert_non_null(blockingQueuePopTimeout(blockingQueue, 10));
     }
 
     // destroy the pool
@@ -220,7 +214,7 @@ static void test_canGrowJobs(void **state)
 
     // add 6 jobs to see that the pool grows
     TaskArg *taskArgs[6];
-    for(int i = 0; i < 6; ++i)
+    for (int i = 0; i < 6; ++i)
     {
         taskArgs[i] = createTaskArg(taskStrs[i], blockingQueue);
         threadPoolAddTask(pool, simpleTask, taskArgs[i], NULL);
@@ -228,13 +222,12 @@ static void test_canGrowJobs(void **state)
 
     // Wait for counter to get to 6, means 1 completed, 5 active, 0 backlog
     pthread_mutex_lock(&mutex);
-    while(counter < 6)
+    while (counter < 6)
     {
         if (incrementalCondTimedWait(&cond, &mutex, 10) == ETIMEDOUT)
         {
             break;
         }
-
     }
     int counterVal = counter;
     pthread_mutex_unlock(&mutex);
@@ -246,9 +239,9 @@ static void test_canGrowJobs(void **state)
     assert_int_equal(back, 0);
 
     // let the tasks go
-    for(int i = 0; i < 6; ++i)
+    for (int i = 0; i < 6; ++i)
     {
-        assert_non_null(blockingQueuePopTimeout(blockingQueue,10));
+        assert_non_null(blockingQueuePopTimeout(blockingQueue, 10));
     }
 
     // destroy the pool
@@ -281,13 +274,12 @@ static void test_canHaveZeroMinThreads(void **state)
     // This waits for the thread to start
     // Wait for counter to get to 2, means 1 completed, 1 active, 0 backlog
     pthread_mutex_lock(&mutex);
-    while(counter < 2)
+    while (counter < 2)
     {
         if (incrementalCondTimedWait(&cond, &mutex, 10) == ETIMEDOUT)
         {
             break;
         }
-
     }
     int counterVal = counter;
     pthread_mutex_unlock(&mutex);
@@ -301,7 +293,7 @@ static void test_canHaveZeroMinThreads(void **state)
     assert_int_equal(back, 0);
 
     // let the tasks go
-    assert_non_null(blockingQueuePopTimeout(blockingQueue,10));
+    assert_non_null(blockingQueuePopTimeout(blockingQueue, 10));
 
     // destroy the pool, which will wait for everything to complete
     threadPoolDestroy(pool);
@@ -332,7 +324,7 @@ static void blockingTask(void *arg)
 static bool waitForThreadCount(icThreadPool *pool, int amount, uint16_t maxTimeSeconds)
 {
     uint32_t threadCount = threadPoolGetThreadCount(pool);
-    uint8_t sleepIncr = 1; //1 second
+    uint8_t sleepIncr = 1; // 1 second
     uint16_t totalTime = 0;
     while (threadCount != amount && totalTime < maxTimeSeconds)
     {
@@ -351,7 +343,7 @@ static void test_threadsAreCleanedUp(void **state)
 {
     icLogDebug(LOG_CAT, "Starting test %s", __FUNCTION__);
 
-    //Initialize variables
+    // Initialize variables
     uint16_t maxThreads = 10;
     uint16_t minThreads = 0;
     uint16_t numThreadsToAdd = 1;
@@ -359,38 +351,38 @@ static void test_threadsAreCleanedUp(void **state)
     counter = 0;
     awoken = false;
 
-    icLogDebug(LOG_CAT, "Starting number of threads in pool = %"PRIu16, threadPoolGetThreadCount(pool));
+    icLogDebug(LOG_CAT, "Starting number of threads in pool = %" PRIu16, threadPoolGetThreadCount(pool));
 
-    //Populate our pool with some number of blocking threads
+    // Populate our pool with some number of blocking threads
     for (counter = 0; counter < numThreadsToAdd; counter++)
     {
         threadPoolAddTask(pool, blockingTask, NULL, threadPoolTaskArgDoNotFreeFunc);
     }
 
-    //Wait until all threads are running
-    bool success = waitForThreadCount(pool, counter+minThreads, 3);
+    // Wait until all threads are running
+    bool success = waitForThreadCount(pool, counter + minThreads, 3);
 
-    //If we didn't hit the active count, then this test is a failure.
+    // If we didn't hit the active count, then this test is a failure.
     assert_true(success);
 
-    icLogDebug(LOG_CAT, "Running number of threads in pool = %"PRIu16, threadPoolGetThreadCount(pool));
+    icLogDebug(LOG_CAT, "Running number of threads in pool = %" PRIu16, threadPoolGetThreadCount(pool));
 
-    //Now lets signal our threads so they finish.
+    // Now lets signal our threads so they finish.
     pthread_mutex_lock(&mutex);
     awoken = true;
     pthread_cond_broadcast(&cond);
     pthread_mutex_unlock(&mutex);
 
-    //Give the thread pool threads time to realize there's nothing to do and end (may take up to numThreads * 10 seconds)
-    //Plus one additional second to ensure the worker has woken up and realized it needs to end
-    success = waitForThreadCount(pool, minThreads, (counter+minThreads) * 10 + 1);
+    // Give the thread pool threads time to realize there's nothing to do and end (may take up to numThreads * 10
+    // seconds) Plus one additional second to ensure the worker has woken up and realized it needs to end
+    success = waitForThreadCount(pool, minThreads, (counter + minThreads) * 10 + 1);
 
-    //If we didn't hit the thread count, then this test is a failure.
+    // If we didn't hit the thread count, then this test is a failure.
     assert_true(success);
 
-    icLogDebug(LOG_CAT, "Final number of threads in pool = %"PRIu16, threadPoolGetThreadCount(pool));
+    icLogDebug(LOG_CAT, "Final number of threads in pool = %" PRIu16, threadPoolGetThreadCount(pool));
 
-    //Cleanup
+    // Cleanup
     threadPoolDestroy(pool);
     icLogDebug(LOG_CAT, "Ending test %s", __FUNCTION__);
     (void) state;
@@ -399,18 +391,17 @@ static void test_threadsAreCleanedUp(void **state)
 static void doNotFreeArgFunc(void *arg)
 {
     // Nothing to do
-    (void)arg;
+    (void) arg;
 }
 
 static void selfDestroyTask(void *arg)
 {
-    icThreadPool *pool = (icThreadPool *)arg;
+    icThreadPool *pool = (icThreadPool *) arg;
     threadPoolDestroy(pool);
     pthread_mutex_lock(&mutex);
     awoken = true;
     pthread_cond_broadcast(&cond);
     pthread_mutex_unlock(&mutex);
-
 }
 
 static void test_taskCanDestroyPool(void **state)
@@ -422,7 +413,7 @@ static void test_taskCanDestroyPool(void **state)
     threadPoolAddTask(pool, selfDestroyTask, pool, doNotFreeArgFunc);
     // Need to make sure the task actually started and did the destroy
     pthread_mutex_lock(&mutex);
-    while(awoken == false)
+    while (awoken == false)
     {
         if (incrementalCondTimedWait(&cond, &mutex, 1) == ETIMEDOUT)
         {
@@ -443,24 +434,20 @@ int main(int argc, const char **argv)
 {
     // init logging and set to ERROR so we don't output a ton of log lines
     // NOTE: feel free to make this INFO or DEBUG when debugging
-    //setIcLogPriorityFilter(IC_LOG_ERROR);
+    // setIcLogPriorityFilter(IC_LOG_ERROR);
     initTimedWaitCond(&cond);
 
     // make our array of tests to run
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_doesPreventStupidity),
-                    cmocka_unit_test(test_canRunJobs),
-                    cmocka_unit_test(test_canQueueJobs),
-                    cmocka_unit_test(test_canGrowJobs),
-                    cmocka_unit_test(test_canHaveZeroMinThreads),
-                    cmocka_unit_test(test_threadsAreCleanedUp),
-                    cmocka_unit_test(test_taskCanDestroyPool)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_doesPreventStupidity),
+                                       cmocka_unit_test(test_canRunJobs),
+                                       cmocka_unit_test(test_canQueueJobs),
+                                       cmocka_unit_test(test_canGrowJobs),
+                                       cmocka_unit_test(test_canHaveZeroMinThreads),
+                                       cmocka_unit_test(test_threadsAreCleanedUp),
+                                       cmocka_unit_test(test_taskCanDestroyPool)};
 
     // fire off the suite of tests
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 
     return retval;
 }
-

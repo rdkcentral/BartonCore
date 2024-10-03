@@ -23,7 +23,6 @@
 #pragma once
 
 #include "MatterCluster.h"
-#include "subsystems/matter/MatterCommon.h"
 #include "app-common/zap-generated/ids/Attributes.h"
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/ClusterStateCache.h"
@@ -31,6 +30,7 @@
 #include "app/ReadHandler.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
+#include "subsystems/matter/MatterCommon.h"
 
 namespace zilker
 {
@@ -40,14 +40,15 @@ namespace zilker
     {
     public:
         GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId) :
-        MatterCluster(handler, deviceId, endpointId)
+            MatterCluster(handler, deviceId, endpointId)
         {
         }
 
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void OnNetworkInterfacesChanged(GeneralDiagnostics &source, NetworkUtils::NetworkInterfaceInfo info) {};
+            virtual void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
+                                                    NetworkUtils::NetworkInterfaceInfo info) {};
         };
 
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override

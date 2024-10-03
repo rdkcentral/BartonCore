@@ -37,15 +37,15 @@
 #include <sys/prctl.h>
 #endif
 
-#include <stdbool.h>
+#include "icConcurrent/threadUtils.h"
+#include <assert.h>
+#include <errno.h>
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
 #include <icUtil/stringUtils.h>
-#include <string.h>
-#include <errno.h>
 #include <signal.h>
-#include <assert.h>
-#include "icConcurrent/threadUtils.h"
+#include <stdbool.h>
+#include <string.h>
 
 #define LOG_TAG "threadUtils"
 
@@ -271,7 +271,7 @@ void _mutexLock(pthread_mutex_t *mtx, const char *file, const int line)
     if (error != 0)
     {
         char *errStr;
-        switch(error)
+        switch (error)
         {
             case EAGAIN:
                 errStr = "recursion limit reached";
@@ -325,7 +325,7 @@ void _readLock(pthread_rwlock_t *lock, const char *file, const int line)
     if (error != 0)
     {
         char *errStr;
-        switch(error)
+        switch (error)
         {
             case EAGAIN:
                 errStr = "recursion limit reached";
@@ -356,7 +356,7 @@ void _writeLock(pthread_rwlock_t *lock, const char *file, const int line)
     if (error != 0)
     {
         char *errStr;
-        switch(error)
+        switch (error)
         {
             case EDEADLK:
                 errStr = "already locked by current thread";

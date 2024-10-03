@@ -24,28 +24,30 @@
 // Created by tlea on 4/4/18.
 //
 
-#include <unistd.h>
-#include <stdarg.h>
 #include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
 #include <cmocka.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
-#include <icLog/logging.h>
-#include <icConfig/storage.h>
 #include <icConfig/simpleProtectConfig.h>
-#include <jsonHelper/jsonHelper.h>
+#include <icConfig/storage.h>
+#include <icLog/logging.h>
 #include <icTypes/sbrm.h>
-#include <icUtil/stringUtils.h>
 #include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
 
-static char* tempDir = NULL;
+static char *tempDir = NULL;
 
-static void test_storage_save_load_simple(void** state)
+static void test_storage_save_load_simple(void **state)
 {
     assert_true(storageSave("namespace1", "key1", "value1"));
 
-    char* value = NULL;
+    char *value = NULL;
     assert_true(storageLoad("namespace1", "key1", &value));
     assert_non_null(value);
     assert_string_equal("value1", value);
@@ -55,11 +57,11 @@ static void test_storage_save_load_simple(void** state)
     (void) state;
 }
 
-static void test_storage_overwrite_value(void** state)
+static void test_storage_overwrite_value(void **state)
 {
     assert_true(storageSave("namespace2", "key2", "value2"));
 
-    char* value = NULL;
+    char *value = NULL;
     assert_true(storageLoad("namespace2", "key2", &value));
     assert_non_null(value);
     assert_string_equal("value2", value);
@@ -77,12 +79,12 @@ static void test_storage_overwrite_value(void** state)
     (void) state;
 }
 
-static void test_storage_delete_value(void** state)
+static void test_storage_delete_value(void **state)
 {
     assert_true(storageSave("namespace1", "key3", "value3"));
     assert_true(storageDelete("namespace1", "key3"));
 
-    char* value = NULL;
+    char *value = NULL;
     assert_false(storageLoad("namespace1", "key3", &value));
     assert_null(value);
 
@@ -91,7 +93,7 @@ static void test_storage_delete_value(void** state)
     (void) state;
 }
 
-static void test_storage_get_keys(void** state)
+static void test_storage_get_keys(void **state)
 {
     assert_true(storageSave("namespace3", "key4a", "value4"));
     assert_true(storageSave("namespace3", "key4b", "value4"));
@@ -101,20 +103,23 @@ static void test_storage_get_keys(void** state)
     AUTO_CLEAN(free_generic__auto) char *bakFile = stringBuilder("%s.bak", origFile);
     assert_true(copyFileByPath(origFile, bakFile));
 
-    icLinkedList* keys = storageGetKeys("namespace3");
+    icLinkedList *keys = storageGetKeys("namespace3");
     assert_non_null(keys);
     assert_int_equal(linkedListCount(keys), 3);
 
-    icLinkedListIterator* it = linkedListIteratorCreate(keys);
+    icLinkedListIterator *it = linkedListIteratorCreate(keys);
     bool foundKey4a = false;
     bool foundKey4b = false;
     bool foundKey4c = false;
-    while(linkedListIteratorHasNext(it))
+    while (linkedListIteratorHasNext(it))
     {
-        char* key = (char*)linkedListIteratorGetNext(it);
-        if(strcmp(key, "key4a") == 0) foundKey4a = true;
-        if(strcmp(key, "key4b") == 0) foundKey4b = true;
-        if(strcmp(key, "key4c") == 0) foundKey4c = true;
+        char *key = (char *) linkedListIteratorGetNext(it);
+        if (strcmp(key, "key4a") == 0)
+            foundKey4a = true;
+        if (strcmp(key, "key4b") == 0)
+            foundKey4b = true;
+        if (strcmp(key, "key4c") == 0)
+            foundKey4c = true;
     }
     linkedListIteratorDestroy(it);
     linkedListDestroy(keys, NULL);
@@ -124,10 +129,10 @@ static void test_storage_get_keys(void** state)
     (void) state;
 }
 
-//if the main file for a storage item is missing, but there is a .bak, it should still appear in keys
-static void test_storage_get_keys_with_bak_only(void** state)
+// if the main file for a storage item is missing, but there is a .bak, it should still appear in keys
+static void test_storage_get_keys_with_bak_only(void **state)
 {
-    storageDeleteNamespace("namespace3"); //clean up anything previous
+    storageDeleteNamespace("namespace3"); // clean up anything previous
     assert_true(storageSave("namespace3", "key5a", "value5"));
     assert_true(storageSave("namespace3", "key5b", "value5"));
     assert_true(storageSave("namespace3", "key5c", "value5"));
@@ -139,20 +144,23 @@ static void test_storage_get_keys_with_bak_only(void** state)
     sprintf(buf2, "%s/%s/namespace3/key5b.bak", tempDir, storageDir);
     assert_int_equal(rename(buf1, buf2), 0);
 
-    icLinkedList* keys = storageGetKeys("namespace3");
+    icLinkedList *keys = storageGetKeys("namespace3");
     assert_non_null(keys);
     assert_int_equal(linkedListCount(keys), 3);
 
-    icLinkedListIterator* it = linkedListIteratorCreate(keys);
+    icLinkedListIterator *it = linkedListIteratorCreate(keys);
     bool foundKey5a = false;
     bool foundKey5b = false;
     bool foundKey5c = false;
-    while(linkedListIteratorHasNext(it))
+    while (linkedListIteratorHasNext(it))
     {
-        char* key = (char*)linkedListIteratorGetNext(it);
-        if(strcmp(key, "key5a") == 0) foundKey5a = true;
-        if(strcmp(key, "key5b") == 0) foundKey5b = true;
-        if(strcmp(key, "key5c") == 0) foundKey5c = true;
+        char *key = (char *) linkedListIteratorGetNext(it);
+        if (strcmp(key, "key5a") == 0)
+            foundKey5a = true;
+        if (strcmp(key, "key5b") == 0)
+            foundKey5b = true;
+        if (strcmp(key, "key5c") == 0)
+            foundKey5c = true;
     }
     linkedListIteratorDestroy(it);
     linkedListDestroy(keys, NULL);
@@ -162,16 +170,16 @@ static void test_storage_get_keys_with_bak_only(void** state)
     (void) state;
 }
 
-static void test_storage_delete_namespace(void** state)
+static void test_storage_delete_namespace(void **state)
 {
     assert_true(storageSave("namespace1", "key5", "value5"));
     assert_true(storageDeleteNamespace("namespace1"));
 
-    char* value = NULL;
+    char *value = NULL;
     assert_false(storageLoad("namespace1", "key5", &value));
     assert_null(value);
 
-    icLinkedList* keys = storageGetKeys("namespace1");
+    icLinkedList *keys = storageGetKeys("namespace1");
     assert_null(keys);
 
     linkedListDestroy(keys, NULL);
@@ -180,16 +188,16 @@ static void test_storage_delete_namespace(void** state)
     (void) state;
 }
 
-static void test_storage_namespace_safety(void** state)
+static void test_storage_namespace_safety(void **state)
 {
     assert_true(storageSave("namespace1", "key6", "value6"));
     assert_true(storageSave("namespace2", "key6", "other_value6"));
 
-    char* value1 = NULL;
+    char *value1 = NULL;
     assert_true(storageLoad("namespace1", "key6", &value1));
     assert_non_null(value1);
 
-    char* value2 = NULL;
+    char *value2 = NULL;
     assert_true(storageLoad("namespace2", "key6", &value2));
     assert_non_null(value2);
 
@@ -201,7 +209,7 @@ static void test_storage_namespace_safety(void** state)
     (void) state;
 }
 
-static void test_storage_namespace_restore(void** state)
+static void test_storage_namespace_restore(void **state)
 {
     /*
      * Create our junk namespace and populate with several key/values.
@@ -211,7 +219,7 @@ static void test_storage_namespace_restore(void** state)
     assert_true(storageSave("namespace10", "key2", "value2"));
     assert_true(storageSave("namespace10", "key3", "value3"));
 
-    char* restoreDir = strdup("/tmp/storageRestoreTest_XXXXXX");
+    char *restoreDir = strdup("/tmp/storageRestoreTest_XXXXXX");
     assert_non_null(mkdtemp(restoreDir));
 
     char cmd[1024]; // Stupid large as we don't really care.
@@ -234,15 +242,15 @@ static void test_storage_namespace_restore(void** state)
      * Get all the restored keys and make sure they are
      * the restored configuration.
      */
-    icLinkedList* list = storageGetKeys("namespace10");
+    icLinkedList *list = storageGetKeys("namespace10");
     assert_non_null(list);
     assert_int_equal(linkedListCount(list), 2);
 
-    icLinkedListIterator* iterator = linkedListIteratorCreate(list);
+    icLinkedListIterator *iterator = linkedListIteratorCreate(list);
     while (linkedListIteratorHasNext(iterator))
     {
-        const char* key = linkedListIteratorGetNext(iterator);
-        char* value = NULL;
+        const char *key = linkedListIteratorGetNext(iterator);
+        char *value = NULL;
 
         assert_true(storageLoad("namespace10", key, &value));
         assert_non_null(value);
@@ -281,7 +289,7 @@ static void test_storage_namespace_restore(void** state)
     (void) state;
 }
 
-static void test_simple_protect(void** state)
+static void test_simple_protect(void **state)
 {
     // encrypt a string using the 'simple' way
     //
@@ -370,8 +378,8 @@ static void test_parse_bad_failover(void **state)
 
     storageSave("namespace1", "key1", "key1data");
 
-    StorageCallbacks angryCb = { .parse = testParser, .parserCtx = (void *) false };
-    StorageCallbacks recoverCb = { .parse = testParser, .parserCtx = (void *) true };
+    StorageCallbacks angryCb = {.parse = testParser, .parserCtx = (void *) false};
+    StorageCallbacks recoverCb = {.parse = testParser, .parserCtx = (void *) true};
 
     assert_true(deleteFile(backupPath));
 
@@ -395,28 +403,25 @@ int runStorageTest()
     mkdtemp(tempDir);
     storageSetConfigPath(tempDir);
 
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_storage_save_load_simple),
-                    cmocka_unit_test(test_storage_overwrite_value),
-                    cmocka_unit_test(test_storage_delete_value),
-                    cmocka_unit_test(test_storage_get_keys),
-                    cmocka_unit_test(test_storage_get_keys_with_bak_only),
-                    cmocka_unit_test(test_storage_delete_namespace),
-                    cmocka_unit_test(test_storage_namespace_safety),
-                    cmocka_unit_test(test_storage_namespace_restore),
-                    cmocka_unit_test(test_simple_protect),
-                    cmocka_unit_test(test_load_valid_json),
-                    cmocka_unit_test(test_load_invalid_json),
-                    cmocka_unit_test(test_load_valid_xml),
-                    cmocka_unit_test(test_load_invalid_xml),
-                    cmocka_unit_test(test_load_backup),
-                    cmocka_unit_test(test_parse_bad_failover)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_storage_save_load_simple),
+                                       cmocka_unit_test(test_storage_overwrite_value),
+                                       cmocka_unit_test(test_storage_delete_value),
+                                       cmocka_unit_test(test_storage_get_keys),
+                                       cmocka_unit_test(test_storage_get_keys_with_bak_only),
+                                       cmocka_unit_test(test_storage_delete_namespace),
+                                       cmocka_unit_test(test_storage_namespace_safety),
+                                       cmocka_unit_test(test_storage_namespace_restore),
+                                       cmocka_unit_test(test_simple_protect),
+                                       cmocka_unit_test(test_load_valid_json),
+                                       cmocka_unit_test(test_load_invalid_json),
+                                       cmocka_unit_test(test_load_valid_xml),
+                                       cmocka_unit_test(test_load_invalid_xml),
+                                       cmocka_unit_test(test_load_backup),
+                                       cmocka_unit_test(test_parse_bad_failover)};
 
     int rc = cmocka_run_group_tests(tests, NULL, NULL);
 
-    //clean up our stuff
+    // clean up our stuff
     storageDeleteNamespace("namespace1");
     storageDeleteNamespace("namespace2");
     storageDeleteNamespace("namespace3");

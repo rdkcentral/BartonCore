@@ -24,9 +24,9 @@
  * Created by Christian Leithner on 6/7/2024.
  */
 
+#include "device-service-discovery-type.h"
 #include "device-service-status.h"
 #include "events/device-service-status-event.h"
-#include "device-service-discovery-type.h"
 #include "glib-object.h"
 #include <glib.h>
 
@@ -60,7 +60,7 @@ static void test_status_creation(BDeviceServiceStatusTest *test, gconstpointer u
 // Test case to check setting and getting properties
 static void test_property_access(BDeviceServiceStatusTest *test, gconstpointer user_data)
 {
-    //test device class
+    // test device class
     g_autoptr(GList) device_classes = g_list_append(NULL, "test-device-class");
     g_object_set(test->status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
@@ -89,7 +89,7 @@ static void test_property_access(BDeviceServiceStatusTest *test, gconstpointer u
     g_assert_cmpuint(discovery_type, ==, B_DEVICE_SERVICE_DISCOVERY_TYPE_DISCOVERY);
 
 
-    //test searching device classes
+    // test searching device classes
     g_autoptr(GList) searching_device_classes = g_list_append(NULL, "test-searching-device-class");
     g_object_set(test->status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES],
@@ -158,37 +158,35 @@ static void test_property_access(BDeviceServiceStatusTest *test, gconstpointer u
     g_assert_cmpstr(g_hash_table_lookup(subsystems_test, "test-subsystem"), ==, "test-status");
 
     // test json
-    g_object_set(test->status,
-                 B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON],
-                 "test-json",
-                 NULL);
+    g_object_set(
+        test->status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON], "test-json", NULL);
     gchar *json = NULL;
-    g_object_get(test->status,
-                 B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON],
-                 &json,
-                 NULL);
+    g_object_get(test->status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON], &json, NULL);
     g_assert_nonnull(json);
     g_assert_cmpstr(json, ==, "test-json");
     g_free(json);
 }
 
-//Test get and set on the event object
+// Test get and set on the event object
 static void test_event_object(BDeviceServiceStatusTest *test, gconstpointer user_data)
 {
     BDeviceServiceStatus *status = b_device_service_status_new();
     g_assert_nonnull(status);
 
-    //add an entry to device_classes
+    // add an entry to device_classes
     g_autoptr(GList) device_classes = g_list_append(NULL, "test-device-class");
-    g_object_set(status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES], device_classes, NULL);
+    g_object_set(status,
+                 B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
+                 device_classes,
+                 NULL);
 
-    //set the status on the event object
+    // set the status on the event object
     g_object_set(test->event,
                  B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
                  status,
                  NULL);
 
-    //get the status object instance from the event object
+    // get the status object instance from the event object
     BDeviceServiceStatus *status_test = NULL;
     g_object_get(test->event,
                  B_DEVICE_SERVICE_STATUS_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_EVENT_PROP_STATUS],
@@ -196,7 +194,7 @@ static void test_event_object(BDeviceServiceStatusTest *test, gconstpointer user
                  NULL);
     g_assert_nonnull(status_test);
 
-    //check that the device_classes property is set on the status object
+    // check that the device_classes property is set on the status object
     GList *device_classes_test = NULL;
     g_object_get(status_test,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
@@ -233,12 +231,8 @@ int main(int argc, char *argv[])
                setup,
                test_property_access,
                teardown);
-    g_test_add("/device-service-status/event-object",
-               BDeviceServiceStatusTest,
-               NULL,
-               setup,
-               test_event_object,
-               teardown);
+    g_test_add(
+        "/device-service-status/event-object", BDeviceServiceStatusTest, NULL, setup, test_event_object, teardown);
 
     // Run tests
     return g_test_run();

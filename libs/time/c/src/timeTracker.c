@@ -36,8 +36,8 @@
 #include <string.h>
 
 #include <icLog/logging.h>
-#include <icTime/timeUtils.h>
 #include <icTime/timeTracker.h>
+#include <icTime/timeUtils.h>
 
 #define LOG_TAG "TIME_TRACKER"
 
@@ -68,16 +68,16 @@ static uint64_t convertMillisToUnit(uint64_t valueMillis, timeTrackerUnit timeUn
 extern inline void timeTrackerDestroy__auto(timeTracker **tracker);
 
 #define MILLIS_IN_SECOND (1000)
-#define MILLIS_IN_MINUTE (MILLIS_IN_SECOND*60)
-#define MILLIS_IN_HOUR (MILLIS_IN_MINUTE*60)
+#define MILLIS_IN_MINUTE (MILLIS_IN_SECOND * 60)
+#define MILLIS_IN_HOUR   (MILLIS_IN_MINUTE * 60)
 
 /*
  * define object for tracking time
  */
 struct _timeTracker
 {
-    uint64_t  startTime;
-    uint64_t  timeoutMillis;
+    uint64_t startTime;
+    uint64_t timeoutMillis;
     bool running;
 };
 
@@ -89,7 +89,7 @@ timeTracker *timeTrackerCreate()
 {
     // create basic struct
     //
-    timeTracker *retVal = (timeTracker *)malloc(sizeof(timeTracker));
+    timeTracker *retVal = (timeTracker *) malloc(sizeof(timeTracker));
     if (retVal != NULL)
     {
         memset(retVal, 0, sizeof(timeTracker));
@@ -236,7 +236,7 @@ uint64_t timeTrackerElapsedTime(timeTracker *tracker, timeTrackerUnit timeUnit)
             // get the number of millis between start time and now
             //
             uint64_t now = getMonotonicMillis();
-            retVal = now-tracker->startTime;
+            retVal = now - tracker->startTime;
         }
         else
         {
@@ -261,7 +261,9 @@ void timeTrackerDebug(timeTracker *tracker)
         return;
     }
 
-    icLogDebug(LOG_TAG, "tracker-dump: tracker run=%s timeout=%"PRIu64" start=%"PRIu64" now=%"PRIu64" elapsed=%"PRIu64" remain=%"PRIu64,
+    icLogDebug(LOG_TAG,
+               "tracker-dump: tracker run=%s timeout=%" PRIu64 " start=%" PRIu64 " now=%" PRIu64 " elapsed=%" PRIu64
+               " remain=%" PRIu64,
                (tracker->running == true) ? "true" : "false",
                tracker->timeoutMillis,
                tracker->startTime,
@@ -274,16 +276,16 @@ static uint64_t unitToMillisFactor(timeTrackerUnit timeUnit)
 {
     uint64_t result = 1;
 
-    switch(timeUnit)
+    switch (timeUnit)
     {
         case TIME_TRACKER_SECS:
-            result=MILLIS_IN_SECOND;
+            result = MILLIS_IN_SECOND;
             break;
         case TIME_TRACKER_MINS:
-            result=MILLIS_IN_MINUTE;
+            result = MILLIS_IN_MINUTE;
             break;
         case TIME_TRACKER_HOURS:
-            result=MILLIS_IN_HOUR;
+            result = MILLIS_IN_HOUR;
             break;
         default:
         case TIME_TRACKER_MILLIS:
@@ -295,7 +297,7 @@ static uint64_t unitToMillisFactor(timeTrackerUnit timeUnit)
 
 static uint64_t convertUnitToMillis(uint64_t value, timeTrackerUnit timeUnit)
 {
-    return value*unitToMillisFactor(timeUnit);
+    return value * unitToMillisFactor(timeUnit);
 }
 
 static uint64_t convertMillisToUnit(uint64_t valueMillis, timeTrackerUnit timeUnit, bool useFloor)
@@ -304,7 +306,7 @@ static uint64_t convertMillisToUnit(uint64_t valueMillis, timeTrackerUnit timeUn
     uint64_t factor = unitToMillisFactor(timeUnit);
     if (factor > 1)
     {
-        double value = valueMillis/(double)factor;
+        double value = valueMillis / (double) factor;
         if (useFloor == true)
         {
             result = floor(value);

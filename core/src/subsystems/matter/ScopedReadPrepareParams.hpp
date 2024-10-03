@@ -34,8 +34,7 @@ namespace zilker
         ScopedReadPrepareParams(const ScopedReadPrepareParams &other) = delete;
         ScopedReadPrepareParams(const std::vector<chip::app::AttributePathParams> &attributes,
                                 const std::vector<chip::app::EventPathParams> &events,
-                                const chip::SessionHandle &handle) :
-            params(handle)
+                                const chip::SessionHandle &handle) : params(handle)
         {
             if (attributes.size() > 0)
             {

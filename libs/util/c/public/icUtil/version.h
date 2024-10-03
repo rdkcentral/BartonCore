@@ -33,19 +33,19 @@
 #ifndef IC_VERSION_H
 #define IC_VERSION_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // the parsed representation of a "version"
 typedef struct _icVersion
 {
-    uint8_t  releaseNumber;
-    uint8_t  serviceUpdateNumber;
-    uint8_t  maintenanceReleaseNumber;
+    uint8_t releaseNumber;
+    uint8_t serviceUpdateNumber;
+    uint8_t maintenanceReleaseNumber;
     uint64_t hotfixNumber;
-    int64_t  buildNumber;
-    int32_t  buildNumTolerance;     // used in Upgrade scenarios.  has to be manually assigned
-    bool     isSnapshot;
+    int64_t buildNumber;
+    int32_t buildNumTolerance; // used in Upgrade scenarios.  has to be manually assigned
+    bool isSnapshot;
 } icVersion;
 
 typedef struct

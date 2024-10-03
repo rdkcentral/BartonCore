@@ -20,29 +20,29 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+#include "deviceServicePrivate.h"
+#include <device/icDeviceMetadata.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
+#include <serial/icSerDesContext.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icLog/logging.h>
-#include <device/icDeviceMetadata.h>
-#include "deviceServicePrivate.h"
-#include <jsonHelper/jsonHelper.h>
-#include <serial/icSerDesContext.h>
-#include <icUtil/stringUtils.h>
 
-#define LOG_TAG "deviceService"
+#define LOG_TAG            "deviceService"
 
 /*
  * Created by Thomas Lea on 9/15/15.
  */
 
 // Keys for metadata json representation
-#define METADATA_ID_KEY "id"
-#define METADATA_URI_KEY "uri"
+#define METADATA_ID_KEY    "id"
+#define METADATA_URI_KEY   "uri"
 #define METADATA_VALUE_KEY "value"
 
 
-void metadataDestroy(icDeviceMetadata* metadata)
+void metadataDestroy(icDeviceMetadata *metadata)
 {
     if (metadata != NULL)
     {
@@ -58,7 +58,7 @@ void metadataDestroy(icDeviceMetadata* metadata)
 
 extern inline void metadataDestroy__auto(icDeviceMetadata **metadata);
 
-void metadataPrint(icDeviceMetadata* metadata, const char* prefix)
+void metadataPrint(icDeviceMetadata *metadata, const char *prefix)
 {
     if (metadata == NULL)
     {
@@ -77,12 +77,12 @@ void metadataPrint(icDeviceMetadata* metadata, const char* prefix)
 }
 
 
-icDeviceMetadata* metadataClone(const icDeviceMetadata* metadata)
+icDeviceMetadata *metadataClone(const icDeviceMetadata *metadata)
 {
-    icDeviceMetadata* clone = NULL;
+    icDeviceMetadata *clone = NULL;
     if (metadata != NULL)
     {
-        clone = (icDeviceMetadata*) calloc(1, sizeof(icDeviceMetadata));
+        clone = (icDeviceMetadata *) calloc(1, sizeof(icDeviceMetadata));
         if (metadata->endpointId != NULL)
         {
             clone->endpointId = strdup(metadata->endpointId);
@@ -111,9 +111,9 @@ icDeviceMetadata* metadataClone(const icDeviceMetadata* metadata)
     return clone;
 }
 
-cJSON* metadataToJSON(const icDeviceMetadata* metadata, const icSerDesContext *context)
+cJSON *metadataToJSON(const icDeviceMetadata *metadata, const icSerDesContext *context)
 {
-    cJSON* json = cJSON_CreateObject();
+    cJSON *json = cJSON_CreateObject();
     // Add metadata info
     cJSON_AddStringToObject(json, METADATA_ID_KEY, metadata->id);
     cJSON_AddStringToObject(json, METADATA_URI_KEY, metadata->uri);
@@ -136,15 +136,15 @@ cJSON* metadataToJSON(const icDeviceMetadata* metadata, const icSerDesContext *c
     return json;
 }
 
-cJSON* metadatasToJSON(icLinkedList* metadatas, const icSerDesContext *context)
+cJSON *metadatasToJSON(icLinkedList *metadatas, const icSerDesContext *context)
 {
     // Add metadata by id
-    cJSON* metadatasJson = cJSON_CreateObject();
-    icLinkedListIterator* metadataIter = linkedListIteratorCreate(metadatas);
+    cJSON *metadatasJson = cJSON_CreateObject();
+    icLinkedListIterator *metadataIter = linkedListIteratorCreate(metadatas);
     while (linkedListIteratorHasNext(metadataIter))
     {
-        icDeviceMetadata* metadata = (icDeviceMetadata*) linkedListIteratorGetNext(metadataIter);
-        cJSON* metadataJson = metadataToJSON(metadata, context);
+        icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(metadataIter);
+        cJSON *metadataJson = metadataToJSON(metadata, context);
         cJSON_AddItemToObject(metadatasJson, metadata->id, metadataJson);
     }
     linkedListIteratorDestroy(metadataIter);
@@ -152,13 +152,13 @@ cJSON* metadatasToJSON(icLinkedList* metadatas, const icSerDesContext *context)
     return metadatasJson;
 }
 
-icDeviceMetadata* metadataFromJSON(const char* deviceUUID, const char* endpointId, cJSON* metadataJSON)
+icDeviceMetadata *metadataFromJSON(const char *deviceUUID, const char *endpointId, cJSON *metadataJSON)
 {
-    icDeviceMetadata* metadata = NULL;
+    icDeviceMetadata *metadata = NULL;
 
     if (metadataJSON != NULL && deviceUUID != NULL)
     {
-        scoped_icDeviceMetadata *tempMetadata = (icDeviceMetadata*) calloc(1, sizeof(icDeviceMetadata));
+        scoped_icDeviceMetadata *tempMetadata = (icDeviceMetadata *) calloc(1, sizeof(icDeviceMetadata));
 
         tempMetadata->uri = getCJSONString(metadataJSON, METADATA_URI_KEY);
         tempMetadata->id = getCJSONString(metadataJSON, METADATA_ID_KEY);
@@ -217,15 +217,18 @@ icDeviceMetadata* metadataFromJSON(const char* deviceUUID, const char* endpointI
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to find metadata json for device %s, endpoint %s", stringCoalesce(deviceUUID), stringCoalesce(endpointId));
+        icLogError(LOG_TAG,
+                   "Failed to find metadata json for device %s, endpoint %s",
+                   stringCoalesce(deviceUUID),
+                   stringCoalesce(endpointId));
     }
 
     return metadata;
 }
 
-icLinkedList* metadatasFromJSON(const char* deviceUUID, const char* endpointId, cJSON* metadatasJSON, bool permissive)
+icLinkedList *metadatasFromJSON(const char *deviceUUID, const char *endpointId, cJSON *metadatasJSON, bool permissive)
 {
-    icLinkedList* metadatas = NULL;
+    icLinkedList *metadatas = NULL;
 
     if (metadatasJSON != NULL)
     {
@@ -234,16 +237,19 @@ icLinkedList* metadatasFromJSON(const char* deviceUUID, const char* endpointId, 
 
         for (int i = 0; i < metadataCount; ++i)
         {
-            cJSON* metadataJson = cJSON_GetArrayItem(metadatasJSON, i);
-            icDeviceMetadata* metadata = metadataFromJSON(deviceUUID, endpointId, metadataJson);
+            cJSON *metadataJson = cJSON_GetArrayItem(metadatasJSON, i);
+            icDeviceMetadata *metadata = metadataFromJSON(deviceUUID, endpointId, metadataJson);
             if (metadata != NULL)
             {
                 linkedListAppend(metadatas, metadata);
             }
             else
             {
-                icLogError(LOG_TAG, "Failed to read metadata %s for device %s, endpoint %s",
-                           metadataJson->string, deviceUUID, stringCoalesceAlt(endpointId, "[root]"));
+                icLogError(LOG_TAG,
+                           "Failed to read metadata %s for device %s, endpoint %s",
+                           metadataJson->string,
+                           deviceUUID,
+                           stringCoalesceAlt(endpointId, "[root]"));
 
 
                 if (permissive == false)
@@ -257,7 +263,10 @@ icLinkedList* metadatasFromJSON(const char* deviceUUID, const char* endpointId, 
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to find metadatas json for device %s, endpoint %s", deviceUUID, stringCoalesceAlt(endpointId, "[root]"));
+        icLogError(LOG_TAG,
+                   "Failed to find metadatas json for device %s, endpoint %s",
+                   deviceUUID,
+                   stringCoalesceAlt(endpointId, "[root]"));
     }
 
     return metadatas;
@@ -282,16 +291,15 @@ char *metadataUriCreate(const char *deviceUuid, const char *endpointId, const ch
     return uri;
 }
 
-bool metadataUriIsValid(const char* deviceMetadataUri,
-                        const char* deviceUuid,
+bool metadataUriIsValid(const char *deviceMetadataUri,
+                        const char *deviceUuid,
                         const char *endpointId,
                         const char *metadataId)
 {
     bool retValue = false;
 
-    if ((stringIsEmpty(deviceMetadataUri) == false) &&
-        (stringIsEmpty(deviceUuid)== false) &&
-        (stringIsEmpty(metadataId)== false))
+    if ((stringIsEmpty(deviceMetadataUri) == false) && (stringIsEmpty(deviceUuid) == false) &&
+        (stringIsEmpty(metadataId) == false))
     {
         scoped_generic char *tempUri = metadataUriCreate(deviceUuid, endpointId, metadataId);
 
@@ -303,4 +311,3 @@ bool metadataUriIsValid(const char* deviceMetadataUri,
 
     return retValue;
 }
-

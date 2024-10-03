@@ -39,4 +39,4 @@
 bool runEncodeTests();
 
 
-#endif //FLEXCORE_ENCODETEST_H
+#endif // FLEXCORE_ENCODETEST_H

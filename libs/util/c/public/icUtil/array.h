@@ -12,4 +12,4 @@
  */
 #define ARRAY_LENGTH(a) sizeof((a)) / sizeof(*(a))
 
-#endif //ZILKER_ARRAY_H
+#endif // ZILKER_ARRAY_H

@@ -24,41 +24,41 @@
 // Created by tlea on 2/18/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
 #include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <zhal/zhal.h>
-#include <stdio.h>
-#include <commonDeviceDefs.h>
-#include <icUtil/stringUtils.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/powerConfigurationCluster.h"
 
-#define LOG_TAG "powerConfigurationCluster"
+#define LOG_TAG                                           "powerConfigurationCluster"
 // Alarm codes
-#define AC_VOLTAGE_BELOW_MIN 0x00
-#define BATTERY_BELOW_MIN_THRESHOLD 0x10
+#define AC_VOLTAGE_BELOW_MIN                              0x00
+#define BATTERY_BELOW_MIN_THRESHOLD                       0x10
 // These seem to be extensions to the Zigbee Spec
-#define BATTERY_NOT_AVAILABLE 0x3B
-#define BATTERY_BAD 0x3C
-#define BATTERY_HIGH_TEMPERATURE 0x3F
-#define CONFIGURE_BATTERY_ALARM_STATE_KEY "powerConfigurationConfigureBatteryAlarmState"
-#define CONFIGURE_BATTERY_ALARM_MASK_KEY "powerConfigurationConfigureBatteryAlarmMask"
-#define CONFIGURE_BATTERY_VOLTAGE_KEY "powerConfigurationConfigureBatteryVoltage"
-#define CONFIGURE_BATTERY_PERCENTAGE_KEY "powerConfigurationConfigureBatteryPercentage"
-#define CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY "powerConfigurationConfigureBatteryRechargeCycles"
-#define CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL "powerConfigurationBatteryVoltageMaxInterval"
-#define AC_POWER_LOSS_ALARM 0x01
-#define BATTERY_TOO_LOW_ALARM 0x01
+#define BATTERY_NOT_AVAILABLE                             0x3B
+#define BATTERY_BAD                                       0x3C
+#define BATTERY_HIGH_TEMPERATURE                          0x3F
+#define CONFIGURE_BATTERY_ALARM_STATE_KEY                 "powerConfigurationConfigureBatteryAlarmState"
+#define CONFIGURE_BATTERY_ALARM_MASK_KEY                  "powerConfigurationConfigureBatteryAlarmMask"
+#define CONFIGURE_BATTERY_VOLTAGE_KEY                     "powerConfigurationConfigureBatteryVoltage"
+#define CONFIGURE_BATTERY_PERCENTAGE_KEY                  "powerConfigurationConfigureBatteryPercentage"
+#define CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY             "powerConfigurationConfigureBatteryRechargeCycles"
+#define CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL            "powerConfigurationBatteryVoltageMaxInterval"
+#define AC_POWER_LOSS_ALARM                               0x01
+#define BATTERY_TOO_LOW_ALARM                             0x01
 
-#define POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY "powerConfigClusterEnableBind"
-#define POWER_CONFIGURATION_CLUSTER_INVALID_VOLTAGE_VALUE  0xFF
+#define POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY       "powerConfigClusterEnableBind"
+#define POWER_CONFIGURATION_CLUSTER_INVALID_VOLTAGE_VALUE 0xFF
 
 typedef struct
 {
@@ -70,10 +70,8 @@ typedef struct
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
 static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId);
-static bool handleAlarm(ZigbeeCluster *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarmTableEntry);
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
 static bool handleAlarmCleared(ZigbeeCluster *ctx,
                                uint64_t eui64,
                                uint8_t endpointId,
@@ -101,9 +99,8 @@ ZigbeeCluster *powerConfigurationClusterCreate(const PowerConfigurationClusterCa
 
 void powerConfigurationClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata,
-                                 POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY,
-                                 bind);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY, bind);
 }
 
 bool powerConfigurationClusterGetBatteryVoltage(uint64_t eui64, uint8_t endpointId, uint8_t *decivolts)
@@ -117,12 +114,8 @@ bool powerConfigurationClusterGetBatteryVoltage(uint64_t eui64, uint8_t endpoint
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  POWER_CONFIGURATION_CLUSTER_ID,
-                                  true,
-                                  BATTERY_VOLTAGE_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, POWER_CONFIGURATION_CLUSTER_ID, true, BATTERY_VOLTAGE_ATTRIBUTE_ID, &val) == 0)
     {
         *decivolts = (uint8_t) (val & 0xFF);
         if (*decivolts != POWER_CONFIGURATION_CLUSTER_INVALID_VOLTAGE_VALUE)
@@ -149,12 +142,9 @@ bool powerConfigurationClusterGetBatteryPercentageRemaining(uint64_t eui64, uint
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  POWER_CONFIGURATION_CLUSTER_ID,
-                                  true,
-                                  BATTERY_PERCENTAGE_REMAINING_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, POWER_CONFIGURATION_CLUSTER_ID, true, BATTERY_PERCENTAGE_REMAINING_ATTRIBUTE_ID, &val) ==
+        0)
     {
         *halfIntPercent = (uint8_t) (val & 0xFF);
         result = true;
@@ -165,7 +155,6 @@ bool powerConfigurationClusterGetBatteryPercentageRemaining(uint64_t eui64, uint
     }
 
     return result;
-
 }
 
 void powerConfigurationClusterBatteryThresholdsDestroy(PowerConfigurationClusterBatteryThresholds *thresholds)
@@ -193,19 +182,20 @@ static void setThresholdEntry(uint8_t **target, const bool *successes, const uin
     }
 }
 
-PowerConfigurationClusterBatteryThresholds *powerConfigurationClusterGetBatteryThresholds(uint64_t eui64, uint8_t endpointId)
+PowerConfigurationClusterBatteryThresholds *powerConfigurationClusterGetBatteryThresholds(uint64_t eui64,
+                                                                                          uint8_t endpointId)
 {
     PowerConfigurationClusterBatteryThresholds *thresholds = NULL;
 
     uint16_t attributeIds[] = {
-            BATTERY_VOLTAGE_MIN_THRESHOLD_ATTRIBUTE_ID,
-            BATTERY_VOLTAGE_THRESHOLD1_ATTRIBUTE_ID,
-            BATTERY_VOLTAGE_THRESHOLD2_ATTRIBUTE_ID,
-            BATTERY_VOLTAGE_THRESHOLD3_ATTRIBUTE_ID,
-            BATTERY_PERCENTAGE_MIN_THRESHOLD_ATTRIBUTE_ID,
-            BATTERY_PERCENTAGE_THRESHOLD1_ATTRIBUTE_ID,
-            BATTERY_PERCENTAGE_THRESHOLD2_ATTRIBUTE_ID,
-            BATTERY_PERCENTAGE_THRESHOLD3_ATTRIBUTE_ID,
+        BATTERY_VOLTAGE_MIN_THRESHOLD_ATTRIBUTE_ID,
+        BATTERY_VOLTAGE_THRESHOLD1_ATTRIBUTE_ID,
+        BATTERY_VOLTAGE_THRESHOLD2_ATTRIBUTE_ID,
+        BATTERY_VOLTAGE_THRESHOLD3_ATTRIBUTE_ID,
+        BATTERY_PERCENTAGE_MIN_THRESHOLD_ATTRIBUTE_ID,
+        BATTERY_PERCENTAGE_THRESHOLD1_ATTRIBUTE_ID,
+        BATTERY_PERCENTAGE_THRESHOLD2_ATTRIBUTE_ID,
+        BATTERY_PERCENTAGE_THRESHOLD3_ATTRIBUTE_ID,
     };
 
     scoped_generic uint64_t *values = calloc(ARRAY_LENGTH(attributeIds), sizeof(uint64_t));
@@ -247,12 +237,8 @@ bool powerConfigurationClusterGetMainsVoltage(uint64_t eui64, uint8_t endpointId
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  POWER_CONFIGURATION_CLUSTER_ID,
-                                  true,
-                                  MAINS_VOLTAGE_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, POWER_CONFIGURATION_CLUSTER_ID, true, MAINS_VOLTAGE_ATTRIBUTE_ID, &val) == 0)
     {
         *decivolts = (uint16_t) (val & 0xFFFF);
         result = true;
@@ -265,34 +251,50 @@ bool powerConfigurationClusterGetMainsVoltage(uint64_t eui64, uint8_t endpointId
     return result;
 }
 
-void powerConfigurationClusterSetConfigureBatteryAlarmState(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void powerConfigurationClusterSetConfigureBatteryAlarmState(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_ALARM_STATE_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_ALARM_STATE_KEY, configure);
 }
 
-void powerConfigurationClusterSetConfigureBatteryAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void powerConfigurationClusterSetConfigureBatteryAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext,
+                                                           bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_ALARM_MASK_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_ALARM_MASK_KEY, configure);
 }
 
-void powerConfigurationClusterSetConfigureBatteryVoltage(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void powerConfigurationClusterSetConfigureBatteryVoltage(const DeviceConfigurationContext *deviceConfigurationContext,
+                                                         bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_VOLTAGE_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_VOLTAGE_KEY, configure);
 }
 
-void powerConfigurationClusterSetConfigureBatteryPercentage(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void powerConfigurationClusterSetConfigureBatteryPercentage(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_PERCENTAGE_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_PERCENTAGE_KEY, configure);
 }
 
-void powerConfigurationClusterSetConfigureBatteryRechargeCycles(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void powerConfigurationClusterSetConfigureBatteryRechargeCycles(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, configure);
 }
 
-void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(const DeviceConfigurationContext *deviceConfigurationContext, uint64_t interval)
+void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    uint64_t interval)
 {
-    addNumberConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL, interval);
+    addNumberConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL, interval);
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -392,9 +394,10 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
             batteryVoltageConfigs[0].attributeInfo.id = BATTERY_VOLTAGE_ATTRIBUTE_ID;
             batteryVoltageConfigs[0].attributeInfo.type = ZCL_INT8U_ATTRIBUTE_TYPE;
             batteryVoltageConfigs[0].minInterval = 1;
-            batteryVoltageConfigs[0].maxInterval = (uint16_t) getNumberConfigurationMetadata(configContext->configurationMetadata,
-                                                                                             CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL,
-                                                                                             REPORTING_INTERVAL_TWENTY_SEVEN_MINS);
+            batteryVoltageConfigs[0].maxInterval =
+                (uint16_t) getNumberConfigurationMetadata(configContext->configurationMetadata,
+                                                          CONFIGURE_BATTERY_VOLTAGE_MAX_INTERVAL,
+                                                          REPORTING_INTERVAL_TWENTY_SEVEN_MINS);
             batteryVoltageConfigs[0].reportableChange = 1;
 
             if (zigbeeSubsystemAttributesSetReporting(configContext->eui64,
@@ -445,29 +448,30 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
             // Record that we configured reporting
             configuredReporting = true;
         }
-
     }
 
     // Check whether to configure battery recharge cycles reporting, default to false
-    if (getBoolConfigurationMetadata(configContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, false))
+    if (getBoolConfigurationMetadata(
+            configContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, false))
     {
         zhalAttributeReportingConfig batteryRechargeCycleConfigs[1];
         uint8_t numConfigs = 1;
 
         memset(&batteryRechargeCycleConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
 
-        batteryRechargeCycleConfigs[0].attributeInfo.id = COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID;
+        batteryRechargeCycleConfigs[0].attributeInfo.id =
+            COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID;
         batteryRechargeCycleConfigs[0].attributeInfo.type = ZCL_INT16U_ATTRIBUTE_TYPE;
         batteryRechargeCycleConfigs[0].minInterval = 1;
         batteryRechargeCycleConfigs[0].maxInterval = REPORTING_INTERVAL_MAX;
         batteryRechargeCycleConfigs[0].reportableChange = 1;
 
         if (zigbeeSubsystemAttributesSetReportingMfgSpecific(configContext->eui64,
-                                                  configContext->endpointId,
-                                                  POWER_CONFIGURATION_CLUSTER_ID,
-                                                  COMCAST_MFG_ID,
-                                                  batteryRechargeCycleConfigs,
-                                                  numConfigs) != 0)
+                                                             configContext->endpointId,
+                                                             POWER_CONFIGURATION_CLUSTER_ID,
+                                                             COMCAST_MFG_ID,
+                                                             batteryRechargeCycleConfigs,
+                                                             numConfigs) != 0)
         {
             icLogError(LOG_TAG, "%s: failed to set reporting for battery recharge cycles", __FUNCTION__);
             result = false;
@@ -479,14 +483,12 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     // Only worry about binding if we have configured some reporting
     if (configuredReporting == true)
     {
-        //If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
-        if (getBoolConfigurationMetadata(configContext->configurationMetadata,
-                                         POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY,
-                                         true))
+        // If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
+        if (getBoolConfigurationMetadata(
+                configContext->configurationMetadata, POWER_CONFIGURATION_CLUSTER_ENABLE_BIND_KEY, true))
         {
-            if (zigbeeSubsystemBindingSet(configContext->eui64,
-                                          configContext->endpointId,
-                                          POWER_CONFIGURATION_CLUSTER_ID) != 0)
+            if (zigbeeSubsystemBindingSet(
+                    configContext->eui64, configContext->endpointId, POWER_CONFIGURATION_CLUSTER_ID) != 0)
             {
                 icLogError(LOG_TAG, "%s: failed to bind power configuration cluster", __FUNCTION__);
                 result = false;
@@ -510,10 +512,8 @@ static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t
     }
 }
 
-static bool handleAlarm(ZigbeeCluster *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     bool result = true;
 
@@ -575,10 +575,8 @@ static bool handleAlarm(ZigbeeCluster *ctx,
     return result;
 }
 
-static bool handleAlarmCleared(ZigbeeCluster *ctx,
-                               uint64_t eui64,
-                               uint8_t endpointId,
-                               const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     bool result = true;
 
@@ -650,20 +648,23 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     uint16_t attributeId = zigbeeIOGetUint16(zio);
     uint8_t attributeType = zigbeeIOGetUint8(zio);
 
-    icLogDebug(LOG_TAG, "%s: 0x%16"PRIx64" attributeId=0x%.4"PRIx16" attributeType=%"PRIu8, __FUNCTION__, report->eui64, attributeId, attributeType);
+    icLogDebug(LOG_TAG,
+               "%s: 0x%16" PRIx64 " attributeId=0x%.4" PRIx16 " attributeType=%" PRIu8,
+               __FUNCTION__,
+               report->eui64,
+               attributeId,
+               attributeType);
 
     if (attributeId == BATTERY_ALARM_STATE_ATTRIBUTE_ID)
     {
         if (cluster->callbacks->batteryChargeStatusUpdated != NULL)
         {
             uint32_t batteryAlarmState = zigbeeIOGetUint32(zio);
-            icLogDebug(LOG_TAG, "%s: batteryAlarmState=0x%08"PRIx32, __FUNCTION__, batteryAlarmState);
-            //CB-103: trigger low battery on any threshold for battery source 1 (the lower 4 bits)
+            icLogDebug(LOG_TAG, "%s: batteryAlarmState=0x%08" PRIx32, __FUNCTION__, batteryAlarmState);
+            // CB-103: trigger low battery on any threshold for battery source 1 (the lower 4 bits)
             bool isLow = (batteryAlarmState & 0xf) > 0;
-            cluster->callbacks->batteryChargeStatusUpdated(cluster->callbackContext,
-                                                     report->eui64,
-                                                     report->sourceEndpoint,
-                                                     isLow);
+            cluster->callbacks->batteryChargeStatusUpdated(
+                cluster->callbackContext, report->eui64, report->sourceEndpoint, isLow);
         }
     }
     else if (attributeId == BATTERY_VOLTAGE_ATTRIBUTE_ID)
@@ -671,13 +672,11 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
         if (cluster->callbacks->batteryVoltageUpdated != NULL)
         {
             uint8_t deciVolts = zigbeeIOGetUint8(zio);
-            icLogDebug(LOG_TAG, "%s: batteryVoltage=%"PRIu8" decivolts", __FUNCTION__, deciVolts);
+            icLogDebug(LOG_TAG, "%s: batteryVoltage=%" PRIu8 " decivolts", __FUNCTION__, deciVolts);
             if (deciVolts != POWER_CONFIGURATION_CLUSTER_INVALID_VOLTAGE_VALUE)
             {
-                cluster->callbacks->batteryVoltageUpdated(cluster->callbackContext,
-                                                          report->eui64,
-                                                          report->sourceEndpoint,
-                                                          deciVolts);
+                cluster->callbacks->batteryVoltageUpdated(
+                    cluster->callbackContext, report->eui64, report->sourceEndpoint, deciVolts);
             }
         }
     }
@@ -687,10 +686,8 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
         {
             uint8_t halfIntPercent = zigbeeIOGetUint8(zio);
 
-            cluster->callbacks->batteryPercentageRemainingUpdated(cluster->callbackContext,
-                                                                  report->eui64,
-                                                                  report->sourceEndpoint,
-                                                                  halfIntPercent);
+            cluster->callbacks->batteryPercentageRemainingUpdated(
+                cluster->callbackContext, report->eui64, report->sourceEndpoint, halfIntPercent);
         }
     }
     else if (report->mfgId == COMCAST_MFG_ID &&
@@ -699,10 +696,8 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
         if (cluster->callbacks->batteryRechargeCyclesChanged != NULL)
         {
             uint16_t attrValue = zigbeeIOGetUint16(zio);
-            icLogDebug(LOG_TAG, "%s: batteryRechargeCycles=%"PRIu16, __FUNCTION__, attrValue);
-            cluster->callbacks->batteryRechargeCyclesChanged(cluster->callbackContext,
-                                                             report->eui64,
-                                                             attrValue);
+            icLogDebug(LOG_TAG, "%s: batteryRechargeCycles=%" PRIu16, __FUNCTION__, attrValue);
+            cluster->callbacks->batteryRechargeCyclesChanged(cluster->callbackContext, report->eui64, attrValue);
         }
     }
     return true;
@@ -710,8 +705,14 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
 
 int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64, uint8_t endpointId, uint64_t *value)
 {
-    return zigbeeSubsystemReadNumberMfgSpecific(eui64, endpointId, POWER_CONFIGURATION_CLUSTER_ID, COMCAST_MFG_ID, true,
-                                  COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID, value);
+    return zigbeeSubsystemReadNumberMfgSpecific(
+        eui64,
+        endpointId,
+        POWER_CONFIGURATION_CLUSTER_ID,
+        COMCAST_MFG_ID,
+        true,
+        COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID,
+        value);
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

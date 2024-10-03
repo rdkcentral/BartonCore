@@ -140,7 +140,8 @@ void collectZigbeeNetworkMap(GHashTable *output);
 /**
  * Add device split markers by subystem, model and count
  *
- * @param output - the runtimeStatistics hashMap containing connected device split markers by subsytem, model and count e.g.
+ * @param output - the runtimeStatistics hashMap containing connected device split markers by subsytem, model and count
+ * e.g.
  * {"TotalSensorCount_split" "subsystem,14"; }
  * {"TotalSubsytemSensor_split" "XHS2-SE,4;XCAM1,3;XCAM2,3;SMCWK01-Z,4;"}
  *
@@ -150,7 +151,8 @@ void collectPairedDevicesInformation(GHashTable *output);
 /**
  * Add camera split markers by model and count
  *
- * @param output - the runtimeStatistics hashMap containing connected camera device split markers by model and count e.g.
+ * @param output - the runtimeStatistics hashMap containing connected camera device split markers by model and count
+ * e.g.
  * {"TotalLocalCameraCount": "2"}
  * {"TotalLocalCamera": "XCam1,1;ICam2C,1;"}
  *
@@ -159,4 +161,4 @@ void collectPairedCamerasInformation(GHashTable *output);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_DEVICESERVICEGATHERER_H
+#endif // ZILKER_DEVICESERVICEGATHERER_H

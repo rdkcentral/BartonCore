@@ -21,13 +21,14 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#include <icUtil/regexUtils.h>
-#include <stddef.h>
-#include <icLog/logging.h>
-#include <stdarg.h>
 #include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
 #include <cmocka.h>
+#include <icLog/logging.h>
 #include <icTypes/sbrm.h>
+#include <icUtil/regexUtils.h>
 #include <string.h>
 
 #define LOG_TAG "regexTests"
@@ -35,17 +36,15 @@
 static void test_credentialsReplacer(void **state)
 {
     REGEX_SIMPLE_REPLACER(usernameReplacer, "<username>\\([^<>]*\\)</username>", NULL, "xxx-username-xxx");
-    REGEX_REPLFLAGS_REPLACER(passwordReplacer, REGEX_GLOBAL, "<password>\\([^<>]*\\)</password>", NULL, "xxx-password-xxx");
-    REGEX_SIMPLE_REPLACER(adminUserReplacer, "<adminUsername>\\([^<>]*\\)</adminUsername>", NULL, "xxx-adminUsername-xxx");
-    REGEX_SIMPLE_REPLACER(adminPasswordReplacer, "<adminPassword>\\([^<>]*\\)</adminPassword>", NULL, "xxx-adminPassword-xxx");
+    REGEX_REPLFLAGS_REPLACER(
+        passwordReplacer, REGEX_GLOBAL, "<password>\\([^<>]*\\)</password>", NULL, "xxx-password-xxx");
+    REGEX_SIMPLE_REPLACER(
+        adminUserReplacer, "<adminUsername>\\([^<>]*\\)</adminUsername>", NULL, "xxx-adminUsername-xxx");
+    REGEX_SIMPLE_REPLACER(
+        adminPasswordReplacer, "<adminPassword>\\([^<>]*\\)</adminPassword>", NULL, "xxx-adminPassword-xxx");
 
     RegexReplacer *credentialsReplacers[] = {
-            &adminUserReplacer,
-            &adminPasswordReplacer,
-            &usernameReplacer,
-            &passwordReplacer,
-            NULL
-    };
+        &adminUserReplacer, &adminPasswordReplacer, &usernameReplacer, &passwordReplacer, NULL};
 
     /* The extra password node is a global replacer sanity check. It is not real smap. */
     const char *cameraAdded = "<iq uri='cameraAdded'>\n"
@@ -92,21 +91,16 @@ static void test_credentialsReplacer(void **state)
 
     printf("edited: %s", edited);
 
-    assert_false(strstr(edited, "myPassword") ||
-                 strstr(edited, "myUsername")    ||
-                 strstr(edited, "testAdmin")     ||
-                 strstr(edited, "testPassword")  ||
-                 strstr(edited, "somePassword"));
+    assert_false(strstr(edited, "myPassword") || strstr(edited, "myUsername") || strstr(edited, "testAdmin") ||
+                 strstr(edited, "testPassword") || strstr(edited, "somePassword"));
 }
 
 static void test_subExpressionReplace(void **state)
 {
-    REGEX_REPLFLAGS_REPLACER(multiReplacer, REGEX_GLOBAL, "Test \\(\\(foo\\)*\\|\\(bar\\)\\)", NULL, NULL, "bz", "bifffff");
+    REGEX_REPLFLAGS_REPLACER(
+        multiReplacer, REGEX_GLOBAL, "Test \\(\\(foo\\)*\\|\\(bar\\)\\)", NULL, NULL, "bz", "bifffff");
 
-    RegexReplacer *replacers[] = {
-            &multiReplacer,
-            NULL
-    };
+    RegexReplacer *replacers[] = {&multiReplacer, NULL};
 
     regexInitReplacers(replacers);
 
@@ -120,10 +114,7 @@ static void test_zeroMatchReplacementIsNotInfinite(void **state)
 {
     /* This replacer will match the zero-length subexpression 1, without matching any actual chars. */
     REGEX_REPLFLAGS_REPLACER(zeroWidthMatchReplacer, REGEX_GLOBAL, "\\(Test\\)*", NULL, "Test");
-    RegexReplacer *replacers[] = {
-            &zeroWidthMatchReplacer,
-            NULL
-    };
+    RegexReplacer *replacers[] = {&zeroWidthMatchReplacer, NULL};
 
     regexInitReplacers(replacers);
 
@@ -136,14 +127,10 @@ static void test_regexReplaceForListOfReplacers(void **state)
 {
     REGEX_REPLFLAGS_REPLACER(IPK_REPLACER, REGEX_GLOBAL, "ipk\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ipk-xxx\"");
     REGEX_REPLFLAGS_REPLACER(SSID_REPLACER, REGEX_GLOBAL, "ssid\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ssid-xxx\"");
-    REGEX_REPLFLAGS_REPLACER(CREDENTIALS_REPLACER, REGEX_GLOBAL, "credentials\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-credentials-xxx\"");
+    REGEX_REPLFLAGS_REPLACER(
+        CREDENTIALS_REPLACER, REGEX_GLOBAL, "credentials\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-credentials-xxx\"");
 
-    RegexReplacer *replacers[] = {
-            &IPK_REPLACER,
-            &SSID_REPLACER,
-            &CREDENTIALS_REPLACER,
-            NULL
-    };
+    RegexReplacer *replacers[] = {&IPK_REPLACER, &SSID_REPLACER, &CREDENTIALS_REPLACER, NULL};
     scoped_icLinkedListNofree *registeredRegexReplacersList = linkedListCreate();
 
     if (replacers != NULL)
@@ -152,8 +139,23 @@ static void test_regexReplaceForListOfReplacers(void **state)
         linkedListAppend(registeredRegexReplacersList, replacers);
     }
 
-    const char *text = "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"Foo\",\"networkCredentials\":{\"wifi\":[{\"ssid\":\"1A39-Five\",\"credentials\":\"Xfinity1\",\"band\":\"5\"},{\"ssid\":\"1A39-TwoPointFour\",\"credentials\":\"Comcast@123\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\",\"max\":\"1\"}}}";
-    const char *fixture = "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"xxx-ipk-xxx\",\"networkCredentials\":{\"wifi\":[{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"5\"},{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\",\"max\":\"1\"}}}";
+    const char *text =
+        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
+        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"Foo\",\"networkCredentials\":{"
+        "\"wifi\":[{\"ssid\":\"1A39-Five\",\"credentials\":\"Xfinity1\",\"band\":\"5\"},{\"ssid\":\"1A39-"
+        "TwoPointFour\",\"credentials\":\"Comcast@123\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-"
+        "9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/"
+        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
+        "\"max\":\"1\"}}}";
+    const char *fixture =
+        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
+        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"xxx-ipk-xxx\","
+        "\"networkCredentials\":{\"wifi\":[{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":"
+        "\"5\"},{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"2.4\"}]}}},\"hdr\":{"
+        "\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":"
+        "\"https://dhdm.xfinity.com/"
+        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
+        "\"max\":\"1\"}}}";
     AUTO_CLEAN(free_generic__auto) char *edited = regexReplaceForListOfReplacers(text, registeredRegexReplacersList);
     assert_string_equal(fixture, edited);
 }
@@ -162,18 +164,12 @@ static void test_regexReplaceWithMultipleElementsInTheList(void **state)
 {
     REGEX_REPLFLAGS_REPLACER(IPK_REPLACER, REGEX_GLOBAL, "ipk\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ipk-xxx\"");
     REGEX_REPLFLAGS_REPLACER(SSID_REPLACER, REGEX_GLOBAL, "ssid\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ssid-xxx\"");
-    REGEX_REPLFLAGS_REPLACER(CREDENTIALS_REPLACER, REGEX_GLOBAL, "credentials\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-credentials-xxx\"");
+    REGEX_REPLFLAGS_REPLACER(
+        CREDENTIALS_REPLACER, REGEX_GLOBAL, "credentials\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-credentials-xxx\"");
 
-    RegexReplacer *ipkReplacer[] = {
-            &IPK_REPLACER,
-            NULL
-    };
+    RegexReplacer *ipkReplacer[] = {&IPK_REPLACER, NULL};
 
-    RegexReplacer *credentialsReplacer[] = {
-            &SSID_REPLACER,
-            &CREDENTIALS_REPLACER,
-            NULL
-    };
+    RegexReplacer *credentialsReplacer[] = {&SSID_REPLACER, &CREDENTIALS_REPLACER, NULL};
 
     scoped_icLinkedListNofree *registeredRegexReplacersList = linkedListCreate();
 
@@ -189,22 +185,34 @@ static void test_regexReplaceWithMultipleElementsInTheList(void **state)
         linkedListAppend(registeredRegexReplacersList, credentialsReplacer);
     }
 
-    const char *text = "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"Foo\",\"networkCredentials\":{\"wifi\":[{\"ssid\":\"1A39-Five\",\"credentials\":\"Xfinity1\",\"band\":\"5\"},{\"ssid\":\"1A39-TwoPointFour\",\"credentials\":\"Comcast@123\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\",\"max\":\"1\"}}}";
-    const char *fixture = "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"xxx-ipk-xxx\",\"networkCredentials\":{\"wifi\":[{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"5\"},{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\",\"max\":\"1\"}}}";
+    const char *text =
+        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
+        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"Foo\",\"networkCredentials\":{"
+        "\"wifi\":[{\"ssid\":\"1A39-Five\",\"credentials\":\"Xfinity1\",\"band\":\"5\"},{\"ssid\":\"1A39-"
+        "TwoPointFour\",\"credentials\":\"Comcast@123\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-"
+        "9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/"
+        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
+        "\"max\":\"1\"}}}";
+    const char *fixture =
+        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
+        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"xxx-ipk-xxx\","
+        "\"networkCredentials\":{\"wifi\":[{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":"
+        "\"5\"},{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"2.4\"}]}}},\"hdr\":{"
+        "\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":"
+        "\"https://dhdm.xfinity.com/"
+        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
+        "\"max\":\"1\"}}}";
     AUTO_CLEAN(free_generic__auto) char *edited = regexReplaceForListOfReplacers(text, registeredRegexReplacersList);
     assert_string_equal(fixture, edited);
 }
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_credentialsReplacer),
-                    cmocka_unit_test(test_subExpressionReplace),
-                    cmocka_unit_test(test_zeroMatchReplacementIsNotInfinite),
-                    cmocka_unit_test(test_regexReplaceForListOfReplacers),
-                    cmocka_unit_test(test_regexReplaceWithMultipleElementsInTheList)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_credentialsReplacer),
+                                       cmocka_unit_test(test_subExpressionReplace),
+                                       cmocka_unit_test(test_zeroMatchReplacementIsNotInfinite),
+                                       cmocka_unit_test(test_regexReplaceForListOfReplacers),
+                                       cmocka_unit_test(test_regexReplaceWithMultipleElementsInTheList)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

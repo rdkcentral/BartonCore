@@ -31,8 +31,8 @@
  * Author: jelderton - 6/19/15
  *-----------------------------------------------*/
 
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
@@ -50,9 +50,9 @@ static char *getTimeString(void);
 /*
  * initialize the logger
  */
-__attribute__ ((constructor)) static void initIcLogger(void)
+__attribute__((constructor)) static void initIcLogger(void)
 {
-    //uses STDOUT, so nothing to open
+    // uses STDOUT, so nothing to open
 }
 
 
@@ -66,13 +66,14 @@ void icLogMsg(const char *file,
               long line,
               const char *categoryName,
               logPriority priority,
-              const char *format, ...)
+              const char *format,
+              ...)
 {
-    va_list     arglist;
+    va_list arglist;
 
     // skip if priority is > logLevel
     //
-    if(!shouldLogMessage(priority))
+    if (!shouldLogMessage(priority))
     {
         return;
     }
@@ -145,5 +146,5 @@ static char *getTimeString(void)
 
     // add millis to the end of the formatted string
     //
-    return g_strdup_printf("%s.%03ld : ", buff, (long)(now.tv_usec / 1000));
+    return g_strdup_printf("%s.%03ld : ", buff, (long) (now.tv_usec / 1000));
 }

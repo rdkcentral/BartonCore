@@ -31,15 +31,12 @@
 #ifndef IC_FILEUTILS_H
 #define IC_FILEUTILS_H
 
-#include <stdio.h>
 #include <stdbool.h>
-#include <sys/stat.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <sys/stat.h>
 
-typedef int (*directoryHandler)(const char* pathname,
-                                const char* dname,
-                                unsigned char dtype,
-                                void* privateData);
+typedef int (*directoryHandler)(const char *pathname, const char *dname, unsigned char dtype, void *privateData);
 
 /**
  * Create all directories in the path
@@ -138,9 +135,7 @@ bool doesDirExist(const char *dirPath);
  * @param privateData Private data that will be handed to the callback routine for each file.
  * @return Zero on success. Otherwise errno will be returned as the value.
  */
-int listDirectory(const char* dir,
-                  directoryHandler handler,
-                  void* privateData);
+int listDirectory(const char *dir, directoryHandler handler, void *privateData);
 
 /*
  * helper to recursively delete a directory and the files within it
@@ -161,7 +156,7 @@ bool deleteDirectoryContent(const char *path);
  * @param privateData Unused for deletion.
  * @return Zero on success, otherwise the errno will be returned as the value.
  */
-int deleteDirHandler(const char* pathname, const char* dname, unsigned char dtype, void* privateData);
+int deleteDirHandler(const char *pathname, const char *dname, unsigned char dtype, void *privateData);
 
 /**
  * Delete a file
@@ -193,7 +188,7 @@ bool deleteFile(const char *filename);
  * @param dst The destination to copy contents of source into
  * @return True on successful copy of all content.
  */
-bool copyDirectory(const char* src, const char* dst);
+bool copyDirectory(const char *src, const char *dst);
 
 /*
  * create a marker file of zero length
@@ -213,8 +208,10 @@ bool createMarkerFile(const char *path);
  * @return true if we successfully purged files below the storage cap and removed files older than the allowed age
  *              in seconds, false otherwise.
  */
-bool fileUtilsDeleteOld(const char *dirToBeChecked, const char *fileExtension,
-                        uint32_t maxAllowedFileStorageMb, uint32_t maxAllowedAgeInSeconds);
+bool fileUtilsDeleteOld(const char *dirToBeChecked,
+                        const char *fileExtension,
+                        uint32_t maxAllowedFileStorageMb,
+                        uint32_t maxAllowedAgeInSeconds);
 
 
 #ifdef CONFIG_LIB_TAR

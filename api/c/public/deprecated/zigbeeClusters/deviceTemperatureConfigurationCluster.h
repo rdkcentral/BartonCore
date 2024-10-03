@@ -34,10 +34,15 @@ typedef enum
 
 typedef struct
 {
-    void (*deviceTemperatureStatusChanged)(void *ctx, uint64_t eui64, uint8_t endpointId, DeviceTemperatureStatus status);
+    void (*deviceTemperatureStatusChanged)(void *ctx,
+                                           uint64_t eui64,
+                                           uint8_t endpointId,
+                                           DeviceTemperatureStatus status);
 } DeviceTemperatureConfigurationClusterCallbacks;
 
-ZigbeeCluster *deviceTemperatureConfigurationClusterCreate(const DeviceTemperatureConfigurationClusterCallbacks *callbacks, void *callbackContext);
+ZigbeeCluster *
+deviceTemperatureConfigurationClusterCreate(const DeviceTemperatureConfigurationClusterCallbacks *callbacks,
+                                            void *callbackContext);
 
 /**
  * Set whether or not to configure the temperature alarm mask.  By default the temperature alarm mask will not be
@@ -45,6 +50,8 @@ ZigbeeCluster *deviceTemperatureConfigurationClusterCreate(const DeviceTemperatu
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void deviceTemperatureConfigurationClusterSetConfigureTemperatureAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void deviceTemperatureConfigurationClusterSetConfigureTemperatureAlarmMask(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure);
 
-#endif //ZILKER_DEVICETEMPERATURECONFIGURATIONCLUSTER_H
+#endif // ZILKER_DEVICETEMPERATURECONFIGURATIONCLUSTER_H

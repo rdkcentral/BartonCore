@@ -34,10 +34,7 @@
 
 typedef struct
 {
-    void (*instantaneousDemandChanged)(uint64_t eui64,
-                     uint8_t endpointId,
-                         int32_t demand,
-                         const void *ctx);
+    void (*instantaneousDemandChanged)(uint64_t eui64, uint8_t endpointId, int32_t demand, const void *ctx);
 } MeteringClusterCallbacks;
 
 
@@ -49,4 +46,4 @@ bool meteringClusterGetMultiplier(uint64_t eui64, uint8_t endpointId, uint32_t *
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_METERINGCLUSTER_H
+#endif // ZILKER_METERINGCLUSTER_H

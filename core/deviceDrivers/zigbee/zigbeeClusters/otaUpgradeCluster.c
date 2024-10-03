@@ -25,24 +25,24 @@
 //
 
 
+#include <commonDeviceDefs.h>
+#include <deviceServicePrivate.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <memory.h>
 #include <stdlib.h>
 #include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <memory.h>
 #include <subsystems/zigbee/zigbeeIO.h>
-#include <deviceServicePrivate.h>
-#include <commonDeviceDefs.h>
-#include <icUtil/stringUtils.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/otaUpgradeCluster.h"
 
-#define LOG_TAG "otaUpgradeCluster"
+#define LOG_TAG                   "otaUpgradeCluster"
 
 #define PAYLOAD_TYPE_QUERY_JITTER 0
-#define JITTER_MAX 100
+#define JITTER_MAX                100
 
 static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId);
 
@@ -70,13 +70,8 @@ bool otaUpgradeClusterImageNotify(uint64_t eui64, uint8_t endpointId)
     zigbeeIOPutUint8(zio, PAYLOAD_TYPE_QUERY_JITTER);
     zigbeeIOPutUint8(zio, JITTER_MAX);
 
-    return zigbeeSubsystemSendCommand(eui64,
-                                      endpointId,
-                                      OTA_UPGRADE_CLUSTER_ID,
-                                      false,
-                                      OTA_IMAGE_NOTIFY_COMMAND_ID,
-                                      payload,
-                                      2) == 0;
+    return zigbeeSubsystemSendCommand(
+               eui64, endpointId, OTA_UPGRADE_CLUSTER_ID, false, OTA_IMAGE_NOTIFY_COMMAND_ID, payload, 2) == 0;
 }
 
 static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId)
@@ -85,16 +80,15 @@ static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t
 
     AUTO_CLEAN(free_generic__auto) char *deviceUuid = zigbeeSubsystemEui64ToId(eui64);
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *firmwareUpgradeState =
-            deviceServiceGetResourceById(deviceUuid,
-                                       NULL,
-                                       COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *firmwareUpgradeState =
+        deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS);
 
     if (firmwareUpgradeState != NULL &&
         stringCompare(firmwareUpgradeState->value, FIRMWARE_UPDATE_STATUS_PENDING, true) == 0)
     {
-        //this device has a pending firmware upgrade, send an image notify while it is polling
+        // this device has a pending firmware upgrade, send an image notify while it is polling
         otaUpgradeClusterImageNotify(eui64, endpointId);
     }
 }
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

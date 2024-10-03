@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2020 Comcast
 //
 // All rights reserved.
@@ -32,4 +32,4 @@
  */
 char *generateUUIDString(void);
 
-#endif //ZILKER_UUIDHELPER_H
+#endif // ZILKER_UUIDHELPER_H

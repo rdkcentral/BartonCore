@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -27,9 +27,9 @@
 #define ZILKER_JSONHELPER_H
 
 #include <cjson/cJSON.h>
+#include <icTypes/sbrm.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <icTypes/sbrm.h>
 
 /**
  * Helper method to extract the string value from a json object
@@ -196,4 +196,4 @@ cJSON *addCJSONBoolean(cJSON *parent, const char *name, const bool *value);
  */
 cJSON *addCJSONString(cJSON *parent, const char *name, const char *value);
 
-#endif //ZILKER_JSONHELPER_H
+#endif // ZILKER_JSONHELPER_H

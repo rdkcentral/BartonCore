@@ -17,8 +17,8 @@
 // Comcast Corporation retains all ownership rights.
 
 #define G_LOG_DOMAIN "deviceServiceCommFail"
-#define LOG_TAG G_LOG_DOMAIN
-#define logFmt(fmt) "(%s)" fmt, __func__
+#define LOG_TAG      G_LOG_DOMAIN
+#define logFmt(fmt)  "(%s)" fmt, __func__
 
 #include "deviceServiceCommFail.h"
 #include "commonDeviceDefs.h"
@@ -145,7 +145,8 @@ void deviceServiceCommFailSetDeviceTimeoutSecs(const icDevice *device, uint32_t 
 
     if (commFailTimeoutSecs != 0)
     {
-        const bool isCommFail = g_strcmp0(deviceGetResourceValueById(device, COMMON_DEVICE_RESOURCE_COMM_FAIL), "true") == 0;
+        const bool isCommFail =
+            g_strcmp0(deviceGetResourceValueById(device, COMMON_DEVICE_RESOURCE_COMM_FAIL), "true") == 0;
 
         deviceCommunicationWatchdogMonitorDevice(device->uuid, commFailTimeoutSecs, isCommFail);
     }

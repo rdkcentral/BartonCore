@@ -52,7 +52,7 @@ using namespace std::chrono_literals;
 #define MATTER_WINDOW_COVERING_DEVICE_DRIVER_NAME "matterWindowCovering"
 
 // this is our endpoint, not the device's
-#define WINDOW_COVERING_ENDPOINT "1"
+#define WINDOW_COVERING_ENDPOINT                  "1"
 
 struct ClusterReadContext
 {
@@ -142,8 +142,7 @@ void MatterWindowCoveringDeviceDriver::CurrentPositionLiftPercentageReadComplete
     delete readContext;
 }
 
-std::vector<MatterCluster *>
-MatterWindowCoveringDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
+std::vector<MatterCluster *> MatterWindowCoveringDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
 {
     icDebug();
 

@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -23,12 +23,12 @@
 // Created by mkoch201 on 6/10/19.
 //
 
+#include <icConfig/obfuscation.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icConfig/obfuscation.h>
 
 bool obfuscateTest()
 {
@@ -38,8 +38,8 @@ bool obfuscateTest()
     //
     const char *pass = "johancameupwiththis";
     const char *input = "this is an obfuscation test with ASCII chars";
-    uint32_t passLen = (uint32_t)strlen(pass);
-    uint32_t inputLen = (uint32_t)strlen(input);
+    uint32_t passLen = (uint32_t) strlen(pass);
+    uint32_t inputLen = (uint32_t) strlen(input);
 
     // encode into a buffer
     //
@@ -52,7 +52,7 @@ bool obfuscateTest()
     char *out = unobfuscate(pass, passLen, buff, buffLen, &outLen);
     printf("unobfuscated string = '%s'\n", out);
 
-    if (strcmp(input,out) != 0)
+    if (strcmp(input, out) != 0)
     {
         printf("FAILED to decode properly\n");
         retVal = false;

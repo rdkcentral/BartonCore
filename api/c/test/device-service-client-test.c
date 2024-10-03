@@ -1740,10 +1740,8 @@ static void test_b_device_service_client_get_metadata_by_uri(void **state)
             icDeviceMetadata *icMetadata = linkedListIteratorGetNext(iter);
 
             g_autofree gchar *dsUri = NULL;
-            g_object_get(self,
-                         B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_URI],
-                         &dsUri,
-                         NULL);
+            g_object_get(
+                self, B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_URI], &dsUri, NULL);
 
             g_assert_cmpstr(icMetadata->uri, ==, dsUri);
 

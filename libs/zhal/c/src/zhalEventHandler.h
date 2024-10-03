@@ -46,4 +46,4 @@ void zhalEventHandlerTerm(void);
  */
 int zhalHandleEvent(cJSON *event);
 
-#endif //ZILKER_ZHALEVENTHANDLER_H
+#endif // ZILKER_ZHALEVENTHANDLER_H

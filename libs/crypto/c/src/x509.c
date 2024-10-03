@@ -35,7 +35,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define LOG_TAG "crypto/x509"
+#define LOG_TAG       "crypto/x509"
 
 #define INDENT_SPACES 4
 

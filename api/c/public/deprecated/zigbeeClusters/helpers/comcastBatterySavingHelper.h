@@ -27,8 +27,8 @@
 #ifndef ZILKER_COMCASTBATTERYSAVINGHELPER_H
 #define ZILKER_COMCASTBATTERYSAVINGHELPER_H
 
-#include <deviceDrivers/zigbeeDriverCommon.h>
 #include "zigbeeClusters/comcastBatterySaving.h"
+#include <deviceDrivers/zigbeeDriverCommon.h>
 
 /**
  * Parse the provided buffer into a ComcastBatterySavingData structure
@@ -39,4 +39,4 @@
  */
 ComcastBatterySavingData *comcastBatterySavingDataParse(uint8_t *buffer, uint16_t bufferLen);
 
-#endif //ZILKER_COMCASTBATTERYSAVINGHELPER_H
+#endif // ZILKER_COMCASTBATTERYSAVINGHELPER_H

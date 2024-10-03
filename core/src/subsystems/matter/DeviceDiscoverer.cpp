@@ -128,8 +128,8 @@ namespace zilker
         if (CHIP_NO_ERROR != error)
         {
             // special handling of the SerialNumber attribute which is optional (dont fail if its unsupported)
-            if (error.IsIMStatus() && chip::app::StatusIB(error).mStatus ==
-                chip::Protocols::InteractionModel::Status::UnsupportedAttribute &&
+            if (error.IsIMStatus() &&
+                chip::app::StatusIB(error).mStatus == chip::Protocols::InteractionModel::Status::UnsupportedAttribute &&
                 path.mClusterId == app::Clusters::BasicInformation::Id &&
                 path.mAttributeId == app::Clusters::BasicInformation::Attributes::SerialNumber::Id)
             {
@@ -253,13 +253,13 @@ namespace zilker
                         auto session = device->GetSecureSession().Value()->AsSecureSession();
                         char nodeIpv6Addr[INET6_ADDRSTRLEN] = {};
                         session->GetPeerAddress().GetIPAddress().ToString(nodeIpv6Addr);
-                        auto interfaceInfo = NetworkUtils::ExtractOperationalInterfaceInfo(v,
-                                                                                           nodeIpv6Addr);
+                        auto interfaceInfo = NetworkUtils::ExtractOperationalInterfaceInfo(v, nodeIpv6Addr);
                         if (interfaceInfo.HasValue())
                         {
                             GetDetails()->macAddress.Emplace(interfaceInfo.Value().macAddress);
                             GetDetails()->networkType.Emplace(interfaceInfo.Value().networkType);
-                        }else
+                        }
+                        else
                         {
                             // Failed to find the hw address. Don't fail discovery if unsupported
                             GetDetails()->macAddress.Emplace("");
@@ -269,21 +269,20 @@ namespace zilker
                         ResultsUpdated();
                         break;
                     }
-                    // other attributes of diagnostic cluster
+                        // other attributes of diagnostic cluster
                 }
             }
-        // other clusters...
+                // other clusters...
         }
 
         if (error != CHIP_NO_ERROR)
         {
             icError("Failed to decode attribute: %s", chip::ErrorStr(error));
         }
-        else if (error == CHIP_NO_ERROR &&
-                 primaryAttributesRead &&
+        else if (error == CHIP_NO_ERROR && primaryAttributesRead &&
                  discoveringEndpoints.find(0) == discoveringEndpoints.end())
         {
-            //we are done reading the basic cluster and have not yet started endpoint discovery
+            // we are done reading the basic cluster and have not yet started endpoint discovery
             error = DiscoverEndpoint(*device->GetExchangeManager(), device, 0);
             if (error != CHIP_NO_ERROR)
             {

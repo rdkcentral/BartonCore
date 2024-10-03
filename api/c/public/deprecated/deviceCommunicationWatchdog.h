@@ -26,13 +26,14 @@
 #ifndef FLEXCORE_DEVICECOMMUNICATIONWATCHDOG_H
 #define FLEXCORE_DEVICECOMMUNICATIONWATCHDOG_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef void (*deviceCommunicationWatchdogCommFailedCallback)(const char *uuid);
 typedef void (*deviceCommunicationWatchdogCommRestoredCallback)(const char *uuid);
 
-void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallback failedCallback, deviceCommunicationWatchdogCommRestoredCallback restoredCallback);
+void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallback failedCallback,
+                                     deviceCommunicationWatchdogCommRestoredCallback restoredCallback);
 void deviceCommunicationWatchdogTerm();
 
 /*
@@ -59,7 +60,8 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid);
  * @param commFailDelaySeconds Fixed, nominal seconds until a device is considered in commfail.
  *                             Must be longer than or the same as the touchscreen.sensor.commFail.troubleDelay value; if
  *                             not, this parameter is ignored with a warning.
- *                             FIXME: armed and unarmed delays are different (longer for armed)?! This shouldn't even be a parameter.
+ *                             FIXME: armed and unarmed delays are different (longer for armed)?! This shouldn't even be
+ * a parameter.
  * @return Seconds to count down from until comm failure
  */
 int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char *uuid, uint32_t commFailDelaySeconds);
@@ -69,7 +71,8 @@ int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char 
  * @param uuid Device uuid
  * @param commFailTimeRemainingSeconds seconds remaining until comm failure
  */
-void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uuid, int32_t commFailTimeRemainingSeconds);
+void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uuid,
+                                                                 int32_t commFailTimeRemainingSeconds);
 
 /**
  * Check if a device is being monitored
@@ -78,4 +81,4 @@ void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uui
  * @return true if device is being monitored
  */
 bool deviceCommunicationWatchdogIsDeviceMonitored(const char *uuid);
-#endif //FLEXCORE_DEVICECOMMUNICATIONWATCHDOG_H
+#endif // FLEXCORE_DEVICECOMMUNICATIONWATCHDOG_H

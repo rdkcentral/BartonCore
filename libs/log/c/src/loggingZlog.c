@@ -35,16 +35,16 @@
 
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 
-#include <zlog.h>
 #include <icLog/logging.h>
+#include <zlog.h>
 
 #ifdef CONFIG_TELEMETRY2
 #include <telemetry_busmessage_sender.h>
@@ -56,25 +56,26 @@
 /*
  * initialize the logger
  */
-__attribute__ ((constructor)) static void initIcLogger(void)
+__attribute__((constructor)) static void initIcLogger(void)
 {
     char *confPath;
     char *ichome = getenv("IC_HOME");
-    if(ichome != NULL)
+    if (ichome != NULL)
     {
-        confPath = (char*)calloc(1, strlen(ichome) + strlen("/etc/zlog.conf") + 1);
+        confPath = (char *) calloc(1, strlen(ichome) + strlen("/etc/zlog.conf") + 1);
         sprintf(confPath, "%s/etc/zlog.conf", ichome);
     }
     else
     {
         // use default: /opt/icontrol/etc
         //
-        confPath = (char*)calloc(1, strlen(CONFIG_STATIC_PATH) + strlen("/etc/zlog.conf") + 1);
+        confPath = (char *) calloc(1, strlen(CONFIG_STATIC_PATH) + strlen("/etc/zlog.conf") + 1);
         sprintf(confPath, "%s/etc/zlog.conf", CONFIG_STATIC_PATH);
     }
 
     struct stat fs;
-    if (stat(confPath, &fs) == 0 && fs.st_size > 5) //arbitrarily small amount of content before we consider it a real file and try to load it
+    if (stat(confPath, &fs) == 0 &&
+        fs.st_size > 5) // arbitrarily small amount of content before we consider it a real file and try to load it
     {
         // config file exists, safe to load
         //
@@ -99,15 +100,20 @@ __attribute__ ((constructor)) static void initIcLogger(void)
 /*
  * Issue logging message based on a 'categoryName' and 'priority'
  */
-void icLogMsg(const char *file, size_t filelen,
-              const char *func, size_t funclen,
+void icLogMsg(const char *file,
+              size_t filelen,
+              const char *func,
+              size_t funclen,
               long line,
-              const char *categoryName, logPriority priority, const char *format, ...)
+              const char *categoryName,
+              logPriority priority,
+              const char *format,
+              ...)
 {
-    va_list  arglist;
-    int      logPriority = ZLOG_LEVEL_DEBUG;
+    va_list arglist;
+    int logPriority = ZLOG_LEVEL_DEBUG;
 
-    if(!shouldLogMessage(priority))
+    if (!shouldLogMessage(priority))
     {
         return;
     }
@@ -116,7 +122,7 @@ void icLogMsg(const char *file, size_t filelen,
     //
     switch (priority)
     {
-        case IC_LOG_TRACE:  // no TRACE, so use DEBUG
+        case IC_LOG_TRACE: // no TRACE, so use DEBUG
         case IC_LOG_DEBUG:
             logPriority = ZLOG_LEVEL_DEBUG;
             break;
@@ -142,7 +148,15 @@ void icLogMsg(const char *file, size_t filelen,
     // preprocess the variable args format, then forward to zlog
     //
     va_start(arglist, format);
-    vzlog(category, __FILE__, sizeof(__FILE__)-1, __func__, sizeof(__func__)-1, __LINE__, logPriority, format, arglist);
+    vzlog(category,
+          __FILE__,
+          sizeof(__FILE__) - 1,
+          __func__,
+          sizeof(__func__) - 1,
+          __LINE__,
+          logPriority,
+          format,
+          arglist);
     va_end(arglist);
 }
 
@@ -152,7 +166,7 @@ void icLogMsg(const char *file, size_t filelen,
  */
 void icTelemetryCounter(char *marker)
 {
-    t2_event_d(marker,1);
+    t2_event_d(marker, 1);
 }
 
 /*
@@ -160,7 +174,7 @@ void icTelemetryCounter(char *marker)
  */
 void icTelemetryStringValue(char *marker, char *value)
 {
-    t2_event_s(marker,value);
+    t2_event_s(marker, value);
 }
 
 /*
@@ -168,7 +182,7 @@ void icTelemetryStringValue(char *marker, char *value)
  */
 void icTelemetryNumberValue(char *marker, double value)
 {
-    t2_event_f(marker,value);
+    t2_event_f(marker, value);
 }
 #endif /* CONFIG_TELEMETRY2 */
 

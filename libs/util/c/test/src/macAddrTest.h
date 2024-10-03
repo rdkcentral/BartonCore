@@ -36,4 +36,4 @@
 
 bool runMacAddrTests();
 
-#endif //ZILKER_MACADDRTEST_H
+#endif // ZILKER_MACADDRTEST_H

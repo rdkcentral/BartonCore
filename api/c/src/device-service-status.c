@@ -49,7 +49,7 @@ static GParamSpec *properties[N_B_DEVICE_SERVICE_STATUS_PROPERTIES];
 
 static gpointer gcopy_func_strdup(gconstpointer src, gpointer data)
 {
-    return g_strdup((gpointer)src);
+    return g_strdup((gpointer) src);
 }
 
 static void
@@ -99,7 +99,7 @@ static void b_device_service_status_get_property(GObject *object, guint property
 
     switch (property_id)
     {
-        //implement get property for all properties
+        // implement get property for all properties
         case B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES:
             g_value_set_pointer(value, g_list_copy_deep(status->device_classes, gcopy_func_strdup, NULL));
             break;

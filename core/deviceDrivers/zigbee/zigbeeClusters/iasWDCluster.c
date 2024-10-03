@@ -23,22 +23,22 @@
 // Created by mkoch201 on 3/25/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <stdio.h>
-#include <commonDeviceDefs.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/iasWDCluster.h"
 
-#define LOG_TAG "iasWDCluster"
-#define IASWD_CLUSTER_ID 0x0502
+#define LOG_TAG                        "iasWDCluster"
+#define IASWD_CLUSTER_ID               0x0502
 #define IASWD_START_WARNING_COMMAND_ID 0x00
 
 /* Private Data */
@@ -84,7 +84,6 @@ bool iasWDClusterStartWarning(uint64_t eui64,
     zigbeeIOPutUint16(zio, warningDuration);
     zigbeeIOPutUint8(zio, strobeDutyCycle);
     zigbeeIOPutUint8(zio, strobeLevel);
-
 
 
     return (zigbeeSubsystemSendCommand(eui64,

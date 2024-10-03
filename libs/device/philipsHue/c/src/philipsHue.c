@@ -21,26 +21,26 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*-----------------------------------------------
-* philipsHue.c
-*
-* Author: tlea
-*-----------------------------------------------*/
+ * philipsHue.c
+ *
+ * Author: tlea
+ *-----------------------------------------------*/
 
 #include <stdio.h>
 #include <string.h>
 
-#include <philipsHue/philipsHue.h>
-#include <ssdp/ssdp.h>
-#include <icLog/logging.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <curl/curl.h>
-#include <stdlib.h>
 #include <cjson/cJSON.h>
+#include <curl/curl.h>
+#include <icLog/logging.h>
+#include <philipsHue/philipsHue.h>
+#include <pthread.h>
+#include <ssdp/ssdp.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#define LOG_TAG "PhueLib"
+#define LOG_TAG                  "PhueLib"
 
-#define MONITOR_INTERVAL_SECS 5
+#define MONITOR_INTERVAL_SECS    5
 
 #define RECOVERY_TIMEOUT_SECONDS 10
 
@@ -173,7 +173,7 @@ static bool createUser(const char *ipAddress, char **username)
         icLogDebug(LOG_TAG, "got response %s", responseBlock.memory);
 
         cJSON *responseObj = cJSON_Parse(responseBlock.memory);
-        if(responseObj != NULL)
+        if (responseObj != NULL)
         {
             cJSON *tmp = cJSON_GetArrayItem(responseObj, 0);
 
@@ -198,7 +198,7 @@ static bool createUser(const char *ipAddress, char **username)
         curl_slist_free_all(header);
     }
 
-    if(*username != NULL)
+    if (*username != NULL)
     {
         return true;
     }
@@ -214,7 +214,7 @@ static void localBridgeDiscoveredCallback(SsdpDevice *device)
 
     char *username = NULL;
 
-    //we will stop trying if discovery stops
+    // we will stop trying if discovery stops
     int count = 0;
     while (clientBridgeDiscoveredCallback != NULL && count < 10)
     {
@@ -223,7 +223,7 @@ static void localBridgeDiscoveredCallback(SsdpDevice *device)
             break;
         }
 
-        //the user probably hasnt pushed the link button yet... wait a little and try again
+        // the user probably hasnt pushed the link button yet... wait a little and try again
         usleep(1000000);
         count++;
     }
@@ -235,13 +235,13 @@ static void localBridgeDiscoveredCallback(SsdpDevice *device)
     }
     pthread_mutex_unlock(&discoverMutex);
 
-    if(username != NULL)
+    if (username != NULL)
     {
         free(username);
     }
 }
 
-icLinkedList* philipsHueGetLights(const char *ipAddress, const char *username)
+icLinkedList *philipsHueGetLights(const char *ipAddress, const char *username)
 {
     icLinkedList *result = NULL;
 
@@ -275,22 +275,22 @@ icLinkedList* philipsHueGetLights(const char *ipAddress, const char *username)
 
         curl_easy_cleanup(curl);
 
-//        icLogDebug(LOG_TAG, "got response %s", responseBlock.memory);
+        //        icLogDebug(LOG_TAG, "got response %s", responseBlock.memory);
 
         cJSON *responseObj = cJSON_Parse(responseBlock.memory);
 
-        if(responseObj != NULL)
+        if (responseObj != NULL)
         {
             result = linkedListCreate();
             cJSON *lightObj = responseObj->child;
-            while(lightObj != NULL)
+            while (lightObj != NULL)
             {
-                PhilipsHueLight *light = (PhilipsHueLight*)calloc(1, sizeof(PhilipsHueLight));
+                PhilipsHueLight *light = (PhilipsHueLight *) calloc(1, sizeof(PhilipsHueLight));
 
                 light->id = strdup(lightObj->string);
 
                 cJSON *state = cJSON_GetObjectItem(lightObj, "state");
-                if(state != NULL)
+                if (state != NULL)
                 {
                     cJSON *on = cJSON_GetObjectItem(state, "on");
                     if (on != NULL && on->valueint == 1)
@@ -326,7 +326,7 @@ bool philipsHueSetLight(const char *ipAddress, const char *username, const char 
         sprintf(url, "http://%s/api/%s/lights/%s/state", ipAddress, username, lightId);
 
         char *body;
-        if(on == true)
+        if (on == true)
         {
             body = strdup("{\"on\":true}");
         }
@@ -372,7 +372,7 @@ bool philipsHueSetLight(const char *ipAddress, const char *username, const char 
 
 void philipsHueLightDestroy(PhilipsHueLight *light)
 {
-    if(light->id != NULL)
+    if (light->id != NULL)
     {
         free(light->id);
         light->id = NULL;
@@ -384,22 +384,22 @@ void philipsHueLightDestroy(PhilipsHueLight *light)
 static void lightFreeFunc(void *key, void *value)
 {
     free(key);
-    philipsHueLightDestroy((PhilipsHueLight*)value);
+    philipsHueLightDestroy((PhilipsHueLight *) value);
 }
 
 static void destroyBridgeMonitoringInfo(BridgeMonitoringInfo *info)
 {
-    if(info->macAddress != NULL)
+    if (info->macAddress != NULL)
     {
         free(info->macAddress);
         info->macAddress = NULL;
     }
-    if(info->ipAddress != NULL)
+    if (info->ipAddress != NULL)
     {
         free(info->ipAddress);
         info->ipAddress = NULL;
     }
-    if(info->username != NULL)
+    if (info->username != NULL)
     {
         free(info->username);
         info->username = NULL;
@@ -415,32 +415,32 @@ static void destroyBridgeMonitoringInfo(BridgeMonitoringInfo *info)
  */
 static void *bridgeMonitoringThreadProc(void *arg)
 {
-    BridgeMonitoringInfo *info = (BridgeMonitoringInfo*)arg;
-    while(info->running == true)
+    BridgeMonitoringInfo *info = (BridgeMonitoringInfo *) arg;
+    while (info->running == true)
     {
         // load the list of all known light objects (from the hue hub)
         //
         icLinkedList *lights = philipsHueGetLights(info->ipAddress, info->username);
-        if(lights != NULL)
+        if (lights != NULL)
         {
             // loop through the list of light devices so we can update status and state
             //
             icLinkedListIterator *iterator = linkedListIteratorCreate(lights);
             while (linkedListIteratorHasNext(iterator))
             {
-                PhilipsHueLight *light = (PhilipsHueLight*)linkedListIteratorGetNext(iterator);
+                PhilipsHueLight *light = (PhilipsHueLight *) linkedListIteratorGetNext(iterator);
 
-                PhilipsHueLight *previousLight = (PhilipsHueLight*)hashMapGet(info->lights, light->id,
-                                                                              (uint16_t) (strlen(light->id)+1));
-                if(previousLight == NULL)
+                PhilipsHueLight *previousLight =
+                    (PhilipsHueLight *) hashMapGet(info->lights, light->id, (uint16_t) (strlen(light->id) + 1));
+                if (previousLight == NULL)
                 {
                     // this is the first time we have seen this light, just save it;
                     // stealing the object from the temp list and placing it into the hash
-                    hashMapPut(info->lights, strdup(light->id), (uint16_t) (strlen(light->id)+1), light);
+                    hashMapPut(info->lights, strdup(light->id), (uint16_t) (strlen(light->id) + 1), light);
                 }
                 else
                 {
-                    if(previousLight->isOn != light->isOn)
+                    if (previousLight->isOn != light->isOn)
                     {
                         // the state has changed, invoke the callback
                         info->lightChangedCallback(info->macAddress, light->id, light->isOn);
@@ -462,9 +462,14 @@ static void *bridgeMonitoringThreadProc(void *arg)
         {
             // we failed to get any lights from the device.  That most likely means its IP address changed and we have
             // to find it again
-            icLogInfo(LOG_TAG, "bridgeMonitoringThreadProc: didn't get any lights from %s, its ip address probably changed from %s... attempting recovery", info->macAddress, info->ipAddress);
+            icLogInfo(LOG_TAG,
+                      "bridgeMonitoringThreadProc: didn't get any lights from %s, its ip address probably changed from "
+                      "%s... attempting recovery",
+                      info->macAddress,
+                      info->ipAddress);
             char *recoveredIpAddress = NULL;
-            if(ssdpRecoverIpAddress(PHILIPSHUE, info->macAddress, &recoveredIpAddress, RECOVERY_TIMEOUT_SECONDS) == true)
+            if (ssdpRecoverIpAddress(PHILIPSHUE, info->macAddress, &recoveredIpAddress, RECOVERY_TIMEOUT_SECONDS) ==
+                true)
             {
                 icLogInfo(LOG_TAG, "bridgeMonitoringThreadProc: found %s at %s", info->macAddress, recoveredIpAddress);
                 info->ipChangedCallback(info->macAddress, recoveredIpAddress);
@@ -480,17 +485,17 @@ static void *bridgeMonitoringThreadProc(void *arg)
 }
 
 bool philipsHueStartMonitoring(const char *macAddress,
-                                    const char *ipAddress,
-                                    const char *username,
-                                    PhilipsHueLightChangedCallback lightChangedCallback,
-                                    PhilipsHueIpAddressChangedCallback ipAddressChangedCallback)
+                               const char *ipAddress,
+                               const char *username,
+                               PhilipsHueLightChangedCallback lightChangedCallback,
+                               PhilipsHueIpAddressChangedCallback ipAddressChangedCallback)
 {
     bool result = true;
 
     icLogInfo(LOG_TAG, "Monitoring of the bridge %s at %s starting", macAddress, ipAddress);
 
     pthread_mutex_lock(&monitorsMutex);
-    if(monitors == NULL)
+    if (monitors == NULL)
     {
         // create hash of 'ipAddresses' to monitor
         //
@@ -500,16 +505,16 @@ bool philipsHueStartMonitoring(const char *macAddress,
     {
         // skip if this ipAddress already being monitored
         //
-        if(hashMapGet(monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1)) != NULL)
+        if (hashMapGet(monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1)) != NULL)
         {
             icLogError(LOG_TAG, "duplicate attempt to watch bridge at %s ignored", ipAddress);
             result = false;
         }
     }
 
-    if(result == true)
+    if (result == true)
     {
-        BridgeMonitoringInfo *info = (BridgeMonitoringInfo*)calloc(1, sizeof(BridgeMonitoringInfo));
+        BridgeMonitoringInfo *info = (BridgeMonitoringInfo *) calloc(1, sizeof(BridgeMonitoringInfo));
         info->macAddress = strdup(macAddress);
         info->ipAddress = strdup(ipAddress);
         info->username = strdup(username);
@@ -532,24 +537,26 @@ bool philipsHueStopMonitoring(const char *ipAddress)
 
     icLogInfo(LOG_TAG, "Monitoring of the bridge at %s stopping", ipAddress);
 
-    if(ipAddress == NULL)
+    if (ipAddress == NULL)
     {
         return false;
     }
 
     pthread_mutex_lock(&monitorsMutex);
-    if(monitors != NULL)
+    if (monitors != NULL)
     {
-        BridgeMonitoringInfo *info = (BridgeMonitoringInfo*)hashMapGet(monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1));
-        if(info != NULL)
+        BridgeMonitoringInfo *info =
+            (BridgeMonitoringInfo *) hashMapGet(monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1));
+        if (info != NULL)
         {
             info->running = false;
             pthread_join(info->thread, NULL);
-            hashMapDelete(monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1), standardDoNotFreeHashMapFunc);
+            hashMapDelete(
+                monitors, (void *) ipAddress, (uint16_t) (strlen(ipAddress) + 1), standardDoNotFreeHashMapFunc);
             destroyBridgeMonitoringInfo(info);
         }
 
-        if(hashMapCount(monitors) == 0)
+        if (hashMapCount(monitors) == 0)
         {
             hashMapDestroy(monitors, standardDoNotFreeHashMapFunc);
             monitors = NULL;

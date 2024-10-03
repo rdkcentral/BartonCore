@@ -314,8 +314,10 @@ BDeviceServiceStatus *convertDeviceServiceStatusToGObject(const DeviceServiceSta
 
     BDeviceServiceStatus *retVal = b_device_service_status_new();
 
-    g_autoptr(GList) supportedDeviceClassesList = convertLinkedListToGListGeneric((icLinkedList *) status->supportedDeviceClasses);
-    g_autoptr(GList) discoveringDeviceClassesList = convertLinkedListToGListGeneric((icLinkedList *) status->discoveringDeviceClasses);
+    g_autoptr(GList) supportedDeviceClassesList =
+        convertLinkedListToGListGeneric((icLinkedList *) status->supportedDeviceClasses);
+    g_autoptr(GList) discoveringDeviceClassesList =
+        convertLinkedListToGListGeneric((icLinkedList *) status->discoveringDeviceClasses);
     g_autoptr(GHashTable) subsystems = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
     // add an overall JSON representation of the status. Redundant and may be removed in the future.
@@ -345,7 +347,7 @@ BDeviceServiceStatus *convertDeviceServiceStatusToGObject(const DeviceServiceSta
     }
 
     g_object_set(retVal,
-    B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
+                 B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
                  supportedDeviceClassesList,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_TYPE],
                  discoveryType,
@@ -368,7 +370,7 @@ BDeviceServiceStatus *convertDeviceServiceStatusToGObject(const DeviceServiceSta
 
 BDeviceServiceStatusChangedReason convertStatusChangedReasonToGObject(DeviceServiceStatusChangedReason reason)
 {
-    switch(reason)
+    switch (reason)
     {
         case DeviceServiceStatusChangedReasonReadyForPairing:
             return B_DEVICE_SERVICE_STATUS_CHANGED_REASON_READY_FOR_PAIRING;
@@ -477,7 +479,7 @@ GList *convertIcDeviceListToGList(icLinkedList *devices)
     GList *retVal = NULL;
 
     scoped_icLinkedListIterator *iterator = linkedListIteratorCreate(devices);
-    while(linkedListIteratorHasNext(iterator))
+    while (linkedListIteratorHasNext(iterator))
     {
         icDevice *device = linkedListIteratorGetNext(iterator);
         BDeviceServiceDevice *deviceObject = convertIcDeviceToGObject(device);

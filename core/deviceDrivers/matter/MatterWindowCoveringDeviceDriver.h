@@ -31,48 +31,53 @@
 
 namespace zilker
 {
-    class MatterWindowCoveringDeviceDriver : public MatterDeviceDriver, WindowCovering::EventHandler {
+    class MatterWindowCoveringDeviceDriver : public MatterDeviceDriver,
+                                             WindowCovering::EventHandler
+    {
     public:
         MatterWindowCoveringDeviceDriver();
 
         bool ClaimDevice(DiscoveredDeviceDetails *details) override;
 
-        //WindowCovering cluster callbacks
+        // WindowCovering cluster callbacks
         void CommandCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
         void WriteRequestCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
-        void CurrentPositionLiftPercentageChanged(std::string &deviceUuid, uint8_t percent, void *asyncContext) override;
-        void CurrentPositionLiftPercentageReadComplete(std::string &deviceUuid, uint8_t percent, void *asyncContext) override;
+        void
+        CurrentPositionLiftPercentageChanged(std::string &deviceUuid, uint8_t percent, void *asyncContext) override;
+        void CurrentPositionLiftPercentageReadComplete(std::string &deviceUuid,
+                                                       uint8_t percent,
+                                                       void *asyncContext) override;
 
     protected:
         std::vector<MatterCluster *> GetClustersToSubscribeTo(const std::string &deviceId) override;
 
         void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                             const std::string &deviceId,
-                             chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle) override;
+                               const std::string &deviceId,
+                               chip::Messaging::ExchangeManager &exchangeMgr,
+                               const chip::SessionHandle &sessionHandle) override;
 
         void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                      const std::string &deviceId,
-                                      icInitialResourceValues *initialResourceValues,
-                                      chip::Messaging::ExchangeManager &exchangeMgr,
-                                      const chip::SessionHandle &sessionHandle) override;
+                                        const std::string &deviceId,
+                                        icInitialResourceValues *initialResourceValues,
+                                        chip::Messaging::ExchangeManager &exchangeMgr,
+                                        const chip::SessionHandle &sessionHandle) override;
 
         bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues) override;
 
         void ReadResource(std::forward_list<std::promise<bool>> &promises,
-                        const std::string &deviceId,
-                        icDeviceResource *resource,
-                        char **value,
-                        chip::Messaging::ExchangeManager &exchangeMgr,
-                        const chip::SessionHandle &sessionHandle) override;
+                          const std::string &deviceId,
+                          icDeviceResource *resource,
+                          char **value,
+                          chip::Messaging::ExchangeManager &exchangeMgr,
+                          const chip::SessionHandle &sessionHandle) override;
 
         bool WriteResource(std::forward_list<std::promise<bool>> &promises,
-                         const std::string &deviceId,
-                         icDeviceResource *resource,
-                         const char *previousValue,
-                         const char *newValue,
-                         chip::Messaging::ExchangeManager &exchangeMgr,
-                         const chip::SessionHandle &sessionHandle) override;
+                           const std::string &deviceId,
+                           icDeviceResource *resource,
+                           const char *previousValue,
+                           const char *newValue,
+                           chip::Messaging::ExchangeManager &exchangeMgr,
+                           const chip::SessionHandle &sessionHandle) override;
 
     private:
         static bool registeredWithFactory;
@@ -81,5 +86,3 @@ namespace zilker
         MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
     };
 } // namespace zilker
-
-

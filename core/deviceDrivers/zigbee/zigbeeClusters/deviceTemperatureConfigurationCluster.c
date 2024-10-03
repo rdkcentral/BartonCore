@@ -20,25 +20,25 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <stdio.h>
-#include <commonDeviceDefs.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/deviceTemperatureConfigurationCluster.h"
 
-#define LOG_TAG "deviceTemperatureConfigCluster"
+#define LOG_TAG                              "deviceTemperatureConfigCluster"
 
 // Alarm codes
-#define DEVICE_TEMPERATURE_TOO_LOW      0x00
-#define DEVICE_TEMPERATURE_TOO_HIGH     0x01
+#define DEVICE_TEMPERATURE_TOO_LOW           0x00
+#define DEVICE_TEMPERATURE_TOO_HIGH          0x01
 
 #define CONFIGURE_TEMPERATURE_ALARM_MASK_KEY "deviceTemperatureConfigurationConfigureTemperatureAlarmMask"
 
@@ -51,16 +51,20 @@ typedef struct
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
 
-static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarmTableEntry);
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
 
-static bool handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId,
+static bool handleAlarmCleared(ZigbeeCluster *ctx,
+                               uint64_t eui64,
+                               uint8_t endpointId,
                                const ZigbeeAlarmTableEntry *alarmTableEntry);
 
-ZigbeeCluster *deviceTemperatureConfigurationClusterCreate(const DeviceTemperatureConfigurationClusterCallbacks *callbacks,
-                                                           void *callbackContext)
+ZigbeeCluster *
+deviceTemperatureConfigurationClusterCreate(const DeviceTemperatureConfigurationClusterCallbacks *callbacks,
+                                            void *callbackContext)
 {
-    DeviceTemperatureConfigurationCluster *result = (DeviceTemperatureConfigurationCluster *) calloc(1, sizeof(DeviceTemperatureConfigurationCluster));
+    DeviceTemperatureConfigurationCluster *result =
+        (DeviceTemperatureConfigurationCluster *) calloc(1, sizeof(DeviceTemperatureConfigurationCluster));
 
     result->cluster.clusterId = DEVICE_TEMPERATURE_CONFIGURATION_CLUSTER_ID;
 
@@ -74,9 +78,12 @@ ZigbeeCluster *deviceTemperatureConfigurationClusterCreate(const DeviceTemperatu
     return (ZigbeeCluster *) result;
 }
 
-void deviceTemperatureConfigurationClusterSetConfigureTemperatureAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void deviceTemperatureConfigurationClusterSetConfigureTemperatureAlarmMask(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, CONFIGURE_TEMPERATURE_ALARM_MASK_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_TEMPERATURE_ALARM_MASK_KEY, configure);
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -92,7 +99,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
                                                      true,
                                                      DEVICE_TEMPERATURE_ALARM_MASK_ATTRIBUTE_ID) == true)
     {
-        if (getBoolConfigurationMetadata(configContext->configurationMetadata, CONFIGURE_TEMPERATURE_ALARM_MASK_KEY, false))
+        if (getBoolConfigurationMetadata(
+                configContext->configurationMetadata, CONFIGURE_TEMPERATURE_ALARM_MASK_KEY, false))
         {
             if (zigbeeSubsystemWriteNumber(configContext->eui64,
                                            configContext->endpointId,
@@ -111,12 +119,18 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     return result;
 }
 
-static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     DeviceTemperatureConfigurationCluster *cluster = (DeviceTemperatureConfigurationCluster *) ctx;
     bool result = true;
 
-    icLogDebug(LOG_TAG, "%s: %"PRIx64" ep %"PRIu8" alarmCode 0x%.2"PRIx8, __FUNCTION__, eui64, endpointId, alarmTableEntry->alarmCode);
+    icLogDebug(LOG_TAG,
+               "%s: %" PRIx64 " ep %" PRIu8 " alarmCode 0x%.2" PRIx8,
+               __FUNCTION__,
+               eui64,
+               endpointId,
+               alarmTableEntry->alarmCode);
 
     switch (alarmTableEntry->alarmCode)
     {
@@ -124,7 +138,8 @@ static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, 
             icLogWarn(LOG_TAG, "%s: device temperature too low", __FUNCTION__);
             if (cluster->callbacks->deviceTemperatureStatusChanged != NULL)
             {
-                cluster->callbacks->deviceTemperatureStatusChanged(cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusLow);
+                cluster->callbacks->deviceTemperatureStatusChanged(
+                    cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusLow);
             }
             break;
 
@@ -132,7 +147,8 @@ static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, 
             icLogWarn(LOG_TAG, "%s: device temperature too high", __FUNCTION__);
             if (cluster->callbacks->deviceTemperatureStatusChanged != NULL)
             {
-                cluster->callbacks->deviceTemperatureStatusChanged(cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusHigh);
+                cluster->callbacks->deviceTemperatureStatusChanged(
+                    cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusHigh);
             }
             break;
 
@@ -148,12 +164,18 @@ static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, 
     return result;
 }
 
-static bool handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     DeviceTemperatureConfigurationCluster *cluster = (DeviceTemperatureConfigurationCluster *) ctx;
     bool result = true;
 
-    icLogDebug(LOG_TAG, "%s: %"PRIx64" ep %"PRIu8" alarmCode 0x%.2"PRIx8, __FUNCTION__, eui64, endpointId, alarmTableEntry->alarmCode);
+    icLogDebug(LOG_TAG,
+               "%s: %" PRIx64 " ep %" PRIu8 " alarmCode 0x%.2" PRIx8,
+               __FUNCTION__,
+               eui64,
+               endpointId,
+               alarmTableEntry->alarmCode);
 
     switch (alarmTableEntry->alarmCode)
     {
@@ -162,7 +184,8 @@ static bool handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpo
             icLogWarn(LOG_TAG, "%s: device temperature is normal", __FUNCTION__);
             if (cluster->callbacks->deviceTemperatureStatusChanged != NULL)
             {
-                cluster->callbacks->deviceTemperatureStatusChanged(cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusNormal);
+                cluster->callbacks->deviceTemperatureStatusChanged(
+                    cluster->callbackContext, eui64, endpointId, deviceTemperatureStatusNormal);
             }
             break;
 
@@ -178,4 +201,4 @@ static bool handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpo
     return result;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

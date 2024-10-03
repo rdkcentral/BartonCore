@@ -41,35 +41,27 @@
 #define DEFAULT_REQUEST_TIMEOUT_SECONDS 30
 
 // On EM357 with maximum of 70 devices this could take about a minute.  Extrapolating to a max 128 is about 150 secs.
-#define SET_DEVICES_TIMEOUT_SECONDS 150
+#define SET_DEVICES_TIMEOUT_SECONDS     150
 
 // If we get a 'network busy' response from ZigbeeCore, we will wait a little bit and try again
-#define MAX_NETWORK_BUSY_RETRIES 5
+#define MAX_NETWORK_BUSY_RETRIES        5
 #define NETWORK_BUSY_RETRY_DELAY_MILLIS 250
 
-static int sendRequest(uint64_t eui64,
-                       cJSON *request,
-                       cJSON **response);
+static int sendRequest(uint64_t eui64, cJSON *request, cJSON **response);
 
-static int sendRequestWithTimeout(uint64_t eui64,
-                                  cJSON *request,
-                                  int timeoutSecs,
-                                  cJSON **response);
+static int sendRequestWithTimeout(uint64_t eui64, cJSON *request, int timeoutSecs, cJSON **response);
 
-static int sendRequestNoResponse(uint64_t eui64,
-                                 cJSON *request);
+static int sendRequestNoResponse(uint64_t eui64, cJSON *request);
 
-static void setAddress(uint64_t eui64,
-                       cJSON *request);
+static void setAddress(uint64_t eui64, cJSON *request);
 
-int zhalNetworkInit(uint64_t eui64,
-                    const char *region,
-                    const char *networkConfigData,
-                    icStringHashMap *properties)
+int zhalNetworkInit(uint64_t eui64, const char *region, const char *networkConfigData, icStringHashMap *properties)
 {
-    icLogDebug(LOG_TAG, "zhalNetworkInit: eui64=%016"
-            PRIx64
-            ", region = %s, networkConfigData = %s", eui64, region, networkConfigData);
+    icLogDebug(LOG_TAG,
+               "zhalNetworkInit: eui64=%016" PRIx64 ", region = %s, networkConfigData = %s",
+               eui64,
+               region,
+               networkConfigData);
 
     cJSON *request = cJSON_CreateObject();
 
@@ -172,7 +164,7 @@ cJSON *zhalGetAndClearCounters(void)
     }
     else
     {
-        //it worked, just remove the 4 JSON IPC related items and we will be left with only counters.
+        // it worked, just remove the 4 JSON IPC related items and we will be left with only counters.
         cJSON_DeleteItemFromObject(result, "eventType");
         cJSON_DeleteItemFromObject(result, "ipcResponseType");
         cJSON_DeleteItemFromObject(result, "resultCode");
@@ -376,9 +368,7 @@ int zhalNetworkDisableJoin(void)
     return sendRequestNoResponse(0, request);
 }
 
-int zhalGetEndpointIds(uint64_t eui64,
-                       uint8_t **endpointIds,
-                       uint8_t *numEndpointIds)
+int zhalGetEndpointIds(uint64_t eui64, uint8_t **endpointIds, uint8_t *numEndpointIds)
 {
     int result = 0;
 
@@ -423,9 +413,7 @@ int zhalGetEndpointIds(uint64_t eui64,
     return result;
 }
 
-int zhalGetEndpointInfo(uint64_t eui64,
-                        uint8_t endpointId,
-                        zhalEndpointInfo *info)
+int zhalGetEndpointInfo(uint64_t eui64, uint8_t endpointId, zhalEndpointInfo *info)
 {
     int result = 0;
 
@@ -494,7 +482,7 @@ int zhalGetEndpointInfo(uint64_t eui64,
             result = -1;
         }
 
-        for (int i = 0; i < 2; i++) //loop first gets input/server clusters, then output/client
+        for (int i = 0; i < 2; i++) // loop first gets input/server clusters, then output/client
         {
             char *itemName = (i == 0 ? "appInputClusterIds" : "appOutputClusterIds");
 
@@ -670,14 +658,14 @@ static int attributesRead(uint64_t eui64,
                         item = cJSON_GetObjectItem(arrayItem, "success");
                         if (item != NULL && item->valueint)
                         {
-                            item = cJSON_GetObjectItem(arrayItem, "data"); //base64 encoded string
+                            item = cJSON_GetObjectItem(arrayItem, "data"); // base64 encoded string
 
                             uint8_t *bytes = NULL;
                             uint16_t byteLen = 0;
 
                             if (icDecodeBase64(item->valuestring, &bytes, &byteLen))
                             {
-                                //caller will free bytes
+                                // caller will free bytes
                                 attributeData[i].data = bytes;
                                 attributeData[i].dataLen = byteLen;
                             }
@@ -739,15 +727,8 @@ int zhalAttributesReadMfgSpecific(uint64_t eui64,
                                   uint8_t numAttributeIds,
                                   zhalAttributeData *attributeData)
 {
-    return attributesRead(eui64,
-                          endpointId,
-                          clusterId,
-                          toServer,
-                          true,
-                          mfgId,
-                          attributeIds,
-                          numAttributeIds,
-                          attributeData);
+    return attributesRead(
+        eui64, endpointId, clusterId, toServer, true, mfgId, attributeIds, numAttributeIds, attributeData);
 }
 
 static int attributesWrite(uint64_t eui64,
@@ -820,11 +801,9 @@ int zhalAttributesWriteMfgSpecific(uint64_t eui64,
     return attributesWrite(eui64, endpointId, clusterId, true, mfgId, toServer, attributeData, numAttributes);
 }
 
-int zhalBindingSet(uint64_t eui64,
-                   uint8_t endpointId,
-                   uint16_t clusterId)
+int zhalBindingSet(uint64_t eui64, uint8_t endpointId, uint16_t clusterId)
 {
-    icLogDebug(LOG_TAG, "zhalBindingSet: %"PRIx64" endpoint %d cluster %d", eui64, endpointId, clusterId);
+    icLogDebug(LOG_TAG, "zhalBindingSet: %" PRIx64 " endpoint %d cluster %d", eui64, endpointId, clusterId);
 
     cJSON *request = cJSON_CreateObject();
 
@@ -853,7 +832,7 @@ int zhalBindingSetTarget(uint64_t eui64,
     cJSON_AddNumberToObject(request, "endpointId", endpointId);
     cJSON_AddNumberToObject(request, "clusterId", clusterId);
 
-    char buf[21]; //max uint64_t is 18446744073709551615
+    char buf[21]; // max uint64_t is 18446744073709551615
     sprintf(buf, "%016" PRIx64, targetEui64);
     cJSON_AddStringToObject(request, "targetAddress", buf);
     cJSON_AddNumberToObject(request, "targetEndpointId", targetEndpointId);
@@ -890,7 +869,7 @@ icLinkedList *zhalBindingGet(uint64_t eui64)
                     cJSON *tmp = cJSON_GetObjectItem(entry, "sourceAddress");
                     if (tmp != NULL)
                     {
-                        sscanf(tmp->valuestring, "%"PRIx64, &bte->sourceAddress);
+                        sscanf(tmp->valuestring, "%" PRIx64, &bte->sourceAddress);
                     }
 
                     tmp = cJSON_GetObjectItem(entry, "sourceEndpoint");
@@ -905,7 +884,7 @@ icLinkedList *zhalBindingGet(uint64_t eui64)
                         bte->clusterId = tmp->valueint;
                     }
 
-                    //can either have destinationAddress + destinationEndpoint OR just destinationGroup
+                    // can either have destinationAddress + destinationEndpoint OR just destinationGroup
                     tmp = cJSON_GetObjectItem(entry, "destinationGroup");
                     if (tmp != NULL)
                     {
@@ -918,7 +897,7 @@ icLinkedList *zhalBindingGet(uint64_t eui64)
                         tmp = cJSON_GetObjectItem(entry, "destinationAddress");
                         if (tmp != NULL)
                         {
-                            sscanf(tmp->valuestring, "%"PRIx64, &bte->destination.extendedAddress.eui64);
+                            sscanf(tmp->valuestring, "%" PRIx64, &bte->destination.extendedAddress.eui64);
                         }
 
                         tmp = cJSON_GetObjectItem(entry, "destinationEndpoint");
@@ -937,12 +916,9 @@ icLinkedList *zhalBindingGet(uint64_t eui64)
     }
 
     return result;
-
 }
 
-int zhalBindingClear(uint64_t eui64,
-                     uint8_t endpointId,
-                     uint16_t clusterId)
+int zhalBindingClear(uint64_t eui64, uint8_t endpointId, uint16_t clusterId)
 {
     icLogDebug(LOG_TAG, "zhalBindingClear");
 
@@ -973,7 +949,7 @@ int zhalBindingClearTarget(uint64_t eui64,
     cJSON_AddNumberToObject(request, "endpointId", endpointId);
     cJSON_AddNumberToObject(request, "clusterId", clusterId);
 
-    char buf[21]; //max uint64_t is 18446744073709551615
+    char buf[21]; // max uint64_t is 18446744073709551615
     sprintf(buf, "%016" PRIx64, targetEui64);
     cJSON_AddStringToObject(request, "targetAddress", buf);
     cJSON_AddNumberToObject(request, "targetEndpointId", targetEndpoint);
@@ -1029,7 +1005,6 @@ static int zhalAttributesSetReportingInternal(uint64_t eui64,
         cJSON_AddNumberToObject(request, "mfgId", mfgId);
     }
     return sendRequestNoResponse(eui64, request);
-
 }
 
 int zhalAttributesSetReporting(uint64_t eui64,
@@ -1055,8 +1030,7 @@ int zhalAttributesSetReportingMfgSpecific(uint64_t eui64,
     return zhalAttributesSetReportingInternal(eui64, endpointId, clusterId, configs, numConfigs, true, mfgId);
 }
 
-int zhalSetDevices(zhalDeviceEntry *devices,
-                   uint16_t numDevices)
+int zhalSetDevices(zhalDeviceEntry *devices, uint16_t numDevices)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1075,7 +1049,7 @@ int zhalSetDevices(zhalDeviceEntry *devices,
     {
         cJSON *deviceEntry = cJSON_CreateObject();
 
-        char buf[21]; //max uint64_t is 18446744073709551615
+        char buf[21]; // max uint64_t is 18446744073709551615
         sprintf(buf, "%016" PRIx64, devices[i].eui64);
         cJSON_AddStringToObject(deviceEntry, "eui64", buf);
         cJSON_AddNumberToObject(deviceEntry, "flags", devices[i].flags.byte);
@@ -1234,9 +1208,7 @@ int zhalSendViaApsAck(uint64_t eui64,
     return sendRequestNoResponse(eui64, request);
 }
 
-int zhalRequestLeave(uint64_t eui64,
-                     bool withRejoin,
-                     bool isEndDevice)
+int zhalRequestLeave(uint64_t eui64, bool withRejoin, bool isEndDevice)
 {
     icLogDebug(LOG_TAG, "zhalRequestLeave");
 
@@ -1333,7 +1305,7 @@ icLinkedList *zhalGetSourceRoute(uint64_t eui64)
                     {
                         // Extract the eui64 and convert to a uin64_t
                         uint64_t *hopEui64 = (uint64_t *) malloc(sizeof(uint64_t));
-                        sscanf(hopEui64Str->valuestring, "%"PRIx64, hopEui64);
+                        sscanf(hopEui64Str->valuestring, "%" PRIx64, hopEui64);
                         linkedListAppend(sourceRouteList, hopEui64);
                     }
                 }
@@ -1379,7 +1351,7 @@ icLinkedList *zhalGetLqiTable(uint64_t eui64)
                     cJSON *euiStr = cJSON_GetObjectItem(entry, "eui");
                     if (euiStr != NULL && cJSON_IsString(euiStr))
                     {
-                        sscanf(euiStr->valuestring, "%"PRIx64, &data->eui64);
+                        sscanf(euiStr->valuestring, "%" PRIx64, &data->eui64);
                     }
                     else
                     {
@@ -1437,20 +1409,17 @@ icLinkedList *zhalGetMonitoredDevicesInfo(void)
                     // Extract the timerSeconds
                     //
                     cJSON *timerSeconds = cJSON_GetObjectItem(monitoredDeviceEntry, "timerSeconds");
-                    if (eui64Str != NULL && cJSON_IsString(eui64Str) == true &&
-                        timerSeconds != NULL && cJSON_IsNumber(timerSeconds) == true)
+                    if (eui64Str != NULL && cJSON_IsString(eui64Str) == true && timerSeconds != NULL &&
+                        cJSON_IsNumber(timerSeconds) == true)
                     {
                         if (monitoredDevicesInfo == NULL)
                         {
                             monitoredDevicesInfo = linkedListCreate();
                         }
-                        zhalLpmMonitoredDeviceInfo *deviceInfo = (zhalLpmMonitoredDeviceInfo *) calloc(1,
-                                                                                                       sizeof(zhalLpmMonitoredDeviceInfo));
-                        if (stringToUnsignedNumberWithinRange(eui64Str->valuestring,
-                                                              &deviceInfo->eui64,
-                                                              16,
-                                                              0,
-                                                              UINT64_MAX) == true)
+                        zhalLpmMonitoredDeviceInfo *deviceInfo =
+                            (zhalLpmMonitoredDeviceInfo *) calloc(1, sizeof(zhalLpmMonitoredDeviceInfo));
+                        if (stringToUnsignedNumberWithinRange(
+                                eui64Str->valuestring, &deviceInfo->eui64, 16, 0, UINT64_MAX) == true)
                         {
                             deviceInfo->timeoutSeconds = timerSeconds->valueint;
                             linkedListAppend(monitoredDevicesInfo, deviceInfo);
@@ -1465,7 +1434,6 @@ icLinkedList *zhalGetMonitoredDevicesInfo(void)
                     {
                         icLogWarn(LOG_TAG, "Missing values in getMonitoredDevices response");
                     }
-
                 }
             }
             cJSON_Delete(response);
@@ -1495,13 +1463,13 @@ int zhalUpgradeDeviceFirmwareLegacy(uint64_t eui64,
 
     setAddress(eui64, request);
 
-    char buf[21]; //max uint64_t is 18446744073709551615
+    char buf[21]; // max uint64_t is 18446744073709551615
     sprintf(buf, "%016" PRIx64, routerEui64);
     cJSON_AddStringToObject(request, "routerAddress", buf);
 
     cJSON_AddStringToObject(request, "appFilename", appFilename);
 
-    cJSON_AddNumberToObject(request, "authChallengeResponse", 0); //unused but required
+    cJSON_AddNumberToObject(request, "authChallengeResponse", 0); // unused but required
 
     if (bootloaderFilename != NULL)
     {
@@ -1632,12 +1600,10 @@ char *zhalGetFirmwareVersion(void)
     return version;
 }
 
-//Helper to send the request, parse out the resultCode, and if successful return the response (otherwise it will be cleaned up if result code was nonzero)
-// also deletes the request json object
-static int sendRequestWithTimeout(uint64_t eui64,
-                                  cJSON *request,
-                                  int timeoutSecs,
-                                  cJSON **response)
+// Helper to send the request, parse out the resultCode, and if successful return the response (otherwise it will be
+// cleaned up if result code was nonzero)
+//  also deletes the request json object
+static int sendRequestWithTimeout(uint64_t eui64, cJSON *request, int timeoutSecs, cJSON **response)
 {
     int result = -1;
 
@@ -1667,7 +1633,7 @@ static int sendRequestWithTimeout(uint64_t eui64,
 
         if (result == ZHAL_STATUS_OK)
         {
-            //good result, we are done
+            // good result, we are done
             break;
         }
         else if (result == ZHAL_STATUS_NETWORK_BUSY)
@@ -1683,7 +1649,7 @@ static int sendRequestWithTimeout(uint64_t eui64,
         }
         else
         {
-            //clean up for any other error (dont return the JSON response)
+            // clean up for any other error (dont return the JSON response)
             cJSON_Delete(resp);
             resp = NULL;
             break;
@@ -1692,7 +1658,7 @@ static int sendRequestWithTimeout(uint64_t eui64,
 
     if (resp != NULL && response != NULL)
     {
-        //the caller wanted a response json and we have one...
+        // the caller wanted a response json and we have one...
         *response = resp;
     }
     else
@@ -1706,8 +1672,7 @@ static int sendRequestWithTimeout(uint64_t eui64,
     return result;
 }
 
-int zhalAddZigbeeUart(uint64_t eui64,
-                      uint8_t endpointId)
+int zhalAddZigbeeUart(uint64_t eui64, uint8_t endpointId)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1721,7 +1686,7 @@ int zhalAddZigbeeUart(uint64_t eui64,
     return sendRequestNoResponse(eui64, request);
 }
 
-//FIXME: This needs endpointId to be able find the correct port in ZigbeeCore. Devices might have > 1 UART ep.
+// FIXME: This needs endpointId to be able find the correct port in ZigbeeCore. Devices might have > 1 UART ep.
 int zhalRemoveZigbeeUart(uint64_t eui64)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
@@ -1734,8 +1699,7 @@ int zhalRemoveZigbeeUart(uint64_t eui64)
     return sendRequestNoResponse(eui64, request);
 }
 
-int zhalSyncZigbeeUart(uint64_t eui64,
-                       uint8_t endpointId)
+int zhalSyncZigbeeUart(uint64_t eui64, uint8_t endpointId)
 {
     icLogDebug(LOG_TAG, __func__);
 
@@ -1830,8 +1794,7 @@ icLinkedList *zhalPerformEnergyScan(const uint8_t *channelsToScan,
     return result;
 }
 
-bool zhalIncrementNetworkCounters(int32_t nonce,
-                                  int32_t frame)
+bool zhalIncrementNetworkCounters(int32_t nonce, int32_t frame)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1880,8 +1843,7 @@ bool zhalDefenderConfigure(uint8_t panIdChangeThreshold,
     return sendRequestNoResponse(0, request) == 0;
 }
 
-bool zhalSetProperty(const char *key,
-                     const char *value)
+bool zhalSetProperty(const char *key, const char *value)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1935,27 +1897,24 @@ char *zhalTest(void)
     return testResult;
 }
 
-//Helper to send the request, parse out the resultCode, and if successful return the response (otherwise it will be cleaned up if result code was nonzero)
-// also deletes the request json object
-static int sendRequest(uint64_t eui64,
-                       cJSON *request,
-                       cJSON **response)
+// Helper to send the request, parse out the resultCode, and if successful return the response (otherwise it will be
+// cleaned up if result code was nonzero)
+//  also deletes the request json object
+static int sendRequest(uint64_t eui64, cJSON *request, cJSON **response)
 {
     return sendRequestWithTimeout(eui64, request, DEFAULT_REQUEST_TIMEOUT_SECONDS, response);
 }
 
-//Helper to send a request that should not have a response payload other than resultCode (which is returned as an int)
-static int sendRequestNoResponse(uint64_t eui64,
-                                 cJSON *request)
+// Helper to send a request that should not have a response payload other than resultCode (which is returned as an int)
+static int sendRequestNoResponse(uint64_t eui64, cJSON *request)
 {
     return sendRequest(eui64, request, NULL);
 }
 
-//Helper to set the 'address' field to the provided eui64
-static void setAddress(uint64_t eui64,
-                       cJSON *request)
+// Helper to set the 'address' field to the provided eui64
+static void setAddress(uint64_t eui64, cJSON *request)
 {
-    char buf[21]; //max uint64_t is 18446744073709551615
+    char buf[21]; // max uint64_t is 18446744073709551615
     sprintf(buf, "%016" PRIx64, eui64);
     cJSON_AddStringToObject(request, "address", buf);
 }
@@ -1970,7 +1929,7 @@ void zhalAddressTableEntryDestroy(zhalAddressTableEntry *entry)
     }
 }
 
-//Get address Table of Zigbee network.
+// Get address Table of Zigbee network.
 icLinkedList *zhalGetAddressTable(void)
 {
     icLinkedList *addressTable = NULL;

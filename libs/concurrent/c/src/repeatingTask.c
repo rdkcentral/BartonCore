@@ -37,25 +37,25 @@
  * Author: jelderton - 10/8/18
  *-----------------------------------------------*/
 
+#include <glib.h>
+#include <inttypes.h>
+#include <pthread.h>
 #include <stddef.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
-#include <inttypes.h>
-#include <glib.h>
+#include <string.h>
 
-#include <icLog/logging.h>
-#include <icTypes/icLinkedList.h>
-#include <icConcurrent/repeatingTask.h>
-#include <icConcurrent/timedWait.h>
-#include <icConcurrent/threadUtils.h>
-#include <icTime/timeUtils.h>
-#include <icTime/timeTracker.h>
-#include <icUtil/stringUtils.h>
 #include "repeatingTaskPolicyPrivate.h"
+#include <icConcurrent/repeatingTask.h>
+#include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
+#include <icTime/timeTracker.h>
+#include <icTime/timeUtils.h>
+#include <icTypes/icLinkedList.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_TAG     "repeatTask"
+#define LOG_TAG                 "repeatTask"
 
 //-----------------------------------------------
 // private data structures
@@ -70,10 +70,10 @@
  */
 typedef enum
 {
-    REPEAT_TASK_IDLE,           // prior to 'wait'
-    REPEAT_TASK_WAITING,        // waiting for time to expire
-    REPEAT_TASK_RUNNING,        // executing callback function
-    REPEAT_TASK_CANCELED,       // signal a 'stop waiting', returns to IDLE
+    REPEAT_TASK_IDLE,     // prior to 'wait'
+    REPEAT_TASK_WAITING,  // waiting for time to expire
+    REPEAT_TASK_RUNNING,  // executing callback function
+    REPEAT_TASK_CANCELED, // signal a 'stop waiting', returns to IDLE
 } repeatTaskState;
 
 /*
@@ -81,11 +81,11 @@ typedef enum
  */
 typedef enum
 {
-    NORMAL_REPEATING_TASK_TYPE,         // deprecated basic repeating task
-    INIT_DELAY_REPEATING_TASK_TYPE,     // deprecated basic repeating task with initial delay
-    FIXED_RATE_REPEATING_TASK_TYPE,     // deprecated fixed-rate repeating task
-    BACK_OFF_REPEATING_TASK_TYPE,       // deprecated backoff repeating task
-    POLICY_REPEATING_TASK_TYPE          // anything created via createPolicyRepeatingTask()
+    NORMAL_REPEATING_TASK_TYPE,     // deprecated basic repeating task
+    INIT_DELAY_REPEATING_TASK_TYPE, // deprecated basic repeating task with initial delay
+    FIXED_RATE_REPEATING_TASK_TYPE, // deprecated fixed-rate repeating task
+    BACK_OFF_REPEATING_TASK_TYPE,   // deprecated backoff repeating task
+    POLICY_REPEATING_TASK_TYPE      // anything created via createPolicyRepeatingTask()
 } repeatingTaskType;
 
 /*
@@ -93,31 +93,31 @@ typedef enum
  */
 typedef struct
 {
-    pthread_mutex_t                 mutex;                  // mutex for the object
-    pthread_cond_t                  cond;                   // condition used for canceling
-    pthread_t                       tid;                    // thread id of the tasks' thread
-    bool                            joinable;
+    pthread_mutex_t mutex; // mutex for the object
+    pthread_cond_t cond;   // condition used for canceling
+    pthread_t tid;         // thread id of the tasks' thread
+    bool joinable;
 
-    uint32_t                        handle;                 // identifier returned to callers
-    repeatTaskState                 state;                  // current state
-    uint8_t                         actionFlag;             // operational action without changing state
-    repeatingTaskType               taskType;               // needed for traditional task support
+    uint32_t handle;            // identifier returned to callers
+    repeatTaskState state;      // current state
+    uint8_t actionFlag;         // operational action without changing state
+    repeatingTaskType taskType; // needed for traditional task support
 
-    RepeatingTaskPolicy             *policy;                // object to calculate the next execution time
-    RepeatingTaskPolicy             *resetPolicy;           // only used during resetPolicyRepeatingTask
-    repeatingTaskRunFunc            runFunc;                // function to run at execution time
-    destroyRepeatingTaskObjectsFunc cleanupFunc;            // cleanup policy and context
-    void                            *userArg;               // optional arg supplied by caller
+    RepeatingTaskPolicy *policy;                 // object to calculate the next execution time
+    RepeatingTaskPolicy *resetPolicy;            // only used during resetPolicyRepeatingTask
+    repeatingTaskRunFunc runFunc;                // function to run at execution time
+    destroyRepeatingTaskObjectsFunc cleanupFunc; // cleanup policy and context
+    void *userArg;                               // optional arg supplied by caller
 
 } RepeatTask;
 
 /*
  * private variables
  */
-static icLinkedList     *tasks = NULL;  // list of repeatTask objects
-static pthread_mutex_t  TASK_MTX = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-static uint64_t         handleCounter = 0;
-static pthread_once_t   initOnce = PTHREAD_ONCE_INIT;
+static icLinkedList *tasks = NULL; // list of repeatTask objects
+static pthread_mutex_t TASK_MTX = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static uint64_t handleCounter = 0;
+static pthread_once_t initOnce = PTHREAD_ONCE_INIT;
 
 /*
  * private internal functions
@@ -125,7 +125,8 @@ static pthread_once_t   initOnce = PTHREAD_ONCE_INIT;
 static uint32_t createPolicyRepeatingTaskInternal(repeatingTaskRunFunc runFunc,
                                                   destroyRepeatingTaskObjectsFunc cleanupFunc,
                                                   RepeatingTaskPolicy *policy,
-                                                  void *userArg, repeatingTaskType type);
+                                                  void *userArg,
+                                                  repeatingTaskType type);
 static void defaultDestroyRepeatingTaskObjectsFunc(uint32_t taskHandle, void *userArg, RepeatingTaskPolicy *policy);
 static RepeatTask *incrementRepeatTaskRef(RepeatTask *task);
 static void decrementRepeatTaskRef(RepeatTask *task);
@@ -136,7 +137,7 @@ static void traditionalTaskClean(uint32_t taskHandle, void *userArg, RepeatingTa
 static bool traditionalBackoffTaskRunWrapper(void *arg);
 static void traditionalBackoffTaskClean(uint32_t taskHandle, void *userArg, RepeatingTaskPolicy *policy);
 static uint32_t assignHandleLocked(void);
-static bool cancelRepeatingTaskObject(RepeatTask* obj);
+static bool cancelRepeatingTaskObject(RepeatTask *obj);
 static void shutdownRepeatingTasks(void);
 static void *runRepeatTaskThread(void *arg);
 
@@ -160,8 +161,9 @@ static void oneTimeInit(void)
 //
 // object used internally for traditional "create repeating task" implementations
 //
-typedef struct {
-    taskCallbackFunc    callbackFunc;
+typedef struct
+{
+    taskCallbackFunc callbackFunc;
     void *userArg;
 } TraditionalRepeatTaskCtx;
 
@@ -188,14 +190,14 @@ uint32_t createRepeatingTask(uint64_t delayAmount, delayUnits units, taskCallbac
     // taskCallbackFunc has a different signature than repeatingTaskRunFunc, so need
     // a proxy/wrapper of sorts.  place this info into a container, then use the newer
     // policy-based approach for the actual task.
-    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *)calloc(1, sizeof(TraditionalRepeatTaskCtx));
+    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *) calloc(1, sizeof(TraditionalRepeatTaskCtx));
     ctx->callbackFunc = func;
     ctx->userArg = userArg;
 
     // plugin into the newer policy approach
     RepeatingTaskPolicy *policy = createStandardRepeatingTaskPolicy(delayAmount, units);
-    return createPolicyRepeatingTaskInternal(traditionalTaskRunWrapper, traditionalTaskClean,
-                                             policy, ctx, NORMAL_REPEATING_TASK_TYPE);
+    return createPolicyRepeatingTaskInternal(
+        traditionalTaskRunWrapper, traditionalTaskClean, policy, ctx, NORMAL_REPEATING_TASK_TYPE);
 }
 
 
@@ -215,8 +217,11 @@ uint32_t createRepeatingTask(uint64_t delayAmount, delayUnits units, taskCallbac
  *
  * @return a repeatingTask handle that can be queried or canceled
  */
-uint32_t createRepeatingTaskWithStartDelay(uint64_t startDelay, uint64_t delayAmount, delayUnits units,
-                                           taskCallbackFunc func, void *userArg)
+uint32_t createRepeatingTaskWithStartDelay(uint64_t startDelay,
+                                           uint64_t delayAmount,
+                                           delayUnits units,
+                                           taskCallbackFunc func,
+                                           void *userArg)
 {
     // we kept this function around to reduce the amount of change necessary
     // when introducing the "policy" approach of repeating tasks.
@@ -224,14 +229,14 @@ uint32_t createRepeatingTaskWithStartDelay(uint64_t startDelay, uint64_t delayAm
     // taskCallbackFunc has a different signature than repeatingTaskRunFunc, so need
     // a proxy/wrapper of sorts.  place this info into a container, then use the newer
     // policy-based approach for the actual task.
-    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *)calloc(1, sizeof(TraditionalRepeatTaskCtx));
+    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *) calloc(1, sizeof(TraditionalRepeatTaskCtx));
     ctx->callbackFunc = func;
     ctx->userArg = userArg;
 
     // plugin into the newer policy approach
     RepeatingTaskPolicy *policy = createRepeatingTaskWithStartDelayPolicy(startDelay, delayAmount, units);
-    return createPolicyRepeatingTaskInternal(traditionalTaskRunWrapper, traditionalTaskClean,
-                                             policy, ctx, INIT_DELAY_REPEATING_TASK_TYPE);
+    return createPolicyRepeatingTaskInternal(
+        traditionalTaskRunWrapper, traditionalTaskClean, policy, ctx, INIT_DELAY_REPEATING_TASK_TYPE);
 }
 
 /*
@@ -257,21 +262,22 @@ uint32_t createFixedRateRepeatingTask(uint64_t delayAmount, delayUnits units, ta
     // taskCallbackFunc has a different signature than repeatingTaskRunFunc, so need
     // a proxy/wrapper of sorts.  place this info into a container, then use the newer
     // policy-based approach for the actual task.
-    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *)calloc(1, sizeof(TraditionalRepeatTaskCtx));
+    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *) calloc(1, sizeof(TraditionalRepeatTaskCtx));
     ctx->callbackFunc = func;
     ctx->userArg = userArg;
 
     // plugin into the newer policy approach
     RepeatingTaskPolicy *policy = createFixedRepeatingTaskPolicy(delayAmount, units);
-    return createPolicyRepeatingTaskInternal(traditionalTaskRunWrapper, traditionalTaskClean,
-                                             policy, ctx, FIXED_RATE_REPEATING_TASK_TYPE);
+    return createPolicyRepeatingTaskInternal(
+        traditionalTaskRunWrapper, traditionalTaskClean, policy, ctx, FIXED_RATE_REPEATING_TASK_TYPE);
 }
 
 //
 // object used internally for traditional "create repeating task" implementations
 //
-typedef struct {
-    backOffTaskRunCallbackFunc     callbackFunc;
+typedef struct
+{
+    backOffTaskRunCallbackFunc callbackFunc;
     backOffTaskSuccessCallbackFunc cleanFunc;
     void *userArg;
 } TraditionalBackoffTaskCtx;
@@ -301,9 +307,13 @@ typedef struct {
  *
  * @return a repeatingTask handle that can be queried or canceled
  */
-uint32_t createBackOffRepeatingTask(uint64_t initDelayAmount, uint64_t maxDelayAmount, uint64_t incrementDelayAmount,
-                                    delayUnits units, backOffTaskRunCallbackFunc runFunc,
-                                    backOffTaskSuccessCallbackFunc cleanFunc, void *userArg)
+uint32_t createBackOffRepeatingTask(uint64_t initDelayAmount,
+                                    uint64_t maxDelayAmount,
+                                    uint64_t incrementDelayAmount,
+                                    delayUnits units,
+                                    backOffTaskRunCallbackFunc runFunc,
+                                    backOffTaskSuccessCallbackFunc cleanFunc,
+                                    void *userArg)
 {
     // we kept this function around to reduce the amount of change necessary
     // when introducing the "policy" approach of repeating tasks.
@@ -311,16 +321,16 @@ uint32_t createBackOffRepeatingTask(uint64_t initDelayAmount, uint64_t maxDelayA
     // the two callback functions have a slightly different signature than the policy-based obes, so need
     // a proxy/wrapper.  place these functions and userArg into a container, then use the newer
     // policy-based approach for the actual task.
-    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *)calloc(1, sizeof(TraditionalBackoffTaskCtx));
+    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *) calloc(1, sizeof(TraditionalBackoffTaskCtx));
     ctx->callbackFunc = runFunc;
     ctx->cleanFunc = cleanFunc;
     ctx->userArg = userArg;
 
     // plugin into the newer policy approach
-    RepeatingTaskPolicy *policy = createIncrementalRepeatingTaskPolicy(initDelayAmount, maxDelayAmount,
-                                            incrementDelayAmount, units);
-    return createPolicyRepeatingTaskInternal(traditionalBackoffTaskRunWrapper, traditionalBackoffTaskClean,
-                                             policy, ctx, BACK_OFF_REPEATING_TASK_TYPE);
+    RepeatingTaskPolicy *policy =
+        createIncrementalRepeatingTaskPolicy(initDelayAmount, maxDelayAmount, incrementDelayAmount, units);
+    return createPolicyRepeatingTaskInternal(
+        traditionalBackoffTaskRunWrapper, traditionalBackoffTaskClean, policy, ctx, BACK_OFF_REPEATING_TASK_TYPE);
 }
 
 /*
@@ -362,7 +372,7 @@ void changeRepeatingTask(uint32_t taskHandle, uint32_t delayAmount, delayUnits u
                 break;
         }
     }
-    decrementRepeatTaskRef(obj);  // dec reference count due to findTaskInListLocked
+    decrementRepeatTaskRef(obj); // dec reference count due to findTaskInListLocked
     mutexUnlock(&TASK_MTX);
 
     // finally, apply the new policy
@@ -434,7 +444,7 @@ void *cancelRepeatingTask(uint32_t taskHandle)
 static RepeatTask *createRepeatTaskObj(void)
 {
     // want to leverage glib ArcBox (atomically reference counted box)
-    return (RepeatTask *)g_atomic_rc_box_new0(RepeatTask);
+    return (RepeatTask *) g_atomic_rc_box_new0(RepeatTask);
 }
 
 /*
@@ -443,7 +453,7 @@ static RepeatTask *createRepeatTaskObj(void)
  */
 static void _clearFullRepeatTaskObj(RepeatTask *task)
 {
-    icLogTrace(LOG_TAG, "destroying task; handle=%"PRIu32, task->handle);
+    icLogTrace(LOG_TAG, "destroying task; handle=%" PRIu32, task->handle);
 
     // destroy mutex and the conditional.
     pthread_mutex_destroy(&task->mutex);
@@ -455,7 +465,7 @@ static void _clearFullRepeatTaskObj(RepeatTask *task)
     task->userArg = NULL;
 
     // NOTE: do not free 'task'.  glib does that for us
-    icLogTrace(LOG_TAG, "destroyed task handle %"PRIu32, task->handle);
+    icLogTrace(LOG_TAG, "destroyed task handle %" PRIu32, task->handle);
 }
 
 /*
@@ -467,8 +477,8 @@ static void decrementRepeatTaskRef(RepeatTask *task)
     // decrement ref, and free if count == 0
     if (task != NULL)
     {
-        icLogTrace(LOG_TAG, "task handle %"PRIu32" decrementing curr ref-count", task->handle);
-        g_atomic_rc_box_release_full(task, (GDestroyNotify)_clearFullRepeatTaskObj);
+        icLogTrace(LOG_TAG, "task handle %" PRIu32 " decrementing curr ref-count", task->handle);
+        g_atomic_rc_box_release_full(task, (GDestroyNotify) _clearFullRepeatTaskObj);
     }
 }
 
@@ -480,7 +490,7 @@ static RepeatTask *incrementRepeatTaskRef(RepeatTask *task)
     // increment ref
     if (task != NULL)
     {
-        icLogTrace(LOG_TAG, "task handle %"PRIu32" incrementing curr ref-count", task->handle);
+        icLogTrace(LOG_TAG, "task handle %" PRIu32 " incrementing curr ref-count", task->handle);
         return g_atomic_rc_box_acquire(task);
     }
     return NULL;
@@ -538,7 +548,7 @@ static uint32_t createPolicyRepeatingTaskInternal(repeatingTaskRunFunc runFunc,
     incrementRepeatTaskRef(def);
 
     // start the thread
-    scoped_generic char *threadName = stringBuilder("rptTask:%"PRIu32, retVal);
+    scoped_generic char *threadName = stringBuilder("rptTask:%" PRIu32, retVal);
     if (createThread(&def->tid, runRepeatTaskThread, def, threadName) == true)
     {
         def->joinable = true;
@@ -603,7 +613,7 @@ bool resetPolicyRepeatingTask(uint32_t taskHandle, RepeatingTaskPolicy *newPolic
     // sanity check.  we don't allow null policy
     if (newPolicy == NULL)
     {
-        icLogWarn(LOG_TAG, "unable to reset task; missing policy for handle %"PRIu32, taskHandle);
+        icLogWarn(LOG_TAG, "unable to reset task; missing policy for handle %" PRIu32, taskHandle);
         return false;
     }
 
@@ -615,7 +625,7 @@ bool resetPolicyRepeatingTask(uint32_t taskHandle, RepeatingTaskPolicy *newPolic
     // sanity checks before moving forward
     if (obj == NULL)
     {
-        icLogWarn(LOG_TAG, "unable to reset task; missing task for handle=%"PRIu32, taskHandle);
+        icLogWarn(LOG_TAG, "unable to reset task; missing task for handle=%" PRIu32, taskHandle);
         destroyRepeatingPolicy(newPolicy);
         return false;
     }
@@ -624,7 +634,7 @@ bool resetPolicyRepeatingTask(uint32_t taskHandle, RepeatingTaskPolicy *newPolic
     if (obj->policy == newPolicy)
     {
         // nothing to do here
-        decrementRepeatTaskRef(obj);  // dec reference count due to findTaskInListLocked
+        decrementRepeatTaskRef(obj); // dec reference count due to findTaskInListLocked
         mutexUnlock(&obj->mutex);
         return true;
     }
@@ -652,10 +662,10 @@ bool resetPolicyRepeatingTask(uint32_t taskHandle, RepeatingTaskPolicy *newPolic
     }
     else
     {
-        icLogWarn(LOG_TAG, "unable to reset task; state is CANCELING - handle=%"PRIu32, taskHandle);
+        icLogWarn(LOG_TAG, "unable to reset task; state is CANCELING - handle=%" PRIu32, taskHandle);
     }
     mutexUnlock(&obj->mutex);
-    decrementRepeatTaskRef(obj);  // dec reference count due to findTaskInListLocked
+    decrementRepeatTaskRef(obj); // dec reference count due to findTaskInListLocked
 
     if (retVal == false)
     {
@@ -686,7 +696,7 @@ bool cancelPolicyRepeatingTask(uint32_t taskHandle)
         // task is not in the list anymore.  possible that
         // it's currently executing or already canceled.
         //
-        icLogWarn(LOG_TAG, "unable to cancel task; missing object for handle %"PRIu32, taskHandle);
+        icLogWarn(LOG_TAG, "unable to cancel task; missing object for handle %" PRIu32, taskHandle);
         return false;
     }
 
@@ -725,19 +735,19 @@ void shortCircuitRepeatingTask(uint32_t taskHandle)
         }
         mutexUnlock(&obj->mutex);
     }
-    decrementRepeatTaskRef(obj);  // dec reference count due to findTaskInListLocked
+    decrementRepeatTaskRef(obj); // dec reference count due to findTaskInListLocked
 }
 
 /*
  * cancel using the RepeatTask object
  */
-static bool cancelRepeatingTaskObject(RepeatTask* obj)
+static bool cancelRepeatingTaskObject(RepeatTask *obj)
 {
     bool retVal = false;
 
     // only need to cancel if state is not CANCELED
     mutexLock(&obj->mutex);
-    icLogTrace(LOG_TAG, "canceling task handle %"PRIu32, obj->handle);
+    icLogTrace(LOG_TAG, "canceling task handle %" PRIu32, obj->handle);
     if (obj->state != REPEAT_TASK_CANCELED)
     {
         // reset flag so the thread does not try to detach
@@ -756,7 +766,7 @@ static bool cancelRepeatingTaskObject(RepeatTask* obj)
         if (joinable == true)
         {
             // wait for the thread to die, so we know it's safe to return
-            icLogTrace(LOG_TAG, "waiting for task handle %"PRIu32" thread to complete...", handle);
+            icLogTrace(LOG_TAG, "waiting for task handle %" PRIu32 " thread to complete...", handle);
             pthread_join(threadId, NULL);
         }
         retVal = true;
@@ -764,7 +774,7 @@ static bool cancelRepeatingTaskObject(RepeatTask* obj)
     else
     {
         // already 'canceling'
-        icLogTrace(LOG_TAG, "unable to cancel task; already canceling handle %"PRIu32, obj->handle);
+        icLogTrace(LOG_TAG, "unable to cancel task; already canceling handle %" PRIu32, obj->handle);
         mutexUnlock(&obj->mutex);
     }
     return retVal;
@@ -812,7 +822,7 @@ static void shutdownRepeatingTasks(void)
 static bool traditionalTaskRunWrapper(void *arg)
 {
     // the traditional function and userArg are within our container
-    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *)arg;
+    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *) arg;
     ctx->callbackFunc(ctx->userArg);
 
     // keep this going until told to cancel
@@ -828,7 +838,7 @@ static void traditionalTaskClean(uint32_t taskHandle, void *userArg, RepeatingTa
     // NOTE: This is a traditional repeating task, so the destruction of the
     //       original userArg is handled by our owner via cancelRepeatingTask;
     //       therefore, no cleanup of that here.
-    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *)userArg;
+    TraditionalRepeatTaskCtx *ctx = (TraditionalRepeatTaskCtx *) userArg;
     ctx->userArg = NULL;
     free(ctx);
 
@@ -843,7 +853,7 @@ static void traditionalTaskClean(uint32_t taskHandle, void *userArg, RepeatingTa
 static bool traditionalBackoffTaskRunWrapper(void *arg)
 {
     // extract our container for this traditional backoff task
-    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *)arg;
+    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *) arg;
 
     // exec the original 'runFunc' supplied when this backoff task was created
     return ctx->callbackFunc(ctx->userArg);
@@ -856,7 +866,7 @@ static bool traditionalBackoffTaskRunWrapper(void *arg)
 static void traditionalBackoffTaskClean(uint32_t taskHandle, void *userArg, RepeatingTaskPolicy *policy)
 {
     // extract our container for this traditional backoff task
-    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *)userArg;
+    TraditionalBackoffTaskCtx *ctx = (TraditionalBackoffTaskCtx *) userArg;
 
     // exec the original 'cleanFunc' supplied when this backoff task was created
     ctx->cleanFunc(ctx->userArg);
@@ -871,7 +881,8 @@ static void traditionalBackoffTaskClean(uint32_t taskHandle, void *userArg, Repe
  * Asks 'policy' for the millis to pause.  That is then saved into 'timeToPause', then added to "now"
  * and saved into 'whenToRun'
  */
-static void getPauseTimeFromPolicy(RepeatingTaskPolicy *policy, struct timespec *timeToPause, struct timespec *whenToRun)
+static void
+getPauseTimeFromPolicy(RepeatingTaskPolicy *policy, struct timespec *timeToPause, struct timespec *whenToRun)
 {
     // ask policy how long to pause before the next execution
     policy->getDelayFunc(policy->policyContext, timeToPause);
@@ -898,7 +909,7 @@ static void calcRemainingTimeToPause(struct timespec *executeTime, struct timesp
  */
 static void updatePolicyLocked(RepeatTask *task)
 {
-    icLogTrace(LOG_TAG, "updating policy for task handle %"PRIu32, task->handle);
+    icLogTrace(LOG_TAG, "updating policy for task handle %" PRIu32, task->handle);
     RepeatingTaskPolicy *oldPolicy = task->policy;
     task->policy = task->resetPolicy;
     task->resetPolicy = NULL;
@@ -936,7 +947,7 @@ static void *runRepeatTaskThread(void *arg)
         taskPostRunNotifyFunc postFunc = def->policy->postRunNotifyFunc;
         void *policyCtx = def->policy->policyContext;
         def->state = REPEAT_TASK_RUNNING;
-        icLogTrace(LOG_TAG, "running task handle %"PRIu32, def->handle);
+        icLogTrace(LOG_TAG, "running task handle %" PRIu32, def->handle);
         mutexUnlock(&def->mutex);
 
         // if the policy has pre/post defined, do them along with the "exec"
@@ -1043,7 +1054,7 @@ static void *runRepeatTaskThread(void *arg)
     }
 
     // outside main loop, so canceling or done running the tasks
-    icLogTrace(LOG_TAG, "task handle %"PRIu32" complete, destroying thread", def->handle);
+    icLogTrace(LOG_TAG, "task handle %" PRIu32 " complete, destroying thread", def->handle);
 
     // if "canceled" then it will wait for the thread to die (via join)
     mutexLock(&def->mutex);
@@ -1056,24 +1067,27 @@ static void *runRepeatTaskThread(void *arg)
     mutexUnlock(&def->mutex);
 
     // destroy the task, it's policy, and userArg
-    icLogTrace(LOG_TAG, "destroying task handle %"PRIu32, handle);
+    icLogTrace(LOG_TAG, "destroying task handle %" PRIu32, handle);
     RepeatTask *self = removeTaskFromList(handle);
     if (self != NULL && self != def)
     {
         // this could be NULL when canceling a traditional
-        icLogError(LOG_TAG, "something wrong, we've crossed the handle-streams!  "
-                            "looking for %"PRIu32" but got %"PRIu32, handle, self->handle);
+        icLogError(LOG_TAG,
+                   "something wrong, we've crossed the handle-streams!  "
+                   "looking for %" PRIu32 " but got %" PRIu32,
+                   handle,
+                   self->handle);
     }
     else if (self == NULL)
     {
-        icLogTrace(LOG_TAG, "handle %"PRIu32" already removed from list, exiting thread", handle);
+        icLogTrace(LOG_TAG, "handle %" PRIu32 " already removed from list, exiting thread", handle);
     }
 
     // We own the thread ref, and we may or may not own the list ref. Scheduling of task cancellation can
     // lead to another thread calling removeTaskFromList before us. decrementRepeatTaskRef will handle the
     // NULL case gracefully (another thread removed from list before us).
     decrementRepeatTaskRef(self);
-    decrementRepeatTaskRef(def);    // thread-creation
+    decrementRepeatTaskRef(def); // thread-creation
     def = NULL;
 
     return NULL;
@@ -1085,8 +1099,8 @@ static void *runRepeatTaskThread(void *arg)
  */
 static bool findRepeatTaskByHandle(void *searchVal, void *item)
 {
-    uint32_t *id = (uint32_t *)searchVal;
-    RepeatTask *task = (RepeatTask *)item;
+    uint32_t *id = (uint32_t *) searchVal;
+    RepeatTask *task = (RepeatTask *) item;
 
     // compare the handle values
     //
@@ -1105,7 +1119,7 @@ static bool findRepeatTaskByHandle(void *searchVal, void *item)
  */
 static RepeatTask *findTaskInListLocked(uint32_t taskHandle)
 {
-    RepeatTask *obj = (RepeatTask *)linkedListFind(tasks, &taskHandle, findRepeatTaskByHandle);
+    RepeatTask *obj = (RepeatTask *) linkedListFind(tasks, &taskHandle, findRepeatTaskByHandle);
     if (obj != NULL)
     {
         return incrementRepeatTaskRef(obj);
@@ -1171,4 +1185,3 @@ static uint32_t assignHandleLocked(void)
 
     return ++handleCounter;
 }
-

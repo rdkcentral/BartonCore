@@ -5,12 +5,12 @@
 #ifndef ZILKER_ICBLOCKINGQUEUE_H
 #define ZILKER_ICBLOCKINGQUEUE_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #define BLOCKINGQUEUE_TIMEOUT_INFINITE (INT_MAX)
-#define BLOCKINGQUEUE_MAX_CAPACITY ((uint16_t) UINT16_MAX)
+#define BLOCKINGQUEUE_MAX_CAPACITY     ((uint16_t) UINT16_MAX)
 
 /*
  * function prototype for freeing items within
@@ -53,7 +53,7 @@ typedef struct _icBlockingQueue icBlockingQueue;
  * @return a new BlockingQueue object
  * @see blockingQueueDestroy()
  */
-icBlockingQueue* blockingQueueCreate(uint16_t maxCapacity);
+icBlockingQueue *blockingQueueCreate(uint16_t maxCapacity);
 
 /**
  * Destroy a queue and cleanup memory.  Note that
@@ -214,4 +214,4 @@ void blockingQueueDisable(icBlockingQueue *queue);
  */
 bool blockingQueueIsDisabled(icBlockingQueue *queue);
 
-#endif //ZILKER_ICBLOCKINGQUEUE_H
+#endif // ZILKER_ICBLOCKINGQUEUE_H

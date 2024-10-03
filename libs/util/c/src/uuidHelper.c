@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2020 Comcast
 //
 // All rights reserved.
@@ -23,8 +23,8 @@
 // Created by mkoch201 on 8/6/20.
 //
 
-#include <uuid/uuid.h>
 #include <stdlib.h>
+#include <uuid/uuid.h>
 
 /**
  * Generate a new 128 bit uuid and return it in string form (xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx)
@@ -32,13 +32,12 @@
  */
 char *generateUUIDString(void)
 {
-    uuid_t uuid = { '\0' };
+    uuid_t uuid = {'\0'};
     uuid_generate(uuid);
 
     // Example (36 characters plus null): CBDE8461-824E-4ADD-87D5-5FD6024685A5
-    char *buffer = (char*)calloc(1, 37);
+    char *buffer = (char *) calloc(1, 37);
     uuid_unparse_lower(uuid, buffer);
 
     return buffer;
 }
-

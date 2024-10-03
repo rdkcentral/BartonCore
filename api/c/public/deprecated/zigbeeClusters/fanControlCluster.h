@@ -34,10 +34,7 @@
 
 typedef struct
 {
-    void (*fanModeChanged)(uint64_t eui64,
-                           uint8_t endpointId,
-                           uint8_t mode,
-                           const void *ctx);
+    void (*fanModeChanged)(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx);
 } FanControlClusterCallbacks;
 
 
@@ -58,4 +55,4 @@ const char *fanControlClusterGetFanModeString(uint8_t fanMode);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_FANCONTROLCLUSTER_H
+#endif // ZILKER_FANCONTROLCLUSTER_H

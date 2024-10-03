@@ -47,4 +47,4 @@ void zigbeeHealthCheckStop();
  */
 void zigbeeHealthCheckSetProblem(bool problemExists);
 
-#endif //ZILKER_ZIGBEEHEALTHCHECK_H
+#endif // ZILKER_ZIGBEEHEALTHCHECK_H

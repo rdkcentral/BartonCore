@@ -54,7 +54,7 @@ G_DECLARE_FINAL_TYPE(BDeviceServiceClient, b_device_service_client, B_DEVICE_SER
 
 typedef enum
 {
-    RESOURCE_NOT_READABLE = 1   // The resource is not readable
+    RESOURCE_NOT_READABLE = 1 // The resource is not readable
 } BDeviceServiceReadResourceError;
 
 typedef enum
@@ -73,51 +73,51 @@ GQuark b_device_service_client_error_quark(void);
 
 /****************** Signals Begin **********************************/
 
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_STATUS_CHANGED "status-changed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_STATUS_CHANGED                 "status-changed"
 // signal handler args: BDeviceServiceStatusEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED "discovery-started"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED              "discovery-started"
 // signal handler args: BDeviceServiceDiscoveryStartedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RECOVERY_STARTED "recovery-started"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RECOVERY_STARTED               "recovery-started"
 // signal handler args: BDeviceServiceRecoveryStartedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED "device-discovery-failed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED        "device-discovery-failed"
 // signal handler args: BDeviceServiceDiscoveryFailedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED "device-discovered"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED              "device-discovered"
 // signal handler args: BDeviceServiceDeviceDiscoveredEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED "device-rejected"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED                "device-rejected"
 // signal handler args: BDeviceServiceDeviceRejectedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_STARTED "device-configuration-started"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_STARTED   "device-configuration-started"
 // signal handler args: BDeviceServiceDeviceConfigurationStartedEvent *event
 #define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED "device-configuration-completed"
 // signal handler args: BDeviceServiceDeviceConfigurationCompletedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED "device-configuration-failed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED    "device-configuration-failed"
 // signal handler args: BDeviceServiceDeviceConfigurationFailedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_ADDED "device-added"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_ADDED                   "device-added"
 // signal handler args: BDeviceServiceDeviceAddedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_RECOVERED "device-recovered"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_RECOVERED               "device-recovered"
 // signal handler args: BDeviceServiceDeviceRecoveredEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED "device-discovery-completed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED     "device-discovery-completed"
 // signal handler args: BDeviceServiceDeviceDiscoveryCompletedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED "discovery-stopped"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED              "discovery-stopped"
 // signal handler args: BDeviceServiceDiscoveryStoppedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RECOVERY_STOPPED "recovery-stopped"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RECOVERY_STOPPED               "recovery-stopped"
 // signal handler args: BDeviceServiceRecoveryStoppedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED "resource-updated"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED               "resource-updated"
 // signal handler args: BDeviceServiceResourceUpdatedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REMOVED "device-removed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REMOVED                 "device-removed"
 // signal handler args: BDeviceServiceDeviceRemovedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_REMOVED "endpoint-removed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_REMOVED               "endpoint-removed"
 // signal handler args: BDeviceServiceEndpointRemovedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED "endpoint-added"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED                 "endpoint-added"
 // signal handler args: BDeviceServiceEndpointAddedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_CHANNEL_CHANGED "zigbee-channel-changed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_CHANNEL_CHANGED         "zigbee-channel-changed"
 // signal handler args: BDeviceServiceZigbeeChannelChangedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_STORAGE_CHANGED "storage-changed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_STORAGE_CHANGED                "storage-changed"
 // signal handler args: BDeviceServiceStorageChangedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_INTERFERENCE "zigbee-interference"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_INTERFERENCE            "zigbee-interference"
 // signal handler args: BDeviceServiceZigbeeInterferenceEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_PAN_ID_ATTACK_CHANGED "zigbee-pan-id-attack-changed"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_PAN_ID_ATTACK_CHANGED   "zigbee-pan-id-attack-changed"
 // signal handler args: BDeviceServiceZigbeePanIdAttackChangedEvent *event
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DATABASE_FAILURE "device-database-failure"
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DATABASE_FAILURE        "device-database-failure"
 // signal handler args: BDeviceServiceDeviceDatabaseFailureEvent *event
 
 // TODO - implement these
@@ -359,7 +359,7 @@ b_device_service_client_get_endpoint_by_id(BDeviceServiceClient *self, const gch
  *
  * Returns: (transfer full): BDeviceServiceEndpoint* - the endpoint with the given uri, or NULL if not found.
  */
-BDeviceServiceEndpoint * b_device_service_client_get_endpoint_by_uri(BDeviceServiceClient *self, const gchar *uri);
+BDeviceServiceEndpoint *b_device_service_client_get_endpoint_by_uri(BDeviceServiceClient *self, const gchar *uri);
 
 /**
  * b_device_service_client_change_zigbee_channel
@@ -464,9 +464,7 @@ GList *b_device_service_client_get_devices_by_subsystem(BDeviceServiceClient *se
  *
  * Returns: gchar* - A string representing the resource value
  */
-gchar *b_device_service_client_read_resource(BDeviceServiceClient *self,
-                                             const gchar *uri,
-                                             GError **err);
+gchar *b_device_service_client_read_resource(BDeviceServiceClient *self, const gchar *uri, GError **err);
 
 /**
  * b_device_service_client_get_device_by_uri

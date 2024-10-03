@@ -49,7 +49,10 @@ typedef enum
     N_B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTIES,
 } BDeviceServiceZigbeeChannelChangedEventProperty;
 
-static const char *B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES[] = {NULL, "channel-changed", "current-channel", "targeted-channel"};
+static const char *B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES[] = {NULL,
+                                                                                     "channel-changed",
+                                                                                     "current-channel",
+                                                                                     "targeted-channel"};
 
 /**
  * b_device_service_zigbee_channel_changed_event_new

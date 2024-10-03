@@ -37,23 +37,23 @@
 #ifndef ZILKER_THREADPOOL_H
 #define ZILKER_THREADPOOL_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <icTypes/icQueue.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-#define MAX_NUM_THREADS     64
-#define MAX_QUEUE_SIZE      128
+#define MAX_NUM_THREADS 64
+#define MAX_QUEUE_SIZE  128
 
 /*
  * object to contain the statistics
  */
 typedef struct _threadPoolStats
 {
-    uint32_t totalTasksQueued;      // total number of tasks added to the queue
-    uint32_t totalTasksRan;         // total number of tasks executed
-    uint32_t maxTasksQueued;        // largest size the task queue got to (backlog of tasks)
-    uint32_t maxConcurrentTasks;    // largest number of tasks running at the same time
-//    uint32_t avgConcurrentTasks;    // average number of tasks running at the same time
+    uint32_t totalTasksQueued;   // total number of tasks added to the queue
+    uint32_t totalTasksRan;      // total number of tasks executed
+    uint32_t maxTasksQueued;     // largest size the task queue got to (backlog of tasks)
+    uint32_t maxConcurrentTasks; // largest number of tasks running at the same time
+    //    uint32_t avgConcurrentTasks;    // average number of tasks running at the same time
 } threadPoolStats;
 
 /*

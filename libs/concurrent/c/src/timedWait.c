@@ -5,14 +5,14 @@
  *      Author: gfaulkner
  */
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-#include <icLog/logging.h>
 #include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
 #include <icTime/timeUtils.h>
 
 // TODO this guard probably needs to change at some point, newer versions of droid might
@@ -21,9 +21,7 @@
 #ifdef BUILDENV_android
 // Ugly but this isn't declared in the universal headers, but the symbol exists in libc
 // This way we don't get undefined symbol warnings, which are treated as errors
-int pthread_cond_timedwait_monotonic_np(pthread_cond_t         *cond,
-                                        pthread_mutex_t        *mutex,
-                                        const struct timespec  *abstime);
+int pthread_cond_timedwait_monotonic_np(pthread_cond_t *cond, pthread_mutex_t *mutex, const struct timespec *abstime);
 #endif
 
 
@@ -108,8 +106,8 @@ int incrementalCondTimedWaitMillis(pthread_cond_t *cond, pthread_mutex_t *mtx, u
     // we will use the monotonic clock "if supported".
     //
     getCurrentTime(&tp, supportMonotonic());
-    tp.tv_sec += timeoutMillis/1000UL;
-    tp.tv_nsec += (timeoutMillis%1000UL)*1000000UL;
+    tp.tv_sec += timeoutMillis / 1000UL;
+    tp.tv_nsec += (timeoutMillis % 1000UL) * 1000000UL;
     if (tp.tv_nsec >= 1000000000UL)
     {
         tp.tv_sec++;

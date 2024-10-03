@@ -64,10 +64,10 @@
  *-----------------------------------------------*/
 
 #include <inttypes.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <icLog/logging.h>
 #include <icTypes/icLinkedList.h>
@@ -81,20 +81,20 @@
  *  - can only have 1 handler per unique path
  *  - store 'variable' child as the first child in the list
  */
-#define LOG_TAG         "uriDistpatch"
-#define HEAD_LABEL      "_HEAD_"
-#define URL_SEPARATOR   "/"
-#define VARIABLE_BEGIN  '['
-#define VARIABLE_END    ']'
+#define LOG_TAG        "uriDistpatch"
+#define HEAD_LABEL     "_HEAD_"
+#define URL_SEPARATOR  "/"
+#define VARIABLE_BEGIN '['
+#define VARIABLE_END   ']'
 
 /*
  * variable types
  */
 typedef enum
 {
-    VAR_NONE,           // node is NOT a variable node
-    VAR_BASIC,          // node is a variable,
-    VAR_DIRECTIVE       // node is a variable that should be formatted with custom directive
+    VAR_NONE,     // node is NOT a variable node
+    VAR_BASIC,    // node is a variable,
+    VAR_DIRECTIVE // node is a variable that should be formatted with custom directive
 } trieVarType;
 
 /*
@@ -102,9 +102,9 @@ typedef enum
  */
 typedef struct
 {
-    char                            *directiveName; // the directive name as it appears in the uri, does NOT include #
-    UriDispatcherDirectiveHandler   handler;        // callback to handle the directive
-    void                            *context;       // callback context
+    char *directiveName;                   // the directive name as it appears in the uri, does NOT include #
+    UriDispatcherDirectiveHandler handler; // callback to handle the directive
+    void *context;                         // callback context
 } variableDirective;
 
 /*
@@ -112,12 +112,12 @@ typedef struct
  */
 typedef struct _trieNode
 {
-    char                *label;       // name of the node (or variable name)
-    trieVarType         varType;      // if not NONE, use label as the variable name
-    variableDirective   *directive;   // if varType is VAR_DIRECTIVE, the directive used to process the variable
-    icLinkedList        *children;    // contains trieNode objects
-    handleUriPath       handler;      // optional, function to call if this is the end of the path
-    char                *handlerDesc; // optional description of the handler
+    char *label;                  // name of the node (or variable name)
+    trieVarType varType;          // if not NONE, use label as the variable name
+    variableDirective *directive; // if varType is VAR_DIRECTIVE, the directive used to process the variable
+    icLinkedList *children;       // contains trieNode objects
+    handleUriPath handler;        // optional, function to call if this is the end of the path
+    char *handlerDesc;            // optional description of the handler
 } trieNode;
 
 /*
@@ -125,9 +125,9 @@ typedef struct _trieNode
  */
 struct _uriDispatcher
 {
-    trieNode      *head;                // head of the Trie
-    uint16_t      size;                 // total number of nodes within this Trie
-    icHashMap     *variableDirectives;  // Map of directive name -> variableDirective
+    trieNode *head;                // head of the Trie
+    uint16_t size;                 // total number of nodes within this Trie
+    icHashMap *variableDirectives; // Map of directive name -> variableDirective
 };
 
 /*
@@ -145,7 +145,7 @@ uriDispatcher *uriDispatcherCreate()
     // create the Trie and add an empty head node.  note that
     // don't increment the size as the head really doesn't get counted
     //
-    uriDispatcher *retVal = (uriDispatcher *)calloc(sizeof(uriDispatcher), 1);
+    uriDispatcher *retVal = (uriDispatcher *) calloc(sizeof(uriDispatcher), 1);
     retVal->head = createNode(HEAD_LABEL);
     retVal->variableDirectives = hashMapCreate();
     return retVal;
@@ -155,7 +155,7 @@ static void destroyNode(trieNode *node)
 {
     free(node->label);
     free(node->handlerDesc);
-    linkedListDestroy(node->children, (linkedListItemFreeFunc)destroyNode);
+    linkedListDestroy(node->children, (linkedListItemFreeFunc) destroyNode);
     free(node);
 }
 
@@ -171,8 +171,8 @@ static void destroyDirective(variableDirective *directive)
 static void destroyDirectiveEntry(void *key, void *value)
 {
     // Key is pointer into the structure, so leave it alone
-    (void)key;
-    destroyDirective((variableDirective *)value);
+    (void) key;
+    destroyDirective((variableDirective *) value);
 }
 
 /*
@@ -195,7 +195,8 @@ void uriDispatcherDestroy(uriDispatcher *dispatcher)
  * @param description - label for this handler (for debugging/logging)
  * @param handler - callback to register for this template
  */
-uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *uriTemplate, const char *description, handleUriPath handler)
+uriDispatchAddResult
+registerUriHandler(uriDispatcher *dispatcher, const char *uriTemplate, const char *description, handleUriPath handler)
 {
     // sanity check
     //
@@ -231,24 +232,23 @@ uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *u
 
         // see if this token is a variable (denoted with [] brackets)
         //
-        if ((tok[0] == VARIABLE_BEGIN) && (tok[tokLen-1] == VARIABLE_END))
+        if ((tok[0] == VARIABLE_BEGIN) && (tok[tokLen - 1] == VARIABLE_END))
         {
             // extract variable
             //
             char varName[64];
-            strncpy(varName, tok+1, tokLen-2);
-            varName[tokLen-2] = '\0';
+            strncpy(varName, tok + 1, tokLen - 2);
+            varName[tokLen - 2] = '\0';
             trieVarType variableKind = VAR_BASIC;
             variableDirective *directive = NULL;
 
             // see if this variable has a registered parsing directive
             //
             char *hash = 0;
-            if ((hash = strchr((const char *)varName, '#')) != NULL)
+            if ((hash = strchr((const char *) varName, '#')) != NULL)
             {
                 // Lookup the directive
-                directive = hashMapGet(dispatcher->variableDirectives, hash + 1,
-                                       strlen(hash + 1));
+                directive = hashMapGet(dispatcher->variableDirectives, hash + 1, strlen(hash + 1));
                 if (directive != NULL)
                 {
                     // Track the type of variable
@@ -258,7 +258,7 @@ uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *u
                 }
                 else
                 {
-                    icLogWarn(LOG_TAG, "Failed to find directive %s", hash+1);
+                    icLogWarn(LOG_TAG, "Failed to find directive %s", hash + 1);
                     retVal = URI_DISPATCH_UNKNOWN_DIRECTIVE;
                     node = NULL;
                     break;
@@ -282,7 +282,11 @@ uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *u
                 {
                     // variable names are different, so log the error
                     //
-                    icLogWarn(LOG_TAG, "unable to 'register uri %s' to dispatcher; var %s conflicts with %s", uriTemplate, varName, varNode->label);
+                    icLogWarn(LOG_TAG,
+                              "unable to 'register uri %s' to dispatcher; var %s conflicts with %s",
+                              uriTemplate,
+                              varName,
+                              varNode->label);
                     retVal = URI_DISPATCH_DUP_VAR;
                     node = NULL;
                     break;
@@ -294,7 +298,9 @@ uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *u
                     //
                     icLogWarn(LOG_TAG,
                               "unable to 'register uri %s' to dispatcher; var %s directive %s conflicts with %s",
-                              uriTemplate, varName, directive != NULL ? directive->directiveName : "(null)",
+                              uriTemplate,
+                              varName,
+                              directive != NULL ? directive->directiveName : "(null)",
                               varNode->directive != NULL ? varNode->directive->directiveName : "(null)");
                     retVal = URI_DISPATCH_DUP_VAR;
                     node = NULL;
@@ -352,7 +358,10 @@ uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *u
         {
             // duplicate handler
             //
-            icLogWarn(LOG_TAG, "unable to 'register uri %s' to dispatcher; node %s already has a handler", uriTemplate, node->label);
+            icLogWarn(LOG_TAG,
+                      "unable to 'register uri %s' to dispatcher; node %s already has a handler",
+                      uriTemplate,
+                      node->label);
             retVal = URI_DISPATCH_DUP_HANDLER;
         }
         else
@@ -487,7 +496,7 @@ uriHandlerContainer *locateUriHandler(uriDispatcher *dispatcher, const char *uri
         // create the return object to include the function
         // the the description (if set)
         //
-        retVal = (uriHandlerContainer *)calloc(sizeof(uriHandlerContainer), 1);
+        retVal = (uriHandlerContainer *) calloc(sizeof(uriHandlerContainer), 1);
         retVal->handler = node->handler;
         if (node->handlerDesc != NULL)
         {
@@ -524,19 +533,21 @@ void uriHandlerContainerDestroy(uriHandlerContainer *container)
  * @param context the callback context
  * @return true if successfully registered
  */
-bool uriDispatcherRegisterDirective(uriDispatcher *dispatcher, const char *directiveName,
-                                    UriDispatcherDirectiveHandler handler, void *context)
+bool uriDispatcherRegisterDirective(uriDispatcher *dispatcher,
+                                    const char *directiveName,
+                                    UriDispatcherDirectiveHandler handler,
+                                    void *context)
 {
     bool retVal = false;
 
     if (dispatcher != NULL && directiveName != NULL && handler != NULL)
     {
-        variableDirective *directive = (variableDirective *)calloc(1, sizeof(variableDirective));
+        variableDirective *directive = (variableDirective *) calloc(1, sizeof(variableDirective));
         directive->directiveName = strdup(directiveName);
         directive->handler = handler;
         directive->context = context;
-        retVal = hashMapPut(dispatcher->variableDirectives, directive->directiveName,
-                            strlen(directive->directiveName), directive);
+        retVal = hashMapPut(
+            dispatcher->variableDirectives, directive->directiveName, strlen(directive->directiveName), directive);
     }
 
     return retVal;
@@ -549,7 +560,7 @@ static trieNode *createNode(char *name)
 {
     // allocate memory
     //
-    trieNode *retVal = (trieNode *)calloc(sizeof(trieNode), 1);
+    trieNode *retVal = (trieNode *) calloc(sizeof(trieNode), 1);
     retVal->children = linkedListCreate();
 
     // apply name and default the varType
@@ -569,8 +580,8 @@ static trieNode *createNode(char *name)
  */
 static bool searchListByName(void *searchVal, void *item)
 {
-    char *searchName = (char *)searchVal;
-    trieNode *node = (trieNode *)item;
+    char *searchName = (char *) searchVal;
+    trieNode *node = (trieNode *) item;
 
     // see if this node has the name we're looking for
     //
@@ -590,7 +601,7 @@ static trieNode *findChildTrieNode(trieNode *node, char *name)
 {
     // loop through the children of 'node' looking for 'name'
     //
-    return (trieNode *)linkedListFind(node->children, name, searchListByName);
+    return (trieNode *) linkedListFind(node->children, name, searchListByName);
 }
 
 /*
@@ -600,7 +611,7 @@ static trieNode *getNodeVarChild(trieNode *node)
 {
     // see if the first child of 'node' is a variable node
     //
-    trieNode *first = (trieNode *)linkedListGetElementAt(node->children, 0);
+    trieNode *first = (trieNode *) linkedListGetElementAt(node->children, 0);
     if (first != NULL && first->varType != VAR_NONE)
     {
         // got a variable at the head of the children list

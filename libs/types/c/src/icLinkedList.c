@@ -46,7 +46,7 @@
 #include <string.h>
 
 #include "icTypes/icLinkedList.h"
-#include "list.h"                   // common list node definition (shared with queue)
+#include "list.h" // common list node definition (shared with queue)
 
 extern inline void linkedListIteratorDestroy__auto(icLinkedListIterator **iter);
 extern inline void linkedListDestroy_generic__auto(icLinkedList **list);
@@ -57,9 +57,9 @@ extern inline void linkedListDestroy_nofree__auto(icLinkedList **list);
 //
 struct _icLinkedListIterator
 {
-    icLinkedList  *head;        // list we're iterating through
-    listNode      *curr;        // node to return in 'getNext'
-    listNode      *prev;        // node returned in last call to 'getNext'.  used for 'delete'
+    icLinkedList *head; // list we're iterating through
+    listNode *curr;     // node to return in 'getNext'
+    listNode *prev;     // node returned in last call to 'getNext'.  used for 'delete'
 };
 
 /*-------------------------------*
@@ -384,11 +384,12 @@ void *linkedListFind(icLinkedList *list, void *searchVal, linkedListCompareFunc 
     return NULL;
 }
 
-void *linkedListRemove(icLinkedList* list, uint32_t offset)
+void *linkedListRemove(icLinkedList *list, uint32_t offset)
 {
-    void* item = NULL;
+    void *item = NULL;
 
-    if ((list != NULL) && (list->size > offset)) {
+    if ((list != NULL) && (list->size > offset))
+    {
         listNode *node, *previous;
         uint32_t index;
 
@@ -396,22 +397,27 @@ void *linkedListRemove(icLinkedList* list, uint32_t offset)
          * We will either break the loop because we hit the offset
          * or we will bail because we hit the end of the list.
          */
-        for (node = list->first, index = 0, previous = NULL;
-             (index != offset) && (node != NULL);
-             previous = node, node = node->next, index++);
+        for (node = list->first, index = 0, previous = NULL; (index != offset) && (node != NULL);
+             previous = node, node = node->next, index++)
+            ;
 
-        if (node != NULL) {
-            listNode* next = node->next;
+        if (node != NULL)
+        {
+            listNode *next = node->next;
 
-            if (previous) {
+            if (previous)
+            {
                 previous->next = next;
-            } else {
+            }
+            else
+            {
                 list->first = next;
             }
 
             item = node->item;
 
-            if (list->size > 0) list->size--;
+            if (list->size > 0)
+                list->size--;
 
             free(node);
         }
@@ -431,7 +437,10 @@ void *linkedListRemove(icLinkedList* list, uint32_t offset)
  * @param freeFunc - optional, only needed if the item needs a custom mechanism to release the memory
  * @return TRUE on success
  */
-bool linkedListDelete(icLinkedList *list, void *searchVal, linkedListCompareFunc searchFunc, linkedListItemFreeFunc freeFunc)
+bool linkedListDelete(icLinkedList *list,
+                      void *searchVal,
+                      linkedListCompareFunc searchFunc,
+                      linkedListItemFreeFunc freeFunc)
 {
     if (list == NULL || searchVal == NULL || searchFunc == NULL)
     {
@@ -569,7 +578,8 @@ icLinkedList *linkedListFilter(icLinkedList *list, linkedListFilterFunc filterFu
  *                      MapFuncKeyContext memory.
  * @return a map of keys and values generated from the provided mapFunc, or NULL if bad arguments are provided.
  */
-icHashMap *linkedListMapFromList(icLinkedList *list, linkedListMapFunc mapFunc, void *context, hashMapFreeFunc mapFreeFunc)
+icHashMap *
+linkedListMapFromList(icLinkedList *list, linkedListMapFunc mapFunc, void *context, hashMapFreeFunc mapFreeFunc)
 {
     icHashMap *retVal = NULL;
 
@@ -806,8 +816,8 @@ void linkedListClear(icLinkedList *list, linkedListItemFreeFunc helper)
  */
 bool linkedListStringCompareSearchFunc(void *searchVal, void *item)
 {
-    char *searchName = (char *)searchVal;
-    char *itemString = (char *)item;
+    char *searchName = (char *) searchVal;
+    char *itemString = (char *) item;
 
     // dont use string utils since we are in the low level types lib
     if (searchName != NULL && strcmp(searchName, item) == 0)
@@ -832,7 +842,7 @@ bool linkedListStringCompareSearchFunc(void *searchVal, void *item)
  * linkedListIteratorGetNext.  once the iteration is done, this
  * MUST BE FREED via linkedListIteratorDestroy
  */
-icLinkedListIterator * linkedListIteratorCreate(icLinkedList *list)
+icLinkedListIterator *linkedListIteratorCreate(icLinkedList *list)
 {
     if (list == NULL || list->size == 0)
     {
@@ -843,7 +853,7 @@ icLinkedListIterator * linkedListIteratorCreate(icLinkedList *list)
 
     // allocate a listIterator and setup pointers at 'list'
     //
-    icLinkedListIterator *retVal = (icLinkedListIterator *)malloc(sizeof(icLinkedListIterator));
+    icLinkedListIterator *retVal = (icLinkedListIterator *) malloc(sizeof(icLinkedListIterator));
     retVal->head = list;
     retVal->curr = retVal->head->first;
     retVal->prev = NULL;
@@ -999,8 +1009,8 @@ bool linkedListStringCompareFunc(void *searchVal, void *item)
  */
 void *linkedListCloneStringItemFunc(void *item, void *context)
 {
-    (void)context; //unused
-    return(strdup((char*)item));
+    (void) context; // unused
+    return (strdup((char *) item));
 }
 
 /*
@@ -1009,8 +1019,7 @@ void *linkedListCloneStringItemFunc(void *item, void *context)
  */
 listNode *createListNode()
 {
-    listNode *node = (listNode *)malloc(sizeof(listNode));
+    listNode *node = (listNode *) malloc(sizeof(listNode));
     memset(node, 0, sizeof(listNode));
     return node;
 }
-

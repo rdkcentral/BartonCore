@@ -31,10 +31,10 @@
 #ifndef IC_XMLHELPER_H
 #define IC_XMLHELPER_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /*-------------------------------*
  *
@@ -143,4 +143,3 @@ char *getXmlNodeAttributeAsString(xmlNodePtr node, const char *attributeName, ch
 
 
 #endif // IC_XMLHELPER_H
-

@@ -28,38 +28,38 @@
  * Author: mkoch - 4/26/18
  *-----------------------------------------------*/
 
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <libgen.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <inttypes.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <sys/types.h>
 #include <time.h>
-#include <dirent.h>
-#include <libgen.h>
+#include <unistd.h>
 #ifdef CONFIG_LIB_TAR
 #include <libtar.h>
 #endif // CONFIG_LIB_TAR
 
 
 #include <icLog/logging.h>
-#include <icUtil/fileUtils.h>
 #include <icTypes/icSortedLinkedList.h>
+#include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
 
 #ifdef CONFIG_OS_DARWIN
-#include <sys/syslimits.h>   // for PATH_MAX
+#include <sys/syslimits.h> // for PATH_MAX
 #endif
 #define LOG_TAG    "FILEUTILS"
 
 #define BUFFER_LEN 1024
 
-typedef struct FileStorageInfo {
+typedef struct FileStorageInfo
+{
     char *path;
     time_t lastUpdatedTimeSecs;
     uint32_t size;
@@ -76,7 +76,7 @@ static bool fileStorageInfoDeleteFile(FileStorageInfo *info);
  * @param privateData Unused for deletion.
  * @return Zero on success, otherwise the errno will be returned as the value.
  */
-int deleteDirHandler(const char* pathname, const char* dname, unsigned char dtype, void* privateData)
+int deleteDirHandler(const char *pathname, const char *dname, unsigned char dtype, void *privateData)
 {
     int ret;
 
@@ -84,19 +84,25 @@ int deleteDirHandler(const char* pathname, const char* dname, unsigned char dtyp
     {
         return EINVAL;
     }
-    char* path = NULL;
+    char *path = NULL;
 
-    switch (dtype) {
-        case DT_DIR: {
+    switch (dtype)
+    {
+        case DT_DIR:
+        {
             path = stringBuilder("%s/%s", pathname, dname);
 
-            if (path) {
+            if (path)
+            {
                 ret = listDirectory(path, deleteDirHandler, privateData);
 
-                if (ret == 0 && ((ret = rmdir(path)) < 0)) {
+                if (ret == 0 && ((ret = rmdir(path)) < 0))
+                {
                     ret = errno;
                 }
-            } else {
+            }
+            else
+            {
                 ret = ENOMEM;
             }
 
@@ -109,14 +115,19 @@ int deleteDirHandler(const char* pathname, const char* dname, unsigned char dtyp
         case DT_CHR:
         case DT_FIFO:
         case DT_SOCK:
-        case DT_UNKNOWN: {
+        case DT_UNKNOWN:
+        {
             path = stringBuilder("%s/%s", pathname, dname);
 
-            if (path) {
-                if ((ret = unlink(path)) < 0) {
+            if (path)
+            {
+                if ((ret = unlink(path)) < 0)
+                {
                     ret = errno;
                 }
-            } else {
+            }
+            else
+            {
                 ret = ENOMEM;
             }
 
@@ -142,21 +153,24 @@ int deleteDirHandler(const char* pathname, const char* dname, unsigned char dtyp
  * @param privateData The destination directory private data.
  * @return Zero on success, otherwise the errno will be returned as the value.
  */
-static int copyDirHandler(const char* pathname, const char* dname, unsigned char dtype, void* privateData)
+static int copyDirHandler(const char *pathname, const char *dname, unsigned char dtype, void *privateData)
 {
     int ret;
 
-    const char* dst = privateData;
+    const char *dst = privateData;
 
-    char* srcpath = NULL;
-    char* dstpath = NULL;
+    char *srcpath = NULL;
+    char *dstpath = NULL;
 
-    switch (dtype) {
-        case DT_DIR: {
+    switch (dtype)
+    {
+        case DT_DIR:
+        {
             srcpath = stringBuilder("%s/%s", pathname, dname);
             dstpath = stringBuilder("%s/%s", dst, dname);
 
-            if (srcpath && dstpath) {
+            if (srcpath && dstpath)
+            {
                 struct stat sinfo;
 
                 errno = 0;
@@ -174,14 +188,17 @@ static int copyDirHandler(const char* pathname, const char* dname, unsigned char
                     if ((ret == 0) || (errno == EEXIST))
                     {
                         ret = listDirectory(srcpath, copyDirHandler, dstpath);
-                    } else
+                    }
+                    else
                     {
                         icLogError(LOG_TAG, "Error: Failed to create directory. [%s]", dstpath);
                         ret = errno;
                     }
                 }
-            } else {
-                icLogError(LOG_TAG,"Error: Failed to allocate memory for paths");
+            }
+            else
+            {
+                icLogError(LOG_TAG, "Error: Failed to allocate memory for paths");
                 ret = ENOMEM;
             }
 
@@ -189,25 +206,30 @@ static int copyDirHandler(const char* pathname, const char* dname, unsigned char
         }
 
         case DT_REG:
-        case DT_UNKNOWN: {
+        case DT_UNKNOWN:
+        {
             srcpath = stringBuilder("%s/%s", pathname, dname);
             dstpath = stringBuilder("%s/%s", dst, dname);
 
-            if (srcpath && dstpath) {
-                FILE* fin;
+            if (srcpath && dstpath)
+            {
+                FILE *fin;
 
                 fin = fopen(srcpath, "r");
-                if (fin) {
-                    FILE* fout;
+                if (fin)
+                {
+                    FILE *fout;
 
                     fout = fopen(dstpath, "w+");
-                    if (fout) {
+                    if (fout)
+                    {
                         /*
                          * copyFile will close both `fin` and `fout`
                          * for us. Thus once to this point we cannot
                          * handle those pointers ourselves.
                          */
-                        if (copyFile(fin, fout) == true) {
+                        if (copyFile(fin, fout) == true)
+                        {
                             /*
                              * However, we can only change the permissions if
                              * the file was actually copied.
@@ -219,59 +241,78 @@ static int copyDirHandler(const char* pathname, const char* dname, unsigned char
                             struct stat sinfo;
 
                             /* We know the path exists as we just pulled it from readdir */
-                            if (stat(srcpath, &sinfo) == 0) {
-                                if (chmod(dstpath, sinfo.st_mode) != 0) {
+                            if (stat(srcpath, &sinfo) == 0)
+                            {
+                                if (chmod(dstpath, sinfo.st_mode) != 0)
+                                {
                                     char *errStr = strerrorSafe(errno);
                                     icLogWarn(LOG_TAG, "Failed to change permissions on [%s]: %s", dstpath, errStr);
                                     free(errStr);
                                 }
                             }
-                        } else {
-                            icLogError(LOG_TAG,"Error: Failed to copy file from [%s] to [%s]", srcpath, dstpath);
+                        }
+                        else
+                        {
+                            icLogError(LOG_TAG, "Error: Failed to copy file from [%s] to [%s]", srcpath, dstpath);
                             ret = EINVAL;
                         }
-                    } else {
-                        icLogError(LOG_TAG,"Failed to open destination [%s]", dstpath);
+                    }
+                    else
+                    {
+                        icLogError(LOG_TAG, "Failed to open destination [%s]", dstpath);
                         fclose(fin);
 
                         ret = errno;
                     }
-                } else {
-                    icLogError(LOG_TAG,"Failed to open source [%s]", srcpath);
+                }
+                else
+                {
+                    icLogError(LOG_TAG, "Failed to open source [%s]", srcpath);
                     ret = errno;
                 }
-            } else {
-                icLogError(LOG_TAG,"Error: Failed to allocate memory for paths");
+            }
+            else
+            {
+                icLogError(LOG_TAG, "Error: Failed to allocate memory for paths");
                 ret = ENOMEM;
             }
 
             break;
         }
 
-        case DT_LNK: {
+        case DT_LNK:
+        {
             struct stat sinfo;
-            char* target = NULL;
+            char *target = NULL;
             size_t target_size = 0;
             ssize_t bytes = 0;
 
             srcpath = stringBuilder("%s/%s", pathname, dname);
             dstpath = stringBuilder("%s/%s", dst, dname);
 
-            if (srcpath && dstpath) {
-                if (lstat(srcpath, &sinfo) == 0) {
+            if (srcpath && dstpath)
+            {
+                if (lstat(srcpath, &sinfo) == 0)
+                {
                     target_size = (size_t) ((sinfo.st_size == 0) ? PATH_MAX : (sinfo.st_size + 1));
                     target = malloc(target_size);
                 }
-                if (target) {
+                if (target)
+                {
                     bytes = readlink(srcpath, target, target_size);
 
-                    if (bytes <= 0) {
-                        icLogError(LOG_TAG,"Error: Failed to read symlink location.");
+                    if (bytes <= 0)
+                    {
+                        icLogError(LOG_TAG, "Error: Failed to read symlink location.");
                         ret = errno;
-                    } else if (bytes == target_size) {
-                        icLogError(LOG_TAG,"Error: The path was too large for the buffer.");
+                    }
+                    else if (bytes == target_size)
+                    {
+                        icLogError(LOG_TAG, "Error: The path was too large for the buffer.");
                         ret = E2BIG;
-                    } else {
+                    }
+                    else
+                    {
                         /*
                          * `readlink` does not null-terminate the path.
                          */
@@ -284,21 +325,27 @@ static int copyDirHandler(const char* pathname, const char* dname, unsigned char
                         unlink(dstpath);
 
                         ret = symlink(target, dstpath);
-                        if (ret != 0) {
-                            icLogError(LOG_TAG,"Error: Failed to create symlink. target [%s], linkpath [%s]",
-                                   target,
-                                   dstpath);
+                        if (ret != 0)
+                        {
+                            icLogError(LOG_TAG,
+                                       "Error: Failed to create symlink. target [%s], linkpath [%s]",
+                                       target,
+                                       dstpath);
                             ret = errno;
                         }
                     }
 
                     free(target);
-                } else {
-                    icLogError(LOG_TAG,"Error: Failed to allocate memory for symlink path");
+                }
+                else
+                {
+                    icLogError(LOG_TAG, "Error: Failed to allocate memory for symlink path");
                     ret = ENOMEM;
                 }
-            } else {
-                icLogError(LOG_TAG,"Error: Failed to allocate memory for path");
+            }
+            else
+            {
+                icLogError(LOG_TAG, "Error: Failed to allocate memory for path");
                 ret = ENOMEM;
             }
 
@@ -329,13 +376,13 @@ static int copyDirHandler(const char* pathname, const char* dname, unsigned char
 int mkdir_p(const char *path, mode_t mode)
 {
     // Create a variable that we can modify while we are working
-    char *workingPath = (char *)malloc(sizeof(char) * (strlen(path) + 1));
+    char *workingPath = (char *) malloc(sizeof(char) * (strlen(path) + 1));
     char *p;
     strcpy(workingPath, path);
 
     int retval = 0;
 
-    for(p = workingPath+1; *p; ++p)
+    for (p = workingPath + 1; *p; ++p)
     {
         if (*p == '/')
         {
@@ -485,9 +532,9 @@ char *readFileContentsWithTrim(const char *filename)
 
     // need to trim off the last '\n' character
     //
-    if (len > 0 && retVal[len-1] == '\n')
+    if (len > 0 && retVal[len - 1] == '\n')
     {
-        retVal[len-1] = '\0';
+        retVal[len - 1] = '\0';
     }
 
     return retVal;
@@ -560,7 +607,8 @@ bool writeContentsToFileName(const char *filename, const char *contents)
             // move tmp file to real fileName
             //
             retVal = moveFile(tmpFileName, filename);
-            icLogTrace(LOG_TAG, "Moving tmp file '%s' to '%s' worked: %s", tmpFileName, filename, stringValueOfBool(retVal));
+            icLogTrace(
+                LOG_TAG, "Moving tmp file '%s' to '%s' worked: %s", tmpFileName, filename, stringValueOfBool(retVal));
         }
         else
         {
@@ -638,7 +686,7 @@ bool copyFile(FILE *source, FILE *dest)
 
         clearerr(source);
 
-        //do fsync, only if fwrite is successful
+        // do fsync, only if fwrite is successful
         if (retval == true)
         {
             int rc = fsync(fileno(dest));
@@ -678,7 +726,7 @@ bool copyFileByPath(const char *sourcePath, const char *destPath)
         FILE *source = fopen(sourcePath, "r");
         if (source != NULL)
         {
-            //write to the temp file first, then safely rename it to original
+            // write to the temp file first, then safely rename it to original
             char *tempPath = stringBuilder("%s%s", destPath, ".tmp");
             FILE *temp = fopen(tempPath, "w+");
             if (temp != NULL)
@@ -690,18 +738,27 @@ bool copyFileByPath(const char *sourcePath, const char *destPath)
                     {
                         result = false;
                         char *errStr = strerrorSafe(errno);
-                        icLogError(LOG_TAG, "%s: failed to rename temp file %s to destination file %s and error string : %s ", __FUNCTION__, tempPath, destPath, errStr);
+                        icLogError(LOG_TAG,
+                                   "%s: failed to rename temp file %s to destination file %s and error string : %s ",
+                                   __FUNCTION__,
+                                   tempPath,
+                                   destPath,
+                                   errStr);
                         free(errStr);
                     }
                 }
 
-                //Here regardless of result value, if tempfile exist then we have to delete the temp file
+                // Here regardless of result value, if tempfile exist then we have to delete the temp file
                 if (doesFileExist(tempPath) == true)
                 {
                     if (unlink(tempPath) != 0)
                     {
                         char *errStr = strerrorSafe(errno);
-                        icLogError(LOG_TAG, "%s: error removing temp file : %s and error string : %s ", __FUNCTION__, tempPath, errStr);
+                        icLogError(LOG_TAG,
+                                   "%s: error removing temp file : %s and error string : %s ",
+                                   __FUNCTION__,
+                                   tempPath,
+                                   errStr);
                         free(errStr);
                     }
                 }
@@ -730,7 +787,8 @@ bool moveFile(const char *sourcePath, const char *destPath)
 
     if (sourcePath != NULL && destPath != NULL)
     {
-        //first try rename.  This is easy and efficient and works so long as the source and dest are on the same filesystem
+        // first try rename.  This is easy and efficient and works so long as the source and dest are on the same
+        // filesystem
         if (rename(sourcePath, destPath) == 0)
         {
             result = true;
@@ -804,34 +862,38 @@ bool doesDirExist(const char *dirPath)
     return false;
 }
 
-int listDirectory(const char* dir, directoryHandler handler, void* privateData)
+int listDirectory(const char *dir, directoryHandler handler, void *privateData)
 {
-    DIR* directory;
-    struct dirent* entry;
+    DIR *directory;
+    struct dirent *entry;
 
-    if (handler == NULL) {
+    if (handler == NULL)
+    {
         return EINVAL;
     }
 
     directory = opendir(dir);
-    if (directory == NULL) {
-        icLogError(LOG_TAG,"Error: Bad directory specified.");
+    if (directory == NULL)
+    {
+        icLogError(LOG_TAG, "Error: Bad directory specified.");
         return EBADF;
     }
 
-    while ((entry = readdir(directory)) != NULL) {
+    while ((entry = readdir(directory)) != NULL)
+    {
         int ret;
 
         // skip 'self' and 'parent'
         //
-        if ((entry->d_type == DT_DIR) &&
-            ((strcmp(entry->d_name, ".") == 0) ||
-             (strcmp(entry->d_name, "..") == 0))) {
+        if ((entry->d_type == DT_DIR) && ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0)))
+        {
             continue;
         }
 
-        if ((ret = handler(dir, entry->d_name, entry->d_type, privateData)) != 0) {
-            icLogError(LOG_TAG, "Error: Failed on dir: [%s], file: [%s], type: [%u]", dir, entry->d_name, entry->d_type);
+        if ((ret = handler(dir, entry->d_name, entry->d_type, privateData)) != 0)
+        {
+            icLogError(
+                LOG_TAG, "Error: Failed on dir: [%s], file: [%s], type: [%u]", dir, entry->d_name, entry->d_type);
             closedir(directory);
             return ret;
         }
@@ -895,7 +957,7 @@ bool deleteFile(const char *filename)
     bool retVal = false;
     if (filename != NULL)
     {
-        if(unlink(filename) == 0)
+        if (unlink(filename) == 0)
         {
             retVal = true;
         }
@@ -903,7 +965,7 @@ bool deleteFile(const char *filename)
     return retVal;
 }
 
-bool copyDirectory(const char* src, const char* dst)
+bool copyDirectory(const char *src, const char *dst)
 {
     int ret;
 
@@ -911,21 +973,26 @@ bool copyDirectory(const char* src, const char* dst)
 
     char realdst[PATH_MAX];
 
-    if ((src == NULL) || (src[0] == '\0')) {
-        icLogError(LOG_TAG,"Error: Invalid source provided.");
+    if ((src == NULL) || (src[0] == '\0'))
+    {
+        icLogError(LOG_TAG, "Error: Invalid source provided.");
         return false;
     }
 
-    if ((dst == NULL) || (dst[0] == '\0')) {
-        icLogError(LOG_TAG,"Error: Invalid destination provided.");
+    if ((dst == NULL) || (dst[0] == '\0'))
+    {
+        icLogError(LOG_TAG, "Error: Invalid destination provided.");
         return false;
     }
 
-    if (stat(src, &sinfo) != 0) {
-        icLogError(LOG_TAG,"Error: Cannot read source path.");
+    if (stat(src, &sinfo) != 0)
+    {
+        icLogError(LOG_TAG, "Error: Cannot read source path.");
         return false;
-    } else if ((sinfo.st_mode & S_IFDIR) == 0) {
-        icLogError(LOG_TAG,"Error: Source path is not a directory.");
+    }
+    else if ((sinfo.st_mode & S_IFDIR) == 0)
+    {
+        icLogError(LOG_TAG, "Error: Source path is not a directory.");
         return false;
     }
 
@@ -933,8 +1000,10 @@ bool copyDirectory(const char* src, const char* dst)
     safeStringCopy(realdst, PATH_MAX - 1, (char *) dst);
 
     ret = mkdir(realdst, sinfo.st_mode);
-    if (ret != 0) {
-        if (errno == EEXIST) {
+    if (ret != 0)
+    {
+        if (errno == EEXIST)
+        {
             /*
              * If this is a directory then it already exists. Thus
              * to match functionality of `cp -a` we want to copy
@@ -967,24 +1036,28 @@ bool copyDirectory(const char* src, const char* dst)
              * and symlinks.
              */
             ret = mkdir(realdst, sinfo.st_mode);
-            if ((ret != 0) && (errno != EEXIST)) {
+            if ((ret != 0) && (errno != EEXIST))
+            {
                 scoped_generic char *errStr = strerrorSafe(errno);
-                icLogError(LOG_TAG,"Error: Failed to create destination directory: [%s] [%s]", realdst, errStr);
+                icLogError(LOG_TAG, "Error: Failed to create destination directory: [%s] [%s]", realdst, errStr);
 
                 return false;
             }
-        } else {
+        }
+        else
+        {
             scoped_generic char *errStr = strerrorSafe(errno);
-            icLogError(LOG_TAG,"Error: Destination cannot be created [%d:%s].", errno, errStr);
+            icLogError(LOG_TAG, "Error: Destination cannot be created [%d:%s].", errno, errStr);
 
             return false;
         }
     }
 
     ret = listDirectory(src, copyDirHandler, realdst);
-    if (ret != 0) {
+    if (ret != 0)
+    {
         scoped_generic char *errStr = strerrorSafe(errno);
-        icLogError(LOG_TAG,"Error: Failed to copy directory. [%s]", errStr);
+        icLogError(LOG_TAG, "Error: Failed to copy directory. [%s]", errStr);
         return false;
     }
 
@@ -1008,8 +1081,8 @@ static void storageFileInfoFreeFunc(void *item)
  */
 static int8_t fileInfoCompareFunc(void *newItem, void *element)
 {
-    FileStorageInfo *newInfo = (FileStorageInfo*)newItem;
-    FileStorageInfo *existingInfo = (FileStorageInfo*)element;
+    FileStorageInfo *newInfo = (FileStorageInfo *) newItem;
+    FileStorageInfo *existingInfo = (FileStorageInfo *) element;
 
     if (existingInfo->lastUpdatedTimeSecs < newInfo->lastUpdatedTimeSecs)
     {
@@ -1037,8 +1110,10 @@ static int8_t fileInfoCompareFunc(void *newItem, void *element)
  * @return true if we successfully purged files below the storage cap and removed files older than the allowed age
  *              in seconds, false otherwise.
  */
-bool fileUtilsDeleteOld(const char *dirToBeChecked, const char *fileExtension,
-                        uint32_t maxAllowedFileStorageMb, uint32_t maxAllowedAgeInSeconds)
+bool fileUtilsDeleteOld(const char *dirToBeChecked,
+                        const char *fileExtension,
+                        uint32_t maxAllowedFileStorageMb,
+                        uint32_t maxAllowedAgeInSeconds)
 {
     if (stringIsEmpty(dirToBeChecked) == true || stringIsEmpty(fileExtension) == true)
     {
@@ -1101,9 +1176,9 @@ bool fileUtilsDeleteOld(const char *dirToBeChecked, const char *fileExtension,
     // Keep a retry counter for when we fail to unlink. If we somehow fail to unlink, we're probably going to keep
     // failing, which would cause us to loop forever. Use this counter to give up on the file after a while.
     uint8_t fileRetryCount = 0;
-    while (totalSize > (maxAllowedFileStorageMb * 1024 *1024) && linkedListCount(files) > 0)
+    while (totalSize > (maxAllowedFileStorageMb * 1024 * 1024) && linkedListCount(files) > 0)
     {
-        icLogDebug(LOG_TAG, "%s: totalSize now %"PRIu32, __FUNCTION__, totalSize);
+        icLogDebug(LOG_TAG, "%s: totalSize now %" PRIu32, __FUNCTION__, totalSize);
 
         FileStorageInfo *info = linkedListGetElementAt(files, 0);
         retVal = fileStorageInfoDeleteFile(info);
@@ -1139,7 +1214,7 @@ bool fileUtilsDeleteOld(const char *dirToBeChecked, const char *fileExtension,
             struct timespec now;
             clock_gettime(CLOCK_REALTIME, &now);
 #endif
-            FileStorageInfo *info  = linkedListIteratorGetNext(iter);
+            FileStorageInfo *info = linkedListIteratorGetNext(iter);
             // Make sure the clock isn't time traveling
             if (now.tv_sec >= info->lastUpdatedTimeSecs)
             {
@@ -1153,8 +1228,11 @@ bool fileUtilsDeleteOld(const char *dirToBeChecked, const char *fileExtension,
                     }
                     else
                     {
-                        icLogError(LOG_TAG, "%s: File %s is older than the specified age, but we failed to remove it. "
-                                            "Skipping file.", __FUNCTION__, info->path);
+                        icLogError(LOG_TAG,
+                                   "%s: File %s is older than the specified age, but we failed to remove it. "
+                                   "Skipping file.",
+                                   __FUNCTION__,
+                                   info->path);
                     }
                 }
                 else
@@ -1202,7 +1280,7 @@ static bool fileStorageInfoDeleteFile(FileStorageInfo *info)
  */
 bool createMarkerFile(const char *path)
 {
-    int rc = creat(path, S_IRWXU|S_IRGRP|S_IROTH);
+    int rc = creat(path, S_IRWXU | S_IRGRP | S_IROTH);
     if (rc >= 0)
     {
         close(rc);
@@ -1211,7 +1289,7 @@ bool createMarkerFile(const char *path)
     else
     {
         scoped_generic char *errStr = strerrorSafe(errno);
-        icLogError(LOG_TAG,"Error: %s: unable to create marker file %s: %s",__FUNCTION__,path,errStr);
+        icLogError(LOG_TAG, "Error: %s: unable to create marker file %s: %s", __FUNCTION__, path, errStr);
         return false;
     }
 }
@@ -1229,12 +1307,12 @@ bool createMarkerFile(const char *path)
  */
 bool extractTarFile(const char *tarFileName, const char *outputDir)
 {
-    TAR* tar_handle = NULL;
+    TAR *tar_handle = NULL;
     bool retVal = false;
     errno = 0;
 
     if ((tar_open(&tar_handle, tarFileName, NULL, O_RDONLY, 0, TAR_GNU) == 0) &&
-        (tar_extract_all(tar_handle, (char *)outputDir) == 0))
+        (tar_extract_all(tar_handle, (char *) outputDir) == 0))
     {
         retVal = true;
     }
@@ -1243,8 +1321,7 @@ bool extractTarFile(const char *tarFileName, const char *outputDir)
         // log warning, cleanup, and return the error
         //
         scoped_generic char *errStr = strerrorSafe(errno);
-        icLogError(LOG_TAG, "%s: Error extracting via tar - %s [%d]", __FUNCTION__,
-                   errStr, errno);
+        icLogError(LOG_TAG, "%s: Error extracting via tar - %s [%d]", __FUNCTION__, errStr, errno);
         retVal = false;
     }
 

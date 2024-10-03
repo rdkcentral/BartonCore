@@ -53,12 +53,12 @@
 #include <string.h>
 #include <sys/errno.h>
 
-#include <icLog/logging.h>
 #include "icTypes/icFifoBuffer.h"
+#include <icLog/logging.h>
 
 
-#define LOG_TAG                 "FIFO"
-#define DEFAULT_BUFFER_SIZE     1024
+#define LOG_TAG             "FIFO"
+#define DEFAULT_BUFFER_SIZE 1024
 
 /*
  * internal structure
@@ -75,11 +75,11 @@
  */
 struct _icFifoBuff
 {
-    void        *top;           // top of allocated space
-    uint32_t    readPos;        // the 'read' position
-    uint32_t    writePos;       // the 'append' position
-    uint32_t    size;           // end of the 'allocated memory'
-    uint32_t    chunkSize;
+    void *top;         // top of allocated space
+    uint32_t readPos;  // the 'read' position
+    uint32_t writePos; // the 'append' position
+    uint32_t size;     // end of the 'allocated memory'
+    uint32_t chunkSize;
 };
 
 
@@ -99,7 +99,7 @@ icFifoBuff *fifoBuffCreate(uint32_t initialSize)
 {
     // first allocate the struct (no size and all pointers at 0)
     //
-    icFifoBuff *retVal = (icFifoBuff *)malloc(sizeof(icFifoBuff));
+    icFifoBuff *retVal = (icFifoBuff *) malloc(sizeof(icFifoBuff));
     memset(retVal, 0, sizeof(icFifoBuff));
 
     // make sure 'size' is a decent amount
@@ -231,7 +231,7 @@ void fifoBuffPush(icFifoBuff *buffer, void *src, uint32_t srcSize)
  */
 void fifoBuffPushByte(icFifoBuff *buffer, char byte)
 {
-    fifoBuffPush(buffer, (void *)&byte, 1);
+    fifoBuffPush(buffer, (void *) &byte, 1);
 }
 
 /*
@@ -415,7 +415,7 @@ static uint32_t ensureCapacity(icFifoBuff *buffer, uint32_t needSize)
         //
         if (needsCompress(buffer) == true)
         {
-//            icLogDebug(LOG_TAG, "compacting FIFO buffer");
+            //            icLogDebug(LOG_TAG, "compacting FIFO buffer");
             compact(buffer, needSize);
             return fifoBuffGetPushAvailable(buffer);
         }

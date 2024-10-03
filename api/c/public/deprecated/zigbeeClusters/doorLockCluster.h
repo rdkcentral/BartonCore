@@ -38,9 +38,9 @@
 typedef struct
 {
     uint16_t userId;
-    uint8_t  userStatus;
-    uint8_t  userType;
-    char     pin[DOOR_LOCK_CLUSTER_MAX_SUPPORTED_PIN_LENGTH];
+    uint8_t userStatus;
+    uint8_t userType;
+    char pin[DOOR_LOCK_CLUSTER_MAX_SUPPORTED_PIN_LENGTH];
 } DoorLockClusterUser;
 
 typedef struct
@@ -52,40 +52,22 @@ typedef struct
                                uint16_t userId,
                                const void *ctx);
 
-    void (*jammedStateChanged)(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool isJammed,
-                                const void *ctx);
+    void (*jammedStateChanged)(uint64_t eui64, uint8_t endpointId, bool isJammed, const void *ctx);
 
-    void (*tamperedStateChanged)(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 bool isTampered,
-                                 const void *ctx);
+    void (*tamperedStateChanged)(uint64_t eui64, uint8_t endpointId, bool isTampered, const void *ctx);
 
-    void (*invalidCodeEntryLimitChanged)(uint64_t eui64,
-                                         uint8_t endpointId,
-                                         bool limitExceeded,
-                                         const void *ctx);
+    void (*invalidCodeEntryLimitChanged)(uint64_t eui64, uint8_t endpointId, bool limitExceeded, const void *ctx);
 
-    void (*clearAllPinCodesResponse)(uint64_t eui64,
-                                     uint8_t endpointId,
-                                     bool success,
-                                     const void *ctx);
+    void (*clearAllPinCodesResponse)(uint64_t eui64, uint8_t endpointId, bool success, const void *ctx);
 
     void (*getPinCodeResponse)(uint64_t eui64,
                                uint8_t endpointId,
                                const DoorLockClusterUser *userDetails,
                                const void *ctx);
 
-    void (*clearPinCodeResponse)(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 bool success,
-                                 const void *ctx);
+    void (*clearPinCodeResponse)(uint64_t eui64, uint8_t endpointId, bool success, const void *ctx);
 
-    void (*setPinCodeResponse)(uint64_t eui64,
-                               uint8_t endpointId,
-                               uint8_t result,
-                               const void *ctx);
+    void (*setPinCodeResponse)(uint64_t eui64, uint8_t endpointId, uint8_t result, const void *ctx);
 
     void (*keypadProgrammingEventNotification)(uint64_t eui64,
                                                uint8_t endpointId,
@@ -98,10 +80,7 @@ typedef struct
                                                const char *data,
                                                const void *ctx);
 
-    void (*autoRelockTimeChanged)(uint64_t eui64,
-                                  uint8_t endpointId,
-                                  uint32_t autoRelockSeconds,
-                                  const void *ctx);
+    void (*autoRelockTimeChanged)(uint64_t eui64, uint8_t endpointId, uint32_t autoRelockSeconds, const void *ctx);
 
 } DoorLockClusterCallbacks;
 
@@ -142,10 +121,8 @@ bool doorLockClusterClearPinCode(uint64_t eui64, uint8_t endpointId, uint16_t us
 /*
  * The result is sent via an async setPinCodeResponse callback
  */
-bool doorLockClusterSetPinCode(uint64_t eui64,
-                               uint8_t endpointId,
-                               const DoorLockClusterUser *user);
+bool doorLockClusterSetPinCode(uint64_t eui64, uint8_t endpointId, const DoorLockClusterUser *user);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_DOORLOCKCLUSTER_H
+#endif // ZILKER_DOORLOCKCLUSTER_H

@@ -23,19 +23,19 @@
 // Created by mkoch201 on 5/16/19.
 //
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icUtil/array.h>
-#include <commonDeviceDefs.h>
-#include <icLog/logging.h>
-#include <device/deviceModelHelper.h>
-#include "deviceDrivers/zigbeeDriverCommon.h"
 #include "device-driver/device-driver-manager.h"
+#include "deviceDrivers/zigbeeDriverCommon.h"
+#include <commonDeviceDefs.h>
+#include <device/deviceModelHelper.h>
+#include <icLog/logging.h>
+#include <icUtil/array.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 
-#define LOG_TAG "ZigBeePresenceDD"
-#define DEVICE_DRIVER_NAME "ZigBeePresenceDD"
-#define MY_DC_VERSION      2
+#define LOG_TAG                "ZigBeePresenceDD"
+#define DEVICE_DRIVER_NAME     "ZigBeePresenceDD"
+#define MY_DC_VERSION          2
 
-#define PRESENCE_DEVICE_ID 0x1080
+#define PRESENCE_DEVICE_ID     0x1080
 #define COMM_FAIL_TIMEOUT_SECS "95"
 
 /* ZigbeeDriverCommonCallbacks */
@@ -45,11 +45,10 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                               IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                               icInitialResourceValues *initialResourceValues);
 
-static const uint16_t myDeviceIds[] = { PRESENCE_DEVICE_ID };
+static const uint16_t myDeviceIds[] = {PRESENCE_DEVICE_ID};
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (370)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(370))) static void driverRegister(void)
 {
     static const ZigbeeDriverCommonCallbacks myHooks = {.mapDeviceIdToProfile = mapDeviceIdToProfile,
                                                         .registerResources = registerResources};
@@ -109,5 +108,4 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
     }
 
     return result;
-
 }

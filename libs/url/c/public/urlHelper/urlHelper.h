@@ -26,11 +26,11 @@
 #ifndef FLEXCORE_URLHELPER_H
 #define FLEXCORE_URLHELPER_H
 
-#include <stdint.h>
 #include <curl/curl.h>
+#include <stdint.h>
 
-#include <icTypes/icStringHashMap.h>
 #include <icTypes/icLinkedList.h>
+#include <icTypes/icStringHashMap.h>
 
 /*
  * list of verify categories
@@ -58,40 +58,41 @@ typedef enum
 /**
  * Try to set a cURL option and complain with an error if it fails
  */
-#define curlSetopt(curl, opt, ...)                                              \
-do                                                                              \
-{                                                                               \
-    CURLcode err;                                                               \
-    if ((err = curl_easy_setopt((curl), (opt), (__VA_ARGS__))) != CURLE_OK)     \
-    {                                                                           \
-        icLogError(LOG_TAG, "curl_easy_setopt(curl, %s, %s) "                   \
-                            "failed at %s(%d): %s",                             \
-                   #opt,                                                        \
-                   #__VA_ARGS__,                                                \
-                   __FILE__,                                                    \
-                   __LINE__,                                                    \
-                   curl_easy_strerror(err));                                    \
-    }                                                                           \
-} while (0)
+#define curlSetopt(curl, opt, ...)                                                                                     \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        CURLcode err;                                                                                                  \
+        if ((err = curl_easy_setopt((curl), (opt), (__VA_ARGS__))) != CURLE_OK)                                        \
+        {                                                                                                              \
+            icLogError(LOG_TAG,                                                                                        \
+                       "curl_easy_setopt(curl, %s, %s) "                                                               \
+                       "failed at %s(%d): %s",                                                                         \
+                       #opt,                                                                                           \
+                       #__VA_ARGS__,                                                                                   \
+                       __FILE__,                                                                                       \
+                       __LINE__,                                                                                       \
+                       curl_easy_strerror(err));                                                                       \
+        }                                                                                                              \
+    } while (0)
 
-//A struct for encapsulating information about file data for multipart http posts
+// A struct for encapsulating information about file data for multipart http posts
 typedef struct
 {
-    char *partName;         //The name of the part for this file
-    char *localFilePath;    //The path to the local file
-    char *remoteFileName;   //The name to use for the file on the remote side
-    char *contentType;      //The content type of the file (ex. "text/plain", "application/x-tar-gz", etc.)
+    char *partName;       // The name of the part for this file
+    char *localFilePath;  // The path to the local file
+    char *remoteFileName; // The name to use for the file on the remote side
+    char *contentType;    // The content type of the file (ex. "text/plain", "application/x-tar-gz", etc.)
 } MimeFileInfo;
 
 MimeFileInfo *createMimeFileInfo();
 void destroyMimeFileInfo(MimeFileInfo *fileInfo);
 
-//A struct for encapsulating information about regular part data for multipart http posts
+// A struct for encapsulating information about regular part data for multipart http posts
 typedef struct
 {
-    char *partName;         //The name of a part
-    char *partData;         //A string representation of data to be the body of a part
-    size_t dataLength;      //The length of the data block (curl expects size_t)
+    char *partName;    // The name of a part
+    char *partData;    // A string representation of data to be the body of a part
+    size_t dataLength; // The length of the data block (curl expects size_t)
 } MimePartInfo;
 
 MimePartInfo *createMimePartInfo();
@@ -121,12 +122,11 @@ bool appendMimeFileInfoToList(icLinkedList *fileInfoList,
  * @param partData A string representation of data to be the body of a part
  * @return true if all the input params were non-NULL, false otherwise
  */
-bool appendMimePartInfoToList(icLinkedList *props,
-                              const char *partName,
-                              const char *partData);
+bool appendMimePartInfoToList(icLinkedList *props, const char *partName, const char *partData);
 
 
-typedef enum {
+typedef enum
+{
     CERT_TYPE_PEM,
     CERT_TYPE_P12,
     CERT_TYPE_DER,
@@ -134,10 +134,10 @@ typedef enum {
 } mtlsCertType;
 
 static const char *mtlsCertTypeStrings[] = {
-        "PEM", // CERT_TYPE_PEM
-        "P12", // CERT_TYPE_P12
-        "DER", // CERT_TYPE_DER
-        "ENG"  // CERT_TYPE_ENG
+    "PEM", // CERT_TYPE_PEM
+    "P12", // CERT_TYPE_P12
+    "DER", // CERT_TYPE_DER
+    "ENG"  // CERT_TYPE_ENG
 };
 
 typedef struct
@@ -169,12 +169,12 @@ void destroyMtlsCertificates(mtlsCertInfo *certInfo);
  *
  * @returns the body of the response.  Caller frees.
  */
-char* urlHelperExecuteVariableRequest(char* requestUrl,
-                                      icStringHashMap* variableMap,
-                                      long* httpCode,
-                                      char* postData,
-                                      const char* username,
-                                      const char* password,
+char *urlHelperExecuteVariableRequest(char *requestUrl,
+                                      icStringHashMap *variableMap,
+                                      long *httpCode,
+                                      char *postData,
+                                      const char *username,
+                                      const char *password,
                                       uint32_t timeoutSecs,
                                       sslVerify verifyFlag,
                                       bool allowCellular);
@@ -196,11 +196,11 @@ char* urlHelperExecuteVariableRequest(char* requestUrl,
  *
  * @returns the body of the response.  Caller frees.
  */
-char* urlHelperExecuteRequest(const char* url,
-                              long* httpCode,
-                              const char* postData,
-                              const char* username,
-                              const char* password,
+char *urlHelperExecuteRequest(const char *url,
+                              long *httpCode,
+                              const char *postData,
+                              const char *username,
+                              const char *password,
                               uint32_t timeoutSecs,
                               sslVerify verifyFlag,
                               bool allowCellular);
@@ -209,14 +209,15 @@ char* urlHelperExecuteRequest(const char* url,
  * same as urlHelperExecuteRequest, but allow for assigning HTTP headers in the request.
  * For ex:  Accept: application/json
  *
- * @param headers - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".  ignored if NULL
+ * @param headers - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".  ignored if
+ * NULL
  */
-char* urlHelperExecuteRequestHeaders(const char* url,
-                                     long* httpCode,
-                                     const char* postData,
-                                     icLinkedList* headerStrings,
-                                     const char* username,
-                                     const char* password,
+char *urlHelperExecuteRequestHeaders(const char *url,
+                                     long *httpCode,
+                                     const char *postData,
+                                     icLinkedList *headerStrings,
+                                     const char *username,
+                                     const char *password,
                                      uint32_t timeoutSecs,
                                      sslVerify verifyFlag,
                                      bool allowCellular);
@@ -224,12 +225,12 @@ char* urlHelperExecuteRequestHeaders(const char* url,
 /*
  * same as urlHelperExecuteMultipartRequestHeaders, but without headers
  */
-char *urlHelperExecuteMultipartRequest(const char* url,
-                                       long* httpCode,
-                                       icLinkedList* plainParts,
-                                       icLinkedList* fileInfo,
-                                       const char* username,
-                                       const char* password,
+char *urlHelperExecuteMultipartRequest(const char *url,
+                                       long *httpCode,
+                                       icLinkedList *plainParts,
+                                       icLinkedList *fileInfo,
+                                       const char *username,
+                                       const char *password,
                                        uint32_t timeoutSecs,
                                        sslVerify verifyFlag,
                                        bool allowCellular);
@@ -237,14 +238,14 @@ char *urlHelperExecuteMultipartRequest(const char* url,
 /*
  * same as urlHelperExecuteMTLSRequestHeaders, but without headers
  */
-char *urlHelperExecuteMTLSRequest(const char* url,
-                                         long* httpCode,
-                                         const char* postData,
-                                         const char* username,
-                                         const char* password,
-                                         uint32_t timeoutSecs,
-                                         const mtlsCertInfo *certInfo,
-                                         bool allowCellular);
+char *urlHelperExecuteMTLSRequest(const char *url,
+                                  long *httpCode,
+                                  const char *postData,
+                                  const char *username,
+                                  const char *password,
+                                  uint32_t timeoutSecs,
+                                  const mtlsCertInfo *certInfo,
+                                  bool allowCellular);
 
 /*
  * Execute a request to the provided URL and return the body. If username and password
@@ -254,7 +255,8 @@ char *urlHelperExecuteMTLSRequest(const char* url,
  * @param url - the URL to retrieve
  * @param httpCode - the result code from the server for the HTTP request
  * @param postData - text to use for an HTTP POST operation or NULL to use a standard HTTP GET
- * @param headerStrings - - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".  ignored if NULL
+ * @param headerStrings - - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".
+ * ignored if NULL
  * @param username - the username to use for basic authentication or NULL for none
  * @param password - the password to use for basic authentication or NULL for none
  * @param timeoutSecs - number of seconds to timeout (0 means no timeout set)
@@ -264,15 +266,15 @@ char *urlHelperExecuteMTLSRequest(const char* url,
  *
  * @returns the body of the response.  Caller frees.
  */
-char *urlHelperExecuteMTLSRequestHeaders(const char* url,
-                                  long* httpCode,
-                                  const char* postData,
-                                  icLinkedList* headerStrings,
-                                  const char* username,
-                                  const char* password,
-                                  uint32_t timeoutSecs,
-                                  const mtlsCertInfo *certInfo,
-                                  bool allowCellular);
+char *urlHelperExecuteMTLSRequestHeaders(const char *url,
+                                         long *httpCode,
+                                         const char *postData,
+                                         icLinkedList *headerStrings,
+                                         const char *username,
+                                         const char *password,
+                                         uint32_t timeoutSecs,
+                                         const mtlsCertInfo *certInfo,
+                                         bool allowCellular);
 
 /*
  * Performs a multipart POST request using the information passed. It is up to the caller to free all memory passed.
@@ -281,8 +283,8 @@ char *urlHelperExecuteMTLSRequestHeaders(const char* url,
  * @param httpCode          A pointer to the httpCode returned by the request.
  * @param plainParts        A list of MimePartInfo types containing key/value string part information.
  * @param fileInfo          A list of MimeFileInfo types containing file information for local files. Each entry in
-*                           the list will be a separate part in the HTTP request, with the file data being the
-*                           part's body.
+ *                           the list will be a separate part in the HTTP request, with the file data being the
+ *                           part's body.
  * @param headerStrings     A list of header strings for the request
  * @param username          A username to provide the server for authentication
  * @param password          A password to provide the server for authentication
@@ -292,13 +294,13 @@ char *urlHelperExecuteMTLSRequestHeaders(const char* url,
  *                          over bband
  * @return The body of the response from the server.
  */
-char *urlHelperExecuteMultipartRequestHeaders(const char* url,
-                                              long* httpCode,
-                                              icLinkedList* plainParts,
-                                              icLinkedList* fileInfo,
-                                              icLinkedList* headerStrings,
-                                              const char* username,
-                                              const char* password,
+char *urlHelperExecuteMultipartRequestHeaders(const char *url,
+                                              long *httpCode,
+                                              icLinkedList *plainParts,
+                                              icLinkedList *fileInfo,
+                                              icLinkedList *headerStrings,
+                                              const char *username,
+                                              const char *password,
                                               uint32_t timeoutSecs,
                                               sslVerify verifyFlag,
                                               bool allowCellular);
@@ -321,14 +323,14 @@ char *urlHelperExecuteMultipartRequestHeaders(const char* url,
  * @param pathname The path and file name to store the file into.
  * @return The number of bytes written into the file.
  */
-size_t urlHelperDownloadFile(const char* url,
-                             long* httpCode,
-                             const char* username,
-                             const char* password,
+size_t urlHelperDownloadFile(const char *url,
+                             long *httpCode,
+                             const char *username,
+                             const char *password,
                              uint32_t timeoutSecs,
                              sslVerify verifyFlag,
                              bool allowCellular,
-                             const char* pathname);
+                             const char *pathname);
 
 /**
  * Helper routine to upload a file using PUT
@@ -343,14 +345,14 @@ size_t urlHelperDownloadFile(const char* url,
  * @param filename The path and file name to upload
  * @return body of the response
  */
-char* urlHelperUploadFile(const char* url,
+char *urlHelperUploadFile(const char *url,
                           long *httpCode,
-                          const char* username,
-                          const char* password,
+                          const char *username,
+                          const char *password,
                           uint32_t timeoutSecs,
                           sslVerify verifyFlag,
                           bool allowCellular,
-                          const char* fileName);
+                          const char *fileName);
 
 /*
  * apply standard options to a Curl Context.
@@ -358,8 +360,12 @@ char* urlHelperUploadFile(const char* url,
  * additionally, if the 'verifyFlag' includes VERIFY_HOST or VERIFY_BOTH, then the
  * 'url' will be checked for IP Addresses, and if so remove VERIFY_HOST from the mix
  */
-void applyStandardCurlOptions(CURL *context, const char *url, uint32_t timeoutSecs, const mtlsCertInfo *certInfo,
-                              sslVerify verifyFlag, bool allowCellular);
+void applyStandardCurlOptions(CURL *context,
+                              const char *url,
+                              uint32_t timeoutSecs,
+                              const mtlsCertInfo *certInfo,
+                              sslVerify verifyFlag,
+                              bool allowCellular);
 
 /*
  * apply the user agent option if we have a user agent defined
@@ -400,4 +406,4 @@ char *urlHelperCreateQueryString(const icStringHashMap *keyValuePairs);
 char *urlHelperCreateUrlEncodedForm(const icStringHashMap *keyValuePairs);
 
 
-#endif //FLEXCORE_URLHELPER_H
+#endif // FLEXCORE_URLHELPER_H

@@ -21,11 +21,11 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#include <icLog/logging.h>
-#include <memory.h>
-#include <icUtil/stringUtils.h>
-#include <icUtil/array.h>
 #include "icUtil/regexUtils.h"
+#include <icLog/logging.h>
+#include <icUtil/array.h>
+#include <icUtil/stringUtils.h>
+#include <memory.h>
 
 #define LOG_TAG "regexUtils"
 

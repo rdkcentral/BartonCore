@@ -25,11 +25,11 @@
 #ifndef ZILKER_THREADUTILS_H
 #define ZILKER_THREADUTILS_H
 
-#include <stdbool.h>
-#include <pthread.h>
 #include <icTypes/sbrm.h>
+#include <pthread.h>
+#include <stdbool.h>
 
-typedef void * (*taskFunc)(void *);
+typedef void *(*taskFunc)(void *);
 
 /**
  * Create a detached thread
@@ -100,11 +100,13 @@ void _mutexUnlock(pthread_mutex_t *mtx, const char *file, const int line);
 /**
  * Lock the current scope with a
  */
-#define LOCK_SCOPE_ALIAS(m, n) AUTO_CLEAN(pthread_mutex_unlock__auto) pthread_mutex_t *lock_guard_##n = &m;\
-mutexLock(lock_guard_##n)
+#define LOCK_SCOPE_ALIAS(m, n)                                                                                         \
+    AUTO_CLEAN(pthread_mutex_unlock__auto) pthread_mutex_t *lock_guard_##n = &m;                                       \
+    mutexLock(lock_guard_##n)
 
 /**
- * Convenience macro to create a guard pointer for a mutex and lock it, releasing it when the guard leaves the current scope.
+ * Convenience macro to create a guard pointer for a mutex and lock it, releasing it when the guard leaves the current
+ * scope.
  * @note This should be limited to use in small sections. It generally is not suitable for use in an entire function.
  */
 #define LOCK_SCOPE(m) LOCK_SCOPE_ALIAS(m, m)
@@ -162,18 +164,22 @@ void _rwUnlock(pthread_rwlock_t *lock, const char *file, const int line);
 #define rwUnlock(lock) _rwUnlock(lock, __FILE__, __LINE__)
 
 /**
- * Convenience macro to create a guard pointer for a rwlock and read lock it, releasing it when the guard leaves the current scope.
+ * Convenience macro to create a guard pointer for a rwlock and read lock it, releasing it when the guard leaves the
+ * current scope.
  * @note This should be limited to use in small sections. It generally is not suitable for use in an entire function.
  */
-#define READ_LOCK_SCOPE(m) AUTO_CLEAN(pthread_rwlock_unlock__auto) pthread_rwlock_t *lock_guard_##m = &m;\
-readLock(lock_guard_##m)
+#define READ_LOCK_SCOPE(m)                                                                                             \
+    AUTO_CLEAN(pthread_rwlock_unlock__auto) pthread_rwlock_t *lock_guard_##m = &m;                                     \
+    readLock(lock_guard_##m)
 
 /**
- * Convenience macro to create a guard pointer for a rwlock and read lock it, releasing it when the guard leaves the current scope.
+ * Convenience macro to create a guard pointer for a rwlock and read lock it, releasing it when the guard leaves the
+ * current scope.
  * @note This should be limited to use in small sections. It generally is not suitable for use in an entire function.
  */
-#define WRITE_LOCK_SCOPE(m) AUTO_CLEAN(pthread_rwlock_unlock__auto) pthread_rwlock_t *lock_guard_##m = &m;\
-writeLock(lock_guard_##m)
+#define WRITE_LOCK_SCOPE(m)                                                                                            \
+    AUTO_CLEAN(pthread_rwlock_unlock__auto) pthread_rwlock_t *lock_guard_##m = &m;                                     \
+    writeLock(lock_guard_##m)
 
 inline void pthread_rwlock_unlock__auto(pthread_rwlock_t **lock)
 {
@@ -181,5 +187,4 @@ inline void pthread_rwlock_unlock__auto(pthread_rwlock_t **lock)
 }
 
 
-
-#endif //ZILKER_THREADUTILS_H
+#endif // ZILKER_THREADUTILS_H

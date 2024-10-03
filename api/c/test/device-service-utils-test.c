@@ -25,15 +25,15 @@
  */
 
 #include "cjson/cJSON.h"
+#include "device-service-discovery-type.h"
 #include "device-service-endpoint.h"
 #include "device-service-resource.h"
+#include "device-service-status.h"
 #include "device-service-utils.h"
 #include "device/icDeviceMetadata.h"
 #include "device/icDeviceResource.h"
 #include "deviceServiceStatus.h"
 #include "icTypes/icLinkedList.h"
-#include "device-service-status.h"
-#include "device-service-discovery-type.h"
 #include "zhal/zhal.h"
 #include <glib.h>
 
@@ -310,7 +310,8 @@ static void test_convertIcDeviceToGObject(void)
 
 static void test_convertIcZigbeeEnergyScanResultToGObject(void)
 {
-    g_autoptr(BDeviceServiceZigbeeEnergyScanResult) dsZigbeeEnergyScanResult = convertZhalEnergyScanResultToGObject(&zigbeeEnergyScanResult);
+    g_autoptr(BDeviceServiceZigbeeEnergyScanResult) dsZigbeeEnergyScanResult =
+        convertZhalEnergyScanResultToGObject(&zigbeeEnergyScanResult);
     verifyBDeviceServiceZigbeeEnergyScanResults(dsZigbeeEnergyScanResult);
 }
 
@@ -355,7 +356,8 @@ static void test_convertIcZigbeeEnergyScanResultListToGList(void)
     scoped_icLinkedListNofree *zigbeeEnergyScanResults = linkedListCreate();
     linkedListAppend(zigbeeEnergyScanResults, &zigbeeEnergyScanResult);
 
-    g_autolist(BDeviceServiceZigbeeEnergyScanResult) dsZigbeeEnergyScanResults = convertIcZigbeeEnergyScanResultListToGList(zigbeeEnergyScanResults);
+    g_autolist(BDeviceServiceZigbeeEnergyScanResult) dsZigbeeEnergyScanResults =
+        convertIcZigbeeEnergyScanResultListToGList(zigbeeEnergyScanResults);
     g_assert_cmpint(g_list_length(dsZigbeeEnergyScanResults), ==, linkedListCount(zigbeeEnergyScanResults));
 
     BDeviceServiceZigbeeEnergyScanResult *dsZigbeeEnergyScanResult = g_list_first(dsZigbeeEnergyScanResults)->data;
@@ -377,14 +379,15 @@ static void test_convertDeviceServiceStatusToGObject(void)
     scoped_DeviceServiceStatus *original_status = calloc(1, sizeof(DeviceServiceStatus));
     BDeviceServiceStatus *converted_status = NULL;
 
-    //fill in some test data
+    // fill in some test data
     original_status->supportedDeviceClasses = linkedListCreate();
     linkedListAppend(original_status->supportedDeviceClasses, strdup("test-device-class"));
     original_status->discoveryRunning = true;
     original_status->discoveringDeviceClasses = linkedListCreate();
     linkedListAppend(original_status->discoveringDeviceClasses, strdup("test-searching-device-class"));
     original_status->discoveryTimeoutSeconds = G_MAXUINT;
-    original_status->findingOrphanedDevices = false; //only this or discoveryRunning can be true at the same time... will have to test this one below
+    original_status->findingOrphanedDevices =
+        false; // only this or discoveryRunning can be true at the same time... will have to test this one below
     original_status->isReadyForDeviceOperation = true;
     original_status->isReadyForPairing = true;
     original_status->subsystemsJsonStatus = hashMapCreate();
@@ -417,7 +420,7 @@ static void test_convertDeviceServiceStatusToGObject(void)
                  NULL);
     g_assert_cmpuint(discovery_type, ==, B_DEVICE_SERVICE_DISCOVERY_TYPE_DISCOVERY);
 
-    //test searching device classes
+    // test searching device classes
     GList *searching_device_classes_test = NULL;
     g_object_get(converted_status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES],
@@ -465,16 +468,14 @@ static void test_convertDeviceServiceStatusToGObject(void)
 
     // test json
     gchar *json = NULL;
-    g_object_get(converted_status,
-                 B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON],
-                 &json,
-                 NULL);
+    g_object_get(
+        converted_status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON], &json, NULL);
     g_assert_nonnull(json);
     g_autofree gchar *json_complete_status = deviceServiceStatusToJson(original_status);
     g_assert_cmpstr(json, ==, json_complete_status);
     g_free(json);
 
-    //finally test findingOrphanedDevices
+    // finally test findingOrphanedDevices
     g_clear_object(&converted_status);
     original_status->findingOrphanedDevices = true;
     original_status->discoveryRunning = false;
@@ -493,7 +494,7 @@ static void test_convertDeviceServiceStatusToGObject(void)
 int main(int argc, char *argv[])
 {
     // Initialize GLib testing framework
-    argc=0;
+    argc = 0;
     g_test_init(&argc, &argv, NULL);
 
     // Some global setup
@@ -514,7 +515,8 @@ int main(int argc, char *argv[])
     g_test_add_func("/device-service-utils/convertIcDeviceResourceToGObject", test_convertIcDeviceResourceToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceMetadataToGObject", test_convertIcDeviceMetadataToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceToGObject", test_convertIcDeviceToGObject);
-    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultToGObject", test_convertIcZigbeeEnergyScanResultToGObject);
+    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultToGObject",
+                    test_convertIcZigbeeEnergyScanResultToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceEndpointListToGList",
                     test_convertIcDeviceEndpointListToGList);
     g_test_add_func("/device-service-utils/convertIcDeviceResourceListToGList",

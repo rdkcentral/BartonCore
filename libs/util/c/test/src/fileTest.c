@@ -24,15 +24,18 @@
 // Created by einfochips
 //
 
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <cmocka.h>
+#include <icTypes/sbrm.h>
+#include <icUtil/fileUtils.h>
+#include <icUtil/md5.h>
+#include <icUtil/stringUtils.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
-#include <cmocka.h>
-#include <icUtil/md5.h>
-#include <icUtil/fileUtils.h>
-#include <icUtil/stringUtils.h>
-#include <icTypes/sbrm.h>
 
 static char templateTempDir[255] = "/tmp/testDirXXXXXX";
 static char *tmpDir = NULL;
@@ -41,9 +44,10 @@ static char *destPath = NULL;
 static const char *textToBeWritten = "Test CopyFile Functionality";
 static const char *srcFileChecksum = "5102fded5245de1595a5a5caaef642ce";
 static int sizeOfString = 0;
-static char* getFileMd5(const char* path);
+static char *getFileMd5(const char *path);
 
-typedef enum {
+typedef enum
+{
     pass,
     fail,
     real
@@ -58,7 +62,7 @@ int __real_fsync(int __fd);
 int __wrap_fsync(int __fd)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case pass:
         {
@@ -81,7 +85,7 @@ int __real_fflush(FILE *__stream);
 int __wrap_fflush(FILE *__stream)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case pass:
         {
@@ -104,7 +108,7 @@ int __real_feof(FILE *fp);
 int __wrap_feof(FILE *fp)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case pass:
         {
@@ -127,7 +131,7 @@ size_t __real_fread(void *__ptr, size_t __size, size_t __nmemb, FILE *__stream);
 size_t __wrap_fread(void *__ptr, size_t __size, size_t __nmemb, FILE *__stream)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case pass:
         {
@@ -146,11 +150,11 @@ size_t __wrap_fread(void *__ptr, size_t __size, size_t __nmemb, FILE *__stream)
     return 0;
 }
 
-size_t __real_fwrite(const void * __ptr, size_t __size, size_t __count, FILE * __stream);
-size_t __wrap_fwrite(const void * __ptr, size_t __size, size_t __count, FILE * __stream)
+size_t __real_fwrite(const void *__ptr, size_t __size, size_t __count, FILE *__stream);
+size_t __wrap_fwrite(const void *__ptr, size_t __size, size_t __count, FILE *__stream)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case pass:
         {
@@ -162,18 +166,18 @@ size_t __wrap_fwrite(const void * __ptr, size_t __size, size_t __count, FILE * _
         };
         case real:
         {
-            ssize_t real = __real_fwrite(__ptr,  __size,  __count, __stream);
+            ssize_t real = __real_fwrite(__ptr, __size, __count, __stream);
             return real;
         }
     }
     return 0;
 }
 
-FILE *__real_fopen(const char * __pathname, const char * __mode);
-FILE *__wrap_fopen(const char * __pathname, const char * __mode)
+FILE *__real_fopen(const char *__pathname, const char *__mode);
+FILE *__wrap_fopen(const char *__pathname, const char *__mode)
 {
     testCaseResult value = mock();
-    switch(value)
+    switch (value)
     {
         case fail:
         {
@@ -194,7 +198,7 @@ int __wrap_ferror(FILE *file)
 {
     testCaseResult value = mock();
 
-    switch(value)
+    switch (value)
     {
         case fail:
             return 1;
@@ -216,7 +220,7 @@ int __wrap_ferror(FILE *file)
  * and produce an md5sum of the local file.  the caller is
  * responsible for releasing the returned string
  */
-static char* getFileMd5(const char* path)
+static char *getFileMd5(const char *path)
 {
     char *retVal = NULL;
     AUTO_CLEAN(free_generic__auto) char *content = readFileContents(path);
@@ -245,17 +249,17 @@ static void writeContentsToTestFile(testCaseResult value)
 static int test_testSetup(void **state)
 {
     remove(destPath);
-    //write content to source file
+    // write content to source file
     writeContentsToTestFile(pass);
-    (void)state;
+    (void) state;
     return 0;
 }
 
 static int test_testSetup_real(void **state)
 {
-    //write content to source file
+    // write content to source file
     writeContentsToTestFile(real);
-    (void)state;
+    (void) state;
     return 0;
 }
 
@@ -271,7 +275,7 @@ static void test_copyFileByPath_fopen_fail(void **state)
 
     will_return_always(__wrap_fopen, fail);
 
-    //copying file
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_false(doesFileExist(destPath));
     assert_false(result);
@@ -289,7 +293,7 @@ static void test_copyFileByPath_feof_ok(void **state)
     will_return_always(__wrap_ferror, pass);
     will_return_always(__wrap_fsync, pass);
 
-    //copying file
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_true(doesFileExist(destPath));
     assert_true(result);
@@ -304,7 +308,7 @@ static void test_copyFileByPath_fread_fail(void **state)
     will_return_always(__wrap_ferror, fail);
     will_return_always(__wrap_fread, fail);
 
-    //copying file
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_false(doesFileExist(destPath));
     assert_false(result);
@@ -320,7 +324,7 @@ static void test_copyFileByPath_fwrite_fail(void **state)
     will_return(__wrap_ferror, pass);
     will_return(__wrap_fwrite, fail);
 
-    //copying file
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_false(doesFileExist(destPath));
     assert_false(result);
@@ -337,7 +341,7 @@ static void test_copyFileByPath_fsync_fail(void **state)
     will_return_always(__wrap_ferror, pass);
     will_return_always(__wrap_fsync, fail);
 
-    //copying file
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_false(doesFileExist(destPath));
     assert_false(result);
@@ -354,18 +358,18 @@ static void test_copyFileByPath_real(void **state)
     will_return_always(__wrap_fread, real);
     will_return_always(__wrap_fsync, real);
 
-    //pass case
-    //copying file
+    // pass case
+    // copying file
     result = copyFileByPath(sourcePath, destPath);
     assert_true(doesFileExist(destPath));
     assert_true(result);
 
-    //get Md5 checksum for destination file
+    // get Md5 checksum for destination file
     AUTO_CLEAN(free_generic__auto) char *destFileChecksum = getFileMd5(destPath);
 
     result = false;
 
-    //verify md5 checksum of both source and destination file
+    // verify md5 checksum of both source and destination file
     if (stringCompare(srcFileChecksum, destFileChecksum, true) == 0)
     {
         result = true;
@@ -380,11 +384,11 @@ static void test_readFileContentsWithTrim(void **state)
     will_return_always(__wrap_fopen, real);
     will_return_always(__wrap_fread, real);
 
-    static const char* simpleFilePath = RESOURCES_DIR "/simpleFile";
-    static const char* simpleFileTrimmedPath = RESOURCES_DIR "/simpleFileTrimmed";
+    static const char *simpleFilePath = RESOURCES_DIR "/simpleFile";
+    static const char *simpleFileTrimmedPath = RESOURCES_DIR "/simpleFileTrimmed";
 
     // This should be the matching contents for both files once read in.
-    static const char* simpleFileContents = "apples\n"
+    static const char *simpleFileContents = "apples\n"
                                             "bananas\n"
                                             "cucumbers";
 
@@ -430,16 +434,15 @@ static void test_copyZeroSizeFile(void **state)
 
 int main(int argc, const char **argv)
 {
-    //creating a temp directory
+    // creating a temp directory
     tmpDir = mkdtemp(templateTempDir);
     assert_non_null(tmpDir);
 
-    //source and destination path
+    // source and destination path
     sourcePath = stringBuilder("%s/%s", tmpDir, "testFile");
     destPath = stringBuilder("%s/%s", tmpDir, "copyFile");
 
-    const struct CMUnitTest tests[] =
-    {
+    const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup(test_copyFileByPath_fopen_fail, test_testSetup),
         cmocka_unit_test_setup(test_copyFileByPath_feof_ok, test_testSetup),
         cmocka_unit_test_setup(test_copyFileByPath_fread_fail, test_testSetup),
@@ -464,7 +467,7 @@ int main(int argc, const char **argv)
     will_return_always(__wrap_fsync, real);
     will_return_always(__wrap_fflush, real);
 
-    //deleting Temp directory
+    // deleting Temp directory
     deleteDirectory(tmpDir);
 
     free(sourcePath);

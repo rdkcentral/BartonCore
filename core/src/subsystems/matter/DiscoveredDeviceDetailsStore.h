@@ -28,12 +28,13 @@
 #define ZILKER_DISCOVEREDDEVICEDETAILSSTORE_H
 
 #include "DiscoveredDeviceDetails.h"
-#include <mutex>
 #include <memory>
+#include <mutex>
 
 namespace zilker
 {
-    class DiscoveredDeviceDetailsStore {
+    class DiscoveredDeviceDetailsStore
+    {
 
     public:
         static DiscoveredDeviceDetailsStore &Instance()
@@ -50,11 +51,12 @@ namespace zilker
         std::shared_ptr<DiscoveredDeviceDetails> Get(std::string deviceId);
 
         /**
-         * Save the provided discovered device details in non-volatile storage.  Cleans up any temporarily stored entries.
+         * Save the provided discovered device details in non-volatile storage.  Cleans up any temporarily stored
+         * entries.
          * @param deviceId
          * @param details
          */
-        void Put(const std::string& deviceId, std::shared_ptr<DiscoveredDeviceDetails> details);
+        void Put(const std::string &deviceId, std::shared_ptr<DiscoveredDeviceDetails> details);
 
         /**
          * Save details about a discovered device temporarily (volatile storage)

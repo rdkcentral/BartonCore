@@ -35,8 +35,8 @@
 #ifndef FLEXCORE_ICQUEUE_H
 #define FLEXCORE_ICQUEUE_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /*
  * the Queue object representation.
@@ -157,4 +157,4 @@ void queueIterate(icQueue *queue, queueIterateFunc callback, void *arg);
  */
 void queueClear(icQueue *queue, queueItemFreeFunc helper);
 
-#endif //FLEXCORE_ICQUEUE_H
+#endif // FLEXCORE_ICQUEUE_H

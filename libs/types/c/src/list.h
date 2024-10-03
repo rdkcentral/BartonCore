@@ -29,9 +29,9 @@
  * Author: jelderton - 8/24/15
  *-----------------------------------------------*/
 
+#include <icLog/logging.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icLog/logging.h>
 
 #include "icTypes/icLinkedList.h"
 
@@ -52,7 +52,7 @@
 typedef struct _listNode listNode;
 struct _listNode
 {
-    void     *item;
+    void *item;
     listNode *next;
 };
 
@@ -60,8 +60,8 @@ struct _listNode
 //
 struct _icLinkedList
 {
-    uint16_t  size;
-    listNode  *first;
+    uint16_t size;
+    listNode *first;
     bool cloned;
 };
 
@@ -76,4 +76,3 @@ listNode *createListNode();
  * pointers to bad memory during iteration.
  */
 void linkedListIteratorClearPrev(icLinkedListIterator *iterator);
-

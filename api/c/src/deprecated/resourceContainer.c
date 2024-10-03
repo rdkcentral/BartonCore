@@ -21,9 +21,9 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#include <string.h>
-#include <icLog/logging.h>
 #include "resourceContainer.h"
+#include <icLog/logging.h>
+#include <string.h>
 
 #define LOG_TAG "resourceContainer"
 

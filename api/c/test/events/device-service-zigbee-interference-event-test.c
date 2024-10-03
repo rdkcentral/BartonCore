@@ -53,19 +53,19 @@ static void test_property_access(BDeviceServiceZigbeeInterferenceEventTest *test
 {
     gboolean interference_detected = true;
     g_object_set(test->event,
-                 B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROP_INTERFERENCE_DETECTED],
+                 B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROP_INTERFERENCE_DETECTED],
                  interference_detected,
                  NULL);
 
     gboolean interference_detected_test = false;
     g_object_get(test->event,
-                 B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROP_INTERFERENCE_DETECTED],
+                 B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_INTERFERENCE_EVENT_PROP_INTERFERENCE_DETECTED],
                  &interference_detected_test,
                  NULL);
 
     g_assert_cmpint(interference_detected, ==, interference_detected_test);
-
-
 }
 
 int main(int argc, char *argv[])

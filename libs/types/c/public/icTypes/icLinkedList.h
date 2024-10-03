@@ -45,11 +45,11 @@
 #ifndef IC_LINKEDLIST_H
 #define IC_LINKEDLIST_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "icHashMap.h"
 #include "icLinkedListFuncs.h"
 #include "sbrm.h"
-#include "icHashMap.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /*-------------------------------*
  *
@@ -185,7 +185,7 @@ void *linkedListFind(icLinkedList *list, void *searchVal, linkedListCompareFunc 
  * @param offset - element number, 0 through (getCount - 1)
  * @return the removed element or NULL if invalid list/offset given
  */
-void *linkedListRemove(icLinkedList* list, uint32_t offset);
+void *linkedListRemove(icLinkedList *list, uint32_t offset);
 
 /*
  * iterate through the LinkedList to find a particular item, and
@@ -198,7 +198,10 @@ void *linkedListRemove(icLinkedList* list, uint32_t offset);
  * @param freeFunc - optional, only needed if the item needs a custom mechanism to release the memory
  * @return TRUE on success
  */
-bool linkedListDelete(icLinkedList *list, void *searchVal, linkedListCompareFunc searchFunc, linkedListItemFreeFunc freeFunc);
+bool linkedListDelete(icLinkedList *list,
+                      void *searchVal,
+                      linkedListCompareFunc searchFunc,
+                      linkedListItemFreeFunc freeFunc);
 
 /*
  * Reverses the order of elements in a list, returning a shallow clone of the list in reverse order.
@@ -233,7 +236,8 @@ icLinkedList *linkedListFilter(icLinkedList *list, linkedListFilterFunc filterFu
  *                      MapFuncKeyContext memory.
  * @return a map of keys and values generated from the provided mapFunc, or NULL if bad arguments are provided.
  */
-icHashMap *linkedListMapFromList(icLinkedList *list, linkedListMapFunc mapFunc, void *context, hashMapFreeFunc mapFreeFunc);
+icHashMap *
+linkedListMapFromList(icLinkedList *list, linkedListMapFunc mapFunc, void *context, hashMapFreeFunc mapFreeFunc);
 
 /*
  * Mimics a classic foldl function. Initially invokes the provided fold function, passing the
@@ -279,7 +283,7 @@ void *linkedListFoldR(icLinkedList *list, linkedListFoldFunc foldFunc, void *ini
  *
  * @param list - the LinkedList to search through
  * @param callback - the function to call for each item
- * @param arg - optional parameter supplied to the 'callback' function 
+ * @param arg - optional parameter supplied to the 'callback' function
  */
 void linkedListIterate(icLinkedList *list, linkedListIterateFunc callback, void *arg);
 
@@ -323,7 +327,7 @@ typedef struct _icLinkedListIterator icLinkedListIterator;
  * Convenience macro to create a scope bound linkedListIterator. When it goes out of scope,
  * linkedListIteratorDestroy will be called automatically.
  */
-#define sbIcLinkedListIterator AUTO_CLEAN(linkedListIteratorDestroy__auto) icLinkedListIterator
+#define sbIcLinkedListIterator      AUTO_CLEAN(linkedListIteratorDestroy__auto) icLinkedListIterator
 #define scoped_icLinkedListIterator sbIcLinkedListIterator
 
 /*

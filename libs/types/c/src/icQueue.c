@@ -46,9 +46,9 @@ struct _icQueue
 {
     // borrow the structures used within linked list
     //
-    uint16_t  size;
-    listNode  *first;
-    listNode  *last;
+    uint16_t size;
+    listNode *first;
+    listNode *last;
 };
 
 /*
@@ -61,7 +61,7 @@ icQueue *queueCreate()
 {
     // create the queue structure, then clear it
     //
-    icQueue *retVal = (icQueue *)malloc(sizeof(icQueue));
+    icQueue *retVal = (icQueue *) malloc(sizeof(icQueue));
     if (retVal != NULL)
     {
         memset(retVal, 0, sizeof(icQueue));
@@ -410,7 +410,3 @@ void queueClear(icQueue *queue, queueItemFreeFunc helper)
     queue->first = NULL;
     queue->last = NULL;
 }
-
-
-
-

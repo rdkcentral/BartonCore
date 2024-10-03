@@ -26,16 +26,14 @@
 
 #include "category.h"
 #include "device-service-client.h"
-#include <stdio.h>
 #include <linenoise.h>
+#include <stdio.h>
 
 #define DISCOVERY_SECONDS 60
 
-static bool discoverStartFunc(BDeviceServiceClient *client,
-                              gint argc,
-                              gchar **argv)
+static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
 {
-    (void) argc; //unused
+    (void) argc; // unused
     bool rc = false;
 
     fprintf(stdout, "Starting discovery of %s for %d seconds\n", argv[0], DISCOVERY_SECONDS);
@@ -54,7 +52,6 @@ static bool discoverStartFunc(BDeviceServiceClient *client,
         {
             fprintf(stderr, "Unable to start discovery of %s\n", argv[0]);
         }
-
     }
     else
     {
@@ -64,12 +61,10 @@ static bool discoverStartFunc(BDeviceServiceClient *client,
     return rc;
 }
 
-static bool discoverStopFunc(BDeviceServiceClient *client,
-                             gint argc,
-                             gchar **argv)
+static bool discoverStopFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
 {
-    (void) argc; //unused
-    (void) argv; //unused
+    (void) argc; // unused
+    (void) argv; // unused
     bool rc = false;
 
     g_autoptr(GError) err = NULL;
@@ -89,24 +84,18 @@ Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
 
-    //discover devices
+    // discover devices
     Command *command = commandCreate("discoverStart",
-                            "dstart",
-                            "<device class> [setup code]",
-                            "Start discovery for a device class with optional setup code for Matter devices",
-                            1,
-                            2,
-                            discoverStartFunc);
+                                     "dstart",
+                                     "<device class> [setup code]",
+                                     "Start discovery for a device class with optional setup code for Matter devices",
+                                     1,
+                                     2,
+                                     discoverStartFunc);
     categoryAddCommand(cat, command);
 
-    //stop discovering devices
-    command = commandCreate("discoverStop",
-                            "dstop",
-                            NULL,
-                            "Stop device discovery",
-                            0,
-                            0,
-                            discoverStopFunc);
+    // stop discovering devices
+    command = commandCreate("discoverStop", "dstop", NULL, "Stop device discovery", 0, 0, discoverStopFunc);
     categoryAddCommand(cat, command);
 
 

@@ -37,19 +37,22 @@
 #ifndef FLEXCORE_PROTECTEDCONFIG_H
 #define FLEXCORE_PROTECTEDCONFIG_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 // container that holds data + lengh.  used for
 // protecting, unprotecting, and passwords
 //
-typedef struct {
-    unsigned char *data;    // input data
-    uint32_t       length;  // size in bytes of 'data'
-    uint_fast8_t  version;  // The encrypted value version detected by unprotectConfig
+typedef struct
+{
+    unsigned char *data;  // input data
+    uint32_t length;      // size in bytes of 'data'
+    uint_fast8_t version; // The encrypted value version detected by unprotectConfig
 } pcData;
 
-enum {
+enum
+{
     /**
      * @var reserved for unrecognized or legacy inputs
      */
@@ -146,7 +149,7 @@ pcData *generateProtectPassword(void);
  * @return a byte array exactly length long.
  * @warning The returned value is not a C string.
  */
-uint8_t * protectedConfigGenerateBytes(const size_t length);
+uint8_t *protectedConfigGenerateBytes(const size_t length);
 
 /**
  * destroy the 'container', and if told to also the
@@ -158,4 +161,3 @@ void destroyProtectConfigData(pcData *data, bool includeData);
 
 
 #endif // FLEXCORE_PROTECTEDCONFIG_H
-

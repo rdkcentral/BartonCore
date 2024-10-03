@@ -33,9 +33,9 @@
 #ifndef IC_TIMEUTILS_H
 #define IC_TIMEUTILS_H
 
-#include <time.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
 /*
  * returns if this platform supports the monotonic clock

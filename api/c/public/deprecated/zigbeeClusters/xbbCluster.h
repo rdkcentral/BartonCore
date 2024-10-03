@@ -29,16 +29,16 @@
 
 #include "zigbeeCluster.h"
 
-#define XBB_CLUSTER_STATUS_LID_OPEN_BIT                     0x00
-#define XBB_CLUSTER_STATUS_AC_POWER_LOSS_BIT                0x01
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_1_PRESENT_BIT       0x02
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_2_PRESENT_BIT       0x03
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_3_PRESENT_BIT       0x04
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_1_LOW_BIT           0x05
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_2_LOW_BIT           0x06
-#define XBB_CLUSTER_STATUS_BATTERY_BANK_3_LOW_BIT           0x07
-#define XBB_CLUSTER_STATUS_TEMP_LOW_BIT                     0x08
-#define XBB_CLUSTER_STATUS_TEMP_HIGH_BIT                    0x09
+#define XBB_CLUSTER_STATUS_LID_OPEN_BIT               0x00
+#define XBB_CLUSTER_STATUS_AC_POWER_LOSS_BIT          0x01
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_1_PRESENT_BIT 0x02
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_2_PRESENT_BIT 0x03
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_3_PRESENT_BIT 0x04
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_1_LOW_BIT     0x05
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_2_LOW_BIT     0x06
+#define XBB_CLUSTER_STATUS_BATTERY_BANK_3_LOW_BIT     0x07
+#define XBB_CLUSTER_STATUS_TEMP_LOW_BIT               0x08
+#define XBB_CLUSTER_STATUS_TEMP_HIGH_BIT              0x09
 
 typedef enum
 {
@@ -80,4 +80,4 @@ void xbbClusterSetBatteryType(const ZigbeeCluster *cluster, XbbBatteryType batte
  */
 bool xbbClusterGetStatus(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId, uint16_t *status);
 
-#endif //ZILKER_XBBCLUSTER_H
+#endif // ZILKER_XBBCLUSTER_H

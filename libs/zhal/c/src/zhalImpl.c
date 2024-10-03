@@ -20,33 +20,33 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+#include <arpa/inet.h>
+#include <glib.h>
+#include <inttypes.h>
+#include <netinet/in.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <inttypes.h>
 #include <sys/errno.h>
-#include <sys/time.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <glib.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
+#include "zhalAsyncReceiver.h"
+#include "zhalEventHandler.h"
+#include "zhalPrivate.h"
 #include <cjson/cJSON.h>
+#include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
 #include <icLog/logging.h>
 #include <icTypes/icHashMap.h>
-#include <icTypes/icQueue.h>
 #include <icTypes/icLinkedList.h>
+#include <icTypes/icQueue.h>
 #include <icUtil/base64.h>
 #include <icUtil/stringUtils.h>
 #include <zhal/zhal.h>
-#include <icConcurrent/timedWait.h>
-#include <icConcurrent/threadUtils.h>
-#include "zhalPrivate.h"
-#include "zhalAsyncReceiver.h"
-#include "zhalEventHandler.h"
 
 /*
  * This is the core IPC processing to ZigbeeCore.  Individual requests are in zhalRequests.c
@@ -54,12 +54,12 @@
  * Created by Thomas Lea on 3/14/16.
  */
 
-#define LOG_TAG "zhalImpl"
+#define LOG_TAG     "zhalImpl"
 #define logFmt(fmt) "%s: " fmt, __func__
 
 typedef struct
 {
-    icQueue *queue; //WorkItems pending for this device
+    icQueue *queue; // WorkItems pending for this device
     pthread_mutex_t mutex;
     int isBusy;
 } DeviceQueue;
@@ -74,7 +74,7 @@ typedef struct
     uint32_t requestId;
     cJSON *request;
     cJSON *response;
-    DeviceQueue *deviceQueue; //handle to the owning device queue
+    DeviceQueue *deviceQueue; // handle to the owning device queue
     pthread_cond_t cond;
     pthread_mutex_t mtx;
     bool timedOut;
@@ -83,12 +83,12 @@ typedef struct
 static WorkItem *workItemAcquire(WorkItem *item);
 static void workItemRelease(void *item);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(WorkItem, workItemRelease)
-#define scoped_WorkItem g_autoptr(WorkItem)
+#define scoped_WorkItem            g_autoptr(WorkItem)
 
 #define SOCKET_RECEIVE_TIMEOUT_SEC 10
-#define SOCKET_SEND_TIMEOUT_SEC 10
+#define SOCKET_SEND_TIMEOUT_SEC    10
 
-static icHashMap *deviceQueues = NULL; //maps uint64_t (EUI64) to DeviceQueue pointers
+static icHashMap *deviceQueues = NULL; // maps uint64_t (EUI64) to DeviceQueue pointers
 static pthread_mutex_t deviceQueuesMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t requestId = 0;
@@ -109,7 +109,7 @@ static bool workerThreadRunning = false;
 
 static bool shouldWorkerContinue(void);
 
-static icHashMap *asyncRequests = NULL; //maps uint32_t (requestId) to WorkItem
+static icHashMap *asyncRequests = NULL; // maps uint32_t (requestId) to WorkItem
 static pthread_mutex_t asyncRequestsMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void asyncRequestsFreeFunc(void *key, void *value);
@@ -120,8 +120,7 @@ static int zigbeePort = 0;
 
 static int handleIpcResponse(cJSON *response);
 
-static void deviceQueuesDestroy(void *key,
-                                void *value);
+static void deviceQueuesDestroy(void *key, void *value);
 
 static bool addQueueItemToPendingList(WorkItem *item, icLinkedList *pendingItems);
 
@@ -144,11 +143,7 @@ void *getCallbackContext(void)
     return callbackContext;
 }
 
-int zhalInit(const char *host,
-             int port,
-             zhalCallbacks *cbs,
-             void *ctx,
-             zhalResponseHandler handler)
+int zhalInit(const char *host, int port, zhalCallbacks *cbs, void *ctx, zhalResponseHandler handler)
 {
     icLogDebug(LOG_TAG, "zhalInit %s:%d", host, port);
 
@@ -220,16 +215,16 @@ int zhalTerm(void)
     // First take care of async requests
     pthread_mutex_lock(&asyncRequestsMutex);
     icHashMapIterator *iter = hashMapIteratorCreate(asyncRequests);
-    while(hashMapIteratorHasNext(iter) == true)
+    while (hashMapIteratorHasNext(iter) == true)
     {
         uint32_t *key;
         uint16_t keyLen;
         WorkItem *item;
-        hashMapIteratorGetNext(iter, (void**)&key, &keyLen, (void**)&item);
+        hashMapIteratorGetNext(iter, (void **) &key, &keyLen, (void **) &item);
 
         if (!linkedListAppend(pendingWorkItems, workItemAcquire(item)))
         {
-            //discard ref if list is null
+            // discard ref if list is null
             workItemRelease(item);
         }
     }
@@ -241,14 +236,14 @@ int zhalTerm(void)
     // Now anything in a device queue
     pthread_mutex_lock(&deviceQueuesMutex);
     icHashMapIterator *deviceQueuesIter = hashMapIteratorCreate(deviceQueues);
-    while(hashMapIteratorHasNext(deviceQueuesIter) == true)
+    while (hashMapIteratorHasNext(deviceQueuesIter) == true)
     {
         uint64_t *key;
         uint16_t keyLen;
         DeviceQueue *deviceQueue;
-        hashMapIteratorGetNext(deviceQueuesIter, (void**)&key, &keyLen, (void**)&deviceQueue);
+        hashMapIteratorGetNext(deviceQueuesIter, (void **) &key, &keyLen, (void **) &deviceQueue);
 
-        queueIterate(deviceQueue->queue, (queueIterateFunc)addQueueItemToPendingList, pendingWorkItems);
+        queueIterate(deviceQueue->queue, (queueIterateFunc) addQueueItemToPendingList, pendingWorkItems);
     }
     hashMapIteratorDestroy(deviceQueuesIter);
     hashMapDestroy(deviceQueues, deviceQueuesDestroy);
@@ -257,9 +252,9 @@ int zhalTerm(void)
 
     // Now signal all these work items to wake up callers so they can clean up
     icLinkedListIterator *pendingItemsIter = linkedListIteratorCreate(pendingWorkItems);
-    while(linkedListIteratorHasNext(pendingItemsIter) == true)
+    while (linkedListIteratorHasNext(pendingItemsIter) == true)
     {
-        WorkItem *item = (WorkItem *)linkedListIteratorGetNext(pendingItemsIter);
+        WorkItem *item = (WorkItem *) linkedListIteratorGetNext(pendingItemsIter);
         pthread_mutex_lock(&item->mtx);
         pthread_cond_signal(&item->cond);
         pthread_mutex_unlock(&item->mtx);
@@ -281,13 +276,13 @@ bool zhalIsInitialized(void)
     return result;
 }
 
-//get the next request id between 0-INT32_MAX
+// get the next request id between 0-INT32_MAX
 static uint32_t getNextRequestId(void)
 {
     uint32_t id;
     pthread_mutex_lock(&requestIdMutex);
     id = requestId++;
-    if (requestId > INT32_MAX) //We are using ints in cJSON so wrap as if signed
+    if (requestId > INT32_MAX) // We are using ints in cJSON so wrap as if signed
     {
         requestId = 0;
     }
@@ -295,14 +290,12 @@ static uint32_t getNextRequestId(void)
     return id;
 }
 
-static bool itemQueueCompareFunc(void *searchVal,
-                                 void *item)
+static bool itemQueueCompareFunc(void *searchVal, void *item)
 {
     return searchVal == item ? true : false;
 }
 
-static void queueDoNotFreeFunc(void *item)
-{}
+static void queueDoNotFreeFunc(void *item) {}
 
 static DeviceQueue *createDeviceQueue(void)
 {
@@ -338,8 +331,7 @@ static void deviceQueueRelease(void *deviceQueue)
     }
 }
 
-static void deviceQueuesDestroy(void *key,
-                                void *value)
+static void deviceQueuesDestroy(void *key, void *value)
 {
     DeviceQueue *deviceQueue = (DeviceQueue *) value;
     deviceQueueRelease(deviceQueue);
@@ -406,9 +398,7 @@ static void asyncRequestsFreeFunc(void *key, void *value)
  * This blocks until the full operation is complete or it times out
  * This function is not responsible for requestJson cleanup
  */
-cJSON *zhalSendRequest(uint64_t targetEui64,
-                       cJSON *requestJson,
-                       int timeoutSecs)
+cJSON *zhalSendRequest(uint64_t targetEui64, cJSON *requestJson, int timeoutSecs)
 {
     cJSON *result = NULL;
 
@@ -433,7 +423,8 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
         return NULL;
     }
 
-    scoped_DeviceQueue deviceQueue = deviceQueueAcquire((DeviceQueue *) hashMapGet(deviceQueues, &targetEui64, sizeof(uint64_t)));
+    scoped_DeviceQueue deviceQueue =
+        deviceQueueAcquire((DeviceQueue *) hashMapGet(deviceQueues, &targetEui64, sizeof(uint64_t)));
 
     if (deviceQueue == NULL)
     {
@@ -465,15 +456,15 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
         return NULL;
     }
 
-    //lock the item before the worker can get it so we wont miss its completion
+    // lock the item before the worker can get it so we wont miss its completion
     pthread_mutex_lock(&item->mtx);
 
-    //enqueue the work item
+    // enqueue the work item
     pthread_mutex_lock(&deviceQueue->mutex);
     queuePush(deviceQueue->queue, workItemAcquire(item));
     pthread_mutex_unlock(&deviceQueue->mutex);
 
-    //signal our worker that there is stuff to do
+    // signal our worker that there is stuff to do
     pthread_mutex_lock(&workerMutex);
     pthread_cond_signal(&workerCond);
     pthread_mutex_unlock(&workerMutex);
@@ -482,15 +473,13 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
     {
         icLogWarn(LOG_TAG, "requestId %" PRIu32 " timed out", item->requestId);
 
-        //remove from asyncRequests
+        // remove from asyncRequests
         pthread_mutex_lock(&asyncRequestsMutex);
-        bool didDeleteFromAsyncRequests = hashMapDelete(asyncRequests,
-                                                        &item->requestId,
-                                                        sizeof(item->requestId),
-                                                        asyncRequestsFreeFunc);
+        bool didDeleteFromAsyncRequests =
+            hashMapDelete(asyncRequests, &item->requestId, sizeof(item->requestId), asyncRequestsFreeFunc);
         pthread_mutex_unlock(&asyncRequestsMutex);
 
-        //lock the device queue and remove this item if its still there
+        // lock the device queue and remove this item if its still there
         pthread_mutex_lock(&deviceQueue->mutex);
         bool didDeleteFromQueue = queueDelete(deviceQueue->queue, item, itemQueueCompareFunc, workItemRelease);
 
@@ -518,7 +507,7 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
         }
         pthread_mutex_unlock(&deviceQueue->mutex);
 
-        //There may have been other requests queued up, so signal our worker that there might be stuff to do
+        // There may have been other requests queued up, so signal our worker that there might be stuff to do
         pthread_mutex_lock(&workerMutex);
         pthread_cond_signal(&workerCond);
         pthread_mutex_unlock(&workerMutex);
@@ -539,7 +528,10 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
             }
             else
             {
-                icLogWarn(LOG_TAG, "requestId %" PRIu32 " did not get the result code, setting default %d", item->requestId, code);
+                icLogWarn(LOG_TAG,
+                          "requestId %" PRIu32 " did not get the result code, setting default %d",
+                          item->requestId,
+                          code);
             }
 
             char *type = NULL;
@@ -553,7 +545,7 @@ cJSON *zhalSendRequest(uint64_t targetEui64,
         }
     }
 
-    //finally unlock the item and clean up
+    // finally unlock the item and clean up
     pthread_mutex_unlock(&item->mtx);
 
     workItemRelease(item);
@@ -573,7 +565,7 @@ ReceivedAttributeReport *cloneReceivedAttributeReport(ReceivedAttributeReport *r
         reportCopy = (ReceivedAttributeReport *) calloc(1, sizeof(ReceivedAttributeReport));
         memcpy(reportCopy, report, sizeof(ReceivedAttributeReport));
 
-        reportCopy->reportData = (uint8_t *) calloc(report->reportDataLen, 1);      // since sizeof(uint8_t) is 1
+        reportCopy->reportData = (uint8_t *) calloc(report->reportDataLen, 1); // since sizeof(uint8_t) is 1
         memcpy(reportCopy->reportData, report->reportData, report->reportDataLen);
     }
 
@@ -592,7 +584,7 @@ ReceivedClusterCommand *cloneReceivedClusterCommand(ReceivedClusterCommand *comm
         commandCopy = (ReceivedClusterCommand *) calloc(1, sizeof(ReceivedClusterCommand));
         memcpy(commandCopy, command, sizeof(ReceivedClusterCommand));
 
-        commandCopy->commandData = (uint8_t *) calloc(command->commandDataLen, 1);      // since sizeof(uint8_t) is 1
+        commandCopy->commandData = (uint8_t *) calloc(command->commandDataLen, 1); // since sizeof(uint8_t) is 1
         memcpy(commandCopy->commandData, command->commandData, command->commandDataLen);
     }
 
@@ -666,8 +658,7 @@ void freeOtaUpgradeEvent(OtaUpgradeEvent *otaEvent)
     }
 }
 
-bool zhalEndpointHasServerCluster(zhalEndpointInfo *endpointInfo,
-                                  uint16_t clusterId)
+bool zhalEndpointHasServerCluster(zhalEndpointInfo *endpointInfo, uint16_t clusterId)
 {
     bool result = false;
 
@@ -704,7 +695,7 @@ static int getAvailableWork(icQueue *availableWork)
         {
             pthread_mutex_lock(&dq->mutex);
 
-            //if a device queue is busy, dont schedule another item
+            // if a device queue is busy, dont schedule another item
             if (dq->isBusy == 0)
             {
                 WorkItem *item = (WorkItem *) queuePop(dq->queue);
@@ -869,8 +860,7 @@ static bool xmit(WorkItem *item)
     return false;
 }
 
-static bool workOnItem(WorkItem *item,
-                       void *arg)
+static bool workOnItem(WorkItem *item, void *arg)
 {
     pthread_mutex_lock(&item->mtx);
 
@@ -887,29 +877,27 @@ static bool workOnItem(WorkItem *item,
     icLogDebug(LOG_TAG, "Worker processing JSON: %s", json);
     free(json);
 
-    //put in asyncRequests
+    // put in asyncRequests
     pthread_mutex_lock(&asyncRequestsMutex);
     if (!hashMapPut(asyncRequests, &item->requestId, sizeof(item->requestId), workItemAcquire(item)))
     {
-        //discard previously acquired ref is asyncRequests is null
+        // discard previously acquired ref is asyncRequests is null
         workItemRelease(item);
     }
     pthread_mutex_unlock(&asyncRequestsMutex);
 
-    //set device queue busy
+    // set device queue busy
     pthread_mutex_lock(&item->deviceQueue->mutex);
     if (item->deviceQueue->isBusy > 0)
     {
-        icLogError(LOG_TAG,
-                   "device queue for %016" PRIx64 " is already busy (%d)!",
-                   item->eui64,
-                   item->deviceQueue->isBusy);
+        icLogError(
+            LOG_TAG, "device queue for %016" PRIx64 " is already busy (%d)!", item->eui64, item->deviceQueue->isBusy);
     }
     item->deviceQueue->isBusy++;
     pthread_mutex_unlock(&item->deviceQueue->mutex);
 
-    //send to ZigbeeCore and wait for immediate/synchronous response
-    // if successful, our async receiver will find and complete it via asyncRequests hash map
+    // send to ZigbeeCore and wait for immediate/synchronous response
+    //  if successful, our async receiver will find and complete it via asyncRequests hash map
     if (xmit(item) == true)
     {
         pthread_mutex_unlock(&item->mtx);
@@ -918,15 +906,13 @@ static bool workOnItem(WorkItem *item,
     {
         icLogWarn(LOG_TAG, "xmit failed... aborting work item %" PRIu32, item->requestId);
 
-        //remove from asyncRequests
+        // remove from asyncRequests
         pthread_mutex_lock(&asyncRequestsMutex);
-        bool didDeleteFromAsyncRequests = hashMapDelete(asyncRequests,
-                                                        &item->requestId,
-                                                        sizeof(item->requestId),
-                                                        asyncRequestsFreeFunc);
+        bool didDeleteFromAsyncRequests =
+            hashMapDelete(asyncRequests, &item->requestId, sizeof(item->requestId), asyncRequestsFreeFunc);
         pthread_mutex_unlock(&asyncRequestsMutex);
 
-        //clear busy for this device queue
+        // clear busy for this device queue
         pthread_mutex_lock(&item->deviceQueue->mutex);
 
         if (didDeleteFromAsyncRequests == true && item->deviceQueue->isBusy > 0)
@@ -943,7 +929,7 @@ static bool workOnItem(WorkItem *item,
 
         pthread_mutex_unlock(&item->deviceQueue->mutex);
 
-        //since it failed, unlock the item here
+        // since it failed, unlock the item here
         pthread_cond_signal(&item->cond);
         pthread_mutex_unlock(&item->mtx);
     }
@@ -957,7 +943,7 @@ static void *workerThreadProc(void *arg)
 
     while (shouldWorkerContinue())
     {
-        //wait to be woken up
+        // wait to be woken up
         pthread_mutex_lock(&workerMutex);
         while (!getAvailableWork(availableWork))
         {
@@ -973,10 +959,10 @@ static void *workerThreadProc(void *arg)
         }
         pthread_mutex_unlock(&workerMutex);
 
-        //Process any items that were ready
+        // Process any items that were ready
         queueIterate(availableWork, (queueIterateFunc) workOnItem, NULL);
 
-        //All items have been processed... clear the queue
+        // All items have been processed... clear the queue
         queueClear(availableWork, workItemRelease);
     }
 
@@ -1041,15 +1027,12 @@ static int handleIpcResponse(cJSON *response)
         pthread_mutex_lock(&asyncRequestsMutex);
         uint32_t rid = requestIdJson->valueint;
         scoped_WorkItem item = workItemAcquire(hashMapGet(asyncRequests, &rid, sizeof(rid)));
-        bool didDeleteFromAsyncRequests = hashMapDelete(asyncRequests,
-                                                        &rid,
-                                                        sizeof(rid),
-                                                        asyncRequestsFreeFunc);
+        bool didDeleteFromAsyncRequests = hashMapDelete(asyncRequests, &rid, sizeof(rid), asyncRequestsFreeFunc);
         pthread_mutex_unlock(&asyncRequestsMutex);
 
         if (item != NULL)
         {
-            //clear busy for this device queue
+            // clear busy for this device queue
             pthread_mutex_lock(&item->deviceQueue->mutex);
 
             if (didDeleteFromAsyncRequests == true && item->deviceQueue->isBusy > 0)
@@ -1075,10 +1058,10 @@ static int handleIpcResponse(cJSON *response)
             icLogDebug(LOG_TAG, "handleIpcResponse did not find %d", requestIdJson->valueint);
         }
 
-        result = 1; //we handled it
+        result = 1; // we handled it
     }
 
-    //this might have freed up a device queue, let the worker thread take another look.
+    // this might have freed up a device queue, let the worker thread take another look.
     pthread_mutex_lock(&workerMutex);
     pthread_cond_signal(&workerCond);
     pthread_mutex_unlock(&workerMutex);
@@ -1090,9 +1073,8 @@ static bool addQueueItemToPendingList(WorkItem *item, icLinkedList *pendingItems
 {
     if (!linkedListAppend(pendingItems, workItemAcquire(item)))
     {
-        //discard ref is append fails
+        // discard ref is append fails
         workItemRelease(item);
     }
     return true; // continue to iterate
 }
-

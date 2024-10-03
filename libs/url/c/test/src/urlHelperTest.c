@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2011. iControl Networks
 //
 // All rights reserved.
@@ -25,21 +25,21 @@
 // Created by Christian Leithner on 3/7/19.
 //
 
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
 #include <string.h>
 
-#include <icLog/logging.h>
-#include <urlHelper/urlHelper.h>
-#include <propsMgr/paths.h>
-#include <commMgr/commService_pojo.h>
 #include <commMgr/commService_ipc.h>
+#include <commMgr/commService_pojo.h>
+#include <icLog/logging.h>
 #include <icSystem/runtimeAttributes.h>
 #include <icTypes/icStringBuffer.h>
+#include <propsMgr/paths.h>
+#include <urlHelper/urlHelper.h>
 
-#define TEST_LOG_TAG "urlHelperTest"
+#define TEST_LOG_TAG    "urlHelperTest"
 
 #define DEFAULT_TIMEOUT 10
 
@@ -58,15 +58,15 @@ static void test_urlHelperExecuteMultipartRequestHeaders(void **state)
     char *password = NULL;
     uint32_t timeoutSecs = DEFAULT_TIMEOUT;
     sslVerify verifyFlag = getSslVerifyProperty(SSL_VERIFY_HTTP_FOR_SERVER);
-    //For testing ca certificates
-    //sslVerify verifyFlag = SSL_VERIFY_BOTH;
+    // For testing ca certificates
+    // sslVerify verifyFlag = SSL_VERIFY_BOTH;
     bool allowCellular = false;
     char *result = NULL;
 
-    //Simple test for multipart http post. Values are largely improvised
+    // Simple test for multipart http post. Values are largely improvised
 
-    //Request some basic values from comm. The rmaBackupConfig struct isn't really made for this, but it conveniently
-    // has all the information we need from comm
+    // Request some basic values from comm. The rmaBackupConfig struct isn't really made for this, but it conveniently
+    //  has all the information we need from comm
     rmaBackupConfig *backupConfig = create_rmaBackupConfig();
     commService_request_GET_RMA_BACKUP_INFO(true, backupConfig);
 
@@ -75,12 +75,12 @@ static void test_urlHelperExecuteMultipartRequestHeaders(void **state)
     password = backupConfig->password;
 
     int len = snprintf(NULL, 0, "%lu", backupConfig->premiseId);
-    char *premiseId = malloc(len+1);
-    snprintf(premiseId, len+1, "%lu", backupConfig->premiseId);
+    char *premiseId = malloc(len + 1);
+    snprintf(premiseId, len + 1, "%lu", backupConfig->premiseId);
     char *cpeId = (char *) getSystemCpeId();
 
-    //Construct our parts (just fake parts, tester should step through and inspect if they want to verify the multipart
-    // body is constructed correctly
+    // Construct our parts (just fake parts, tester should step through and inspect if they want to verify the multipart
+    //  body is constructed correctly
     plainParts = linkedListCreate();
     MimePartInfo *partInfo = createMimePartInfo();
     partInfo->partName = strdup("cpeId");
@@ -98,22 +98,22 @@ static void test_urlHelperExecuteMultipartRequestHeaders(void **state)
     partInfo->dataLength = strlen(partInfo->partData);
     linkedListAppend(plainParts, partInfo);
 
-    //Use macAddress as a dummy file to use as a file part.
+    // Use macAddress as a dummy file to use as a file part.
     fileParts = linkedListCreate();
     MimeFileInfo *macFileInfo = createMimeFileInfo();
 
     char *dynamicConfigPath = getDynamicConfigPath();
     char *macAddrFilename = "/macAddress";
     len = strlen(dynamicConfigPath) + strlen(macAddrFilename);
-    char *pathToMacFile = malloc(len+1);
-    snprintf(pathToMacFile, len+1, "%s%s",dynamicConfigPath, macAddrFilename);
+    char *pathToMacFile = malloc(len + 1);
+    snprintf(pathToMacFile, len + 1, "%s%s", dynamicConfigPath, macAddrFilename);
     macFileInfo->partName = strdup("MacAddressFile");
     macFileInfo->localFilePath = pathToMacFile;
     macFileInfo->remoteFileName = strdup("fakeFile");
     macFileInfo->contentType = strdup("text/plain");
     linkedListAppend(fileParts, macFileInfo);
 
-    //Execute the request
+    // Execute the request
     result = urlHelperExecuteMultipartRequestHeaders(url,
                                                      &httpCode,
                                                      plainParts,
@@ -125,11 +125,11 @@ static void test_urlHelperExecuteMultipartRequestHeaders(void **state)
                                                      verifyFlag,
                                                      allowCellular);
 
-    //Check response
+    // Check response
     assert_int_not_equal(httpCode, -1);
     assert_non_null(result);
 
-    //cleanup
+    // cleanup
     destroy_rmaBackupConfig(backupConfig);
     linkedListDestroy(plainParts, (linkedListItemFreeFunc) destroyMimePartInfo);
     linkedListDestroy(fileParts, (linkedListItemFreeFunc) destroyMimeFileInfo);
@@ -180,11 +180,8 @@ static void test_urlHelperCreateQueryString(void **state)
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_urlHelperExecuteMultipartRequestHeaders),
-                    cmocka_unit_test(test_urlHelperCreateQueryString)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_urlHelperExecuteMultipartRequestHeaders),
+                                       cmocka_unit_test(test_urlHelperCreateQueryString)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

@@ -46,12 +46,13 @@ extern "C" {
  * caller must free "out" on success
  *
  * @param *str Encrypt Base64 string, terminated with '\0'
- * @param **out pointer to decrypt buffer, terminated with '\0' (*out[*len], won't affect content) malloc() during decryption
+ * @param **out pointer to decrypt buffer, terminated with '\0' (*out[*len], won't affect content) malloc() during
+ * decryption
  * @param *len length of out, set to 0 if failed
  *
  * @return SUCCESS or FAILURE
  */
-bool decryptConfigString(const char *str, unsigned char **out, size_t * len);
+bool decryptConfigString(const char *str, unsigned char **out, size_t *len);
 
 /*check if the compiler is of C++ */
 #ifdef __cplusplus

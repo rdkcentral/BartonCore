@@ -52,7 +52,7 @@ void storageSetConfigPath(const char *configPath);
  * @param value
  * @return true on success
  */
-bool storageSave(const char* ns, const char* key, const char* value);
+bool storageSave(const char *ns, const char *key, const char *value);
 
 /**
  * Load a value for a key under a namespace.
@@ -62,7 +62,7 @@ bool storageSave(const char* ns, const char* key, const char* value);
  * @param value the retrieved value, if any.  Caller frees.
  * @return true on success
  */
-bool storageLoad(const char* ns, const char* key, char** value);
+bool storageLoad(const char *ns, const char *key, char **value);
 
 /**
  * Try to load valid XML from storage.
@@ -123,7 +123,7 @@ bool storageParseBad(const char *ns, const char *key, const StorageCallbacks *cb
  * @param key
  * @return true on success
  */
-bool storageDelete(const char* ns, const char* key);
+bool storageDelete(const char *ns, const char *key);
 
 /**
  * Delete a namespace and all of the keys stored within it.
@@ -133,23 +133,22 @@ bool storageDelete(const char* ns, const char* key);
  * @param ns
  * @return true on success
  */
-bool storageDeleteNamespace(const char* ns);
+bool storageDeleteNamespace(const char *ns);
 
 typedef enum StorageRestoreErrorCode
 {
-    STORAGE_RESTORE_ERROR_NONE,                     // Restore succeeded
-    STORAGE_RESTORE_ERROR_NEW_DIR_MISSING,          // The configuration directory to restore to does not exist
-    STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE,        // The current configuration directory could not be deleted
-    STORAGE_RESTORE_ERROR_FAILED_COPY               // The new configuration could not be copied to the current configuration directory
+    STORAGE_RESTORE_ERROR_NONE,              // Restore succeeded
+    STORAGE_RESTORE_ERROR_NEW_DIR_MISSING,   // The configuration directory to restore to does not exist
+    STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE, // The current configuration directory could not be deleted
+    STORAGE_RESTORE_ERROR_FAILED_COPY        // The new configuration could not be copied to the current configuration
+                                             // directory
 } StorageRestoreErrorCode;
 
 
-static const char * const StorageRestoreErrorLabels[] = {
-        "STORAGE_RESTORE_ERROR_NONE",
-        "STORAGE_RESTORE_ERROR_NEW_DIR_MISSING",
-        "STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE",
-        "STORAGE_RESTORE_ERROR_FAILED_COPY"
-};
+static const char *const StorageRestoreErrorLabels[] = {"STORAGE_RESTORE_ERROR_NONE",
+                                                        "STORAGE_RESTORE_ERROR_NEW_DIR_MISSING",
+                                                        "STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE",
+                                                        "STORAGE_RESTORE_ERROR_FAILED_COPY"};
 
 const char *storageRestoreErrorDescribe(StorageRestoreErrorCode code);
 
@@ -165,9 +164,10 @@ const char *storageRestoreErrorDescribe(StorageRestoreErrorCode code);
  * @return STORAGE_RESTORE_ERROR_NONE on success
  *         STORAGE_RESTORE_ERROR_NEW_DIR_MISSING if the configuration directory to restore to does not exist
  *         STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE if the current configuration directory could not be deleted
- *         STORAGE_RESTORE_ERROR_FAILED_COPY if the new configuration could not be copied to the current configuration directory
+ *         STORAGE_RESTORE_ERROR_FAILED_COPY if the new configuration could not be copied to the current configuration
+ * directory
  */
-StorageRestoreErrorCode storageRestoreNamespace(const char* ns, const char* basePath);
+StorageRestoreErrorCode storageRestoreNamespace(const char *ns, const char *basePath);
 
 /**
  * Checks for the existance of a file in this namespace and this key
@@ -176,7 +176,7 @@ StorageRestoreErrorCode storageRestoreNamespace(const char* ns, const char* base
  * @param key
  * @return the if the key is the ORIGINAL_FILE, BACKUP_FILE, or missing
  */
-fileToRead storageHasKey(const char* ns, const char *key);
+fileToRead storageHasKey(const char *ns, const char *key);
 
 /**
  * Retrieve a list of all the keys under a namespace.
@@ -184,7 +184,7 @@ fileToRead storageHasKey(const char* ns, const char *key);
  * @param ns
  * @return the list of keys or NULL on failure
  */
-icLinkedList* storageGetKeys(const char* ns);
+icLinkedList *storageGetKeys(const char *ns);
 
 /**
  * Retrieve the name of the storage directory within the dynamic config directory
@@ -202,4 +202,4 @@ const char *getStorageDir(void);
  */
 bool storageGetMtime(const char *ns, const char *key, struct timespec *mtime);
 
-#endif //ZILKER_STORAGE_H
+#endif // ZILKER_STORAGE_H

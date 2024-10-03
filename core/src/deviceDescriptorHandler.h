@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -69,4 +69,4 @@ void deviceDescriptorsUpdateAllowlist(const char *allowlistUrl);
  */
 void deviceDescriptorsUpdateDenylist(const char *denylistUrl);
 
-#endif //FLEXCORE_DEVICEDESCRIPTORHANDLER_H
+#endif // FLEXCORE_DEVICEDESCRIPTORHANDLER_H

@@ -22,16 +22,17 @@
 #include "access/AccessControl.h"
 #include <lib/core/CHIPPersistentStorageDelegate.h>
 
-namespace zilker {
+namespace zilker
+{
 
-/**
- * @brief Get a global instance of the access control delegate implemented in this module.
- *
- * NOTE: This function should be followed by an ::Init() method call. This function does
- *       not manage lifecycle considerations.
- *
- * @return a pointer to the AccessControl::Delegate singleton.
- */
-chip::Access::AccessControl::Delegate *GetAccessControlDelegate();
+    /**
+     * @brief Get a global instance of the access control delegate implemented in this module.
+     *
+     * NOTE: This function should be followed by an ::Init() method call. This function does
+     *       not manage lifecycle considerations.
+     *
+     * @return a pointer to the AccessControl::Delegate singleton.
+     */
+    chip::Access::AccessControl::Delegate *GetAccessControlDelegate();
 
 } // namespace zilker

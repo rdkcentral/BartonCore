@@ -57,26 +57,26 @@ b_device_service_endpoint_set_property(GObject *object, guint property_id, const
     switch (property_id)
     {
         case B_DEVICE_SERVICE_ENDPOINT_PROP_ID:
-            g_free (self->id);
-            self->id = g_value_dup_string (value);
+            g_free(self->id);
+            self->id = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_URI:
-            g_free (self->uri);
-            self->uri = g_value_dup_string (value);
+            g_free(self->uri);
+            self->uri = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE:
-            g_free (self->profile);
-            self->profile = g_value_dup_string (value);
+            g_free(self->profile);
+            self->profile = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION:
-            self->profileVersion = g_value_get_uint (value);
+            self->profileVersion = g_value_get_uint(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID:
-            g_free (self->deviceUuid);
-            self->deviceUuid = g_value_dup_string (value);
+            g_free(self->deviceUuid);
+            self->deviceUuid = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_ENABLED:
-            self->enabled = g_value_get_boolean (value);
+            self->enabled = g_value_get_boolean(value);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES:
             g_list_free_full(self->resources, g_object_unref);
@@ -87,7 +87,7 @@ b_device_service_endpoint_set_property(GObject *object, guint property_id, const
             self->metadata = g_list_copy_deep(g_value_get_pointer(value), glistGobjectDataDeepCopy, NULL);
             break;
         default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
             break;
     }
 }
@@ -99,22 +99,22 @@ static void b_device_service_endpoint_get_property(GObject *object, guint proper
     switch (property_id)
     {
         case B_DEVICE_SERVICE_ENDPOINT_PROP_ID:
-            g_value_set_string (value, self->id);
+            g_value_set_string(value, self->id);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_URI:
-            g_value_set_string (value, self->uri);
+            g_value_set_string(value, self->uri);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE:
-            g_value_set_string (value, self->profile);
+            g_value_set_string(value, self->profile);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION:
-            g_value_set_uint (value, self->profileVersion);
+            g_value_set_uint(value, self->profileVersion);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID:
-            g_value_set_string (value, self->deviceUuid);
+            g_value_set_string(value, self->deviceUuid);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_ENABLED:
-            g_value_set_boolean (value, self->enabled);
+            g_value_set_boolean(value, self->enabled);
             break;
         case B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES:
             g_value_set_pointer(value, g_list_copy_deep(self->resources, glistGobjectDataDeepCopy, NULL));
@@ -123,7 +123,7 @@ static void b_device_service_endpoint_get_property(GObject *object, guint proper
             g_value_set_pointer(value, g_list_copy_deep(self->metadata, glistGobjectDataDeepCopy, NULL));
             break;
         default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
             break;
     }
 }
@@ -144,7 +144,7 @@ static void b_device_service_endpoint_finalize(GObject *object)
 
 static void b_device_service_endpoint_class_init(BDeviceServiceEndpointClass *klass)
 {
-    GObjectClass *object_class = G_OBJECT_CLASS (klass);
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
     object_class->set_property = b_device_service_endpoint_set_property;
     object_class->get_property = b_device_service_endpoint_get_property;

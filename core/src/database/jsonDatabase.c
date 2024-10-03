@@ -24,9 +24,9 @@
  * Created by Micah Koch on 5/4/18.
  */
 
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
@@ -44,8 +44,8 @@
 #include <jsonHelper/jsonHelper.h>
 #include <regex.h>
 
-#define LOG_TAG "jsonDeviceDatabase"
-#define STORAGE_NAMESPACE "devicedb"
+#define LOG_TAG               "jsonDeviceDatabase"
+#define STORAGE_NAMESPACE     "devicedb"
 #define SYSTEM_PROPERTIES_KEY "systemProperties"
 
 // We keep per device files, and keep an in memory cache of all devices
@@ -93,7 +93,8 @@ typedef struct
 typedef struct
 {
     LocatorType locatorType;
-    union {
+    union
+    {
         DeviceCacheEntry *deviceCacheEntry;
         EndpointLocator endpointLocator;
         ResourceLocator resourceLocator;
@@ -142,7 +143,7 @@ static void replaceEndpointResources(EndpointLocator *dst, icDeviceEndpoint *src
  */
 static DeviceCacheEntry *createCacheEntry(icDevice *device)
 {
-    DeviceCacheEntry *entry = (DeviceCacheEntry *)calloc(1, sizeof(DeviceCacheEntry));
+    DeviceCacheEntry *entry = (DeviceCacheEntry *) calloc(1, sizeof(DeviceCacheEntry));
     entry->device = device;
     entry->dirty = false;
 
@@ -175,14 +176,14 @@ static cJSON *stringHashMapToJson(icStringHashMap *hashMap)
 {
     cJSON *body = cJSON_CreateObject();
     icStringHashMapIterator *iter = stringHashMapIteratorCreate(hashMap);
-    while(stringHashMapIteratorHasNext(iter))
+    while (stringHashMapIteratorHasNext(iter))
     {
         char *key;
         char *value;
         stringHashMapIteratorGetNext(iter, &key, &value);
         cJSON_AddStringToObject(body, key, value);
-     }
-     stringHashMapIteratorDestroy(iter);
+    }
+    stringHashMapIteratorDestroy(iter);
 
     return body;
 }
@@ -195,7 +196,7 @@ static cJSON *stringHashMapToJson(icStringHashMap *hashMap)
 static void destroyLocator(void *key, void *value)
 {
     // Only the locator struct itself is owned, so free only it
-    (void)key;
+    (void) key;
     free(value);
 }
 
@@ -240,18 +241,18 @@ static void removeEndpointURIEntries(const icDeviceEndpoint *endpoint)
         hashMapDelete(resourcesByUri, endpoint->uri, strlen(endpoint->uri) + 1, destroyLocator);
         // Remove all resource URI entries
         icLinkedListIterator *iter = linkedListIteratorCreate(endpoint->resources);
-        while(linkedListIteratorHasNext(iter))
+        while (linkedListIteratorHasNext(iter))
         {
-            icDeviceResource *resource = (icDeviceResource *)linkedListIteratorGetNext(iter);
+            icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(iter);
             removeDeviceResourceURIEntry(resource);
         }
         linkedListIteratorDestroy(iter);
 
         // Remove all metadata URI entries
         icLinkedListIterator *metadataIter = linkedListIteratorCreate(endpoint->metadata);
-        while(linkedListIteratorHasNext(metadataIter))
+        while (linkedListIteratorHasNext(metadataIter))
         {
-            icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListIteratorGetNext(metadataIter);
+            icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(metadataIter);
             removeMetadataURIEntry(metadata);
         }
         linkedListIteratorDestroy(metadataIter);
@@ -270,27 +271,27 @@ static void removeDeviceURIEntries(const icDevice *device)
         hashMapDelete(resourcesByUri, device->uri, strlen(device->uri) + 1, destroyLocator);
         // Remove all endpoint URI entries
         icLinkedListIterator *iter = linkedListIteratorCreate(device->endpoints);
-        while(linkedListIteratorHasNext(iter))
+        while (linkedListIteratorHasNext(iter))
         {
-            icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListIteratorGetNext(iter);
+            icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iter);
             removeEndpointURIEntries(endpoint);
         }
         linkedListIteratorDestroy(iter);
 
         // Remove all resource URI entries
         icLinkedListIterator *resourcesIter = linkedListIteratorCreate(device->resources);
-        while(linkedListIteratorHasNext(resourcesIter))
+        while (linkedListIteratorHasNext(resourcesIter))
         {
-            icDeviceResource *resource = (icDeviceResource *)linkedListIteratorGetNext(resourcesIter);
+            icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(resourcesIter);
             removeDeviceResourceURIEntry(resource);
         }
         linkedListIteratorDestroy(resourcesIter);
 
         // Remove all metadata URI entries
         icLinkedListIterator *metadatasIter = linkedListIteratorCreate(device->metadata);
-        while(linkedListIteratorHasNext(metadatasIter))
+        while (linkedListIteratorHasNext(metadatasIter))
         {
-            icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListIteratorGetNext(metadatasIter);
+            icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(metadatasIter);
             removeMetadataURIEntry(metadata);
         }
         linkedListIteratorDestroy(metadatasIter);
@@ -305,19 +306,21 @@ static void removeDeviceURIEntries(const icDevice *device)
  * @param deviceMetadata the metadata
  * @return true on success, failure otherwise
  */
-static bool addDeviceMetadataURIEntry(DeviceCacheEntry *deviceCacheEntry, icDeviceEndpoint *endpoint, icDeviceMetadata *deviceMetadata)
+static bool addDeviceMetadataURIEntry(DeviceCacheEntry *deviceCacheEntry,
+                                      icDeviceEndpoint *endpoint,
+                                      icDeviceMetadata *deviceMetadata)
 {
     bool retval = true;
-    if (deviceMetadata != NULL &&
-        deviceMetadata->uri != NULL &&
-        metadataUriIsValid(deviceMetadata->uri, deviceMetadata->deviceUuid, deviceMetadata->endpointId, deviceMetadata->id) == true)
+    if (deviceMetadata != NULL && deviceMetadata->uri != NULL &&
+        metadataUriIsValid(
+            deviceMetadata->uri, deviceMetadata->deviceUuid, deviceMetadata->endpointId, deviceMetadata->id) == true)
     {
         Locator *locator = (Locator *) calloc(1, sizeof(Locator));
         locator->locatorType = LOCATOR_TYPE_METADATA;
         locator->locator.metadataLocator.deviceCacheEntry = deviceCacheEntry;
         locator->locator.metadataLocator.endpoint = endpoint;
         locator->locator.metadataLocator.metadata = deviceMetadata;
-        if (hashMapPut(resourcesByUri, deviceMetadata->uri, strlen(deviceMetadata->uri)+1, locator) == false)
+        if (hashMapPut(resourcesByUri, deviceMetadata->uri, strlen(deviceMetadata->uri) + 1, locator) == false)
         {
             icLogError(LOG_TAG, "Failed to add metadata locator with uri %s", deviceMetadata->uri);
             free(locator);
@@ -341,12 +344,14 @@ static bool addDeviceMetadataURIEntry(DeviceCacheEntry *deviceCacheEntry, icDevi
  * @param deviceResource the resource
  * @return true on success, failure otherwise
  */
-static bool addDeviceResourceURIEntry(DeviceCacheEntry *deviceCacheEntry, icDeviceEndpoint *endpoint, icDeviceResource *deviceResource)
+static bool addDeviceResourceURIEntry(DeviceCacheEntry *deviceCacheEntry,
+                                      icDeviceEndpoint *endpoint,
+                                      icDeviceResource *deviceResource)
 {
     bool retval = true;
-    if (deviceResource != NULL &&
-        deviceResource->uri != NULL &&
-        resourceUriIsValid(deviceResource->uri, deviceResource->deviceUuid, deviceResource->endpointId, deviceResource->id) == true)
+    if (deviceResource != NULL && deviceResource->uri != NULL &&
+        resourceUriIsValid(
+            deviceResource->uri, deviceResource->deviceUuid, deviceResource->endpointId, deviceResource->id) == true)
     {
         Locator *locator = (Locator *) calloc(1, sizeof(Locator));
         locator->locatorType = LOCATOR_TYPE_RESOURCE;
@@ -362,7 +367,8 @@ static bool addDeviceResourceURIEntry(DeviceCacheEntry *deviceCacheEntry, icDevi
     }
     else
     {
-        icLogError(LOG_TAG, "Cannot add NULL device resource or device resource with an invalid URI '%s'",
+        icLogError(LOG_TAG,
+                   "Cannot add NULL device resource or device resource with an invalid URI '%s'",
                    stringCoalesce(deviceResource != NULL ? deviceResource->uri : NULL));
         retval = false;
     }
@@ -380,8 +386,7 @@ static bool addDeviceResourceURIEntry(DeviceCacheEntry *deviceCacheEntry, icDevi
 static bool addEndpointURIEntries(DeviceCacheEntry *deviceCacheEntry, icDeviceEndpoint *endpoint)
 {
     bool retval = true;
-    if (endpoint != NULL &&
-        endpoint->uri != NULL &&
+    if (endpoint != NULL && endpoint->uri != NULL &&
         endpointUriIsValid(endpoint->uri, endpoint->deviceUuid, endpoint->id) == true)
     {
         Locator *locator = (Locator *) calloc(1, sizeof(Locator));
@@ -393,8 +398,8 @@ static bool addEndpointURIEntries(DeviceCacheEntry *deviceCacheEntry, icDeviceEn
             icLinkedListIterator *endpointResourcesIter = linkedListIteratorCreate(endpoint->resources);
             while (linkedListIteratorHasNext(endpointResourcesIter))
             {
-                icDeviceResource *endpointResource = (icDeviceResource *) linkedListIteratorGetNext(
-                        endpointResourcesIter);
+                icDeviceResource *endpointResource =
+                    (icDeviceResource *) linkedListIteratorGetNext(endpointResourcesIter);
                 if (!addDeviceResourceURIEntry(deviceCacheEntry, endpoint, endpointResource))
                 {
                     retval = false;
@@ -417,7 +422,6 @@ static bool addEndpointURIEntries(DeviceCacheEntry *deviceCacheEntry, icDeviceEn
                 }
                 linkedListIteratorDestroy(metdataIter);
             }
-
         }
         else
         {
@@ -428,7 +432,8 @@ static bool addEndpointURIEntries(DeviceCacheEntry *deviceCacheEntry, icDeviceEn
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to add NULL endpoint or endpoint with an invalid URI '%s'",
+        icLogError(LOG_TAG,
+                   "Failed to add NULL endpoint or endpoint with an invalid URI '%s'",
                    stringCoalesce(endpoint != NULL ? endpoint->uri : NULL));
         retval = false;
     }
@@ -446,15 +451,14 @@ static bool addEndpointURIEntries(DeviceCacheEntry *deviceCacheEntry, icDeviceEn
 static bool addDeviceURIEntries(DeviceCacheEntry *deviceCacheEntry)
 {
     bool retval = true;
-    if (deviceCacheEntry != NULL &&
-        deviceCacheEntry->device != NULL &&
-        deviceCacheEntry->device->uri != NULL &&
+    if (deviceCacheEntry != NULL && deviceCacheEntry->device != NULL && deviceCacheEntry->device->uri != NULL &&
         deviceUriIsValid(deviceCacheEntry->device->uri, deviceCacheEntry->device->uuid) == true)
     {
         Locator *locator = (Locator *) calloc(1, sizeof(Locator));
         locator->locatorType = LOCATOR_TYPE_DEVICE;
         locator->locator.deviceCacheEntry = deviceCacheEntry;
-        if (hashMapPut(resourcesByUri, deviceCacheEntry->device->uri, strlen(deviceCacheEntry->device->uri) + 1, locator))
+        if (hashMapPut(
+                resourcesByUri, deviceCacheEntry->device->uri, strlen(deviceCacheEntry->device->uri) + 1, locator))
         {
             icLinkedListIterator *iter = linkedListIteratorCreate(deviceCacheEntry->device->endpoints);
             while (linkedListIteratorHasNext(iter))
@@ -465,7 +469,6 @@ static bool addDeviceURIEntries(DeviceCacheEntry *deviceCacheEntry)
                     retval = false;
                     break;
                 }
-
             }
             linkedListIteratorDestroy(iter);
 
@@ -508,8 +511,11 @@ static bool addDeviceURIEntries(DeviceCacheEntry *deviceCacheEntry)
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to add device locator for NULL device or device with invalid URI '%s'",
-                   stringCoalesce(deviceCacheEntry != NULL && deviceCacheEntry->device != NULL ? deviceCacheEntry->device->uri : NULL));
+        icLogError(LOG_TAG,
+                   "Failed to add device locator for NULL device or device with invalid URI '%s'",
+                   stringCoalesce(deviceCacheEntry != NULL && deviceCacheEntry->device != NULL
+                                      ? deviceCacheEntry->device->uri
+                                      : NULL));
         retval = false;
     }
 
@@ -520,7 +526,6 @@ static bool addDeviceURIEntries(DeviceCacheEntry *deviceCacheEntry)
     }
 
     return retval;
-
 }
 
 /**
@@ -655,23 +660,15 @@ static bool loadDevices()
     icLinkedList *keys = storageGetKeys(STORAGE_NAMESPACE);
     icLinkedListIterator *iter = linkedListIteratorCreate(keys);
 
-    const StorageCallbacks strictDeviceCallback = {
-            .parse = loadDevice,
-            .parserCtx = NULL
-    };
+    const StorageCallbacks strictDeviceCallback = {.parse = loadDevice, .parserCtx = NULL};
 
-    struct LoaderContext permissiveCtx = {
-            .permissive = true
-    };
+    struct LoaderContext permissiveCtx = {.permissive = true};
 
-    const StorageCallbacks permissiveDeviceCallback = {
-            .parse = loadDevice,
-            .parserCtx = &permissiveCtx
-    };
+    const StorageCallbacks permissiveDeviceCallback = {.parse = loadDevice, .parserCtx = &permissiveCtx};
 
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        char *key = (char *)linkedListIteratorGetNext(iter);
+        char *key = (char *) linkedListIteratorGetNext(iter);
         if (key != NULL && strcmp(key, SYSTEM_PROPERTIES_KEY) != 0)
         {
             if (storageParse(STORAGE_NAMESPACE, key, &strictDeviceCallback) == false)
@@ -769,7 +766,7 @@ static bool jsonDatabaseInitializeNoLock()
             // Intialize empty database
             devices = hashMapCreate();
             resourcesByUri = hashMapCreate();
-            jsonDatabaseSetSystemPropertyNoLock(JSON_DATABASE_SCHEMA_VERSION_KEY,JSON_DATABASE_CURRENT_SCHEMA_VERSION);
+            jsonDatabaseSetSystemPropertyNoLock(JSON_DATABASE_SCHEMA_VERSION_KEY, JSON_DATABASE_CURRENT_SCHEMA_VERSION);
             retval = true;
         }
         initialized = true;
@@ -791,8 +788,8 @@ static bool jsonDatabaseInitializeNoLock()
 static void freeDevicesItem(void *key, void *value)
 {
     // The key is the device uuid stored within the actual device, so no need to free
-    (void)key;
-    destroyCacheEntry((DeviceCacheEntry *)value);
+    (void) key;
+    destroyCacheEntry((DeviceCacheEntry *) value);
 }
 
 /**
@@ -812,12 +809,12 @@ static void jsonDatabaseCleanupNoLock(bool persist)
     systemProperties = NULL;
     // Flush devices to disk
     icHashMapIterator *iter = hashMapIteratorCreate(devices);
-    while(hashMapIteratorHasNext(iter))
+    while (hashMapIteratorHasNext(iter))
     {
         char *deviceUuid;
         uint16_t keyLen;
         DeviceCacheEntry *deviceCacheEntry;
-        hashMapIteratorGetNext(iter, (void**)&deviceUuid, &keyLen, (void**)&deviceCacheEntry);
+        hashMapIteratorGetNext(iter, (void **) &deviceUuid, &keyLen, (void **) &deviceCacheEntry);
 
         if (persist)
         {
@@ -877,7 +874,7 @@ bool jsonDatabaseReload(void)
     return retval;
 }
 
-bool jsonDatabaseRestore(const char* tempRestoreDir)
+bool jsonDatabaseRestore(const char *tempRestoreDir)
 {
     bool retval = false;
 
@@ -885,7 +882,7 @@ bool jsonDatabaseRestore(const char* tempRestoreDir)
 
     if (initialized)
     {
-         jsonDatabaseCleanupNoLock(false);
+        jsonDatabaseCleanupNoLock(false);
     }
 
     // Restore the configuration. The current namespace will
@@ -911,7 +908,8 @@ bool jsonDatabaseRestore(const char* tempRestoreDir)
     {
         icLogError(LOG_TAG,
                    "JSON database storage restore failed: [%d]: %s",
-                   restoreError, storageRestoreErrorDescribe(restoreError));
+                   restoreError,
+                   storageRestoreErrorDescribe(restoreError));
         return false;
     }
 
@@ -1070,7 +1068,7 @@ static bool loadDeviceIntoCache(icDevice *newDevice)
         {
             icLogError(LOG_TAG, "Failed to add device resources for device %s", newDevice->uuid);
             retval = false;
-            hashMapDelete(devices, newDevice->uuid, strlen(newDevice->uuid)+1, freeDevicesItem);
+            hashMapDelete(devices, newDevice->uuid, strlen(newDevice->uuid) + 1, freeDevicesItem);
         }
     }
     else
@@ -1133,9 +1131,8 @@ bool jsonDatabaseAddEndpoint(icDeviceEndpoint *endpoint)
 
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        DeviceCacheEntry *deviceCacheEntry = (DeviceCacheEntry *)hashMapGet(devices,
-                                                                            (void *)endpoint->deviceUuid,
-                                                                            strlen(endpoint->deviceUuid)+1);
+        DeviceCacheEntry *deviceCacheEntry =
+            (DeviceCacheEntry *) hashMapGet(devices, (void *) endpoint->deviceUuid, strlen(endpoint->deviceUuid) + 1);
         if (deviceCacheEntry != NULL)
         {
             if (addEndpointURIEntries(deviceCacheEntry, newEndpoint) == true)
@@ -1153,7 +1150,9 @@ bool jsonDatabaseAddEndpoint(icDeviceEndpoint *endpoint)
             }
             else
             {
-                icLogError(LOG_TAG, "Failed to add endpoint resources for endpoint %s on device %s", endpoint->id,
+                icLogError(LOG_TAG,
+                           "Failed to add endpoint resources for endpoint %s on device %s",
+                           endpoint->id,
                            endpoint->deviceUuid);
                 retval = false;
 
@@ -1191,12 +1190,12 @@ icLinkedList *jsonDatabaseGetDevices(void)
     jsonDatabaseInitializeNoLock();
     icLinkedList *devicesCopy = linkedListCreate();
     icHashMapIterator *iter = hashMapIteratorCreate(devices);
-    while(hashMapIteratorHasNext(iter))
+    while (hashMapIteratorHasNext(iter))
     {
         char *key;
         uint16_t keyLen;
         DeviceCacheEntry *deviceCacheEntry;
-        hashMapIteratorGetNext(iter, (void**)&key, &keyLen, (void**)&deviceCacheEntry);
+        hashMapIteratorGetNext(iter, (void **) &key, &keyLen, (void **) &deviceCacheEntry);
         linkedListAppend(devicesCopy, deviceClone(deviceCacheEntry->device));
     }
     hashMapIteratorDestroy(iter);
@@ -1246,7 +1245,6 @@ icLinkedList *jsonDatabaseGetDevicesByEndpointProfile(const char *profileId)
     }
 
     return foundDevices;
-
 }
 
 /**
@@ -1337,7 +1335,7 @@ icDevice *jsonDatabaseGetDeviceById(const char *uuid)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        DeviceCacheEntry *deviceCacheEntry = (DeviceCacheEntry *)hashMapGet(devices, (void *)uuid, strlen(uuid)+1);
+        DeviceCacheEntry *deviceCacheEntry = (DeviceCacheEntry *) hashMapGet(devices, (void *) uuid, strlen(uuid) + 1);
         if (deviceCacheEntry != NULL)
         {
             device = deviceClone(deviceCacheEntry->device);
@@ -1364,7 +1362,7 @@ icDevice *jsonDatabaseGetDeviceByUri(const char *uri)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)uri, strlen(uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL)
         {
             if (locator->locatorType == LOCATOR_TYPE_DEVICE)
@@ -1407,7 +1405,7 @@ bool jsonDatabaseIsDeviceKnown(const char *uuid)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        retval = hashMapContains(devices, (void *)uuid, strlen(uuid)+1);
+        retval = hashMapContains(devices, (void *) uuid, strlen(uuid) + 1);
         pthread_mutex_unlock(&mtx);
     }
 
@@ -1427,13 +1425,13 @@ bool jsonDatabaseRemoveDeviceById(const char *uuid)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        DeviceCacheEntry *cacheEntry = hashMapGet(devices, (void *)uuid, strlen(uuid)+1);
+        DeviceCacheEntry *cacheEntry = hashMapGet(devices, (void *) uuid, strlen(uuid) + 1);
         if (cacheEntry != NULL)
         {
             if (storageDelete(STORAGE_NAMESPACE, uuid))
             {
                 // Clean out of id map, which will free all resources
-                hashMapDelete(devices, (void *)uuid, strlen(uuid)+1, (hashMapFreeFunc)freeDevicesItem);
+                hashMapDelete(devices, (void *) uuid, strlen(uuid) + 1, (hashMapFreeFunc) freeDevicesItem);
                 retval = true;
             }
             else
@@ -1447,7 +1445,7 @@ bool jsonDatabaseRemoveDeviceById(const char *uuid)
     return retval;
 }
 
-//Endpoints
+// Endpoints
 /**
  * Retrieve all endpoints  with the given device profile
  *
@@ -1465,23 +1463,22 @@ icLinkedList *jsonDatabaseGetEndpointsByProfile(const char *profileId)
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
         icHashMapIterator *iter = hashMapIteratorCreate(devices);
-        while(hashMapIteratorHasNext(iter))
+        while (hashMapIteratorHasNext(iter))
         {
             char *key;
             uint16_t keyLen;
             DeviceCacheEntry *deviceCacheEntry;
-            hashMapIteratorGetNext(iter, (void**)&key, &keyLen, (void**)&deviceCacheEntry);
+            hashMapIteratorGetNext(iter, (void **) &key, &keyLen, (void **) &deviceCacheEntry);
             icLinkedListIterator *endpointsIter = linkedListIteratorCreate(deviceCacheEntry->device->endpoints);
-            while(linkedListIteratorHasNext(endpointsIter))
+            while (linkedListIteratorHasNext(endpointsIter))
             {
-                icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListIteratorGetNext(endpointsIter);
+                icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(endpointsIter);
                 if (endpoint->profile != NULL && strcmp(endpoint->profile, profileId) == 0)
                 {
                     linkedListAppend(endpoints, endpointClone(endpoint));
                 }
             }
             linkedListIteratorDestroy(endpointsIter);
-
         }
         hashMapIteratorDestroy(iter);
         pthread_mutex_unlock(&mtx);
@@ -1506,7 +1503,7 @@ icDeviceEndpoint *jsonDatabaseGetEndpointById(const char *deviceUuid, const char
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        DeviceCacheEntry *deviceCacheEntry = hashMapGet(devices, (void *)deviceUuid, strlen(deviceUuid)+1);
+        DeviceCacheEntry *deviceCacheEntry = hashMapGet(devices, (void *) deviceUuid, strlen(deviceUuid) + 1);
         if (deviceCacheEntry != NULL)
         {
             icLinkedListIterator *endpointsIter = linkedListIteratorCreate(deviceCacheEntry->device->endpoints);
@@ -1542,7 +1539,7 @@ icDeviceEndpoint *jsonDatabaseGetEndpointByUri(const char *uri)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)uri, strlen(uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL)
         {
             if (locator->locatorType == LOCATOR_TYPE_ENDPOINT)
@@ -1562,8 +1559,11 @@ icDeviceEndpoint *jsonDatabaseGetEndpointByUri(const char *uri)
             }
             else
             {
-                icLogWarn(LOG_TAG, "%s: Found invalid locator type %d when looking up endpoint by uri %s",
-                          __FUNCTION__, locator->locatorType, uri);
+                icLogWarn(LOG_TAG,
+                          "%s: Found invalid locator type %d when looking up endpoint by uri %s",
+                          __FUNCTION__,
+                          locator->locatorType,
+                          uri);
             }
         }
         pthread_mutex_unlock(&mtx);
@@ -1587,8 +1587,7 @@ bool jsonDatabaseSaveEndpoint(icDeviceEndpoint *endpoint)
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
-        Locator *locator = (Locator *) hashMapGet(resourcesByUri, endpoint->uri,
-                                                  strlen(endpoint->uri) + 1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, endpoint->uri, strlen(endpoint->uri) + 1);
         if (locator != NULL)
         {
             if (locator->locatorType == LOCATOR_TYPE_ENDPOINT)
@@ -1616,7 +1615,6 @@ bool jsonDatabaseSaveEndpoint(icDeviceEndpoint *endpoint)
                 {
                     entry->dirty = false;
                 }
-
             }
         }
         pthread_mutex_unlock(&mtx);
@@ -1626,7 +1624,7 @@ bool jsonDatabaseSaveEndpoint(icDeviceEndpoint *endpoint)
 }
 
 
-//Resources
+// Resources
 /**
  * Retrieve a resource by its uri
  *
@@ -1642,7 +1640,7 @@ icDeviceResource *jsonDatabaseGetResourceByUri(const char *uri)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)uri, strlen(uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
         {
             resource = resourceClone(locator->locator.resourceLocator.resource);
@@ -1671,7 +1669,7 @@ bool jsonDatabaseSaveResource(icDeviceResource *resource)
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
         {
             icDeviceResource *dbResource = locator->locator.resourceLocator.resource;
@@ -1685,8 +1683,8 @@ bool jsonDatabaseSaveResource(icDeviceResource *resource)
             DeviceCacheEntry *entry = locator->locator.resourceLocator.deviceCacheEntry;
             entry->dirty = true;
 
-            //If this is a lazy save resource, dont flush to storage yet
-            if((resource->mode & RESOURCE_MODE_LAZY_SAVE_NEXT) == 0)
+            // If this is a lazy save resource, dont flush to storage yet
+            if ((resource->mode & RESOURCE_MODE_LAZY_SAVE_NEXT) == 0)
             {
                 retval = saveDevice(entry->device);
                 if (retval)
@@ -1696,7 +1694,7 @@ bool jsonDatabaseSaveResource(icDeviceResource *resource)
             }
             else
             {
-                //a lazy save is successful
+                // a lazy save is successful
                 retval = true;
             }
         }
@@ -1721,7 +1719,7 @@ bool jsonDatabaseUpdateDateOfLastSyncMillis(icDeviceResource *resource)
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
         {
             icDeviceResource *dbResource = locator->locator.resourceLocator.resource;
@@ -1763,7 +1761,7 @@ static void replaceEndpointResources(EndpointLocator *dst, icDeviceEndpoint *src
     linkedListIteratorDestroy(resIt);
 }
 
-//Metadata
+// Metadata
 /**
  * Retrieve a metadata by its uri
  *
@@ -1779,7 +1777,7 @@ icDeviceMetadata *jsonDatabaseGetMetadataByUri(const char *uri)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)uri, strlen(uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_METADATA)
         {
             metadata = metadataClone(locator->locator.metadataLocator.metadata);
@@ -1805,7 +1803,7 @@ bool jsonDatabaseSaveMetadata(icDeviceMetadata *metadata)
         jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *entry = NULL;
         // Copy over the pieces we can update in our internal cache
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, metadata->uri, strlen(metadata->uri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, metadata->uri, strlen(metadata->uri) + 1);
         if (locator != NULL)
         {
             if (locator->locatorType == LOCATOR_TYPE_METADATA)
@@ -1815,21 +1813,19 @@ bool jsonDatabaseSaveMetadata(icDeviceMetadata *metadata)
                 dbMetadata->value = strdup(metadata->value);
                 // Mark the device dirty and save
                 entry = locator->locator.metadataLocator.deviceCacheEntry;
-
             }
         }
         else
         {
             // Create new metadata
-            entry = hashMapGet(devices, metadata->deviceUuid,
-                               strlen(metadata->deviceUuid) + 1);
+            entry = hashMapGet(devices, metadata->deviceUuid, strlen(metadata->deviceUuid) + 1);
             if (entry != NULL && metadata->endpointId != NULL)
             {
                 // Add endpoint metadata
                 icLinkedListIterator *iter = linkedListIteratorCreate(entry->device->endpoints);
-                while(linkedListIteratorHasNext(iter))
+                while (linkedListIteratorHasNext(iter))
                 {
-                    icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListIteratorGetNext(iter);
+                    icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iter);
                     if (strcmp(endpoint->id, metadata->endpointId) == 0)
                     {
                         icDeviceMetadata *newMetadata = metadataClone(metadata);
@@ -1894,12 +1890,12 @@ static icLinkedList *getItemsByUriRegex(const char *uriRegex, LocatorType locato
             pthread_mutex_lock(&mtx);
             jsonDatabaseInitializeNoLock();
             icHashMapIterator *iter = hashMapIteratorCreate(resourcesByUri);
-            while(hashMapIteratorHasNext(iter))
+            while (hashMapIteratorHasNext(iter))
             {
                 char *key;
                 uint16_t keyLen;
                 Locator *value;
-                hashMapIteratorGetNext(iter, (void**)&key, &keyLen, (void**)&value);
+                hashMapIteratorGetNext(iter, (void **) &key, &keyLen, (void **) &value);
                 if (value->locatorType == locatorType)
                 {
                     ret = regexec(&regex, key, 0, NULL, 0);
@@ -1921,10 +1917,9 @@ static icLinkedList *getItemsByUriRegex(const char *uriRegex, LocatorType locato
                                 linkedListAppend(items, metadataClone(value->locator.metadataLocator.metadata));
                                 break;
                             default:
-                                icLogError(LOG_TAG, "Unknown locator type value %d", (int)locatorType);
+                                icLogError(LOG_TAG, "Unknown locator type value %d", (int) locatorType);
                                 break;
                         }
-
                     }
                 }
             }
@@ -1982,7 +1977,7 @@ bool jsonDatabaseAddResource(const char *ownerUri, icDeviceResource *resource)
     {
         pthread_mutex_lock(&mtx);
         jsonDatabaseInitializeNoLock();
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)ownerUri, strlen(ownerUri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) ownerUri, strlen(ownerUri) + 1);
         if (locator != NULL)
         {
             // Logic is same between device/endpoint resources, just need correct pointers to where to add
@@ -2024,12 +2019,13 @@ bool jsonDatabaseAddResource(const char *ownerUri, icDeviceResource *resource)
                     if (retval == false)
                     {
                         // Clean up, remove resource from list
-                        linkedListDelete(resourceList, newResource, searchResourceListByResource,
+                        linkedListDelete(resourceList,
+                                         newResource,
+                                         searchResourceListByResource,
                                          (linkedListItemFreeFunc) resourceDestroy);
                     }
                 }
             }
-
         }
         pthread_mutex_unlock(&mtx);
     }
@@ -2056,7 +2052,7 @@ bool jsonDatabaseIsUriAccessible(const char *uri)
 
     pthread_mutex_lock(&mtx);
     jsonDatabaseInitializeNoLock();
-    Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)uri, strlen(uri) + 1);
+    Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
     if (locator != NULL)
     {
         if (locator->locatorType == LOCATOR_TYPE_DEVICE)
@@ -2064,7 +2060,8 @@ bool jsonDatabaseIsUriAccessible(const char *uri)
             // it is URI of device
             //
             accessible = true;
-        }else if (locator->locatorType == LOCATOR_TYPE_ENDPOINT)
+        }
+        else if (locator->locatorType == LOCATOR_TYPE_ENDPOINT)
         {
             accessible = isEndpointEnabled(locator->locator.endpointLocator.endpoint);
         }
@@ -2096,7 +2093,7 @@ bool jsonDatabaseIsUriAccessible(const char *uri)
         }
         else
         {
-            icLogWarn(LOG_TAG, "%s: Unknown locator type found %d", __FUNCTION__, (int)locator->locatorType);
+            icLogWarn(LOG_TAG, "%s: Unknown locator type found %d", __FUNCTION__, (int) locator->locatorType);
         }
     }
     else
@@ -2137,7 +2134,7 @@ bool parseMetadataUri(const char *uri, char *endpointId, char *deviceId, char *n
 
     if (strstr(uri, JSON_DATABASE_ENDPOINT_MARKER) == NULL)
     {
-        //this URI is for metadata on a device
+        // this URI is for metadata on a device
         //
         int numParsed = sscanf(uri, "/%[^/]/m/%s", deviceId, name);
         if (numParsed == 2)
@@ -2147,7 +2144,7 @@ bool parseMetadataUri(const char *uri, char *endpointId, char *deviceId, char *n
     }
     else
     {
-        //this URI is for metadata on an endpoint
+        // this URI is for metadata on an endpoint
         //
         int numParsed = sscanf(uri, "/%[^/]/ep/%[^/]/m/%s", deviceId, endpointId, name);
         if (numParsed == 3)
@@ -2183,9 +2180,9 @@ static bool isMetadataAccessible(const char *uri)
     {
         // Check if uri is valid and either on a device or an endpoint
         //
-        scoped_generic char *deviceId = (char *) calloc(strlen(uri), 1); //allocate worst case
-        scoped_generic char *name = (char *) calloc(strlen(uri), 1); //allocate worst case
-        scoped_generic char *endpointId = (char *) calloc(strlen(uri), 1); //allocate worst case
+        scoped_generic char *deviceId = (char *) calloc(strlen(uri), 1);   // allocate worst case
+        scoped_generic char *name = (char *) calloc(strlen(uri), 1);       // allocate worst case
+        scoped_generic char *endpointId = (char *) calloc(strlen(uri), 1); // allocate worst case
 
         if (parseMetadataUri(uri, endpointId, deviceId, name) == true)
         {
@@ -2242,16 +2239,16 @@ bool jsonDatabaseRemoveMetadataByUri(const char *uri)
         scoped_generic char *metadataUri = strdup(uri);
 
         // get the locator to required metadata from our URI hashmap
-        Locator *locator = (Locator *)hashMapGet(resourcesByUri, (void *)metadataUri, strlen(metadataUri)+1);
+        Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) metadataUri, strlen(metadataUri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_METADATA)
         {
             // remove the locator from our URI hashmap, but don't destory it yet
-            if(hashMapDelete(resourcesByUri, metadataUri, strlen(metadataUri) + 1, standardDoNotFreeHashMapFunc))
+            if (hashMapDelete(resourcesByUri, metadataUri, strlen(metadataUri) + 1, standardDoNotFreeHashMapFunc))
             {
                 icLinkedList *metadataList = NULL;
-                DeviceCacheEntry* entry = locator->locator.metadataLocator.deviceCacheEntry;
+                DeviceCacheEntry *entry = locator->locator.metadataLocator.deviceCacheEntry;
                 // find if the metadata is endpoint metadata or device metadata
-                if(locator->locator.metadataLocator.endpoint != NULL)
+                if (locator->locator.metadataLocator.endpoint != NULL)
                 {
                     metadataList = locator->locator.metadataLocator.endpoint->metadata;
                 }
@@ -2261,7 +2258,10 @@ bool jsonDatabaseRemoveMetadataByUri(const char *uri)
                 }
 
                 // Now delete the metadata from the its list
-                if(linkedListDelete(metadataList, locator->locator.metadataLocator.metadata, compareMetadata, (linkedListItemFreeFunc) metadataDestroy))
+                if (linkedListDelete(metadataList,
+                                     locator->locator.metadataLocator.metadata,
+                                     compareMetadata,
+                                     (linkedListItemFreeFunc) metadataDestroy))
                 {
                     // save the device
                     entry->dirty = true;
@@ -2295,7 +2295,7 @@ static bool compareMetadata(void *searchVal, void *item)
 {
     bool retVal = false;
     // pointer comparison is enough for our use case
-    if(searchVal == item)
+    if (searchVal == item)
     {
         retVal = true;
     }

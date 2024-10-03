@@ -24,29 +24,29 @@
 //
 
 // cmock support
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stddef.h>
+
 #include <cmocka.h>
-
-#include <unistd.h>
 #include <inttypes.h>
-#include <pthread.h>
 #include <math.h>
+#include <pthread.h>
+#include <unistd.h>
 
-#include <icLog/logging.h>
 #include <icConcurrent/repeatingTask.h>
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
-#include <icTypes/icLinkedList.h>
+#include <icLog/logging.h>
 #include <icTime/timeUtils.h>
+#include <icTypes/icLinkedList.h>
 
-#define LOG_TAG "repeatingTaskTest"
-#define MAX_TASK_RUNS              3
-#define MAX_EXPONENTIAL_TASK_RUNS  5
+#define LOG_TAG                   "repeatingTaskTest"
+#define MAX_TASK_RUNS             3
+#define MAX_EXPONENTIAL_TASK_RUNS 5
 
-static pthread_mutex_t TEST_MTX  = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-static pthread_cond_t  TEST_COND = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t TEST_MTX = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static pthread_cond_t TEST_COND = PTHREAD_COND_INITIALIZER;
 
 extern void shutdownRepeatingTasksForTest(void);
 
@@ -57,14 +57,15 @@ extern void shutdownRepeatingTasksForTest(void);
 static bool taskFinshed = false;
 
 // object used as "userArg" for all of the tests
-typedef struct {
+typedef struct
+{
     uint32_t counter;
-    const char *label;  // for logging
+    const char *label; // for logging
 } testUserArg;
 
 static testUserArg *createUserArg(const char *label)
 {
-    testUserArg *retVal = (testUserArg *)calloc(1, sizeof(testUserArg));
+    testUserArg *retVal = (testUserArg *) calloc(1, sizeof(testUserArg));
     retVal->label = label;
     return retVal;
 }
@@ -111,7 +112,7 @@ static bool waitCompleteIndication(uint64_t timeoutMillis)
 static bool basicRunFunc(void *userArg)
 {
     // arg should contain a counter and a label
-    testUserArg *arg = (testUserArg *)userArg;
+    testUserArg *arg = (testUserArg *) userArg;
     icLogDebug(LOG_TAG, "  '%s' run number %d", arg->label, arg->counter);
 
     // run the task MAX_TASK_RUNS times, then bail
@@ -127,7 +128,7 @@ static bool basicRunFunc(void *userArg)
 static void basicCleanupFunc(uint32_t taskHandle, void *userArg, RepeatingTaskPolicy *policy)
 {
     destroyRepeatingPolicy(policy);
-    free(userArg);  // should be testUserArg object
+    free(userArg); // should be testUserArg object
 
     // send broadcast that we finished this task
     setCompletedIndicator();
@@ -143,7 +144,7 @@ static void basicCleanupFunc(uint32_t taskHandle, void *userArg, RepeatingTaskPo
 static void traditionalRunFunc(void *arg)
 {
     // just inrement the number of times this function runs
-    testUserArg *userArg = (testUserArg *)arg;
+    testUserArg *userArg = (testUserArg *) arg;
     userArg->counter += 1;
     icLogDebug(LOG_TAG, "  '%s' run number %d", userArg->label, userArg->counter);
 }
@@ -225,7 +226,7 @@ static void test_standardPolicySecsTasks(void **state)
 static bool fixedRunFunc(void *userArg)
 {
     // arg should contain a counter and a label
-    testUserArg *arg = (testUserArg *)userArg;
+    testUserArg *arg = (testUserArg *) userArg;
     icLogDebug(LOG_TAG, "  '%s' run number %d", arg->label, arg->counter);
 
     // run the task 10 times, then bail
@@ -305,10 +306,11 @@ static void test_incrementalPolicyTasks(void **state)
 }
 
 // object used as "userArg" for all of the tests
-typedef struct {
-    uint32_t     counter;
-    const char   *label;        // for logging
-    icLinkedList *execTimes;    // list of uint64_t objects, one for each execution
+typedef struct
+{
+    uint32_t counter;
+    const char *label;       // for logging
+    icLinkedList *execTimes; // list of uint64_t objects, one for each execution
 } trackingTestUserArg;
 
 // repeatingTaskRunFunc specific for createIncrementalRepeatingTaskPolicy
@@ -316,11 +318,11 @@ static bool incrementalTrackRunFunc(void *userArg)
 {
     // arg should contain the items we need for the test.
     // first, the counter and logging.
-    trackingTestUserArg *arg = (trackingTestUserArg *)userArg;
+    trackingTestUserArg *arg = (trackingTestUserArg *) userArg;
     icLogDebug(LOG_TAG, "  '%s' run number %d", arg->label, arg->counter);
 
     // save current time into our linked list
-    uint64_t *now = (uint64_t *)malloc(sizeof(uint64_t));
+    uint64_t *now = (uint64_t *) malloc(sizeof(uint64_t));
     *now = getMonotonicMillis();
     linkedListAppend(arg->execTimes, now);
 
@@ -340,7 +342,7 @@ static void incrementakTrackCleanupFunc(uint32_t taskHandle, void *userArg, Repe
 
     // NOTE: purposefully not destroying the linked list of times so the unit test
     //       can examine them after finished running all of the tasks
-    trackingTestUserArg *arg = (trackingTestUserArg *)userArg;
+    trackingTestUserArg *arg = (trackingTestUserArg *) userArg;
     arg->execTimes = NULL;
     free(arg);
 
@@ -358,7 +360,7 @@ static void test_incremental2PolicyTasks(void **state)
 
     // run and record each time we run the function.  we are verifying
     // that the increments are spaced out property
-    trackingTestUserArg *myArg = (trackingTestUserArg *)calloc(1, sizeof(trackingTestUserArg));
+    trackingTestUserArg *myArg = (trackingTestUserArg *) calloc(1, sizeof(trackingTestUserArg));
     icLinkedList *times = linkedListCreate();
     myArg->label = "incremental tracked millis";
     myArg->execTimes = times;
@@ -371,22 +373,22 @@ static void test_incremental2PolicyTasks(void **state)
     assert_true(done);
 
     // this should have ran 4 times, so grab each timestamp
-    uint64_t *runA = (uint64_t *)linkedListGetElementAt(times, 0);
-    uint64_t *runB = (uint64_t *)linkedListGetElementAt(times, 1);
-    uint64_t *runC = (uint64_t *)linkedListGetElementAt(times, 2);
-    uint64_t *runD = (uint64_t *)linkedListGetElementAt(times, 3);
+    uint64_t *runA = (uint64_t *) linkedListGetElementAt(times, 0);
+    uint64_t *runB = (uint64_t *) linkedListGetElementAt(times, 1);
+    uint64_t *runC = (uint64_t *) linkedListGetElementAt(times, 2);
+    uint64_t *runD = (uint64_t *) linkedListGetElementAt(times, 3);
 
     uint64_t diff = 0;
     diff = (*runB - *runA);
-    icLogDebug(LOG_TAG, "  'incremental tracked' run #1 time diff=%"PRIu64, diff);
+    icLogDebug(LOG_TAG, "  'incremental tracked' run #1 time diff=%" PRIu64, diff);
     assert_in_range(diff, 80, 120);
 
     diff = (*runC - *runB);
-    icLogDebug(LOG_TAG, "  'incremental tracked' run #2 time diff=%"PRIu64, diff);
+    icLogDebug(LOG_TAG, "  'incremental tracked' run #2 time diff=%" PRIu64, diff);
     assert_in_range(diff, 180, 220);
 
     diff = (*runD - *runC);
-    icLogDebug(LOG_TAG, "  'incremental tracked' run #3 time diff=%"PRIu64, diff);
+    icLogDebug(LOG_TAG, "  'incremental tracked' run #3 time diff=%" PRIu64, diff);
     assert_in_range(diff, 280, 320);
 
     linkedListDestroy(times, NULL);
@@ -404,11 +406,11 @@ static bool exponentialTrackRunFunc(void *userArg)
 {
     // arg should contain the items we need for the test.
     // first, the counter and logging.
-    trackingTestUserArg *arg = (trackingTestUserArg *)userArg;
+    trackingTestUserArg *arg = (trackingTestUserArg *) userArg;
     icLogDebug(LOG_TAG, "  '%s' run number %d", arg->label, arg->counter);
 
     // save current time into our linked list
-    uint64_t *now = (uint64_t *)malloc(sizeof(uint64_t));
+    uint64_t *now = (uint64_t *) malloc(sizeof(uint64_t));
     *now = getMonotonicMillis();
     linkedListAppend(arg->execTimes, now);
 
@@ -430,7 +432,7 @@ static void exponentialTrackCleanupFunc(uint32_t taskHandle, void *userArg, Repe
 
     // NOTE: purposefully not destroying the linked list of times so the unit test
     //       can examine them after finished running all of the tasks
-    trackingTestUserArg *arg = (trackingTestUserArg *)userArg;
+    trackingTestUserArg *arg = (trackingTestUserArg *) userArg;
     arg->execTimes = NULL;
     free(arg);
 
@@ -448,7 +450,7 @@ static void test_exponentialPolicyTasks(void **state)
 
     // run and record each time we run the function.  we are verifying
     // that the increments are spaced out properly
-    trackingTestUserArg *myArg = (trackingTestUserArg *)calloc(1, sizeof(trackingTestUserArg));
+    trackingTestUserArg *myArg = (trackingTestUserArg *) calloc(1, sizeof(trackingTestUserArg));
     icLinkedList *times = linkedListCreate();
     myArg->label = "exponential tracked millis";
     myArg->execTimes = times;
@@ -467,23 +469,29 @@ static void test_exponentialPolicyTasks(void **state)
 
     for (int i = 0; i < MAX_EXPONENTIAL_TASK_RUNS; i++)
     {
-        uint64_t *runA = (uint64_t *)linkedListGetElementAt(times, i);
-        uint64_t *runB = (uint64_t *)linkedListGetElementAt(times, i+1);
+        uint64_t *runA = (uint64_t *) linkedListGetElementAt(times, i);
+        uint64_t *runB = (uint64_t *) linkedListGetElementAt(times, i + 1);
         diff = (*runB - *runA);
 
         if (i < MAX_EXPONENTIAL_TASK_RUNS - 1)
         {
             // On these runs, the expected delay should be the calculated delay for the proceeding run
-            expectedDelay = pow(base, i+1);
+            expectedDelay = pow(base, i + 1);
         }
         else
         {
-            // On this run, the exponentiated delay should have surpassed the maxDelay, so the actual delay should be equal to the maxDelay
+            // On this run, the exponentiated delay should have surpassed the maxDelay, so the actual delay should be
+            // equal to the maxDelay
             expectedDelay = maxDelay;
         }
 
-        icLogDebug(LOG_TAG, "  'exponential tracked' delay between run %d and run %d = %"PRIu64"; expected delay: %"PRIu64, i, i+1, diff, expectedDelay);
-        assert_in_range(diff, expectedDelay - base,  expectedDelay + base);
+        icLogDebug(LOG_TAG,
+                   "  'exponential tracked' delay between run %d and run %d = %" PRIu64 "; expected delay: %" PRIu64,
+                   i,
+                   i + 1,
+                   diff,
+                   expectedDelay);
+        assert_in_range(diff, expectedDelay - base, expectedDelay + base);
     }
 
     linkedListDestroy(times, NULL);
@@ -499,7 +507,7 @@ static void test_exponentialPolicyTasks(void **state)
 static bool resetRunFunc(void *userArg)
 {
     // arg should contain a counter and a label
-    testUserArg *arg = (testUserArg *)userArg;
+    testUserArg *arg = (testUserArg *) userArg;
     icLogDebug(LOG_TAG, "  '%s' run number %d", arg->label, arg->counter);
 
     // run the task 7 times, then bail
@@ -559,7 +567,7 @@ static void test_shortCircuit(void **state)
     assert_int_not_equal(handle, 0);
 
     // pause a few millis, then short-circuit
-    usleep(1000*250);
+    usleep(1000 * 250);
     shortCircuitRepeatingTask(handle);
 
     // should take less than 8 seconds to finish since iteration #2 was done early
@@ -583,7 +591,7 @@ static void test_cancelTask(void **state)
     assert_int_not_equal(handle, 0);
 
     // pause a few millis, then cancel
-    usleep(1000*250);
+    usleep(1000 * 250);
     bool canceled = cancelPolicyRepeatingTask(handle);
     assert_true(canceled);
 
@@ -625,23 +633,22 @@ int main(int argc, const char **argv)
     initTimedWaitCond(&TEST_COND);
     mutexUnlock(&TEST_MTX);
 
-    const struct CMUnitTest tests[] =
-    {
-            // traditional task tests
-            cmocka_unit_test(test_traditionalMillisTasks),
+    const struct CMUnitTest tests[] = {
+        // traditional task tests
+        cmocka_unit_test(test_traditionalMillisTasks),
 
-            // policy-based task tests
-            cmocka_unit_test(test_standardPolicyMillisTasks),
-            cmocka_unit_test(test_standardPolicySecsTasks),
-            cmocka_unit_test(test_fixedPolicyTasks),
-            cmocka_unit_test(test_randomPolicyTasks),
-            cmocka_unit_test(test_incrementalPolicyTasks),
-            cmocka_unit_test(test_incremental2PolicyTasks),
-            cmocka_unit_test(test_exponentialPolicyTasks),
+        // policy-based task tests
+        cmocka_unit_test(test_standardPolicyMillisTasks),
+        cmocka_unit_test(test_standardPolicySecsTasks),
+        cmocka_unit_test(test_fixedPolicyTasks),
+        cmocka_unit_test(test_randomPolicyTasks),
+        cmocka_unit_test(test_incrementalPolicyTasks),
+        cmocka_unit_test(test_incremental2PolicyTasks),
+        cmocka_unit_test(test_exponentialPolicyTasks),
 
-            cmocka_unit_test(test_resetPolicy),
-            cmocka_unit_test(test_shortCircuit),
-            cmocka_unit_test(test_cancelTask),
+        cmocka_unit_test(test_resetPolicy),
+        cmocka_unit_test(test_shortCircuit),
+        cmocka_unit_test(test_cancelTask),
     };
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);

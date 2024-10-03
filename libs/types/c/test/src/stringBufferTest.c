@@ -28,13 +28,13 @@
  * Author: mkoch201 - 5/16/18
  *-----------------------------------------------*/
 
-#include <icLog/logging.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
 #include "icTypes/icStringBuffer.h"
+#include <icLog/logging.h>
+#include <inttypes.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define LOG_CAT     "stringBufferTEST"
+#define LOG_CAT "stringBufferTEST"
 
 
 static bool canAppendAndGet()
@@ -49,7 +49,7 @@ static bool canAppendAndGet()
     if (len != 9)
     {
         // expecting 9, got something else
-        icLogError(LOG_CAT, "appendAndGet: expected length of 9, got %"PRIu32, len);
+        icLogError(LOG_CAT, "appendAndGet: expected length of 9, got %" PRIu32, len);
         stringBufferDestroy(buff);
         return false;
     }
@@ -172,5 +172,3 @@ bool runStringBufferTests()
 
     return true;
 }
-
-

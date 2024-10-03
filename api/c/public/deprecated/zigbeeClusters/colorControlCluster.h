@@ -34,20 +34,10 @@
 
 typedef struct
 {
-    void (*currentXChanged)(uint64_t eui64,
-                            uint8_t endpointId,
-                            double x,
-                            const void *ctx);
+    void (*currentXChanged)(uint64_t eui64, uint8_t endpointId, double x, const void *ctx);
 
-    void (*currentYChanged)(uint64_t eui64,
-                            uint8_t endpointId,
-                            double y,
-                            const void *ctx);
-    void (*currentXYChanged)(uint64_t eui64,
-                             uint8_t endpointId,
-                             double x,
-                             double y,
-                             const void *ctx);
+    void (*currentYChanged)(uint64_t eui64, uint8_t endpointId, double y, const void *ctx);
+    void (*currentXYChanged)(uint64_t eui64, uint8_t endpointId, double x, double y, const void *ctx);
 } ColorControlClusterCallbacks;
 
 
@@ -59,4 +49,4 @@ bool colorControlClusterMoveToColor(uint64_t eui64, uint8_t endpointId, double x
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_COLORCONTROLCLUSTER_H
+#endif // ZILKER_COLORCONTROLCLUSTER_H

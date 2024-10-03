@@ -15,19 +15,19 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <arpa/inet.h>
+#include <cmocka.h>
+#include <icUtil/ping.h>
+#include <inttypes.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
-#include <icUtil/ping.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
-static void test_ping(void** state)
+static void test_ping(void **state)
 {
 
     struct sockaddr_in localhost;
@@ -40,9 +40,10 @@ static void test_ping(void** state)
 
     struct pingResults results;
 
-    int rc = icPing(NULL, (struct sockaddr*) &localhost, 4, 0, 1, 100, &results);
+    int rc = icPing(NULL, (struct sockaddr *) &localhost, 4, 0, 1, 100, &results);
 
-    if (rc != 0) {
+    if (rc != 0)
+    {
         fail_msg("%s", strerror(rc));
     }
 
@@ -50,18 +51,17 @@ static void test_ping(void** state)
     assert_int_equal(results.received, 4);
     assert_int_not_equal(results.rtt_avg_usec, 0);
 
-    printf("Avg rtt: %"PRIu32 ", max: %"PRIu32 ", min: %"PRIu32 " µsec \n",
-           results.rtt_avg_usec, results.rtt_max_usec, results.rtt_min_usec);
+    printf("Avg rtt: %" PRIu32 ", max: %" PRIu32 ", min: %" PRIu32 " µsec \n",
+           results.rtt_avg_usec,
+           results.rtt_max_usec,
+           results.rtt_min_usec);
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-    const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_ping)
-    };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_ping)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 
     return retval;
-
 }

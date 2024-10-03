@@ -29,10 +29,10 @@
  *-----------------------------------------------*/
 
 // cmocka & it's dependencies
-#include <stddef.h>
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,7 +115,10 @@ static void test_urlDispatcher(void **state)
     assert_int_equal(rc, URI_DISPATCH_ADD_OK);
     rc = registerUriHandler(disp, "/icontrol/sites/[siteId]/network/zdif/discover", "zdif uri", stubHandleUriPath);
     assert_int_equal(rc, URI_DISPATCH_ADD_OK);
-    rc = registerUriHandler(disp, "/icontrol/sites/[siteId]/testDirective/[cameraId#stripPremise]", "premise-strip-test", stubHandleUriPath);
+    rc = registerUriHandler(disp,
+                            "/icontrol/sites/[siteId]/testDirective/[cameraId#stripPremise]",
+                            "premise-strip-test",
+                            stubHandleUriPath);
     assert_int_equal(rc, URI_DISPATCH_ADD_OK);
 
     // should get a 'dup var' error
@@ -127,11 +130,13 @@ static void test_urlDispatcher(void **state)
     assert_int_equal(rc, URI_DISPATCH_DUP_HANDLER);
 
     // should get a unknown directive error
-    rc = registerUriHandler(disp, "/icontrol/sites/[siteId]/invalidDirective/[cameraId#invalidDirective]", NULL, stubHandleUriPath);
+    rc = registerUriHandler(
+        disp, "/icontrol/sites/[siteId]/invalidDirective/[cameraId#invalidDirective]", NULL, stubHandleUriPath);
     assert_int_equal(rc, URI_DISPATCH_UNKNOWN_DIRECTIVE);
 
     // should get a 'dup var' error
-    rc = registerUriHandler(disp, "/icontrol/sites/[siteId]/testDirective/[cameraId#anotherDirective]", NULL, stubHandleUriPath);
+    rc = registerUriHandler(
+        disp, "/icontrol/sites/[siteId]/testDirective/[cameraId#anotherDirective]", NULL, stubHandleUriPath);
     assert_int_equal(rc, URI_DISPATCH_DUP_VAR);
 
     // now process a couple of URIs
@@ -205,22 +210,15 @@ static void test_urlHelperExtractHost(void **state)
 }
 
 
-
 void test_urlHelperCancel(void **state)
 {
     urlHelperCancel("http://localhost:65535/fake");
     long httpCode;
-    urlHelperDownloadFile("http://localhost:65535/fake",
-                          &httpCode,
-                          NULL,
-                          NULL,
-                          60,
-                          SSL_VERIFY_NONE,
-                          false,
-                          "/dev/null");
+    urlHelperDownloadFile(
+        "http://localhost:65535/fake", &httpCode, NULL, NULL, 60, SSL_VERIFY_NONE, false, "/dev/null");
 
-    //TODO: this test can't detect failure in software -
-    // urlHelper doesn't report what went wrong, which is important. It can be verified by log inspection.
+    // TODO: this test can't detect failure in software -
+    //  urlHelper doesn't report what went wrong, which is important. It can be verified by log inspection.
 }
 
 /*
@@ -230,15 +228,11 @@ int main(int argc, char *argv[])
 {
     setIcLogPriorityFilter(IC_LOG_TRACE);
 
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_urlDispatcher),
-                    cmocka_unit_test(test_urlHelperExtractHost),
-                    cmocka_unit_test(test_urlHelperCancel)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_urlDispatcher),
+                                       cmocka_unit_test(test_urlHelperExtractHost),
+                                       cmocka_unit_test(test_urlHelperCancel)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 
     return retval;
 }
-

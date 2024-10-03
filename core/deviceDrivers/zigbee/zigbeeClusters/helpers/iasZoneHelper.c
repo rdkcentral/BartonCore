@@ -24,26 +24,31 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include <zigbeeClusters/iasZoneCluster.h>
-#include <string.h>
-#include <icLog/logging.h>
-#include <device/deviceModelHelper.h>
-#include <resourceTypes.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icTime/timeUtils.h>
-#include <deviceServicePrivate.h>
-#include <jsonHelper/jsonHelper.h>
-#include <icUtil/stringUtils.h>
 #include "zigbeeClusters/helpers/iasZoneHelper.h"
 #include "commonDeviceDefs.h"
 #include "zigbeeClusters/helpers/comcastBatterySavingHelper.h"
+#include <device/deviceModelHelper.h>
+#include <deviceServicePrivate.h>
+#include <icLog/logging.h>
+#include <icTime/timeUtils.h>
+#include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
+#include <resourceTypes.h>
+#include <string.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <zigbeeClusters/iasZoneCluster.h>
 
 #define LOG_TAG "iasZoneHelper"
 
 /* Private functions */
-static bool fetchInitialResourceValues(icDevice *device, const char *endpoint, const char *endpointProfile,
-                                       const uint8_t endpointId, icInitialResourceValues *initialResourceValues);
-static bool registerResources(icDevice *device, icDeviceEndpoint *endpoint, const uint8_t endpointId,
+static bool fetchInitialResourceValues(icDevice *device,
+                                       const char *endpoint,
+                                       const char *endpointProfile,
+                                       const uint8_t endpointId,
+                                       icInitialResourceValues *initialResourceValues);
+static bool registerResources(icDevice *device,
+                              icDeviceEndpoint *endpoint,
+                              const uint8_t endpointId,
                               icInitialResourceValues *initialResourceValues);
 
 static bool fetchInitialSensorResourceValues(icDevice *device,
@@ -51,40 +56,35 @@ static bool fetchInitialSensorResourceValues(icDevice *device,
                                              const uint16_t zoneStatus,
                                              const uint16_t zoneType,
                                              icInitialResourceValues *initialResourceValues);
-static bool registerSensorResources(icDevice *device,
-                                    icDeviceEndpoint *endpoint,
-                                    icInitialResourceValues *initialResourceValues);
+static bool
+registerSensorResources(icDevice *device, icDeviceEndpoint *endpoint, icInitialResourceValues *initialResourceValues);
 
 static const char *getProfileForDeviceClass(const char *deviceClass);
 static const char *getTamperResourceForProfile(const char *profileName);
 static const char *getTypeResourceForProfile(const char *profileName);
 static uint8_t getSensorTypeModeForDeviceClass(const char *deviceClass);
 
-static inline cJSON* createTestFaultMetadata(bool test);
+static inline cJSON *createTestFaultMetadata(bool test);
 
-static inline cJSON* createTestFaultMetadata(bool test)
+static inline cJSON *createTestFaultMetadata(bool test)
 {
     cJSON *metadata = cJSON_CreateObject();
     cJSON_AddBoolToObject(metadata, SENSOR_PROFILE_METADATA_TEST, test);
     return metadata;
 }
 
-void iasZoneStatusChangedHelper(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t zoneStatus,
-                                const ZigbeeDriverCommon *ctx)
+void iasZoneStatusChangedHelper(uint64_t eui64, uint8_t endpointId, uint16_t zoneStatus, const ZigbeeDriverCommon *ctx)
 {
     AUTO_CLEAN(free_generic__auto) const char *deviceUuid = zigbeeSubsystemEui64ToId(eui64);
     AUTO_CLEAN(free_generic__auto) const char *endpointName = zigbeeSubsystemEndpointIdAsString(endpointId);
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *batteryLow = deviceServiceGetResourceById(deviceUuid,
-                                                                                                  NULL,
-                                                                                                  COMMON_DEVICE_RESOURCE_BATTERY_LOW);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *batteryLow = deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_BATTERY_LOW);
     AUTO_CLEAN(endpointDestroy__auto) icDeviceEndpoint *ep = deviceServiceGetEndpointById(deviceUuid, endpointName);
     AUTO_CLEAN(deviceDestroy__auto) icDevice *device = deviceServiceGetDevice(deviceUuid);
     const bool isBatteryPowered = batteryLow != NULL;
     const char *endpointType = NULL;
-    char valStr[21]; //Largest output: 20-char millisecond timestamp + \0
+    char valStr[21]; // Largest output: 20-char millisecond timestamp + \0
 
     if (!ep)
     {
@@ -94,16 +94,21 @@ void iasZoneStatusChangedHelper(uint64_t eui64,
 
     if (strcmp(ep->profile, SENSOR_PROFILE) == 0)
     {
-        AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *zoneTypeResource = deviceServiceGetResourceById(deviceUuid,
-                                                                                                            endpointName,
-                                                                                                            SENSOR_PROFILE_RESOURCE_TYPE);
+        AUTO_CLEAN(resourceDestroy__auto)
+        icDeviceResource *zoneTypeResource =
+            deviceServiceGetResourceById(deviceUuid, endpointName, SENSOR_PROFILE_RESOURCE_TYPE);
         if (zoneTypeResource)
         {
             endpointType = zoneTypeResource->value;
         }
         else
         {
-            icLogWarn(LOG_TAG, "%s: unable to get resource %s on device %s.%s", __FUNCTION__, SENSOR_PROFILE_RESOURCE_TYPE, deviceUuid, endpointName);
+            icLogWarn(LOG_TAG,
+                      "%s: unable to get resource %s on device %s.%s",
+                      __FUNCTION__,
+                      SENSOR_PROFILE_RESOURCE_TYPE,
+                      deviceUuid,
+                      endpointName);
         }
 
         const char *troubleResourceId = iasZoneHelperGetTroubleResource(device->deviceClass, endpointType);
@@ -112,7 +117,7 @@ void iasZoneStatusChangedHelper(uint64_t eui64,
             updateResource(deviceUuid,
                            endpointName,
                            troubleResourceId,
-                           (zoneStatus & (uint16_t)IAS_ZONE_STATUS_TROUBLE) != 0 ? "true" : "false",
+                           (zoneStatus & (uint16_t) IAS_ZONE_STATUS_TROUBLE) != 0 ? "true" : "false",
                            NULL);
         }
 
@@ -121,7 +126,7 @@ void iasZoneStatusChangedHelper(uint64_t eui64,
         //
         cJSON *resourceFaultedMetadataJson = NULL;
 
-        if ((zoneStatus & (uint16_t)IAS_ZONE_STATUS_TEST) != 0)
+        if ((zoneStatus & (uint16_t) IAS_ZONE_STATUS_TEST) != 0)
         {
             if ((zoneStatus & (uint16_t) IAS_ZONE_STATUS_ALARM1) != 0)
             {
@@ -153,16 +158,12 @@ void iasZoneStatusChangedHelper(uint64_t eui64,
         updateResource(deviceUuid,
                        NULL,
                        COMMON_DEVICE_RESOURCE_BATTERY_LOW,
-                       (zoneStatus & (uint16_t)IAS_ZONE_STATUS_BATTERY_LOW) != 0 ? "true" : "false",
+                       (zoneStatus & (uint16_t) IAS_ZONE_STATUS_BATTERY_LOW) != 0 ? "true" : "false",
                        NULL);
     }
 
     snprintf(valStr, sizeof(valStr), "%" PRIu64, getCurrentUnixTimeMillis());
-    updateResource(deviceUuid,
-                   NULL,
-                   COMMON_DEVICE_RESOURCE_LAST_USER_INTERACTION_DATE,
-                   valStr,
-                   NULL);
+    updateResource(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_LAST_USER_INTERACTION_DATE, valStr, NULL);
 }
 
 /**
@@ -192,8 +193,8 @@ bool iasZoneFetchInitialResourceValues(icDevice *device,
     {
         if (icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails, endpointId, IAS_ZONE_CLUSTER_ID, true))
         {
-            foundOne = result = fetchInitialResourceValues(device, endpoint, endpointProfile, endpointId,
-                                                           initialResourceValues);
+            foundOne = result =
+                fetchInitialResourceValues(device, endpoint, endpointProfile, endpointId, initialResourceValues);
         }
     }
     else
@@ -201,15 +202,15 @@ bool iasZoneFetchInitialResourceValues(icDevice *device,
         for (int i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
         {
             IcDiscoveredEndpointDetails endpointDetails = discoveredDeviceDetails->endpointDetails[i];
-            if (icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails, endpointDetails.endpointId,
-                                                            IAS_ZONE_CLUSTER_ID, true))
+            if (icDiscoveredDeviceDetailsEndpointHasCluster(
+                    discoveredDeviceDetails, endpointDetails.endpointId, IAS_ZONE_CLUSTER_ID, true))
             {
                 const char *profileName = getProfileForDeviceClass(device->deviceClass);
-                AUTO_CLEAN(free_generic__auto) const char *epName = zigbeeSubsystemEndpointIdAsString(
-                        endpointDetails.endpointId);
+                AUTO_CLEAN(free_generic__auto)
+                const char *epName = zigbeeSubsystemEndpointIdAsString(endpointDetails.endpointId);
 
-                result &= fetchInitialResourceValues(device, epName, profileName, endpointDetails.endpointId,
-                                                     initialResourceValues);
+                result &= fetchInitialResourceValues(
+                    device, epName, profileName, endpointDetails.endpointId, initialResourceValues);
                 foundOne |= result;
             }
         }
@@ -252,10 +253,12 @@ bool iasZoneRegisterResources(icDevice *device,
         for (int i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
         {
             IcDiscoveredEndpointDetails endpointDetails = discoveredDeviceDetails->endpointDetails[i];
-            if (icDiscoveredDeviceDetailsEndpointHasCluster(discoveredDeviceDetails, endpointDetails.endpointId, IAS_ZONE_CLUSTER_ID, true))
+            if (icDiscoveredDeviceDetailsEndpointHasCluster(
+                    discoveredDeviceDetails, endpointDetails.endpointId, IAS_ZONE_CLUSTER_ID, true))
             {
                 const char *profileName = getProfileForDeviceClass(device->deviceClass);
-                AUTO_CLEAN(free_generic__auto) const char *epName = zigbeeSubsystemEndpointIdAsString(endpointDetails.endpointId);
+                AUTO_CLEAN(free_generic__auto)
+                const char *epName = zigbeeSubsystemEndpointIdAsString(endpointDetails.endpointId);
 
                 endpoint = createEndpoint(device, epName, profileName, true);
                 registered &= registerResources(device, endpoint, endpointDetails.endpointId, initialResourceValues);
@@ -272,8 +275,11 @@ bool iasZoneRegisterResources(icDevice *device,
     return registered && registeredOne;
 }
 
-static bool fetchInitialResourceValues(icDevice *device, const char *endpoint, const char *endpointProfile,
-                                       const uint8_t endpointId, icInitialResourceValues *initialResourceValues)
+static bool fetchInitialResourceValues(icDevice *device,
+                                       const char *endpoint,
+                                       const char *endpointProfile,
+                                       const uint8_t endpointId,
+                                       icInitialResourceValues *initialResourceValues)
 {
     uint64_t tmp = 0;
     uint16_t zoneStatus = 0;
@@ -288,18 +294,14 @@ static bool fetchInitialResourceValues(icDevice *device, const char *endpoint, c
     if (zigbeeSubsystemReadNumber(eui64, endpointId, IAS_ZONE_CLUSTER_ID, true, IAS_ZONE_STATUS_ATTRIBUTE_ID, &tmp) !=
         0)
     {
-        icLogError(LOG_TAG, "Unable to read zone status from %"
-                PRIu64
-                "%s", eui64, endpoint);
+        icLogError(LOG_TAG, "Unable to read zone status from %" PRIu64 "%s", eui64, endpoint);
         return false;
     }
     zoneStatus = (uint16_t) tmp;
 
     if (zigbeeSubsystemReadNumber(eui64, endpointId, IAS_ZONE_CLUSTER_ID, true, IAS_ZONE_TYPE_ATTRIBUTE_ID, &tmp) != 0)
     {
-        icLogError(LOG_TAG, "Unable to read zone type from %"
-                PRIu64
-                "%s", eui64, endpoint);
+        icLogError(LOG_TAG, "Unable to read zone type from %" PRIu64 "%s", eui64, endpoint);
         return false;
     }
 
@@ -310,9 +312,11 @@ static bool fetchInitialResourceValues(icDevice *device, const char *endpoint, c
         registered = fetchInitialSensorResourceValues(device, endpoint, zoneStatus, zoneType, initialResourceValues);
     }
     const char *zoneTypeName = iasZoneHelperGetZoneTypeName(zoneType);
-    initialResourceValuesPutEndpointValue(initialResourceValues, endpoint, getTypeResourceForProfile(endpointProfile),
-                                          zoneTypeName);
-    initialResourceValuesPutEndpointValue(initialResourceValues, endpoint, getTamperResourceForProfile(endpointProfile),
+    initialResourceValuesPutEndpointValue(
+        initialResourceValues, endpoint, getTypeResourceForProfile(endpointProfile), zoneTypeName);
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          endpoint,
+                                          getTamperResourceForProfile(endpointProfile),
                                           (zoneStatus & IAS_ZONE_STATUS_TAMPER) != 0 ? "true" : "false");
 
     return registered;
@@ -323,9 +327,10 @@ void iasZoneHelperSyncZoneStatus(const char *uuid, const uint8_t endpointId, Zig
     uint64_t tmp = 0;
     uint16_t zoneStatus = 0;
     uint64_t eui64 = zigbeeSubsystemIdToEui64(uuid);
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, IAS_ZONE_CLUSTER_ID, true, IAS_ZONE_STATUS_ATTRIBUTE_ID, &tmp) != 0)
+    if (zigbeeSubsystemReadNumber(eui64, endpointId, IAS_ZONE_CLUSTER_ID, true, IAS_ZONE_STATUS_ATTRIBUTE_ID, &tmp) !=
+        0)
     {
-        icLogError(LOG_TAG, "Unable to read zone status from %"PRIu64, eui64);
+        icLogError(LOG_TAG, "Unable to read zone status from %" PRIu64, eui64);
         return;
     }
 
@@ -333,7 +338,9 @@ void iasZoneHelperSyncZoneStatus(const char *uuid, const uint8_t endpointId, Zig
     iasZoneStatusChangedHelper(eui64, endpointId, zoneStatus, ctx);
 }
 
-static bool registerResources(icDevice *device, icDeviceEndpoint *endpoint, const uint8_t endpointId,
+static bool registerResources(icDevice *device,
+                              icDeviceEndpoint *endpoint,
+                              const uint8_t endpointId,
                               icInitialResourceValues *initialResourceValues)
 {
     bool registered = true;
@@ -369,13 +376,13 @@ static bool registerResources(icDevice *device, icDeviceEndpoint *endpoint, cons
                                                     sensorTypeMode,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
-    registered &= createEndpointResourceIfAvailable(endpoint,
-                                                    getTamperResourceForProfile(endpoint->profile),
-                                                    initialResourceValues,
-                                                    RESOURCE_TYPE_BOOLEAN,
-                                                    RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
-                                                    CACHING_POLICY_ALWAYS) != NULL;
+    registered &=
+        createEndpointResourceIfAvailable(endpoint,
+                                          getTamperResourceForProfile(endpoint->profile),
+                                          initialResourceValues,
+                                          RESOURCE_TYPE_BOOLEAN,
+                                          RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+                                          CACHING_POLICY_ALWAYS) != NULL;
 
     return registered;
 }
@@ -386,27 +393,30 @@ static bool fetchInitialSensorResourceValues(icDevice *device,
                                              const uint16_t zoneType,
                                              icInitialResourceValues *initialResourceValues)
 {
-    const char *troubleResourceId = iasZoneHelperGetTroubleResource(device->deviceClass,
-                                                                    iasZoneHelperGetZoneTypeName(zoneType));
+    const char *troubleResourceId =
+        iasZoneHelperGetTroubleResource(device->deviceClass, iasZoneHelperGetZoneTypeName(zoneType));
     if (troubleResourceId != NULL)
     {
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, troubleResourceId,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              troubleResourceId,
                                               (zoneStatus & IAS_ZONE_STATUS_TROUBLE) != 0 ? "true" : "false");
     }
 
-    initialResourceValuesPutEndpointValue(initialResourceValues, epName, SENSOR_PROFILE_RESOURCE_FAULTED,
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          epName,
+                                          SENSOR_PROFILE_RESOURCE_FAULTED,
                                           (zoneStatus & IAS_ZONE_STATUS_ALARM1) != 0 ? "true" : "false");
 
     initialResourceValuesPutEndpointValue(initialResourceValues, epName, SENSOR_PROFILE_RESOURCE_QUALIFIED, "true");
     initialResourceValuesPutEndpointValue(initialResourceValues, epName, SENSOR_PROFILE_RESOURCE_BYPASSED, "false");
 
-    //TODO: motion types' sensitivity
+    // TODO: motion types' sensitivity
     return true;
 }
 
-static bool registerSensorResources(icDevice *device,
-                                    icDeviceEndpoint *endpoint,
-                                    icInitialResourceValues *initialResourceValues)
+static bool
+registerSensorResources(icDevice *device, icDeviceEndpoint *endpoint, icInitialResourceValues *initialResourceValues)
 {
 
     bool registered = true;
@@ -433,13 +443,13 @@ static bool registerSensorResources(icDevice *device,
                                       RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
                                       CACHING_POLICY_ALWAYS);
 
-    registered &= createEndpointResourceIfAvailable(endpoint,
-                                                    SENSOR_PROFILE_RESOURCE_FAULTED,
-                                                    initialResourceValues,
-                                                    RESOURCE_TYPE_BOOLEAN,
-                                                    RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
-                                                    CACHING_POLICY_ALWAYS) != NULL;
+    registered &=
+        createEndpointResourceIfAvailable(endpoint,
+                                          SENSOR_PROFILE_RESOURCE_FAULTED,
+                                          initialResourceValues,
+                                          RESOURCE_TYPE_BOOLEAN,
+                                          RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+                                          CACHING_POLICY_ALWAYS) != NULL;
 
     registered &= createEndpointResourceIfAvailable(endpoint,
                                                     SENSOR_PROFILE_RESOURCE_QUALIFIED,
@@ -455,7 +465,7 @@ static bool registerSensorResources(icDevice *device,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
-    //TODO: motion types' sensitivity
+    // TODO: motion types' sensitivity
     return registered;
 }
 
@@ -599,4 +609,4 @@ static uint8_t getSensorTypeModeForDeviceClass(const char *deviceClass)
     }
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

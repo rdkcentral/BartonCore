@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -23,23 +23,23 @@
 // Created by mkoch201 on 11/15/18.
 //
 
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
+#include <cmocka.h>
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <errno.h>
 
 #include "icConcurrent/icBlockingQueue.h"
 #include "icConcurrent/threadUtils.h"
 #include <icLog/logging.h>
+#include <icTypes/sbrm.h>
 #include <icUtil/stringUtils.h>
 #include <pthread.h>
-#include <icTypes/sbrm.h>
 #include <unistd.h>
 
 #define LOG_TAG "blockingQueueTest"
@@ -51,10 +51,7 @@ static void test_canCreate(void **state)
     blockingQueueDestroy(queue, NULL);
 }
 
-static void blockingQueueDoNotFreeFunc(void *item)
-{
-
-}
+static void blockingQueueDoNotFreeFunc(void *item) {}
 
 static void test_canPushAndPop(void **state)
 {
@@ -62,7 +59,7 @@ static void test_canPushAndPop(void **state)
     assert_int_equal(blockingQueueCount(queue), 0);
     assert_true(blockingQueuePush(queue, "a"));
     assert_int_equal(blockingQueueCount(queue), 1);
-    char *res = (char *)blockingQueuePop(queue);
+    char *res = (char *) blockingQueuePop(queue);
     assert_int_equal(blockingQueueCount(queue), 0);
     assert_string_equal(res, "a");
     blockingQueueDestroy(queue, blockingQueueDoNotFreeFunc);
@@ -84,9 +81,9 @@ static void test_canClear(void **state)
 
 static bool iterateFunc(void *item, void *arg)
 {
-    int *iterateCount = (int *)arg;
+    int *iterateCount = (int *) arg;
     *iterateCount = *iterateCount + 1;
-    if (strcmp(item,"b") == 0)
+    if (strcmp(item, "b") == 0)
     {
         return true;
     }
@@ -108,8 +105,8 @@ static void test_canIterate(void **state)
 
 static bool searchFunc(void *searchVal, void *item)
 {
-    char *searchValCh = (char *)searchVal;
-    char *itemCh = (char *)item;
+    char *searchValCh = (char *) searchVal;
+    char *itemCh = (char *) item;
     return strcmp(searchValCh, itemCh) == 0;
 }
 
@@ -124,11 +121,12 @@ static void test_canDelete(void **state)
     blockingQueueDestroy(queue, blockingQueueDoNotFreeFunc);
 }
 
-typedef struct {
-   icBlockingQueue *queue;
-   char *arg;
-   int *waitCount;
-   int totalWaitCount;
+typedef struct
+{
+    icBlockingQueue *queue;
+    char *arg;
+    int *waitCount;
+    int totalWaitCount;
 } TaskArg;
 
 static TaskArg *taskArgs;
@@ -141,7 +139,7 @@ static pthread_cond_t cond;
 
 static void *pushTask(void *arg)
 {
-    TaskArg *taskArg = (TaskArg*)arg;
+    TaskArg *taskArg = (TaskArg *) arg;
     pthread_mutex_lock(&mutex);
     int *waitCount = taskArg->waitCount;
     *waitCount += 1;
@@ -157,7 +155,7 @@ static void *pushTask(void *arg)
 
     icLogDebug(LOG_TAG, "Pushing %s", taskArg->arg);
 
-    bool *isSuccess = (bool *)malloc(sizeof(bool));
+    bool *isSuccess = (bool *) malloc(sizeof(bool));
     errno = 0;
     *isSuccess = blockingQueuePushTimeout(taskArg->queue, taskArg->arg, 10);
     if (*isSuccess == false)
@@ -176,7 +174,7 @@ static void *pushTask(void *arg)
 
 static void *popTask(void *arg)
 {
-    TaskArg *taskArg = (TaskArg*)arg;
+    TaskArg *taskArg = (TaskArg *) arg;
     pthread_mutex_lock(&mutex);
     int *waitCount = taskArg->waitCount;
     *waitCount += 1;
@@ -192,9 +190,9 @@ static void *popTask(void *arg)
 
     icLogDebug(LOG_TAG, "Popping");
 
-    bool *isSuccess = (bool *)malloc(sizeof(bool));
+    bool *isSuccess = (bool *) malloc(sizeof(bool));
     errno = 0;
-    char *res = (char *)blockingQueuePopTimeout(taskArg->queue, 10);
+    char *res = (char *) blockingQueuePopTimeout(taskArg->queue, 10);
     if (res == NULL)
     {
         *isSuccess = false;
@@ -216,7 +214,7 @@ static int createQueueTasks(void **state, void *taskFunc(void *), int maxCapacit
     taskThreads = calloc(CONCURRENT_COUNT, sizeof(pthread_t));
     taskWaitCount = 0;
 
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         taskArgs[i].queue = taskQueue;
         taskArgs[i].arg = stringBuilder("%d", i);
@@ -274,7 +272,7 @@ static int teardown_queueTasks(void **state)
 
 static void test_popWaitsForPush(void **state)
 {
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         assert_true(blockingQueuePushTimeout(taskQueue, taskArgs[i].arg, 10));
         icLogDebug(LOG_TAG, "Pushed %s", taskArgs[i].arg);
@@ -283,7 +281,7 @@ static void test_popWaitsForPush(void **state)
 
 static void test_pushWaitsForPop(void **state)
 {
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         char *res = blockingQueuePopTimeout(taskQueue, 10);
         if (res != NULL)
@@ -310,14 +308,14 @@ static int setup_multiPop(void **state)
 
 static void *multiPushTask(void *arg)
 {
-    (void)arg;
+    (void) arg;
     blockingQueuePush(taskQueue, "a");
     return NULL;
 }
 
 static void test_multiPopMultiPush(void **state)
 {
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         scoped_generic char *name = stringBuilder("push%d", i);
         createDetachedThread(multiPushTask, NULL, name);
@@ -326,12 +324,12 @@ static void test_multiPopMultiPush(void **state)
 
 static int setup_multiPush(void **state)
 {
-    return createQueueTasks(state, pushTask, CONCURRENT_COUNT/2);
+    return createQueueTasks(state, pushTask, CONCURRENT_COUNT / 2);
 }
 
 static void *multiPopTask(void *arg)
 {
-    bool *success = (bool *)arg;
+    bool *success = (bool *) arg;
     void *val = blockingQueuePopTimeout(taskQueue, 10);
     *success = val != NULL;
     return NULL;
@@ -342,7 +340,7 @@ static void test_multiPushMultiPop(void **state)
     // Wait for queue to fill up
     int iterCount = 0;
     int queueCount = 0;
-    while(queueCount < CONCURRENT_COUNT/2 && iterCount < 100)
+    while (queueCount < CONCURRENT_COUNT / 2 && iterCount < 100)
     {
         queueCount = blockingQueueCount(taskQueue);
         usleep(5000);
@@ -353,12 +351,12 @@ static void test_multiPushMultiPop(void **state)
     pthread_t popTasks[CONCURRENT_COUNT];
     bool popSuccess[CONCURRENT_COUNT];
 
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         scoped_generic char *name = stringBuilder("pop%d", i);
         createThread(&popTasks[i], multiPopTask, &popSuccess[i], name);
     }
-    for(int i = 0; i < CONCURRENT_COUNT; ++i)
+    for (int i = 0; i < CONCURRENT_COUNT; ++i)
     {
         pthread_join(popTasks[i], NULL);
         assert_true(popSuccess[i]);
@@ -367,7 +365,7 @@ static void test_multiPushMultiPop(void **state)
 
 static int setup_clearWithWaiters(void **state)
 {
-    return createQueueTasks(state, pushTask, CONCURRENT_COUNT/2);
+    return createQueueTasks(state, pushTask, CONCURRENT_COUNT / 2);
 }
 
 static void test_clearWithWaiters(void **state)
@@ -375,7 +373,7 @@ static void test_clearWithWaiters(void **state)
     // Wait for queue to fill up
     int iterCount = 0;
     int queueCount = 0;
-    while(queueCount < CONCURRENT_COUNT/2 && iterCount < 100)
+    while (queueCount < CONCURRENT_COUNT / 2 && iterCount < 100)
     {
         queueCount = blockingQueueCount(taskQueue);
         usleep(5000);
@@ -395,25 +393,24 @@ static void test_clearWithWaiters(void **state)
 /*
  * main
  */
-int main(int argc, const char ** argv)
+int main(int argc, const char **argv)
 {
     setIcLogPriorityFilter(IC_LOG_ERROR);
 
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_canCreate),
-                    cmocka_unit_test(test_canPushAndPop),
-                    cmocka_unit_test(test_canClear),
-                    cmocka_unit_test_setup_teardown(test_pushWaitsForPop, setup_pushWaitsForPop, teardown_queueTasks),
-                    cmocka_unit_test_setup_teardown(test_popWaitsForPush, setup_popWaitsForPush, teardown_queueTasks),
-                    cmocka_unit_test(test_canIterate),
-                    cmocka_unit_test(test_canDelete),
-                    cmocka_unit_test(test_zeroTimeout),
-                    cmocka_unit_test_setup_teardown(test_multiPopMultiPush, setup_multiPop, teardown_queueTasks),
-                    cmocka_unit_test_setup_teardown(test_multiPushMultiPop, setup_multiPush, teardown_queueTasks),
-                    cmocka_unit_test_setup_teardown(test_clearWithWaiters, setup_clearWithWaiters, teardown_queueTasks),
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_canCreate),
+        cmocka_unit_test(test_canPushAndPop),
+        cmocka_unit_test(test_canClear),
+        cmocka_unit_test_setup_teardown(test_pushWaitsForPop, setup_pushWaitsForPop, teardown_queueTasks),
+        cmocka_unit_test_setup_teardown(test_popWaitsForPush, setup_popWaitsForPush, teardown_queueTasks),
+        cmocka_unit_test(test_canIterate),
+        cmocka_unit_test(test_canDelete),
+        cmocka_unit_test(test_zeroTimeout),
+        cmocka_unit_test_setup_teardown(test_multiPopMultiPush, setup_multiPop, teardown_queueTasks),
+        cmocka_unit_test_setup_teardown(test_multiPushMultiPop, setup_multiPush, teardown_queueTasks),
+        cmocka_unit_test_setup_teardown(test_clearWithWaiters, setup_clearWithWaiters, teardown_queueTasks),
 
-            };
+    };
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

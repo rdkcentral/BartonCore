@@ -24,11 +24,11 @@
 //
 
 #include "deviceServiceStatus.h"
+#include "icTypes/icHashMap.h"
+#include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
 #include "jsonHelper/jsonHelper.h"
 #include <string.h>
-#include "icTypes/icLinkedList.h"
-#include "icTypes/icHashMap.h"
 
 static void subsystemStatusCloneFunc(void *key, void *value, void **clonedKey, void **clonedValue, void *context)
 {
@@ -45,7 +45,7 @@ static void subsystemStatusFreeFunc(void *key, void *value)
     cJSON_Delete((cJSON *) value);
 }
 
-DeviceServiceStatus * device_service_status_copy (DeviceServiceStatus *s)
+DeviceServiceStatus *device_service_status_copy(DeviceServiceStatus *s)
 {
     DeviceServiceStatus *retVal = NULL;
 
@@ -55,12 +55,14 @@ DeviceServiceStatus * device_service_status_copy (DeviceServiceStatus *s)
 
         if (s->supportedDeviceClasses)
         {
-            retVal->supportedDeviceClasses = linkedListDeepClone(s->supportedDeviceClasses, linkedListCloneStringItemFunc, NULL);
+            retVal->supportedDeviceClasses =
+                linkedListDeepClone(s->supportedDeviceClasses, linkedListCloneStringItemFunc, NULL);
         }
 
         if (s->discoveringDeviceClasses)
         {
-            retVal->discoveringDeviceClasses = linkedListDeepClone(s->discoveringDeviceClasses, linkedListCloneStringItemFunc, NULL);
+            retVal->discoveringDeviceClasses =
+                linkedListDeepClone(s->discoveringDeviceClasses, linkedListCloneStringItemFunc, NULL);
         }
 
         if (s->subsystemsJsonStatus)
@@ -78,9 +80,9 @@ DeviceServiceStatus * device_service_status_copy (DeviceServiceStatus *s)
     return retVal;
 }
 
-void device_service_status_free (DeviceServiceStatus *s)
+void device_service_status_free(DeviceServiceStatus *s)
 {
-    if(s)
+    if (s)
     {
         linkedListDestroy(s->supportedDeviceClasses, free);
         linkedListDestroy(s->discoveringDeviceClasses, free);
@@ -182,9 +184,9 @@ DeviceServiceStatus *deviceServiceStatusFromJson(const char *json)
         {
             result->subsystemsJsonStatus = hashMapCreate();
 
-            //walk backwards through the array since we are removing elements as we go
+            // walk backwards through the array since we are removing elements as we go
             int num = cJSON_GetArraySize(array);
-            for (int i = num-1; i >= 0; i--)
+            for (int i = num - 1; i >= 0; i--)
             {
                 cJSON *item = cJSON_DetachItemFromArray(array, i);
 
@@ -193,7 +195,7 @@ DeviceServiceStatus *deviceServiceStatusFromJson(const char *json)
                 if (subsystemName == NULL)
                 {
                     parseError = true;
-                    cJSON_Delete(item); //since we couldnt put in our map for cleanup
+                    cJSON_Delete(item); // since we couldnt put in our map for cleanup
                     break;
                 }
                 else
@@ -203,7 +205,7 @@ DeviceServiceStatus *deviceServiceStatusFromJson(const char *json)
                                strlen(subsystemName->valuestring),
                                item);
 
-                    cJSON_Delete(subsystemName); //since we detached it
+                    cJSON_Delete(subsystemName); // since we detached it
                 }
             }
         }

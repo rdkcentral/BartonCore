@@ -26,17 +26,17 @@
 
 #include "zigbeeClusters/iasACECluster.h"
 #include "zigbeeClusters/iasZoneCluster.h"
-#include <subsystems/zigbee/zigbeeSubsystem.h>
+#include <errno.h>
 #include <icLog/logging.h>
-#include <subsystems/zigbee/zigbeeIO.h>
 #include <icUtil/array.h>
 #include <icUtil/stringUtils.h>
-#include <string.h>
-#include <errno.h>
 #include <pthread.h>
+#include <string.h>
 #include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeIO.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
-#define LOG_TAG "IASACECluster"
+#define LOG_TAG               "IASACECluster"
 
 #define AUDIBLE_NOTIF_MUTE    0x00
 #define AUDIBLE_NOTIF_DEFAULT 0x01
@@ -58,47 +58,47 @@ typedef struct
 
 enum ZCLArmMode
 {
-    ZCL_ARM_DISARM  = 0x00,
-    ZCL_ARM_STAY    = 0x01,
-    ZCL_ARM_NIGHT   = 0x02,
-    ZCL_ARM_AWAY    = 0x03
+    ZCL_ARM_DISARM = 0x00,
+    ZCL_ARM_STAY = 0x01,
+    ZCL_ARM_NIGHT = 0x02,
+    ZCL_ARM_AWAY = 0x03
 };
 
 enum ZCLArmNotification
 {
-    ZCL_ARM_NOTIF_DISARMED_ALL        = 0x00,
-    ZCL_ARM_NOTIF_ARMED_STAY          = 0x01,
-    ZCL_ARM_NOTIF_ARMED_NIGHT         = 0x02,
-    ZCL_ARM_NOTIF_ARMED_AWAY          = 0x03,
-    ZCL_ARM_NOTIF_ARM_CODE_INVALID    = 0x04,
-    ZCL_ARM_NOTIF_ARM_NOT_READY       = 0x05,
-    ZCL_ARM_NOTIF_ALREADY_DISARMED    = 0x06
+    ZCL_ARM_NOTIF_DISARMED_ALL = 0x00,
+    ZCL_ARM_NOTIF_ARMED_STAY = 0x01,
+    ZCL_ARM_NOTIF_ARMED_NIGHT = 0x02,
+    ZCL_ARM_NOTIF_ARMED_AWAY = 0x03,
+    ZCL_ARM_NOTIF_ARM_CODE_INVALID = 0x04,
+    ZCL_ARM_NOTIF_ARM_NOT_READY = 0x05,
+    ZCL_ARM_NOTIF_ALREADY_DISARMED = 0x06
 };
 
 enum ZCLAlarmStatus
 {
-    ZCL_ALARM_NONE          = 0x00,
-    ZCL_ALARM_BURGLAR       = 0x01,
-    ZCL_ALARM_FIRE          = 0x02,
-    ZCL_ALARM_EMERG         = 0x03,
-    ZCL_ALARM_POLICE_PANIC  = 0x04,
-    ZCL_ALARM_FIRE_PANIC    = 0x05,
-    ZCL_ALARM_EMERG_PANIC   = 0x06
+    ZCL_ALARM_NONE = 0x00,
+    ZCL_ALARM_BURGLAR = 0x01,
+    ZCL_ALARM_FIRE = 0x02,
+    ZCL_ALARM_EMERG = 0x03,
+    ZCL_ALARM_POLICE_PANIC = 0x04,
+    ZCL_ALARM_FIRE_PANIC = 0x05,
+    ZCL_ALARM_EMERG_PANIC = 0x06
 };
 
 enum ZCLPanelStatus
 {
-    ZCL_PANEL_STATUS_DISARMED       = 0x00,
-    ZCL_PANEL_STATUS_ARMED_STAY     = 0x01,
-    ZCL_PANEL_STATUS_ARMED_NIGHT    = 0x02,
-    ZCL_PANEL_STATUS_ARMED_AWAY     = 0x03,
-    ZCL_PANEL_STATUS_EXIT_DELAY     = 0x04,
-    ZCL_PANEL_STATUS_ENTRY_DELAY    = 0x05,
-    ZCL_PANEL_STATUS_NOT_READY      = 0x06,
-    ZCL_PANEL_STATUS_IN_ALARM       = 0x07,
-    ZCL_PANEL_STATUS_ARMING_STAY    = 0x08,
-    ZCL_PANEL_STATUS_ARMING_NIGHT   = 0x09,
-    ZCL_PANEL_STATUS_ARMING_AWAY    = 0x0a
+    ZCL_PANEL_STATUS_DISARMED = 0x00,
+    ZCL_PANEL_STATUS_ARMED_STAY = 0x01,
+    ZCL_PANEL_STATUS_ARMED_NIGHT = 0x02,
+    ZCL_PANEL_STATUS_ARMED_AWAY = 0x03,
+    ZCL_PANEL_STATUS_EXIT_DELAY = 0x04,
+    ZCL_PANEL_STATUS_ENTRY_DELAY = 0x05,
+    ZCL_PANEL_STATUS_NOT_READY = 0x06,
+    ZCL_PANEL_STATUS_IN_ALARM = 0x07,
+    ZCL_PANEL_STATUS_ARMING_STAY = 0x08,
+    ZCL_PANEL_STATUS_ARMING_NIGHT = 0x09,
+    ZCL_PANEL_STATUS_ARMING_AWAY = 0x0a
 };
 
 static pthread_mutex_t refCounterMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -127,8 +127,8 @@ static uint8_t getAndIncrementRefCounter(void);
 /**
  * Atomically get and decrement ref counter
  */
-//TODO: If flex can get gcc 4.9+ (C11 standard support), we can use standard atomic types without locks.
-// Punt to pthread_mutex until then
+// TODO: If flex can get gcc 4.9+ (C11 standard support), we can use standard atomic types without locks.
+//  Punt to pthread_mutex until then
 static uint8_t getAndDecrementRefCounter(void);
 
 
@@ -241,7 +241,8 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
             case IAS_ACE_GET_PANEL_STATUS_COMMAND_ID:
                 if (_this->callbacks->onGetPanelStatusReceived)
                 {
-                    _this->callbacks->onGetPanelStatusReceived(command->eui64, command->sourceEndpoint, _this->callbackContext);
+                    _this->callbacks->onGetPanelStatusReceived(
+                        command->eui64, command->sourceEndpoint, _this->callbackContext);
                     handled = true;
                 }
                 break;
@@ -260,14 +261,12 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
     return handled;
 }
 
-static void requestPanic(IASACECluster *cluster, const uint64_t eui64, const uint8_t endpointId, const PanelStatus panicStatus)
+static void
+requestPanic(IASACECluster *cluster, const uint64_t eui64, const uint8_t endpointId, const PanelStatus panicStatus)
 {
     if (cluster->callbacks->onPanicRequestReceived)
     {
-        cluster->callbacks->onPanicRequestReceived(eui64,
-                                                   endpointId,
-                                                   panicStatus,
-                                                   cluster->callbackContext);
+        cluster->callbacks->onPanicRequestReceived(eui64, endpointId, panicStatus, cluster->callbackContext);
     }
 }
 
@@ -275,7 +274,7 @@ static void requestArmDisarm(IASACECluster *cluster, ReceivedClusterCommand *com
 {
     ZCLArmCommandPayload payload;
     enum ArmNotification *zclResult = NULL;
-    int rc  = readArmCommandPayload(command, &payload);
+    int rc = readArmCommandPayload(command, &payload);
 
     if (rc != 0)
     {
@@ -287,14 +286,9 @@ static void requestArmDisarm(IASACECluster *cluster, ReceivedClusterCommand *com
     PanelStatus *requestedStatus = hashMapGet(zclArmModeToPanelStatus, &payload.armMode, sizeof(int));
     if (requestedStatus)
     {
-        const IASACEArmRequest request = {
-                .requestedStatus = *requestedStatus,
-                .accessCode = payload.accessCode
-        };
-        ArmDisarmNotification result = cluster->callbacks->onArmRequestReceived(command->eui64,
-                                                                                command->sourceEndpoint,
-                                                                                &request,
-                                                                                cluster->callbackContext);
+        const IASACEArmRequest request = {.requestedStatus = *requestedStatus, .accessCode = payload.accessCode};
+        ArmDisarmNotification result = cluster->callbacks->onArmRequestReceived(
+            command->eui64, command->sourceEndpoint, &request, cluster->callbackContext);
         zclResult = hashMapGet(armNotificationToZCL, &result, sizeof(int));
         if (zclResult)
         {
@@ -308,12 +302,15 @@ static void requestArmDisarm(IASACECluster *cluster, ReceivedClusterCommand *com
         }
         else
         {
-            icLogWarn(LOG_TAG, "Arm/Disarm request result [0x%02" PRIx8 "] did not map to a ZCL arm notification", (uint8_t) result);
+            icLogWarn(LOG_TAG,
+                      "Arm/Disarm request result [0x%02" PRIx8 "] did not map to a ZCL arm notification",
+                      (uint8_t) result);
         }
     }
     else
     {
-        icLogError(LOG_TAG, "Unable to convert ZCL arm mode 0x%02" PRIx8 " to a deviceService panel status", payload.armMode);
+        icLogError(
+            LOG_TAG, "Unable to convert ZCL arm mode 0x%02" PRIx8 " to a deviceService panel status", payload.armMode);
     }
 
     free(payload.accessCode);
@@ -338,7 +335,8 @@ static int readArmCommandPayload(ReceivedClusterCommand *command, ZCLArmCommandP
 
     if (!errno)
     {
-        icLogDebug(LOG_TAG, "Arm command: Mode: 0x%02" PRIx8 ", Zone: 0x%02" PRIx8 "", payload->armMode, payload->zoneId);
+        icLogDebug(
+            LOG_TAG, "Arm command: Mode: 0x%02" PRIx8 ", Zone: 0x%02" PRIx8 "", payload->armMode, payload->zoneId);
     }
     else
     {
@@ -415,20 +413,15 @@ void iasACEClusterSendPanelStatus(uint64_t eui64, uint8_t destEndpoint, const Se
         }
 
         icLogDebug(LOG_TAG,
-                   "Sending panel status [0x%02" PRIx8 "] to %" PRIx64 ".%" PRIu8" audible: %d, seconds left: %d",
+                   "Sending panel status [0x%02" PRIx8 "] to %" PRIx64 ".%" PRIu8 " audible: %d, seconds left: %d",
                    *zclPanelStatus,
                    eui64,
                    destEndpoint,
                    audibleNotif,
                    state->timeLeft);
 
-        zigbeeSubsystemSendCommand(eui64,
-                                   destEndpoint,
-                                   IAS_ACE_CLUSTER_ID,
-                                   false,
-                                   commandId,
-                                   payload,
-                                   ARRAY_LENGTH(payload));
+        zigbeeSubsystemSendCommand(
+            eui64, destEndpoint, IAS_ACE_CLUSTER_ID, false, commandId, payload, ARRAY_LENGTH(payload));
     }
     else
     {
@@ -460,7 +453,7 @@ void iasACEClusterSendZoneStatus(uint64_t eui64, uint8_t destEndpoint, const Zon
     zigbeeIOPutUint16(zio, zclZoneStatus);
 
     uint8_t audibleNotif = AUDIBLE_NOTIF_MUTE;
-    switch(zoneChanged->indication)
+    switch (zoneChanged->indication)
     {
         case SECURITY_INDICATION_AUDIBLE:
         case SECURITY_INDICATION_BOTH:
@@ -474,7 +467,9 @@ void iasACEClusterSendZoneStatus(uint64_t eui64, uint8_t destEndpoint, const Zon
 
         case SECURITY_INDICATION_INVALID:
         default:
-            icLogWarn(LOG_TAG, "SecurityIndication [%d] not recognized! Audible notification disabled.", zoneChanged->indication);
+            icLogWarn(LOG_TAG,
+                      "SecurityIndication [%d] not recognized! Audible notification disabled.",
+                      zoneChanged->indication);
             break;
     }
 

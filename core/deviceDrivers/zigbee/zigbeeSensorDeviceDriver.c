@@ -21,63 +21,69 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icUtil/array.h>
-#include <jsonHelper/jsonHelper.h>
-#include <zigbeeClusters/iasZoneCluster.h>
-#include <zigbeeClusters/helpers/iasZoneHelper.h>
-#include <commonDeviceDefs.h>
-#include <subsystems/zigbee/zigbeeIO.h>
-#include <errno.h>
-#include <memory.h>
-#include <math.h>
-#include <zigbeeClusters/powerConfigurationCluster.h>
-#include <zigbeeClusters/pollControlCluster.h>
-#include <zigbeeClusters/helpers/comcastBatterySavingHelper.h>
+#include "device-driver/device-driver-manager.h"
+#include "device/deviceModelHelper.h"
+#include "deviceDrivers/zigbeeDriverCommon.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
-#include "deviceDrivers/zigbeeDriverCommon.h"
-#include <deviceDescriptors.h>
-#include <device/icDeviceResource.h>
-#include <deviceServicePrivate.h>
-#include "subsystems/zigbee/zigbeeEventTracker.h"
 #include "resourceTypes.h"
-#include "device/deviceModelHelper.h"
-#include "device-driver/device-driver-manager.h"
+#include "subsystems/zigbee/zigbeeEventTracker.h"
+#include <commonDeviceDefs.h>
+#include <device/icDeviceResource.h>
+#include <deviceDescriptors.h>
+#include <deviceServicePrivate.h>
+#include <errno.h>
+#include <icUtil/array.h>
+#include <jsonHelper/jsonHelper.h>
+#include <math.h>
+#include <memory.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeIO.h>
+#include <zigbeeClusters/helpers/comcastBatterySavingHelper.h>
+#include <zigbeeClusters/helpers/iasZoneHelper.h>
+#include <zigbeeClusters/iasZoneCluster.h>
+#include <zigbeeClusters/pollControlCluster.h>
+#include <zigbeeClusters/powerConfigurationCluster.h>
 
-#define LOG_TAG "ZigBeeSensorDD"
+#define LOG_TAG     "ZigBeeSensorDD"
 #define logFmt(fmt) "%s: " fmt, __func__
 #include <icLog/logging.h>
 
-#define DEVICE_DRIVER_NAME "ZigBeeSensorDD"
-#define MY_DC_VERSION 1
+#define DEVICE_DRIVER_NAME        "ZigBeeSensorDD"
+#define MY_DC_VERSION             1
 #define MY_SENSOR_PROFILE_VERSION 2
 
 static inline icDeviceResource *createMagFieldStrengthResource(icDeviceEndpoint *endpoint)
 {
-    return createEndpointResource(endpoint, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH,
-                                       NULL,
-                                       RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH,
-                                       RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
-                                       CACHING_POLICY_ALWAYS);
+    return createEndpointResource(endpoint,
+                                  SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH,
+                                  NULL,
+                                  RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH,
+                                  RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS |
+                                      RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                  CACHING_POLICY_ALWAYS);
 }
 
 static inline icDeviceResource *createMagFieldHealthResource(icDeviceEndpoint *endpoint)
 {
-    return createEndpointResource(endpoint, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
-                                       NULL,
-                                       RESOURCE_TYPE_STRING,
-                                       RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_LAZY_SAVE_NEXT,
-                                       CACHING_POLICY_ALWAYS);
+    return createEndpointResource(endpoint,
+                                  SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
+                                  NULL,
+                                  RESOURCE_TYPE_STRING,
+                                  RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                  CACHING_POLICY_ALWAYS);
 }
 
 /* ZigbeeDriverCommonCallbacks */
-static bool getDiscoveredDeviceMetadata(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details, icStringHashMap *metadata);
+static bool
+getDiscoveredDeviceMetadata(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details, icStringHashMap *metadata);
 static void processDeviceDescriptorMetadata(ZigbeeDriverCommon *ctx, icDevice *device, icStringHashMap *metadata);
 static const char *mapDeviceIdToProfile(ZigbeeDriverCommon *ctx, uint16_t deviceId);
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext);
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext);
 
-static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device,
+static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
+                                       icDevice *device,
                                        IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                        icInitialResourceValues *initialResourceValues);
 
@@ -86,9 +92,10 @@ static void handlePollControlCheckin(uint64_t eui64,
                                      const ComcastBatterySavingData *batterySavingData,
                                      const void *ctx);
 
-static bool
-registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *discoveredDeviceDetails,
-                  icInitialResourceValues *initialResourceValues);
+static bool registerResources(ZigbeeDriverCommon *ctx,
+                              icDevice *device,
+                              IcDiscoveredDeviceDetails *discoveredDeviceDetails,
+                              icInitialResourceValues *initialResourceValues);
 
 /* IASZoneClusterCallbacks */
 static void onZoneStatusChanged(uint64_t eui64,
@@ -102,7 +109,8 @@ static inline char *batterySavingDataGetMagneticStrengthMilliString(uint16_t mag
 static inline const char *batterySavingDataMagneticFieldStrengthToHealth(uint16_t magStrengthMicroTesla);
 static bool isZoneClosed(const char *deviceUuid);
 static bool createMagneticFieldResources(icDevice *device, bool isPairing);
-static void updateMagneticFieldResources(const char * deviceUuid, uint8_t, const ComcastBatterySavingData *batterySavingData);
+static void
+updateMagneticFieldResources(const char *deviceUuid, uint8_t, const ComcastBatterySavingData *batterySavingData);
 
 // Ranges of magnetic field strength defined for magnetic field health
 #define MAGNETIC_FIELD_POOR_HEALTH_MIN 0
@@ -110,30 +118,25 @@ static void updateMagneticFieldResources(const char * deviceUuid, uint8_t, const
 #define MAGNETIC_FIELD_GOOD_HEALTH_MIN 10000
 #define MAGNETIC_FIELD_GOOD_HEALTH_MAX 21460
 
-static const uint16_t myDeviceIds[] = { SENSOR_DEVICE_ID };
+static const uint16_t myDeviceIds[] = {SENSOR_DEVICE_ID};
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (260)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(260))) static void driverRegister(void)
 {
-    static const ZigbeeDriverCommonCallbacks myHooks = {
-            .fetchInitialResourceValues = fetchInitialResourceValues,
-            .registerResources = registerResources,
-            .mapDeviceIdToProfile = mapDeviceIdToProfile,
-            .getDiscoveredDeviceMetadata = getDiscoveredDeviceMetadata,
-            .processDeviceDescriptorMetadata = processDeviceDescriptorMetadata,
-            .preConfigureCluster = preConfigureCluster
-    };
+    static const ZigbeeDriverCommonCallbacks myHooks = {.fetchInitialResourceValues = fetchInitialResourceValues,
+                                                        .registerResources = registerResources,
+                                                        .mapDeviceIdToProfile = mapDeviceIdToProfile,
+                                                        .getDiscoveredDeviceMetadata = getDiscoveredDeviceMetadata,
+                                                        .processDeviceDescriptorMetadata =
+                                                            processDeviceDescriptorMetadata,
+                                                        .preConfigureCluster = preConfigureCluster};
 
     static const IASZoneClusterCallbacks iasZoneClusterCallbacks = {
-            .onZoneEnrollRequested = NULL,
-            .onZoneStatusChanged = onZoneStatusChanged,
-            .processComcastBatterySavingData = zigbeeDriverCommonComcastBatterySavingUpdateResources
-    };
+        .onZoneEnrollRequested = NULL,
+        .onZoneStatusChanged = onZoneStatusChanged,
+        .processComcastBatterySavingData = zigbeeDriverCommonComcastBatterySavingUpdateResources};
 
-    static const PollControlClusterCallbacks pollControlClusterCallbacks = {
-            .checkin = handlePollControlCheckin
-    };
+    static const PollControlClusterCallbacks pollControlClusterCallbacks = {.checkin = handlePollControlCheckin};
 
     DeviceDriver *myDriver = zigbeeDriverCommonCreateDeviceDriver(DEVICE_DRIVER_NAME,
                                                                   SENSOR_DC,
@@ -148,20 +151,23 @@ static void driverRegister(void)
 
     zigbeeDriverCommonAddCluster(myDriver, iasZoneClusterCreate(&iasZoneClusterCallbacks, myDriver));
 
-    ZigbeeCluster *cluster = zigbeeDriverCommonGetCluster((ZigbeeDriverCommon *)myDriver, POLL_CONTROL_CLUSTER_ID);
+    ZigbeeCluster *cluster = zigbeeDriverCommonGetCluster((ZigbeeDriverCommon *) myDriver, POLL_CONTROL_CLUSTER_ID);
     pollControlClusterAddCallback(cluster, &pollControlClusterCallbacks, myDriver);
 
     deviceDriverManagerRegisterDriver(myDriver);
 }
 
-static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device,
+static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
+                                       icDevice *device,
                                        IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                        icInitialResourceValues *initialResourceValues)
 {
     return iasZoneFetchInitialResourceValues(device, NULL, NULL, 0, discoveredDeviceDetails, initialResourceValues);
 }
 
-static bool registerResources(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *discoveredDeviceDetails,
+static bool registerResources(ZigbeeDriverCommon *ctx,
+                              icDevice *device,
+                              IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                               icInitialResourceValues *initialResourceValues)
 {
     bool registered = true;
@@ -214,7 +220,8 @@ static void onZoneStatusChanged(uint64_t eui64,
     }
 }
 
-static bool getDiscoveredDeviceMetadata(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details, icStringHashMap *metadata)
+static bool
+getDiscoveredDeviceMetadata(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details, icStringHashMap *metadata)
 {
     bool ok = true;
 
@@ -258,19 +265,24 @@ static void processDeviceDescriptorMetadata(ZigbeeDriverCommon *ctx, icDevice *d
     {
         if (!createMagneticFieldResources(device, false))
         {
-            icLogError(LOG_TAG, "%s: Failed to create magnetic field resources required due to metadata updates!", __func__);
+            icLogError(
+                LOG_TAG, "%s: Failed to create magnetic field resources required due to metadata updates!", __func__);
         }
     }
     else
     {
-        //metadata was updated and the magnetic field strength resources are not required.  Check to see if we previously created
-        // them and if so, set the related values to NULL.  Note we have to do this for all endpoints since it could be on multiple.
+        // metadata was updated and the magnetic field strength resources are not required.  Check to see if we
+        // previously created
+        //  them and if so, set the related values to NULL.  Note we have to do this for all endpoints since it could be
+        //  on multiple.
         scoped_icLinkedListIterator *iterator = linkedListIteratorCreate(device->endpoints);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceEndpoint *endpoint = (icDeviceEndpoint*)linkedListIteratorGetNext(iterator);
-            scoped_icDeviceResource *strength = deviceServiceGetResourceById(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
-            scoped_icDeviceResource *health = deviceServiceGetResourceById(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
+            icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iterator);
+            scoped_icDeviceResource *strength = deviceServiceGetResourceById(
+                device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
+            scoped_icDeviceResource *health =
+                deviceServiceGetResourceById(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
 
             if (strength || health)
             {
@@ -279,26 +291,19 @@ static void processDeviceDescriptorMetadata(ZigbeeDriverCommon *ctx, icDevice *d
 
             if (strength)
             {
-                updateResource(device->uuid,
-                       endpoint->id,
-                       SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH,
-                       NULL,
-                       NULL);
+                updateResource(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH, NULL, NULL);
             }
 
             if (health)
             {
-                updateResource(device->uuid,
-                       endpoint->id,
-                       SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
-                       NULL,
-                       NULL);
+                updateResource(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH, NULL, NULL);
             }
         }
     }
 }
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext)
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext)
 {
     if (cluster->clusterId == POWER_CONFIGURATION_CLUSTER_ID)
     {
@@ -307,16 +312,16 @@ static bool preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster,
 
     if (cluster->clusterId == POLL_CONTROL_CLUSTER_ID)
     {
-        //5 * 60 * 4 == 5 minutes in quarter seconds
+        // 5 * 60 * 4 == 5 minutes in quarter seconds
         stringHashMapPutCopy(deviceConfigContext->configurationMetadata, LONG_POLL_INTERVAL_QS_METADATA, "1200");
 
-        //2 == half second in quarter seconds
+        // 2 == half second in quarter seconds
         stringHashMapPutCopy(deviceConfigContext->configurationMetadata, SHORT_POLL_INTERVAL_QS_METADATA, "2");
 
-        //10 * 4 == 10 seconds in quarter seconds
+        // 10 * 4 == 10 seconds in quarter seconds
         stringHashMapPutCopy(deviceConfigContext->configurationMetadata, FAST_POLL_TIMEOUT_QS_METADATA, "40");
 
-        //27 * 60 * 4 == 27 minutes in quarter seconds
+        // 27 * 60 * 4 == 27 minutes in quarter seconds
         stringHashMapPutCopy(deviceConfigContext->configurationMetadata, CHECK_IN_INTERVAL_QS_METADATA, "6480");
     }
 
@@ -348,7 +353,7 @@ static bool isZoneClosed(const char *deviceUuid)
     scoped_icLinkedListIterator *iterator = linkedListIteratorCreate(device->endpoints);
     while (linkedListIteratorHasNext(iterator) && zoneFaultedResource == NULL)
     {
-        icDeviceEndpoint *endpoint = (icDeviceEndpoint*) linkedListIteratorGetNext(iterator);
+        icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iterator);
         zoneFaultedResource = deviceServiceGetResourceById(deviceUuid, endpoint->id, SENSOR_PROFILE_RESOURCE_FAULTED);
     }
 
@@ -378,10 +383,11 @@ static void handlePollControlCheckin(uint64_t eui64,
         if (isMagneticFieldStrengthSupported(deviceUuid) && isZoneClosed(deviceUuid))
         {
             scoped_icDeviceResource *modelResource =
-                    deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
+                deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
             if (modelResource != NULL && modelResource->value != NULL)
             {
-                scoped_generic char *magStrMilliTeslaString = batterySavingDataGetMagneticStrengthMilliString(batterySavingData->optionalData.magStrMicroTesla);
+                scoped_generic char *magStrMilliTeslaString =
+                    batterySavingDataGetMagneticStrengthMilliString(batterySavingData->optionalData.magStrMicroTesla);
                 char *markerValue = stringBuilder("%s,%s", modelResource->value, magStrMilliTeslaString);
                 zigbeeEventTrackerAddMagneticStrengthReport(deviceUuid, markerValue);
                 markerValue = NULL;
@@ -393,7 +399,7 @@ static void handlePollControlCheckin(uint64_t eui64,
 static inline char *batterySavingDataGetMagneticStrengthMilliString(uint16_t magStrengthMicroTesla)
 {
     // convert micro Tesla to milli Tesla string
-    return  stringBuilder("%d.%03d", magStrengthMicroTesla/1000, magStrengthMicroTesla%1000);
+    return stringBuilder("%d.%03d", magStrengthMicroTesla / 1000, magStrengthMicroTesla % 1000);
 }
 
 static inline bool isMagneticFieldStrengthSupported(const char *deviceUuid)
@@ -411,15 +417,18 @@ static inline bool isMagneticFieldStrengthSupported(const char *deviceUuid)
 
 static inline const char *batterySavingDataMagneticFieldStrengthToHealth(uint16_t magStrengthMicroTesla)
 {
-    if (magStrengthMicroTesla >= MAGNETIC_FIELD_POOR_HEALTH_MIN && magStrengthMicroTesla < MAGNETIC_FIELD_FAIR_HEALTH_MIN)
+    if (magStrengthMicroTesla >= MAGNETIC_FIELD_POOR_HEALTH_MIN &&
+        magStrengthMicroTesla < MAGNETIC_FIELD_FAIR_HEALTH_MIN)
     {
         return "POOR";
     }
-    else if (magStrengthMicroTesla >= MAGNETIC_FIELD_FAIR_HEALTH_MIN && magStrengthMicroTesla < MAGNETIC_FIELD_GOOD_HEALTH_MIN)
+    else if (magStrengthMicroTesla >= MAGNETIC_FIELD_FAIR_HEALTH_MIN &&
+             magStrengthMicroTesla < MAGNETIC_FIELD_GOOD_HEALTH_MIN)
     {
         return "FAIR";
     }
-    else if (magStrengthMicroTesla >= MAGNETIC_FIELD_GOOD_HEALTH_MIN && magStrengthMicroTesla <= MAGNETIC_FIELD_GOOD_HEALTH_MAX)
+    else if (magStrengthMicroTesla >= MAGNETIC_FIELD_GOOD_HEALTH_MIN &&
+             magStrengthMicroTesla <= MAGNETIC_FIELD_GOOD_HEALTH_MAX)
     {
         return "GOOD";
     }
@@ -431,7 +440,7 @@ static inline const char *batterySavingDataMagneticFieldStrengthToHealth(uint16_
  * If we are creating the resources during pairing we use createEndpointResource which only modifies the provided
  * icDevice structure.  If we are creating these resources after the device has already been paired, we have to
  * use addNewResource which persists the modified structure.
-*/
+ */
 static bool createMagneticFieldResources(icDevice *device, bool isPairing)
 {
     bool registered = true;
@@ -446,7 +455,8 @@ static bool createMagneticFieldResources(icDevice *device, bool isPairing)
         // 1:1 mapping.
         if (icDeviceResourceGetValueById(endpoint->resources, SENSOR_PROFILE_RESOURCE_FAULTED))
         {
-            scoped_icDeviceResource *strength = deviceServiceGetResourceById(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
+            scoped_icDeviceResource *strength = deviceServiceGetResourceById(
+                device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
             if (!strength)
             {
                 if (isPairing)
@@ -460,9 +470,10 @@ static bool createMagneticFieldResources(icDevice *device, bool isPairing)
                 }
             }
 
-            if (registered) //only proceed if the previous resource created successfully
+            if (registered) // only proceed if the previous resource created successfully
             {
-                scoped_icDeviceResource *health = deviceServiceGetResourceById(device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
+                scoped_icDeviceResource *health = deviceServiceGetResourceById(
+                    device->uuid, endpoint->id, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
                 if (!health)
                 {
                     if (isPairing)
@@ -478,14 +489,16 @@ static bool createMagneticFieldResources(icDevice *device, bool isPairing)
 
                 if (!registered)
                 {
-                    icLogError(LOG_TAG, "Unable to register endpoint resource %s",
+                    icLogError(LOG_TAG,
+                               "Unable to register endpoint resource %s",
                                SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
                 }
             }
             else
             {
-                icLogError(LOG_TAG, "Unable to register endpoint resource %s",
-                               SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
+                icLogError(LOG_TAG,
+                           "Unable to register endpoint resource %s",
+                           SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
             }
         }
     }
@@ -493,35 +506,41 @@ static bool createMagneticFieldResources(icDevice *device, bool isPairing)
     return registered;
 }
 
-static void updateMagneticFieldResources(const char * deviceUuid, uint8_t endpointId, const ComcastBatterySavingData *batterySavingData)
+static void updateMagneticFieldResources(const char *deviceUuid,
+                                         uint8_t endpointId,
+                                         const ComcastBatterySavingData *batterySavingData)
 {
     double lastMagneticFieldStrengthMilliTesla = 0.0;
     const char *lastMagneticFieldHealth = NULL;
 
     scoped_generic const char *endpointName = zigbeeSubsystemEndpointIdAsString(endpointId);
-    scoped_icDeviceResource *magneticFieldStrengthResource = deviceServiceGetResourceById(deviceUuid, endpointName,
-                                                                                          SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
+    scoped_icDeviceResource *magneticFieldStrengthResource =
+        deviceServiceGetResourceById(deviceUuid, endpointName, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_STRENGTH);
     if (magneticFieldStrengthResource)
     {
         stringToDouble(magneticFieldStrengthResource->value, &lastMagneticFieldStrengthMilliTesla);
     }
 
-    scoped_icDeviceResource *magneticFieldHealthResource = deviceServiceGetResourceById(deviceUuid, endpointName,
-                                                                                        SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
+    scoped_icDeviceResource *magneticFieldHealthResource =
+        deviceServiceGetResourceById(deviceUuid, endpointName, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH);
     if (magneticFieldHealthResource)
     {
         lastMagneticFieldHealth = magneticFieldHealthResource->value;
     }
 
-    const char *magneticFieldHealth = batterySavingDataMagneticFieldStrengthToHealth(batterySavingData->optionalData.magStrMicroTesla);
-    const uint16_t diff = (uint16_t)abs((int32_t)(lastMagneticFieldStrengthMilliTesla * 1000) - batterySavingData->optionalData.magStrMicroTesla);
+    const char *magneticFieldHealth =
+        batterySavingDataMagneticFieldStrengthToHealth(batterySavingData->optionalData.magStrMicroTesla);
+    const uint16_t diff = (uint16_t) abs((int32_t) (lastMagneticFieldStrengthMilliTesla * 1000) -
+                                         batterySavingData->optionalData.magStrMicroTesla);
 
     if (diff >= 1000 || stringCompare(lastMagneticFieldHealth, magneticFieldHealth, false) != 0)
     {
-        scoped_generic char *magneticFieldStrengthMilliString = batterySavingDataGetMagneticStrengthMilliString(batterySavingData->optionalData.magStrMicroTesla);
+        scoped_generic char *magneticFieldStrengthMilliString =
+            batterySavingDataGetMagneticStrengthMilliString(batterySavingData->optionalData.magStrMicroTesla);
         // Event is generated for magnetic strength only and magnetic health is added as additional detail to the event.
         scoped_cJSON *magneticStrengthDetails = cJSON_CreateObject();
-        cJSON_AddItemToObjectCS(magneticStrengthDetails, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
+        cJSON_AddItemToObjectCS(magneticStrengthDetails,
+                                SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
                                 cJSON_CreateString(magneticFieldHealth));
 
         updateResource(deviceUuid,
@@ -530,11 +549,7 @@ static void updateMagneticFieldResources(const char * deviceUuid, uint8_t endpoi
                        magneticFieldStrengthMilliString,
                        magneticStrengthDetails);
 
-        updateResource(deviceUuid,
-                       endpointName,
-                       SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH,
-                       magneticFieldHealth,
-                       NULL);
-
+        updateResource(
+            deviceUuid, endpointName, SENSOR_PROFILE_RESOURCE_MAGNETIC_FIELD_HEALTH, magneticFieldHealth, NULL);
     }
 }

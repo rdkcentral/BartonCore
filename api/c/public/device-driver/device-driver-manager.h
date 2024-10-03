@@ -26,8 +26,8 @@
 
 #pragma once
 
-#include <stdbool.h>
 #include "device-driver.h"
+#include <stdbool.h>
 
 /**
  * @brief - Add a device driver to the device driver manager. This must only be called in a constructor attribute

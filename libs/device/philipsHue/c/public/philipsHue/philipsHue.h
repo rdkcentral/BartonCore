@@ -31,10 +31,10 @@
 #ifndef PHILIPS_HUE_H
 #define PHILIPS_HUE_H
 
-#include <stdbool.h>
-#include <icTypes/icLinkedList.h>
 #include <icTypes/icHashMap.h>
+#include <icTypes/icLinkedList.h>
 #include <icTypes/icStringHashMap.h>
+#include <stdbool.h>
 
 typedef struct
 {
@@ -57,7 +57,7 @@ bool philipsHueStopDiscoveringBridges();
 /*
  * Retrieve the list and state of all lights connected to the bridge
  */
-icLinkedList* philipsHueGetLights(const char *ipAddress, const char *username);
+icLinkedList *philipsHueGetLights(const char *ipAddress, const char *username);
 
 /*
  * Turn a light on or off
@@ -86,4 +86,4 @@ bool philipsHueStopMonitoring(const char *ipAddress);
  */
 void philipsHueLightDestroy(PhilipsHueLight *light);
 
-#endif //PHILIPS_HUE_H
+#endif // PHILIPS_HUE_H

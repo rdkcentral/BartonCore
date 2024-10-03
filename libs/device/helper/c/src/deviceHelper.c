@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -31,15 +31,13 @@
 #include <string.h>
 
 #define READ_RESOURCE_TIMEOUT_SECONDS 60
-#define LOG_TAG "deviceHelper"
+#define LOG_TAG                       "deviceHelper"
 
-char* createDeviceUri(const char *uuid)
+char *createDeviceUri(const char *uuid)
 {
-    //URI format: /[uuid]
-    char *uri = (char*)malloc(1
-                              + strlen(uuid)
-                              + 1);
-    if(uri == NULL)
+    // URI format: /[uuid]
+    char *uri = (char *) malloc(1 + strlen(uuid) + 1);
+    if (uri == NULL)
     {
         return NULL;
     }
@@ -49,15 +47,11 @@ char* createDeviceUri(const char *uuid)
     return uri;
 }
 
-char* createEndpointUri(const char *uuid, const char *endpointId)
+char *createEndpointUri(const char *uuid, const char *endpointId)
 {
-    //URI format: /[uuid]/ep/[endpoint id]
-    char *uri = (char*)malloc(1
-                              + strlen(uuid)
-                              + 4
-                              + strlen(endpointId)
-                              + 1);
-    if(uri == NULL)
+    // URI format: /[uuid]/ep/[endpoint id]
+    char *uri = (char *) malloc(1 + strlen(uuid) + 4 + strlen(endpointId) + 1);
+    if (uri == NULL)
     {
         return NULL;
     }
@@ -67,15 +61,11 @@ char* createEndpointUri(const char *uuid, const char *endpointId)
     return uri;
 }
 
-char* createDeviceResourceUri(const char *uuid, const char *resourceId)
+char *createDeviceResourceUri(const char *uuid, const char *resourceId)
 {
-    //URI format: /[uuid]/r/[resource id]
-    char *uri = (char*)malloc(1
-                              + strlen(uuid)
-                              + 3
-                              + strlen(resourceId)
-                              + 1);
-    if(uri == NULL)
+    // URI format: /[uuid]/r/[resource id]
+    char *uri = (char *) malloc(1 + strlen(uuid) + 3 + strlen(resourceId) + 1);
+    if (uri == NULL)
     {
         return NULL;
     }
@@ -87,13 +77,9 @@ char* createDeviceResourceUri(const char *uuid, const char *resourceId)
 
 char *createDeviceMetadataUri(const char *uuid, const char *metadataId)
 {
-    //URI format: /[uuid]/m/[resource id]
-    char *uri = (char*)malloc(1
-                              + strlen(uuid)
-                              + 3
-                              + strlen(metadataId)
-                              + 1);
-    if(uri == NULL)
+    // URI format: /[uuid]/m/[resource id]
+    char *uri = (char *) malloc(1 + strlen(uuid) + 3 + strlen(metadataId) + 1);
+    if (uri == NULL)
     {
         return NULL;
     }
@@ -103,16 +89,13 @@ char *createDeviceMetadataUri(const char *uuid, const char *metadataId)
     return uri;
 }
 
-char* createEndpointResourceUri(const char *uuid, const char *endpointId, const char *resourceId)
+char *createEndpointResourceUri(const char *uuid, const char *endpointId, const char *resourceId)
 {
     char *epUri = createEndpointUri(uuid, endpointId);
 
-    //URI Format: [endpointURI]/r/[resourceId]
-    //The compiler will optimize the constants addition
-    char *uri = (char*)malloc(strlen(epUri)
-                              + 3
-                              + strlen(resourceId)
-                              + 1);
+    // URI Format: [endpointURI]/r/[resourceId]
+    // The compiler will optimize the constants addition
+    char *uri = (char *) malloc(strlen(epUri) + 3 + strlen(resourceId) + 1);
 
     sprintf(uri, "%s/r/%s", epUri, resourceId);
 
@@ -121,16 +104,13 @@ char* createEndpointResourceUri(const char *uuid, const char *endpointId, const 
     return uri;
 }
 
-char* createEndpointMetadataUri(const char *uuid, const char *endpointId, const char *metadataId)
+char *createEndpointMetadataUri(const char *uuid, const char *endpointId, const char *metadataId)
 {
     char *epUri = createEndpointUri(uuid, endpointId);
 
-    //URI Format: /[endpointUri]/m/[metadataId]
-    //The compiler will optimize the constants addition
-    char *uri = (char*)malloc(strlen(epUri)
-                              + 3
-                              + strlen(metadataId)
-                              + 1);
+    // URI Format: /[endpointUri]/m/[metadataId]
+    // The compiler will optimize the constants addition
+    char *uri = (char *) malloc(strlen(epUri) + 3 + strlen(metadataId) + 1);
 
     sprintf(uri, "%s/m/%s", epUri, metadataId);
 
@@ -139,9 +119,9 @@ char* createEndpointMetadataUri(const char *uuid, const char *endpointId, const 
     return uri;
 }
 
-char* createResourceUri(const char *ownerUri, const char *resourceId)
+char *createResourceUri(const char *ownerUri, const char *resourceId)
 {
-    //URI format: ownerUri/r/[resource id]
+    // URI format: ownerUri/r/[resource id]
 
     return stringBuilder("%s/r/%s", ownerUri, resourceId);
 }
@@ -149,7 +129,7 @@ char* createResourceUri(const char *ownerUri, const char *resourceId)
 /*
  * Extract the device UUID from the given URI, caller must free result
  */
-char* getDeviceUuidFromUri(const char *uri)
+char *getDeviceUuidFromUri(const char *uri)
 {
     char *retVal = NULL;
     // Format should /deviceUuid/... or just /deviceUuid
@@ -177,7 +157,7 @@ char* getDeviceUuidFromUri(const char *uri)
 /*
  * Extract the endpoint ID from the given URI, caller must free result
  */
-char* getEndpointIdFromUri(const char *uri)
+char *getEndpointIdFromUri(const char *uri)
 {
     char *retVal = NULL;
     // Format should /deviceUuid/ep/endpointId/... or /deviceUuid/ep/endpointId

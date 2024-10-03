@@ -20,38 +20,38 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+#include "deviceServicePrivate.h"
+#include <device-driver/device-driver.h>
+#include <device/icDeviceResource.h>
+#include <icConfig/simpleProtectConfig.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icLog/logging.h>
-#include <device/icDeviceResource.h>
-#include <device-driver/device-driver.h>
-#include "deviceServicePrivate.h"
-#include <jsonHelper/jsonHelper.h>
-#include <icUtil/stringUtils.h>
-#include <icConfig/simpleProtectConfig.h>
 
-#define LOG_TAG "deviceService"
+#define LOG_TAG                               "deviceService"
 
 /*
  * Created by Thomas Lea on 8/10/15.
  */
 
 // Keys for resource json representation
-#define RESOURCE_ID_KEY "id"
-#define RESOURCE_URI_KEY "uri"
-#define RESOURCE_MODE_KEY "mode"
-#define RESOURCE_CACHING_POLICY_KEY "cachingPolicy"
+#define RESOURCE_ID_KEY                       "id"
+#define RESOURCE_URI_KEY                      "uri"
+#define RESOURCE_MODE_KEY                     "mode"
+#define RESOURCE_CACHING_POLICY_KEY           "cachingPolicy"
 #define RESOURCE_DATE_OF_LAST_SYNC_MILLIS_KEY "dateOfLastSyncMillis"
-#define RESOURCE_VALUE_KEY "value"
-#define RESOURCE_ENCRYPTED_VALUE_KEY "value_enc"
-#define RESOURCE_TYPE_KEY "type"
-#define RESOURCE_NAMESPACE_KEY "namespace"
+#define RESOURCE_VALUE_KEY                    "value"
+#define RESOURCE_ENCRYPTED_VALUE_KEY          "value_enc"
+#define RESOURCE_TYPE_KEY                     "type"
+#define RESOURCE_NAMESPACE_KEY                "namespace"
 
 
 extern inline void resourceDestroy__auto(icDeviceResource **resource);
 
-void resourceDestroy(icDeviceResource* resource)
+void resourceDestroy(icDeviceResource *resource)
 {
     if (resource != NULL)
     {
@@ -66,7 +66,7 @@ void resourceDestroy(icDeviceResource* resource)
     }
 }
 
-void resourcePrint(icDeviceResource* resource, const char* prefix)
+void resourcePrint(icDeviceResource *resource, const char *prefix)
 {
     if (resource == NULL)
     {
@@ -87,12 +87,12 @@ void resourcePrint(icDeviceResource* resource, const char* prefix)
     }
 }
 
-icDeviceResource* resourceClone(const icDeviceResource* resource)
+icDeviceResource *resourceClone(const icDeviceResource *resource)
 {
-    icDeviceResource* clone = NULL;
+    icDeviceResource *clone = NULL;
     if (resource != NULL)
     {
-        clone = (icDeviceResource*) calloc(1, sizeof(icDeviceResource));
+        clone = (icDeviceResource *) calloc(1, sizeof(icDeviceResource));
         if (resource->deviceUuid != NULL)
         {
             clone->deviceUuid = strdup(resource->deviceUuid);
@@ -128,9 +128,9 @@ icDeviceResource* resourceClone(const icDeviceResource* resource)
     return clone;
 }
 
-cJSON* resourceToJSON(const icDeviceResource* resource, const icSerDesContext *context)
+cJSON *resourceToJSON(const icDeviceResource *resource, const icSerDesContext *context)
 {
-    cJSON* json = cJSON_CreateObject();
+    cJSON *json = cJSON_CreateObject();
     char *resourceValue = NULL;
     bool resourceValueEncrypted = false;
 
@@ -138,8 +138,8 @@ cJSON* resourceToJSON(const icDeviceResource* resource, const icSerDesContext *c
     {
         if (serDesHasContextValue(context, RESOURCE_NAMESPACE_KEY) == true)
         {
-            resourceValue = simpleProtectConfigData(serDesGetContextValue(context, RESOURCE_NAMESPACE_KEY),
-                                                                          resource->value);
+            resourceValue =
+                simpleProtectConfigData(serDesGetContextValue(context, RESOURCE_NAMESPACE_KEY), resource->value);
             resourceValueEncrypted = true;
         }
         else
@@ -178,14 +178,14 @@ cJSON* resourceToJSON(const icDeviceResource* resource, const icSerDesContext *c
     return json;
 }
 
-cJSON* resourcesToJSON(icLinkedList* resources, const icSerDesContext *context)
+cJSON *resourcesToJSON(icLinkedList *resources, const icSerDesContext *context)
 {
-    cJSON* resourcesJSON = cJSON_CreateObject();
-    icLinkedListIterator* iter = linkedListIteratorCreate(resources);
+    cJSON *resourcesJSON = cJSON_CreateObject();
+    icLinkedListIterator *iter = linkedListIteratorCreate(resources);
     while (linkedListIteratorHasNext(iter))
     {
-        icDeviceResource* resource = (icDeviceResource*) linkedListIteratorGetNext(iter);
-        cJSON* resourceJson = resourceToJSON(resource, context);
+        icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(iter);
+        cJSON *resourceJson = resourceToJSON(resource, context);
         cJSON_AddItemToObject(resourcesJSON, resource->id, resourceJson);
     }
     linkedListIteratorDestroy(iter);
@@ -194,15 +194,15 @@ cJSON* resourcesToJSON(icLinkedList* resources, const icSerDesContext *context)
 }
 
 
-icDeviceResource* resourceFromJSON(const char* deviceUUID, const char* endpointId, cJSON* resourceJSON,
-                                   const icSerDesContext *context)
+icDeviceResource *
+resourceFromJSON(const char *deviceUUID, const char *endpointId, cJSON *resourceJSON, const icSerDesContext *context)
 {
-    icDeviceResource* resource = NULL;
+    icDeviceResource *resource = NULL;
     char *resourceValue = NULL;
 
     if (resourceJSON != NULL && deviceUUID != NULL)
     {
-        scoped_icDeviceResource *tempResource = (icDeviceResource*) calloc(1, sizeof(icDeviceResource));
+        scoped_icDeviceResource *tempResource = (icDeviceResource *) calloc(1, sizeof(icDeviceResource));
 
         if (stringIsEmpty(deviceUUID) == true)
         {
@@ -252,14 +252,16 @@ icDeviceResource* resourceFromJSON(const char* deviceUUID, const char* endpointI
                 }
                 else
                 {
-                    icLogWarn(LOG_TAG, "Cannot decrypt value for resource \"%s\": missing namespace context value",
+                    icLogWarn(LOG_TAG,
+                              "Cannot decrypt value for resource \"%s\": missing namespace context value",
                               tempResource->id);
                 }
                 free(encryptedResourceValue);
             }
             else
             {
-                icLogWarn(LOG_TAG, "Cannot find encrypted value for resource \"%s\" (using unencrypted value)",
+                icLogWarn(LOG_TAG,
+                          "Cannot find encrypted value for resource \"%s\" (using unencrypted value)",
                           tempResource->id);
             }
         }
@@ -298,16 +300,22 @@ icDeviceResource* resourceFromJSON(const char* deviceUUID, const char* endpointI
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to find resource json for device %s, endpoint %s", stringCoalesce(deviceUUID), stringCoalesce(endpointId));
+        icLogError(LOG_TAG,
+                   "Failed to find resource json for device %s, endpoint %s",
+                   stringCoalesce(deviceUUID),
+                   stringCoalesce(endpointId));
     }
 
     return resource;
 }
 
-icLinkedList* resourcesFromJSON(const char* deviceUUID, const char* endpointId, cJSON* resourcesJSON,
-                                const icSerDesContext *context, bool permissive)
+icLinkedList *resourcesFromJSON(const char *deviceUUID,
+                                const char *endpointId,
+                                cJSON *resourcesJSON,
+                                const icSerDesContext *context,
+                                bool permissive)
 {
-    icLinkedList* resources = NULL;
+    icLinkedList *resources = NULL;
 
     if (resourcesJSON != NULL)
     {
@@ -316,16 +324,19 @@ icLinkedList* resourcesFromJSON(const char* deviceUUID, const char* endpointId, 
 
         for (int i = 0; i < resourceCount; ++i)
         {
-            cJSON* resourceJson = cJSON_GetArrayItem(resourcesJSON, i);
-            icDeviceResource* resource = resourceFromJSON(deviceUUID, endpointId, resourceJson, context);
+            cJSON *resourceJson = cJSON_GetArrayItem(resourcesJSON, i);
+            icDeviceResource *resource = resourceFromJSON(deviceUUID, endpointId, resourceJson, context);
             if (resource != NULL)
             {
                 linkedListAppend(resources, resource);
             }
             else
             {
-                icLogError(LOG_TAG, "Failed to read resource %s for device %s, endpoint %s",
-                           resourceJson->string, deviceUUID, stringCoalesceAlt(endpointId, "[root]"));
+                icLogError(LOG_TAG,
+                           "Failed to read resource %s for device %s, endpoint %s",
+                           resourceJson->string,
+                           deviceUUID,
+                           stringCoalesceAlt(endpointId, "[root]"));
 
                 if (permissive == false)
                 {
@@ -338,7 +349,10 @@ icLinkedList* resourcesFromJSON(const char* deviceUUID, const char* endpointId, 
     }
     else
     {
-        icLogError(LOG_TAG, "Failed to find resources json for device %s, endpoint %s", deviceUUID, stringCoalesceAlt(endpointId, "[root]"));
+        icLogError(LOG_TAG,
+                   "Failed to find resources json for device %s, endpoint %s",
+                   deviceUUID,
+                   stringCoalesceAlt(endpointId, "[root]"));
     }
 
     return resources;
@@ -382,16 +396,15 @@ char *resourceUriCreate(const char *deviceUuid, const char *endpointId, const ch
     return uri;
 }
 
-bool resourceUriIsValid(const char* deviceResourceUri,
-                        const char* deviceUuid,
+bool resourceUriIsValid(const char *deviceResourceUri,
+                        const char *deviceUuid,
                         const char *endpointId,
                         const char *resourceId)
 {
     bool retValue = false;
 
-    if ((stringIsEmpty(deviceResourceUri) == false) &&
-        (stringIsEmpty(deviceUuid)== false) &&
-        (stringIsEmpty(resourceId)== false))
+    if ((stringIsEmpty(deviceResourceUri) == false) && (stringIsEmpty(deviceUuid) == false) &&
+        (stringIsEmpty(resourceId) == false))
     {
         scoped_generic char *tempUri = resourceUriCreate(deviceUuid, endpointId, resourceId);
 

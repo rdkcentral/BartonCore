@@ -23,41 +23,39 @@
 // Created by mkoch201 on 3/18/19.
 //
 
+#include <icLog/logging.h>
+#include <memory.h>
 #include <stdlib.h>
 #include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <memory.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/bridgeCluster.h"
 
-#define LOG_TAG "bridgeCluster"
+#define LOG_TAG                         "bridgeCluster"
 
 // Alarm codes
-#define BRIDGE_TAMPER_ALARM_CODE 0x00
+#define BRIDGE_TAMPER_ALARM_CODE        0x00
 
-#define BRIDGE_REFRESH             0x00
-#define BRIDGE_RESET               0x01
-#define BRIDGE_START_CONFIGURATION 0x02
-#define BRIDGE_STOP_CONFIGURATION  0x03
+#define BRIDGE_REFRESH                  0x00
+#define BRIDGE_RESET                    0x01
+#define BRIDGE_START_CONFIGURATION      0x02
+#define BRIDGE_STOP_CONFIGURATION       0x03
 
-#define BRIDGE_REFRESH_REQUESTED 0x00
-#define BRIDGE_REFRESH_COMPLETED 0x01
+#define BRIDGE_REFRESH_REQUESTED        0x00
+#define BRIDGE_REFRESH_COMPLETED        0x01
 
 #define BRIDGE_ALARM_MASK_ATTRIBUTE_ID  0x00
 #define BRIDGE_ALARM_STATE_ATTRIBUTE_ID 0x0001
 
-#define BRIDGE_TAMPER_ALARM 0x01
+#define BRIDGE_TAMPER_ALARM             0x01
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
 
 static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *command);
-static bool handleAlarm(ZigbeeCluster *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarmTableEntry);
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
 static bool handleAlarmCleared(ZigbeeCluster *ctx,
                                uint64_t eui64,
                                uint8_t endpointId,
@@ -90,50 +88,26 @@ ZigbeeCluster *bridgeClusterCreate(const BridgeClusterCallbacks *callbacks, cons
 
 bool bridgeClusterRefresh(uint64_t eui64, uint8_t endpointId)
 {
-    return zigbeeSubsystemSendMfgCommand(eui64,
-                                         endpointId,
-                                         BRIDGE_CLUSTER_ID,
-                                         true,
-                                         BRIDGE_REFRESH,
-                                         ICONTROL_MFG_ID,
-                                         NULL,
-                                         0) == 0;
+    return zigbeeSubsystemSendMfgCommand(
+               eui64, endpointId, BRIDGE_CLUSTER_ID, true, BRIDGE_REFRESH, ICONTROL_MFG_ID, NULL, 0) == 0;
 }
 
 bool bridgeClusterStartConfiguration(uint64_t eui64, uint8_t endpointId)
 {
-    return zigbeeSubsystemSendMfgCommand(eui64,
-                                         endpointId,
-                                         BRIDGE_CLUSTER_ID,
-                                         true,
-                                         BRIDGE_START_CONFIGURATION,
-                                         ICONTROL_MFG_ID,
-                                         NULL,
-                                         0) == 0;
+    return zigbeeSubsystemSendMfgCommand(
+               eui64, endpointId, BRIDGE_CLUSTER_ID, true, BRIDGE_START_CONFIGURATION, ICONTROL_MFG_ID, NULL, 0) == 0;
 }
 
 bool bridgeClusterStopConfiguration(uint64_t eui64, uint8_t endpointId)
 {
-    return zigbeeSubsystemSendMfgCommand(eui64,
-                                         endpointId,
-                                         BRIDGE_CLUSTER_ID,
-                                         true,
-                                         BRIDGE_STOP_CONFIGURATION,
-                                         ICONTROL_MFG_ID,
-                                         NULL,
-                                         0) == 0;
+    return zigbeeSubsystemSendMfgCommand(
+               eui64, endpointId, BRIDGE_CLUSTER_ID, true, BRIDGE_STOP_CONFIGURATION, ICONTROL_MFG_ID, NULL, 0) == 0;
 }
 
 bool bridgeClusterReset(uint64_t eui64, uint8_t endpointId)
 {
-    return zigbeeSubsystemSendMfgCommand(eui64,
-                                         endpointId,
-                                         BRIDGE_CLUSTER_ID,
-                                         true,
-                                         BRIDGE_RESET,
-                                         ICONTROL_MFG_ID,
-                                         NULL,
-                                         0) == 0;
+    return zigbeeSubsystemSendMfgCommand(
+               eui64, endpointId, BRIDGE_CLUSTER_ID, true, BRIDGE_RESET, ICONTROL_MFG_ID, NULL, 0) == 0;
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -179,9 +153,8 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
             if (bridgeCluster->callbacks->refreshRequested != NULL)
             {
 
-                bridgeCluster->callbacks->refreshRequested(command->eui64,
-                                                           command->sourceEndpoint,
-                                                           bridgeCluster->callbackContext);
+                bridgeCluster->callbacks->refreshRequested(
+                    command->eui64, command->sourceEndpoint, bridgeCluster->callbackContext);
             }
             result = true;
             break;
@@ -192,9 +165,8 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
             if (bridgeCluster->callbacks->refreshCompleted != NULL)
             {
 
-                bridgeCluster->callbacks->refreshCompleted(command->eui64,
-                                                           command->sourceEndpoint,
-                                                           bridgeCluster->callbackContext);
+                bridgeCluster->callbacks->refreshCompleted(
+                    command->eui64, command->sourceEndpoint, bridgeCluster->callbackContext);
             }
             result = true;
             break;
@@ -203,16 +175,13 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
         default:
             icLogError(LOG_TAG, "%s: unexpected command id 0x%02x", __FUNCTION__, command->commandId);
             break;
-
     }
 
     return result;
 }
 
-static bool handleAlarm(ZigbeeCluster *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     bool result = true;
 
@@ -231,10 +200,8 @@ static bool handleAlarm(ZigbeeCluster *ctx,
             break;
 
         default:
-            icLogWarn(LOG_TAG,
-                      "%s: Unsupported bridge cluster alarm code 0x%02x",
-                      __FUNCTION__,
-                      alarmTableEntry->alarmCode);
+            icLogWarn(
+                LOG_TAG, "%s: Unsupported bridge cluster alarm code 0x%02x", __FUNCTION__, alarmTableEntry->alarmCode);
             result = false;
             break;
     }
@@ -242,10 +209,8 @@ static bool handleAlarm(ZigbeeCluster *ctx,
     return result;
 }
 
-static bool handleAlarmCleared(ZigbeeCluster *ctx,
-                               uint64_t eui64,
-                               uint8_t endpointId,
-                               const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarmCleared(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     bool result = true;
 
@@ -264,10 +229,8 @@ static bool handleAlarmCleared(ZigbeeCluster *ctx,
             break;
 
         default:
-            icLogWarn(LOG_TAG,
-                      "%s: Unsupported bridge cluster alarm code 0x%02x",
-                      __FUNCTION__,
-                      alarmTableEntry->alarmCode);
+            icLogWarn(
+                LOG_TAG, "%s: Unsupported bridge cluster alarm code 0x%02x", __FUNCTION__, alarmTableEntry->alarmCode);
             result = false;
             break;
     }
@@ -275,12 +238,9 @@ static bool handleAlarmCleared(ZigbeeCluster *ctx,
     return result;
 }
 
-bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx,
-                                  uint64_t eui64,
-                                  uint8_t endpointId,
-                                  bool *result)
+bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, bool *result)
 {
-    icLogDebug(LOG_TAG, "%s: %"PRIx64" endpoint %d", __FUNCTION__, eui64, endpointId);
+    icLogDebug(LOG_TAG, "%s: %" PRIx64 " endpoint %d", __FUNCTION__, eui64, endpointId);
 
     if (result == NULL)
     {
@@ -289,8 +249,8 @@ bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx,
     }
 
     uint64_t value = 0;
-    if (zigbeeSubsystemReadNumberMfgSpecific(eui64, endpointId, BRIDGE_CLUSTER_ID, ICONTROL_MFG_ID,
-                                             true, BRIDGE_ALARM_STATE_ATTRIBUTE_ID, &value) != 0)
+    if (zigbeeSubsystemReadNumberMfgSpecific(
+            eui64, endpointId, BRIDGE_CLUSTER_ID, ICONTROL_MFG_ID, true, BRIDGE_ALARM_STATE_ATTRIBUTE_ID, &value) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read tamper status attribute", __FUNCTION__);
         return false;
@@ -300,4 +260,4 @@ bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx,
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

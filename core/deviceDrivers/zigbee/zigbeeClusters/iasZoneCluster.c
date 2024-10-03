@@ -23,15 +23,15 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
-#include <subsystems/zigbee/zigbeeIO.h>
-#include <string.h>
+#include "zigbeeClusters/iasZoneCluster.h"
 #include <errno.h>
+#include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <string.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <zigbeeClusters/helpers/comcastBatterySavingHelper.h>
-#include "zigbeeClusters/iasZoneCluster.h"
 
 #define LOG_TAG "iasZoneCluster"
 
@@ -70,43 +70,39 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    if (command->clusterId == IAS_ZONE_CLUSTER_ID &&
-        command->fromServer == true)
+    if (command->clusterId == IAS_ZONE_CLUSTER_ID && command->fromServer == true)
     {
         switch (command->commandId)
         {
             case IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID:
             {
                 IASZoneStatusChangedNotification payload;
-                ComcastBatterySavingData *batterySavingData = NULL; //This is optional
+                ComcastBatterySavingData *batterySavingData = NULL; // This is optional
 
-                if(readZoneStatusPayload(&payload, command) != 0)
+                if (readZoneStatusPayload(&payload, command) != 0)
                 {
                     return false;
                 }
 
-                if (command->mfgSpecific && (command->mfgCode == COMCAST_MFG_ID_INCORRECT || command->mfgCode == COMCAST_MFG_ID))
+                if (command->mfgSpecific &&
+                    (command->mfgCode == COMCAST_MFG_ID_INCORRECT || command->mfgCode == COMCAST_MFG_ID))
                 {
-                    //skip the common 6 bytes of the standard zone status message
-                    batterySavingData = comcastBatterySavingDataParse(command->commandData + 6,
-                                                                      command->commandDataLen - 6);
+                    // skip the common 6 bytes of the standard zone status message
+                    batterySavingData =
+                        comcastBatterySavingDataParse(command->commandData + 6, command->commandDataLen - 6);
                 }
 
                 if (_this->callbacks->onZoneStatusChanged)
                 {
-                    _this->callbacks->onZoneStatusChanged(command->eui64,
-                                                          command->sourceEndpoint,
-                                                          &payload,
-                                                          batterySavingData,
-                                                          _this->callbackContext);
+                    _this->callbacks->onZoneStatusChanged(
+                        command->eui64, command->sourceEndpoint, &payload, batterySavingData, _this->callbackContext);
                     handled = true;
                 }
 
                 if (batterySavingData && _this->callbacks->processComcastBatterySavingData)
                 {
-                    _this->callbacks->processComcastBatterySavingData(command->eui64,
-                                                                      batterySavingData,
-                                                                      _this->callbackContext);
+                    _this->callbacks->processComcastBatterySavingData(
+                        command->eui64, batterySavingData, _this->callbackContext);
                     handled = true;
                 }
 
@@ -124,21 +120,18 @@ static bool handleClusterCommand(ZigbeeCluster *cluster, ReceivedClusterCommand 
                     uint16_t mfgCode = zigbeeIOGetUint16(zio);
                     if (errno)
                     {
-                        AUTO_CLEAN(free_generic__auto) char * errStr = strerrorSafe(errno);
+                        AUTO_CLEAN(free_generic__auto) char *errStr = strerrorSafe(errno);
                         icLogError(LOG_TAG, "Unable to read zigbee enroll request command payload: %s", errStr);
                         return false;
                     }
-                    _this->callbacks->onZoneEnrollRequested(command->eui64,
-                                                            command->sourceEndpoint,
-                                                            zoneType,
-                                                            mfgCode,
-                                                            _this->callbackContext);
+                    _this->callbacks->onZoneEnrollRequested(
+                        command->eui64, command->sourceEndpoint, zoneType, mfgCode, _this->callbackContext);
                     handled = true;
                 }
                 break;
             }
             default:
-                icLogWarn(LOG_TAG, "IAS Zone command id 0x%02"PRIx8 "not supported", command->commandId);
+                icLogWarn(LOG_TAG, "IAS Zone command id 0x%02" PRIx8 "not supported", command->commandId);
                 break;
         }
     }
@@ -164,7 +157,7 @@ static int readZoneStatusPayload(IASZoneStatusChangedNotification *payload, cons
 
 bool iasZoneClusterExtract(IASZoneStatusChangedNotification *payload, const ReceivedClusterCommand *command)
 {
-   return readZoneStatusPayload(payload, command) == 0;
+    return readZoneStatusPayload(payload, command) == 0;
 }
 
 static bool configureCluster(ZigbeeCluster *cluster, const DeviceConfigurationContext *configContext)
@@ -173,7 +166,7 @@ static bool configureCluster(ZigbeeCluster *cluster, const DeviceConfigurationCo
 
     bool result = true;
 
-    //Write CIE address
+    // Write CIE address
     if (zigbeeSubsystemWriteNumber(configContext->eui64,
                                    configContext->endpointId,
                                    IAS_ZONE_CLUSTER_ID,
@@ -183,7 +176,7 @@ static bool configureCluster(ZigbeeCluster *cluster, const DeviceConfigurationCo
                                    getLocalEui64(),
                                    sizeof(uint64_t)) == 0)
     {
-        //enroll the endpoint
+        // enroll the endpoint
         uint8_t payload[2];
         sbZigbeeIOContext *zio = zigbeeIOInit(payload, 2, ZIO_WRITE);
         zigbeeIOPutUint8(zio, ZCL_STATUS_SUCCESS);
@@ -191,7 +184,8 @@ static bool configureCluster(ZigbeeCluster *cluster, const DeviceConfigurationCo
         zigbeeIOPutUint8(zio, 0);
         if (zigbeeSubsystemSendCommand(configContext->eui64,
                                        configContext->endpointId,
-                                       IAS_ZONE_CLUSTER_ID, true,
+                                       IAS_ZONE_CLUSTER_ID,
+                                       true,
                                        IAS_ZONE_CLIENT_ENROLL_RESPONSE_COMMAND_ID,
                                        payload,
                                        sizeof(payload)) != 0)

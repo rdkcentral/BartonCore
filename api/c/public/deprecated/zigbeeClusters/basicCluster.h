@@ -27,21 +27,20 @@
 
 #define REBOOT_REASON_DEFAULT 0xFF
 
-static const char* basicClusterRebootReasonLabels[] = {
-    "UNKNOWN",
-    "BATTERY",
-    "BROWNOUT",
-    "WATCHDOG",
-    "RESET_PIN",
-    "MEMORY_HARDWARE_FAULT",
-    "SOFTWARE_EXCEPTION",
-    "OTA_BOOTLOAD_SUCCESS",
-    "SOFTWARE_RESET",
-    "POWER_BUTTON",
-    "TEMPERATURE",
-    "BOOTLOAD_FAILURE"
-};
-typedef enum {
+static const char *basicClusterRebootReasonLabels[] = {"UNKNOWN",
+                                                       "BATTERY",
+                                                       "BROWNOUT",
+                                                       "WATCHDOG",
+                                                       "RESET_PIN",
+                                                       "MEMORY_HARDWARE_FAULT",
+                                                       "SOFTWARE_EXCEPTION",
+                                                       "OTA_BOOTLOAD_SUCCESS",
+                                                       "SOFTWARE_RESET",
+                                                       "POWER_BUTTON",
+                                                       "TEMPERATURE",
+                                                       "BOOTLOAD_FAILURE"};
+typedef enum
+{
     UNKNOWN,
     BATTERY,
     BROWNOUT,
@@ -91,4 +90,4 @@ void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *devi
  */
 int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId);
 
-#endif //ZILKER_BASICCLUSTER_H
+#endif // ZILKER_BASICCLUSTER_H

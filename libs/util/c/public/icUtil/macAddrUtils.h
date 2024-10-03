@@ -31,26 +31,27 @@
 #ifndef IC_MACADDRUTILS_H
 #define IC_MACADDRUTILS_H
 
+#include <netinet/if_ether.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <netinet/if_ether.h>
 
 #ifndef ETHER_ADDR_LEN
 #define ETHER_ADDR_LEN 6
 #endif
 
-#define MAC_ADDR_BYTES 12
+#define MAC_ADDR_BYTES             12
 #define MAC_ADDR_WITH_COLONS_BYTES 17
 
 /*
  * enumerated list of possible return codes from MAC address utility
  */
-typedef enum {
+typedef enum
+{
     MAC_ADDR_CODE_SUCCESS = 0,
-    MAC_ADDR_CODE_GENERIC_ERROR,            // A generic error occurred
-    MAC_ADDR_CODE_ARP_FILE_OPEN_ERROR,      // The ARP file could not be found or could not be opened
-    MAC_ADDR_CODE_ARP_FILE_NO_HWA,          // The ARP file did not contain the hwa field
-    MAC_ADDR_CODE_ARP_FILE_NO_IP_MATCH,     // The IP address was not found in the ARP file
+    MAC_ADDR_CODE_GENERIC_ERROR,        // A generic error occurred
+    MAC_ADDR_CODE_ARP_FILE_OPEN_ERROR,  // The ARP file could not be found or could not be opened
+    MAC_ADDR_CODE_ARP_FILE_NO_HWA,      // The ARP file did not contain the hwa field
+    MAC_ADDR_CODE_ARP_FILE_NO_IP_MATCH, // The IP address was not found in the ARP file
 
     /* the final entry is just for looping over the enum */
     MAC_ADDR_CODE_LAST
@@ -95,4 +96,4 @@ int8_t compareMacAddrs(uint8_t *left, uint8_t *right);
  */
 bool setMacAddressForIP(const char *ipAddr, const uint8_t macAddr[ETHER_ADDR_LEN], const char *devname);
 
-#endif //IC_MACADDRUTILS_H
+#endif // IC_MACADDRUTILS_H

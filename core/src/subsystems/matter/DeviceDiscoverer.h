@@ -60,11 +60,14 @@ namespace zilker
         void SetCompleted(bool isSuccess) { promise.set_value(isSuccess); }
         void ResultsUpdated();
         std::shared_ptr<DiscoveredDeviceDetails> GetDetails() { return details; };
-        CHIP_ERROR DiscoverEndpoint(chip::Messaging::ExchangeManager &exchangeMgr, chip::OperationalDeviceProxy *device, chip::EndpointId endpointId);
+        CHIP_ERROR DiscoverEndpoint(chip::Messaging::ExchangeManager &exchangeMgr,
+                                    chip::OperationalDeviceProxy *device,
+                                    chip::EndpointId endpointId);
 
-        void OnDone(chip::app::ReadClient * apReadClient) override;
-        void OnAttributeData(const chip::app::ConcreteDataAttributePath & path, chip::TLV::TLVReader * data,
-                         const chip::app::StatusIB & status) override;
+        void OnDone(chip::app::ReadClient *apReadClient) override;
+        void OnAttributeData(const chip::app::ConcreteDataAttributePath &path,
+                             chip::TLV::TLVReader *data,
+                             const chip::app::StatusIB &status) override;
 
 
     private:
@@ -86,4 +89,4 @@ namespace zilker
         chip::Callback::Callback<chip::OnDeviceConnected> onDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> onDeviceConnectionFailureCallback;
     };
-}
+} // namespace zilker

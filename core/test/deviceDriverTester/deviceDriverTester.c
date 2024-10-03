@@ -1,42 +1,42 @@
 /*-----------------------------------------------
-* deviceDriverTester.c
-*
-* Tests the device driver callbacks
-*       - *only supports cameras currently*
-*
-* Author: jgleason
-*-----------------------------------------------*/
+ * deviceDriverTester.c
+ *
+ * Tests the device driver callbacks
+ *       - *only supports cameras currently*
+ *
+ * Author: jgleason
+ *-----------------------------------------------*/
+#include <getopt.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
-#include <getopt.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/time.h>
+#include <unistd.h>
 
-#include <icLog/logging.h>
-#include <ssdp/ssdp.h>
-#include <openHomeCamera/openHomeCameraDeviceDriver.h>
-#include <deviceDriver.h>
+#include "deviceDriver.h"
 #include <commonDeviceDefs.h>
 #include <device/icDevice.h>
+#include <deviceDescriptors.h>
+#include <deviceDriver.h>
 #include <deviceModelHelper.h>
+#include <icLog/logging.h>
 #include <inttypes.h>
 #include <ipc/deviceEventProducer.h>
-#include <deviceDescriptors.h>
-#include "deviceDriver.h"
+#include <openHomeCamera/openHomeCameraDeviceDriver.h>
+#include <ssdp/ssdp.h>
 
 
 /* Define the nodes in XML responses */
-#define ROOT_NODE           "root"
-#define DEVICE_NODE         "device"
-#define FRIENDLY_NAME_NODE  "friendlyName"
-#define MANUFACTURER_NODE   "manufacturer"
-#define MODEL_NAME_NODE     "modelName"
-#define MODEL_NUMBER_NODE   "modelNumber"
-#define UUID_NODE           "UDN"
+#define ROOT_NODE          "root"
+#define DEVICE_NODE        "device"
+#define FRIENDLY_NAME_NODE "friendlyName"
+#define MANUFACTURER_NODE  "manufacturer"
+#define MODEL_NAME_NODE    "modelName"
+#define MODEL_NUMBER_NODE  "modelNumber"
+#define UUID_NODE          "UDN"
 
-#define TWENTY_SECONDS      20*1000*1000
+#define TWENTY_SECONDS     20 * 1000 * 1000
 
 void deviceFoundCallback(const DeviceDriver *deviceDriver,
                          const char *deviceClass,
@@ -129,8 +129,8 @@ int main(int argc, char *argv[])
         }
 
         // let it run for 4 minutes
-        //while(1)
-        for(int i=0;i<12;i++)
+        // while(1)
+        for (int i = 0; i < 12; i++)
         {
             usleep(TWENTY_SECONDS);
         }
@@ -154,18 +154,27 @@ void deviceFoundCallback(const DeviceDriver *deviceDriver,
                          const char *firmwareVersion)
 {
 
-    //Create a device instance populated with all required items from the base device class specification
+    // Create a device instance populated with all required items from the base device class specification
     icDevice *device = createDevice(deviceUuid, deviceClass, deviceClassVersion, deviceDriver->driverName);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_MANUFACTURER, manufacturer, "string", false, CACHING_POLICY_ALWAYS);
+    createDeviceResource(
+        device, COMMON_DEVICE_RESOURCE_MANUFACTURER, manufacturer, "string", false, CACHING_POLICY_ALWAYS);
     createDeviceResource(device, COMMON_DEVICE_RESOURCE_MODEL, model, "string", false, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION, hardwareVersion, "string", false, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, firmwareVersion, "string", false, CACHING_POLICY_ALWAYS); //the device driver will update after firmware upgrade
+    createDeviceResource(
+        device, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION, hardwareVersion, "string", false, CACHING_POLICY_ALWAYS);
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION,
+                         firmwareVersion,
+                         "string",
+                         false,
+                         CACHING_POLICY_ALWAYS); // the device driver will update after firmware upgrade
 
-    char dateBuf[14]; //timestamps in millis are 13 digits plus \0: 1442408555212
+    char dateBuf[14]; // timestamps in millis are 13 digits plus \0: 1442408555212
     sprintf(dateBuf, "%" PRIu64, getCurrentGmtTimeMillis());
     createDeviceResource(device, COMMON_DEVICE_RESOURCE_DATE_ADDED, dateBuf, "integer", false, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, dateBuf, "integer", false, CACHING_POLICY_ALWAYS);
-    createDeviceResource(device, COMMON_DEVICE_RESOURCE_COMM_FAIL_TROUBLE, "false", "boolean", false, CACHING_POLICY_ALWAYS);
+    createDeviceResource(
+        device, COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, dateBuf, "integer", false, CACHING_POLICY_ALWAYS);
+    createDeviceResource(
+        device, COMMON_DEVICE_RESOURCE_COMM_FAIL_TROUBLE, "false", "boolean", false, CACHING_POLICY_ALWAYS);
     createDeviceResource(device, COMMON_DEVICE_FUNCTION_RESET_TO_FACTORY, NULL, "function", true, CACHING_POLICY_NEVER);
 
     DeviceDescriptor *dd = deviceDescriptorsGet(manufacturer, model, hardwareVersion, firmwareVersion);
@@ -180,7 +189,6 @@ void deviceFoundCallback(const DeviceDriver *deviceDriver,
     {
         bool configFlag = deviceDriver->configureDevice(device, NULL);
     }
-
 }
 
 /*
@@ -200,13 +208,13 @@ static uint64_t getCurrentGmtTimeMillis()
     //
     struct timeval now;
     gettimeofday(&now, NULL);
-    result = (uint64_t) ((uint64_t)now.tv_sec * 1000 + ((uint64_t)now.tv_usec / 1000));
+    result = (uint64_t) ((uint64_t) now.tv_sec * 1000 + ((uint64_t) now.tv_usec / 1000));
 #else
     // standard linux, use real (not monotonic) clock
     //
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
-    result = (uint64_t) ((uint64_t)now.tv_sec * 1000 + ((uint64_t)now.tv_nsec / 1000000));
+    result = (uint64_t) ((uint64_t) now.tv_sec * 1000 + ((uint64_t) now.tv_nsec / 1000000));
 #endif
 
     return result;

@@ -26,8 +26,8 @@
 
 #include "command.h"
 #include "device-service-client.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 struct _Command
 {
@@ -108,10 +108,7 @@ void commandSetAdvanced(Command *command)
     }
 }
 
-bool commandExecute(BDeviceServiceClient *client,
-                    const Command *command,
-                    gint argc,
-                    gchar **argv)
+bool commandExecute(BDeviceServiceClient *client, const Command *command, gint argc, gchar **argv)
 {
     bool result = false;
 
@@ -130,8 +127,7 @@ bool commandExecute(BDeviceServiceClient *client,
     return result;
 }
 
-void commandAddExample(Command *command,
-                       const gchar *example)
+void commandAddExample(Command *command, const gchar *example)
 {
     if (command != NULL && example != NULL)
     {
@@ -139,9 +135,7 @@ void commandAddExample(Command *command,
     }
 }
 
-void commandPrintUsage(const Command *command,
-                       bool isInteractive,
-                       bool showAdvanced)
+void commandPrintUsage(const Command *command, bool isInteractive, bool showAdvanced)
 {
     if (command != NULL && (command->isAdvanced == false || showAdvanced == true))
     {
@@ -149,31 +143,28 @@ void commandPrintUsage(const Command *command,
         {
             if (command->shortInteractiveName != NULL)
             {
-                printf("\t%s|%s %s : %s\n", command->name,
+                printf("\t%s|%s %s : %s\n",
+                       command->name,
                        command->shortInteractiveName,
                        command->argUsage == NULL ? "" : command->argUsage,
                        command->help);
             }
             else
             {
-                printf("\t%s %s : %s\n",
-                       command->name,
-                       command->argUsage == NULL ? "" : command->argUsage,
-                       command->help);
+                printf(
+                    "\t%s %s : %s\n", command->name, command->argUsage == NULL ? "" : command->argUsage, command->help);
             }
         }
         else
         {
-            printf("\t--%s %s : %s\n",
-                   command->name,
-                   command->argUsage == NULL ? "" : command->argUsage,
-                   command->help);
+            printf(
+                "\t--%s %s : %s\n", command->name, command->argUsage == NULL ? "" : command->argUsage, command->help);
         }
 
         if (command->examples != NULL)
         {
             printf("\tExamples:\n");
-            for(GList *it = command->examples; it != NULL; it = it->next)
+            for (GList *it = command->examples; it != NULL; it = it->next)
             {
                 if (isInteractive == true)
                 {

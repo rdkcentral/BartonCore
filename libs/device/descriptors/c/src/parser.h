@@ -28,12 +28,13 @@
 #define FLEXCORE_PARSER_H
 
 #include <icTypes/icLinkedList.h>
+#include <icTypes/icStringHashMap.h>
 
 /*
  * Parse the device descriptor list (aka allowlist) and any optional denylist at the provided paths
  * and return a list of device descriptors that are not explicitly denylisted.
  */
-icLinkedList* parseDeviceDescriptors(const char *allowlistPath, const char *denylistPath);
+icLinkedList *parseDeviceDescriptors(const char *allowlistPath, const char *denylistPath);
 
 /*
  * Allows just parsing a denylist, can be used for validating a denylist file is valid
@@ -42,4 +43,4 @@ icLinkedList* parseDeviceDescriptors(const char *allowlistPath, const char *deny
  */
 icStringHashMap *getDenylistedUuids(const char *denylistPath);
 
-#endif //FLEXCORE_PARSER_H
+#endif // FLEXCORE_PARSER_H

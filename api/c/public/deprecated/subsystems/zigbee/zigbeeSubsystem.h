@@ -34,13 +34,13 @@
 #include <stdbool.h>
 #include <zhal/zhal.h>
 
-#define ZIGBEE_SUBSYSTEM_NAME "zigbee"
-#define NETWORK_BLOB_PROPERTY_NAME "ZIGBEE_NETWORK_CONFIG_DATA"
+#define ZIGBEE_SUBSYSTEM_NAME             "zigbee"
+#define NETWORK_BLOB_PROPERTY_NAME        "ZIGBEE_NETWORK_CONFIG_DATA"
 
 /* 27 min */
 #define ZIGBEE_DEFAULT_CHECKIN_INTERVAL_S 27 * 60
 
-#define FAST_COMM_FAIL_PROP "zigbee.testing.fastCommFail.flag"
+#define FAST_COMM_FAIL_PROP               "zigbee.testing.fastCommFail.flag"
 
 typedef enum
 {
@@ -61,34 +61,24 @@ typedef struct
 
 typedef struct
 {
-    //this value will be provided back to the caller in each callback
+    // this value will be provided back to the caller in each callback
     void *callbackContext;
 
-    //callback frees report with freeReceivedAttributeReport()
-    void (*attributeReportReceived)(void *ctx,
-                                    ReceivedAttributeReport *report);
+    // callback frees report with freeReceivedAttributeReport()
+    void (*attributeReportReceived)(void *ctx, ReceivedAttributeReport *report);
 
-    //callback frees command with freeReceivedClusterCommand()
-    void (*clusterCommandReceived)(void *ctx,
-                                   ReceivedClusterCommand *command);
+    // callback frees command with freeReceivedClusterCommand()
+    void (*clusterCommandReceived)(void *ctx, ReceivedClusterCommand *command);
 
-    void (*otaUpgradeMessageSent)(void *ctx,
-                                  OtaUpgradeEvent *otaEvent);
+    void (*otaUpgradeMessageSent)(void *ctx, OtaUpgradeEvent *otaEvent);
 
-    void (*otaUpgradeMessageReceived)(void *ctx,
-                                      OtaUpgradeEvent *otaEvent);
+    void (*otaUpgradeMessageReceived)(void *ctx, OtaUpgradeEvent *otaEvent);
 
-    void (*deviceRejoined)(void *ctx,
-                           uint64_t eui64,
-                           bool isSecure);
+    void (*deviceRejoined)(void *ctx, uint64_t eui64, bool isSecure);
 
-    void (*deviceLeft)(void *ctx,
-                       uint64_t eui64);
+    void (*deviceLeft)(void *ctx, uint64_t eui64);
 
-    void (*deviceAnnounced)(void *ctx,
-                            uint64_t eui64,
-                            zhalDeviceType deviceType,
-                            zhalPowerSource powerSource);
+    void (*deviceAnnounced)(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource);
 
 } ZigbeeSubsystemDeviceCallbacks;
 
@@ -124,8 +114,8 @@ typedef struct
 typedef struct
 {
     uint64_t eui64;
-    char *manufacturer; //presumed to be the same across all endpoints!
-    char *model; //presumed to be the same across all endpoints!
+    char *manufacturer; // presumed to be the same across all endpoints!
+    char *model;        // presumed to be the same across all endpoints!
     uint64_t hardwareVersion;
     uint64_t firmwareVersion;
     uint64_t appVersion;
@@ -141,17 +131,15 @@ typedef struct
     char *driverName;
     void *callbackContext;
 
-    bool (*callback)(void *context,
-                     IcDiscoveredDeviceDetails *details,
-                     DeviceMigrator *deviceMigrator);
+    bool (*callback)(void *context, IcDiscoveredDeviceDetails *details, DeviceMigrator *deviceMigrator);
 } ZigbeeSubsystemDeviceDiscoveredHandler;
 
 typedef struct
 {
-    uint64_t address;        // EUI64 of the zigbee device for this entry
-    uint64_t nextCloserHop;  // EUI64 of the next hop
-    int32_t lqi;             // LQI of this hop
-    uint16_t nodeId;         // Network node Id of device
+    uint64_t address;       // EUI64 of the zigbee device for this entry
+    uint64_t nextCloserHop; // EUI64 of the next hop
+    int32_t lqi;            // LQI of this hop
+    uint16_t nodeId;        // Network node Id of device
 } ZigbeeSubsystemNetworkMapEntry;
 
 typedef enum
@@ -164,14 +152,12 @@ typedef enum
 
 // This must be called in the order that the handlers will be invoked when a device is discovered.
 //  the first handler to return true 'claims' the device and subsequent handlers will not be notified
-int zigbeeSubsystemRegisterDiscoveryHandler(const char *name,
-                                            ZigbeeSubsystemDeviceDiscoveredHandler *handler);
+int zigbeeSubsystemRegisterDiscoveryHandler(const char *name, ZigbeeSubsystemDeviceDiscoveredHandler *handler);
 
 int zigbeeSubsystemUnregisterDiscoveryHandler(ZigbeeSubsystemDeviceDiscoveredHandler *handler);
 
-//register callbacks for the provided eui64
-int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64,
-                                          ZigbeeSubsystemDeviceCallbacks *callbacks);
+// register callbacks for the provided eui64
+int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64, ZigbeeSubsystemDeviceCallbacks *callbacks);
 
 int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
 
@@ -267,9 +253,9 @@ int zigbeeSubsystemReadNumbers(uint64_t eui64,
                                uint16_t clusterId,
                                bool toServer,
                                uint8_t numAttributes,
-                               const uint16_t* attributeIds,
-                               uint64_t* values,
-                               bool* readSuccesses);
+                               const uint16_t *attributeIds,
+                               uint64_t *values,
+                               bool *readSuccesses);
 
 /*
  * Caller frees non-null output
@@ -303,9 +289,9 @@ int zigbeeSubsystemReadNumbersMfgSpecific(uint64_t eui64,
                                           uint16_t mfgId,
                                           bool toServer,
                                           uint8_t numAttributes,
-                                          const uint16_t* attributeIds,
-                                          uint64_t* values,
-                                          bool* readSuccesses);
+                                          const uint16_t *attributeIds,
+                                          uint64_t *values,
+                                          bool *readSuccesses);
 
 /*
  * Can write 8 to 64 bit values only.
@@ -332,18 +318,14 @@ int zigbeeSubsystemWriteNumberMfgSpecific(uint64_t eui64,
                                           uint64_t value,
                                           uint8_t numBytes);
 
-int zigbeeSubsystemBindingSet(uint64_t eui64,
-                              uint8_t endpointId,
-                              uint16_t clusterId);
+int zigbeeSubsystemBindingSet(uint64_t eui64, uint8_t endpointId, uint16_t clusterId);
 
-//returns linked list of zhalBindingTableEntry on success or NULL on failure
+// returns linked list of zhalBindingTableEntry on success or NULL on failure
 icLinkedList *zigbeeSubsystemBindingGet(uint64_t eui64);
 
-int zigbeeSubsystemBindingClear(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t clusterId);
+int zigbeeSubsystemBindingClear(uint64_t eui64, uint8_t endpointId, uint16_t clusterId);
 
-//clear a remote binding to the provided target (not necessarily us).
+// clear a remote binding to the provided target (not necessarily us).
 int zigbeeSubsystemBindingClearTarget(uint64_t eui64,
                                       uint8_t endpointId,
                                       uint16_t clusterId,
@@ -371,9 +353,7 @@ int zigbeeSubsystemAttributesSetReportingMfgSpecific(uint64_t eui64,
  *
  * @return 0 on success
  */
-int zigbeeSubsystemGetEndpointIds(uint64_t eui64,
-                                  uint8_t **endpointIds,
-                                  uint8_t *numEndpointIds);
+int zigbeeSubsystemGetEndpointIds(uint64_t eui64, uint8_t **endpointIds, uint8_t *numEndpointIds);
 
 /*
  * Discover the attributes available on a client or server cluster.
@@ -441,15 +421,13 @@ void zigbeeSubsystemDestroyPrematureClusterCommands(uint64_t eui64);
 /*
  * Wait for a specific premature cluster command.  This does not remove it from the collection.
  */
-ReceivedClusterCommand *zigbeeSubsystemGetPrematureClusterCommand(uint64_t eui64,
-                                                                  uint8_t commandId,
-                                                                  uint32_t timeoutSeconds);
+ReceivedClusterCommand *
+zigbeeSubsystemGetPrematureClusterCommand(uint64_t eui64, uint8_t commandId, uint32_t timeoutSeconds);
 
 /*
  * Remove any premature cluster commands for the provided device that match the command id
  */
-void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64,
-                                                  uint8_t commandId);
+void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64, uint8_t commandId);
 
 /*
  * Cleanup any unused firmware files
@@ -583,8 +561,7 @@ cJSON *zigbeeSubsystemGetAndClearCounters(void);
  *
  * @return a ChannelChnageResponse value
  */
-ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
-                                                   bool dryRun);
+ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun);
 
 /*
  * Populate the zigbee network map
@@ -629,8 +606,7 @@ void zigbeeSubsystemSetRejectUnknownDevices(bool doReject);
 /*
  * Tell the Zigbee Subsystem that a related property has changed
  */
-void zigbeeSubsystemHandlePropertyChange(const char *prop,
-                                         const char *value);
+void zigbeeSubsystemHandlePropertyChange(const char *prop, const char *value);
 
 /*
  * Perform an energy scan
@@ -679,9 +655,7 @@ const char *zigbeeSubsystemDetermineLinkQuality(int8_t neRssi,
 /*
  * Request that a device leave the network.
  */
-bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64,
-                                       bool withRejoin,
-                                       bool isEndDevice);
+bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64, bool withRejoin, bool isEndDevice);
 
 /*
  * Notify zigbeeSubsystem that a device has announced
@@ -689,9 +663,7 @@ bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64,
  * @param deviceType
  * @param powerSource
  */
-void zigbeeSubsystemDeviceAnnounced(uint64_t eui64,
-                                    zhalDeviceType deviceType,
-                                    zhalPowerSource powerSource);
+void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource);
 
 /*
  * Convert string formatted linkQuality to enum
@@ -700,4 +672,4 @@ void zigbeeSubsystemDeviceAnnounced(uint64_t eui64,
  */
 ZigbeeSubsystemLinkQualityLevel zigbeeSubsystemLinkQualityStringToEnum(const char *linkQuality);
 
-#endif //FLEXCORE_ZIGBEESUBSYSTEM_H
+#endif // FLEXCORE_ZIGBEESUBSYSTEM_H

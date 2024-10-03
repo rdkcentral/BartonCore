@@ -34,4 +34,4 @@
 
 bool runBufferTests();
 
-#endif //FLEXCORE_BUFFERTEST_H
+#endif // FLEXCORE_BUFFERTEST_H

@@ -24,14 +24,14 @@
 // Created by tlea on 2/18/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -74,12 +74,8 @@ bool diagnosticsClusterGetLastMessageLqi(uint64_t eui64, uint8_t endpointId, uin
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DIAGNOSTICS_CLUSTER_ID,
-                                  true,
-                                  DIAGNOSTICS_LAST_MESSAGE_LQI_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DIAGNOSTICS_CLUSTER_ID, true, DIAGNOSTICS_LAST_MESSAGE_LQI_ATTRIBUTE_ID, &val) == 0)
     {
         *lqi = (uint8_t) (val & 0xFF);
         result = true;
@@ -103,12 +99,8 @@ bool diagnosticsClusterGetLastMessageRssi(uint64_t eui64, uint8_t endpointId, in
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DIAGNOSTICS_CLUSTER_ID,
-                                  true,
-                                  DIAGNOSTICS_LAST_MESSAGE_RSSI_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DIAGNOSTICS_CLUSTER_ID, true, DIAGNOSTICS_LAST_MESSAGE_RSSI_ATTRIBUTE_ID, &val) == 0)
     {
         *rssi = (int8_t) (val & 0xFF);
         result = true;
@@ -123,8 +115,8 @@ bool diagnosticsClusterGetLastMessageRssi(uint64_t eui64, uint8_t endpointId, in
 
 static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId)
 {
-    //read RSSI and LQI then invoke the callbacks
-    //TODO enhance with a multi-attribute read once zigbee subsystem supports that
+    // read RSSI and LQI then invoke the callbacks
+    // TODO enhance with a multi-attribute read once zigbee subsystem supports that
 
     DiagnosticsCluster *diagnosticsCluster = (DiagnosticsCluster *) ctx;
 
@@ -143,9 +135,9 @@ static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t
             return;
         }
 
-        diagnosticsCluster->callbacks->lastMessageRssiLqiUpdated(diagnosticsCluster->callbackContext, eui64, endpointId,
-                                                                 rssi, lqi);
+        diagnosticsCluster->callbacks->lastMessageRssiLqiUpdated(
+            diagnosticsCluster->callbackContext, eui64, endpointId, rssi, lqi);
     }
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

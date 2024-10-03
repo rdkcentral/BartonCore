@@ -66,9 +66,9 @@
 #ifndef FLEXCORE_URI_DISPATCHER_H
 #define FLEXCORE_URI_DISPATCHER_H
 
+#include <icTypes/icStringHashMap.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <icTypes/icStringHashMap.h>
 
 /*
  * function signature to process the URI.
@@ -87,20 +87,22 @@ typedef struct _uriDispatcher uriDispatcher;
 /*
  * container of a 'function handler' and a 'description'
  */
-typedef struct _uriHandlerContainer {
-    handleUriPath   handler;
-    char            *description;
+typedef struct _uriHandlerContainer
+{
+    handleUriPath handler;
+    char *description;
 } uriHandlerContainer;
 
 
 /*
  * return codes
  */
-typedef enum {
+typedef enum
+{
     URI_DISPATCH_ADD_OK,
-    URI_DISPATCH_INVALID,       // input args are invalid
-    URI_DISPATCH_DUP_VAR,       // conflict with a variable at the same segment (with a different name or directive)
-    URI_DISPATCH_DUP_HANDLER,   // conflict with a callback already registered
+    URI_DISPATCH_INVALID,           // input args are invalid
+    URI_DISPATCH_DUP_VAR,           // conflict with a variable at the same segment (with a different name or directive)
+    URI_DISPATCH_DUP_HANDLER,       // conflict with a callback already registered
     URI_DISPATCH_UNKNOWN_DIRECTIVE, // directive found that could not be resolved
 } uriDispatchAddResult;
 
@@ -124,7 +126,8 @@ void uriDispatcherDestroy(uriDispatcher *dispatcher);
  * @param description - label for this handler (for debugging/logging)
  * @param handler - callback to register for this template
  */
-uriDispatchAddResult registerUriHandler(uriDispatcher *dispatcher, const char *uriTemplate, const char *description, handleUriPath handler);
+uriDispatchAddResult
+registerUriHandler(uriDispatcher *dispatcher, const char *uriTemplate, const char *description, handleUriPath handler);
 
 /*
  * process a URI and return the handler/description that should be used.
@@ -160,9 +163,10 @@ typedef bool (*UriDispatcherDirectiveHandler)(char *input, char **output, void *
  * @param context the callback context
  * @return true if successfully registered
  */
-bool uriDispatcherRegisterDirective(uriDispatcher *dispatcher, const char *directiveName,
-                                    UriDispatcherDirectiveHandler handler, void *context);
-
+bool uriDispatcherRegisterDirective(uriDispatcher *dispatcher,
+                                    const char *directiveName,
+                                    UriDispatcherDirectiveHandler handler,
+                                    void *context);
 
 
 #endif // FLEXCORE_URI_DISPATCHER_H

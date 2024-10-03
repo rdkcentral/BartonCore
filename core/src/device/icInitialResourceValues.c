@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -23,16 +23,16 @@
 // Created by mkoch201 on 4/15/19.
 //
 
-#include <string.h>
+#include <icLog/logging.h>
+#include <icTypes/icStringHashMap.h>
 #include <icUtil/stringUtils.h>
 #include <stdlib.h>
-#include <icTypes/icStringHashMap.h>
-#include <icLog/logging.h>
+#include <string.h>
 
 #include "device/icInitialResourceValues.h"
 
 #define ENDPOINT_FORMAT "%s/%s"
-#define LOG_TAG "initialResourceValues"
+#define LOG_TAG         "initialResourceValues"
 
 /**
  * This is just an abstraction around a stringHashMap, hiding from the client the way we form the keys so we can
@@ -45,7 +45,7 @@
  */
 icInitialResourceValues *initialResourceValuesCreate()
 {
-    return (icInitialResourceValues *)stringHashMapCreate();
+    return (icInitialResourceValues *) stringHashMapCreate();
 }
 
 /**
@@ -54,7 +54,7 @@ icInitialResourceValues *initialResourceValuesCreate()
  */
 void initialResourceValuesDestroy(icInitialResourceValues *initialResourceValues)
 {
-    stringHashMapDestroy((icStringHashMap *)initialResourceValues, NULL);
+    stringHashMapDestroy((icStringHashMap *) initialResourceValues, NULL);
 }
 
 /**
@@ -65,7 +65,8 @@ void initialResourceValuesDestroy(icInitialResourceValues *initialResourceValues
  * @param allowReplace true to allow replace, false otherwise
  * @return true if the value was put
  */
-static bool internalDeviceValuePut(icInitialResourceValues *values, const char *resourceId, const char *value, bool allowReplace)
+static bool
+internalDeviceValuePut(icInitialResourceValues *values, const char *resourceId, const char *value, bool allowReplace)
 {
     bool success = false;
     if (values != NULL && resourceId != NULL)
@@ -78,7 +79,7 @@ static bool internalDeviceValuePut(icInitialResourceValues *values, const char *
         char *key = strdup(resourceId);
         char *valueToPut = value != NULL ? strdup(value) : NULL;
         // Now put the new value
-        success = stringHashMapPut((icStringHashMap *)values, key, valueToPut);
+        success = stringHashMapPut((icStringHashMap *) values, key, valueToPut);
         if (!success)
         {
             free(key);
@@ -109,7 +110,8 @@ bool initialResourceValuesPutDeviceValue(icInitialResourceValues *values, const 
  * @param value the value
  * @return true if value was put, false otherwise
  */
-bool initialResourceValuesPutDeviceValueIfNotExists(icInitialResourceValues *values, const char *resourceId,
+bool initialResourceValuesPutDeviceValueIfNotExists(icInitialResourceValues *values,
+                                                    const char *resourceId,
                                                     const char *value)
 {
     return internalDeviceValuePut(values, resourceId, value, false);
@@ -140,7 +142,7 @@ static bool internalEndpointValuePut(icInitialResourceValues *values,
             stringHashMapDelete((icStringHashMap *) values, key, NULL);
         }
         // Now put the new value
-        success = stringHashMapPut((icStringHashMap *)values, key, valueToPut);
+        success = stringHashMapPut((icStringHashMap *) values, key, valueToPut);
         if (!success)
         {
             free(key);
@@ -196,7 +198,7 @@ bool initialResourceValuesHasDeviceValue(icInitialResourceValues *values, const 
     bool hasValue = false;
     if (values != NULL && resourceId != NULL)
     {
-        hasValue = stringHashMapContains((icStringHashMap *)values, resourceId);
+        hasValue = stringHashMapContains((icStringHashMap *) values, resourceId);
     }
 
     return hasValue;
@@ -208,7 +210,8 @@ bool initialResourceValuesHasDeviceValue(icInitialResourceValues *values, const 
  * @param resourceId the resource id
  * @return true if an entry for the initial value exists(even if the value is NULL), false if it does not exist
  */
-bool initialResourceValuesHasEndpointValue(icInitialResourceValues *values, const char *endpointId,
+bool initialResourceValuesHasEndpointValue(icInitialResourceValues *values,
+                                           const char *endpointId,
                                            const char *resourceId)
 {
     bool hasValue = false;
@@ -216,7 +219,7 @@ bool initialResourceValuesHasEndpointValue(icInitialResourceValues *values, cons
     {
         char *key = stringBuilder(ENDPOINT_FORMAT, endpointId, resourceId);
 
-        hasValue = stringHashMapContains((icStringHashMap *)values, key);
+        hasValue = stringHashMapContains((icStringHashMap *) values, key);
 
         free(key);
     }
@@ -236,7 +239,7 @@ const char *initialResourceValuesGetDeviceValue(icInitialResourceValues *values,
     char *val = NULL;
     if (values != NULL && resourceId != NULL)
     {
-        val = stringHashMapGet((icStringHashMap *)values, resourceId);
+        val = stringHashMapGet((icStringHashMap *) values, resourceId);
     }
 
     return val;
@@ -250,15 +253,15 @@ const char *initialResourceValuesGetDeviceValue(icInitialResourceValues *values,
  * @param resourceId the resource id
  * @return the initial value, which may be NULL
  */
-const char *initialResourceValuesGetEndpointValue(icInitialResourceValues *values, const char *endpointId,
-                                                  const char *resourceId)
+const char *
+initialResourceValuesGetEndpointValue(icInitialResourceValues *values, const char *endpointId, const char *resourceId)
 {
     char *val = NULL;
     if (values != NULL && endpointId != NULL && resourceId != NULL)
     {
         char *key = stringBuilder(ENDPOINT_FORMAT, endpointId, resourceId);
 
-        val = stringHashMapGet((icStringHashMap *)values, key);
+        val = stringHashMapGet((icStringHashMap *) values, key);
 
         free(key);
     }
@@ -275,8 +278,8 @@ void initialResourcesValuesLogValues(icInitialResourceValues *values)
     if (values != NULL)
     {
         icLogDebug(LOG_TAG, "Initial Resource Values:");
-        icStringHashMapIterator *iter = stringHashMapIteratorCreate((icStringHashMap *)values);
-        while(stringHashMapIteratorHasNext(iter))
+        icStringHashMapIterator *iter = stringHashMapIteratorCreate((icStringHashMap *) values);
+        while (stringHashMapIteratorHasNext(iter))
         {
             char *key;
             char *value;
@@ -293,4 +296,3 @@ void initialResourcesValuesLogValues(icInitialResourceValues *values)
         stringHashMapIteratorDestroy(iter);
     }
 }
-

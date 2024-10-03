@@ -28,13 +28,13 @@
  * Author: jelderton - 8/25/15
  *-----------------------------------------------*/
 
-#include <icLog/logging.h>
-#include <string.h>
-#include <stdlib.h>
 #include "queueTest.h"
 #include "icTypes/icQueue.h"
+#include <icLog/logging.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define LOG_CAT     "logTEST"
+#define LOG_CAT "logTEST"
 
 
 static bool canAddItemsToQueue()
@@ -113,8 +113,8 @@ static bool canAddAndDelItemsFromQueue()
 
 static bool queueFindFunc(void *searchVal, void *item)
 {
-    char *searchStr = (char *)searchVal;
-    char *currStr = (char *)item;
+    char *searchStr = (char *) searchVal;
+    char *currStr = (char *) item;
 
     if (strcmp(searchStr, currStr) == 0)
     {
@@ -193,5 +193,3 @@ bool runQueueTests()
 
     return true;
 }
-
-

@@ -19,35 +19,37 @@
 // iControl Networks retains all ownership rights.
 //
 //------------------------------ tabstop = 4 ----------------------------------
-#include <stddef.h>
-#include <stdarg.h>
 #include <setjmp.h>
-#include <stdint.h>
-#include <zhal/zhal.h>
-#include <zhalRequests.c>
-#include <icLog/logging.h>
-#include <unistd.h>
-#include <string.h>
-#include <inttypes.h>
-#include <stdio.h>
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <cjson/cJSON.h>
 #include <cmocka.h>
+#include <glib.h>
+#include <icConcurrent/threadUtils.h>
+#include <icLog/logging.h>
+#include <inttypes.h>
+#include <netinet/in.h>
 #include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/errno.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <cjson/cJSON.h>
-#include <icConcurrent/threadUtils.h>
-#include <glib.h>
+#include <unistd.h>
+#include <zhal/zhal.h>
+#include <zhalRequests.c>
 
-#define CLUSTER_ID_BASIC                        0x0000
-#define ATTRIBUTE_ID_APPLICATION_VERSION        0x0001
-#define ATTRIBUTE_ID_HARDWARE_VERSION           0x0003
-#define ATTRIBUTE_ID_MANUFACTURER_NAME          0x0004
-#define ATTRIBUTE_ID_MODEL_IDENTIFIER           0x0005
+#define CLUSTER_ID_BASIC                 0x0000
+#define ATTRIBUTE_ID_APPLICATION_VERSION 0x0001
+#define ATTRIBUTE_ID_HARDWARE_VERSION    0x0003
+#define ATTRIBUTE_ID_MANUFACTURER_NAME   0x0004
+#define ATTRIBUTE_ID_MODEL_IDENTIFIER    0x0005
 
-#define TEST_TARGET_EUI64 0x000d6f0003c04a7d
+#define TEST_TARGET_EUI64                0x000d6f0003c04a7d
 
-typedef struct {
+typedef struct
+{
     void *data;
     size_t dataLen;
 } asyncQueueData;
@@ -118,7 +120,8 @@ static void testZhalImpl(void **state)
     sendAsyncQueue = g_async_queue_new();
     recvAsyncQueue = g_async_queue_new();
 
-    uint16_t attributeIds[] = {ATTRIBUTE_ID_HARDWARE_VERSION, ATTRIBUTE_ID_MANUFACTURER_NAME, ATTRIBUTE_ID_MODEL_IDENTIFIER};
+    uint16_t attributeIds[] = {
+        ATTRIBUTE_ID_HARDWARE_VERSION, ATTRIBUTE_ID_MANUFACTURER_NAME, ATTRIBUTE_ID_MODEL_IDENTIFIER};
     uint8_t numAttributeIds = 3;
     cJSON *request = cJSON_CreateObject();
     setAddress(TEST_TARGET_EUI64, request);
@@ -169,7 +172,7 @@ static void testZhalImpl(void **state)
     g_async_queue_push(recvAsyncQueue, replyLenData);
     asyncQueueData *replyStrData = malloc(sizeof(asyncQueueData));
     replyStrData->data = replyStr;
-    replyStrData->dataLen = strlen(replyStr)+1;
+    replyStrData->dataLen = strlen(replyStr) + 1;
     g_async_queue_push(recvAsyncQueue, replyStrData);
 
     zhalTerm();
@@ -186,10 +189,9 @@ static void testZhalImpl(void **state)
 
 int main(int argc, char *argv[])
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(testZhalImpl),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(testZhalImpl),
+    };
 
     int retVal = cmocka_run_group_tests(tests, NULL, NULL);
 

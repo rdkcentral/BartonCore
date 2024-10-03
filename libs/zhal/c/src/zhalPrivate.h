@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -30,9 +30,7 @@
 
 #include <zhal/zhal.h>
 
-cJSON *zhalSendRequest(uint64_t targetEui64,
-                       cJSON *requestJson,
-                       int timeoutSecs);
+cJSON *zhalSendRequest(uint64_t targetEui64, cJSON *requestJson, int timeoutSecs);
 
 zhalCallbacks *getCallbacks(void);
 
@@ -40,4 +38,4 @@ void *getCallbackContext(void);
 
 bool zhalIsInitialized(void);
 
-#endif //FLEXCORE_ZHALPRIVATE_H
+#endif // FLEXCORE_ZHALPRIVATE_H

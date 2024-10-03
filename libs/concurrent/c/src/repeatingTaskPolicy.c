@@ -28,14 +28,14 @@
  * Author: jelderton - 5/6/22
  *-----------------------------------------------*/
 
-#include <math.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <inttypes.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-#include <icLog/logging.h>
 #include <icConcurrent/repeatingTask.h>
+#include <icLog/logging.h>
 #include <icTime/timeUtils.h>
 #include <icUtil/numberUtils.h>
 
@@ -44,51 +44,57 @@
  */
 
 // basic policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint64_t    currentDelay;           // the delay amount, might change depending on the task
+typedef struct
+{
+    delayUnits units;      // The unit of time to use (min, secs, etc.)
+    uint64_t currentDelay; // the delay amount, might change depending on the task
 } standardPolicyContext;
 
 // start-delay policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint64_t    startDelay;             // the delay amount, might change depending on the task
-    uint64_t    currentDelay;           // the delay amount, might change depending on the task
-    bool        ranOnce;                // indicator to switch from 'start' to 'current' delay
+typedef struct
+{
+    delayUnits units;      // The unit of time to use (min, secs, etc.)
+    uint64_t startDelay;   // the delay amount, might change depending on the task
+    uint64_t currentDelay; // the delay amount, might change depending on the task
+    bool ranOnce;          // indicator to switch from 'start' to 'current' delay
 } startDelayPolicyContext;
 
 // fixed policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint64_t    currentDelay;           // the delay amount, might change depending on the task
-    bool        ranOnce;
-    struct timespec  lastTimeRan;       // last time this was executed
+typedef struct
+{
+    delayUnits units;      // The unit of time to use (min, secs, etc.)
+    uint64_t currentDelay; // the delay amount, might change depending on the task
+    bool ranOnce;
+    struct timespec lastTimeRan; // last time this was executed
 } fixedPolicyContext;
 
 // random policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint32_t    minRange;
-    uint32_t    maxRange;
-    uint64_t    lastValueUsed;          // large enough to hold the rand number
+typedef struct
+{
+    delayUnits units; // The unit of time to use (min, secs, etc.)
+    uint32_t minRange;
+    uint32_t maxRange;
+    uint64_t lastValueUsed; // large enough to hold the rand number
 } randomPolicyContext;
 
 // incremental backoff policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint64_t    currentDelay;           // the delay amount, might change depending on the task
-    uint64_t    startDelay;             // the the delay amount after 1st run
-    uint64_t    maxDelay;               // the max delay amount to hit
-    uint64_t    incrementDelay;         // the amount delay amount will increase after each iteration
+typedef struct
+{
+    delayUnits units;        // The unit of time to use (min, secs, etc.)
+    uint64_t currentDelay;   // the delay amount, might change depending on the task
+    uint64_t startDelay;     // the the delay amount after 1st run
+    uint64_t maxDelay;       // the max delay amount to hit
+    uint64_t incrementDelay; // the amount delay amount will increase after each iteration
 } incrementalPolicyContext;
 
 // exponential backoff policy context
-typedef struct {
-    delayUnits  units;                  // The unit of time to use (min, secs, etc.)
-    uint64_t    attempts;               // the number of attempts made
-    uint64_t    currentDelay;           // the delay amount, might change depending on the task
-    uint8_t     base;                   // the base of the exponentiated delay
-    uint64_t    maxDelay;               // the max delay amount to hit
+typedef struct
+{
+    delayUnits units;      // The unit of time to use (min, secs, etc.)
+    uint64_t attempts;     // the number of attempts made
+    uint64_t currentDelay; // the delay amount, might change depending on the task
+    uint8_t base;          // the base of the exponentiated delay
+    uint64_t maxDelay;     // the max delay amount to hit
 } exponentialPolicyContext;
 
 
@@ -103,7 +109,7 @@ typedef struct {
  */
 RepeatingTaskPolicy *createRepeatingPolicy(void)
 {
-    return (RepeatingTaskPolicy *)calloc(1, sizeof(RepeatingTaskPolicy));
+    return (RepeatingTaskPolicy *) calloc(1, sizeof(RepeatingTaskPolicy));
 }
 
 /*
@@ -171,7 +177,7 @@ static void populateTimespecDelay(uint64_t delay, delayUnits units, struct times
  */
 static void standardGetDelayForNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    standardPolicyContext *ctx = (standardPolicyContext *)delayContext;
+    standardPolicyContext *ctx = (standardPolicyContext *) delayContext;
     populateTimespecDelay(ctx->currentDelay, ctx->units, whenToRun);
 }
 
@@ -199,7 +205,7 @@ RepeatingTaskPolicy *createStandardRepeatingTaskPolicy(uint64_t delayAmount, del
     retVal->destroyContextFunc = standardDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    standardPolicyContext *ctx = (standardPolicyContext *)calloc(1, sizeof(standardPolicyContext));
+    standardPolicyContext *ctx = (standardPolicyContext *) calloc(1, sizeof(standardPolicyContext));
     ctx->currentDelay = delayAmount;
     ctx->units = units;
     retVal->policyContext = ctx;
@@ -218,7 +224,7 @@ RepeatingTaskPolicy *createStandardRepeatingTaskPolicy(uint64_t delayAmount, del
  */
 static void startDelayCalcNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    startDelayPolicyContext *ctx = (startDelayPolicyContext *)delayContext;
+    startDelayPolicyContext *ctx = (startDelayPolicyContext *) delayContext;
 
     // if this is the first run, use 'startDelay' otherwise 'currentDelay'
     if (ctx->ranOnce == false)
@@ -249,9 +255,8 @@ static void startDelayDestroyContextFunc(void *delayContext)
  * @param delayAmount - number of 'units' to delay
  * @param units - amount of time 'delayAmount' represents
  */
-RepeatingTaskPolicy *createRepeatingTaskWithStartDelayPolicy(uint64_t startDelayAmount,
-                                                             uint64_t delayAmount,
-                                                             delayUnits units)
+RepeatingTaskPolicy *
+createRepeatingTaskWithStartDelayPolicy(uint64_t startDelayAmount, uint64_t delayAmount, delayUnits units)
 {
     // first the policy and supporting functions
     RepeatingTaskPolicy *retVal = createRepeatingPolicy();
@@ -259,7 +264,7 @@ RepeatingTaskPolicy *createRepeatingTaskWithStartDelayPolicy(uint64_t startDelay
     retVal->destroyContextFunc = startDelayDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    startDelayPolicyContext *ctx = (startDelayPolicyContext *)calloc(1, sizeof(startDelayPolicyContext));
+    startDelayPolicyContext *ctx = (startDelayPolicyContext *) calloc(1, sizeof(startDelayPolicyContext));
     ctx->startDelay = startDelayAmount;
     ctx->currentDelay = delayAmount;
     ctx->units = units;
@@ -280,7 +285,7 @@ RepeatingTaskPolicy *createRepeatingTaskWithStartDelayPolicy(uint64_t startDelay
  */
 static void fixedGetDelayForNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    fixedPolicyContext *ctx = (fixedPolicyContext *)delayContext;
+    fixedPolicyContext *ctx = (fixedPolicyContext *) delayContext;
 
     // if this is the first run, just return the millis for the delay
     if (ctx->ranOnce == false)
@@ -307,7 +312,7 @@ static void fixedGetDelayForNextRunFunc(void *delayContext, struct timespec *whe
 static void fixedPreRunNotifyFunc(void *delayContext)
 {
     // save current time so we can calculate when to run again
-    fixedPolicyContext *ctx = (fixedPolicyContext *)delayContext;
+    fixedPolicyContext *ctx = (fixedPolicyContext *) delayContext;
     getCurrentTime(&ctx->lastTimeRan, true);
 }
 
@@ -317,7 +322,7 @@ static void fixedPreRunNotifyFunc(void *delayContext)
 static void fixedPostRunNotifyFunc(void *delayContext)
 {
     // update ranOnce flag
-    fixedPolicyContext *ctx = (fixedPolicyContext *)delayContext;
+    fixedPolicyContext *ctx = (fixedPolicyContext *) delayContext;
     ctx->ranOnce = true;
 }
 
@@ -349,7 +354,7 @@ RepeatingTaskPolicy *createFixedRepeatingTaskPolicy(uint64_t delayAmount, delayU
     retVal->destroyContextFunc = fixedDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    fixedPolicyContext *ctx = (fixedPolicyContext *)calloc(1, sizeof(fixedPolicyContext));
+    fixedPolicyContext *ctx = (fixedPolicyContext *) calloc(1, sizeof(fixedPolicyContext));
     ctx->currentDelay = delayAmount;
     ctx->units = units;
     ctx->ranOnce = false;
@@ -369,7 +374,7 @@ RepeatingTaskPolicy *createFixedRepeatingTaskPolicy(uint64_t delayAmount, delayU
  */
 static void randomGetDelayForNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    randomPolicyContext *ctx = (randomPolicyContext *)delayContext;
+    randomPolicyContext *ctx = (randomPolicyContext *) delayContext;
     uint64_t randNum = 0;
     if (generateRandomNumberInRange(ctx->minRange, ctx->maxRange, &randNum) == true)
     {
@@ -379,7 +384,7 @@ static void randomGetDelayForNextRunFunc(void *delayContext, struct timespec *wh
     else
     {
         // log warning? use the same value we had last time
-        icLogWarn("randPolicy", "%s unable to obtain random number.  using %"PRIu64, __FUNCTION__, ctx->lastValueUsed);
+        icLogWarn("randPolicy", "%s unable to obtain random number.  using %" PRIu64, __FUNCTION__, ctx->lastValueUsed);
     }
 
     // basic math of millisecond representation of the amount in units
@@ -412,11 +417,11 @@ RepeatingTaskPolicy *createRandomRepeatingTaskPolicy(uint32_t minDelayAmount, ui
     retVal->destroyContextFunc = randomDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    randomPolicyContext *ctx = (randomPolicyContext *)calloc(1, sizeof(randomPolicyContext));
+    randomPolicyContext *ctx = (randomPolicyContext *) calloc(1, sizeof(randomPolicyContext));
     ctx->units = units;
     ctx->minRange = minDelayAmount;
     ctx->maxRange = maxDelayAmount;
-    ctx->lastValueUsed = minDelayAmount;    // safeguard if random num generation fails
+    ctx->lastValueUsed = minDelayAmount; // safeguard if random num generation fails
     retVal->policyContext = ctx;
 
     return retVal;
@@ -433,7 +438,7 @@ RepeatingTaskPolicy *createRandomRepeatingTaskPolicy(uint32_t minDelayAmount, ui
  */
 static void incrementalGetDelayForNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    incrementalPolicyContext *ctx = (incrementalPolicyContext *)delayContext;
+    incrementalPolicyContext *ctx = (incrementalPolicyContext *) delayContext;
     populateTimespecDelay(ctx->currentDelay, ctx->units, whenToRun);
 }
 
@@ -442,7 +447,7 @@ static void incrementalGetDelayForNextRunFunc(void *delayContext, struct timespe
  */
 static void incrementalPostRunNotifyFunc(void *delayContext)
 {
-    incrementalPolicyContext *ctx = (incrementalPolicyContext *)delayContext;
+    incrementalPolicyContext *ctx = (incrementalPolicyContext *) delayContext;
 
     if (ctx->currentDelay == 0)
     {
@@ -476,8 +481,10 @@ static void incrementalDestroyContextFunc(void *delayContext)
  * @param units - amount of time each 'amount' represents
  *
  */
-RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmount, uint64_t maxDelayAmount,
-                                                          uint64_t incrementDelayAmount, delayUnits units)
+RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmount,
+                                                          uint64_t maxDelayAmount,
+                                                          uint64_t incrementDelayAmount,
+                                                          delayUnits units)
 {
     // first the policy and supporting functions
     RepeatingTaskPolicy *retVal = createRepeatingPolicy();
@@ -486,7 +493,7 @@ RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmou
     retVal->destroyContextFunc = incrementalDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    incrementalPolicyContext *ctx = (incrementalPolicyContext *)calloc(1, sizeof(incrementalPolicyContext));
+    incrementalPolicyContext *ctx = (incrementalPolicyContext *) calloc(1, sizeof(incrementalPolicyContext));
     ctx->units = units;
     ctx->currentDelay = 0;
     ctx->startDelay = initDelayAmount;
@@ -502,15 +509,15 @@ RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmou
  * this returns a deep clone, but updates the current delay amount.
  * Solely used by changeRepeatingTask
  */
-RepeatingTaskPolicy *cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskPolicy *orig,
-                                                                  uint32_t delayAmount, delayUnits units)
+RepeatingTaskPolicy *
+cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskPolicy *orig, uint32_t delayAmount, delayUnits units)
 {
     RepeatingTaskPolicy *retVal = NULL;
 
     // need to create a new incrementalPolicyContext and transfer over as
     // much as we can from the context within 'orig'
-    incrementalPolicyContext *origCtx = (incrementalPolicyContext *)orig->policyContext;
-    incrementalPolicyContext *ctx = (incrementalPolicyContext *)calloc(1, sizeof(incrementalPolicyContext));
+    incrementalPolicyContext *origCtx = (incrementalPolicyContext *) orig->policyContext;
+    incrementalPolicyContext *ctx = (incrementalPolicyContext *) calloc(1, sizeof(incrementalPolicyContext));
     ctx->units = units;
     ctx->currentDelay = (uint64_t) delayAmount;
     ctx->startDelay = origCtx->startDelay;
@@ -538,7 +545,7 @@ RepeatingTaskPolicy *cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskP
  */
 static void exponentialGetDelayForNextRunFunc(void *delayContext, struct timespec *whenToRun)
 {
-    exponentialPolicyContext *ctx = (exponentialPolicyContext *)delayContext;
+    exponentialPolicyContext *ctx = (exponentialPolicyContext *) delayContext;
     populateTimespecDelay(ctx->currentDelay, ctx->units, whenToRun);
 }
 
@@ -547,7 +554,7 @@ static void exponentialGetDelayForNextRunFunc(void *delayContext, struct timespe
  */
 static void exponentialPostRunNotifyFunc(void *delayContext)
 {
-    exponentialPolicyContext *ctx = (exponentialPolicyContext *)delayContext;
+    exponentialPolicyContext *ctx = (exponentialPolicyContext *) delayContext;
     ctx->attempts++;
 
     if (ctx->currentDelay != ctx->maxDelay)
@@ -603,7 +610,7 @@ RepeatingTaskPolicy *createExponentialRepeatingTaskPolicy(uint8_t delayBase, uin
     retVal->destroyContextFunc = exponentialDestroyContextFunc;
 
     // now add the context to store our input variables and state information
-    exponentialPolicyContext *ctx = (exponentialPolicyContext *)calloc(1, sizeof(exponentialPolicyContext));
+    exponentialPolicyContext *ctx = (exponentialPolicyContext *) calloc(1, sizeof(exponentialPolicyContext));
     ctx->units = units;
     ctx->currentDelay = 0;
     ctx->attempts = 0;

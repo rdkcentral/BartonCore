@@ -91,14 +91,15 @@
 #define HTTP_STATUS_NOT_EXTENDED                    510
 #define HTTP_STATUS_NETWORK_AUTHENTICATION_REQUIRED 511
 
-#define HTTP_STATUS_IS_INFORMATIONAL(_stat_code)   ((_stat_code >= 100) && (_stat_code < 200))
-#define HTTP_STATUS_IS_SUCCESSFUL(_stat_code)      ((_stat_code >= 200) && (_stat_code < 300))
-#define HTTP_STATUS_IS_REDIRECTION(_stat_code)     ((_stat_code >= 300) && (_stat_code < 400))
-#define HTTP_STATUS_IS_CLIENT_ERROR(_stat_code)    ((_stat_code >= 400) && (_stat_code < 500))
-#define HTTP_STATUS_IS_SERVER_ERROR(_stat_code)    ((_stat_code >= 500) && (_stat_code < 600))
-#define HTTP_STATUS_IS_ERROR(_stat_code)           (_stat_code >= 400)
+#define HTTP_STATUS_IS_INFORMATIONAL(_stat_code)    ((_stat_code >= 100) && (_stat_code < 200))
+#define HTTP_STATUS_IS_SUCCESSFUL(_stat_code)       ((_stat_code >= 200) && (_stat_code < 300))
+#define HTTP_STATUS_IS_REDIRECTION(_stat_code)      ((_stat_code >= 300) && (_stat_code < 400))
+#define HTTP_STATUS_IS_CLIENT_ERROR(_stat_code)     ((_stat_code >= 400) && (_stat_code < 500))
+#define HTTP_STATUS_IS_SERVER_ERROR(_stat_code)     ((_stat_code >= 500) && (_stat_code < 600))
+#define HTTP_STATUS_IS_ERROR(_stat_code)            (_stat_code >= 400)
 
-typedef enum {
+typedef enum
+{
     HTTP_STATUS_IS_INFORMATIONAL,
     HTTP_STATUS_IS_SUCCESSFUL,
     HTTP_STATUS_IS_REDIRECTION,
@@ -136,6 +137,4 @@ static inline httpStatusClassifier getHttpStatusClassifier(int stat_code)
     return retval;
 }
 
-#endif /* COMCASTHTTPSTATUS_H */ 
-
-
+#endif /* COMCASTHTTPSTATUS_H */

@@ -51,53 +51,53 @@ namespace zilker
         {
         public:
             /**
-            * @brief This is called whenever the requestor server's UpdateState attribute changes
-            * @ref Matter 1.0 11.19.7.8
-            *
-            * @param source
-            * @param oldState
-            * @param newState
-            * @param reason
-            * @param targetSoftwareVersion
-            * @param subscriber
-            */
+             * @brief This is called whenever the requestor server's UpdateState attribute changes
+             * @ref Matter 1.0 11.19.7.8
+             *
+             * @param source
+             * @param oldState
+             * @param newState
+             * @param reason
+             * @param targetSoftwareVersion
+             * @param subscriber
+             */
             virtual void OnStateTransition(OTARequestor &source,
                                            OtaSoftwareUpdateRequestor::OTAUpdateStateEnum oldState,
                                            OtaSoftwareUpdateRequestor::OTAUpdateStateEnum newState,
                                            OtaSoftwareUpdateRequestor::OTAChangeReasonEnum reason,
                                            Nullable<uint32_t> targetSoftwareVersion,
-                                           SubscribeInteraction &subscriber){};
+                                           SubscribeInteraction &subscriber) {};
 
             /**
-            * @brief This is called whenever a download fails to complete
-            * @ref Matter 1.0 11.19.7.8
-            * @param source
-            * @param softwareVersion
-            * @param bytesDownloaded
-            * @param percentDownloaded
-            * @param platformCode
-            * @param subscriber
-            */
+             * @brief This is called whenever a download fails to complete
+             * @ref Matter 1.0 11.19.7.8
+             * @param source
+             * @param softwareVersion
+             * @param bytesDownloaded
+             * @param percentDownloaded
+             * @param platformCode
+             * @param subscriber
+             */
             virtual void OnDownloadError(OTARequestor &source,
                                          uint32_t softwareVersion,
                                          uint64_t bytesDownloaded,
                                          Nullable<uint8_t> percentDownloaded,
                                          Nullable<int64_t> platformCode,
-                                         SubscribeInteraction &subscriber){};
+                                         SubscribeInteraction &subscriber) {};
 
             /**
-            * @brief This is called whenever a new version is applied and will match the SoftwareVersion
-            *        attribute in the Basic Information cluster.
-            * @ref Matter 1.0 11.19.7.8
-            * @param source
-            * @param softwareVersion
-            * @param productId
-            * @param subscriber
-            */
+             * @brief This is called whenever a new version is applied and will match the SoftwareVersion
+             *        attribute in the Basic Information cluster.
+             * @ref Matter 1.0 11.19.7.8
+             * @param source
+             * @param softwareVersion
+             * @param productId
+             * @param subscriber
+             */
             virtual void OnVersionApplied(OTARequestor &source,
                                           uint32_t softwareVersion,
                                           uint16_t productId,
-                                          SubscribeInteraction &subscriber){};
+                                          SubscribeInteraction &subscriber) {};
         };
 
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override

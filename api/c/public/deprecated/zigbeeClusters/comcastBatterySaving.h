@@ -32,9 +32,11 @@
 #ifndef ZILKER_COMCASTBATTERYSAVING_H
 #define ZILKER_COMCASTBATTERYSAVING_H
 
-#define OPTIONAL_SENSOR_DATA_TYPE_METADATA          "comcast.battSave.extra"
-#define OPTIONAL_SENSOR_DATA_TYPE_MAGNETIC          "magStr"
-#define OPTIONAL_SENSOR_DATA_TYPE_BATTERY_CAP_USED  "battCapUsed"
+#include <inttypes.h>
+
+#define OPTIONAL_SENSOR_DATA_TYPE_METADATA         "comcast.battSave.extra"
+#define OPTIONAL_SENSOR_DATA_TYPE_MAGNETIC         "magStr"
+#define OPTIONAL_SENSOR_DATA_TYPE_BATTERY_CAP_USED "battCapUsed"
 
 typedef union
 {
@@ -54,4 +56,4 @@ typedef struct
     uint32_t rejoins;
 } ComcastBatterySavingData;
 
-#endif //ZILKER_COMCASTBATTERYSAVING_H
+#endif // ZILKER_COMCASTBATTERYSAVING_H

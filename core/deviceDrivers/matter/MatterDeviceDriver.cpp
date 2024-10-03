@@ -24,8 +24,8 @@
  * Created by Thomas Lea on 11/15/21.
  */
 
-#define LOG_TAG     "MatterBaseDD"
-#define logFmt(fmt) "(%s): " fmt, __func__
+#define LOG_TAG      "MatterBaseDD"
+#define logFmt(fmt)  "(%s): " fmt, __func__
 #define G_LOG_DOMAIN LOG_TAG
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "subsystems/matter/MatterCommon.h"
@@ -56,6 +56,7 @@
 #include "app/OperationalSessionSetup.h"
 #include "app/ReadPrepareParams.h"
 #include "clusters/BasicInformation.hpp"
+#include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
 #include "controller-clusters/zap-generated/CHIPClusters.h"
 #include "controller/CHIPCluster.h"
@@ -69,17 +70,16 @@
 #include "subsystems/matter/Matter.h"
 #include "subsystems/matter/matterSubsystem.h"
 #include "transport/Session.h"
-#include "clusters/GeneralDiagnostics.h"
 
 extern "C" {
+#include "device-driver/device-driver.h"
+#include "device/deviceModelHelper.h"
 #include "device/icDevice.h"
 #include "device/icDeviceMetadata.h"
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
 #include "deviceCommunicationWatchdog.h"
 #include "deviceDescriptor.h"
-#include "device-driver/device-driver.h"
-#include "device/deviceModelHelper.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
 #include "glib.h"
@@ -348,16 +348,15 @@ void MatterDeviceDriver::ConfigureDevice(std::forward_list<std::promise<bool>> &
 }
 
 void MatterDeviceDriver::ConfigureSubscription(std::forward_list<std::promise<bool>> &promises,
-                                                const std::string &deviceId,
-                                                DeviceDescriptor *deviceDescriptor,
-                                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                                const chip::SessionHandle &sessionHandle)
+                                               const std::string &deviceId,
+                                               DeviceDescriptor *deviceDescriptor,
+                                               chip::Messaging::ExchangeManager &exchangeMgr,
+                                               const chip::SessionHandle &sessionHandle)
 {
     icDebug();
 
     auto subscriptionIntervalSecs = CalculateFinalSubscriptionIntervalSecs(deviceId);
-    if (subscriptionIntervalSecs.minIntervalFloorSecs == 0
-        || subscriptionIntervalSecs.maxIntervalCeilingSecs == 0)
+    if (subscriptionIntervalSecs.minIntervalFloorSecs == 0 || subscriptionIntervalSecs.maxIntervalCeilingSecs == 0)
     {
         icError("Failed to calculate valid subscription interval params");
         FailOperation(promises);
@@ -390,10 +389,8 @@ void MatterDeviceDriver::ConfigureSubscription(std::forward_list<std::promise<bo
     auto &configureSubscriptionPromise = promises.front();
     AssociateStoredContext(&configureSubscriptionPromise);
 
-    auto subscribeInteraction = std::make_unique<SubscribeInteraction>(std::move(subEventHandler),
-                                                                       deviceId,
-                                                                       exchangeMgr,
-                                                                       configureSubscriptionPromise);
+    auto subscribeInteraction = std::make_unique<SubscribeInteraction>(
+        std::move(subEventHandler), deviceId, exchangeMgr, configureSubscriptionPromise);
 
     CHIP_ERROR err = subscribeInteraction->Send(std::move(params));
 
@@ -408,8 +405,7 @@ void MatterDeviceDriver::ConfigureSubscription(std::forward_list<std::promise<bo
     }
 }
 
-SubscriptionIntervalSecs
-MatterDeviceDriver::CalculateFinalSubscriptionIntervalSecs(const std::string &deviceId)
+SubscriptionIntervalSecs MatterDeviceDriver::CalculateFinalSubscriptionIntervalSecs(const std::string &deviceId)
 {
     icDebug();
 
@@ -429,11 +425,11 @@ MatterDeviceDriver::CalculateFinalSubscriptionIntervalSecs(const std::string &de
             return intervalSecs;
         }
         minIntervalFloorSeconds = minIntervalFloorSeconds > intervals.minIntervalFloorSecs
-                                  ? minIntervalFloorSeconds
-                                  : intervals.minIntervalFloorSecs;
+                                      ? minIntervalFloorSeconds
+                                      : intervals.minIntervalFloorSecs;
         maxIntervalCeilingSeconds = maxIntervalCeilingSeconds < intervals.maxIntervalCeilingSecs
-                                    ? maxIntervalCeilingSeconds
-                                    : intervals.maxIntervalCeilingSecs;
+                                        ? maxIntervalCeilingSeconds
+                                        : intervals.maxIntervalCeilingSecs;
     }
 
     // The report interval should be "significantly less" than the comm fail timeout to avoid
@@ -456,9 +452,7 @@ MatterDeviceDriver::CalculateFinalSubscriptionIntervalSecs(const std::string &de
 
     if (minIntervalFloorSeconds > maxIntervalCeilingSeconds)
     {
-        uint16_t adjustedMinIntervalFloor = maxIntervalCeilingSeconds - 1 > 0
-                                            ? maxIntervalCeilingSeconds - 1
-                                            : 1;
+        uint16_t adjustedMinIntervalFloor = maxIntervalCeilingSeconds - 1 > 0 ? maxIntervalCeilingSeconds - 1 : 1;
         icWarn("The requested min interval floor of %d secs is greater than the max interval ceiling of %d secs; "
                "adjusting the floor to %d secs",
                minIntervalFloorSeconds,
@@ -486,10 +480,11 @@ std::vector<MatterCluster *> MatterDeviceDriver::GetCommonClustersToSubscribeTo(
     auto basicInfoServer = (BasicInformation *) GetAnyServerById(deviceId, chip::app::Clusters::BasicInformation::Id);
     std::vector<MatterCluster *> clusters = {basicInfoServer};
 
-    auto generalDiagnosticsServer = (GeneralDiagnostics *) GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id);
+    auto generalDiagnosticsServer =
+        (GeneralDiagnostics *) GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id);
     clusters.push_back(generalDiagnosticsServer);
 
-    auto requestorServer = (OTARequestor *)GetAnyServerById(deviceId, OtaSoftwareUpdateRequestor::Id);
+    auto requestorServer = (OTARequestor *) GetAnyServerById(deviceId, OtaSoftwareUpdateRequestor::Id);
 
     if (requestorServer != nullptr)
     {
@@ -771,9 +766,10 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
         };
 
     chip::Callback::Callback<OnDeviceConnectionFailure> failCb(OnMatterDeviceConnectionFailure,
-                                                         static_cast<void *>(&connectPromise));
+                                                               static_cast<void *>(&connectPromise));
 
-    chip::Callback::Callback<OnDeviceConnected> successCb(OnMatterDeviceConnectionSuccess, static_cast<void *>(&workWrapper));
+    chip::Callback::Callback<OnDeviceConnected> successCb(OnMatterDeviceConnectionSuccess,
+                                                          static_cast<void *>(&workWrapper));
 
     // SDK event size limitations prevent directly capturing too many objects.
     // connectPromise is directly pointed at in failCb.mContext, so it is indirectly
@@ -941,10 +937,11 @@ static bool writeResource(void *self, icDeviceResource *resource, const char *pr
     {
         result = myDriver->ConnectAndExecute(
             resource->deviceUuid,
-            [myDriver, resource, previousValue, newValue, &shouldUpdateResource](std::forward_list<std::promise<bool>> &promises,
-                                                          const std::string &deviceId,
-                                                          chip::Messaging::ExchangeManager &exchangeMgr,
-                                                          const chip::SessionHandle &sessionHandle) {
+            [myDriver, resource, previousValue, newValue, &shouldUpdateResource](
+                std::forward_list<std::promise<bool>> &promises,
+                const std::string &deviceId,
+                chip::Messaging::ExchangeManager &exchangeMgr,
+                const chip::SessionHandle &sessionHandle) {
                 shouldUpdateResource = myDriver->WriteResource(
                     promises, deviceId, resource, previousValue, newValue, exchangeMgr, sessionHandle);
             },
@@ -953,11 +950,7 @@ static bool writeResource(void *self, icDeviceResource *resource, const char *pr
 
     if (result && changed && shouldUpdateResource)
     {
-        updateResource(resource->deviceUuid,
-                       resource->endpointId,
-                       resource->id,
-                       newValue,
-                       NULL);
+        updateResource(resource->deviceUuid, resource->endpointId, resource->id, newValue, NULL);
     }
 
     return result;
@@ -1290,7 +1283,8 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
                 break;
 
             case chip::app::Clusters::GeneralDiagnostics::Id:
-                serverRef = std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId);
+                serverRef =
+                    std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId);
                 break;
 
             default:
@@ -1383,9 +1377,8 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnStateTransition(
     if (oldState == OTAUpdateStateEnum::kDownloading && newState == OTAUpdateStateEnum::kIdle &&
         ((reason == OTAChangeReasonEnum::kFailure) || (reason == OTAChangeReasonEnum::kTimeOut)))
     {
-        driver.DeviceFirmwareUpdateFailed(source,
-                                          targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value(),
-                                          subscriber);
+        driver.DeviceFirmwareUpdateFailed(
+            source, targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value(), subscriber);
         icWarn("Update faiure reason: %s", reason == OTAChangeReasonEnum::kFailure ? "Failed" : "Timed out");
     }
     else if (newState == OTAUpdateStateEnum::kDownloading)
@@ -1394,8 +1387,11 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnStateTransition(
 
         std::string deviceUuid = source.GetDeviceId();
 
-        updateResource(
-            deviceUuid.c_str(), NULL, COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS, FIRMWARE_UPDATE_STATUS_STARTED, NULL);
+        updateResource(deviceUuid.c_str(),
+                       NULL,
+                       COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS,
+                       FIRMWARE_UPDATE_STATUS_STARTED,
+                       NULL);
     }
     else if (newState == OTAUpdateStateEnum::kApplying)
     {

@@ -34,23 +34,23 @@
  * Author: jelderton - 2/12/16
  *-----------------------------------------------*/
 
+#include <errno.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include <pthread.h>
 #include <unistd.h>
-#include <errno.h>
-#include <inttypes.h>
 
-#include <icLog/logging.h>
-#include <icConcurrent/threadUtils.h>
-#include <icTypes/icLinkedList.h>
-#include <icUtil/stringUtils.h>
 #include "icConcurrent/icBlockingQueue.h"
 #include "icConcurrent/threadPool.h"
+#include <icConcurrent/threadUtils.h>
+#include <icLog/logging.h>
+#include <icTypes/icLinkedList.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_CAT "threadPool"
+#define LOG_CAT             "threadPool"
 
 #define ADD_TASK_TIMEOUT_MS 10
 
@@ -59,21 +59,21 @@
  */
 struct _icThreadPool
 {
-    char            *name;            // name of the pool.  used for debug and stats
-    icBlockingQueue *queue;           // queue of 'icTask' objects (things to run)
+    char *name;             // name of the pool.  used for debug and stats
+    icBlockingQueue *queue; // queue of 'icTask' objects (things to run)
 
-    pthread_t       *threads;         // array of pthread_t
-    uint16_t        threadCount;      // number of threads in array
-    uint16_t        minThreads;       // min number of threads to maintain
-    uint16_t        maxThreads;       // max number of threads allowed
+    pthread_t *threads;   // array of pthread_t
+    uint16_t threadCount; // number of threads in array
+    uint16_t minThreads;  // min number of threads to maintain
+    uint16_t maxThreads;  // max number of threads allowed
 
-    pthread_mutex_t poolMutex;        // mutex for this pool instance
+    pthread_mutex_t poolMutex; // mutex for this pool instance
 
-    bool            running;          // indicator of when to shutdown
-    uint16_t        active;           // number of threads executing a task
-    pthread_key_t   *threadLocalKey;  // The thread local key for this pool
+    bool running;                  // indicator of when to shutdown
+    uint16_t active;               // number of threads executing a task
+    pthread_key_t *threadLocalKey; // The thread local key for this pool
 
-    threadPoolStats stats;            // statistics gathered during execution
+    threadPoolStats stats; // statistics gathered during execution
 };
 
 /*
@@ -81,11 +81,11 @@ struct _icThreadPool
  */
 typedef struct _icTask
 {
-    threadPoolTask  run;
-    void            *argument;
+    threadPoolTask run;
+    void *argument;
     threadPoolTaskArgFreeFunc argumentFreeFunc;
-    bool            selfDestructed;   // true if the task destroyed the pool it belongs to
-    pthread_key_t   *threadLocalKey;  // Copy of thread local key for the pool, in case the task needs to destroy it
+    bool selfDestructed;           // true if the task destroyed the pool it belongs to
+    pthread_key_t *threadLocalKey; // Copy of thread local key for the pool, in case the task needs to destroy it
 } icTask;
 
 /*
@@ -93,8 +93,8 @@ typedef struct _icTask
  */
 typedef struct _workerArgs
 {
-    icThreadPool    *pool;      // pool this worker belogs to
-    int             offset;     // index of pool->threads this instance is.  needed during cleanup.
+    icThreadPool *pool; // pool this worker belogs to
+    int offset;         // index of pool->threads this instance is.  needed during cleanup.
 } workerArgs;
 
 /*
@@ -104,7 +104,7 @@ static bool addWorkerThreads(icThreadPool *pool, uint16_t numToAdd);
 static void *runWorker(void *arg);
 static void taskFreeFunc(void *item);
 
-static bool isRunning(icThreadPool* pool)
+static bool isRunning(icThreadPool *pool)
 {
     bool ret;
 
@@ -141,14 +141,15 @@ icThreadPool *threadPoolCreate(const char *name, uint16_t minThreads, uint16_t m
 
     // allocate the object container
     //
-    icThreadPool *retVal = (icThreadPool *)malloc(sizeof(icThreadPool));
+    icThreadPool *retVal = (icThreadPool *) malloc(sizeof(icThreadPool));
     if (retVal == NULL)
     {
         // error getting memory
         return NULL;
     }
 
-    if (maxQueueSize == 0) {
+    if (maxQueueSize == 0)
+    {
         maxQueueSize = MAX_QUEUE_SIZE;
     }
 
@@ -159,7 +160,7 @@ icThreadPool *threadPoolCreate(const char *name, uint16_t minThreads, uint16_t m
     pthread_mutex_init(&retVal->poolMutex, NULL);
 
     // Initialize the thread local key, we have one key per thread pool
-    retVal->threadLocalKey = (pthread_key_t *)malloc(sizeof(pthread_key_t));
+    retVal->threadLocalKey = (pthread_key_t *) malloc(sizeof(pthread_key_t));
     pthread_key_create(retVal->threadLocalKey, NULL);
 
     // apply a name
@@ -176,7 +177,7 @@ icThreadPool *threadPoolCreate(const char *name, uint16_t minThreads, uint16_t m
     // create the array of thread pointers, making one for each
     // (i.e. max) even though they won't all get used
     //
-    retVal->threads = (pthread_t *)malloc(sizeof(pthread_t) * maxThreads);
+    retVal->threads = (pthread_t *) malloc(sizeof(pthread_t) * maxThreads);
     retVal->threadCount = 0;
     retVal->minThreads = minThreads;
     retVal->maxThreads = maxThreads;
@@ -226,7 +227,7 @@ void threadPoolDestroy(icThreadPool *pool)
         for (i = 0; i < threadCount; i++)
         {
             // Check for a task in the thread pool destroying itself
-            if (pthread_equal(currThread,pool->threads[i]) == false)
+            if (pthread_equal(currThread, pool->threads[i]) == false)
             {
                 int retval = pthread_join(pool->threads[i], NULL);
                 if (retval != 0)
@@ -240,7 +241,7 @@ void threadPoolDestroy(icThreadPool *pool)
                 icTask *task = NULL;
                 if (pool->threadLocalKey != NULL)
                 {
-                    task = (icTask *)pthread_getspecific(*pool->threadLocalKey);
+                    task = (icTask *) pthread_getspecific(*pool->threadLocalKey);
                 }
                 if (task != NULL)
                 {
@@ -254,7 +255,6 @@ void threadPoolDestroy(icThreadPool *pool)
                 }
                 pthread_detach(pool->threads[i]);
             }
-
         }
         icLogDebug(pool->name, "done waiting on worker threads");
     }
@@ -319,7 +319,7 @@ bool threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threa
     pthread_mutex_lock(&pool->poolMutex);
     // create the task object
     //
-    icTask *job = (icTask *)malloc(sizeof(icTask));
+    icTask *job = (icTask *) malloc(sizeof(icTask));
     job->run = task;
     job->argument = arg;
     job->argumentFreeFunc = argFreeFunc;
@@ -333,8 +333,9 @@ bool threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threa
      * anything that was expecting us to return immediately.
      */
 
-    struct timespec retryWait = { .tv_sec = 0, .tv_nsec = ADD_TASK_TIMEOUT_MS * 1000 * 1000 };
-    if (blockingQueuePushTimeoutGranular(pool->queue, job, &retryWait)) {
+    struct timespec retryWait = {.tv_sec = 0, .tv_nsec = ADD_TASK_TIMEOUT_MS * 1000 * 1000};
+    if (blockingQueuePushTimeoutGranular(pool->queue, job, &retryWait))
+    {
         uint16_t currSize = blockingQueueCount(pool->queue);
 
         // if we have available room, create another worker
@@ -343,16 +344,28 @@ bool threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threa
         uint32_t empty = (pool->maxThreads - pool->threadCount);
         if (empty > 0 && pool->threadCount < pool->maxThreads)
         {
-            icLogTrace(pool->name, "adding extra worker; empty=%d min=%d max=%d curr=%d active=%d queue=%d",
-                   empty, pool->minThreads, pool->maxThreads, pool->threadCount, pool->active, currSize);
+            icLogTrace(pool->name,
+                       "adding extra worker; empty=%d min=%d max=%d curr=%d active=%d queue=%d",
+                       empty,
+                       pool->minThreads,
+                       pool->maxThreads,
+                       pool->threadCount,
+                       pool->active,
+                       currSize);
             // have room to add 1 thread
             //
             addWorkerThreads(pool, 1);
         }
         else
         {
-            icLogTrace(pool->name, "place task in queue; empty=%d min=%d max=%d curr=%d active=%d queue=%d",
-                   empty, pool->minThreads, pool->maxThreads, pool->threadCount, pool->active, currSize);
+            icLogTrace(pool->name,
+                       "place task in queue; empty=%d min=%d max=%d curr=%d active=%d queue=%d",
+                       empty,
+                       pool->minThreads,
+                       pool->maxThreads,
+                       pool->threadCount,
+                       pool->active,
+                       currSize);
         }
 
         // update stats
@@ -364,7 +377,9 @@ bool threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threa
         }
 
         ret = true;
-    } else {
+    }
+    else
+    {
         icLogWarn(LOG_CAT, "%s: unable to add task: queue full", pool->name);
         taskFreeFunc(job);
     }
@@ -416,9 +431,11 @@ uint32_t threadPoolGetBacklogCount(icThreadPool *pool)
 {
     uint32_t retVal = 0;
 
-    if (pool) {
+    if (pool)
+    {
         pthread_mutex_lock(&pool->poolMutex);
-        if (pool->running) {
+        if (pool->running)
+        {
             retVal = blockingQueueCount(pool->queue);
         }
         pthread_mutex_unlock(&pool->poolMutex);
@@ -456,7 +473,7 @@ threadPoolStats *threadPoolGetStatistics(icThreadPool *pool, bool thenClear)
 {
     // create the return object
     //
-    threadPoolStats *retVal = (threadPoolStats *)malloc(sizeof(threadPoolStats));
+    threadPoolStats *retVal = (threadPoolStats *) malloc(sizeof(threadPoolStats));
 
     // copy stats from 'pool'
     //
@@ -490,7 +507,7 @@ void threadPoolClearStatistics(icThreadPool *pool)
  */
 void threadPoolTaskArgDoNotFreeFunc(void *arg)
 {
-    (void)arg;
+    (void) arg;
     // Nothing to do
 }
 
@@ -523,11 +540,11 @@ static bool addWorkerThreads(icThreadPool *pool, uint16_t numToAdd)
     icLogTrace(pool->name, "adding %d workers to threadpool; avail=%d", numToAdd, emptyAvail);
 
     int i = 0;
-    for (i = 0 ; i < numToAdd ; i++)
+    for (i = 0; i < numToAdd; i++)
     {
         // creat a workerArgs to supply to the worker thread
         //
-        workerArgs *parm = (workerArgs *)malloc(sizeof(workerArgs));
+        workerArgs *parm = (workerArgs *) malloc(sizeof(workerArgs));
         parm->pool = pool;
         parm->offset = pool->threadCount;
 
@@ -551,7 +568,7 @@ static bool addWorkerThreads(icThreadPool *pool, uint16_t numToAdd)
  */
 static void *runWorker(void *arg)
 {
-    workerArgs *parm = (workerArgs *)arg;
+    workerArgs *parm = (workerArgs *) arg;
     if (parm == NULL)
     {
         // exit cleanly for the 'join' to work
@@ -570,7 +587,7 @@ static void *runWorker(void *arg)
     bool keepGoing = true;
     while (keepGoing == true)
     {
-        icTask* task = NULL;
+        icTask *task = NULL;
 
         if (isRunning(pool))
         {
@@ -600,11 +617,15 @@ static void *runWorker(void *arg)
                 //
                 if (isIcLogPriorityTrace() == true)
                 {
-                    icLogTrace(poolName, "removing woker # %d; min=%d active=%d", pool->threadCount, pool->minThreads, pool->active);
+                    icLogTrace(poolName,
+                               "removing woker # %d; min=%d active=%d",
+                               pool->threadCount,
+                               pool->minThreads,
+                               pool->active);
                 }
 
-                //Do one last check if the pool is running. If it's not, we are in shutdown so don't detach because we're
-                //going to get joined anyway.
+                // Do one last check if the pool is running. If it's not, we are in shutdown so don't detach because
+                // we're going to get joined anyway.
                 if (pool->running == true)
                 {
                     pthread_detach(pthread_self());
@@ -690,7 +711,7 @@ static void *runWorker(void *arg)
 
 static void taskFreeFunc(void *item)
 {
-    icTask *job = (icTask *)item;
+    icTask *job = (icTask *) item;
     if (job != NULL)
     {
         if (job->argumentFreeFunc != NULL)

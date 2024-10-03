@@ -24,23 +24,23 @@
 // Created by Thomas Lea on 7/29/15.
 //
 
+#include <libxml/tree.h>
+#include <limits.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdbool.h>
-#include <string.h>
-#include <pthread.h>
-#include <limits.h>
-#include <sys/stat.h>
 #include <stdlib.h>
-#include <libxml/tree.h>
+#include <string.h>
+#include <sys/stat.h>
 
+#include "parser.h"
+#include <deviceDescriptor.h>
+#include <deviceDescriptors.h>
 #include <icLog/logging.h>
 #include <icTypes/icLinkedList.h>
-#include <xmlHelper/xmlHelper.h>
-#include <deviceDescriptors.h>
-#include <deviceDescriptor.h>
 #include <icUtil/stringUtils.h>
-#include "parser.h"
+#include <xmlHelper/xmlHelper.h>
 
 static bool parseFiles();
 
@@ -96,10 +96,14 @@ DeviceDescriptor *deviceDescriptorsGet(const char *manufacturer,
 {
     DeviceDescriptor *result = NULL;
 
-    icLogDebug(LOG_TAG, "deviceDescriptorsGet: manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s",
-               manufacturer, model, hardwareVersion, firmwareVersion);
+    icLogDebug(LOG_TAG,
+               "deviceDescriptorsGet: manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s",
+               manufacturer,
+               model,
+               hardwareVersion,
+               firmwareVersion);
 
-    //manufacturer and model are required
+    // manufacturer and model are required
     if (manufacturer == NULL || model == NULL)
     {
         icLogError(LOG_TAG, "deviceDescriptorsGet: invalid arguments");
@@ -141,8 +145,8 @@ DeviceDescriptor *deviceDescriptorsGet(const char *manufacturer,
                 continue;
             }
 
-            //if we got here, we have a match!
-            //to prevent use after free issues create a copy to hand back to the caller
+            // if we got here, we have a match!
+            // to prevent use after free issues create a copy to hand back to the caller
             result = deviceDescriptorClone(dd);
             break;
         }
@@ -193,12 +197,10 @@ static bool versionInRange(const char *versionInput, DeviceVersionList *allowedV
             result = versionInAllowedList(versionInput, allowedVersions->list.versionList);
             if (result == false)
             {
-                result = versionInAllowedRange(versionInput,
-                                               allowedVersions->list.versionRange.from,
-                                               allowedVersions->list.versionRange.to);
+                result = versionInAllowedRange(
+                    versionInput, allowedVersions->list.versionRange.from, allowedVersions->list.versionRange.to);
             }
         }
-
     }
     return result;
 }
@@ -241,7 +243,7 @@ static bool versionInAllowedRange(const char *versionInput, const char *minVersi
     uint64_t input = 0;
     if (stringToUint64(versionInput, &input) == false)
     {
-        icLogWarn(LOG_TAG,"%s: Unable to convert firmware version: %s",__FUNCTION__, versionInput);
+        icLogWarn(LOG_TAG, "%s: Unable to convert firmware version: %s", __FUNCTION__, versionInput);
         return false;
     }
 
@@ -251,19 +253,16 @@ static bool versionInAllowedRange(const char *versionInput, const char *minVersi
         uint64_t maxValue = UINT64_MAX;
         bool isValidRange = true;
 
-        if (stringIsEmpty(minVersionValue) == false &&
-            stringToUint64(minVersionValue,&minValue) == false)
+        if (stringIsEmpty(minVersionValue) == false && stringToUint64(minVersionValue, &minValue) == false)
         {
-            icLogWarn(LOG_TAG,"%s: Unable to convert minValue %s to a uint64",__FUNCTION__,minVersionValue);
+            icLogWarn(LOG_TAG, "%s: Unable to convert minValue %s to a uint64", __FUNCTION__, minVersionValue);
             isValidRange = false;
-
         }
 
-        if (stringIsEmpty(maxVersionValue) == false &&
-            stringToUint64(maxVersionValue,&maxValue) == false)
+        if (stringIsEmpty(maxVersionValue) == false && stringToUint64(maxVersionValue, &maxValue) == false)
         {
-                icLogWarn(LOG_TAG,"%s: Unable to convert maxValue %s to a uint64",__FUNCTION__,maxVersionValue);
-                isValidRange = false;
+            icLogWarn(LOG_TAG, "%s: Unable to convert maxValue %s to a uint64", __FUNCTION__, maxVersionValue);
+            isValidRange = false;
         }
 
         if (isValidRange == true)
@@ -279,7 +278,7 @@ static bool versionInAllowedRange(const char *versionInput, const char *minVersi
 
 char *getAllowListPath()
 {
-    if(strlen(allowListPath) > 0)
+    if (strlen(allowListPath) > 0)
     {
         return strdup(allowListPath);
     }
@@ -291,7 +290,7 @@ char *getAllowListPath()
 
 char *getDenyListPath()
 {
-    if(strlen(denyListPath) > 0)
+    if (strlen(denyListPath) > 0)
     {
         return strdup(denyListPath);
     }

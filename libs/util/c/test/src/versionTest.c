@@ -30,19 +30,19 @@
  * Author: jelderton -  6/21/18.
  *-----------------------------------------------*/
 
+#include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <memory.h>
 
-#include <icUtil/version.h>
-#include <icUtil/stringUtils.h>
-#include <zconf.h>
 #include "versionTest.h"
+#include <icUtil/stringUtils.h>
+#include <icUtil/version.h>
+#include <zconf.h>
 
-#define BAD_INPUT   -99
-#define LEFT_WINS   -1
-#define RIGHT_WINS  1
-#define BOTH_WINS   0
+#define BAD_INPUT  -99
+#define LEFT_WINS  -1
+#define RIGHT_WINS 1
+#define BOTH_WINS  0
 
 static bool validateVersionFile(void)
 {
@@ -79,8 +79,7 @@ static bool validateVersionFile(void)
         return false;
     }
 
-    if (fileContents == NULL ||
-        compareVersions(fileContents->version, &expectedVersion) != 0 ||
+    if (fileContents == NULL || compareVersions(fileContents->version, &expectedVersion) != 0 ||
         compareVersions(fileContents->lastCompatibleVersion, &expectedLastCompatibleVersion) != 0)
     {
         printf("Memory file contents do not match good version file contents\n");
@@ -99,9 +98,8 @@ static bool validateVersionFile(void)
         return false;
     }
 
-    if (fileContents == NULL ||
-        compareVersions(fileContents->version, &expectedVersion) != 0 ||
-        compareVersions(fileContents->lastCompatibleVersion, &emptyVersion) != 0 )
+    if (fileContents == NULL || compareVersions(fileContents->version, &expectedVersion) != 0 ||
+        compareVersions(fileContents->lastCompatibleVersion, &emptyVersion) != 0)
     {
         printf("Memory file contents do not match bad version file contents\n");
         destroyVersionFile(fileContents);

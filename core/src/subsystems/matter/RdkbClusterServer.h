@@ -24,13 +24,13 @@
  * Created by Thomas Lea on 10/27/23.
  */
 
- #pragma once
+#pragma once
 
 #include "rdkb-cluster-server.hpp"
 
 class RdkbClusterServer : public RdkbClusterServerDelegate
 {
-    public:
+public:
     virtual ~RdkbClusterServer() {}
 
     EmberAfStatus OnAttributeRead(const EmberAfAttributeMetadata *attributeMetadata,

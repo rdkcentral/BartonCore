@@ -27,16 +27,16 @@
 #define ZILKER_JSONDATABASE_H
 
 
-#include <icTypes/icLinkedList.h>
 #include <device/icDevice.h>
-#include <device/icDeviceResource.h>
 #include <device/icDeviceEndpoint.h>
 #include <device/icDeviceMetadata.h>
+#include <device/icDeviceResource.h>
+#include <icTypes/icLinkedList.h>
 
 #define JSON_DATABASE_CURRENT_SCHEMA_VERSION "2"
-#define JSON_DATABASE_SCHEMA_VERSION_KEY "schemaVersion"
-#define JSON_DATABASE_METADATA_MARKER "/m/"
-#define JSON_DATABASE_ENDPOINT_MARKER "/ep/"
+#define JSON_DATABASE_SCHEMA_VERSION_KEY     "schemaVersion"
+#define JSON_DATABASE_METADATA_MARKER        "/m/"
+#define JSON_DATABASE_ENDPOINT_MARKER        "/ep/"
 
 /**
  * Close the jsonDatabase and release any related resources.  If not called
@@ -59,7 +59,7 @@ bool jsonDatabaseReload(void);
  * @param tempRestoreDir The configuration directory to restore from.
  * @return True on success.
  */
-bool jsonDatabaseRestore(const char* tempRestoreDir);
+bool jsonDatabaseRestore(const char *tempRestoreDir);
 
 /**
  * Retrieve a system property by name.
@@ -201,7 +201,7 @@ bool jsonDatabaseIsDeviceKnown(const char *uuid);
  */
 bool jsonDatabaseRemoveDeviceById(const char *uuid);
 
-//Endpoints
+// Endpoints
 
 /**
  * Retrieve all endpoints  with the given device profile
@@ -243,7 +243,7 @@ icDeviceEndpoint *jsonDatabaseGetEndpointByUri(const char *uri);
  */
 bool jsonDatabaseSaveEndpoint(icDeviceEndpoint *endpoint);
 
-//Resources
+// Resources
 /**
  * Retrieve a resource by its uri
  *
@@ -275,7 +275,7 @@ bool jsonDatabaseSaveResource(icDeviceResource *resource);
  */
 bool jsonDatabaseUpdateDateOfLastSyncMillis(icDeviceResource *resource);
 
-//Metadata
+// Metadata
 /**
  * Retrieve a metadata by its uri
  *
@@ -340,4 +340,4 @@ bool parseMetadataUri(const char *uri, char *endpointId, char *deviceId, char *n
  */
 bool jsonDatabaseRemoveMetadataByUri(const char *uri);
 
-#endif //ZILKER_JSONDATABASE_H
+#endif // ZILKER_JSONDATABASE_H

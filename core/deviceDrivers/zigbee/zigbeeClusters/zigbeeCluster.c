@@ -23,14 +23,14 @@
 // Created by mkoch201 on 3/6/19.
 //
 
-#include <icUtil/stringUtils.h>
-#include <icLog/logging.h>
 #include "zigbeeClusters/zigbeeCluster.h"
 #include "string.h"
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
 
-#define TRUE_STR "true"
+#define TRUE_STR  "true"
 #define FALSE_STR "false"
-#define LOG_TAG "zigbeeCluster"
+#define LOG_TAG   "zigbeeCluster"
 
 /**
  * Add a boolean value to configuration metadata
@@ -61,7 +61,7 @@ bool getBoolConfigurationMetadata(icStringHashMap *configurationMetadata, const 
         return defaultValue;
     }
 
-    return strcmp(value,TRUE_STR) == 0;
+    return strcmp(value, TRUE_STR) == 0;
 }
 
 /**
@@ -76,7 +76,7 @@ void addNumberConfigurationMetadata(icStringHashMap *configurationMetadata, cons
     // Clear out in case it existed
     //
     stringHashMapDelete(configurationMetadata, key, NULL);
-    char *valueStr = stringBuilder("%"PRIu64, value);
+    char *valueStr = stringBuilder("%" PRIu64, value);
 
     stringHashMapPut(configurationMetadata, strdup(key), valueStr);
 }
@@ -102,4 +102,3 @@ uint64_t getNumberConfigurationMetadata(icStringHashMap *configurationMetadata, 
 
     return retVal;
 }
-

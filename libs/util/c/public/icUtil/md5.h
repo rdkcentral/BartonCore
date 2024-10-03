@@ -16,4 +16,4 @@
  */
 char *icMd5sum(const char *src);
 
-#endif  // IC_MD5_H
+#endif // IC_MD5_H

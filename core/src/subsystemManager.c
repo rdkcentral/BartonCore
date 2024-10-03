@@ -27,18 +27,18 @@
 #include "deviceServiceConfiguration.h"
 #include "icUtil/stringUtils.h"
 #include "provider/device-service-property-provider.h"
-#define LOG_TAG "deviceService"
+#define LOG_TAG     "deviceService"
 #define logFmt(fmt) "subsystemManager: %s - " fmt, __func__
 
 #include <assert.h>
 #include <icLog/logging.h>
 #include <inttypes.h>
 
-#include <zhal/zhal.h>
-#include <string.h>
+#include <icConcurrent/threadUtils.h>
 #include <icTypes/icHashMap.h>
 #include <pthread.h>
-#include <icConcurrent/threadUtils.h>
+#include <string.h>
+#include <zhal/zhal.h>
 
 #include "subsystemManager.h"
 
@@ -54,20 +54,20 @@ typedef struct
     bool ready;
 } SubsystemRegistration;
 
-#define MAP_FOREACH(value, map, expr)                                           \
-do                                                                              \
-{                                                                               \
-    scoped_icHashMapIterator *it = hashMapIteratorCreate((map));                \
-    while (hashMapIteratorHasNext(it) == true)                                  \
-    {                                                                           \
-        void *key = NULL;                                                       \
-        uint16_t keyLen = 0;                                                    \
-        hashMapIteratorGetNext(it, &key, &keyLen, (void **) &(value));          \
-        expr                                                                    \
-    }                                                                           \
-} while (0)
+#define MAP_FOREACH(value, map, expr)                                                                                  \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        scoped_icHashMapIterator *it = hashMapIteratorCreate((map));                                                   \
+        while (hashMapIteratorHasNext(it) == true)                                                                     \
+        {                                                                                                              \
+            void *key = NULL;                                                                                          \
+            uint16_t keyLen = 0;                                                                                       \
+            hashMapIteratorGetNext(it, &key, &keyLen, (void **) &(value));                                             \
+            expr                                                                                                       \
+        }                                                                                                              \
+    } while (0)
 
-static pthread_once_t  initOnce = PTHREAD_ONCE_INIT;
+static pthread_once_t initOnce = PTHREAD_ONCE_INIT;
 
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
 static icHashMap *subsystems;
@@ -100,7 +100,7 @@ static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
         return;
     }
 
-    SubsystemRegistration *reg = hashMapGet(subsystems, (void *)subsystem, strlen(subsystem));
+    SubsystemRegistration *reg = hashMapGet(subsystems, (void *) subsystem, strlen(subsystem));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -165,9 +165,7 @@ static void unregisterSubsystems(void)
 
 void subsystemManagerRegister(Subsystem *subsystem)
 {
-    if (subsystem == NULL ||
-        subsystem->initialize == NULL ||
-        subsystem->name == NULL)
+    if (subsystem == NULL || subsystem->initialize == NULL || subsystem->name == NULL)
     {
         icLogError(LOG_TAG, "%s: Can't register subsystem with unknown type or no initializer!", __func__);
         return;
@@ -187,10 +185,7 @@ void subsystemManagerRegister(Subsystem *subsystem)
             atexit(unregisterSubsystems);
         }
 
-        if (hashMapPut(subsystems,
-                       (char *) subsystem->name,
-                       strlen(subsystem->name),
-                       registration) == false)
+        if (hashMapPut(subsystems, (char *) subsystem->name, strlen(subsystem->name), registration) == false)
         {
             subsystemRegistrationDestroy(registration);
             registration = NULL;
@@ -212,10 +207,10 @@ icLinkedList *subsystemManagerGetRegisteredSubsystems(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(registration,
+                subsystems,
 
-                linkedListAppend(result, strdup(registration->subsystem->name));
-    );
+                linkedListAppend(result, strdup(registration->subsystem->name)););
 
     return result;
 }
@@ -324,14 +319,11 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
         if (disabledSubsystems != NULL)
         {
             SubsystemRegistration *registration = NULL;
-            MAP_FOREACH(registration, subsystems,
-                        if (strstr(disabledSubsystems, registration->subsystem->name) != NULL)
-                        {
-                            hashMapIteratorDeleteCurrent(it, subsystemRegistrationMapDestroy);
-                        }
-            );
+            MAP_FOREACH(
+                registration, subsystems, if (strstr(disabledSubsystems, registration->subsystem->name) != NULL) {
+                    hashMapIteratorDeleteCurrent(it, subsystemRegistrationMapDestroy);
+                });
         }
-
     }
 
     {
@@ -342,13 +334,13 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
         MAP_FOREACH(registration, subsystems, checkSubsystemForMigration(registration););
 
         registration = NULL;
-        MAP_FOREACH(registration, subsystems,
+        MAP_FOREACH(registration,
+                    subsystems,
 
                     mutexLock(&registration->mtx);
                     registration->ready = false;
                     mutexUnlock(&registration->mtx);
-                    registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized);
-        );
+                    registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized););
     }
 }
 
@@ -365,17 +357,15 @@ void subsystemManagerShutdown(void)
         READ_LOCK_SCOPE(mutex);
 
         SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(registration, subsystems,
+        MAP_FOREACH(
+            registration,
+            subsystems,
 
-                    mutexLock(&registration->mtx);
-                    registration->ready = false;
-                    mutexUnlock(&registration->mtx);
+            mutexLock(&registration->mtx);
+            registration->ready = false;
+            mutexUnlock(&registration->mtx);
 
-                    if (registration->subsystem->shutdown != NULL)
-                    {
-                        registration->subsystem->shutdown();
-                    }
-        );
+            if (registration->subsystem->shutdown != NULL) { registration->subsystem->shutdown(); });
     }
 }
 
@@ -387,13 +377,13 @@ void subsystemManagerAllDriversStarted(void)
         READ_LOCK_SCOPE(mutex);
 
         SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(registration, subsystems,
+        MAP_FOREACH(
+            registration,
+            subsystems,
 
-                    if (registration->subsystem->onAllDriversStarted != NULL)
-                    {
-                        registration->subsystem->onAllDriversStarted();
-                    }
-        );
+            if (registration->subsystem->onAllDriversStarted != NULL) {
+                registration->subsystem->onAllDriversStarted();
+            });
     }
 
     {
@@ -414,13 +404,13 @@ void subsystemManagerAllServicesAvailable(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->onAllServicesAvailable != NULL)
-                {
-                    registration->subsystem->onAllServicesAvailable();
-                }
-    );
+        if (registration->subsystem->onAllServicesAvailable != NULL) {
+            registration->subsystem->onAllServicesAvailable();
+        });
 }
 
 void subsystemManagerPostRestoreConfig(void)
@@ -430,13 +420,11 @@ void subsystemManagerPostRestoreConfig(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->onPostRestoreConfig != NULL)
-                {
-                    registration->subsystem->onPostRestoreConfig();
-                }
-    );
+        if (registration->subsystem->onPostRestoreConfig != NULL) { registration->subsystem->onPostRestoreConfig(); });
 }
 
 void subsystemManagerSetOtaUpgradeDelay(uint32_t delaySeconds)
@@ -444,17 +432,18 @@ void subsystemManagerSetOtaUpgradeDelay(uint32_t delaySeconds)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->setOtaUpgradeDelay != NULL)
-                {
-                    icLogDebug(LOG_TAG,
-                               "Setting %s OTA upgrade delay to : %" PRIu32 " seconds",
-                               registration->subsystem->name, delaySeconds);
+        if (registration->subsystem->setOtaUpgradeDelay != NULL) {
+            icLogDebug(LOG_TAG,
+                       "Setting %s OTA upgrade delay to : %" PRIu32 " seconds",
+                       registration->subsystem->name,
+                       delaySeconds);
 
-                    registration->subsystem->setOtaUpgradeDelay(delaySeconds);
-                }
-    );
+            registration->subsystem->setOtaUpgradeDelay(delaySeconds);
+        });
 }
 
 void subsystemManagerEnterLPM(void)
@@ -462,13 +451,11 @@ void subsystemManagerEnterLPM(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->onLPMStart != NULL)
-                {
-                    registration->subsystem->onLPMStart();
-                }
-    );
+        if (registration->subsystem->onLPMStart != NULL) { registration->subsystem->onLPMStart(); });
 }
 
 
@@ -477,13 +464,11 @@ void subsystemManagerExitLPM(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->onLPMEnd != NULL)
-                {
-                    registration->subsystem->onLPMEnd();
-                }
-    );
+        if (registration->subsystem->onLPMEnd != NULL) { registration->subsystem->onLPMEnd(); });
 }
 
 /*
@@ -516,19 +501,19 @@ bool subsystemManagerIsReadyForDevices(void)
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                mutexLock(&registration->mtx);
-                bool ready = registration->ready;
-                mutexUnlock(&registration->mtx);
+        mutexLock(&registration->mtx);
+        bool ready = registration->ready;
+        mutexUnlock(&registration->mtx);
 
-                if (ready == false)
-                {
-                    icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
-                    allReady = false;
-                    break;
-                }
-    );
+        if (ready == false) {
+            icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
+            allReady = false;
+            break;
+        });
 
     return allReady && allDriversStarted;
 }
@@ -543,18 +528,18 @@ bool subsystemManagerRestoreConfig(const char *tempRestoreDir, const char *dynam
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems,
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (registration->subsystem->onRestoreConfig != NULL)
-                {
-                    result &= registration->subsystem->onRestoreConfig(tempRestoreDir, dynamicConfigPath);
+        if (registration->subsystem->onRestoreConfig != NULL) {
+            result &= registration->subsystem->onRestoreConfig(tempRestoreDir, dynamicConfigPath);
 
-                    if (!result)
-                    {
-                        icWarn("failed for %s!", registration->subsystem->name);
-                    }
-                }
-    );
+            if (!result)
+            {
+                icWarn("failed for %s!", registration->subsystem->name);
+            }
+        });
 
     return result;
 }

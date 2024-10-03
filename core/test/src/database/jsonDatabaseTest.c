@@ -23,36 +23,37 @@
 // Created by mkoch201 on 5/9/18.
 //
 
-#include <icLog/logging.h>
-#include "database/jsonDatabase.h"
-#include <device/icDevice.h>
-#include <libgen.h>
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stddef.h>
+
+#include "database/jsonDatabase.h"
+#include <cjson/cJSON.h>
 #include <cmocka.h>
+#include <device/icDevice.h>
+#include <icLog/logging.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <string.h>
-#include <cjson/cJSON.h>
 
-#include <device/deviceModelHelper.h>
 #include <commonDeviceDefs.h>
-#include <resourceTypes.h>
-#include <deviceHelper.h>
 #include <device-driver/device-driver.h>
+#include <device/deviceModelHelper.h>
 #include <device/icDeviceEndpoint.h>
 #include <device/icDeviceResource.h>
+#include <deviceHelper.h>
 #include <icConfig/storage.h>
-#include <icUtil/stringUtils.h>
 #include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
 #include <jsonHelper/jsonHelper.h>
+#include <resourceTypes.h>
 
 
-#define LOG_TAG "jsonDatabaseTest"
+#define LOG_TAG              "jsonDatabaseTest"
 
-#define USE_DUMMY_STORAGE "___USE_DUMMY_STORAGE___"
+#define USE_DUMMY_STORAGE    "___USE_DUMMY_STORAGE___"
 
-#define STORAGE_NAMESPACE "devicedb"
+#define STORAGE_NAMESPACE    "devicedb"
 #define DEVICE_ENDPOINTS_KEY "deviceEndpoints"
 #define DEVICE_RESOURCES_KEY "deviceResources"
 
@@ -65,11 +66,11 @@ static int counter = 0;
 static cJSON *dummyMemoryStorage;
 
 bool __wrap_storageLoad(const char *namespace, const char *key, char **value);
-cJSON* __wrap_storageLoadJSON(const char *namespace, const char *key);
-bool __wrap_storageParse(const char* namespace, const char* key, const StorageCallbacks *cb);
-bool __wrap_storageSave(const char* namespace, const char* key, const char* value);
-icLinkedList* __wrap_storageGetKeys(const char* namespace);
-bool __wrap_storageDelete(const char* namespace, const char* key);
+cJSON *__wrap_storageLoadJSON(const char *namespace, const char *key);
+bool __wrap_storageParse(const char *namespace, const char *key, const StorageCallbacks *cb);
+bool __wrap_storageSave(const char *namespace, const char *key, const char *value);
+icLinkedList *__wrap_storageGetKeys(const char *namespace);
+bool __wrap_storageDelete(const char *namespace, const char *key);
 static icDevice *createDummyDevice();
 static icDevice *createCorruptedDummyDevice();
 static void dummyStoragePut(const char *namespace, const char *key, const char *value);
@@ -84,8 +85,8 @@ static bool compareMetadata(void *searchVal, void *item);
 // Tests
 // ******************************
 
-static icDevice *createDeviceWithSensitiveResourceData(const char *uuid, const char *adminUser,
-                                                       const char *adminPassword)
+static icDevice *
+createDeviceWithSensitiveResourceData(const char *uuid, const char *adminUser, const char *adminPassword)
 {
     icDevice *camera = createDevice(uuid, "camera", 1, "openHomeCameraDeviceDriver", NULL);
     camera->uri = malloc(64);
@@ -93,7 +94,8 @@ static icDevice *createDeviceWithSensitiveResourceData(const char *uuid, const c
 
     icInitialResourceValues *initialResourceValues = initialResourceValuesCreate();
 
-    icDeviceEndpoint *cameraEndpoint = createEndpoint(camera, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID, CAMERA_PROFILE, true);
+    icDeviceEndpoint *cameraEndpoint =
+        createEndpoint(camera, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID, CAMERA_PROFILE, true);
     cameraEndpoint->uri = malloc(64);
     sprintf(cameraEndpoint->uri, "/%s/ep/camera", uuid);
 
@@ -106,39 +108,44 @@ static icDevice *createDeviceWithSensitiveResourceData(const char *uuid, const c
     snResource->uri = stringBuilder("/%s/r/" COMMON_DEVICE_RESOURCE_SERIAL_NUMBER, uuid);
     snResource = NULL; /* owned by camera */
 
-    initialResourceValuesPutEndpointValue(initialResourceValues, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID,
-                                          COMMON_ENDPOINT_RESOURCE_LABEL, "My Camera 1");
+    initialResourceValuesPutEndpointValue(
+        initialResourceValues, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID, COMMON_ENDPOINT_RESOURCE_LABEL, "My Camera 1");
 
-    initialResourceValuesPutEndpointValue(initialResourceValues, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID,
-                                          CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID, adminUser);
+    initialResourceValuesPutEndpointValue(
+        initialResourceValues, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID, CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID, adminUser);
 
-    initialResourceValuesPutEndpointValue(initialResourceValues, CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID,
-                                          CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD, adminPassword);
+    initialResourceValuesPutEndpointValue(initialResourceValues,
+                                          CAMERA_DC_CAMERA_PROFILE_ENDPOINT_ID,
+                                          CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD,
+                                          adminPassword);
 
-    icDeviceResource *labelResource = createEndpointResourceIfAvailable(cameraEndpoint,
-                                                                        COMMON_ENDPOINT_RESOURCE_LABEL,
-                                                                        initialResourceValues,
-                                                                        RESOURCE_TYPE_LABEL,
-                                                                        RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |RESOURCE_MODE_EMIT_EVENTS,
-                                                                        CACHING_POLICY_ALWAYS);
+    icDeviceResource *labelResource = createEndpointResourceIfAvailable(
+        cameraEndpoint,
+        COMMON_ENDPOINT_RESOURCE_LABEL,
+        initialResourceValues,
+        RESOURCE_TYPE_LABEL,
+        RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+        CACHING_POLICY_ALWAYS);
     labelResource->uri = malloc(64);
     sprintf(labelResource->uri, "/%s/ep/camera/r/label", uuid);
 
-    icDeviceResource *adminUserResource = createEndpointResourceIfAvailable(cameraEndpoint,
-                                                                            CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID,
-                                                                            initialResourceValues,
-                                                                            RESOURCE_TYPE_USER_ID,
-                                                                            RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_SENSITIVE,
-                                                                            CACHING_POLICY_ALWAYS);
+    icDeviceResource *adminUserResource = createEndpointResourceIfAvailable(
+        cameraEndpoint,
+        CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID,
+        initialResourceValues,
+        RESOURCE_TYPE_USER_ID,
+        RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_SENSITIVE,
+        CACHING_POLICY_ALWAYS);
     adminUserResource->uri = malloc(64);
     sprintf(adminUserResource->uri, "/%s/ep/camera/r/adminUserId", uuid);
 
-    icDeviceResource *adminPasswordResource = createEndpointResourceIfAvailable(cameraEndpoint,
-                                                                                CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD,
-                                                                                initialResourceValues,
-                                                                                RESOURCE_TYPE_PASSWORD,
-                                                                                RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_SENSITIVE,
-                                                                                CACHING_POLICY_ALWAYS);
+    icDeviceResource *adminPasswordResource = createEndpointResourceIfAvailable(
+        cameraEndpoint,
+        CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD,
+        initialResourceValues,
+        RESOURCE_TYPE_PASSWORD,
+        RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_SENSITIVE,
+        CACHING_POLICY_ALWAYS);
     adminPasswordResource->uri = malloc(64);
     sprintf(adminPasswordResource->uri, "/%s/ep/camera/r/adminPassword", uuid);
 
@@ -155,7 +162,8 @@ static void test_jsonDatabaseAddDeviceWithSensitiveResourceData(void **state)
     // mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
-    icDevice *device = createDeviceWithSensitiveResourceData("944a0c1c0ae4", "AdminUserNameValue", "AdminPasswordValue");
+    icDevice *device =
+        createDeviceWithSensitiveResourceData("944a0c1c0ae4", "AdminUserNameValue", "AdminPasswordValue");
 
     // Mock saving the device
     will_return(__wrap_storageSave, true);
@@ -212,7 +220,7 @@ static void test_jsonDatabaseInitializeEmptyAndCleanup(void **state)
     will_return(__wrap_storageSave, true);
 
     char *version;
-    jsonDatabaseGetSystemProperty(JSON_DATABASE_SCHEMA_VERSION_KEY,&version);
+    jsonDatabaseGetSystemProperty(JSON_DATABASE_SCHEMA_VERSION_KEY, &version);
 
     assert_string_equal(version, JSON_DATABASE_CURRENT_SCHEMA_VERSION);
     free(version);
@@ -233,7 +241,7 @@ static void test_jsonDatabaseSetSystemPropertyAndCleanup(void **state)
 
     // Set a property, which will do an immediate save
     will_return(__wrap_storageSave, true);
-    jsonDatabaseSetSystemProperty("dummyKey","dummyValue");
+    jsonDatabaseSetSystemProperty("dummyKey", "dummyValue");
 
     // Mock writing system properties for cleanup
     will_return(__wrap_storageSave, true);
@@ -275,7 +283,7 @@ static void test_jsonDatabaseSetSystemPropertyAndReadItBack(void **state)
 
     // Set a property, which will do an immediate save
     will_return(__wrap_storageSave, true);
-    jsonDatabaseSetSystemProperty("dummyKey","dummyValue");
+    jsonDatabaseSetSystemProperty("dummyKey", "dummyValue");
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -370,9 +378,9 @@ static void test_jsonDatabaseGetDevices(void **state)
 
     // Should be the "same" as what we put in
     icLinkedListIterator *iter = linkedListIteratorCreate(devices);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        icDevice *item = (icDevice *)linkedListIteratorGetNext(iter);
+        icDevice *item = (icDevice *) linkedListIteratorGetNext(iter);
         if (strcmp(item->uuid, device->uuid) == 0)
         {
             assertDevicesEqual(item, device);
@@ -390,7 +398,7 @@ static void test_jsonDatabaseGetDevices(void **state)
     jsonDatabaseCleanup(true);
 
     // Cleanup
-    linkedListDestroy(devices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(devices, (linkedListItemFreeFunc) deviceDestroy);
     // We still own devices after we call add
     deviceDestroy(device);
     deviceDestroy(device2);
@@ -430,7 +438,7 @@ static void test_jsonDatabaseGetDevicesByEndpointProfile(void **state)
     assertDevicesEqual(foundDevice, device);
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Now try finding multiple devices
     icDevice *device3 = createDummyDevice();
@@ -448,9 +456,9 @@ static void test_jsonDatabaseGetDevicesByEndpointProfile(void **state)
     // Should have found both device2 and device3
     assert_int_equal(linkedListCount(foundDevices), 2);
     icLinkedListIterator *iter = linkedListIteratorCreate(foundDevices);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        icDevice *item = (icDevice *)linkedListIteratorGetNext(iter);
+        icDevice *item = (icDevice *) linkedListIteratorGetNext(iter);
         if (strcmp(item->uuid, device2->uuid) == 0)
         {
             assertDevicesEqual(item, device2);
@@ -464,7 +472,7 @@ static void test_jsonDatabaseGetDevicesByEndpointProfile(void **state)
 
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -509,7 +517,7 @@ static void test_jsonDatabaseGetDevicesByDeviceClass(void **state)
     assertDevicesEqual(foundDevice, device);
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Now try finding multiple devices
     icDevice *device3 = createDummyDevice();
@@ -525,9 +533,9 @@ static void test_jsonDatabaseGetDevicesByDeviceClass(void **state)
     // Should have found both device2 and device3
     assert_int_equal(linkedListCount(foundDevices), 2);
     icLinkedListIterator *iter = linkedListIteratorCreate(foundDevices);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        icDevice *item = (icDevice *)linkedListIteratorGetNext(iter);
+        icDevice *item = (icDevice *) linkedListIteratorGetNext(iter);
         if (strcmp(item->uuid, device2->uuid) == 0)
         {
             assertDevicesEqual(item, device2);
@@ -541,7 +549,7 @@ static void test_jsonDatabaseGetDevicesByDeviceClass(void **state)
 
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -586,7 +594,7 @@ static void test_jsonDatabaseGetDevicesByDeviceDriver(void **state)
     assertDevicesEqual(foundDevice, device);
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Now try finding multiple devices
     icDevice *device3 = createDummyDevice();
@@ -602,9 +610,9 @@ static void test_jsonDatabaseGetDevicesByDeviceDriver(void **state)
     // Should have found both device2 and device3
     assert_int_equal(linkedListCount(foundDevices), 2);
     icLinkedListIterator *iter = linkedListIteratorCreate(foundDevices);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        icDevice *item = (icDevice *)linkedListIteratorGetNext(iter);
+        icDevice *item = (icDevice *) linkedListIteratorGetNext(iter);
         if (strcmp(item->uuid, device2->uuid) == 0)
         {
             assertDevicesEqual(item, device2);
@@ -618,7 +626,7 @@ static void test_jsonDatabaseGetDevicesByDeviceDriver(void **state)
 
 
     // Clean up what we found
-    linkedListDestroy(foundDevices, (linkedListItemFreeFunc)deviceDestroy);
+    linkedListDestroy(foundDevices, (linkedListItemFreeFunc) deviceDestroy);
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -817,7 +825,7 @@ static void test_jsonDatabaseGetEndpointsByEndpointProfile(void **state)
     assertEndpointsEqual(foundEndpoint, endpoint);
 
     // Clean up what we found
-    linkedListDestroy(foundEndpoints, (linkedListItemFreeFunc)endpointDestroy);
+    linkedListDestroy(foundEndpoints, (linkedListItemFreeFunc) endpointDestroy);
 
     // Now try finding multiple endpoints
     icDevice *device3 = createDummyDevice();
@@ -835,9 +843,9 @@ static void test_jsonDatabaseGetEndpointsByEndpointProfile(void **state)
     // Should have found both endpoint2 and endpoint3
     assert_int_equal(linkedListCount(foundEndpoints), 2);
     icLinkedListIterator *iter = linkedListIteratorCreate(foundEndpoints);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        icDeviceEndpoint *item = (icDeviceEndpoint *)linkedListIteratorGetNext(iter);
+        icDeviceEndpoint *item = (icDeviceEndpoint *) linkedListIteratorGetNext(iter);
         if (strcmp(item->id, endpoint2->id) == 0)
         {
             assertEndpointsEqual(item, endpoint2);
@@ -851,7 +859,7 @@ static void test_jsonDatabaseGetEndpointsByEndpointProfile(void **state)
 
 
     // Clean up what we found
-    linkedListDestroy(foundEndpoints, (linkedListItemFreeFunc)endpointDestroy);
+    linkedListDestroy(foundEndpoints, (linkedListItemFreeFunc) endpointDestroy);
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -1359,10 +1367,10 @@ static void test_jsonDatabaseGetDeviceByOtherUris(void **state)
     will_return(__wrap_storageSave, true);
     assert_true(jsonDatabaseAddDevice(device));
 
-    icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListGetElementAt(device->endpoints, 0);
-    icDeviceResource *resource = (icDeviceResource *)linkedListGetElementAt(device->resources, 0);
-    icDeviceResource *endpointResource = (icDeviceResource *)linkedListGetElementAt(endpoint->resources, 0);
-    icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListGetElementAt(endpoint->metadata, 0);
+    icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListGetElementAt(device->endpoints, 0);
+    icDeviceResource *resource = (icDeviceResource *) linkedListGetElementAt(device->resources, 0);
+    icDeviceResource *endpointResource = (icDeviceResource *) linkedListGetElementAt(endpoint->resources, 0);
+    icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListGetElementAt(endpoint->metadata, 0);
 
     // Query by endpoint uri
     icDevice *foundDevice = jsonDatabaseGetDeviceByUri(endpoint->uri);
@@ -1411,9 +1419,9 @@ static void test_jsonDatabaseGetEndpointByOtherUris(void **state)
     will_return(__wrap_storageSave, true);
     assert_true(jsonDatabaseAddDevice(device));
 
-    icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListGetElementAt(device->endpoints, 0);
-    icDeviceResource *endpointResource = (icDeviceResource *)linkedListGetElementAt(endpoint->resources, 0);
-    icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListGetElementAt(endpoint->metadata, 0);
+    icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListGetElementAt(device->endpoints, 0);
+    icDeviceResource *endpointResource = (icDeviceResource *) linkedListGetElementAt(endpoint->resources, 0);
+    icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListGetElementAt(endpoint->metadata, 0);
 
     // Query by resource uri
     icDeviceEndpoint *foundEndpoint = jsonDatabaseGetEndpointByUri(endpointResource->uri);
@@ -1447,9 +1455,11 @@ static void test_jsonDatabaseGetResourcesByUriRegex(void **state)
     icDevice *device = createDummyDevice();
 
     // Create some additional resources to match
-    icDeviceResource *resource = createDeviceResource(device, "bypassed", "false", RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    icDeviceResource *resource = createDeviceResource(
+        device, "bypassed", "false", RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
     resource->uri = createDeviceResourceUri(device->uuid, resource->id);
-    resource = createDeviceResource(device, "Rssi", "-25", RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    resource = createDeviceResource(
+        device, "Rssi", "-25", RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
     resource->uri = createDeviceResourceUri(device->uuid, resource->id);
 
     // Mock saving the device
@@ -1461,7 +1471,7 @@ static void test_jsonDatabaseGetResourcesByUriRegex(void **state)
     assert_int_equal(linkedListCount(foundResources), 1);
 
     // Clean up the findings
-    linkedListDestroy(foundResources, (linkedListItemFreeFunc)resourceDestroy);
+    linkedListDestroy(foundResources, (linkedListItemFreeFunc) resourceDestroy);
 
     // Mock writing system properties
     will_return(__wrap_storageSave, true);
@@ -1541,10 +1551,15 @@ static void test_jsonDatabaseAddDeviceResource(void **state)
 
     // Create new resource for the device
     char deviceResourceId[64];
-    sprintf(deviceResourceId,"newResource%d", counter++);
+    sprintf(deviceResourceId, "newResource%d", counter++);
     char deviceResourceValue[64];
     sprintf(deviceResourceValue, "newResourceValue%d", counter++);
-    icDeviceResource *resource = createDeviceResource(device, deviceResourceId, deviceResourceValue, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    icDeviceResource *resource = createDeviceResource(device,
+                                                      deviceResourceId,
+                                                      deviceResourceValue,
+                                                      RESOURCE_TYPE_STRING,
+                                                      RESOURCE_MODE_READABLE,
+                                                      CACHING_POLICY_ALWAYS);
     resource->uri = createDeviceResourceUri(device->uuid, resource->id);
     // Mock saving the device
     will_return(__wrap_storageSave, true);
@@ -1587,10 +1602,15 @@ static void test_jsonDatabaseAddEndpointResource(void **state)
 
     // Create new resource for the device
     char deviceResourceId[64];
-    sprintf(deviceResourceId,"newResource%d", counter++);
+    sprintf(deviceResourceId, "newResource%d", counter++);
     char deviceResourceValue[64];
     sprintf(deviceResourceValue, "newResourceValue%d", counter++);
-    icDeviceResource *resource = createEndpointResource(endpoint, deviceResourceId, deviceResourceValue, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    icDeviceResource *resource = createEndpointResource(endpoint,
+                                                        deviceResourceId,
+                                                        deviceResourceValue,
+                                                        RESOURCE_TYPE_STRING,
+                                                        RESOURCE_MODE_READABLE,
+                                                        CACHING_POLICY_ALWAYS);
     resource->uri = createEndpointResourceUri(device->uuid, endpoint->id, resource->id);
     // Mock saving the device
     will_return(__wrap_storageSave, true);
@@ -1688,7 +1708,7 @@ static void test_jsonDatabaseLoadDeviceWithBadEndpoint(void **state)
 
     scoped_generic char *deviceFilePath = stringBuilder(FIXTURES_DIR "/%s", corruptedDeviceUuid);
 
-    scoped_generic char *corruptedDevicePtr =  readFileContents(deviceFilePath);
+    scoped_generic char *corruptedDevicePtr = readFileContents(deviceFilePath);
     assert_non_null(corruptedDevicePtr);
 
     // Add the corrupted device data on dummy storage
@@ -1784,7 +1804,7 @@ static int dummyStorageSetup(void **state)
 {
     dummyMemoryStorage = cJSON_CreateObject();
 
-    (void)state;
+    (void) state;
 
     return 0;
 }
@@ -1797,7 +1817,7 @@ static int dummyStorageTeardown(void **state)
         dummyMemoryStorage = NULL;
     }
 
-    (void)state;
+    (void) state;
 
     return 0;
 }
@@ -1897,7 +1917,7 @@ static icLinkedList *dummyStorageGetKeys(const char *namespace)
     if (keysJson != NULL)
     {
         int count = cJSON_GetArraySize(keysJson);
-        for(int i = 0; i < count; ++i)
+        for (int i = 0; i < count; ++i)
         {
             cJSON *item = cJSON_GetArrayItem(keysJson, i);
             icLogDebug(LOG_TAG, "Found key %s for namespace %s", item->string, namespace);
@@ -1909,7 +1929,7 @@ static icLinkedList *dummyStorageGetKeys(const char *namespace)
     return keys;
 }
 
-static bool dummyStorageDelete(const char* namespace, const char* key)
+static bool dummyStorageDelete(const char *namespace, const char *key)
 {
     bool retval = false;
     cJSON *keysJson = cJSON_GetObjectItem(dummyMemoryStorage, namespace);
@@ -1930,22 +1950,27 @@ static icDevice *createDummyDevice()
 {
     ++counter;
     char uuid[64];
-    sprintf(uuid,"device%d", counter++);
+    sprintf(uuid, "device%d", counter++);
     char class[64];
-    sprintf(class,"dummyClass%d", counter++);
+    sprintf(class, "dummyClass%d", counter++);
     char driver[64];
-    sprintf(driver,"dummyDriver%d", counter++);
+    sprintf(driver, "dummyDriver%d", counter++);
     icDevice *device = createDevice(uuid, class, 1, driver, NULL);
     char uri[64];
-    sprintf(uri,"/%s", device->uuid);
+    sprintf(uri, "/%s", device->uuid);
     device->uri = strdup(uri);
 
     // Create resources for the device
     char deviceResourceId[64];
-    sprintf(deviceResourceId,"dummyResource%d", counter++);
+    sprintf(deviceResourceId, "dummyResource%d", counter++);
     char deviceResourceValue[64];
     sprintf(deviceResourceValue, "dummyResourceValue%d", counter++);
-    icDeviceResource *resource = createDeviceResource(device, deviceResourceId, deviceResourceValue, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    icDeviceResource *resource = createDeviceResource(device,
+                                                      deviceResourceId,
+                                                      deviceResourceValue,
+                                                      RESOURCE_TYPE_STRING,
+                                                      RESOURCE_MODE_READABLE,
+                                                      CACHING_POLICY_ALWAYS);
     resource->uri = createDeviceResourceUri(device->uuid, resource->id);
 
     // Create a metadata for the device
@@ -1975,10 +2000,15 @@ static icDevice *createDummyDevice()
 
     // Create a resource for the endpoint
     char endpointResourceId[64];
-    sprintf(endpointResourceId,"dummyEndpointResource%d", counter++);
+    sprintf(endpointResourceId, "dummyEndpointResource%d", counter++);
     char endpointResourceValue[64];
     sprintf(endpointResourceValue, "dummyEndpointResourceValue%d", counter++);
-    resource = createEndpointResource(endpoint, endpointResourceId, endpointResourceValue, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE | RESOURCE_MODE_SENSITIVE, CACHING_POLICY_ALWAYS);
+    resource = createEndpointResource(endpoint,
+                                      endpointResourceId,
+                                      endpointResourceValue,
+                                      RESOURCE_TYPE_STRING,
+                                      RESOURCE_MODE_READABLE | RESOURCE_MODE_SENSITIVE,
+                                      CACHING_POLICY_ALWAYS);
     resource->uri = createEndpointResourceUri(device->uuid, endpoint->id, resource->id);
 
     // Create a metadata for the endpoint
@@ -2009,7 +2039,12 @@ static icDevice *createCorruptedDummyDevice()
     //
     scoped_generic char *deviceResourceId = stringBuilder("dummyResource%d", counter++);
     scoped_generic char *deviceResourceValue = stringBuilder("dummyResourceValue%d", counter++);
-    icDeviceResource *resource = createDeviceResource(device, deviceResourceId, deviceResourceValue, RESOURCE_TYPE_STRING, RESOURCE_MODE_READABLE, CACHING_POLICY_ALWAYS);
+    icDeviceResource *resource = createDeviceResource(device,
+                                                      deviceResourceId,
+                                                      deviceResourceValue,
+                                                      RESOURCE_TYPE_STRING,
+                                                      RESOURCE_MODE_READABLE,
+                                                      CACHING_POLICY_ALWAYS);
     resource->uri = createDeviceResourceUri(device->uuid, resource->id);
 
     // Create a metadata for the device
@@ -2028,10 +2063,10 @@ static icDevice *createCorruptedDummyDevice()
     return device;
 }
 
-#define assert_non_null_string_equal(a, b) \
-    assert_non_null(a); \
-    assert_non_null(b); \
-    assert_string_equal(a,b);
+#define assert_non_null_string_equal(a, b)                                                                             \
+    assert_non_null(a);                                                                                                \
+    assert_non_null(b);                                                                                                \
+    assert_string_equal(a, b);
 
 static void assertResourceEqual(icDeviceResource *resource1, icDeviceResource *resource2)
 {
@@ -2061,10 +2096,10 @@ static void assertResourcesEqual(icLinkedList *resources1, icLinkedList *resourc
     assert_int_equal(linkedListCount(resources1), linkedListCount(resources2));
     icLinkedListIterator *iter1 = linkedListIteratorCreate(resources1);
     icLinkedListIterator *iter2 = linkedListIteratorCreate(resources2);
-    while(linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
+    while (linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
     {
-        icDeviceResource *resource1 = (icDeviceResource *)linkedListIteratorGetNext(iter1);
-        icDeviceResource *resource2 = (icDeviceResource *)linkedListIteratorGetNext(iter2);
+        icDeviceResource *resource1 = (icDeviceResource *) linkedListIteratorGetNext(iter1);
+        icDeviceResource *resource2 = (icDeviceResource *) linkedListIteratorGetNext(iter2);
         assertResourceEqual(resource1, resource2);
     }
     linkedListIteratorDestroy(iter1);
@@ -2095,10 +2130,10 @@ static void assertMetadatasEqual(icLinkedList *metadatas1, icLinkedList *metadat
     assert_int_equal(linkedListCount(metadatas1), linkedListCount(metadatas2));
     icLinkedListIterator *iter1 = linkedListIteratorCreate(metadatas1);
     icLinkedListIterator *iter2 = linkedListIteratorCreate(metadatas2);
-    while(linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
+    while (linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
     {
-        icDeviceMetadata *metadata1 = (icDeviceMetadata *)linkedListIteratorGetNext(iter1);
-        icDeviceMetadata *metadata2 = (icDeviceMetadata *)linkedListIteratorGetNext(iter2);
+        icDeviceMetadata *metadata1 = (icDeviceMetadata *) linkedListIteratorGetNext(iter1);
+        icDeviceMetadata *metadata2 = (icDeviceMetadata *) linkedListIteratorGetNext(iter2);
         assertMetadataEqual(metadata1, metadata2);
     }
     linkedListIteratorDestroy(iter1);
@@ -2135,10 +2170,10 @@ static void assertDevicesEqual(icDevice *device1, icDevice *device2)
 
     icLinkedListIterator *iter1 = linkedListIteratorCreate(device1->endpoints);
     icLinkedListIterator *iter2 = linkedListIteratorCreate(device2->endpoints);
-    while(linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
+    while (linkedListIteratorHasNext(iter1) && linkedListIteratorHasNext(iter2))
     {
-        icDeviceEndpoint *endpoint1 = (icDeviceEndpoint *)linkedListIteratorGetNext(iter1);
-        icDeviceEndpoint *endpoint2 = (icDeviceEndpoint *)linkedListIteratorGetNext(iter2);
+        icDeviceEndpoint *endpoint1 = (icDeviceEndpoint *) linkedListIteratorGetNext(iter1);
+        icDeviceEndpoint *endpoint2 = (icDeviceEndpoint *) linkedListIteratorGetNext(iter2);
         assertEndpointsEqual(endpoint1, endpoint2);
     }
     linkedListIteratorDestroy(iter1);
@@ -2163,7 +2198,7 @@ bool __wrap_storageLoad(const char *namespace, const char *key, char **value)
     {
         return false;
     }
-    else if (strcmp(*value,USE_DUMMY_STORAGE) == 0)
+    else if (strcmp(*value, USE_DUMMY_STORAGE) == 0)
     {
         icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s - reading from memory storage", __FUNCTION__, namespace, key);
 
@@ -2177,7 +2212,7 @@ bool __wrap_storageLoad(const char *namespace, const char *key, char **value)
     }
 }
 
-cJSON* __wrap_storageLoadJSON(const char *namespace, const char *key)
+cJSON *__wrap_storageLoadJSON(const char *namespace, const char *key)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s", __FUNCTION__, namespace, key);
 
@@ -2185,7 +2220,8 @@ cJSON* __wrap_storageLoadJSON(const char *namespace, const char *key)
     cJSON *json = NULL;
     if (value != NULL)
     {
-        icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s - reading json from memory storage", __FUNCTION__, namespace, key);
+        icLogDebug(
+            LOG_TAG, "%s: namespace=%s, key=%s - reading json from memory storage", __FUNCTION__, namespace, key);
         value = dummyStorageGet(namespace, key);
         json = cJSON_Parse(value);
     }
@@ -2200,7 +2236,7 @@ cJSON* __wrap_storageLoadJSON(const char *namespace, const char *key)
  * @param cb
  * @return true when data is valid
  */
-__attribute__ ((used)) bool __wrap_storageParse(const char* namespace, const char* key, const StorageCallbacks *cb)
+__attribute__((used)) bool __wrap_storageParse(const char *namespace, const char *key, const StorageCallbacks *cb)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s", __FUNCTION__, namespace, key);
 
@@ -2230,7 +2266,7 @@ __attribute__ ((used)) bool __wrap_storageParse(const char* namespace, const cha
  * @param cb
  * @return
  */
-__attribute__ ((used)) bool __wrap_storageParseBad(const char* namespace, const char* key, const StorageCallbacks *cb)
+__attribute__((used)) bool __wrap_storageParseBad(const char *namespace, const char *key, const StorageCallbacks *cb)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s", __FUNCTION__, namespace, key);
 
@@ -2254,7 +2290,7 @@ __attribute__ ((used)) bool __wrap_storageParseBad(const char* namespace, const 
     }
 }
 
-bool __wrap_storageSave(const char* namespace, const char* key, const char* value)
+bool __wrap_storageSave(const char *namespace, const char *key, const char *value)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s, value=%s", __FUNCTION__, namespace, key, value);
 
@@ -2268,12 +2304,12 @@ bool __wrap_storageSave(const char* namespace, const char* key, const char* valu
     return retval;
 }
 
-icLinkedList* __wrap_storageGetKeys(const char* namespace)
+icLinkedList *__wrap_storageGetKeys(const char *namespace)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s", __FUNCTION__, namespace);
 
-    void *mockReturn = (void *)mock();
-    if (mockReturn != NULL && strcmp(mockReturn,USE_DUMMY_STORAGE) == 0)
+    void *mockReturn = (void *) mock();
+    if (mockReturn != NULL && strcmp(mockReturn, USE_DUMMY_STORAGE) == 0)
     {
         icLogDebug(LOG_TAG, "%s: namespace=%s - getting keys from memory storage", __FUNCTION__, namespace);
 
@@ -2281,15 +2317,15 @@ icLinkedList* __wrap_storageGetKeys(const char* namespace)
     }
     else
     {
-        return (icLinkedList *)mockReturn;
+        return (icLinkedList *) mockReturn;
     }
 }
 
-bool __wrap_storageDelete(const char* namespace, const char* key)
+bool __wrap_storageDelete(const char *namespace, const char *key)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s", __FUNCTION__, namespace, key);
-    void *mockReturn = (void *)mock();
-    if (mockReturn != NULL && strcmp(mockReturn,USE_DUMMY_STORAGE) == 0)
+    void *mockReturn = (void *) mock();
+    if (mockReturn != NULL && strcmp(mockReturn, USE_DUMMY_STORAGE) == 0)
     {
         icLogDebug(LOG_TAG, "%s: namespace=%s - deleting from memory storage", __FUNCTION__, namespace);
 
@@ -2297,55 +2333,68 @@ bool __wrap_storageDelete(const char* namespace, const char* key)
     }
     else
     {
-        return (bool)mockReturn;
+        return (bool) mockReturn;
     }
 }
 
-StorageRestoreErrorCode __wrap_storageRestoreNamespace(const char* namespace, const char* basePath)
+StorageRestoreErrorCode __wrap_storageRestoreNamespace(const char *namespace, const char *basePath)
 {
     return mock_type(StorageRestoreErrorCode);
 }
 
-int main(int argc, const char ** argv)
+int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseInitializeEmptyAndCleanup, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSetSystemPropertyAndCleanup, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddOneDeviceAndCleanup, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSetSystemPropertyAndReadItBack, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddOneDeviceAndReadItBack, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDevices, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDevicesByEndpointProfile, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDevicesByDeviceClass, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDevicesByDeviceDriver, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceById, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseRemoveDeviceById, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointsByEndpointProfile, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointById, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveEndpoint, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetResourceByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveResource, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointResourceByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveEndpointResource, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetMetadataByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseRemoveMetadataByUri, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveMetadata, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceByOtherUris, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointByOtherUris, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseGetResourcesByUriRegex, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddNewDeviceMetdata, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDeviceWithSensitiveResourceData, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDeviceResource, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddEndpointResource, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDeviceWithBadEndpoint, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseLoadDeviceWithBadEndpoint, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDuplicateEndpoint, dummyStorageSetup, dummyStorageTeardown),
-                    cmocka_unit_test(test_deviceModelLoadPermissive),
-                    cmocka_unit_test_setup_teardown(test_restore, dummyStorageSetup, dummyStorageTeardown)
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseInitializeEmptyAndCleanup, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseSetSystemPropertyAndCleanup, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseAddOneDeviceAndCleanup, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseSetSystemPropertyAndReadItBack, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseAddOneDeviceAndReadItBack, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDevices, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetDevicesByEndpointProfile, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetDevicesByDeviceClass, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetDevicesByDeviceDriver, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceById, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseRemoveDeviceById, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetEndpointsByEndpointProfile, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointById, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetEndpointByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveEndpoint, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetResourceByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveResource, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetEndpointResourceByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveEndpointResource, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetMetadataByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseRemoveMetadataByUri, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseSaveMetadata, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseGetDeviceByOtherUris, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetEndpointByOtherUris, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseGetResourcesByUriRegex, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseAddNewDeviceMetdata, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseAddDeviceWithSensitiveResourceData, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDeviceResource, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseAddEndpointResource, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseAddDeviceWithBadEndpoint, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(
+            test_jsonDatabaseLoadDeviceWithBadEndpoint, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test_setup_teardown(test_jsonDatabaseAddDuplicateEndpoint, dummyStorageSetup, dummyStorageTeardown),
+        cmocka_unit_test(test_deviceModelLoadPermissive),
+        cmocka_unit_test_setup_teardown(test_restore, dummyStorageSetup, dummyStorageTeardown)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

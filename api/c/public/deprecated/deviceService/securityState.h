@@ -23,39 +23,27 @@
 #ifndef ZILKER_SECURITYSTATE_H
 #define ZILKER_SECURITYSTATE_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <icUtil/array.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-#define SECURITY_STATE_PANEL_STATUS "panelStatus"
-#define SECURITY_STATE_INDICATION "indication"
-#define SECURITY_STATE_TIME_LEFT "timeLeft"
+#define SECURITY_STATE_PANEL_STATUS  "panelStatus"
+#define SECURITY_STATE_INDICATION    "indication"
+#define SECURITY_STATE_TIME_LEFT     "timeLeft"
 #define SECURITY_STATE_BYPASS_ACTIVE "bypassActive"
 
-#define ENUM_LABEL(x) x
-#define ENUM_VALUES                                 \
-        ENUM_LABEL(PANEL_STATUS_INVALID),           \
-        ENUM_LABEL(PANEL_STATUS_DISARMED),          \
-        ENUM_LABEL(PANEL_STATUS_ARMED_STAY),        \
-        ENUM_LABEL(PANEL_STATUS_ARMING_STAY),       \
-        ENUM_LABEL(PANEL_STATUS_ARMED_AWAY),        \
-        ENUM_LABEL(PANEL_STATUS_ARMING_AWAY),       \
-        ENUM_LABEL(PANEL_STATUS_ARMED_NIGHT),       \
-        ENUM_LABEL(PANEL_STATUS_ARMING_NIGHT),      \
-        ENUM_LABEL(PANEL_STATUS_UNREADY),           \
-        ENUM_LABEL(PANEL_STATUS_ALARM_NONE),        \
-        ENUM_LABEL(PANEL_STATUS_ALARM_BURG),        \
-        ENUM_LABEL(PANEL_STATUS_ALARM_AUDIBLE),     \
-        ENUM_LABEL(PANEL_STATUS_ALARM_FIRE),        \
-        ENUM_LABEL(PANEL_STATUS_ALARM_MEDICAL),     \
-        ENUM_LABEL(PANEL_STATUS_ALARM_CO),          \
-        ENUM_LABEL(PANEL_STATUS_ALARM_POLICE),      \
-        ENUM_LABEL(PANEL_STATUS_PANIC_FIRE),        \
-        ENUM_LABEL(PANEL_STATUS_PANIC_MEDICAL),     \
-        ENUM_LABEL(PANEL_STATUS_PANIC_POLICE),      \
-        ENUM_LABEL(PANEL_STATUS_EXIT_DELAY),        \
-        ENUM_LABEL(PANEL_STATUS_ENTRY_DELAY),       \
+#define ENUM_LABEL(x)                x
+#define ENUM_VALUES                                                                                                    \
+    ENUM_LABEL(PANEL_STATUS_INVALID), ENUM_LABEL(PANEL_STATUS_DISARMED), ENUM_LABEL(PANEL_STATUS_ARMED_STAY),          \
+        ENUM_LABEL(PANEL_STATUS_ARMING_STAY), ENUM_LABEL(PANEL_STATUS_ARMED_AWAY),                                     \
+        ENUM_LABEL(PANEL_STATUS_ARMING_AWAY), ENUM_LABEL(PANEL_STATUS_ARMED_NIGHT),                                    \
+        ENUM_LABEL(PANEL_STATUS_ARMING_NIGHT), ENUM_LABEL(PANEL_STATUS_UNREADY), ENUM_LABEL(PANEL_STATUS_ALARM_NONE),  \
+        ENUM_LABEL(PANEL_STATUS_ALARM_BURG), ENUM_LABEL(PANEL_STATUS_ALARM_AUDIBLE),                                   \
+        ENUM_LABEL(PANEL_STATUS_ALARM_FIRE), ENUM_LABEL(PANEL_STATUS_ALARM_MEDICAL),                                   \
+        ENUM_LABEL(PANEL_STATUS_ALARM_CO), ENUM_LABEL(PANEL_STATUS_ALARM_POLICE), ENUM_LABEL(PANEL_STATUS_PANIC_FIRE), \
+        ENUM_LABEL(PANEL_STATUS_PANIC_MEDICAL), ENUM_LABEL(PANEL_STATUS_PANIC_POLICE),                                 \
+        ENUM_LABEL(PANEL_STATUS_EXIT_DELAY), ENUM_LABEL(PANEL_STATUS_ENTRY_DELAY),                                     \
         ENUM_LABEL(PANEL_STATUS_ENTRY_DELAY_ONESHOT)
 
 typedef enum
@@ -65,18 +53,14 @@ typedef enum
 
 #undef ENUM_LABEL
 #define ENUM_LABEL(x) #x
-static const char *const PanelStatusLabels[] = {
-    ENUM_VALUES
-};
+static const char *const PanelStatusLabels[] = {ENUM_VALUES};
 #undef ENUM_LABEL
 #undef ENUM_VALUES
 
 #define ENUM_LABEL(x) x
-#define ENUM_VALUES                                 \
-        ENUM_LABEL(SECURITY_INDICATION_INVALID),    \
-        ENUM_LABEL(SECURITY_INDICATION_NONE),       \
-        ENUM_LABEL(SECURITY_INDICATION_AUDIBLE),    \
-        ENUM_LABEL(SECURITY_INDICATION_VISUAL),     \
+#define ENUM_VALUES                                                                                                    \
+    ENUM_LABEL(SECURITY_INDICATION_INVALID), ENUM_LABEL(SECURITY_INDICATION_NONE),                                     \
+        ENUM_LABEL(SECURITY_INDICATION_AUDIBLE), ENUM_LABEL(SECURITY_INDICATION_VISUAL),                               \
         ENUM_LABEL(SECURITY_INDICATION_BOTH)
 
 typedef enum
@@ -87,9 +71,7 @@ typedef enum
 #undef ENUM_LABEL
 #define ENUM_LABEL(x) #x
 
-static const char *const SecurityIndicationLabels[] = {
-    ENUM_VALUES
-};
+static const char *const SecurityIndicationLabels[] = {ENUM_VALUES};
 #undef ENUM_LABEL
 #undef ENUM_VALUES
 
@@ -120,10 +102,8 @@ typedef struct
  * @return a heap allocated event pointer
  * @see deviceServiceSecurityEventDestroy
  */
-SecurityState *securityStateCreate(PanelStatus panelStatus,
-                                   uint32_t timeLeft,
-                                   SecurityIndication indication,
-                                   bool bypassActive);
+SecurityState *
+securityStateCreate(PanelStatus panelStatus, uint32_t timeLeft, SecurityIndication indication, bool bypassActive);
 
 /**
  * Clone a security state
@@ -170,4 +150,4 @@ const char *securityStateToJSON(SecurityState *state);
  */
 SecurityState *securityStateFromJSON(const char *json);
 
-#endif //ZILKER_SECURITYSTATE_H
+#endif // ZILKER_SECURITYSTATE_H

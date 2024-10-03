@@ -40,11 +40,11 @@
 #ifndef IC_STRINGHASHMAP_H
 #define IC_STRINGHASHMAP_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <cjson/cJSON.h>
 #include "icTypes/icHashMap.h"
 #include "sbrm.h"
+#include <cjson/cJSON.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /*-------------------------------*
  *

@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -27,57 +27,50 @@
 #define FLEXCORE_DEVICEMODELHELPER_H
 
 #include <device/icDevice.h>
-#include <device/icDeviceResource.h>
 #include <device/icDeviceEndpoint.h>
 #include <device/icDeviceMetadata.h>
-#include <deviceDescriptor.h>
+#include <device/icDeviceResource.h>
 #include <device/icInitialResourceValues.h>
+#include <deviceDescriptor.h>
 
-icDevice* createDevice(const char *uuid,
+icDevice *createDevice(const char *uuid,
                        const char *deviceClass,
                        uint8_t deviceClassVersion,
                        const char *deviceDriverName,
                        const DeviceDescriptor *dd);
 
-icDeviceMetadata *createDeviceMetadata(icDevice *device,
-                                       const char *metadataId,
-                                       const char *value);
+icDeviceMetadata *createDeviceMetadata(icDevice *device, const char *metadataId, const char *value);
 
-icDeviceEndpoint* createEndpoint(icDevice *device,
-                                 const char *id,
-                                 const char *profile,
-                                 bool enabled);
+icDeviceEndpoint *createEndpoint(icDevice *device, const char *id, const char *profile, bool enabled);
 
-icDeviceResource* createDeviceResource(icDevice *device,
+icDeviceResource *createDeviceResource(icDevice *device,
                                        const char *resourceId,
                                        const char *value,
                                        const char *type,
                                        uint8_t mode,
                                        ResourceCachingPolicy cachingPolicy);
 
-icDeviceResource* createDeviceResourceIfAvailable(icDevice* device,
-                                                  const char* resourceId,
+icDeviceResource *createDeviceResourceIfAvailable(icDevice *device,
+                                                  const char *resourceId,
                                                   icInitialResourceValues *initialResourceValues,
-                                                  const char* type,
+                                                  const char *type,
                                                   uint8_t mode,
                                                   ResourceCachingPolicy cachingPolicy);
 
-icDeviceResource* createEndpointResource(icDeviceEndpoint *endpoint,
+icDeviceResource *createEndpointResource(icDeviceEndpoint *endpoint,
                                          const char *resourceId,
                                          const char *value,
                                          const char *type,
                                          uint8_t mode,
                                          ResourceCachingPolicy cachingPolicy);
 
-icDeviceResource* createEndpointResourceIfAvailable(icDeviceEndpoint *endpoint,
+icDeviceResource *createEndpointResourceIfAvailable(icDeviceEndpoint *endpoint,
                                                     const char *resourceId,
                                                     icInitialResourceValues *initialResourceValues,
                                                     const char *type,
                                                     uint8_t mode,
                                                     ResourceCachingPolicy cachingPolicy);
 
-icDeviceMetadata *createEndpointMetadata(icDeviceEndpoint *endpoint,
-                                         const char *metadataId,
-                                         const char *value);
+icDeviceMetadata *createEndpointMetadata(icDeviceEndpoint *endpoint, const char *metadataId, const char *value);
 
-#endif //FLEXCORE_DEVICEMODELHELPER_H
+#endif // FLEXCORE_DEVICEMODELHELPER_H

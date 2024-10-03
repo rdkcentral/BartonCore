@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -123,7 +123,7 @@ void stringBufferClear(icStringBuffer *stringBuffer);
  * @param format the format string
  * @param ... format args
  */
-__attribute__ ((format (__printf__, 2, 3)))
-void stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, ...);
+__attribute__((format(__printf__, 2, 3))) void
+stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, ...);
 
-#endif //ZILKER_ICSTRINGBUFFER_H
+#endif // ZILKER_ICSTRINGBUFFER_H

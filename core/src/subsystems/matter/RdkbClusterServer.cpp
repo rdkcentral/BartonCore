@@ -26,8 +26,7 @@
 
 #include <glib-object.h>
 
-extern "C"
-{
+extern "C" {
 #include "deviceServiceConfiguration.h"
 #include "icUtil/stringUtils.h"
 #include "jsonHelper/jsonHelper.h"
@@ -36,8 +35,8 @@ extern "C"
 }
 
 #include "RdkbClusterServer.h"
-#include "app/util/af-enums.h"
 #include "app-common/zap-generated/ids/Attributes.h"
+#include "app/util/af-enums.h"
 #include <cstring>
 
 #define LOG_TAG     "RdkbClusterServer"
@@ -50,7 +49,7 @@ EmberAfStatus RdkbClusterServer::OnAttributeRead(const EmberAfAttributeMetadata 
 {
     EmberAfStatus result = EMBER_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE;
 
-    switch(attributeMetadata->attributeId)
+    switch (attributeMetadata->attributeId)
     {
         case chip::app::Clusters::RDKBGateway::Attributes::WifiNetworks::Id:
         {

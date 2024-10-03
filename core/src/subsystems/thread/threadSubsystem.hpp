@@ -44,4 +44,4 @@ extern "C" {
  */
 bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info);
 
-#endif //ZILKER_THREADSUBSYSTEM_H
+#endif // ZILKER_THREADSUBSYSTEM_H

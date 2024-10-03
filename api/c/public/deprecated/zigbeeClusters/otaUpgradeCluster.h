@@ -45,4 +45,4 @@ bool otaUpgradeClusterImageNotify(uint64_t eui64, uint8_t endpointId);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_OTAUPGRADECLUSTER_H
+#endif // ZILKER_OTAUPGRADECLUSTER_H

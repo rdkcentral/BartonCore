@@ -28,22 +28,22 @@
  * Author: John Elderton  -  1/18/17
  *-----------------------------------------------*/
 
+#include "macAddrTest.h"
+#include <icUtil/macAddrUtils.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <icUtil/macAddrUtils.h>
-#include "macAddrTest.h"
 
-#define MAC_ADDRESS1    "e0:60:66:d:2a:2e"
-#define MAC_ADDRESS2    "e0:60:66:0d:2a:2e"
-#define MAC_ADDRESS3    "E0:60:66:0d:2A:2e"
-#define MAC_ADDRESS4    "a0:60:66:0d:aA:2e"
+#define MAC_ADDRESS1 "e0:60:66:d:2a:2e"
+#define MAC_ADDRESS2 "e0:60:66:0d:2a:2e"
+#define MAC_ADDRESS3 "E0:60:66:0d:2A:2e"
+#define MAC_ADDRESS4 "a0:60:66:0d:aA:2e"
 
 static void printMacBytes(uint8_t *array)
 {
     int i = 0;
-    for (i = 0 ; i < 6 ; i++)
+    for (i = 0; i < 6; i++)
     {
         printf("%02x ", array[i]);
     }

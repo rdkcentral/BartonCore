@@ -24,8 +24,10 @@
 #ifndef ZILKER_RESOURCECONTAINER_H
 #define ZILKER_RESOURCECONTAINER_H
 
+#include <stddef.h>
+
 #define INVALID_ENUM 0
 
 int findEnumForLabel(const char *needle, const char *const haystack[], size_t haystackLength);
 
-#endif //ZILKER_RESOURCECONTAINER_H
+#endif // ZILKER_RESOURCECONTAINER_H

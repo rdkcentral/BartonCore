@@ -30,16 +30,19 @@
  * FIXME: upgrade to cmocka testcase
  *-----------------------------------------------*/
 
+#include "tests.h"
+#include <icConfig/obfuscation.h>
+#include <icConfig/protectedConfig.h>
+#include <icUtil/base64.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icConfig/obfuscation.h>
-#include <icUtil/base64.h>
-#include <icConfig/protectedConfig.h>
-#include "tests.h"
 
-#define INPUT_STRING    "this is my test of crud to encrypt"
-#define DECRYPT_UPG_SIG "FgAAADMAAAATS5m5bm9pVHk5Bi8dTBcL7Up3FRx9ZCpFesEVFVYJCYJOQXpKJEcWHUVsMhPINXpHURFV2G03DZ1lG200JANAfjE0QYFoB3I6dB2McVJAORx7CGM3AGkQXwVOGu5tUxgXCPZse2FXNqhge0BANXGdfnk5L3pGN1ggNmtBEj/kLKEzGjMNaXFbX14UIKYjdAwBLjO1SWpNaRo5Iy9wdFswKW1jLlhGCzAeH0gqHj0uIGRhFC5FWRlX"
+#define INPUT_STRING "this is my test of crud to encrypt"
+#define DECRYPT_UPG_SIG                                                                                                \
+    "FgAAADMAAAATS5m5bm9pVHk5Bi8dTBcL7Up3FRx9ZCpFesEVFVYJCYJOQXpKJEcWHUVsMhPINXpHURFV2G03DZ1lG200JANAfjE0QYFoB3I6dB2M" \
+    "cVJAORx7CGM3AGkQXwVOGu5tUxgXCPZse2FXNqhge0BANXGdfnk5L3pGN1ggNmtBEj/"                                              \
+    "kLKEzGjMNaXFbX14UIKYjdAwBLjO1SWpNaRo5Iy9wdFswKW1jLlhGCzAeH0gqHj0uIGRhFC5FWRlX"
 #define DECRYPT_UPG_CT "SaNYwxz7EGvwneOMSFXS8g=="
 #define DECRYPT_UPG_PT "4321"
 
@@ -52,16 +55,16 @@ bool testProtectConfig()
     bool worked = false;
     uint32_t obLen = 0;
 
-    char badCT[2] = { '\30', '\31' };
-    pcData badInput = { .data = badCT, .length = 1 };
+    char badCT[2] = {'\30', '\31'};
+    pcData badInput = {.data = badCT, .length = 1};
     pcData *testPT = NULL;
     pcData *badEnc = NULL;
-    pcData badPass = { .data = "", .length = 1 };
+    pcData badPass = {.data = "", .length = 1};
     pcData *encr = NULL;
 
-    pcData upgPass = { 0 , 0 };
-    pcData upgInput = { .data = DECRYPT_UPG_CT, .length = (uint32_t) strlen(DECRYPT_UPG_CT) };
-    pcData bad = { 0, 0 };
+    pcData upgPass = {0, 0};
+    pcData upgInput = {.data = DECRYPT_UPG_CT, .length = (uint32_t) strlen(DECRYPT_UPG_CT)};
+    pcData bad = {0, 0};
     pcData *decr = NULL;
 
     printf("encoding '%s'\n", inputMsg);
@@ -85,8 +88,8 @@ bool testProtectConfig()
     // could be saved into a config file
     //
     obLen = 0;
-    ob = obfuscate("123456", 6, (const char *)pass->data, pass->length, &obLen);
-    bob = icEncodeBase64((uint8_t *)ob, obLen);
+    ob = obfuscate("123456", 6, (const char *) pass->data, pass->length, &obLen);
+    bob = icEncodeBase64((uint8_t *) ob, obLen);
     printf("obfuscated key='%s' len=%d (passlen=%d)\n", bob, obLen, pass->length);
     free(ob);
     free(bob);
@@ -94,8 +97,8 @@ bool testProtectConfig()
     // encrypt something using this key
     //
     pcData input;
-    input.data = (unsigned char *)inputMsg;
-    input.length = (uint32_t)strlen(inputMsg);
+    input.data = (unsigned char *) inputMsg;
+    input.length = (uint32_t) strlen(inputMsg);
     printf("input string='%s' len=%d\n", input.data, input.length);
 
     badEnc = protectConfigData(&input, &badPass);
@@ -137,14 +140,14 @@ bool testProtectConfig()
 
     // compare to ensure we got the same value
     //
-    if (strcmp((const char *)decr->data, (const char *)input.data) != 0)
+    if (strcmp((const char *) decr->data, (const char *) input.data) != 0)
     {
         printf("FAILED!  decrypt string is different then input\n");
         worked = false;
         goto cleanup;
     }
 
-    bad .data = strdup(encr->data);
+    bad.data = strdup(encr->data);
     bad.length = encr->length;
     bad.data[strlen(bad.data) - 1] = '*';
     destroyProtectConfigData(encr, true);
@@ -152,7 +155,7 @@ bool testProtectConfig()
     destroyProtectConfigData(decr, true);
 
     decr = unprotectConfigData(&bad, pass);
-    if(decr != NULL)
+    if (decr != NULL)
     {
         puts("Invalid data accepted by decrypt");
         free(bad.data);
@@ -162,7 +165,7 @@ bool testProtectConfig()
     worked = false;
 
     /* Test that a simulated downgrade/noop is ignored */
-    if(forceProtectVersion(PROTECT_AES_CBC_NO_IV, false))
+    if (forceProtectVersion(PROTECT_AES_CBC_NO_IV, false))
     {
         puts("Nonforced downgrade was not ignored!");
         goto cleanup;
@@ -225,25 +228,28 @@ bool testProtectConfig()
     }
 
     /* Test that a forced upgrade works */
-    if(!forceProtectVersion(PROTECT_ID_LATEST, false))
+    if (!forceProtectVersion(PROTECT_ID_LATEST, false))
     {
         puts("Upgrade to latest version ID failed");
         goto cleanup;
     }
 
     encr = protectConfigData(testPT, &upgPass);
-    if(encr == NULL || strcmp(DECRYPT_UPG_CT, encr->data) == 0)
+    if (encr == NULL || strcmp(DECRYPT_UPG_CT, encr->data) == 0)
     {
         puts("Encryption with latest verison ID failed");
         goto cleanup;
     }
 
     decr = unprotectConfigData(encr, &upgPass);
-    if(strcmp(decr->data, DECRYPT_UPG_PT) != 0 || decr->version != PROTECT_ID_LATEST)
+    if (strcmp(decr->data, DECRYPT_UPG_PT) != 0 || decr->version != PROTECT_ID_LATEST)
     {
         printf("Decrypting value with latest version ID failed!\n"
-                "Expected: '%s' ID: %d, received: '%s' ID: %d\n",
-                DECRYPT_UPG_PT, PROTECT_ID_LATEST, decr->data, decr->version);
+               "Expected: '%s' ID: %d, received: '%s' ID: %d\n",
+               DECRYPT_UPG_PT,
+               PROTECT_ID_LATEST,
+               decr->data,
+               decr->version);
         goto cleanup;
     }
     destroyProtectConfigData(decr, true);
@@ -252,7 +258,7 @@ bool testProtectConfig()
     decr = NULL;
 
     /* Test that a noop upgrade is reported as success */
-    if(!forceProtectVersion(PROTECT_ID_LATEST, false))
+    if (!forceProtectVersion(PROTECT_ID_LATEST, false))
     {
         puts("Noop upgrade did not report success");
         goto cleanup;
@@ -261,7 +267,7 @@ bool testProtectConfig()
     /* All tests passed! */
     worked = true;
 
-    cleanup:
+cleanup:
     free(upgKey);
     destroyProtectConfigData(pass, true);
     destroyProtectConfigData(testPT, true);

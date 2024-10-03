@@ -29,9 +29,7 @@
 #include "device-service-client.h"
 #include <stdbool.h>
 
-typedef bool (*commandExecFunc)(BDeviceServiceClient *client,
-                                gint argc,
-                                gchar *argv[]);
+typedef bool (*commandExecFunc)(BDeviceServiceClient *client, gint argc, gchar *argv[]);
 
 typedef struct _Command Command;
 
@@ -95,18 +93,14 @@ void commandSetAdvanced(Command *command);
  * @param argv
  * @return true if the command succeeded
  */
-bool commandExecute(BDeviceServiceClient *client,
-                    const Command *command,
-                    gint argc,
-                    gchar **argv);
+bool commandExecute(BDeviceServiceClient *client, const Command *command, gint argc, gchar **argv);
 
 /**
  * Add an example usage for this Command.  These help the user understand how to use it.
  * @param command
  * @param example
  */
-void commandAddExample(Command *command,
-                       const gchar *example);
+void commandAddExample(Command *command, const gchar *example);
 
 /**
  * Print the usage of the Command for the user.
@@ -115,6 +109,4 @@ void commandAddExample(Command *command,
  * @param isInteractive true if we are in interactive mode
  * @param showAdvanced true if we are in advanced mode
  */
-void commandPrintUsage(const Command *command,
-                       bool isInteractive,
-                       bool showAdvanced);
+void commandPrintUsage(const Command *command, bool isInteractive, bool showAdvanced);

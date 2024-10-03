@@ -33,10 +33,11 @@ struct _BDeviceServiceZigbeeChannelChangedEvent
     gboolean channel_changed;
     guint8 current_channel;
     guint8 targeted_channel;
-
 };
 
-G_DEFINE_TYPE(BDeviceServiceZigbeeChannelChangedEvent, b_device_service_zigbee_channel_changed_event, B_DEVICE_SERVICE_EVENT_TYPE)
+G_DEFINE_TYPE(BDeviceServiceZigbeeChannelChangedEvent,
+              b_device_service_zigbee_channel_changed_event,
+              B_DEVICE_SERVICE_EVENT_TYPE)
 
 static GParamSpec *properties[N_B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTIES];
 
@@ -53,12 +54,14 @@ static void b_device_service_zigbee_channel_changed_event_finalize(GObject *obje
     G_OBJECT_CLASS(b_device_service_zigbee_channel_changed_event_parent_class)->finalize(object);
 }
 
-static void
-b_device_service_zigbee_channel_changed_event_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec)
+static void b_device_service_zigbee_channel_changed_event_get_property(GObject *object,
+                                                                       guint property_id,
+                                                                       GValue *value,
+                                                                       GParamSpec *pspec)
 {
     BDeviceServiceZigbeeChannelChangedEvent *self = B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT(object);
 
-    switch(property_id)
+    switch (property_id)
     {
         case B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED:
             g_value_set_boolean(value, self->channel_changed);
@@ -75,12 +78,14 @@ b_device_service_zigbee_channel_changed_event_get_property(GObject *object, guin
     }
 }
 
-static void
-b_device_service_zigbee_channel_changed_event_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec)
+static void b_device_service_zigbee_channel_changed_event_set_property(GObject *object,
+                                                                       guint property_id,
+                                                                       const GValue *value,
+                                                                       GParamSpec *pspec)
 {
     BDeviceServiceZigbeeChannelChangedEvent *self = B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT(object);
 
-    switch(property_id)
+    switch (property_id)
     {
         case B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED:
             self->channel_changed = g_value_get_boolean(value);
@@ -97,7 +102,8 @@ b_device_service_zigbee_channel_changed_event_set_property(GObject *object, guin
     }
 }
 
-static void b_device_service_zigbee_channel_changed_event_class_init(BDeviceServiceZigbeeChannelChangedEventClass *klass)
+static void
+b_device_service_zigbee_channel_changed_event_class_init(BDeviceServiceZigbeeChannelChangedEventClass *klass)
 {
     GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
@@ -105,40 +111,39 @@ static void b_device_service_zigbee_channel_changed_event_class_init(BDeviceServ
     object_class->get_property = b_device_service_zigbee_channel_changed_event_get_property;
     object_class->set_property = b_device_service_zigbee_channel_changed_event_set_property;
 
-    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED] = g_param_spec_boolean(
-        B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED],
-        "channel-changed",
-        "Indicates if the channel actually changed (true) or failed (false)",
-        FALSE,
-        G_PARAM_READWRITE);
+    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED] =
+        g_param_spec_boolean(B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
+                                 [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED],
+                             "channel-changed",
+                             "Indicates if the channel actually changed (true) or failed (false)",
+                             FALSE,
+                             G_PARAM_READWRITE);
 
-    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL] = g_param_spec_uint(
-        B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
-        "current-channel",
-        "The current Zigbee channel",
-        0,
-        G_MAXUINT8,
-        0,
-        G_PARAM_READWRITE);
+    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL] =
+        g_param_spec_uint(B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
+                              [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
+                          "current-channel",
+                          "The current Zigbee channel",
+                          0,
+                          G_MAXUINT8,
+                          0,
+                          G_PARAM_READWRITE);
 
-    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL] = g_param_spec_uint(
-        B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],
-        "targeted-channel",
-        "Indicates targeted Zigbee channel",
-        0,
-        G_MAXUINT8,
-        0,
-        G_PARAM_READWRITE);
+    properties[B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL] =
+        g_param_spec_uint(B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
+                              [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],
+                          "targeted-channel",
+                          "Indicates targeted Zigbee channel",
+                          0,
+                          G_MAXUINT8,
+                          0,
+                          G_PARAM_READWRITE);
 
-    g_object_class_install_properties(object_class, N_B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTIES, properties);
+    g_object_class_install_properties(
+        object_class, N_B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTIES, properties);
 }
 
 BDeviceServiceZigbeeChannelChangedEvent *b_device_service_zigbee_channel_changed_event_new(void)
 {
     return g_object_new(B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_TYPE, NULL);
 }
-
-
-
-
-

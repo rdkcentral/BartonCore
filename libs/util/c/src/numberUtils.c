@@ -28,14 +28,14 @@
  * Author: eInfochips
  *-----------------------------------------------*/
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <time.h>
-#include <stdbool.h>
 #include <icLog/logging.h>
 #include <icUtil/numberUtils.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
 
-#define LOG_TAG    "NUMBERUTILS"
+#define LOG_TAG "NUMBERUTILS"
 
 /*
  * Generate random number between given range
@@ -47,7 +47,7 @@ bool generateRandomNumberInRange(uint32_t lowerRange, uint32_t higherRange, uint
     //
     if (lowerRange > higherRange)
     {
-        icLogError(LOG_TAG, "%s: Can't generate random number for given range ",__FUNCTION__);
+        icLogError(LOG_TAG, "%s: Can't generate random number for given range ", __FUNCTION__);
         return false;
     }
 
@@ -60,7 +60,7 @@ bool generateRandomNumberInRange(uint32_t lowerRange, uint32_t higherRange, uint
     //
     struct timeval now;
     gettimeofday(&now, NULL);
-    current.tv_sec  = now.tv_sec;
+    current.tv_sec = now.tv_sec;
     current.tv_nsec = now.tv_usec * 1000;
 #else
     // standard linux way

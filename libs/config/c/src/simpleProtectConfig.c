@@ -32,21 +32,21 @@
  * Author: jelderton -  6/7/19.
  *-----------------------------------------------*/
 
+#include <cjson/cJSON.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <cjson/cJSON.h>
 
-#include <icUtil/base64.h>
+#include <icConfig/obfuscation.h>
+#include <icConfig/protectedConfig.h>
 #include <icConfig/simpleProtectConfig.h>
 #include <icConfig/storage.h>
-#include <icConfig/protectedConfig.h>
-#include <icConfig/obfuscation.h>
-#include <icUtil/stringUtils.h>
+#include <icUtil/base64.h>
 #include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
 
-#define DEFAULT_KEY_IDENTIFIER      "default"
-#define OBFUSCATE_KEY               "config"        // simple yet not out of place.  need to make this better
+#define DEFAULT_KEY_IDENTIFIER "default"
+#define OBFUSCATE_KEY          "config" // simple yet not out of place.  need to make this better
 
 struct ProtectSecret
 {
@@ -122,13 +122,13 @@ char *simpleProtectDecrypt(const ProtectSecret *secret, const char *protectedDat
     //
     char *retVal = NULL;
     pcData input;
-    input.data = (unsigned char *)protectedData;
-    input.length = (uint32_t)strlen(protectedData);
+    input.data = (unsigned char *) protectedData;
+    input.length = (uint32_t) strlen(protectedData);
     pcData *data = unprotectConfigData(&input, secret->key);
     if (data != NULL && data->data[data->length] == 0)
     {
         // move from 'data' to 'retVal'
-        retVal = (char *)data->data;
+        retVal = (char *) data->data;
         data->data = NULL;
     }
 
@@ -151,14 +151,14 @@ char *simpleProtectEncrypt(const ProtectSecret *secret, const char *dataToProtec
     //
     char *retVal = NULL;
     pcData in;
-    in.data = (unsigned char *)dataToProtect;
-    in.length = (uint32_t)strlen(dataToProtect);
+    in.data = (unsigned char *) dataToProtect;
+    in.length = (uint32_t) strlen(dataToProtect);
     pcData *encr = protectConfigData(&in, secret->key);
 
     if (encr != NULL)
     {
         // move from 'encr' to 'retVal'
-        retVal = (char *)encr->data;
+        retVal = (char *) encr->data;
         encr->data = NULL;
     }
 
@@ -198,8 +198,8 @@ ProtectSecret *simpleProtectSecretLoad(const char *keyData, const char *magic)
                 secret = malloc(sizeof(ProtectSecret));
                 // save as our return object
                 //
-                secret->key = (pcData *)malloc(sizeof(pcData));
-                secret->key->data = (unsigned char *)key;
+                secret->key = (pcData *) malloc(sizeof(pcData));
+                secret->key->data = (unsigned char *) key;
                 secret->key->length = keyLen;
             }
             free(decoded);
@@ -290,12 +290,13 @@ static bool writeNamespaceKey(const char *namespace, const char *identifier, pcD
         // obfuscate our key.  for simplicity, we use a hard-coded obfuscation seed
         //
         uint32_t obLen = 0;
-        char *ob1 = obfuscate(OBFUSCATE_KEY, (uint32_t)strlen(OBFUSCATE_KEY), (const char *)key->data, key->length, &obLen);
+        char *ob1 =
+            obfuscate(OBFUSCATE_KEY, (uint32_t) strlen(OBFUSCATE_KEY), (const char *) key->data, key->length, &obLen);
         if (ob1 != NULL)
         {
             // base64 encode the key so we can save it in JSON
             //
-            encodedKey = icEncodeBase64((uint8_t *)ob1, (uint16_t)obLen);
+            encodedKey = icEncodeBase64((uint8_t *) ob1, (uint16_t) obLen);
             free(ob1);
         }
     }
@@ -339,16 +340,16 @@ ProtectSecret *simpleProtectGetSecretFromKeyring(char *keyring, char *name, char
     ProtectSecret *secret = NULL;
     scoped_generic char *encoded = NULL;
 
-    //load the secret key from json file
+    // load the secret key from json file
     scoped_generic char *data = readFileContents(keyring);
 
     if (data != NULL)
     {
-        //parse the key information from json format
+        // parse the key information from json format
         encoded = loadKeyFromKeyring(data, name);
     }
 
-    //de-obfuscate the key so it can be used for decryption.
+    // de-obfuscate the key so it can be used for decryption.
     secret = simpleProtectSecretLoad(encoded, magic);
 
     return secret;

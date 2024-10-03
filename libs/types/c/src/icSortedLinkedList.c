@@ -54,7 +54,7 @@
  */
 icSortedLinkedList *sortedLinkedListCreate()
 {
-   return (icSortedLinkedList *)linkedListCreate();
+    return (icSortedLinkedList *) linkedListCreate();
 }
 
 /*
@@ -130,5 +130,3 @@ bool sortedLinkedListAdd(icSortedLinkedList *list, void *item, linkedListSortCom
     //
     return linkedListAppend(list, item);
 }
-
-

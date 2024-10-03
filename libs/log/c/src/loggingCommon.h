@@ -25,10 +25,10 @@
 #ifndef ZILKER_LOGGINGCOMMON_H
 #define ZILKER_LOGGINGCOMMON_H
 
-#include <stdbool.h>
 #include <icLog/logging.h>
+#include <stdbool.h>
 
 bool shouldLogMessage(logPriority priority);
 
 
-#endif //ZILKER_LOGGINGCOMMON_H
+#endif // ZILKER_LOGGINGCOMMON_H

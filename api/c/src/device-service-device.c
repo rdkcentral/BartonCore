@@ -57,22 +57,22 @@ b_device_service_device_set_property(GObject *object, guint property_id, const G
     {
         case B_DEVICE_SERVICE_DEVICE_PROP_UUID:
             g_free(self->uuid);
-            self->uuid = g_value_dup_string (value);
+            self->uuid = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS:
             g_free(self->deviceClass);
-            self->deviceClass = g_value_dup_string (value);
+            self->deviceClass = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION:
-            self->deviceClassVersion = g_value_get_uint (value);
+            self->deviceClassVersion = g_value_get_uint(value);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_URI:
             g_free(self->uri);
-            self->uri = g_value_dup_string (value);
+            self->uri = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER:
             g_free(self->managingDeviceDriver);
-            self->managingDeviceDriver = g_value_dup_string (value);
+            self->managingDeviceDriver = g_value_dup_string(value);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS:
             g_list_free_full(self->endpoints, g_object_unref);
@@ -87,7 +87,7 @@ b_device_service_device_set_property(GObject *object, guint property_id, const G
             self->metadata = g_list_copy_deep(g_value_get_pointer(value), glistGobjectDataDeepCopy, NULL);
             break;
         default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
             break;
     }
 }
@@ -99,19 +99,19 @@ static void b_device_service_device_get_property(GObject *object, guint property
     switch (property_id)
     {
         case B_DEVICE_SERVICE_DEVICE_PROP_UUID:
-            g_value_set_string (value, self->uuid);
+            g_value_set_string(value, self->uuid);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS:
-            g_value_set_string (value, self->deviceClass);
+            g_value_set_string(value, self->deviceClass);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION:
-            g_value_set_uint (value, self->deviceClassVersion);
+            g_value_set_uint(value, self->deviceClassVersion);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_URI:
-            g_value_set_string (value, self->uri);
+            g_value_set_string(value, self->uri);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER:
-            g_value_set_string (value, self->managingDeviceDriver);
+            g_value_set_string(value, self->managingDeviceDriver);
             break;
         case B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS:
             g_value_set_pointer(value, g_list_copy_deep(self->endpoints, glistGobjectDataDeepCopy, NULL));
@@ -123,7 +123,7 @@ static void b_device_service_device_get_property(GObject *object, guint property
             g_value_set_pointer(value, g_list_copy_deep(self->metadata, glistGobjectDataDeepCopy, NULL));
             break;
         default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
             break;
     }
 }
@@ -145,7 +145,7 @@ static void b_device_service_device_finalize(GObject *object)
 
 static void b_device_service_device_class_init(BDeviceServiceDeviceClass *klass)
 {
-    GObjectClass *object_class = G_OBJECT_CLASS (klass);
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
     object_class->set_property = b_device_service_device_set_property;
     object_class->get_property = b_device_service_device_get_property;

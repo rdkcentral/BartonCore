@@ -39,4 +39,4 @@ ZigbeeCluster *diagnosticsClusterCreate(const DiagnosticsClusterCallbacks *callb
 bool diagnosticsClusterGetLastMessageLqi(uint64_t eui64, uint8_t endpointId, uint8_t *lqi);
 bool diagnosticsClusterGetLastMessageRssi(uint64_t eui64, uint8_t endpointId, int8_t *rssi);
 
-#endif //ZILKER_DIAGNOSTICSCLUSTER_H
+#endif // ZILKER_DIAGNOSTICSCLUSTER_H

@@ -24,14 +24,14 @@
  * Created by Thomas Lea on 8/13/15.
  */
 
+#include <curl/curl.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <regex.h>
 #include <stdlib.h>
 #include <string.h>
-#include <regex.h>
-#include <unistd.h>
-#include <curl/curl.h>
-#include <pthread.h>
-#include <inttypes.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <icLog/logging.h>
 #include <icTypes/icStringHashMap.h>
@@ -48,7 +48,7 @@
 #include <icUtil/array.h>
 #include <urlHelper/properties.h>
 
-#define LOG_TAG "urlHelper"
+#define LOG_TAG                  "urlHelper"
 
 #define CONNECT_TIMEOUT          15
 #define CELLULAR_CONNECT_TIMEOUT 30
@@ -57,14 +57,14 @@
  * 118 is the cURL default
  * @ref https://curl.haxx.se/mail/lib-2019-04/0040.html
  */
-#define DEFAULT_CONN_IDLE_SECS  118
+#define DEFAULT_CONN_IDLE_SECS   118
 
 pthread_mutex_t cancelMtx;
 icStringHashMap *cancelUrls;
 
 pthread_once_t initOnce = PTHREAD_ONCE_INIT;
 
-#define DEFAULT_LOW_BYTES_PER_SEC 150
+#define DEFAULT_LOW_BYTES_PER_SEC   150
 
 /*
  * 1 TLS record is 16k, and cURL will accept no less than 16k.
@@ -76,21 +76,22 @@ pthread_once_t initOnce = PTHREAD_ONCE_INIT;
 /**
  * Try to set a cURL share option and complain with a warning if it fails
  */
-#define curlSetShareOpt(share, opt, ...)                                        \
-do                                                                              \
-{                                                                               \
-    CURLSHcode err;                                                             \
-    if ((err = curl_share_setopt((share), (opt), (__VA_ARGS__))) != CURLSHE_OK) \
-    {                                                                           \
-        icLogWarn(LOG_TAG, "curl_share_setopt("#share", %s, %s) "               \
-                           "failed at %s(%d): %s",                              \
-                   #opt,                                                        \
-                   #__VA_ARGS__,                                                \
-                   __FILE__,                                                    \
-                   __LINE__,                                                    \
-                   curl_share_strerror(err));                                   \
-    }                                                                           \
-} while (0)
+#define curlSetShareOpt(share, opt, ...)                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        CURLSHcode err;                                                                                                \
+        if ((err = curl_share_setopt((share), (opt), (__VA_ARGS__))) != CURLSHE_OK)                                    \
+        {                                                                                                              \
+            icLogWarn(LOG_TAG,                                                                                         \
+                      "curl_share_setopt(" #share ", %s, %s) "                                                         \
+                      "failed at %s(%d): %s",                                                                          \
+                      #opt,                                                                                            \
+                      #__VA_ARGS__,                                                                                    \
+                      __FILE__,                                                                                        \
+                      __LINE__,                                                                                        \
+                      curl_share_strerror(err));                                                                       \
+        }                                                                                                              \
+    } while (0)
 
 static pthread_mutex_t shareMtx[CURL_LOCK_DATA_LAST];
 static CURLSH *curlShare;
@@ -132,7 +133,7 @@ static void setupCurlShare()
      * whenever the URL_HELPER_PROP_REUSE_ENABLE property is set.
      */
 
-    for(int i = 0; i < ARRAY_LENGTH(shareMtx); i++)
+    for (int i = 0; i < ARRAY_LENGTH(shareMtx); i++)
     {
         mutexInitWithType(&shareMtx[i], PTHREAD_MUTEX_ERRORCHECK);
     }
@@ -143,19 +144,15 @@ static void setupCurlShare()
     bool ok = true;
     if ((rc = curl_share_setopt(curlShare, CURLSHOPT_LOCKFUNC, lockCurlShare)) != CURLSHE_OK)
     {
-        icLogError(LOG_TAG,
-                   "%s: Could not set lock function: '%s'. Sharing disabled.",
-                   __func__,
-                   curl_share_strerror(rc));
+        icLogError(
+            LOG_TAG, "%s: Could not set lock function: '%s'. Sharing disabled.", __func__, curl_share_strerror(rc));
         ok = false;
     }
 
     if ((rc = curl_share_setopt(curlShare, CURLSHOPT_UNLOCKFUNC, unlockCurlShare)) != CURLSHE_OK)
     {
-        icLogError(LOG_TAG,
-                   "%s: Could not set unlock function: '%s'. Sharing disabled.",
-                   __func__,
-                   curl_share_strerror(rc));
+        icLogError(
+            LOG_TAG, "%s: Could not set unlock function: '%s'. Sharing disabled.", __func__, curl_share_strerror(rc));
         ok = false;
     }
 
@@ -214,19 +211,19 @@ typedef struct
 
 typedef struct fileDownloadData
 {
-    FILE* fout;
+    FILE *fout;
     size_t size;
 } fileDownloadData;
 
 /**
-  * Internal function for running the cURL request. When mTLS is enabled,
-  * this will try again without mTLS automatically when the client certificate is unusable.
-  * @param curl The cURL context used by the cURL library
-  * @param reportOnFailure If true then report that a network connectivity issue may have
-  *                        occurred to the system reporting component.
-  * @return the HTTP response status code
-  * @note the return value may be < 200 if no response is received or the connection is interrupted.
-  */
+ * Internal function for running the cURL request. When mTLS is enabled,
+ * this will try again without mTLS automatically when the client certificate is unusable.
+ * @param curl The cURL context used by the cURL library
+ * @param reportOnFailure If true then report that a network connectivity issue may have
+ *                        occurred to the system reporting component.
+ * @return the HTTP response status code
+ * @note the return value may be < 200 if no response is received or the connection is interrupted.
+ */
 static long performRequest(CURL *curl, bool reportOnFailure);
 static inline CURL *urlHelperCreateCurl(void);
 static inline void urlHelperDestroyCurl(CURL *ctx);
@@ -243,11 +240,7 @@ static void urlHelperInit(void)
     setupCurlShare();
 }
 
-static int curlDebugCallback(CURL *handle,
-                             curl_infotype type,
-                             char *data,
-                             size_t size,
-                             void *debugCtx);
+static int curlDebugCallback(CURL *handle, curl_infotype type, char *data, size_t size, void *debugCtx);
 
 static bool initResponseBuffer(ResponseBuffer *buff)
 {
@@ -279,7 +272,7 @@ static size_t writefunc(char *ptr, size_t size, size_t nmemb, void *outstream)
 {
     icLogTrace(LOG_TAG, "%s", __FUNCTION__);
 
-    ResponseBuffer *buff = (ResponseBuffer *)outstream;
+    ResponseBuffer *buff = (ResponseBuffer *) outstream;
     size_t new_len = buff->len + size * nmemb;
     buff->ptr = realloc(buff->ptr, new_len + 1);
     if (buff->ptr == NULL)
@@ -300,13 +293,13 @@ static size_t writefunc(char *ptr, size_t size, size_t nmemb, void *outstream)
  * Core logic for performing HTTP Request. Allows other callers in the library to presupply a curl context, if
  * additional options are needed (such as in the case of multipart)
  */
-static char *urlHelperPerformRequestInternal(CURL* curl,
-                                             const char* url,
-                                             long* httpCode,
-                                             const char* postData,
-                                             icLinkedList* headerStrings,
-                                             const char* username,
-                                             const char* password,
+static char *urlHelperPerformRequestInternal(CURL *curl,
+                                             const char *url,
+                                             long *httpCode,
+                                             const char *postData,
+                                             icLinkedList *headerStrings,
+                                             const char *username,
+                                             const char *password,
                                              uint32_t timeoutSecs,
                                              const mtlsCertInfo *certInfo,
                                              sslVerify verifyFlag,
@@ -340,10 +333,10 @@ static char *urlHelperPerformRequestInternal(CURL* curl,
 
             // apply credentials if supplied
             char *userpass = NULL;
-            if(username != NULL && password != NULL)
+            if (username != NULL && password != NULL)
             {
-                userpass = (char*)malloc(strlen(username) + 1 + strlen(password) + 1);
-                if(userpass == NULL)
+                userpass = (char *) malloc(strlen(username) + 1 + strlen(password) + 1);
+                if (userpass == NULL)
                 {
                     icLogError(LOG_TAG, "Failed to allocate userpass");
                     free(buff.ptr);
@@ -363,7 +356,7 @@ static char *urlHelperPerformRequestInternal(CURL* curl,
                 icLinkedListIterator *loop = linkedListIteratorCreate(headerStrings);
                 while (linkedListIteratorHasNext(loop) == true)
                 {
-                    char *string = (char *)linkedListIteratorGetNext(loop);
+                    char *string = (char *) linkedListIteratorGetNext(loop);
                     if (string != NULL)
                     {
                         header = curl_slist_append(header, string);
@@ -387,12 +380,11 @@ static char *urlHelperPerformRequestInternal(CURL* curl,
             result = buff.ptr;
 
             // cleanup
-            if(userpass != NULL)
+            if (userpass != NULL)
             {
                 free(userpass);
             }
         }
-
     }
     return result;
 }
@@ -431,8 +423,10 @@ static long performRequest(CURL *curl, bool reportOnFailure)
                    curlcode,
                    curl_easy_strerror(curlcode));
 
-        if (reportOnFailure) {
-            switch (curlcode) {
+        if (reportOnFailure)
+        {
+            switch (curlcode)
+            {
                 case CURLE_COULDNT_CONNECT:
                 case CURLE_COULDNT_RESOLVE_HOST:
                 case CURLE_COULDNT_RESOLVE_PROXY:
@@ -477,12 +471,12 @@ static long performRequest(CURL *curl, bool reportOnFailure)
  *
  * @returns the body of the response.  Caller frees.
  */
-char* urlHelperExecuteVariableRequest(char* requestUrl,
-                                      icStringHashMap* variableMap,
-                                      long* httpCode,
-                                      char* postData,
-                                      const char* username,
-                                      const char* password,
+char *urlHelperExecuteVariableRequest(char *requestUrl,
+                                      icStringHashMap *variableMap,
+                                      long *httpCode,
+                                      char *postData,
+                                      const char *username,
+                                      const char *password,
                                       uint32_t timeoutSecs,
                                       sslVerify verifyFlag,
                                       bool allowCellular)
@@ -498,7 +492,8 @@ char* urlHelperExecuteVariableRequest(char* requestUrl,
     char *updatedUri = requestUrl;
     char *updatedPostData = postData;
 
-    //for each variable in the variable map, search and replace all occurrences in the requestUri and the postData (if it was provided)
+    // for each variable in the variable map, search and replace all occurrences in the requestUri and the postData (if
+    // it was provided)
     icStringHashMapIterator *iterator = stringHashMapIteratorCreate(variableMap);
     while (stringHashMapIteratorHasNext(iterator))
     {
@@ -507,16 +502,16 @@ char* urlHelperExecuteVariableRequest(char* requestUrl,
         stringHashMapIteratorGetNext(iterator, &key, &value);
 
         char *tmp = stringReplace(updatedUri, key, value);
-        if(updatedUri != requestUrl)
+        if (updatedUri != requestUrl)
         {
             free(updatedUri);
         }
         updatedUri = tmp;
 
-        if(postData != NULL)
+        if (postData != NULL)
         {
             tmp = stringReplace(updatedPostData, key, value);
-            if(updatedPostData != postData)
+            if (updatedPostData != postData)
             {
                 free(updatedPostData);
             }
@@ -525,20 +520,14 @@ char* urlHelperExecuteVariableRequest(char* requestUrl,
     }
     stringHashMapIteratorDestroy(iterator);
 
-    result = urlHelperExecuteRequest(updatedUri,
-                                     httpCode,
-                                     updatedPostData,
-                                     username,
-                                     password,
-                                     timeoutSecs,
-                                     verifyFlag,
-                                     allowCellular);
+    result = urlHelperExecuteRequest(
+        updatedUri, httpCode, updatedPostData, username, password, timeoutSecs, verifyFlag, allowCellular);
 
-    if(updatedUri != requestUrl)
+    if (updatedUri != requestUrl)
     {
         free(updatedUri);
     }
-    if(postData != NULL && updatedPostData != postData)
+    if (postData != NULL && updatedPostData != postData)
     {
         free(updatedPostData);
     }
@@ -563,38 +552,32 @@ char* urlHelperExecuteVariableRequest(char* requestUrl,
  *
  * @returns the body of the response.  Caller frees.
  */
-char* urlHelperExecuteRequest(const char* url,
-                              long* httpCode,
-                              const char* postData,
-                              const char* username,
-                              const char* password,
+char *urlHelperExecuteRequest(const char *url,
+                              long *httpCode,
+                              const char *postData,
+                              const char *username,
+                              const char *password,
                               uint32_t timeoutSecs,
                               sslVerify verifyFlag,
                               bool allowCellular)
 {
-    return urlHelperExecuteRequestHeaders(url,
-                                          httpCode,
-                                          postData,
-                                          NULL,
-                                          username,
-                                          password,
-                                          timeoutSecs,
-                                          verifyFlag,
-                                          allowCellular);
+    return urlHelperExecuteRequestHeaders(
+        url, httpCode, postData, NULL, username, password, timeoutSecs, verifyFlag, allowCellular);
 }
 
 /*
  * same as urlHelperExecuteRequest, but allow for assigning HTTP headers in the request.
  * For ex:  Accept: application/json
  *
- * @param headers - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".  ignored if NULL
+ * @param headers - list of strings that define header values.  ex: "Content-Type: text/xml; charset=utf-8".  ignored if
+ * NULL
  */
-char* urlHelperExecuteRequestHeaders(const char* url,
-                                     long* httpCode,
-                                     const char* postData,
-                                     icLinkedList* headerStrings,
-                                     const char* username,
-                                     const char* password,
+char *urlHelperExecuteRequestHeaders(const char *url,
+                                     long *httpCode,
+                                     const char *postData,
+                                     icLinkedList *headerStrings,
+                                     const char *username,
+                                     const char *password,
                                      uint32_t timeoutSecs,
                                      sslVerify verifyFlag,
                                      bool allowCellular)
@@ -602,50 +585,33 @@ char* urlHelperExecuteRequestHeaders(const char* url,
     icLogTrace(LOG_TAG, "%s", __FUNCTION__);
 
     CURL *ctx = urlHelperCreateCurl();
-    char *result = urlHelperPerformRequestInternal(ctx,
-                                                   url,
-                                                   httpCode,
-                                                   postData,
-                                                   headerStrings,
-                                                   username,
-                                                   password,
-                                                   timeoutSecs,
-                                                   NULL,
-                                                   verifyFlag,
-                                                   allowCellular);
+    char *result = urlHelperPerformRequestInternal(
+        ctx, url, httpCode, postData, headerStrings, username, password, timeoutSecs, NULL, verifyFlag, allowCellular);
     urlHelperDestroyCurl(ctx);
 
     return result;
 }
 
 
-
-char *urlHelperExecuteMTLSRequest(const char* url,
-                                  long* httpCode,
-                                  const char* postData,
-                                  const char* username,
-                                  const char* password,
+char *urlHelperExecuteMTLSRequest(const char *url,
+                                  long *httpCode,
+                                  const char *postData,
+                                  const char *username,
+                                  const char *password,
                                   uint32_t timeoutSecs,
                                   const mtlsCertInfo *certInfo,
                                   bool allowCellular)
 {
-    return urlHelperExecuteMTLSRequestHeaders(url,
-                                              httpCode,
-                                              postData,
-                                              NULL,
-                                              username,
-                                              password,
-                                              timeoutSecs,
-                                              certInfo,
-                                              allowCellular);
+    return urlHelperExecuteMTLSRequestHeaders(
+        url, httpCode, postData, NULL, username, password, timeoutSecs, certInfo, allowCellular);
 }
 
-char *urlHelperExecuteMTLSRequestHeaders(const char* url,
-                                         long* httpCode,
-                                         const char* postData,
-                                         icLinkedList* headerStrings,
-                                         const char* username,
-                                         const char* password,
+char *urlHelperExecuteMTLSRequestHeaders(const char *url,
+                                         long *httpCode,
+                                         const char *postData,
+                                         icLinkedList *headerStrings,
+                                         const char *username,
+                                         const char *password,
                                          uint32_t timeoutSecs,
                                          const mtlsCertInfo *certInfo,
                                          bool allowCellular)
@@ -672,26 +638,18 @@ char *urlHelperExecuteMTLSRequestHeaders(const char* url,
 /*
  * same as urlHelperExecuteMultipartRequestHeaders, but without headers
  */
-char* urlHelperExecuteMultipartRequest(const char* url,
-                                       long* httpCode,
-                                       icLinkedList* plainParts,
-                                       icLinkedList* fileInfo,
-                                       const char* username,
-                                       const char* password,
+char *urlHelperExecuteMultipartRequest(const char *url,
+                                       long *httpCode,
+                                       icLinkedList *plainParts,
+                                       icLinkedList *fileInfo,
+                                       const char *username,
+                                       const char *password,
                                        uint32_t timeoutSecs,
                                        sslVerify verifyFlag,
                                        bool allowCellular)
 {
-    return urlHelperExecuteMultipartRequestHeaders(url,
-                                                   httpCode,
-                                                   plainParts,
-                                                   fileInfo,
-                                                   NULL,
-                                                   username,
-                                                   password,
-                                                   timeoutSecs,
-                                                   verifyFlag,
-                                                   allowCellular);
+    return urlHelperExecuteMultipartRequestHeaders(
+        url, httpCode, plainParts, fileInfo, NULL, username, password, timeoutSecs, verifyFlag, allowCellular);
 }
 
 /*
@@ -701,8 +659,8 @@ char* urlHelperExecuteMultipartRequest(const char* url,
  * @param httpCode          A pointer to the httpCode returned by the request.
  * @param plainParts        A list of MimePartInfo types containing key/value string part information.
  * @param fileInfo          A list of MimeFileInfo types containing file information for local files. Each entry in
-*                           the list will be a separate part in the HTTP request, with the file data being the
-*                           part's body.
+ *                           the list will be a separate part in the HTTP request, with the file data being the
+ *                           part's body.
  * @param headerStrings     A list of header strings for the request
  * @param username          A username to provide the server for authentication
  * @param password          A password to provide the server for authentication
@@ -712,29 +670,29 @@ char* urlHelperExecuteMultipartRequest(const char* url,
  *                          over bband
  * @return The body of the response from the server.
  */
-char* urlHelperExecuteMultipartRequestHeaders(const char* url,
-                                              long* httpCode,
-                                              icLinkedList* plainParts,
-                                              icLinkedList* fileInfo,
-                                              icLinkedList* headerStrings,
-                                              const char* username,
-                                              const char* password,
+char *urlHelperExecuteMultipartRequestHeaders(const char *url,
+                                              long *httpCode,
+                                              icLinkedList *plainParts,
+                                              icLinkedList *fileInfo,
+                                              icLinkedList *headerStrings,
+                                              const char *username,
+                                              const char *password,
                                               uint32_t timeoutSecs,
                                               sslVerify verifyFlag,
                                               bool allowCellular)
 {
     char *result = NULL;
 
-    //We are going to construct the curl context so we can fill it with our multipart data.
+    // We are going to construct the curl context so we can fill it with our multipart data.
     CURL *ctx = urlHelperCreateCurl();
     if (ctx)
     {
-        //Init mime
+        // Init mime
         curl_mime *requestBody = curl_mime_init(ctx);
 
         if (plainParts != NULL)
         {
-            //Iterate over parts and add each one to the mime part
+            // Iterate over parts and add each one to the mime part
             icLinkedListIterator *partIter = linkedListIteratorCreate(plainParts);
             while (linkedListIteratorHasNext(partIter))
             {
@@ -759,13 +717,13 @@ char* urlHelperExecuteMultipartRequestHeaders(const char* url,
 
         if (fileInfo != NULL)
         {
-            //Iterate over the file parts and add each one to the mime part
+            // Iterate over the file parts and add each one to the mime part
             icLinkedListIterator *partIter = linkedListIteratorCreate(fileInfo);
             while (linkedListIteratorHasNext(partIter))
             {
-                MimeFileInfo *file = (MimeFileInfo*) linkedListIteratorGetNext(partIter);
+                MimeFileInfo *file = (MimeFileInfo *) linkedListIteratorGetNext(partIter);
 
-                //Make sure they supplied the bare mimimum information
+                // Make sure they supplied the bare mimimum information
                 if (file->partName != NULL && file->localFilePath != NULL)
                 {
                     curl_mimepart *part = curl_mime_addpart(requestBody);
@@ -777,13 +735,13 @@ char* urlHelperExecuteMultipartRequestHeaders(const char* url,
                         mimeCode = curl_mime_filedata(part, file->localFilePath);
                     }
 
-                    //Add a content-type if it was specified
+                    // Add a content-type if it was specified
                     if (file->contentType != NULL && mimeCode == CURLE_OK)
                     {
                         mimeCode = curl_mime_type(part, file->contentType);
                     }
 
-                    //See if the caller wants to have a custom remote filename
+                    // See if the caller wants to have a custom remote filename
                     if (file->remoteFileName != NULL && mimeCode == CURLE_OK)
                     {
                         mimeCode = curl_mime_filename(part, file->remoteFileName);
@@ -791,7 +749,8 @@ char* urlHelperExecuteMultipartRequestHeaders(const char* url,
 
                     if (mimeCode != CURLE_OK)
                     {
-                        icLogWarn(LOG_TAG, "Can't set MIME part '%s': %s", file->partName, curl_easy_strerror(mimeCode));
+                        icLogWarn(
+                            LOG_TAG, "Can't set MIME part '%s': %s", file->partName, curl_easy_strerror(mimeCode));
                     }
                 }
             }
@@ -800,23 +759,15 @@ char* urlHelperExecuteMultipartRequestHeaders(const char* url,
         }
 
         curlSetopt(ctx, CURLOPT_MIMEPOST, requestBody);
-        //Since multipart can be a large request, setting this bit will cause libcurl to handle exepct: 100 scenarios properly.
+        // Since multipart can be a large request, setting this bit will cause libcurl to handle exepct: 100 scenarios
+        // properly.
         curlSetopt(ctx, CURLOPT_FAILONERROR, 1L);
 
-        //Perform the operation and get the result
-        result = urlHelperPerformRequestInternal(ctx,
-                                                 url,
-                                                 httpCode,
-                                                 NULL,
-                                                 headerStrings,
-                                                 username,
-                                                 password,
-                                                 timeoutSecs,
-                                                 NULL,
-                                                 verifyFlag,
-                                                 allowCellular);
+        // Perform the operation and get the result
+        result = urlHelperPerformRequestInternal(
+            ctx, url, httpCode, NULL, headerStrings, username, password, timeoutSecs, NULL, verifyFlag, allowCellular);
 
-        //Cleanup
+        // Cleanup
         curl_mime_free(requestBody);
         urlHelperDestroyCurl(ctx);
     }
@@ -824,9 +775,9 @@ char* urlHelperExecuteMultipartRequestHeaders(const char* url,
     return result;
 }
 
-static size_t download_func(void* ptr, size_t size, size_t nmemb, void* stream)
+static size_t download_func(void *ptr, size_t size, size_t nmemb, void *stream)
 {
-    fileDownloadData* data = stream;
+    fileDownloadData *data = stream;
     size_t written;
 
     written = fwrite(ptr, size, nmemb, data->fout);
@@ -839,14 +790,14 @@ static size_t download_func(void* ptr, size_t size, size_t nmemb, void* stream)
     return written;
 }
 
-size_t urlHelperDownloadFile(const char* url,
-                             long* httpCode,
-                             const char* username,
-                             const char* password,
+size_t urlHelperDownloadFile(const char *url,
+                             long *httpCode,
+                             const char *username,
+                             const char *password,
                              uint32_t timeoutSecs,
                              sslVerify verifyFlag,
                              bool allowCellular,
-                             const char* pathname)
+                             const char *pathname)
 {
     CURL *curl = urlHelperCreateCurl();
     fileDownloadData data;
@@ -869,10 +820,10 @@ size_t urlHelperDownloadFile(const char* url,
 
             // apply credentials if supplied
             char *userpass = NULL;
-            if(username != NULL && password != NULL)
+            if (username != NULL && password != NULL)
             {
-                userpass = (char*)malloc(strlen(username) + 1 + strlen(password) + 1);
-                if(userpass == NULL)
+                userpass = (char *) malloc(strlen(username) + 1 + strlen(password) + 1);
+                if (userpass == NULL)
                 {
                     icLogError(LOG_TAG, "Failed to allocate userpass");
                     urlHelperDestroyCurl(curl);
@@ -909,23 +860,23 @@ size_t urlHelperDownloadFile(const char* url,
  * @param filename The path and file name to upload
  * @return body of the response
  */
-char* urlHelperUploadFile(const char* url,
+char *urlHelperUploadFile(const char *url,
                           long *httpCode,
-                          const char* username,
-                          const char* password,
+                          const char *username,
+                          const char *password,
                           uint32_t timeoutSecs,
                           sslVerify verifyFlag,
                           bool allowCellular,
-                          const char* fileName)
+                          const char *fileName)
 {
     char *result = NULL;
 
-    //We are going to construct the curl context so we can fill it with our upload file data
+    // We are going to construct the curl context so we can fill it with our upload file data
     CURL *ctx = urlHelperCreateCurl();
     if (ctx)
     {
         // Verify the file
-        if(fileName != NULL)
+        if (fileName != NULL)
         {
             struct stat file_info;
             FILE *file;
@@ -957,7 +908,7 @@ char* urlHelperUploadFile(const char* url,
 
                         curlSetopt(ctx, CURLOPT_FAILONERROR, 1L);
 
-                        //Perform the operation and get the result
+                        // Perform the operation and get the result
                         result = urlHelperPerformRequestInternal(ctx,
                                                                  url,
                                                                  httpCode,
@@ -986,7 +937,7 @@ char* urlHelperUploadFile(const char* url,
                 icLogWarn(LOG_TAG, "cannot stat '%s': %s", fileName, errStr);
             }
         }
-        //Cleanup
+        // Cleanup
         urlHelperDestroyCurl(ctx);
     }
 
@@ -998,8 +949,7 @@ static int onCurlXferInfo(void *userData, curl_off_t dltotal, curl_off_t dlnow, 
     int action = 0;
 
     LOCK_SCOPE(cancelMtx);
-    if (stringHashMapCount(cancelUrls) > 0 &&
-        stringHashMapDelete(cancelUrls, userData, NULL) == true)
+    if (stringHashMapCount(cancelUrls) > 0 && stringHashMapDelete(cancelUrls, userData, NULL) == true)
     {
         /* Any nonzero will abort */
         action = 1;
@@ -1020,11 +970,11 @@ void urlHelperCancel(const char *url)
  */
 void applyUserAgentCurlOptionIfAvailable(CURL *context)
 {
-    //apply userAgent if supplied.
-    //Note: The UserAgent string is set from USER_AGENT_STRING macro from the header file config_url_helper.h
-    //generated from the template file config_url_helper.h.in by the CMakelists.txt
+    // apply userAgent if supplied.
+    // Note: The UserAgent string is set from USER_AGENT_STRING macro from the header file config_url_helper.h
+    // generated from the template file config_url_helper.h.in by the CMakelists.txt
     char *userAgent = USER_AGENT_STRING;
-    if(userAgent != NULL)
+    if (userAgent != NULL)
     {
         curlSetopt(context, CURLOPT_USERAGENT, userAgent);
     }
@@ -1036,8 +986,12 @@ void applyUserAgentCurlOptionIfAvailable(CURL *context)
  * additionally, if the 'verifyFlag' includes VERIFY_HOST or VERIFY_BOTH, then the
  * 'url' will be checked for IP Addresses, and if so remove VERIFY_HOST from the mix
  */
-void applyStandardCurlOptions(CURL *context, const char *url, uint32_t timeoutSecs, const mtlsCertInfo *certInfo,
-                              sslVerify verifyFlag, bool allowCellular)
+void applyStandardCurlOptions(CURL *context,
+                              const char *url,
+                              uint32_t timeoutSecs,
+                              const mtlsCertInfo *certInfo,
+                              sslVerify verifyFlag,
+                              bool allowCellular)
 {
     icLogTrace(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1075,7 +1029,7 @@ void applyStandardCurlOptions(CURL *context, const char *url, uint32_t timeoutSe
     }
 
     /* Prior to 7.62.0, UPLOAD_BUFFERSIZE was 16KiB, and was fixed. */
-#if CURL_AT_LEAST_VERSION(7,62,0)
+#if CURL_AT_LEAST_VERSION(7, 62, 0)
     /*
      * Slow links can cause false "Operation Too Slow" errors if upload buffers
      * are too large.  To avoid this, the upload buffer size is limited to ensure
@@ -1099,33 +1053,33 @@ void applyStandardCurlOptions(CURL *context, const char *url, uint32_t timeoutSe
 
 /* Option did not exist before 7.65.0 */
 #if CURL_AT_LEAST_VERSION(7, 65, 0)
-        /* TODO: allow request to override */
-        curlSetopt(context, CURLOPT_MAXAGE_CONN, DEFAULT_CONN_IDLE_SECS);
+    /* TODO: allow request to override */
+    curlSetopt(context, CURLOPT_MAXAGE_CONN, DEFAULT_CONN_IDLE_SECS);
 #endif
 
-        // follow any redirection (302?)
-        //
-        curlSetopt(context, CURLOPT_FOLLOWLOCATION, 1L);
+    // follow any redirection (302?)
+    //
+    curlSetopt(context, CURLOPT_FOLLOWLOCATION, 1L);
 
-        // bail if there's an error
-        //
-        curlSetopt(context, CURLOPT_FAILONERROR, 1L);
+    // bail if there's an error
+    //
+    curlSetopt(context, CURLOPT_FAILONERROR, 1L);
 
-        // prevent curl from calling SIGABRT if we are trying to communicate with
-        // a device that won't let us negotiate SSL or login properly
-        //
-        curlSetopt(context, CURLOPT_NOSIGNAL, 1);
+    // prevent curl from calling SIGABRT if we are trying to communicate with
+    // a device that won't let us negotiate SSL or login properly
+    //
+    curlSetopt(context, CURLOPT_NOSIGNAL, 1);
 
-        // disable DNS caching
-        //
-        curlSetopt(context, CURLOPT_DNS_CACHE_TIMEOUT, 0);
+    // disable DNS caching
+    //
+    curlSetopt(context, CURLOPT_DNS_CACHE_TIMEOUT, 0);
 
-        if (isIcLogPriorityTrace() == true)
-        {
-            // enable verbose output
-            curlSetopt(context, CURLOPT_VERBOSE, 1L);
-            curlSetopt(context, CURLOPT_DEBUGFUNCTION, curlDebugCallback);
-        }
+    if (isIcLogPriorityTrace() == true)
+    {
+        // enable verbose output
+        curlSetopt(context, CURLOPT_VERBOSE, 1L);
+        curlSetopt(context, CURLOPT_DEBUGFUNCTION, curlDebugCallback);
+    }
     else
     {
         // disable verbose output
@@ -1171,7 +1125,8 @@ static char *urlHelperCreateStringData(const icStringHashMap *keyValuePairs, boo
     {
         CURL *ctx = curl_easy_init();
         icStringBuffer *buffer = stringBufferCreate(0);
-        if(isQueryString) {
+        if (isQueryString)
+        {
             stringBufferAppend(buffer, "?");
         }
         icStringHashMapIterator *iterator = stringHashMapIteratorCreate((icStringHashMap *) keyValuePairs);
@@ -1217,7 +1172,7 @@ static char *urlHelperCreateStringData(const icStringHashMap *keyValuePairs, boo
  */
 char *urlHelperCreateQueryString(const icStringHashMap *keyValuePairs)
 {
-    char *queryString = urlHelperCreateStringData(keyValuePairs,true);
+    char *queryString = urlHelperCreateStringData(keyValuePairs, true);
     return queryString;
 }
 
@@ -1231,7 +1186,7 @@ char *urlHelperCreateQueryString(const icStringHashMap *keyValuePairs)
  */
 char *urlHelperCreateUrlEncodedForm(const icStringHashMap *keyValuePairs)
 {
-    char *formData = urlHelperCreateStringData(keyValuePairs,false);
+    char *formData = urlHelperCreateStringData(keyValuePairs, false);
     return formData;
 }
 
@@ -1285,7 +1240,7 @@ static char *extractHostFromUrl(const char *urlStr)
         len++;
         ptr++;
     }
-    char *retVal = calloc(len+1, sizeof(char));
+    char *retVal = calloc(len + 1, sizeof(char));
     strncpy(retVal, start, len);
     return retVal;
 }
@@ -1381,17 +1336,11 @@ static inline void urlHelperDestroyCurl(CURL *ctx)
     curl_easy_cleanup(ctx);
 }
 
-static const char curlInfoTypes[CURLINFO_END][3] = {
-        "* ", "< ", "> ", "{ ", "} ", "{ ", "} "
-};
+static const char curlInfoTypes[CURLINFO_END][3] = {"* ", "< ", "> ", "{ ", "} ", "{ ", "} "};
 
-static int curlDebugCallback(CURL *handle,
-                             curl_infotype type,
-                             char *data,
-                             size_t size,
-                             void *debugCtx)
+static int curlDebugCallback(CURL *handle, curl_infotype type, char *data, size_t size, void *debugCtx)
 {
-    switch(type)
+    switch (type)
     {
         case CURLINFO_TEXT:
         case CURLINFO_HEADER_IN:
@@ -1407,7 +1356,7 @@ static int curlDebugCallback(CURL *handle,
     return 0;
 }
 
-MimeFileInfo* createMimeFileInfo()
+MimeFileInfo *createMimeFileInfo()
 {
     MimeFileInfo *retVal = (MimeFileInfo *) calloc(1, sizeof(MimeFileInfo));
 
@@ -1483,9 +1432,7 @@ bool appendMimeFileInfoToList(icLinkedList *fileInfoList,
                               const char *localFilePath,
                               const char *contentType)
 {
-    if (fileInfoList == NULL ||
-        partName == NULL ||
-        localFilePath == NULL)
+    if (fileInfoList == NULL || partName == NULL || localFilePath == NULL)
     {
         return false;
     }
@@ -1508,13 +1455,9 @@ bool appendMimeFileInfoToList(icLinkedList *fileInfoList,
  * @param partData A string representation of data to be the body of a part
  * @return true if all the input params were non-NULL, false otherwise
  */
-bool appendMimePartInfoToList(icLinkedList *props,
-                              const char *partName,
-                              const char *partData)
+bool appendMimePartInfoToList(icLinkedList *props, const char *partName, const char *partData)
 {
-    if (props == NULL ||
-        partName == NULL ||
-        partData == NULL)
+    if (props == NULL || partName == NULL || partData == NULL)
     {
         return false;
     }

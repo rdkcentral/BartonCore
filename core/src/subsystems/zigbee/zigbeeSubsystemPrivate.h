@@ -35,9 +35,9 @@ void zigbeeSubsystemHandleZhalStartupEvent(void);
 
 void zigbeeSubsystemDeviceDiscovered(IcDiscoveredDeviceDetails *details);
 
-void zigbeeSubsystemAttributeReportReceived(ReceivedAttributeReport* report);
+void zigbeeSubsystemAttributeReportReceived(ReceivedAttributeReport *report);
 
-void zigbeeSubsystemClusterCommandReceived(ReceivedClusterCommand* command);
+void zigbeeSubsystemClusterCommandReceived(ReceivedClusterCommand *command);
 
 void zigbeeSubsystemDeviceLeft(uint64_t eui64);
 
@@ -75,4 +75,4 @@ bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details, De
  */
 void zigbeeSubsystemAddPrematureClusterCommand(const ReceivedClusterCommand *command);
 
-#endif //FLEXCORE_ZIGBEESUBSYSTEMPRIVATE_H_H
+#endif // FLEXCORE_ZIGBEESUBSYSTEMPRIVATE_H_H

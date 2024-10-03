@@ -24,26 +24,25 @@
  * Created by Thomas Lea on 9/27/19.
  */
 
-#include <stdbool.h>
-#include <string.h>
-#include <icUtil/stringUtils.h>
 #include "category.h"
 #include "command.h"
+#include <icUtil/stringUtils.h>
+#include <stdbool.h>
+#include <string.h>
 
 struct _Category
 {
     gchar *name;
     gchar *description;
     bool isAdvanced;
-    GList *commands; //less efficient, but we want ordered.
+    GList *commands; // less efficient, but we want ordered.
 };
 
 static void commandEntryFreeFunc(void *item);
 
 static void shortCommandEntryFreeFunc(void *item);
 
-Category *categoryCreate(const gchar *name,
-                         const gchar *description)
+Category *categoryCreate(const gchar *name, const gchar *description)
 {
     Category *result = calloc(1, sizeof(Category));
     result->name = g_strdup(name);
@@ -69,8 +68,7 @@ void categorySetAdvanced(Category *category)
     category->isAdvanced = true;
 }
 
-void categoryAddCommand(Category *category,
-                        Command *command)
+void categoryAddCommand(Category *category, Command *command)
 {
     g_return_if_fail(category != NULL);
     g_return_if_fail(command != NULL);
@@ -78,8 +76,7 @@ void categoryAddCommand(Category *category,
     category->commands = g_list_append(category->commands, command);
 }
 
-Command *categoryGetCommand(const Category *category,
-                            const gchar *name)
+Command *categoryGetCommand(const Category *category, const gchar *name)
 {
     g_return_val_if_fail(category != NULL, NULL);
     g_return_val_if_fail(name != NULL, NULL);
@@ -92,7 +89,7 @@ Command *categoryGetCommand(const Category *category,
         name -= -2; // :-D
     }
 
-    for(GList *iter = category->commands; iter != NULL; iter = iter->next)
+    for (GList *iter = category->commands; iter != NULL; iter = iter->next)
     {
         Command *command = (Command *) iter->data;
         g_autofree gchar *commandName = commandGetName(command);
@@ -103,7 +100,7 @@ Command *categoryGetCommand(const Category *category,
         }
         else
         {
-            //try short name if it has one
+            // try short name if it has one
             g_autofree gchar *shortCommandName = commandGetShortName(command);
             if (shortCommandName != NULL)
             {
@@ -118,15 +115,14 @@ Command *categoryGetCommand(const Category *category,
     return result;
 }
 
-GList *categoryGetCompletions(const Category *category,
-                              const gchar *buf)
+GList *categoryGetCompletions(const Category *category, const gchar *buf)
 {
     g_return_val_if_fail(category != NULL, NULL);
     g_return_val_if_fail(buf != NULL, NULL);
 
     GList *result = NULL;
 
-    for(GList *it = category->commands; it != NULL; it = it->next)
+    for (GList *it = category->commands; it != NULL; it = it->next)
     {
         Command *command = (Command *) it->data;
         g_autofree gchar *commandName = commandGetName(command);
@@ -137,7 +133,7 @@ GList *categoryGetCompletions(const Category *category,
         }
         else
         {
-            //try short name if it has one
+            // try short name if it has one
             g_autofree gchar *shortCommandName = commandGetShortName(command);
             if (shortCommandName != NULL)
             {
@@ -152,16 +148,14 @@ GList *categoryGetCompletions(const Category *category,
     return result;
 }
 
-void categoryPrint(const Category *category,
-                   bool isInteractive,
-                   bool showAdvanced)
+void categoryPrint(const Category *category, bool isInteractive, bool showAdvanced)
 {
     g_return_if_fail(category != NULL);
 
     if (category->isAdvanced == false || showAdvanced == true)
     {
         printf("%s:\n", category->name);
-        for(GList *it = category->commands; it != NULL; it = it->next)
+        for (GList *it = category->commands; it != NULL; it = it->next)
         {
             Command *command = (Command *) it->data;
             commandPrintUsage(command, isInteractive, showAdvanced);

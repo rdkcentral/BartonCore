@@ -24,13 +24,13 @@
  * Created by Thomas Lea on 4/2/21.
  */
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <icLog/logging.h>
-#include <memory.h>
-#include <icUtil/stringUtils.h>
 #include <icTime/timeUtils.h>
+#include <icUtil/stringUtils.h>
+#include <memory.h>
+#include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
 
@@ -49,7 +49,7 @@ typedef struct
     void *callbackContext;
 } XbbCluster;
 
-static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand* command);
+static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *command);
 
 ZigbeeCluster *xbbClusterCreate(const XbbClusterCallbacks *callbacks, void *callbackContext)
 {
@@ -68,7 +68,7 @@ void xbbClusterSetBatteryType(const ZigbeeCluster *cluster, XbbBatteryType batte
 {
     icLogDebug(LOG_TAG, "%s: setting type to %d", __func__, batteryType);
 
-    XbbCluster *xbbCluster = (XbbCluster *)cluster;
+    XbbCluster *xbbCluster = (XbbCluster *) cluster;
     if (xbbCluster != NULL)
     {
         xbbCluster->batteryType = batteryType;
@@ -85,13 +85,9 @@ bool xbbClusterGetStatus(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t e
     }
 
     uint64_t value = 0;
-    if (zigbeeSubsystemReadNumberMfgSpecific(eui64,
-                                             1,
-                                             XBB_CLUSTER_ID,
-                                             COMCAST_MFG_ID,
-                                             true,
-                                             XBB_CLUSTER_STATUS_ATTRIBUTE_ID,
-                                             &value) == 0 && value <= UINT16_MAX)
+    if (zigbeeSubsystemReadNumberMfgSpecific(
+            eui64, 1, XBB_CLUSTER_ID, COMCAST_MFG_ID, true, XBB_CLUSTER_STATUS_ATTRIBUTE_ID, &value) == 0 &&
+        value <= UINT16_MAX)
     {
         *status = (uint16_t) value;
         result = true;
@@ -100,7 +96,7 @@ bool xbbClusterGetStatus(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t e
     return result;
 }
 
-static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand* command)
+static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *command)
 {
     bool result = true;
 
@@ -108,21 +104,17 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand* com
 
     XbbCluster *xbbCluster = (XbbCluster *) ctx;
 
-    if (command->mfgSpecific &&
-        command->mfgCode == COMCAST_MFG_ID &&
-        command->clusterId == XBB_CLUSTER_ID &&
+    if (command->mfgSpecific && command->mfgCode == COMCAST_MFG_ID && command->clusterId == XBB_CLUSTER_ID &&
         command->commandId == XBB_CLUSTER_STATUS_COMMAND_ID)
     {
         sbZigbeeIOContext *zio = zigbeeIOInit(command->commandData, command->commandDataLen, ZIO_READ);
-        zigbeeIOGetUint16(zio); //unused cluster revision
+        zigbeeIOGetUint16(zio); // unused cluster revision
         uint16_t status = zigbeeIOGetUint16(zio);
 
         if (xbbCluster->callbacks->xbbStatusChanged != NULL)
         {
-            xbbCluster->callbacks->xbbStatusChanged(xbbCluster->callbackContext,
-                                                    command->eui64,
-                                                    command->sourceEndpoint,
-                                                    status);
+            xbbCluster->callbacks->xbbStatusChanged(
+                xbbCluster->callbackContext, command->eui64, command->sourceEndpoint, status);
         }
     }
     else
@@ -134,4 +126,4 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand* com
     return result;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

@@ -56,9 +56,7 @@
  * @param inputLen - length of the data to obfuscate
  * @param outputLen - length of the returned buffer.
  */
-char *obfuscate(const char *passphrase, uint32_t passLen,
-                const char *input, uint32_t inputLen,
-                uint32_t *outputLen);
+char *obfuscate(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen);
 
 /*
  * given an obfuscated buffer, extract and return the original value.
@@ -73,8 +71,6 @@ char *obfuscate(const char *passphrase, uint32_t passLen,
  * @param inputLen - length of the data to unobfuscate
  * @param outputLen - length of the returned buffer.
  */
-char *unobfuscate(const char *passphrase, uint32_t passLen,
-                  const char *input, uint32_t inputLen,
-                  uint32_t *outputLen);
+char *unobfuscate(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen);
 
 #endif // FLEXCORE_OBFUSCATION_H

@@ -27,10 +27,10 @@
 #ifndef FLEXCORE_DEVICEDESCRIPTORS_H
 #define FLEXCORE_DEVICEDESCRIPTORS_H
 
-#include <libxml/parser.h>
-#include <icTypes/icLinkedList.h>
-#include <icTypes/icHashMap.h>
 #include <deviceDescriptor.h>
+#include <icTypes/icHashMap.h>
+#include <icTypes/icLinkedList.h>
+#include <libxml/parser.h>
 
 /*
  * Initialize the library and provide the path to where the device descriptor files will be located.
@@ -45,10 +45,10 @@ void deviceDescriptorsCleanup();
 /*
  * Retrieve the matching DeviceDescriptor for the provided input or NULL if a matching one doesnt exist.
  */
-DeviceDescriptor* deviceDescriptorsGet(const char *manufacturer,
-                                      const char *model,
-                                      const char *hardwareVersion,
-                                      const char *firmwareVersion);
+DeviceDescriptor *deviceDescriptorsGet(const char *manufacturer,
+                                       const char *model,
+                                       const char *hardwareVersion,
+                                       const char *firmwareVersion);
 
 /*
  * Retrieve the currently configured allowlist path.
@@ -80,4 +80,4 @@ bool checkAllowListValid(const char *allowListPath);
  */
 bool checkDenyListValid(const char *denyListPath);
 
-#endif //FLEXCORE_DEVICEDESCRIPTORS_H
+#endif // FLEXCORE_DEVICEDESCRIPTORS_H

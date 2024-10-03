@@ -28,8 +28,8 @@
 
 #include "MatterDeviceDriver.h"
 #include "clusters/ComcastChime.h"
-#include "clusters/WifiNetworkDiagnostics.h"
 #include "clusters/LevelControl.h"
+#include "clusters/WifiNetworkDiagnostics.h"
 #include "lib/core/DataModelTypes.h"
 
 extern "C" {
@@ -52,38 +52,37 @@ namespace zilker
         std::vector<MatterCluster *> GetClustersToSubscribeTo(const std::string &deviceId) override;
 
         void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                             const std::string &deviceId,
-                             chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle) override;
+                               const std::string &deviceId,
+                               chip::Messaging::ExchangeManager &exchangeMgr,
+                               const chip::SessionHandle &sessionHandle) override;
 
         void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                      const std::string &deviceId,
-                                      icInitialResourceValues *initialResourceValues,
-                                      chip::Messaging::ExchangeManager &exchangeMgr,
-                                      const chip::SessionHandle &sessionHandle) override;
+                                        const std::string &deviceId,
+                                        icInitialResourceValues *initialResourceValues,
+                                        chip::Messaging::ExchangeManager &exchangeMgr,
+                                        const chip::SessionHandle &sessionHandle) override;
         bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues) override;
 
         void ExecuteResource(std::forward_list<std::promise<bool>> &promises,
-                           const std::string &deviceId,
-                           icDeviceResource *resource,
-                           const char *arg,
-                           char **response,
-                           chip::Messaging::ExchangeManager &exchangeMgr,
-                           const chip::SessionHandle &sessionHandle) override;
+                             const std::string &deviceId,
+                             icDeviceResource *resource,
+                             const char *arg,
+                             char **response,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle) override;
 
         bool WriteResource(std::forward_list<std::promise<bool>> &promises,
-                         const std::string &deviceId,
-                         icDeviceResource *resource,
-                         const char *previousValue,
-                         const char *newValue,
-                         chip::Messaging::ExchangeManager &exchangeMgr,
-                         const chip::SessionHandle &sessionHandle) override;
+                           const std::string &deviceId,
+                           icDeviceResource *resource,
+                           const char *previousValue,
+                           const char *newValue,
+                           chip::Messaging::ExchangeManager &exchangeMgr,
+                           const chip::SessionHandle &sessionHandle) override;
 
     private:
         static bool registeredWithFactory;
 
-        bool shouldPlaySound(icDeviceResource *resource,
-                             cJSON *json);
+        bool shouldPlaySound(icDeviceResource *resource, cJSON *json);
 
         static uint8_t getLinkScore(int8_t rssi);
 
@@ -92,48 +91,47 @@ namespace zilker
 
         class ChimeClusterEventHandler : public ComcastChime::EventHandler
         {
-            public:
-                void CommandCompleted(void *context, bool success) override
-                {
-                    deviceDriver->OnDeviceWorkCompleted(context, success);
-                };
+        public:
+            void CommandCompleted(void *context, bool success) override
+            {
+                deviceDriver->OnDeviceWorkCompleted(context, success);
+            };
 
-                void AudioAssetsChanged(const std::string &deviceUuid,
-                                        std::unique_ptr<std::string> assets,
-                                        void *asyncContext) override;
+            void AudioAssetsChanged(const std::string &deviceUuid,
+                                    std::unique_ptr<std::string> assets,
+                                    void *asyncContext) override;
 
-                void AudioAssetsReadComplete(const std::string &deviceUuid,
-                                             std::unique_ptr<std::string> assets,
-                                             void *asyncContext) override;
+            void AudioAssetsReadComplete(const std::string &deviceUuid,
+                                         std::unique_ptr<std::string> assets,
+                                         void *asyncContext) override;
 
-                MatterChimeDeviceDriver *deviceDriver;
+            MatterChimeDeviceDriver *deviceDriver;
         } chimeClusterEventHandler;
 
         class LevelControlClusterEventHandler : public LevelControl::EventHandler
         {
-            public:
-                void CommandCompleted(void *context, bool success) override
-                {
-                    deviceDriver->OnDeviceWorkCompleted(context, success);
-                };
+        public:
+            void CommandCompleted(void *context, bool success) override
+            {
+                deviceDriver->OnDeviceWorkCompleted(context, success);
+            };
 
-                void CurrentLevelChanged(const std::string &deviceUuid, uint8_t level, void *asyncContext) override;
-                void
-                CurrentLevelReadComplete(const std::string &deviceUuid, uint8_t level, void *asyncContext) override;
-                MatterChimeDeviceDriver *deviceDriver;
+            void CurrentLevelChanged(const std::string &deviceUuid, uint8_t level, void *asyncContext) override;
+            void CurrentLevelReadComplete(const std::string &deviceUuid, uint8_t level, void *asyncContext) override;
+            MatterChimeDeviceDriver *deviceDriver;
         } levelControlClusterEventHandler;
 
         class WifiNetworkDiagnosticsEventHandler : public WifiNetworkDiagnostics::EventHandler
         {
-            public:
-                void CommandCompleted(void *context, bool success) override
-                {
-                    deviceDriver->OnDeviceWorkCompleted(context, success);
-                };
+        public:
+            void CommandCompleted(void *context, bool success) override
+            {
+                deviceDriver->OnDeviceWorkCompleted(context, success);
+            };
 
-                void RssiChanged(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
-                void RssiReadComplete(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
-                MatterChimeDeviceDriver *deviceDriver;
+            void RssiChanged(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
+            void RssiReadComplete(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
+            MatterChimeDeviceDriver *deviceDriver;
         } wifiDiagnosticsClusterEventHandler;
 
         /**

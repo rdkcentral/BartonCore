@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -38,4 +38,4 @@ typedef void (*subsystemInitializedFunc)(const char *subsystemName);
  */
 typedef void (*subsystemDeInitializedFunc)(const char *subsystemName);
 
-#endif //ZILKER_SUBSYSTEMMANAGERCALLBACKS_H
+#endif // ZILKER_SUBSYSTEMMANAGERCALLBACKS_H

@@ -41,7 +41,7 @@
 #include "icTypes/icLinkedListFuncs.h"
 #include "provider/device-service-token-provider.h"
 
-G_DEFINE_QUARK(b-device-service-client-error-quark, b_device_service_client_error)
+G_DEFINE_QUARK(b - device - service - client - error - quark, b_device_service_client_error)
 
 struct _BDeviceServiceClient
 {
@@ -260,7 +260,7 @@ b_device_service_client_get_endpoint_by_id(BDeviceServiceClient *self, const gch
     return convertIcDeviceEndpointToGObject(endpoint);
 }
 
-BDeviceServiceEndpoint * b_device_service_client_get_endpoint_by_uri(BDeviceServiceClient *self, const gchar *uri)
+BDeviceServiceEndpoint *b_device_service_client_get_endpoint_by_uri(BDeviceServiceClient *self, const gchar *uri)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
@@ -294,9 +294,7 @@ GList *b_device_service_client_get_devices_by_device_class(BDeviceServiceClient 
     return devicesGlist;
 }
 
-gchar *b_device_service_client_read_resource(BDeviceServiceClient *self,
-                                             const gchar *uri,
-                                             GError **err)
+gchar *b_device_service_client_read_resource(BDeviceServiceClient *self, const gchar *uri, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
@@ -306,12 +304,9 @@ gchar *b_device_service_client_read_resource(BDeviceServiceClient *self,
     scoped_icDeviceResource *resource = deviceServiceGetResourceByUri(uri);
     if (resource != NULL)
     {
-        if ((resource->mode & RESOURCE_MODE_READABLE) == 0) //this resource is not readable
+        if ((resource->mode & RESOURCE_MODE_READABLE) == 0) // this resource is not readable
         {
-            g_set_error_literal(err,
-                                B_DEVICE_SERVICE_CLIENT_ERROR,
-                                RESOURCE_NOT_READABLE,
-                                "Resource is not readable");
+            g_set_error_literal(err, B_DEVICE_SERVICE_CLIENT_ERROR, RESOURCE_NOT_READABLE, "Resource is not readable");
         }
         else
         {
@@ -545,18 +540,16 @@ GList *b_device_service_client_zigbee_energy_scan(BDeviceServiceClient *self,
     GList *retVal = NULL;
 
     guint8 numChannels = g_list_length(channels);
-    uint8_t *channelArray = (uint8_t *)malloc(numChannels * sizeof(uint8_t));
+    uint8_t *channelArray = (uint8_t *) malloc(numChannels * sizeof(uint8_t));
     int i = 0;
     for (GList *iter = channels; iter != NULL; iter = g_list_next(iter))
     {
         guint8 channel = GPOINTER_TO_UINT(iter->data);
-        channelArray[i++] = (uint8_t)channel;
+        channelArray[i++] = (uint8_t) channel;
     }
 
-    icLinkedList *energyScanResults = zigbeeSubsystemPerformEnergyScan(channelArray,
-                                                                       numChannels,
-                                                                       maxScanDuration,
-                                                                       scanCount);
+    icLinkedList *energyScanResults =
+        zigbeeSubsystemPerformEnergyScan(channelArray, numChannels, maxScanDuration, scanCount);
 
     if (energyScanResults != NULL)
     {

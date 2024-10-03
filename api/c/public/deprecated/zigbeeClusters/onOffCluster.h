@@ -34,10 +34,7 @@
 
 typedef struct
 {
-    void (*onOffStateChanged)(uint64_t eui64,
-                              uint8_t endpointId,
-                              bool isOn,
-                              const void *ctx);
+    void (*onOffStateChanged)(uint64_t eui64, uint8_t endpointId, bool isOn, const void *ctx);
 } OnOffClusterCallbacks;
 
 
@@ -55,4 +52,4 @@ bool onOffClusterSetOn(uint64_t eui64, uint8_t endpointId, bool isOn);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_ONOFFCLUSTER_H
+#endif // ZILKER_ONOFFCLUSTER_H

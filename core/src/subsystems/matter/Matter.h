@@ -63,7 +63,6 @@ namespace zilker
     class Matter : public chip::Credentials::DeviceAttestationDelegate
     {
     public:
-
         static Matter &GetInstance()
         {
             static Matter instance;
@@ -92,7 +91,7 @@ namespace zilker
 
         static CHIP_ERROR ParseSetupPayload(const std::string &codeString, chip::SetupPayload &payload);
 
-        //TODO : yuck, we shouldnt hand this out publicly
+        // TODO : yuck, we shouldnt hand this out publicly
         chip::Controller::DeviceCommissioner &GetCommissioner() { return *commissionerController; }
 
         chip::NodeId GetNodeId() { return myNodeId; }
@@ -109,7 +108,8 @@ namespace zilker
          * @note This is a potentially long-running operation.
          * @note This method is NOT thread-safe.
          *
-         * @return true when a new token was successfully fetched and registered with our operational credentials issuer.
+         * @return true when a new token was successfully fetched and registered with our operational credentials
+         * issuer.
          */
         bool PrimeNewAuthorizationToken();
 
@@ -120,9 +120,11 @@ namespace zilker
          * Only used in development mode. SDK follows standard procedure in production mode.
          * Only called on attestation failure.
          */
-        void OnDeviceAttestationCompleted(Controller::DeviceCommissioner * deviceCommissioner, DeviceProxy * device,
-                                              const chip::Credentials::DeviceAttestationVerifier::AttestationDeviceInfo & info,
-                                              chip::Credentials::AttestationVerificationResult attestationResult) override;
+        void
+        OnDeviceAttestationCompleted(Controller::DeviceCommissioner *deviceCommissioner,
+                                     DeviceProxy *device,
+                                     const chip::Credentials::DeviceAttestationVerifier::AttestationDeviceInfo &info,
+                                     chip::Credentials::AttestationVerificationResult attestationResult) override;
         ////////////// DeviceAttestationDelegate overrides ////////////////////
 
         /**
@@ -145,7 +147,7 @@ namespace zilker
             return tmp.str();
         }
 
-        CHIP_ERROR AccessControlDump(const chip::Access::AccessControl::Entry & entry);
+        CHIP_ERROR AccessControlDump(const chip::Access::AccessControl::Entry &entry);
 
         /**
          * @brief Get the endpoint id for "this" node that hosts utility servers (Basic Information, OTA provider, etc)
@@ -194,7 +196,8 @@ namespace zilker
 
         Matter::OperationalEnvironment GetOperationalEnvironment(std::string env);
 
-        Controller::CertifierOperationalCredentialsIssuer::ApiEnv GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv);
+        Controller::CertifierOperationalCredentialsIssuer::ApiEnv
+        GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv);
 
         const chip::Credentials::AttestationTrustStore &GetAttestationTrustStore()
         {
@@ -242,7 +245,11 @@ namespace zilker
          * @return CHP_NO_ERROR, or an SDK error (e.g., bad certificate data).
          * @note idxOut is undefined when an error is indicated.
          */
-        CHIP_ERROR GetFabricIndex(FabricTable *fabricTable, bool mutliControllerAllowed, ByteSpan rCA, ByteSpan NOC, FabricIndex &idxOut);
+        CHIP_ERROR GetFabricIndex(FabricTable *fabricTable,
+                                  bool mutliControllerAllowed,
+                                  ByteSpan rCA,
+                                  ByteSpan NOC,
+                                  FabricIndex &idxOut);
 
         /**
          * @brief Idemptotently set the single epoch Identity Protection Key
@@ -255,9 +262,9 @@ namespace zilker
 
         void SetOperationalCredsIssuerApiEnv();
 
-        std::thread *stackThread{};
+        std::thread *stackThread {};
         chip::NodeId myNodeId = kUndefinedNodeId;
-        chip::FabricId myFabricId{};
+        chip::FabricId myFabricId {};
         chip::FabricIndex myFabricIndex = kUndefinedFabricIndex;
         // defined by zilker.zap.
         static constexpr chip::EndpointId localEndpointId = 0;
@@ -278,8 +285,8 @@ namespace zilker
         DeviceInfoProviderImpl deviceInfoProvider;
         chip::Credentials::GroupDataProviderImpl groupDataProvider;
         chip::app::DefaultAttributePersistenceProvider attributePersistenceProvider;
-        char *wifiSsid{};
-        char *wifiPass{};
+        char *wifiSsid {};
+        char *wifiPass {};
 
         chip::app::DefaultAclStorage aclStorage;
 

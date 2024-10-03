@@ -52,8 +52,7 @@ namespace zilker
                                chip::Messaging::ExchangeManager &exchangeMgr,
                                const chip::SessionHandle &sessionHandle)
     {
-        auto commandSender =
-            new chip::app::CommandSender(this, &exchangeMgr, true);
+        auto commandSender = new chip::app::CommandSender(this, &exchangeMgr, true);
         chip::app::CommandPathParams commandPath(endpointId,
                                                  0, /* group id - not used */
                                                  CHIME_CLUSTER_ID,
@@ -75,8 +74,7 @@ namespace zilker
     {
         using namespace chip::app::Clusters::Chime::Commands;
 
-        auto commandSender =
-            new chip::app::CommandSender(this, &exchangeMgr, true);
+        auto commandSender = new chip::app::CommandSender(this, &exchangeMgr, true);
         chip::app::CommandPathParams commandPath(endpointId,
                                                  0, /* group id - not used */
                                                  CHIME_CLUSTER_ID,
@@ -136,9 +134,8 @@ namespace zilker
         using namespace chip::app::Clusters::Chime;
         using TypeInfo = Attributes::AudioAssets::TypeInfo;
 
-        chip::app::ConcreteAttributePath path(endpointId,
-                                              chip::app::Clusters::Chime::Id,
-                                              chip::app::Clusters::Chime::Attributes::AudioAssets::Id);
+        chip::app::ConcreteAttributePath path(
+            endpointId, chip::app::Clusters::Chime::Id, chip::app::Clusters::Chime::Attributes::AudioAssets::Id);
         {
             TypeInfo::DecodableType value;
             error = cache->Get<TypeInfo>(path, value);

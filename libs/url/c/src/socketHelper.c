@@ -27,16 +27,16 @@
 // Helper functions for working with sockets.
 //
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <string.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <inttypes.h>
-#include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
@@ -64,8 +64,8 @@
  *          of socketHelperErrors corresponding to where the errors occurred.
  * @see socketHelperError
  */
- //TODO: Provide a better configuration interface for this is the need arises. Maybe separate functions or some kind
- // of bitmask input?
+// TODO: Provide a better configuration interface for this is the need arises. Maybe separate functions or some kind
+//  of bitmask input?
 int socketHelperConfigure(int socketFd, const char *interface, bool useCell, bool disableSigPipe)
 {
     if (socketFd < 0)
@@ -86,7 +86,8 @@ int socketHelperConfigure(int socketFd, const char *interface, bool useCell, boo
         if (setsockopt(socketFd, SOL_SOCKET, SO_BINDTODEVICE, interface, strlen(interface) + 1) != 0)
         {
             AUTO_CLEAN(free_generic__auto) char *errStr = strerrorSafe(errno);
-            icLogError(LOG_TAG, "%s: could not set SO_BINDTODEVICE to %s: [%d][%s]", __FUNCTION__, interface, errno, errStr);
+            icLogError(
+                LOG_TAG, "%s: could not set SO_BINDTODEVICE to %s: [%d][%s]", __FUNCTION__, interface, errno, errStr);
 
             retVal |= SOCKET_HELPER_ERROR_CONF_SO_BINDTODEVICE;
         }
@@ -158,8 +159,13 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
     if (getaddrinfo(hostname, port_str, &hints, &addr_res) != 0)
     {
         AUTO_CLEAN(free_generic__auto) char *errStr = strerrorSafe(errno);
-        icLogError(LOG_TAG, "%s: Could not get address info for provided host/port %s:%"PRIu16" [%d][%s]",
-                    __FUNCTION__, hostname, port, errno, errStr);
+        icLogError(LOG_TAG,
+                   "%s: Could not get address info for provided host/port %s:%" PRIu16 " [%d][%s]",
+                   __FUNCTION__,
+                   hostname,
+                   port,
+                   errno,
+                   errStr);
 
         return SOCKET_HELPER_ERROR_HOSTNAME_TRANSLATION;
     }
@@ -170,7 +176,12 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
         {
             char ipAddr[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &(addr_ptr->ai_addr), ipAddr, INET_ADDRSTRLEN);
-            icLogTrace(LOG_TAG, "%s: Performing socket connection to %s (%s) at port %"PRIu16, __FUNCTION__, hostname, ipAddr, port);
+            icLogTrace(LOG_TAG,
+                       "%s: Performing socket connection to %s (%s) at port %" PRIu16,
+                       __FUNCTION__,
+                       hostname,
+                       ipAddr,
+                       port);
         }
 
         retVal = socketHelperTryConnectAddr(socketFd, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
@@ -179,15 +190,20 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
     freeaddrinfo(addr_res);
 #else
     // Do not free hostent as it may point to static data.
-    struct hostent* host;
+    struct hostent *host;
     struct sockaddr_in sin;
 
     host = gethostbyname(hostname);
     if (host == NULL || (host->h_addr_list[0] == NULL))
     {
         AUTO_CLEAN(free_generic__auto) char *errStr = strerrorSafe(errno);
-        icLogError(LOG_TAG, "%s: Could not get address info for provided host/port %s:%"PRIu16" [%d][%s]",
-                   __FUNCTION__, hostname, port, errno, errStr);
+        icLogError(LOG_TAG,
+                   "%s: Could not get address info for provided host/port %s:%" PRIu16 " [%d][%s]",
+                   __FUNCTION__,
+                   hostname,
+                   port,
+                   errno,
+                   errStr);
 
         return SOCKET_HELPER_ERROR_HOSTNAME_TRANSLATION;
     }
@@ -201,10 +217,15 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
     {
         char ipAddr[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(sin.sin_addr), ipAddr, INET_ADDRSTRLEN);
-        icLogTrace(LOG_TAG, "%s: Performing socket connection to %s (%s) at port %"PRIu16, __FUNCTION__, hostname, ipAddr, port);
+        icLogTrace(LOG_TAG,
+                   "%s: Performing socket connection to %s (%s) at port %" PRIu16,
+                   __FUNCTION__,
+                   hostname,
+                   ipAddr,
+                   port);
     }
 
-    retVal = socketHelperTryConnectAddr(socketFd, (struct sockaddr*) &sin, sizeof(struct sockaddr_in));
+    retVal = socketHelperTryConnectAddr(socketFd, (struct sockaddr *) &sin, sizeof(struct sockaddr_in));
 #endif
 
     return retVal;
@@ -222,7 +243,7 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
  *         socketHelperError corresponding to where the error occurred.
  * @see socketHelperError
  */
-socketHelperError socketHelperTryConnectAddr(int socketFd, const struct sockaddr* addr, socklen_t addrlen)
+socketHelperError socketHelperTryConnectAddr(int socketFd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (socketFd < 0)
     {

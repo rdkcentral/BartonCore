@@ -33,9 +33,9 @@
 
 typedef enum
 {
-    ORIGINAL_FILE,     // use original file
-    BACKUP_FILE,       // use .bak file
-    FILE_NOT_PRESENT   // need to create the file (a readable version is not present)
+    ORIGINAL_FILE,   // use original file
+    BACKUP_FILE,     // use .bak file
+    FILE_NOT_PRESENT // need to create the file (a readable version is not present)
 } fileToRead;
 
 typedef enum
@@ -73,4 +73,4 @@ fileToRead chooseFileToRead(const char *originalFile, const char *backupFile, co
  */
 fileToRead chooseValidFileToRead(const char *originalFile, const char *backupFile, configFileFormat fileFormat);
 
-#endif //IC_BACKUPUTILS_H
+#endif // IC_BACKUPUTILS_H

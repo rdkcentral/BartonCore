@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -23,17 +23,17 @@
 // Created by mdeleo739 on 6/10/19.
 //
 
+#include <icLog/logging.h>
+#include <serial/icSerDesContext.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <icLog/logging.h>
-#include <serial/icSerDesContext.h>
 
 #define LOG_TAG "serDesContext"
 
 icSerDesContext *serDesCreateContext(void)
 {
-    icSerDesContext *context = (icSerDesContext *)calloc(1, sizeof(icSerDesContext));
+    icSerDesContext *context = (icSerDesContext *) calloc(1, sizeof(icSerDesContext));
     context->props = stringHashMapCreate();
     return context;
 }

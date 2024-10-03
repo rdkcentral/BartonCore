@@ -39,10 +39,10 @@
  * Author: jelder380 - 2/21/19.
  *-----------------------------------------------*/
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #include <icConcurrent/repeatingTask.h>
@@ -66,54 +66,52 @@
 #include "zigbeeClusters/pollControlCluster.h"
 #include "zigbeeEventTracker.h"
 
-#define LOG_TAG "zigbeeEventTracker"
+#define LOG_TAG                           "zigbeeEventTracker"
 
 // the min and max Zigbee channels
 //
-#define MIN_ZIGBEE_CHANNEL 11
-#define MAX_ZIGBEE_CHANNEL 25
+#define MIN_ZIGBEE_CHANNEL                11
+#define MAX_ZIGBEE_CHANNEL                25
 
 // defaults for channel energy scans
 //
-#define DEFAULT_NUM_SCAN_PER_CHANNEL        10
-#define DEFAULT_CHANNEL_SCAN_DUR_MS         100     // milliseconds
-#define DEFAULT_SCAN_DELAY_PER_CHANNEL_MS   1000    // milliseconds
-#define DEFAULT_CHANNEL_COLLECT_DELAY_MIN   60      // minutes
+#define DEFAULT_NUM_SCAN_PER_CHANNEL      10
+#define DEFAULT_CHANNEL_SCAN_DUR_MS       100  // milliseconds
+#define DEFAULT_SCAN_DELAY_PER_CHANNEL_MS 1000 // milliseconds
+#define DEFAULT_CHANNEL_COLLECT_DELAY_MIN 60   // minutes
 
 // defaults for collection enabled
 //
-#define DEFAULT_EVENT_COLLECT_ENABLED true
-#define DEFAULT_CHANNEL_COLLECT_ENABLED false
+#define DEFAULT_EVENT_COLLECT_ENABLED     true
+#define DEFAULT_CHANNEL_COLLECT_ENABLED   false
 
 
 // time conversions
-#define NANOSECONDS_IN_MILLISECONDS     1000000
+#define NANOSECONDS_IN_MILLISECONDS       1000000
 
 // the event value to look at in the holder
 typedef enum
 {
     BASIC_REJOIN_CHECK_IN_EVENT_TYPE = 0,
-    APS_ACK_FAILURE_EVENT_TYPE ,
+    APS_ACK_FAILURE_EVENT_TYPE,
     DUPLICATE_SEQ_NUM_EVENT_TYPE,
     DETAILED_REJOIN_EVENT_TYPE,
     CHECK_IN_EVENT_TYPE,
     ATTRIBUTE_REPORT_EVENT_TYPE,
     IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE,
     MAGNETIC_STRENGTH_REPORT_EVENT_TYPE
-}statEventType;
+} statEventType;
 
 // the event value as a sting
-static const char *statEventTypeNames[] = {
-    "BASIC_REJOIN_CHECK_IN_EVENT_TYPE",
-    "APS_ACK_FAILURE_EVENT_TYPE",
-    "DUPLICATE_SEQ_NUM_EVENT_TYPE",
-    "DETAILED_REJOIN_EVENT_TYPE",
-    "CHECK_IN_EVENT_TYPE",
-    "ATTRIBUTE_REPORT_EVENT_TYPE",
-    "IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE",
-    "MAGNETIC_STRENGTH_REPORT_EVENT_TYPE",
-    NULL
-};
+static const char *statEventTypeNames[] = {"BASIC_REJOIN_CHECK_IN_EVENT_TYPE",
+                                           "APS_ACK_FAILURE_EVENT_TYPE",
+                                           "DUPLICATE_SEQ_NUM_EVENT_TYPE",
+                                           "DETAILED_REJOIN_EVENT_TYPE",
+                                           "CHECK_IN_EVENT_TYPE",
+                                           "ATTRIBUTE_REPORT_EVENT_TYPE",
+                                           "IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE",
+                                           "MAGNETIC_STRENGTH_REPORT_EVENT_TYPE",
+                                           NULL};
 
 // items in the deviceCollection
 typedef struct _deviceStatHolder
@@ -124,7 +122,7 @@ typedef struct _deviceStatHolder
     char *magneticStrength; // magnetic strength for hall effect sensor
     deviceEventCounterItem *eventCounters;
     uint32_t previousSeqNum;
-}deviceStatHolder;
+} deviceStatHolder;
 
 // the collection of events
 static int numberOfDeviceUpgSuccess = 0;
@@ -145,10 +143,10 @@ static uint32_t channelStartRepeatingTaskId = 0;
 static uint32_t channelRunRepeatingTaskId = 0;
 
 // parameters for the Channel Energy Scan collecting
-static uint32_t channelScanDuration = 0;        // the channel scan duration in milliseconds
-static uint32_t numofScanPerChannel = 0;        // the number of scans be channel
-static uint32_t scanDelayPerChannel = 0;        // the delay time before scanning the next channel in milliseconds
-static uint32_t channelCollectionDelay = 0;     // the delay before looking through
+static uint32_t channelScanDuration = 0;    // the channel scan duration in milliseconds
+static uint32_t numofScanPerChannel = 0;    // the number of scans be channel
+static uint32_t scanDelayPerChannel = 0;    // the delay time before scanning the next channel in milliseconds
+static uint32_t channelCollectionDelay = 0; // the delay before looking through
 
 // private functions
 //
@@ -245,12 +243,14 @@ void zigbeeEventTrackerAddAttributeReportEvent(ReceivedAttributeReport *report)
         {
             // need to cleanup, since didn't add attribute report event
             destroyDeviceAttributeItem(newReport);
-            icLogWarn(LOG_TAG, "%s: unable to save information about attribute report for device %s", __FUNCTION__, uuid);
+            icLogWarn(
+                LOG_TAG, "%s: unable to save information about attribute report for device %s", __FUNCTION__, uuid);
         }
     }
     else
     {
-        icLogWarn(LOG_TAG, "%s: unable to create a duplicate of the attribute report for device %s", __FUNCTION__, uuid);
+        icLogWarn(
+            LOG_TAG, "%s: unable to create a duplicate of the attribute report for device %s", __FUNCTION__, uuid);
     }
 
     // cleanup
@@ -334,7 +334,8 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command)
     // sanity check
     if (command == NULL)
     {
-        icLogError(LOG_TAG, "%s: got a bad command for check-in event and/or duplicate sequence number event", __FUNCTION__);
+        icLogError(
+            LOG_TAG, "%s: got a bad command for check-in event and/or duplicate sequence number event", __FUNCTION__);
         return;
     }
 
@@ -342,7 +343,9 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command)
     char *uuid = zigbeeSubsystemEui64ToId(command->eui64);
     if (uuid == NULL)
     {
-        icLogError(LOG_TAG, "%s: got a bad device ID string value for check-in event and/or duplicate sequence number event", __FUNCTION__);
+        icLogError(LOG_TAG,
+                   "%s: got a bad device ID string value for check-in event and/or duplicate sequence number event",
+                   __FUNCTION__);
         return;
     }
 
@@ -356,12 +359,13 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command)
     if (command->commandId == DEVICE_CHECKIN)
     {
         addCheckInEvent(uuid);
-    } else
+    }
+    else
 #endif
-    if ((command->clusterId == POLL_CONTROL_CLUSTER_ID &&
-        command->commandId == POLL_CONTROL_CHECKIN_COMMAND_ID) || (command->mfgSpecific &&
-        command->mfgCode == COMCAST_MFG_ID_INCORRECT && command->clusterId == IAS_ZONE_CLUSTER_ID
-        && command->commandId == IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID))
+        if ((command->clusterId == POLL_CONTROL_CLUSTER_ID && command->commandId == POLL_CONTROL_CHECKIN_COMMAND_ID) ||
+            (command->mfgSpecific && command->mfgCode == COMCAST_MFG_ID_INCORRECT &&
+             command->clusterId == IAS_ZONE_CLUSTER_ID &&
+             command->commandId == IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID))
     {
         addCheckInEvent(uuid);
     }
@@ -372,12 +376,11 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command)
     if (physicalDevice != NULL && physicalDevice->deviceClass != NULL)
     {
         if ((command->clusterId == IAS_ZONE_CLUSTER_ID &&
-            command->commandId == IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID) &&
+             command->commandId == IAS_ZONE_STATUS_CHANGE_NOTIFICATION_COMMAND_ID) &&
             (strcasecmp(physicalDevice->deviceClass, SENSOR_DC) == 0))
         {
             IASZoneStatusChangedNotification payload;
-            if((iasZoneClusterExtract(&payload, command) == true) &&
-               (payload.delayQS > 0))
+            if ((iasZoneClusterExtract(&payload, command) == true) && (payload.delayQS > 0))
             {
                 addSensorDelayEvent(uuid, &payload.delayQS);
             }
@@ -388,7 +391,7 @@ void zigbeeEventTrackerAddClusterCommandEvent(ReceivedClusterCommand *command)
     free(uuid);
 }
 
-void zigbeeEventTrackerAddMagneticStrengthReport(const char* deviceUuid, const char* valueString)
+void zigbeeEventTrackerAddMagneticStrengthReport(const char *deviceUuid, const char *valueString)
 {
     if (isReportCollectingTurnedOn() == false)
     {
@@ -400,7 +403,7 @@ void zigbeeEventTrackerAddMagneticStrengthReport(const char* deviceUuid, const c
         return;
     }
 
-    if (locateAndAddEventToCollection(MAGNETIC_STRENGTH_REPORT_EVENT_TYPE, (void*)valueString, deviceUuid) == false)
+    if (locateAndAddEventToCollection(MAGNETIC_STRENGTH_REPORT_EVENT_TYPE, (void *) valueString, deviceUuid) == false)
     {
         icLogWarn(LOG_TAG, "%s: unable to add magnetic strength report event for device %s", __func__, deviceUuid);
     }
@@ -425,7 +428,7 @@ static void addSensorDelayEvent(const char *deviceUuid, uint16_t *delayQS)
         return;
     }
 
-    if (!locateAndAddEventToCollection(IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE, (void*)delayQS, deviceUuid))
+    if (!locateAndAddEventToCollection(IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE, (void *) delayQS, deviceUuid))
     {
         icLogWarn(LOG_TAG, "%s: unable to add Sensor delay time for device %s", __func__, deviceUuid);
     }
@@ -480,7 +483,7 @@ void zigbeeEventTrackerAddDeviceFirmwareUpgradeSuccessEvent()
     pthread_mutex_lock(&eventTrackerMutex);
 
     // only need to track the number of successes
-    numberOfDeviceUpgSuccess ++;
+    numberOfDeviceUpgSuccess++;
 
     pthread_mutex_unlock(&eventTrackerMutex);
 }
@@ -524,7 +527,10 @@ void zigbeeEventTrackerAddDeviceFirmwareUpgradeFailureEvent(uint64_t eui64)
         }
         else
         {
-            icLogDebug(LOG_TAG, "%s: was able to successfully add device FW upgrade failure event for device %s", __FUNCTION__, uuid);
+            icLogDebug(LOG_TAG,
+                       "%s: was able to successfully add device FW upgrade failure event for device %s",
+                       __FUNCTION__,
+                       uuid);
         }
 
         pthread_mutex_unlock(&eventTrackerMutex);
@@ -567,7 +573,8 @@ icLinkedList *zigbeeEventTrackerCollectAttributeReportEventsForDevice(const char
     {
         // locate device id
         //
-        deviceStatHolder *tmp = (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
+        deviceStatHolder *tmp =
+            (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
         if (tmp != NULL && tmp->attributeReportList != NULL)
         {
             // now make a copy of the linked list
@@ -576,7 +583,8 @@ icLinkedList *zigbeeEventTrackerCollectAttributeReportEventsForDevice(const char
         }
         else
         {
-            icLogTrace(LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
+            icLogTrace(
+                LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
         }
     }
 
@@ -613,7 +621,8 @@ icLinkedList *zigbeeEventTrackerCollectRejoinEventsForDevice(const char *deviceI
     {
         // locate device id
         //
-        deviceStatHolder *tmp = (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
+        deviceStatHolder *tmp =
+            (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
         if (tmp != NULL && tmp->detailRejoinList != NULL)
         {
             // now make a copy of the linked list
@@ -622,7 +631,8 @@ icLinkedList *zigbeeEventTrackerCollectRejoinEventsForDevice(const char *deviceI
         }
         else
         {
-            icLogTrace(LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
+            icLogTrace(
+                LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
         }
     }
 
@@ -659,7 +669,8 @@ icLinkedList *zigbeeEventTrackerCollectCheckInEventsForDevice(const char *device
     {
         // locate device id
         //
-        deviceStatHolder *tmp = (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
+        deviceStatHolder *tmp =
+            (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
         if (tmp != NULL && tmp->checkInList != NULL)
         {
             // now make a copy of the linked list
@@ -668,7 +679,8 @@ icLinkedList *zigbeeEventTrackerCollectCheckInEventsForDevice(const char *device
         }
         else
         {
-            icLogTrace(LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
+            icLogTrace(
+                LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
         }
     }
 
@@ -698,14 +710,18 @@ char *zigbeeEventTrackerCollectMagneticStrengthReportsForDevice(const char *devi
 
     if (deviceCollection != NULL)
     {
-        deviceStatHolder *tmp = (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
+        deviceStatHolder *tmp =
+            (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
         if (tmp != NULL && tmp->magneticStrength != NULL)
         {
             retVal = strdupOpt(tmp->magneticStrength);
         }
         else
         {
-            icLogTrace(LOG_TAG, "%s: unable to find device %s in collection, no magnetic strength report events have occurred", __func__, deviceId);
+            icLogTrace(LOG_TAG,
+                       "%s: unable to find device %s in collection, no magnetic strength report events have occurred",
+                       __func__,
+                       deviceId);
         }
     }
 
@@ -739,7 +755,8 @@ deviceEventCounterItem *zigbeeEventTrackerCollectEventCountersForDevice(const ch
     {
         // locate device id
         //
-        deviceStatHolder *tmp = (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
+        deviceStatHolder *tmp =
+            (deviceStatHolder *) hashMapGet(deviceCollection, (void *) deviceId, (uint16_t) strlen(deviceId));
         if (tmp != NULL && tmp->eventCounters != NULL)
         {
             // now make a copy of device event counter item
@@ -748,7 +765,8 @@ deviceEventCounterItem *zigbeeEventTrackerCollectEventCountersForDevice(const ch
         }
         else
         {
-            icLogTrace(LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
+            icLogTrace(
+                LOG_TAG, "%s: unable to find device %s in collection, no events have occurred", __FUNCTION__, deviceId);
         }
     }
 
@@ -998,7 +1016,11 @@ static bool locateAndAddEventToCollection(statEventType type, void *arg, const c
         return retVal;
     }
 
-    icLogTrace(LOG_TAG, "%s: attempting to collect event type %s for device %s", __FUNCTION__, statEventTypeNames[type], deviceId);
+    icLogTrace(LOG_TAG,
+               "%s: attempting to collect event type %s for device %s",
+               __FUNCTION__,
+               statEventTypeNames[type],
+               deviceId);
 
     uint16_t keyLen = (uint16_t) strlen(deviceId);
 
@@ -1022,7 +1044,10 @@ static bool locateAndAddEventToCollection(statEventType type, void *arg, const c
         //
         if (!hashMapPut(deviceCollection, deviceIdCopy, keyLen, currHolder))
         {
-            icLogError(LOG_TAG, "%s: unable to add new deviceStatHolder %s for adding item into collection", __FUNCTION__, deviceId);
+            icLogError(LOG_TAG,
+                       "%s: unable to add new deviceStatHolder %s for adding item into collection",
+                       __FUNCTION__,
+                       deviceId);
             destroyDeviceStatHolder(deviceIdCopy, currHolder);
             pthread_mutex_unlock(&eventTrackerMutex);
             return retVal;
@@ -1056,7 +1081,11 @@ static bool locateAndAddEventToCollection(statEventType type, void *arg, const c
             break;
         // should never happen
         default:
-            icLogError(LOG_TAG, "%s: unable to determine event type %s for new event on device %s", __FUNCTION__, statEventTypeNames[type], deviceId);
+            icLogError(LOG_TAG,
+                       "%s: unable to determine event type %s for new event on device %s",
+                       __FUNCTION__,
+                       statEventTypeNames[type],
+                       deviceId);
             break;
     }
 
@@ -1072,7 +1101,7 @@ static bool locateAndAddEventToCollection(statEventType type, void *arg, const c
  */
 void zigbeeEventTrackerResetSensorDelayCountersForDevice(const char *deviceId)
 {
-    if(deviceId != NULL)
+    if (deviceId != NULL)
     {
         uint16_t keyLen = (uint16_t) strlen(deviceId);
         LOCK_SCOPE(eventTrackerMutex);
@@ -1103,7 +1132,10 @@ static bool addEventInfoToDeviceStatHolderList(deviceStatHolder *holder, void *a
     // sanity check
     if (holder == NULL || arg == NULL)
     {
-        icLogError(LOG_TAG, "%s: got a bad argument or bad holder for event type %s ... so bailing", __FUNCTION__, statEventTypeNames[listEventType]);
+        icLogError(LOG_TAG,
+                   "%s: got a bad argument or bad holder for event type %s ... so bailing",
+                   __FUNCTION__,
+                   statEventTypeNames[listEventType]);
         return false;
     }
 
@@ -1124,7 +1156,8 @@ static bool addEventInfoToDeviceStatHolderList(deviceStatHolder *holder, void *a
             // if at max, remove the last item
             if (currentNumOfItems == MAX_NUMBER_OF_ATTRIBUTE_REPORTS)
             {
-                deviceAttributeItem *oldItem = (deviceAttributeItem *) linkedListRemove(holderList, (uint32_t) currentNumOfItems - 1);
+                deviceAttributeItem *oldItem =
+                    (deviceAttributeItem *) linkedListRemove(holderList, (uint32_t) currentNumOfItems - 1);
                 destroyDeviceAttributeItem(oldItem);
             }
 
@@ -1140,7 +1173,8 @@ static bool addEventInfoToDeviceStatHolderList(deviceStatHolder *holder, void *a
             // if at max, remove the last item
             if (currentNumOfItems == MAX_NUMBER_OF_REJOINS)
             {
-                deviceRejoinItem *oldItem = (deviceRejoinItem *) linkedListRemove(holderList, (uint32_t) currentNumOfItems - 1);
+                deviceRejoinItem *oldItem =
+                    (deviceRejoinItem *) linkedListRemove(holderList, (uint32_t) currentNumOfItems - 1);
                 destroyDeviceRejoinItem(oldItem);
             }
 
@@ -1166,22 +1200,30 @@ static bool addEventInfoToDeviceStatHolderList(deviceStatHolder *holder, void *a
         // something has gone horribly wrong...
         default:
         {
-            icLogError(LOG_TAG, "%s: unable to determine event type %s when determining which event list to use ... so bailing", __FUNCTION__, statEventTypeNames[listEventType]);
+            icLogError(LOG_TAG,
+                       "%s: unable to determine event type %s when determining which event list to use ... so bailing",
+                       __FUNCTION__,
+                       statEventTypeNames[listEventType]);
             return false;
         }
     }
 
     // add the new item to the beginning of list
     //
-    if(linkedListPrepend(holderList, arg) == true)
+    if (linkedListPrepend(holderList, arg) == true)
     {
-        icLogTrace(LOG_TAG, "%s: was successfully able to add event %s", __FUNCTION__, statEventTypeNames[listEventType]);
+        icLogTrace(
+            LOG_TAG, "%s: was successfully able to add event %s", __FUNCTION__, statEventTypeNames[listEventType]);
         return true;
     }
     else
     {
         // could not add item for some reason
-        icLogWarn(LOG_TAG, "%s: unable to add new event type %s into the deviceStatHolder, for some strange reason ... so bailing", __FUNCTION__, statEventTypeNames[listEventType]);
+        icLogWarn(
+            LOG_TAG,
+            "%s: unable to add new event type %s into the deviceStatHolder, for some strange reason ... so bailing",
+            __FUNCTION__,
+            statEventTypeNames[listEventType]);
         return false;
     }
 }
@@ -1210,7 +1252,10 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
     // sanity check
     if (holder == NULL || holder->eventCounters == NULL)
     {
-        icLogError(LOG_TAG, "%s: unable to use holder for event type %s ... so bailing", __FUNCTION__, statEventTypeNames[counterEventType]);
+        icLogError(LOG_TAG,
+                   "%s: unable to use holder for event type %s ... so bailing",
+                   __FUNCTION__,
+                   statEventTypeNames[counterEventType]);
         return retVal;
     }
 
@@ -1229,23 +1274,29 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
                 //
                 if (*isSecureCheckIn == true)
                 {
-                    holder->eventCounters->totalSecureRejoinEvents ++;
+                    holder->eventCounters->totalSecureRejoinEvents++;
                     icLogTrace(LOG_TAG, "%s: successfully increased secure rejoin counter", __FUNCTION__);
                 }
                 else
                 {
-                    holder->eventCounters->totalUnSecureRejoinEvents ++;
+                    holder->eventCounters->totalUnSecureRejoinEvents++;
                     icLogTrace(LOG_TAG, "%s: successfully increased un-secure rejoin counter", __FUNCTION__);
                 }
 
                 // always increase the total rejoin counter
-                holder->eventCounters->totalRejoinEvents ++;
-                icLogTrace(LOG_TAG, "%s: successfully increased %s counters", __FUNCTION__, statEventTypeNames[counterEventType]);
+                holder->eventCounters->totalRejoinEvents++;
+                icLogTrace(LOG_TAG,
+                           "%s: successfully increased %s counters",
+                           __FUNCTION__,
+                           statEventTypeNames[counterEventType]);
                 retVal = true;
             }
             else
             {
-                icLogError(LOG_TAG, "%s: got a bad argument for event type %s ... so bailing", __FUNCTION__, statEventTypeNames[counterEventType]);
+                icLogError(LOG_TAG,
+                           "%s: got a bad argument for event type %s ... so bailing",
+                           __FUNCTION__,
+                           statEventTypeNames[counterEventType]);
             }
 
             break;
@@ -1254,9 +1305,10 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
         // device aps ack failure counter events
         case APS_ACK_FAILURE_EVENT_TYPE:
         {
-            holder->eventCounters->totalApsAckFailureEvents ++;
+            holder->eventCounters->totalApsAckFailureEvents++;
             retVal = true;
-            icLogTrace(LOG_TAG, "%s: successfully increased %s counter", __FUNCTION__, statEventTypeNames[counterEventType]);
+            icLogTrace(
+                LOG_TAG, "%s: successfully increased %s counter", __FUNCTION__, statEventTypeNames[counterEventType]);
             break;
         }
 
@@ -1270,8 +1322,11 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
                 //
                 if (*newSeqNum == holder->previousSeqNum)
                 {
-                    holder->eventCounters->totalDuplicateSeqNumEvents ++;
-                    icLogTrace(LOG_TAG, "%s: successfully increased %s counter", __FUNCTION__, statEventTypeNames[counterEventType]);
+                    holder->eventCounters->totalDuplicateSeqNumEvents++;
+                    icLogTrace(LOG_TAG,
+                               "%s: successfully increased %s counter",
+                               __FUNCTION__,
+                               statEventTypeNames[counterEventType]);
                 }
                 else
                 {
@@ -1284,18 +1339,24 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
             }
             else
             {
-                icLogError(LOG_TAG, "%s: got a bad argument for event type %s ... so bailing", __FUNCTION__, statEventTypeNames[counterEventType]);
+                icLogError(LOG_TAG,
+                           "%s: got a bad argument for event type %s ... so bailing",
+                           __FUNCTION__,
+                           statEventTypeNames[counterEventType]);
             }
 
             break;
         }
 
-        //sensor fault/restore delay events
-         case IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE:
+            // sensor fault/restore delay events
+        case IAS_NOTIFY_SENSOR_DELAY_EVENT_TYPE:
         {
-            uint16_t delayQS = *(uint16_t*)arg;
+            uint16_t delayQS = *(uint16_t *) arg;
             holder->eventCounters->cumulativeSensorDelayQS += delayQS;
-            icLogTrace(LOG_TAG, "%s: Total Device Delay value %"PRIu16 ,__func__,holder->eventCounters->cumulativeSensorDelayQS);
+            icLogTrace(LOG_TAG,
+                       "%s: Total Device Delay value %" PRIu16,
+                       __func__,
+                       holder->eventCounters->cumulativeSensorDelayQS);
             retVal = true;
             break;
         }
@@ -1303,7 +1364,10 @@ static bool addEventCounterInfoToDeviceStatHolder(deviceStatHolder *holder, void
         // something has gone horribly wrong...
         default:
         {
-            icLogError(LOG_TAG, "%s: unable to determine the even type %s ... so bailing", __FUNCTION__, statEventTypeNames[counterEventType]);
+            icLogError(LOG_TAG,
+                       "%s: unable to determine the even type %s ... so bailing",
+                       __FUNCTION__,
+                       statEventTypeNames[counterEventType]);
             break;
         }
     }
@@ -1387,9 +1451,12 @@ static void initChannelDataCollection()
     {
         // schedule a delayed task to start the repeating task for channel collecting
         //
-        icLogTrace(LOG_TAG, "%s: starting repeating task for collecting channel scans, with time of %"PRIu32" minutes",
-                   __FUNCTION__, channelCollectionDelay);
-        channelStartRepeatingTaskId = scheduleDelayTask(channelCollectionDelay, DELAY_MINS, startChannelRepeatingTaskCallback, NULL);
+        icLogTrace(LOG_TAG,
+                   "%s: starting repeating task for collecting channel scans, with time of %" PRIu32 " minutes",
+                   __FUNCTION__,
+                   channelCollectionDelay);
+        channelStartRepeatingTaskId =
+            scheduleDelayTask(channelCollectionDelay, DELAY_MINS, startChannelRepeatingTaskCallback, NULL);
     }
     else
     {
@@ -1419,8 +1486,11 @@ static void updateChannelDataCollectionDelayAmount()
     {
         // update the delayed task with the new time
         //
-        icLogTrace(LOG_TAG, "%s: updating delayed task for starting collecting channel scans, with a new time of %"PRIu32" minutes",
-                   __FUNCTION__, delayChange);
+        icLogTrace(LOG_TAG,
+                   "%s: updating delayed task for starting collecting channel scans, with a new time of %" PRIu32
+                   " minutes",
+                   __FUNCTION__,
+                   delayChange);
         rescheduleDelayTask(delayedTaskId, delayChange, DELAY_MINS);
     }
 
@@ -1430,8 +1500,10 @@ static void updateChannelDataCollectionDelayAmount()
     {
         // update the repeating task with the new time
         //
-        icLogTrace(LOG_TAG, "%s: updating repeating task for collecting channel scans, with a new time of %"PRIu32" minutes",
-                   __FUNCTION__, delayChange);
+        icLogTrace(LOG_TAG,
+                   "%s: updating repeating task for collecting channel scans, with a new time of %" PRIu32 " minutes",
+                   __FUNCTION__,
+                   delayChange);
         changeRepeatingTask(repeatingTaskId, delayChange, DELAY_MINS, false);
     }
 }
@@ -1512,7 +1584,8 @@ static void startChannelRepeatingTaskCallback(void *args)
     {
         // schedule the repeating task and store the task ID
         //
-        channelRunRepeatingTaskId = createRepeatingTask(channelCollectionDelay, DELAY_MINS, channelEnergyDataCollectingCallback, NULL);
+        channelRunRepeatingTaskId =
+            createRepeatingTask(channelCollectionDelay, DELAY_MINS, channelEnergyDataCollectingCallback, NULL);
     }
     else
     {
@@ -1581,8 +1654,8 @@ static void channelEnergyDataCollectingCallback(void *arg)
 
                 // see if we already have that item in our list
                 //
-                channelEnergyScanDataItem *scanDataItem = (channelEnergyScanDataItem *) linkedListGetElementAt(
-                        channelCollection, channelNum);
+                channelEnergyScanDataItem *scanDataItem =
+                    (channelEnergyScanDataItem *) linkedListGetElementAt(channelCollection, channelNum);
                 if (scanDataItem == NULL)
                 {
                     // since it does not exist create it and populate its information
@@ -1811,7 +1884,7 @@ static char *dataToString(const uint8_t *dataList, uint16_t len)
         // determine the total size first
         // this really means:
         // (the num of items) * (the max number of digits uint8_t could be) + the num of (',') needed + '/0' + "[]"
-        uint32_t totalSize =  (uint32_t) ((len * 3) + len + 2);
+        uint32_t totalSize = (uint32_t) ((len * 3) + len + 2);
 
         // now build the string
         icStringBuffer *strBuff = stringBufferCreate(totalSize);

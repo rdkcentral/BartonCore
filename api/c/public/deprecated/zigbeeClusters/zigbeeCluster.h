@@ -27,11 +27,11 @@
 #ifndef ZILKER_ZIGBEECLUSTER_H
 #define ZILKER_ZIGBEECLUSTER_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <zhal/zhal.h>
 #include <device-driver/device-driver.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
+#include <zhal/zhal.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -46,7 +46,7 @@ typedef struct
 {
     uint8_t alarmCode;
     uint16_t clusterId;
-    uint32_t timeStamp; // zigbee timestamp (zigbee epoch-based)
+    uint32_t timeStamp;      // zigbee timestamp (zigbee epoch-based)
     uint32_t localTimeStamp; // local time (unix epoch-based)
 } ZigbeeAlarmTableEntry;
 
@@ -70,21 +70,21 @@ struct ZigbeeCluster
      * @param eui64
      * @param endpointId
      */
-    bool (* configureCluster)(ZigbeeCluster *ctx, const DeviceConfigurationContext *deviceConfigurationContext);
+    bool (*configureCluster)(ZigbeeCluster *ctx, const DeviceConfigurationContext *deviceConfigurationContext);
 
     /**
      * Handle a received cluster command
      * @param ctx This cluster instance
      * @param command
      */
-    bool (* handleClusterCommand)(ZigbeeCluster *ctx, ReceivedClusterCommand* command);
+    bool (*handleClusterCommand)(ZigbeeCluster *ctx, ReceivedClusterCommand *command);
 
     /**
      * Handle an attribute report
      * @param ctx
      * @param report
      */
-    bool (* handleAttributeReport)(ZigbeeCluster *ctx, ReceivedAttributeReport* report);
+    bool (*handleAttributeReport)(ZigbeeCluster *ctx, ReceivedAttributeReport *report);
 
     /**
      * Handle an alarm
@@ -93,7 +93,10 @@ struct ZigbeeCluster
      * @param endpointId
      * @param alarmTableEntry
      */
-    bool (* handleAlarm)(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
+    bool (*handleAlarm)(ZigbeeCluster *ctx,
+                        uint64_t eui64,
+                        uint8_t endpointId,
+                        const ZigbeeAlarmTableEntry *alarmTableEntry);
 
 
     /**
@@ -103,7 +106,10 @@ struct ZigbeeCluster
      * @param endpointId
      * @param alarmTableEntry
      */
-    bool (* handleAlarmCleared)(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
+    bool (*handleAlarmCleared)(ZigbeeCluster *ctx,
+                               uint64_t eui64,
+                               uint8_t endpointId,
+                               const ZigbeeAlarmTableEntry *alarmTableEntry);
 
     /**
      * Special function to allow any cluster to do something during poll control checkin
@@ -111,13 +117,13 @@ struct ZigbeeCluster
      * @param eui64
      * @param endpointId
      */
-    void (* handlePollControlCheckin)(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId);
+    void (*handlePollControlCheckin)(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId);
 
     /**
      * Destroy this cluster instance
      * @param ctx
      */
-    void (* destroy)(const ZigbeeCluster *ctx);
+    void (*destroy)(const ZigbeeCluster *ctx);
 };
 
 /**
@@ -157,4 +163,4 @@ uint64_t getNumberConfigurationMetadata(icStringHashMap *configurationMetadata, 
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_ZIGBEECLUSTER_H
+#endif // ZILKER_ZIGBEECLUSTER_H

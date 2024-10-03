@@ -24,37 +24,37 @@
 // Created by tlea on 2/20/19.
 //
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include "device-driver/device-driver-manager.h"
+#include "deviceDrivers/zigbeeDriverCommon.h"
+#include <commonDeviceDefs.h>
+#include <ctype.h>
+#include <device/deviceModelHelper.h>
+#include <deviceServicePrivate.h>
+#include <icConcurrent/delayedTask.h>
+#include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
 #include <icLog/logging.h>
+#include <icTime/timeUtils.h>
+#include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
+#include <memory.h>
 #include <pthread.h>
 #include <resourceTypes.h>
-#include <commonDeviceDefs.h>
-#include <device/deviceModelHelper.h>
-#include <memory.h>
-#include <ctype.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <zigbeeClusters/doorLockCluster.h>
 #include <zigbeeClusters/powerConfigurationCluster.h>
-#include <icConcurrent/delayedTask.h>
-#include <icUtil/stringUtils.h>
-#include <icConcurrent/timedWait.h>
-#include <jsonHelper/jsonHelper.h>
-#include <icTime/timeUtils.h>
-#include <icConcurrent/threadUtils.h>
-#include <deviceServicePrivate.h>
-#include "deviceDrivers/zigbeeDriverCommon.h"
-#include "device-driver/device-driver-manager.h"
 
-#define LOG_TAG "zigbeeDoorLockDD"
-#define DRIVER_NAME "zigbeeDoorLock"
-#define DEVICE_CLASS_NAME "doorLock"
+#define LOG_TAG                                       "zigbeeDoorLockDD"
+#define DRIVER_NAME                                   "zigbeeDoorLock"
+#define DEVICE_CLASS_NAME                             "doorLock"
 #define DOOR_LOCK_PROGRAM_PIN_CODES_DELAY_MS_METADATA "doorLockProgramPinCodesDelayMs"
 
-#define MY_DC_VERSION 2
-#define MY_DOORLOCK_PROFILE_VERSION 2
+#define MY_DC_VERSION                                 2
+#define MY_DOORLOCK_PROFILE_VERSION                   2
 
-#define DEFAULT_LOCKOUT_TIME 60
-#define CLEAR_ALL_PIN_CODES_TIMEOUT_SECS 5
-#define SET_PIN_CODE_TIMEOUT_SECS 5
+#define DEFAULT_LOCKOUT_TIME                          60
+#define CLEAR_ALL_PIN_CODES_TIMEOUT_SECS              5
+#define SET_PIN_CODE_TIMEOUT_SECS                     5
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -64,10 +64,7 @@ typedef struct
     char *endpointName;
 } RestoreLockoutArg;
 
-static uint16_t myDeviceIds[] =
-        {
-                DOORLOCK_DEVICE_ID
-        };
+static uint16_t myDeviceIds[] = {DOORLOCK_DEVICE_ID};
 
 static const char *mapDeviceIdToProfile(ZigbeeDriverCommon *ctx, uint16_t deviceId);
 
@@ -81,9 +78,8 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                               IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                               icInitialResourceValues *values);
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext);
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext);
 
 static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
                                   uint32_t endpointNumber,
@@ -103,30 +99,15 @@ static void lockedStateChanged(uint64_t eui64,
                                uint16_t userId,
                                const void *ctx);
 
-static void jammedStateChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool isJammed,
-                                const void *ctx);
+static void jammedStateChanged(uint64_t eui64, uint8_t endpointId, bool isJammed, const void *ctx);
 
-static void tamperedStateChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 bool isTampered,
-                                 const void *ctx);
+static void tamperedStateChanged(uint64_t eui64, uint8_t endpointId, bool isTampered, const void *ctx);
 
-static void invalidCodeEntryLimitChanged(uint64_t eui64,
-                                         uint8_t endpointId,
-                                         bool limitExceeded,
-                                         const void *ctx);
+static void invalidCodeEntryLimitChanged(uint64_t eui64, uint8_t endpointId, bool limitExceeded, const void *ctx);
 
-static void clearAllPinCodesResponse(uint64_t eui64,
-                                     uint8_t endpointId,
-                                     bool success,
-                                     const void *ctx);
+static void clearAllPinCodesResponse(uint64_t eui64, uint8_t endpointId, bool success, const void *ctx);
 
-static void setPinCodeResponse(uint64_t eui64,
-                               uint8_t endpointId,
-                               uint8_t result,
-                               const void *ctx);
+static void setPinCodeResponse(uint64_t eui64, uint8_t endpointId, uint8_t result, const void *ctx);
 
 static void keypadProgrammingEventNotification(uint64_t eui64,
                                                uint8_t endpointId,
@@ -139,10 +120,7 @@ static void keypadProgrammingEventNotification(uint64_t eui64,
                                                const char *data,
                                                const void *ctx);
 
-static void autoRelockTimeChanged(uint64_t eui64,
-                                  uint8_t endpointId,
-                                  uint32_t autoRelockSeconds,
-                                  const void *ctx);
+static void autoRelockTimeChanged(uint64_t eui64, uint8_t endpointId, uint32_t autoRelockSeconds, const void *ctx);
 
 static void freeRestoreLockoutArg(RestoreLockoutArg *arg);
 
@@ -154,29 +132,27 @@ static void preStartup(ZigbeeDriverCommon *ctx, uint32_t *commFailTimeoutSeconds
 
 static void postShutdown(ZigbeeDriverCommon *ctx);
 
-static const ZigbeeDriverCommonCallbacks commonCallbacks =
-        {
-                .preStartup = preStartup,
-                .postShutdown = postShutdown,
-                .fetchInitialResourceValues = fetchInitialResourceValues,
-                .registerResources = registerResources,
-                .preConfigureCluster = preConfigureCluster,
-                .mapDeviceIdToProfile = mapDeviceIdToProfile,
-                .writeEndpointResource = writeEndpointResource,
-                .synchronizeDevice = synchronizeDevice,
-        };
+static const ZigbeeDriverCommonCallbacks commonCallbacks = {
+    .preStartup = preStartup,
+    .postShutdown = postShutdown,
+    .fetchInitialResourceValues = fetchInitialResourceValues,
+    .registerResources = registerResources,
+    .preConfigureCluster = preConfigureCluster,
+    .mapDeviceIdToProfile = mapDeviceIdToProfile,
+    .writeEndpointResource = writeEndpointResource,
+    .synchronizeDevice = synchronizeDevice,
+};
 
-static const DoorLockClusterCallbacks doorLockClusterCallbacks =
-        {
-            .lockedStateChanged = lockedStateChanged,
-            .jammedStateChanged = jammedStateChanged,
-            .tamperedStateChanged = tamperedStateChanged,
-            .invalidCodeEntryLimitChanged = invalidCodeEntryLimitChanged,
-            .autoRelockTimeChanged = autoRelockTimeChanged,
-            .clearAllPinCodesResponse = clearAllPinCodesResponse,
-            .setPinCodeResponse = setPinCodeResponse,
-            .keypadProgrammingEventNotification = keypadProgrammingEventNotification,
-        };
+static const DoorLockClusterCallbacks doorLockClusterCallbacks = {
+    .lockedStateChanged = lockedStateChanged,
+    .jammedStateChanged = jammedStateChanged,
+    .tamperedStateChanged = tamperedStateChanged,
+    .invalidCodeEntryLimitChanged = invalidCodeEntryLimitChanged,
+    .autoRelockTimeChanged = autoRelockTimeChanged,
+    .clearAllPinCodesResponse = clearAllPinCodesResponse,
+    .setPinCodeResponse = setPinCodeResponse,
+    .keypadProgrammingEventNotification = keypadProgrammingEventNotification,
+};
 
 // Map of eui64 to delayed task handle
 static icHashMap *lockoutExpiryTasks = NULL;
@@ -216,9 +192,8 @@ typedef struct
     bool complete;
 } ProgramPinCodesOnLockArgs;
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (300)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(300))) static void driverRegister(void)
 {
     DeviceDriver *myDriver = zigbeeDriverCommonCreateDeviceDriver(DRIVER_NAME,
                                                                   DEVICE_CLASS_NAME,
@@ -233,10 +208,10 @@ static void driverRegister(void)
 
     zigbeeDriverCommonAddCluster(myDriver, doorLockClusterCreate(&doorLockClusterCallbacks, myDriver));
 
-    //enable periodic collection of common diagnostics info (rssi, lqi, etc).
+    // enable periodic collection of common diagnostics info (rssi, lqi, etc).
     zigbeeDriverCommonSetDiagnosticsCollectionEnabled(myDriver, true);
 
-    //enable pair time reading of battery voltage alarm thresholds
+    // enable pair time reading of battery voltage alarm thresholds
     zigbeeDriverCommonRegisterBatteryThresholdResource(myDriver, true);
 
     deviceDriverManagerRegisterDriver(myDriver);
@@ -279,14 +254,14 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
 
-    //get the eui64 for the device, which is the uuid
+    // get the eui64 for the device, which is the uuid
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     for (uint8_t i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+        AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
         bool isLocked = false;
         if (doorLockClusterIsLocked(eui64, endpointId, &isLocked) == false)
@@ -296,14 +271,14 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
             break;
         }
 
-        initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_LOCKED,
-                                              stringValueOfBool(isLocked));
+        initialResourceValuesPutEndpointValue(
+            values, epName, DOORLOCK_PROFILE_RESOURCE_LOCKED, stringValueOfBool(isLocked));
 
         // optional attribute may not exist
         uint8_t maxPinCodeLength = 0;
         if (doorLockClusterGetMaxPinCodeLength(eui64, endpointId, &maxPinCodeLength) == true)
         {
-            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%"PRIu8, maxPinCodeLength);
+            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%" PRIu8, maxPinCodeLength);
             initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_MAX_PIN_CODE_LENGTH, temp);
         }
 
@@ -311,7 +286,7 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
         uint8_t minPinCodeLength = 0;
         if (doorLockClusterGetMinPinCodeLength(eui64, endpointId, &minPinCodeLength) == true)
         {
-            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%"PRIu8, minPinCodeLength);
+            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%" PRIu8, minPinCodeLength);
             initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_MIN_PIN_CODE_LENGTH, temp);
         }
 
@@ -320,7 +295,7 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
         if (doorLockClusterGetMaxPinCodeUsers(eui64, endpointId, &maxPinCodeUsers) == true)
         {
             // Subtract 1 because some locks seem to reserve one of their slots for the master pin
-            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%"PRIu16, maxPinCodeUsers-1);
+            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%" PRIu16, maxPinCodeUsers - 1);
             initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_MAX_PIN_CODES, temp);
         }
 
@@ -328,14 +303,15 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
         uint32_t autoRelockSeconds = 0;
         if (doorLockClusterGetAutoRelockTime(eui64, endpointId, &autoRelockSeconds) == true)
         {
-            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%"PRIu32, autoRelockSeconds);
+            AUTO_CLEAN(free_generic__auto) char *temp = stringBuilder("%" PRIu32, autoRelockSeconds);
             initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_AUTOLOCK_SECS, temp);
         }
 
         // These we can't get the initial state now
         initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_JAMMED, "false");
         initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_TAMPERED, "false");
-        initialResourceValuesPutEndpointValue(values, epName, DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT, "false");
+        initialResourceValuesPutEndpointValue(
+            values, epName, DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT, "false");
         initialResourceValuesPutEndpointValue(values, epName, COMMON_DEVICE_RESOURCE_LAST_USER_INTERACTION_DATE, NULL);
     }
 
@@ -355,9 +331,9 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+        AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
-        icDeviceEndpoint* endpoint = createEndpoint(device, epName, DOORLOCK_PROFILE, true);
+        icDeviceEndpoint *endpoint = createEndpoint(device, epName, DOORLOCK_PROFILE, true);
         endpoint->profileVersion = MY_DOORLOCK_PROFILE_VERSION;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -365,7 +341,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     values,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -373,7 +349,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     values,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -381,7 +357,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     values,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -389,7 +365,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     values,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResource(endpoint,
@@ -403,17 +379,16 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                          DOORLOCK_PROFILE_RESOURCE_LAST_PROGRAMMING_EVENT,
                                          NULL,
                                          RESOURCE_TYPE_DOORLOCK_PROGRAMMING_EVENT,
-                                         RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                         RESOURCE_MODE_EMIT_EVENTS,
+                                         RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
                                          CACHING_POLICY_ALWAYS) != NULL;
 
-                // optional resources that dont cause pairing failure
+        // optional resources that dont cause pairing failure
         createEndpointResourceIfAvailable(endpoint,
                                           DOORLOCK_PROFILE_RESOURCE_AUTOLOCK_SECS,
                                           values,
                                           RESOURCE_TYPE_SECONDS,
                                           RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                          RESOURCE_MODE_EMIT_EVENTS,
+                                              RESOURCE_MODE_EMIT_EVENTS,
                                           CACHING_POLICY_ALWAYS);
 
         createEndpointResourceIfAvailable(endpoint,
@@ -443,9 +418,8 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
     return result;
 }
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext)
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext)
 {
     if (ctx == NULL || cluster == NULL || deviceConfigContext == NULL)
     {
@@ -453,7 +427,11 @@ static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
         return false;
     }
 
-    icLogDebug(LOG_TAG, "%s: cluster 0x%.4"PRIx16" endpoint %"PRIu8, __FUNCTION__, cluster->clusterId, deviceConfigContext->endpointId);
+    icLogDebug(LOG_TAG,
+               "%s: cluster 0x%.4" PRIx16 " endpoint %" PRIu8,
+               __FUNCTION__,
+               cluster->clusterId,
+               deviceConfigContext->endpointId);
 
     if (cluster->clusterId == POLL_CONTROL_CLUSTER_ID)
     {
@@ -493,7 +471,7 @@ static DoorLockClusterUser *parsePinUser(const cJSON *userJson)
     memset(&user, 0, sizeof(user));
 
     user.userId = userIdJson->valueint;
-    user.userType = 0; // we only support 'unrestricted' user type
+    user.userType = 0;   // we only support 'unrestricted' user type
     user.userStatus = 1; // we only support active slot, enabled
 
     // walk the chars in the pin and confirm that they are numbers
@@ -519,7 +497,7 @@ static DoorLockClusterUser *parsePinUser(const cJSON *userJson)
         pinPtr++;
     }
 
-    //we made it here, so everything checked out.  Allocate our result and copy over what we parsed
+    // we made it here, so everything checked out.  Allocate our result and copy over what we parsed
     DoorLockClusterUser *result = calloc(1, sizeof(DoorLockClusterUser));
     memcpy(result, &user, sizeof(user));
     return result;
@@ -527,15 +505,15 @@ static DoorLockClusterUser *parsePinUser(const cJSON *userJson)
 
 static void pinMapKeyFreeFunc(void *key, void *value)
 {
-    //free the key but not the value
+    // free the key but not the value
     free(key);
-    (void)value; //unused
+    (void) value; // unused
 }
 
 static icLinkedList *parsePinCodes(const char *pinCodes)
 {
     icHashMap *pinMap = NULL; // prevent duplicate pin codes with a hash map
-    icHashMap *idMap = NULL; // prevent duplicate ids with a hash map
+    icHashMap *idMap = NULL;  // prevent duplicate ids with a hash map
 
     AUTO_CLEAN(cJSON_Delete__auto) cJSON *json = cJSON_Parse(pinCodes);
     if (json != NULL && cJSON_IsArray(json) == true)
@@ -561,7 +539,8 @@ static icLinkedList *parsePinCodes(const char *pinCodes)
                 icLogError(LOG_TAG, "%s: duplicate pin code provided", __func__);
                 parseError = true;
             }
-            else if (hashMapPutCopy(idMap, &user->userId, sizeof(user->userId), user, sizeof(DoorLockClusterUser)) == false)
+            else if (hashMapPutCopy(idMap, &user->userId, sizeof(user->userId), user, sizeof(DoorLockClusterUser)) ==
+                     false)
             {
                 // if this id has already been used, abort the whole thing and clean up
                 icLogError(LOG_TAG, "%s: duplicate user id provided", __func__);
@@ -597,11 +576,11 @@ static icLinkedList *parsePinCodes(const char *pinCodes)
             uint16_t pinLen = 0;
             DoorLockClusterUser *user = NULL;
 
-            //remove the entry from the map, freeing only the key
+            // remove the entry from the map, freeing only the key
             hashMapIteratorGetNext(it, (void **) &pin, &pinLen, (void **) &user);
             hashMapIteratorDeleteCurrent(it, pinMapKeyFreeFunc);
 
-            //put it in the result list
+            // put it in the result list
             linkedListAppend(result, user);
         }
     }
@@ -617,12 +596,12 @@ static void programPinCodesOnLock(void *args)
 {
     icLogDebug(LOG_TAG, "%s", __func__);
 
-    ProgramPinCodesOnLockArgs *myArgs = (ProgramPinCodesOnLockArgs*)args;
+    ProgramPinCodesOnLockArgs *myArgs = (ProgramPinCodesOnLockArgs *) args;
 
-    //FIXME: why is this section so large?
+    // FIXME: why is this section so large?
     pthread_mutex_lock(&myArgs->mtx);
 
-    //assume success
+    // assume success
     myArgs->result = true;
 
     DoorLockRequestSynchronizer *syncr = getRequestSynchronizer(myArgs->eui64);
@@ -643,20 +622,20 @@ static void programPinCodesOnLock(void *args)
                 if (incrementalCondTimedWait(&syncr->asyncCond, &syncr->asyncMtx, SET_PIN_CODE_TIMEOUT_SECS) != 0 ||
                     syncr->success == false || syncr->responseType != doorLockResponseTypeSetPin)
                 {
-                    icLogError(LOG_TAG, "%s: failed to set pin code for user id %"PRIu16, __func__, user->userId);
+                    icLogError(LOG_TAG, "%s: failed to set pin code for user id %" PRIu16, __func__, user->userId);
                     myArgs->result = false; // set the overall result to failure
                 }
             }
             else
             {
-                icLogError(LOG_TAG, "%s: failed to send set pin code for user id %"PRIu16, __func__, user->userId);
+                icLogError(LOG_TAG, "%s: failed to send set pin code for user id %" PRIu16, __func__, user->userId);
                 myArgs->result = false; // set the overall result to failure
             }
 
             mutexUnlock(&syncr->asyncMtx);
         }
 
-        //indicate we have finished processing
+        // indicate we have finished processing
         myArgs->complete = true;
     }
     else
@@ -684,15 +663,14 @@ static uint64_t getSetPinCodeDelayMillis(uint64_t eui64)
         const char *metadata = deviceGetMetadata(device, DOOR_LOCK_PROGRAM_PIN_CODES_DELAY_MS_METADATA);
         if (metadata != NULL)
         {
-            if(stringToUint64(metadata, &delayMillis) == true)
+            if (stringToUint64(metadata, &delayMillis) == true)
             {
-                icLogDebug(LOG_TAG, "%s: using pin code programming delay of %"PRIu64" milliseconds", __func__,
-                        delayMillis);
+                icLogDebug(
+                    LOG_TAG, "%s: using pin code programming delay of %" PRIu64 " milliseconds", __func__, delayMillis);
             }
             else
             {
-                icLogWarn(LOG_TAG, "%s: failed to parse pin code programming delay metadata '%s'", __func__,
-                        metadata);
+                icLogWarn(LOG_TAG, "%s: failed to parse pin code programming delay metadata '%s'", __func__, metadata);
             }
         }
     }
@@ -726,7 +704,7 @@ static bool setPinCodes(uint64_t eui64, uint8_t endpointId, const char *pinCodes
 {
     bool result = false;
 
-    icLogDebug(LOG_TAG, "%s", __func__ );
+    icLogDebug(LOG_TAG, "%s", __func__);
 
     // first ensure the pin codes that have been provided are all valid and parse correctly
     scoped_icLinkedListGeneric *users = parsePinCodes(pinCodes);
@@ -744,9 +722,10 @@ static bool setPinCodes(uint64_t eui64, uint8_t endpointId, const char *pinCodes
             result = doorLockClusterClearAllPinCodes(eui64, endpointId);
             if (result == true)
             {
-                //wait for the response
-                if (incrementalCondTimedWait(&syncr->asyncCond, &syncr->asyncMtx, CLEAR_ALL_PIN_CODES_TIMEOUT_SECS) != 0 ||
-                syncr->success == false || syncr->responseType != doorLockResponseTypeClearAllPins)
+                // wait for the response
+                if (incrementalCondTimedWait(&syncr->asyncCond, &syncr->asyncMtx, CLEAR_ALL_PIN_CODES_TIMEOUT_SECS) !=
+                        0 ||
+                    syncr->success == false || syncr->responseType != doorLockResponseTypeClearAllPins)
                 {
                     icLogError(LOG_TAG, "%s: failed to clear all pin codes", __func__);
                     result = false;
@@ -757,8 +736,8 @@ static bool setPinCodes(uint64_t eui64, uint8_t endpointId, const char *pinCodes
             if (result == true)
             {
                 // some door locks have a bug whereby the 'clear all pin codes response' comes early, before the lock is
-                // actually done clearing codes, which causes 'set pin code request' to fail.  Here we insert an optional
-                // delay, based on metadata loaded by the device descriptor.
+                // actually done clearing codes, which causes 'set pin code request' to fail.  Here we insert an
+                // optional delay, based on metadata loaded by the device descriptor.
 
                 ProgramPinCodesOnLockArgs args;
                 args.eui64 = eui64;
@@ -805,7 +784,7 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
 {
     bool result = false;
 
-    (void) baseDriverUpdatesResource; //unused
+    (void) baseDriverUpdatesResource; // unused
 
     if (resource == NULL || endpointNumber == 0 || newValue == NULL)
     {
@@ -819,10 +798,11 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
 
     if (stringCompare(DOORLOCK_PROFILE_RESOURCE_LOCKED, resource->id, false) == 0)
     {
-        result = doorLockClusterSetLocked(eui64, (uint8_t)endpointNumber, stringToBool(newValue));
+        result = doorLockClusterSetLocked(eui64, (uint8_t) endpointNumber, stringToBool(newValue));
 
-        //we dont want the write resource operation to update the locked state... that happens when we get the operation
-        // event notification command
+        // we dont want the write resource operation to update the locked state... that happens when we get the
+        // operation
+        //  event notification command
         *baseDriverUpdatesResource = false;
     }
     else if (stringCompare(DOORLOCK_PROFILE_RESOURCE_AUTOLOCK_SECS, resource->id, false) == 0)
@@ -830,16 +810,16 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
         uint32_t autoRelockSeconds = 0;
         if (stringToUint32(newValue, &autoRelockSeconds) == true)
         {
-            result = doorLockClusterSetAutoRelockTime(eui64, (uint8_t)endpointNumber, autoRelockSeconds);
+            result = doorLockClusterSetAutoRelockTime(eui64, (uint8_t) endpointNumber, autoRelockSeconds);
         }
         else
         {
-            icLogError(LOG_TAG, "%s: invalid value '%s' for %s", __func__ , newValue, resource->id);
+            icLogError(LOG_TAG, "%s: invalid value '%s' for %s", __func__, newValue, resource->id);
         }
     }
     else if (stringCompare(DOORLOCK_PROFILE_RESOURCE_PIN_CODES, resource->id, false) == 0)
     {
-        result = setPinCodes(eui64, (uint8_t)endpointNumber, newValue);
+        result = setPinCodes(eui64, (uint8_t) endpointNumber, newValue);
         *baseDriverUpdatesResource = false; // we do not want the written value persisted
     }
 
@@ -850,33 +830,22 @@ static void setLockBoltJammed(const char *uuid, const char *epName, bool isJamme
 {
     icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__, stringValueOfBool(isJammed));
 
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_JAMMED,
-                   stringValueOfBool(isJammed),
-                   NULL);
+    updateResource(uuid, epName, DOORLOCK_PROFILE_RESOURCE_JAMMED, stringValueOfBool(isJammed), NULL);
 }
 
 static void setTampered(const char *uuid, const char *epName, bool isTampered)
 {
     icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__, stringValueOfBool(isTampered));
 
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_TAMPERED,
-                   stringValueOfBool(isTampered),
-                   NULL);
+    updateResource(uuid, epName, DOORLOCK_PROFILE_RESOURCE_TAMPERED, stringValueOfBool(isTampered), NULL);
 }
 
 static void setInvalidCodeEntryLimit(const char *uuid, const char *epName, bool isAtLimit)
 {
     icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__, stringValueOfBool(isAtLimit));
 
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT,
-                   stringValueOfBool(isAtLimit),
-                   NULL);
+    updateResource(
+        uuid, epName, DOORLOCK_PROFILE_RESOURCE_INVALID_CODE_ENTRY_LIMIT, stringValueOfBool(isAtLimit), NULL);
 }
 
 static void lockedStateChanged(uint64_t eui64,
@@ -887,25 +856,17 @@ static void lockedStateChanged(uint64_t eui64,
                                const void *ctx)
 {
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
-    AUTO_CLEAN(cJSON_Delete__auto) cJSON* sourceJson = cJSON_CreateObject();
+    AUTO_CLEAN(cJSON_Delete__auto) cJSON *sourceJson = cJSON_CreateObject();
     cJSON_AddStringToObject(sourceJson, DOORLOCK_PROFILE_LOCKED_SOURCE, source);
     cJSON_AddNumberToObject(sourceJson, DOORLOCK_PROFILE_LOCKED_USERID, userId);
 
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_LOCKED,
-                   stringValueOfBool(isLocked),
-                   sourceJson);
+    updateResource(uuid, epName, DOORLOCK_PROFILE_RESOURCE_LOCKED, stringValueOfBool(isLocked), sourceJson);
 
-    //TODO this code should be in common driver... its copied all over the place
-    AUTO_CLEAN(free_generic__auto) const char *dateStr = stringBuilder("%"PRIu64, getCurrentUnixTimeMillis());
-    updateResource(uuid,
-                   NULL,
-                   COMMON_DEVICE_RESOURCE_LAST_USER_INTERACTION_DATE,
-                   dateStr,
-                   NULL);
+    // TODO this code should be in common driver... its copied all over the place
+    AUTO_CLEAN(free_generic__auto) const char *dateStr = stringBuilder("%" PRIu64, getCurrentUnixTimeMillis());
+    updateResource(uuid, NULL, COMMON_DEVICE_RESOURCE_LAST_USER_INTERACTION_DATE, dateStr, NULL);
 
     // if the lock was tampered, let this state change clear it
     tamperedStateChanged(eui64, endpointId, false, ctx);
@@ -917,23 +878,17 @@ static void lockedStateChanged(uint64_t eui64,
     }
 }
 
-static void jammedStateChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool isJammed,
-                                const void *ctx)
+static void jammedStateChanged(uint64_t eui64, uint8_t endpointId, bool isJammed, const void *ctx)
 {
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
     setLockBoltJammed(uuid, epName, isJammed);
 }
 
-static void tamperedStateChanged(uint64_t eui64,
-                                 uint8_t endpointId,
-                                 bool isTampered,
-                                 const void *ctx)
+static void tamperedStateChanged(uint64_t eui64, uint8_t endpointId, bool isTampered, const void *ctx)
 {
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
     setTampered(uuid, epName, isTampered);
 }
 
@@ -950,7 +905,7 @@ static void freeRestoreLockoutArg(RestoreLockoutArg *arg)
  */
 static void restoreLockoutCallback(void *arg)
 {
-    RestoreLockoutArg *restoreLockoutArg = (RestoreLockoutArg *)arg;
+    RestoreLockoutArg *restoreLockoutArg = (RestoreLockoutArg *) arg;
     setInvalidCodeEntryLimit(restoreLockoutArg->uuid, restoreLockoutArg->endpointName, false);
     // Clean up our map entry
     mutexLock(&MTX);
@@ -968,20 +923,17 @@ static void restoreLockoutCallback(void *arg)
  */
 static void cancelLockoutExpiryTask(int taskHandle)
 {
-    RestoreLockoutArg *arg = (RestoreLockoutArg *)cancelDelayTask(taskHandle);
+    RestoreLockoutArg *arg = (RestoreLockoutArg *) cancelDelayTask(taskHandle);
     if (arg != NULL)
     {
         freeRestoreLockoutArg(arg);
     }
 }
 
-static void invalidCodeEntryLimitChanged(uint64_t eui64,
-                                         uint8_t endpointId,
-                                         bool limitExceeded,
-                                         const void *ctx)
+static void invalidCodeEntryLimitChanged(uint64_t eui64, uint8_t endpointId, bool limitExceeded, const void *ctx)
 {
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
     setInvalidCodeEntryLimit(uuid, epName, limitExceeded);
 
@@ -1001,7 +953,7 @@ static void invalidCodeEntryLimitChanged(uint64_t eui64,
         {
             lockoutExpiryTasks = hashMapCreate();
         }
-        RestoreLockoutArg *restoreLockoutArg = (RestoreLockoutArg *)calloc(1, sizeof(RestoreLockoutArg));
+        RestoreLockoutArg *restoreLockoutArg = (RestoreLockoutArg *) calloc(1, sizeof(RestoreLockoutArg));
         restoreLockoutArg->uuid = strdup(uuid);
         restoreLockoutArg->endpointName = strdup(epName);
         // Check if we have a pending task, just to be safe
@@ -1009,7 +961,7 @@ static void invalidCodeEntryLimitChanged(uint64_t eui64,
         int taskToCancel = -1;
         if (delayedTaskHandle == NULL)
         {
-            delayedTaskHandle = (int *)malloc(sizeof(int));
+            delayedTaskHandle = (int *) malloc(sizeof(int));
         }
         else
         {
@@ -1064,12 +1016,9 @@ static bool handleAsyncResponse(uint64_t eui64,
     return result;
 }
 
-static void clearAllPinCodesResponse(uint64_t eui64,
-                                     uint8_t endpointId,
-                                     bool success,
-                                     const void *ctx)
+static void clearAllPinCodesResponse(uint64_t eui64, uint8_t endpointId, bool success, const void *ctx)
 {
-    icLogDebug(LOG_TAG, "%s: %"PRIx64" success=%s", __func__, eui64, stringValueOfBool(success));
+    icLogDebug(LOG_TAG, "%s: %" PRIx64 " success=%s", __func__, eui64, stringValueOfBool(success));
 
     if (handleAsyncResponse(eui64, endpointId, success, NULL, doorLockResponseTypeClearAllPins) == false)
     {
@@ -1077,12 +1026,9 @@ static void clearAllPinCodesResponse(uint64_t eui64,
     }
 }
 
-static void setPinCodeResponse(uint64_t eui64,
-                               uint8_t endpointId,
-                               uint8_t result,
-                               const void *ctx)
+static void setPinCodeResponse(uint64_t eui64, uint8_t endpointId, uint8_t result, const void *ctx)
 {
-    icLogDebug(LOG_TAG, "%s: %"PRIx64" result=%"PRIu8, __func__, eui64, result);
+    icLogDebug(LOG_TAG, "%s: %" PRIx64 " result=%" PRIu8, __func__, eui64, result);
 
     if (handleAsyncResponse(eui64, endpointId, result == 0, NULL, doorLockResponseTypeSetPin) == false)
     {
@@ -1104,14 +1050,14 @@ static void keypadProgrammingEventNotification(uint64_t eui64,
     // we do not want programming to occur on the lock itself.  When this occurs, we just save off some details
     // about it in a resource that could be used to trigger a trouble or whatever
 
-    icLogDebug(LOG_TAG, "%s: event=%"PRIu8", userId=%"PRIu16, __func__, programmingEventCode, userId);
+    icLogDebug(LOG_TAG, "%s: event=%" PRIu8 ", userId=%" PRIu16, __func__, programmingEventCode, userId);
 
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
     AUTO_CLEAN(cJSON_Delete__auto) cJSON *event = cJSON_CreateObject();
 
-    (void)pin; //not saved due to security
+    (void) pin; // not saved due to security
 
     const char *eventCode = NULL;
     switch (programmingEventCode)
@@ -1170,30 +1116,19 @@ static void keypadProgrammingEventNotification(uint64_t eui64,
     }
 
     AUTO_CLEAN(free_generic__auto) char *eventStr = cJSON_Print(event);
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_LAST_PROGRAMMING_EVENT,
-                   eventStr,
-                   NULL);
+    updateResource(uuid, epName, DOORLOCK_PROFILE_RESOURCE_LAST_PROGRAMMING_EVENT, eventStr, NULL);
 }
 
-static void autoRelockTimeChanged(uint64_t eui64,
-                                  uint8_t endpointId,
-                                  uint32_t autoRelockSeconds,
-                                  const void *ctx)
+static void autoRelockTimeChanged(uint64_t eui64, uint8_t endpointId, uint32_t autoRelockSeconds, const void *ctx)
 {
-    icLogDebug(LOG_TAG, "%s: autoRelockSeconds=%"PRIu32, __func__, autoRelockSeconds);
+    icLogDebug(LOG_TAG, "%s: autoRelockSeconds=%" PRIu32, __func__, autoRelockSeconds);
 
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%"PRIu8, endpointId);
+    AUTO_CLEAN(free_generic__auto) char *epName = stringBuilder("%" PRIu8, endpointId);
 
-    AUTO_CLEAN(free_generic__auto) char *str = stringBuilder("%"PRIu32, autoRelockSeconds);
+    AUTO_CLEAN(free_generic__auto) char *str = stringBuilder("%" PRIu32, autoRelockSeconds);
 
-    updateResource(uuid,
-                   epName,
-                   DOORLOCK_PROFILE_RESOURCE_AUTOLOCK_SECS,
-                   str,
-                   NULL);
+    updateResource(uuid, epName, DOORLOCK_PROFILE_RESOURCE_AUTOLOCK_SECS, str, NULL);
 }
 
 static DoorLockRequestSynchronizer *getRequestSynchronizer(uint64_t eui64)
@@ -1226,7 +1161,7 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     sbIcLinkedListIterator *it = linkedListIteratorCreate(device->endpoints);
-    while(linkedListIteratorHasNext(it) && deviceServiceIsShuttingDown() == false)
+    while (linkedListIteratorHasNext(it) && deviceServiceIsShuttingDown() == false)
     {
         icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(it);
         uint8_t endpointNumber = zigbeeDriverCommonGetEndpointNumber(ctx, endpoint);
@@ -1236,11 +1171,8 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
             bool isLocked;
             if (doorLockClusterIsLocked(eui64, endpointNumber, &isLocked))
             {
-                updateResource(device->uuid,
-                               endpoint->id,
-                               DOORLOCK_PROFILE_RESOURCE_LOCKED,
-                               stringValueOfBool(isLocked),
-                               NULL);
+                updateResource(
+                    device->uuid, endpoint->id, DOORLOCK_PROFILE_RESOURCE_LOCKED, stringValueOfBool(isLocked), NULL);
             }
         }
     }
@@ -1268,6 +1200,3 @@ static const char *mapDeviceIdToProfile(ZigbeeDriverCommon *ctx, uint16_t device
 }
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-
-

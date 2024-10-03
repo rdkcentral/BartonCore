@@ -35,18 +35,18 @@
  *-----------------------------------------------*/
 
 
-#include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
-#include <pthread.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <icConcurrent/delayedTask.h>
+#include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
 #include <icTime/timeUtils.h>
 #include <icTypes/icLinkedList.h>
-#include <icConcurrent/threadUtils.h>
 #include <icUtil/stringUtils.h>
 
 /*
@@ -55,10 +55,10 @@
 
 typedef enum
 {
-    DELAY_TASK_IDLE,        // prior to 'wait'
-    DELAY_TASK_WAITING,     // waiting for time to expire
-    DELAY_TASK_RUNNING,     // executing callback function
-    DELAY_TASK_CANCELED,    // signal a 'stop waiting', returns to IDLE
+    DELAY_TASK_IDLE,     // prior to 'wait'
+    DELAY_TASK_WAITING,  // waiting for time to expire
+    DELAY_TASK_RUNNING,  // executing callback function
+    DELAY_TASK_CANCELED, // signal a 'stop waiting', returns to IDLE
 } taskState;
 
 /*
@@ -66,17 +66,17 @@ typedef enum
  */
 typedef struct _delayedTask
 {
-    uint32_t            handle;     // identifier returned to callers
-    taskCallbackFunc    callback;   // function to execute after the delay
-    taskState           state;      // current state
-    uint64_t            delay;
-    delayUnits          units;
-    void                *arg;       // optional arg supplied by caller
-    pthread_mutex_t     mutex;      // mutex for the object
-    pthread_cond_t      cond;       // condition used for canceling
-    pthread_t           tid;        // thread id of the tasks' thread
-    struct timespec     startTime;  // when timer started
-    bool                joinable;   // true when run thread should detach or otherwise safe to pthread_join
+    uint32_t handle;           // identifier returned to callers
+    taskCallbackFunc callback; // function to execute after the delay
+    taskState state;           // current state
+    uint64_t delay;
+    delayUnits units;
+    void *arg;                 // optional arg supplied by caller
+    pthread_mutex_t mutex;     // mutex for the object
+    pthread_cond_t cond;       // condition used for canceling
+    pthread_t tid;             // thread id of the tasks' thread
+    struct timespec startTime; // when timer started
+    bool joinable;             // true when run thread should detach or otherwise safe to pthread_join
 } delayedTask;
 
 typedef enum
@@ -85,8 +85,8 @@ typedef enum
     TASKS_STATE_FINALIZING
 } tasksState;
 
-static icLinkedList     *tasks = NULL;  // list of delayedTask objects
-static pthread_mutex_t  TASK_MTX = PTHREAD_MUTEX_INITIALIZER;
+static icLinkedList *tasks = NULL; // list of delayedTask objects
+static pthread_mutex_t TASK_MTX = PTHREAD_MUTEX_INITIALIZER;
 
 #if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
 // Keep a state tracking if we are told to finalize tasks. This is so we can short-circuit
@@ -114,14 +114,14 @@ static bool finalizeTaskInternal(delayedTask *obj);
  * @return A pointer to the delayed task object, or NULL if
  *         no object could be found.
  */
-static delayedTask* getDelayedTask(uint32_t task)
+static delayedTask *getDelayedTask(uint32_t task)
 {
-    delayedTask* ret;
+    delayedTask *ret;
 
     // find the task for this handle
     //
     pthread_mutex_lock(&TASK_MTX);
-    ret = (delayedTask *)linkedListFind(tasks, &task, findDelayedTaskByHandle);
+    ret = (delayedTask *) linkedListFind(tasks, &task, findDelayedTaskByHandle);
     pthread_mutex_unlock(&TASK_MTX);
 
     return ret;
@@ -144,7 +144,7 @@ uint32_t scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCallbackF
 {
     // create and populate a task definition
     //
-    delayedTask *def = (delayedTask *)calloc(1, sizeof(delayedTask));
+    delayedTask *def = (delayedTask *) calloc(1, sizeof(delayedTask));
     if (def == NULL)
     {
         return 0;
@@ -189,10 +189,10 @@ uint32_t scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCallbackF
     linkedListAppend(tasks, def);
     pthread_mutex_unlock(&TASK_MTX);
 
-    // TODO: Wbb: this seems dangerous as we allow for the arbitrary creation of threads in the system. We should consider moving this to a single thread that sorts a queue by expiration time.
-    // create and start the thread
+    // TODO: Wbb: this seems dangerous as we allow for the arbitrary creation of threads in the system. We should
+    // consider moving this to a single thread that sorts a queue by expiration time. create and start the thread
     //
-    char *threadName = stringBuilder("delayedTask:%"PRIu32, retVal);
+    char *threadName = stringBuilder("delayedTask:%" PRIu32, retVal);
 
     getCurrentTime(&(def->startTime), true);
     createThread(&def->tid, runDelayTaskThread, def, threadName);
@@ -243,14 +243,14 @@ uint32_t scheduleTimeOfDayTask(uint8_t hour, uint8_t min, taskCallbackFunc func,
 
     // call 'func' after the delay
     //
-    return scheduleDelayTask((uint32_t)diffSecs, DELAY_SECS, func, arg);
+    return scheduleDelayTask((uint32_t) diffSecs, DELAY_SECS, func, arg);
 }
 
 bool rescheduleDelayTask(uint32_t task, uint64_t delayAmount, delayUnits units)
 {
     bool ret = false;
 
-    delayedTask* obj = getDelayedTask(task);
+    delayedTask *obj = getDelayedTask(task);
 
     if (obj != NULL)
     {
@@ -370,10 +370,10 @@ bool exceuteDelayTask(uint32_t task)
 
 #if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
 
-//FIXME: This api is has concurrency problems due to delayed tasks rescheduling themselves (software trouble
-// generation). It is currently only practically used to cleanly shutdown single process for CI, so I've added
-// rudimentary safeguards under the assumption this function only gets called from one thread at a time. However,
-// this function and *tasks module callbacks need to be investigated at a future date.
+// FIXME: This api is has concurrency problems due to delayed tasks rescheduling themselves (software trouble
+//  generation). It is currently only practically used to cleanly shutdown single process for CI, so I've added
+//  rudimentary safeguards under the assumption this function only gets called from one thread at a time. However,
+//  this function and *tasks module callbacks need to be investigated at a future date.
 /*
  * Force and wait for all delayed tasks to complete
  */
@@ -385,9 +385,9 @@ void finalizeAllDelayTasks()
 
     pthread_mutex_lock(&TASK_MTX);
     icLinkedListIterator *iter = linkedListIteratorCreate(tasks);
-    while(linkedListIteratorHasNext(iter))
+    while (linkedListIteratorHasNext(iter))
     {
-        delayedTask *item = (delayedTask *)linkedListIteratorGetNext(iter);
+        delayedTask *item = (delayedTask *) linkedListIteratorGetNext(iter);
         bool joinable;
         pthread_t tid;
 
@@ -488,7 +488,7 @@ static void *runDelayTaskThread(void *arg)
 {
     // get the taskDef parameters
     //
-    delayedTask *def = (delayedTask *)arg;
+    delayedTask *def = (delayedTask *) arg;
     uint32_t id = def->handle;
     bool detachSelf = false;
 
@@ -558,12 +558,12 @@ static void *runDelayTaskThread(void *arg)
     }
     pthread_mutex_unlock(&def->mutex);
 
-    // now that we're done, delete this task from the list
-    // and free it.  we assume the callback already freed
-    // the 'arg' within the task (due to execute or cancel)
-    // if the list is empty, release it (could be we're shutting down)
-    //
-    cleanup:
+// now that we're done, delete this task from the list
+// and free it.  we assume the callback already freed
+// the 'arg' within the task (due to execute or cancel)
+// if the list is empty, release it (could be we're shutting down)
+//
+cleanup:
     if (detachSelf == true)
     {
         pthread_mutex_lock(&TASK_MTX);
@@ -586,7 +586,7 @@ static void listDeleteDelayTask(void *item)
 {
     if (item != NULL)
     {
-        releaseDelayTask((delayedTask *)item);
+        releaseDelayTask((delayedTask *) item);
     }
 }
 
@@ -612,8 +612,8 @@ static void releaseDelayTask(delayedTask *task)
  */
 static bool findDelayedTaskByHandle(void *searchVal, void *item)
 {
-    uint32_t *id = (uint32_t *)searchVal;
-    delayedTask *task = (delayedTask *)item;
+    uint32_t *id = (uint32_t *) searchVal;
+    delayedTask *task = (delayedTask *) item;
 
     // comparet he handle values
     //
@@ -641,7 +641,6 @@ static uint32_t assignHandle()
     // look at the last item in the list, then
     // add 1 to it
     //
-    delayedTask *last = (delayedTask *)linkedListGetElementAt(tasks, (uint32_t)(count - 1));
+    delayedTask *last = (delayedTask *) linkedListGetElementAt(tasks, (uint32_t) (count - 1));
     return (last->handle + 1);
 }
-

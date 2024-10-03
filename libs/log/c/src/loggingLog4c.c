@@ -35,15 +35,15 @@
 
 #include <stdarg.h>
 
-#include <log4c.h>
 #include <icLog/logging.h>
+#include <log4c.h>
 
 #include "loggingCommon.h"
 
 /*
  * initialize the logger
  */
-__attribute__ ((constructor)) static void initIcLogger(void)
+__attribute__((constructor)) static void initIcLogger(void)
 {
     log4c_init();
 }
@@ -51,16 +51,21 @@ __attribute__ ((constructor)) static void initIcLogger(void)
 /*
  * Issue logging message based on a 'categoryName' and 'priority'
  */
-void icLogMsg(const char *file, size_t filelen,
-              const char *func, size_t funclen,
+void icLogMsg(const char *file,
+              size_t filelen,
+              const char *func,
+              size_t funclen,
               long line,
-              const char *categoryName, logPriority priority, const char *format, ...)
+              const char *categoryName,
+              logPriority priority,
+              const char *format,
+              ...)
 {
-    va_list                 arglist;
-    log4c_priority_level_t  logPriority = LOG4C_PRIORITY_DEBUG;
-    log4c_category_t*       logcat = NULL;
+    va_list arglist;
+    log4c_priority_level_t logPriority = LOG4C_PRIORITY_DEBUG;
+    log4c_category_t *logcat = NULL;
 
-    if(!shouldLogMessage(priority))
+    if (!shouldLogMessage(priority))
     {
         return;
     }

@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -259,7 +259,8 @@ bool getCJSONBool(const cJSON *json, const char *key, bool *value)
  */
 void setCJSONBool(cJSON *json, bool value)
 {
-    if (cJSON_IsBool(json)) {
+    if (cJSON_IsBool(json))
+    {
         json->type = (json->type & ~0xFF) | (value ? cJSON_True : cJSON_False);
 
         json->valueint = value ? 1 : 0;

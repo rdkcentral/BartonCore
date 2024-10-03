@@ -34,4 +34,4 @@
 
 bool runStringBufferTests();
 
-#endif //ZILKER_STRINGBUFFERTEST_H
+#endif // ZILKER_STRINGBUFFERTEST_H

@@ -35,9 +35,9 @@
  *-----------------------------------------------*/
 
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #include <time.h>
 
@@ -46,33 +46,57 @@
 
 // define a table of patterns
 //
-#define PATTERN_LEN     8
-#define PATTERN_COUNT   36
+#define PATTERN_LEN   8
+#define PATTERN_COUNT 36
 static const uint32_t patterns[PATTERN_COUNT][PATTERN_LEN] = {
-        {  3, 0, 2, 6, 5, 0, 4, 1 }, {  5, 6, 2, 0, 5, 1, 3, 2 }, {  6, 3, 0, 5, 1, 3, 1, 2 },
-        {  5, 2, 5, 0, 3, 1, 6, 2 }, {  6, 0, 1, 3, 5, 6, 4, 3 }, {  5, 6, 1, 1, 5, 5, 0, 5 },
-        {  1, 0, 2, 0, 6, 4, 1, 4 }, {  1, 6, 2, 4, 5, 0, 4, 2 }, {  6, 3, 5, 2, 1, 4, 6, 0 },
-        {  1, 0, 3, 5, 4, 5, 1, 3 }, {  3, 1, 5, 6, 2, 5, 6, 5 }, {  1, 6, 5, 4, 0, 6, 4, 0 },
-        {  4, 5, 1, 4, 3, 2, 4, 6 }, {  3, 0, 5, 3, 5, 3, 1, 0 }, {  0, 6, 4, 5, 4, 6, 6, 5 },
-        {  5, 2, 0, 3, 2, 1, 1, 0 }, {  4, 0, 2, 0, 2, 4, 4, 3 }, {  5, 1, 4, 3, 2, 3, 1, 0 },
-        {  0, 4, 5, 4, 3, 2, 1, 2 }, {  4, 0, 2, 4, 5, 4, 5, 1 }, {  3, 2, 4, 5, 1, 4, 5, 1 },
-        {  1, 4, 3, 4, 6, 4, 4, 2 }, {  3, 0, 3, 2, 2, 1, 6, 4 }, {  0, 6, 2, 3, 3, 4, 4, 0 },
-        {  4, 3, 0, 1, 6, 2, 4, 2 }, {  1, 0, 3, 3, 6, 2, 6, 4 }, {  1, 5, 5, 2, 3, 0, 2, 0 },
-        {  5, 6, 3, 6, 1, 4, 2, 3 }, {  6, 0, 4, 3, 2, 1, 3, 3 }, {  5, 0, 3, 6, 5, 3, 0, 3 },
-        {  2, 3, 3, 1, 2, 5, 4, 1 }, {  5, 2, 4, 0, 3, 1, 2, 1 }, {  1, 5, 3, 0, 1, 2, 6, 3 },
-        {  0, 1, 3, 6, 3, 3, 2, 4 }, {  4, 5, 5, 0, 3, 1, 2, 6 }, {  1, 0, 5, 2, 1, 0, 1, 0 }
+    {3, 0, 2, 6, 5, 0, 4, 1},
+    {5, 6, 2, 0, 5, 1, 3, 2},
+    {6, 3, 0, 5, 1, 3, 1, 2},
+    {5, 2, 5, 0, 3, 1, 6, 2},
+    {6, 0, 1, 3, 5, 6, 4, 3},
+    {5, 6, 1, 1, 5, 5, 0, 5},
+    {1, 0, 2, 0, 6, 4, 1, 4},
+    {1, 6, 2, 4, 5, 0, 4, 2},
+    {6, 3, 5, 2, 1, 4, 6, 0},
+    {1, 0, 3, 5, 4, 5, 1, 3},
+    {3, 1, 5, 6, 2, 5, 6, 5},
+    {1, 6, 5, 4, 0, 6, 4, 0},
+    {4, 5, 1, 4, 3, 2, 4, 6},
+    {3, 0, 5, 3, 5, 3, 1, 0},
+    {0, 6, 4, 5, 4, 6, 6, 5},
+    {5, 2, 0, 3, 2, 1, 1, 0},
+    {4, 0, 2, 0, 2, 4, 4, 3},
+    {5, 1, 4, 3, 2, 3, 1, 0},
+    {0, 4, 5, 4, 3, 2, 1, 2},
+    {4, 0, 2, 4, 5, 4, 5, 1},
+    {3, 2, 4, 5, 1, 4, 5, 1},
+    {1, 4, 3, 4, 6, 4, 4, 2},
+    {3, 0, 3, 2, 2, 1, 6, 4},
+    {0, 6, 2, 3, 3, 4, 4, 0},
+    {4, 3, 0, 1, 6, 2, 4, 2},
+    {1, 0, 3, 3, 6, 2, 6, 4},
+    {1, 5, 5, 2, 3, 0, 2, 0},
+    {5, 6, 3, 6, 1, 4, 2, 3},
+    {6, 0, 4, 3, 2, 1, 3, 3},
+    {5, 0, 3, 6, 5, 3, 0, 3},
+    {2, 3, 3, 1, 2, 5, 4, 1},
+    {5, 2, 4, 0, 3, 1, 2, 1},
+    {1, 5, 3, 0, 1, 2, 6, 3},
+    {0, 1, 3, 6, 3, 3, 2, 4},
+    {4, 5, 5, 0, 3, 1, 2, 6},
+    {1, 0, 5, 2, 1, 0, 1, 0}
 };
 
-#define PI_STRING   "3.1415926535897931159979634685441851615905761719"
+#define PI_STRING "3.1415926535897931159979634685441851615905761719"
 
 
 // header stored at beginning of the buffer
 //
 typedef struct _dataHeader
 {
-    uint32_t  pattern;  // index into "patterns" used for encoding (need uint8, but make 32 for padding)
-    uint32_t length;    // length of the original "input" string
-    char     mask;      // rand value used to 'mask' elements of this header
+    uint32_t pattern; // index into "patterns" used for encoding (need uint8, but make 32 for padding)
+    uint32_t length;  // length of the original "input" string
+    char mask;        // rand value used to 'mask' elements of this header
 } dataHeader;
 
 // private function declarations
@@ -106,9 +130,7 @@ static void printHex(char *buff, int len);
  * @param inputLen - length of the data to obfuscate
  * @param outputLen - length of the returned buffer.
  */
-char *obfuscate(const char *passphrase, uint32_t passLen,
-                const char *input, uint32_t inputLen,
-                uint32_t *outputLen)
+char *obfuscate(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen)
 {
     // sanity check.  cannot look at the input strings
     // as those could start with a NULL character
@@ -151,7 +173,7 @@ char *obfuscate(const char *passphrase, uint32_t passLen,
     // header size so we don't overwrite it
     //
     writeHeader(buffer, row, inputLen);
-    uint32_t offset = (uint32_t)sizeof(dataHeader);
+    uint32_t offset = (uint32_t) sizeof(dataHeader);
 
     // hide the obfuscated value (munge) by sprinkling each
     // byte into a random buffer, utilizing our pattern
@@ -159,7 +181,7 @@ char *obfuscate(const char *passphrase, uint32_t passLen,
     //
     int buffIdx = offset;
     int dataIdx, pattIdx = 0;
-    for (dataIdx = 0 ; dataIdx < inputLen ; dataIdx++)
+    for (dataIdx = 0; dataIdx < inputLen; dataIdx++)
     {
         // find number of chars to skip using pattern
         //
@@ -197,9 +219,7 @@ char *obfuscate(const char *passphrase, uint32_t passLen,
  * @param inputLen - length of the data to unobfuscate
  * @param outputLen - length of the returned buffer.
  */
-char *unobfuscate(const char *passphrase, uint32_t passLen,
-                  const char *input, uint32_t inputLen,
-                  uint32_t *outputLen)
+char *unobfuscate(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen)
 {
     // sanity check.  cannot look at the input strings
     // as those could start with a NULL character
@@ -226,16 +246,16 @@ char *unobfuscate(const char *passphrase, uint32_t passLen,
     // 'de-sprinkle' the obfuscated message from the noise
     // (i.e. remove random chars that are not needed)
     //
-    char *temp = (char *)calloc(length+1, sizeof(char));
+    char *temp = (char *) calloc(length + 1, sizeof(char));
     *outputLen = length;
 
     // extract desired chars from 'input' using the pattern,
     // and place them into our temp buffer
     //
     const uint32_t *pattern = patterns[row];
-    int buffIdx = (int)sizeof(dataHeader);
+    int buffIdx = (int) sizeof(dataHeader);
     int tempIdx, pattIdx = 0;
-    for (tempIdx = 0 ; tempIdx < length ; tempIdx++)
+    for (tempIdx = 0; tempIdx < length; tempIdx++)
     {
         // find number of chars to skip using pattern
         //
@@ -283,9 +303,9 @@ static void initRandomness(int32_t seed)
     getCurrentTime(&current, true);
     if (seed != 0)
     {
-        seed = (int32_t)(current.tv_nsec / seed);
+        seed = (int32_t) (current.tv_nsec / seed);
     }
-    srandom((unsigned int)time(NULL) + seed);
+    srandom((unsigned int) time(NULL) + seed);
 }
 
 /*
@@ -301,9 +321,9 @@ static char *mask(const char *key, uint32_t keyLen, const char *input, uint32_t 
     // now that we have 2 character arrays of the same
     // length, loop through and bitwise XOR them together
     //
-    char *buffer = (char *)calloc(inputLen+1, sizeof(char));
+    char *buffer = (char *) calloc(inputLen + 1, sizeof(char));
     uint32_t x = 0;
-    for (x = 0 ; x < inputLen ; x++)
+    for (x = 0; x < inputLen; x++)
     {
         buffer[x] = (adjusted[x] ^ input[x]);
     }
@@ -321,7 +341,7 @@ static char *createKey(const char *passphrase, uint32_t passLen, uint32_t *outpu
 {
     // represent PI as a string of 48 characters
     //
-    uint32_t pieLen = (uint32_t)strlen(PI_STRING);
+    uint32_t pieLen = (uint32_t) strlen(PI_STRING);
 
     // merge passphrase with pie, producing 'key'
     //
@@ -350,12 +370,12 @@ static void readHeader(const char *buffer, uint8_t *patternOut, uint32_t *inputL
 {
     // overlay a header struct at the beginning of the buffer
     //
-    dataHeader *head = (dataHeader *)buffer;
+    dataHeader *head = (dataHeader *) buffer;
 
     // use the 'mask' to decode the other values
     //
-    *patternOut = (uint8_t)(head->pattern ^ head->mask);
-    *inputLenOut = (uint32_t)(head->length ^ head->mask);
+    *patternOut = (uint8_t) (head->pattern ^ head->mask);
+    *inputLenOut = (uint32_t) (head->length ^ head->mask);
 }
 
 /*
@@ -368,12 +388,12 @@ static void writeHeader(char *buffer, uint8_t pattern, uint32_t inputLen)
     // create a header struct and grab a random number to use for masking
     //
     dataHeader head;
-    head.mask = (char)(random() % 127);
+    head.mask = (char) (random() % 127);
 
     // add the pattern & length, but mask against the rand value
     //
-    head.pattern = (uint32_t)(pattern ^ head.mask);
-    head.length = (uint32_t)(inputLen ^ head.mask);
+    head.pattern = (uint32_t) (pattern ^ head.mask);
+    head.length = (uint32_t) (inputLen ^ head.mask);
 
     // now write the header at the beginning of buffer
     //
@@ -394,15 +414,15 @@ static char *generateRandomBuff(uint32_t maxLength)
 
     // allocate the buffer
     //
-    char *buffer = (char *)malloc(sizeof(char) * (maxLength + 1));
+    char *buffer = (char *) malloc(sizeof(char) * (maxLength + 1));
 
     // Fill in the token using random values, keeping them
     // bounded between 0-127
     //
     int i;
-    for (i = 0 ; i < maxLength; i++)
+    for (i = 0; i < maxLength; i++)
     {
-        buffer[i] = (char)(random() % 127);
+        buffer[i] = (char) (random() % 127);
     }
     return buffer;
 }
@@ -424,7 +444,7 @@ static char *fillByDuplication(const char *input, uint32_t inputLen, uint32_t ou
 
     // create the buffer to write into (leave room for NULL char)
     //
-    char *buffer = (char *)calloc(outputLen + 1, sizeof(char));
+    char *buffer = (char *) calloc(outputLen + 1, sizeof(char));
     char *start = buffer;
     int offset = 0;
 
@@ -463,7 +483,7 @@ static char *fillByDuplication(const char *input, uint32_t inputLen, uint32_t ou
  */
 static uint8_t choosePattern()
 {
-    return (uint8_t)(random() % PATTERN_COUNT);
+    return (uint8_t) (random() % PATTERN_COUNT);
 }
 
 /*
@@ -478,7 +498,7 @@ static uint32_t calculatePatternSpread(uint8_t row, uint32_t inputLen)
     const uint32_t *pattern = patterns[row];
     uint32_t perRow = PATTERN_LEN;
     int x = 0;
-    for (x = 0 ; x < PATTERN_LEN ; x++)
+    for (x = 0; x < PATTERN_LEN; x++)
     {
         perRow += pattern[x];
     }

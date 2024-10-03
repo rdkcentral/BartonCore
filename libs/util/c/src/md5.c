@@ -15,8 +15,8 @@
 
 #include <icUtil/md5.h>
 
-#define DIGEST_BYTE_LEN     16
-#define DIGEST_STR_LEN      (DIGEST_BYTE_LEN * 2)
+#define DIGEST_BYTE_LEN 16
+#define DIGEST_STR_LEN  (DIGEST_BYTE_LEN * 2)
 
 /*
  *
@@ -48,4 +48,3 @@ char *icMd5sum(const char *src)
     copyBinaryToString(result, checksum);
     return strdup(result);
 }
-

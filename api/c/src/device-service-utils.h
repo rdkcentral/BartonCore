@@ -51,7 +51,8 @@ BDeviceServiceMetadata *convertIcDeviceMetadataToGObject(const icDeviceMetadata 
 
 BDeviceServiceDevice *convertIcDeviceToGObject(const icDevice *device);
 
-BDeviceServiceZigbeeEnergyScanResult *convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergyScanResult);
+BDeviceServiceZigbeeEnergyScanResult *
+convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergyScanResult);
 
 GList *convertIcDeviceEndpointListToGList(const icLinkedList *endpoints);
 

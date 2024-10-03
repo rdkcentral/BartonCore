@@ -28,14 +28,14 @@
  * Author: jelderton - 4/3/18
  *-----------------------------------------------*/
 
-#include <icLog/logging.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
-#include "queueTest.h"
 #include "icTypes/icFifoBuffer.h"
+#include "queueTest.h"
+#include <icLog/logging.h>
+#include <inttypes.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define LOG_CAT     "buffTEST"
+#define LOG_CAT "buffTEST"
 
 
 static bool canAddSmallStrings()
@@ -52,7 +52,7 @@ static bool canAddSmallStrings()
     if (len != 9)
     {
         // expecting 9, got something else
-        icLogError(LOG_CAT, "add: expected length of 9, got %"PRIu32, len);
+        icLogError(LOG_CAT, "add: expected length of 9, got %" PRIu32, len);
         fifoBuffDestroy(buff);
         return false;
     }
@@ -68,7 +68,7 @@ static bool canReadSmallStrings()
     // add a small string to the buffer
     //
     const char *msg = "this is a test of the icBuffer object";
-    fifoBuffPush(buff, (void *)msg, (uint32_t)strlen(msg));
+    fifoBuffPush(buff, (void *) msg, (uint32_t) strlen(msg));
 
     // pull 7 chars
     char sample[10];
@@ -78,7 +78,7 @@ static bool canReadSmallStrings()
 
     // make sure add again works
     const char *msg2 = " another string to append";
-    fifoBuffPush(buff, (void *)msg2, (uint32_t)strlen(msg2));
+    fifoBuffPush(buff, (void *) msg2, (uint32_t) strlen(msg2));
 
     // len should be the length of both strings, minus the 7 chars read before
     //
@@ -87,7 +87,7 @@ static bool canReadSmallStrings()
     if (len != expect)
     {
         // expecting 9, got something else
-        icLogError(LOG_CAT, "read: expected length of %"PRIu32", got %"PRIu32, expect, len);
+        icLogError(LOG_CAT, "read: expected length of %" PRIu32 ", got %" PRIu32, expect, len);
         fifoBuffDestroy(buff);
         return false;
     }
@@ -114,5 +114,3 @@ bool runBufferTests()
 
     return true;
 }
-
-

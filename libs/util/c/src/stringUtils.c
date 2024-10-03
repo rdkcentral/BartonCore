@@ -28,22 +28,22 @@
  * Author: jgleason - 9/23/15 (moved tlea's stringReplace function here)
  *-----------------------------------------------*/
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <time.h>
-#include <stdio.h>
-#include <stdarg.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include <icLog/logging.h>
-#include <icUtil/stringUtils.h>
-#include <icUtil/array.h>
 #include <icTypes/icStringBuffer.h>
+#include <icUtil/array.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_TAG    "STRINGUTILS"
+#define LOG_TAG "STRINGUTILS"
 
 /*
  * take an original string a replace a substring within it
@@ -78,7 +78,7 @@ char *stringReplace(const char *orig, const char *rep, const char *with)
     //
     icStringBuffer *buffer = stringBufferCreate(strlen(orig));
     char *ptr = NULL;
-    char *start = (char *)orig;
+    char *start = (char *) orig;
     unsigned long repLen = strlen(rep);
 
     // search for instances of 'rep' in the 'orig' string
@@ -86,7 +86,7 @@ char *stringReplace(const char *orig, const char *rep, const char *with)
     while ((ptr = strstr(start, rep)) != NULL)
     {
         // append from 'start' to 'ptr'
-        stringBufferAppendLength(buffer, start, (uint16_t)(ptr - start));
+        stringBufferAppendLength(buffer, start, (uint16_t) (ptr - start));
 
         // append the replacement
         stringBufferAppend(buffer, with);
@@ -173,7 +173,7 @@ char *stringEdit(char *str, const size_t offset, const size_t removeCount, const
     {
         size_t shift = newSize - origSize + removeCharsFromNew;
         size_t displacedPartSize = origSize - offset - removeCharsFromNew;
-        char * displacedPart = NULL;
+        char *displacedPart = NULL;
 
         str = realloc(str, newSize + 1);
         displacedPart = str + offset + removeCharsFromNew;
@@ -199,8 +199,9 @@ char *stringEdit(char *str, const size_t offset, const size_t removeCount, const
          * The displaced part is at the end of the region that will be deleted. removeCharsFromNew always represents how
          * many characters will be erased/replaced within the planned string bounds.
          *
-         * When the planned bounds include the entire removeCharsFromNew count, it is added to offset to get the displaced
-         * part. The net size change may be less than this, as characters will be overwritten by newText if present.
+         * When the planned bounds include the entire removeCharsFromNew count, it is added to offset to get the
+         * displaced part. The net size change may be less than this, as characters will be overwritten by newText if
+         * present.
          *
          * When the planned bounds exclude part or all of the discard region, the net size change is exactly the number
          * of characters excluded from the planned string. The removeCharsFromNew was already reduced by this amount.
@@ -253,11 +254,11 @@ char *generateRandomToken(uint16_t minLength, uint16_t maxLength, int seedAdder)
     }
 
     /* Generate a random token length using 'time' plus the 'seedAdder' */
-    srandom((unsigned int)time(NULL)+seedAdder);
-    len = (uint16_t)(random() % (maxLength-minLength+1) +minLength);
+    srandom((unsigned int) time(NULL) + seedAdder);
+    len = (uint16_t) (random() % (maxLength - minLength + 1) + minLength);
 
     /* Allocate and zero memory for our token */
-    token = (char *)calloc(len+1, sizeof(char));
+    token = (char *) calloc(len + 1, sizeof(char));
 
     /* Check to see if we were successful */
     if (token == NULL)
@@ -267,10 +268,10 @@ char *generateRandomToken(uint16_t minLength, uint16_t maxLength, int seedAdder)
     }
 
     /* Fill in the token using random selections from tokenBits[] */
-    srandom((unsigned int)time(NULL)+seedAdder+2);
-    for (int i=0; i< len; i++)
+    srandom((unsigned int) time(NULL) + seedAdder + 2);
+    for (int i = 0; i < len; i++)
     {
-        token[i] = tokenBits[random()%strlen(tokenBits)];
+        token[i] = tokenBits[random() % strlen(tokenBits)];
     }
     return token;
 }
@@ -298,7 +299,7 @@ bool safeStringCopy(char *dest, uint16_t maxDestChars, const char *src)
     {
         // source is longer then destination
         //
-        max = (size_t)(maxDestChars - 1);
+        max = (size_t) (maxDestChars - 1);
     }
 
     // do the copy and NULL terminate the string
@@ -494,9 +495,9 @@ char *trimString(const char *src)
 
     // make return string at least the same size as 'src'
     //
-    char *retVal = (char *)malloc(sizeof(char) * strlen(src) + 1);
+    char *retVal = (char *) malloc(sizeof(char) * strlen(src) + 1);
     int offset = 0;
-    char *ptr = (char *)src;
+    char *ptr = (char *) src;
     bool gotChar = false;
 
     // loop until our ptr points hits 'end of string'
@@ -532,9 +533,9 @@ char *trimString(const char *src)
     // walk backward replacing any whitespace chars with NULL chars
     // to remove the trailing spaces
     //
-    while (offset > 0 && isspace(retVal[offset-1]))
+    while (offset > 0 && isspace(retVal[offset - 1]))
     {
-        retVal[offset-1] = '\0';
+        retVal[offset - 1] = '\0';
         offset--;
     }
 
@@ -584,9 +585,9 @@ static int copyAndTrimBuffer(char *dest, const char *src, char *stop)
     // walk backward replacing any whitespace chars with NULL chars
     // to remove the trailing spaces
     //
-    while (offset > 0 && isspace(dest[offset-1]))
+    while (offset > 0 && isspace(dest[offset - 1]))
     {
-        dest[offset-1] = '\0';
+        dest[offset - 1] = '\0';
         offset--;
     }
 
@@ -643,7 +644,7 @@ void stringToLowerCase(char *inputStr)
     int loop = 0;
     while (loop < len)
     {
-        inputStr[loop] = (char)tolower(inputStr[loop]);
+        inputStr[loop] = (char) tolower(inputStr[loop]);
         loop++;
     }
 }
@@ -662,7 +663,7 @@ void stringToUpperCase(char *inputStr)
     int loop = 0;
     while (loop < len)
     {
-        inputStr[loop] = (char)toupper(inputStr[loop]);
+        inputStr[loop] = (char) toupper(inputStr[loop]);
         loop++;
     }
 }
@@ -691,29 +692,29 @@ char *stringToCamelCase(const char *inputStr)
     int dest = 0, loop = 0;
     bool nextUpper = false;
 
-    while(loop < len)
+    while (loop < len)
     {
         // if current is one of these char, uppercase the next char
         //
         if ((inputStr[loop] == '_') || (inputStr[loop] == '-') || (inputStr[loop] == ' '))
         {
             nextUpper = true;
-            loop ++;
+            loop++;
             continue;
         }
 
         if (nextUpper)
         {
-            retVal[dest] = (char)toupper(inputStr[loop]);
+            retVal[dest] = (char) toupper(inputStr[loop]);
             nextUpper = false;
         }
         else
         {
-            retVal[dest] = (char)tolower(inputStr[loop]);
+            retVal[dest] = (char) tolower(inputStr[loop]);
         }
 
-        dest ++;
-        loop ++;
+        dest++;
+        loop++;
     }
 
     return retVal;
@@ -727,7 +728,7 @@ char *stringToCamelCase(const char *inputStr)
  */
 char *stringBuilder(const char *format, ...)
 {
-    va_list  arglist;
+    va_list arglist;
 
     // preprocess the format & args
     //
@@ -751,8 +752,8 @@ char *stringBuilder(const char *format, ...)
 
         // create the string, then populate it
         //
-        retVal = (char *)malloc(sizeof(char) * (strLen+1));
-        vsnprintf(retVal, (size_t)strLen+1, format, arglist);
+        retVal = (char *) malloc(sizeof(char) * (strLen + 1));
+        vsnprintf(retVal, (size_t) strLen + 1, format, arglist);
     }
 #endif // defined _GNU_SOURCE && !defined CONFIG_PRODUCT_ANGELSENVY
 
@@ -764,7 +765,7 @@ char *stringBuilder(const char *format, ...)
 
 char *strerrorSafe(int errnum)
 {
-    char buf[1024] = { 0 };
+    char buf[1024] = {0};
 #if !defined(__GLIBC__) || ((_POSIX_C_SOURCE >= 200112L) && !defined(_GNU_SOURCE))
     strerror_r(errnum, buf, ARRAY_LENGTH(buf));
     return strdup(buf);
@@ -878,7 +879,11 @@ bool stringToUint64(const char *str, uint64_t *num)
  * @param maxValue maximum value in range(inclusive)
  * @return true if success and is within range, false otherwise
  */
-bool stringToUnsignedNumberWithinRange(const char *str, uint64_t *num, uint8_t base, uint64_t minValue, uint64_t maxValue)
+bool stringToUnsignedNumberWithinRange(const char *str,
+                                       uint64_t *num,
+                                       uint8_t base,
+                                       uint64_t minValue,
+                                       uint64_t maxValue)
 {
     bool retVal = true;
     if (str == NULL)
@@ -1050,7 +1055,7 @@ bool stringToBoolStrict(const char *str, bool *result)
         if (strcasecmp(str, "true") == 0 || strcasecmp(str, "yes") == 0 || strcmp(str, "1") == 0)
         {
             *result = true;
-            success= true;
+            success = true;
         }
         else if (strcasecmp(str, "false") == 0 || strcasecmp(str, "no") == 0 || strcmp(str, "0") == 0)
         {
@@ -1071,7 +1076,7 @@ bool stringToBool(const char *str)
     bool retVal = false;
 
     // coverity[check_return] if unparseable, retVal will be false. Warnings will only clutter logs.
-    stringToBoolStrict(str,&retVal);
+    stringToBoolStrict(str, &retVal);
 
     return retVal;
 }
@@ -1118,16 +1123,16 @@ char *bitmapToStr(const uint64_t bitmap, const size_t mapSize)
     {
         if ((bitmap >> i) & 1U)
         {
-            sprintf(currentPos,"|%u", i+1);
+            sprintf(currentPos, "|%u", i + 1);
             if (i >= 9)
             {
                 // added |xx
-                currentPos+=3;
+                currentPos += 3;
             }
             else
             {
                 // added |x
-                currentPos+=2;
+                currentPos += 2;
             }
         }
     }
@@ -1169,7 +1174,7 @@ char *stringBin2hex(const unsigned char *data, size_t length)
     {
         size_t j = i * 2;
         hex[j] = hexits[(data[i] >> 4) & 0xf];
-        hex[j+1] = hexits[data[i] & 0xf];
+        hex[j + 1] = hexits[data[i] & 0xf];
     }
 
     hex[hexLen] = '\0';
@@ -1222,7 +1227,7 @@ char *stringPad(const char *src, uint16_t padLen, char padChar, bool isLeftPad)
     uint16_t srcLen = strlen(src);
     uint16_t padStrLen = srcLen + padLen + 1;
 
-    padStr = (char *)malloc(sizeof(char) * padStrLen);
+    padStr = (char *) malloc(sizeof(char) * padStrLen);
     if (padStr == NULL)
     {
         return NULL;
@@ -1238,7 +1243,7 @@ char *stringPad(const char *src, uint16_t padLen, char padChar, bool isLeftPad)
         memcpy(padStr, src, srcLen);
         memset(padStr + srcLen, padChar, padLen);
     }
-    padStr[padStrLen-1] = '\0';
+    padStr[padStrLen - 1] = '\0';
 
     return padStr;
 }

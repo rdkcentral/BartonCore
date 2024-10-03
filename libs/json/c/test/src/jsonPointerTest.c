@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2020 Comcast
 //
 // All rights reserved.
@@ -24,11 +24,11 @@
 //
 
 // cmocka & it's dependencies
-#include <stddef.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
+#include <stddef.h>
 
+#include <cmocka.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -168,14 +168,13 @@ static void test_fetchByJSONPointer(void **state)
     jsonPointerDestroy(pointer);
 
 
-
     cJSON_Delete(json);
 }
 
-#define A_NODE "A"
-#define B_NODE "B"
-#define C_NODE "C"
-#define D_NODE "D"
+#define A_NODE    "A"
+#define B_NODE    "B"
+#define C_NODE    "C"
+#define D_NODE    "D"
 #define A_POINTER "/" A_NODE
 #define B_POINTER A_POINTER "/" B_NODE
 #define C_POINTER B_POINTER "/" C_NODE
@@ -353,11 +352,8 @@ int main(int argc, char *argv[])
 {
     setIcLogPriorityFilter(IC_LOG_TRACE);
 
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_fetchByJSONPointer),
-                    cmocka_unit_test_setup(test_JSONPointerCreate, setup_JSONPointerCreate)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_fetchByJSONPointer),
+                                       cmocka_unit_test_setup(test_JSONPointerCreate, setup_JSONPointerCreate)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

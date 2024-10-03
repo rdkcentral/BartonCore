@@ -48,12 +48,8 @@ typedef enum
     N_B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTIES
 } BDeviceServiceZigbeeEnergyScanResultProperty;
 
-static const char *B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES[] = {NULL,
-                                                                                  "channel",
-                                                                                  "max-rssi",
-                                                                                  "min-rssi",
-                                                                                  "avg-rssi",
-                                                                                  "score"};
+static const char *B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES[] =
+    {NULL, "channel", "max-rssi", "min-rssi", "avg-rssi", "score"};
 
 /**
  * b_device_service_device_found_details_new

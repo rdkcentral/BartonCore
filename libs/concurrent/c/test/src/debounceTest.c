@@ -24,18 +24,19 @@
 // Created by Christian Leithner on 12/9/20
 //
 
-#include <icLog/logging.h>
 #include <setjmp.h>
 #include <stdarg.h>
-#include <cmocka.h>
-#include <unistd.h>
+#include <stddef.h>
 
-#include <icConcurrent/icDebounce.h>
-#include <pthread.h>
-#include <icConcurrent/timedWait.h>
+#include <cmocka.h>
+#include <icLog/logging.h>
+#include <unistd.h>
 #include <asm/errno.h>
-#include <icTime/timeUtils.h>
+#include <icConcurrent/icDebounce.h>
 #include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
+#include <icTime/timeUtils.h>
+#include <pthread.h>
 
 #define LOG_TAG "debounceTest"
 
@@ -88,7 +89,7 @@ static void test_debounceExpire(void **state)
     int localExpireCount;
 
     // Test re-usability (multiple timer expirations)
-    for (int i = 0; i<5; i++)
+    for (int i = 0; i < 5; i++)
     {
         assert_true(debounce(debouncer));
         mutexLock(&mtx);
@@ -156,12 +157,9 @@ static void test_debounceDestroy__auto(void **state)
 int main(int argc, const char **argv)
 {
     initTimedWaitCond(&cond);
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_createDestroy),
-                    cmocka_unit_test(test_debounceExpire),
-                    cmocka_unit_test(test_debounceDestroy__auto)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_createDestroy),
+                                       cmocka_unit_test(test_debounceExpire),
+                                       cmocka_unit_test(test_debounceDestroy__auto)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

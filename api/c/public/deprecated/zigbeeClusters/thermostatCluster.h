@@ -34,44 +34,23 @@
 
 typedef struct
 {
-    void (*localTemperatureChanged)(uint64_t eui64,
-                                    uint8_t endpointId,
-                                    int16_t temp,
-                                    const void *ctx);
+    void (*localTemperatureChanged)(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-    void (*occupiedHeatingSetpointChanged)(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx);
+    void (*occupiedHeatingSetpointChanged)(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-    void (*occupiedCoolingSetpointChanged)(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx);
+    void (*occupiedCoolingSetpointChanged)(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-    void (*systemModeChanged)(uint64_t eui64,
-                              uint8_t endpointId,
-                              uint8_t mode,
-                              const void *ctx);
+    void (*systemModeChanged)(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx);
 
-    void (*runningStateChanged)(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t state,
-                                const void *ctx);
+    void (*runningStateChanged)(uint64_t eui64, uint8_t endpointId, uint16_t state, const void *ctx);
 
-    void (*setpointHoldChanged)(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool holdOn,
-                                const void *ctx);
+    void (*setpointHoldChanged)(uint64_t eui64, uint8_t endpointId, bool holdOn, const void *ctx);
 
-    void (*ctrlSeqOpChanged)(uint64_t eui64,
-                             uint8_t endpointId,
-                             uint8_t ctrlSeqOp,
-                             const void *ctx);
+    void (*ctrlSeqOpChanged)(uint64_t eui64, uint8_t endpointId, uint8_t ctrlSeqOp, const void *ctx);
 
     void (*legacyOperationInfoReceived)(uint64_t eui64,
                                         uint8_t endpointId,
-                                        uint8_t runningMode,      // 0=off, 1=heat, 2=cool
+                                        uint8_t runningMode, // 0=off, 1=heat, 2=cool
                                         bool holdOn,
                                         uint8_t runningState,     // 0=off, 1=heat, 2=cool, 0xff=not used
                                         uint8_t fanRunningState); // 0=off, 1=running, 0xff=not used
@@ -165,15 +144,10 @@ bool thermostatClusterGetCtrlSeqOp(const ZigbeeCluster *cluster,
                                    uint8_t endpointId,
                                    uint8_t *ctrlSeqOp);
 
-bool thermostatClusterSetCtrlSeqOp(const ZigbeeCluster *cluster,
-                                   uint64_t eui64,
-                                   uint8_t endpointId,
-                                   uint8_t ctrlSeqOp);
+bool thermostatClusterSetCtrlSeqOp(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId, uint8_t ctrlSeqOp);
 
 // this is a manufacturer specific command for RTCoA thermostats
-bool thermostatClusterSetAbsoluteSetpointModeLegacy(const ZigbeeCluster *cluster,
-                                                    uint64_t eui64,
-                                                    uint8_t endpointId);
+bool thermostatClusterSetAbsoluteSetpointModeLegacy(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId);
 
 // this is a manufacturer specific command for RTCoA and CentraLite thermostats
 bool thermostatClusterSetPollRateLegacy(const ZigbeeCluster *cluster,
@@ -183,9 +157,7 @@ bool thermostatClusterSetPollRateLegacy(const ZigbeeCluster *cluster,
 
 // this is a manufacturer specific command for RTCoA and CentraLite thermostats. It triggers an operational info
 // command to be sent to us.
-bool thermostatClusterRequestOperationalInfoLegacy(const ZigbeeCluster *cluster,
-                                                   uint64_t eui64,
-                                                   uint8_t endpointId);
+bool thermostatClusterRequestOperationalInfoLegacy(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId);
 
 const char *thermostatClusterGetSystemState(uint16_t runningState);
 
@@ -196,10 +168,10 @@ const char *thermostatClusterGetSystemModeString(uint8_t systemMode);
 // this only returns the values we support setting, not the entire enum
 uint8_t thermostatClusterGetSystemModeFromString(const char *systemMode);
 
-//return a string representing the temperature in celcius * 100
+// return a string representing the temperature in celcius * 100
 char *thermostatClusterGetTemperatureString(int16_t temperature);
 
-//parse a string representing the temperature in celcius * 100
+// parse a string representing the temperature in celcius * 100
 bool thermostatClusterGetTemperatureValue(const char *temperatureString, int16_t *temp);
 
 const char *thermostatClusterGetCtrlSeqOpString(uint8_t ctrlSeqOp);
@@ -211,4 +183,4 @@ uint8_t thermostatClusterGetFanModeFromString(const char *fanMode);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_THERMOSTATCLUSTER_H
+#endif // ZILKER_THERMOSTATCLUSTER_H

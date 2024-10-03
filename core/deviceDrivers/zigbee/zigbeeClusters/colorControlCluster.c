@@ -25,22 +25,22 @@
 //
 
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
-#include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <stdio.h>
 #include <commonDeviceDefs.h>
 #include <device/icDeviceResource.h>
+#include <icLog/logging.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/colorControlCluster.h"
 
-#define LOG_TAG "colorControlCluster"
+#define LOG_TAG                       "colorControlCluster"
 
 // ZCL wants integer values of normalized x and y by scaling by this value.
 #define COLOR_CONTROL_XY_SCALE_FACTOR 65536.0
@@ -77,8 +77,8 @@ bool colorControlClusterGetX(uint64_t eui64, uint8_t endpointId, double *x)
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true,
-                                  COLOR_CONTROL_CURRENTX_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true, COLOR_CONTROL_CURRENTX_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read current x attribute value", __FUNCTION__);
     }
@@ -97,8 +97,8 @@ bool colorControlClusterGetY(uint64_t eui64, uint8_t endpointId, double *y)
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true,
-                                  COLOR_CONTROL_CURRENTY_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true, COLOR_CONTROL_CURRENTY_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read current y attribute value", __FUNCTION__);
     }
@@ -135,11 +135,12 @@ bool colorControlClusterMoveToColor(uint64_t eui64, uint8_t endpointId, double x
     msg[2] = (uint8_t) (scaledY >> 8);
 #endif
 
-    msg[4] = 0; //transition time byte 1
-    msg[5] = 0; //transition time byte 2
+    msg[4] = 0; // transition time byte 1
+    msg[5] = 0; // transition time byte 2
 
-    return (zigbeeSubsystemSendCommand(eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true,
-                               COLOR_CONTROL_MOVE_TO_COLOR_COMMAND_ID, msg, 6) == 0);
+    return (zigbeeSubsystemSendCommand(
+                eui64, endpointId, COLOR_CONTROL_CLUSTER_ID, true, COLOR_CONTROL_MOVE_TO_COLOR_COMMAND_ID, msg, 6) ==
+            0);
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -167,11 +168,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         icLogError(LOG_TAG, "%s: failed to bind color control", __FUNCTION__);
         result = false;
     }
-    else if (zigbeeSubsystemAttributesSetReporting(configContext->eui64,
-                                                   configContext->endpointId,
-                                                   COLOR_CONTROL_CLUSTER_ID,
-                                                   colorConfigs,
-                                                   numConfigs) != 0)
+    else if (zigbeeSubsystemAttributesSetReporting(
+                 configContext->eui64, configContext->endpointId, COLOR_CONTROL_CLUSTER_ID, colorConfigs, numConfigs) !=
+             0)
     {
         icLogError(LOG_TAG, "%s: failed to set reporting for color control", __FUNCTION__);
         result = false;
@@ -198,9 +197,10 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     while ((remainingSize = zigbeeIOGetRemainingSize(zio)) > 0 && remainingSize % 5 == 0)
     {
         uint16_t attributeId = zigbeeIOGetUint16(zio);
-        zigbeeIOGetUint8(zio);  //unneeded data type
+        zigbeeIOGetUint8(zio); // unneeded data type
 
-        switch (attributeId) {
+        switch (attributeId)
+        {
             case COLOR_CONTROL_CURRENTX_ATTRIBUTE_ID:
                 if (zigbeeIOGetRemainingSize(zio) >= sizeof(uint16_t))
                 {
@@ -216,7 +216,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
                 }
                 break;
             default:
-                icLogWarn(LOG_TAG, "Unrecognized attribute id %"PRIu16, attributeId);
+                icLogWarn(LOG_TAG, "Unrecognized attribute id %" PRIu16, attributeId);
                 break;
         }
     }
@@ -248,4 +248,4 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

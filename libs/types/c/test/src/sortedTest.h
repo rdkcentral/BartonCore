@@ -34,4 +34,4 @@
 
 bool runSortedTests();
 
-#endif //FLEXCORE_SORTEDTEST_H
+#endif // FLEXCORE_SORTEDTEST_H

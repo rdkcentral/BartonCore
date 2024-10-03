@@ -20,36 +20,36 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <icLog/logging.h>
-#include <device/icDeviceEndpoint.h>
-#include <device/icDeviceMetadata.h>
-#include <stdio.h>
-#include <string.h>
 #include "deviceServicePrivate.h"
 #include "icTypes/icLinkedList.h"
-#include <jsonHelper/jsonHelper.h>
+#include <device/icDeviceEndpoint.h>
+#include <device/icDeviceMetadata.h>
+#include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define LOG_TAG "deviceService"
+#define LOG_TAG                      "deviceService"
 
 /*
  * Created by Thomas Lea on 8/10/15.
  */
 
 // Keys for endpoint json representation
-#define ENDPOINT_URI_KEY "uri"
-#define ENDPOINT_ID_KEY "id"
-#define ENDPOINT_PROFILE_KEY "profile"
+#define ENDPOINT_URI_KEY             "uri"
+#define ENDPOINT_ID_KEY              "id"
+#define ENDPOINT_PROFILE_KEY         "profile"
 #define ENDPOINT_PROFILE_VERSION_KEY "profileVersion"
-#define ENDPOINT_ENABLED_KEY "enabled"
-#define ENDPOINT_RESOURCES_KEY "resources"
-#define ENDPOINT_METADATAS_KEY "metadatas"
+#define ENDPOINT_ENABLED_KEY         "enabled"
+#define ENDPOINT_RESOURCES_KEY       "resources"
+#define ENDPOINT_METADATAS_KEY       "metadatas"
 
 extern inline void endpointDestroy__auto(icDeviceEndpoint **endpoint);
 
-void endpointDestroy(icDeviceEndpoint* endpoint)
+void endpointDestroy(icDeviceEndpoint *endpoint)
 {
     if (endpoint != NULL)
     {
@@ -64,7 +64,7 @@ void endpointDestroy(icDeviceEndpoint* endpoint)
     }
 }
 
-void endpointPrint(icDeviceEndpoint* endpoint, const char* prefix)
+void endpointPrint(icDeviceEndpoint *endpoint, const char *prefix)
 {
     if (endpoint == NULL)
     {
@@ -81,24 +81,24 @@ void endpointPrint(icDeviceEndpoint* endpoint, const char* prefix)
         icLogDebug(LOG_TAG, "%s\tenabled=%s", prefix, (endpoint->enabled == true) ? "true" : "false");
 
 
-        //add indentation to our lower level stuff
-        char* newPrefix;
+        // add indentation to our lower level stuff
+        char *newPrefix;
         if (prefix == NULL)
         {
-            newPrefix = (char*) malloc(3); // \t\t\0
+            newPrefix = (char *) malloc(3); // \t\t\0
             sprintf(newPrefix, "\t\t");
         }
         else
         {
-            newPrefix = (char*) malloc(strlen(prefix) + 3); //\t\t\0
+            newPrefix = (char *) malloc(strlen(prefix) + 3); //\t\t\0
             sprintf(newPrefix, "%s\t\t", prefix);
         }
 
         icLogDebug(LOG_TAG, "%s\tresources:", prefix);
-        icLinkedListIterator* iterator = linkedListIteratorCreate(endpoint->resources);
+        icLinkedListIterator *iterator = linkedListIteratorCreate(endpoint->resources);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceResource* resource = (icDeviceResource*) linkedListIteratorGetNext(iterator);
+            icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(iterator);
             resourcePrint(resource, newPrefix);
         }
         linkedListIteratorDestroy(iterator);
@@ -107,7 +107,7 @@ void endpointPrint(icDeviceEndpoint* endpoint, const char* prefix)
         iterator = linkedListIteratorCreate(endpoint->metadata);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceMetadata* metadata = (icDeviceMetadata*) linkedListIteratorGetNext(iterator);
+            icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(iterator);
             metadataPrint(metadata, newPrefix);
         }
         linkedListIteratorDestroy(iterator);
@@ -123,10 +123,10 @@ void endpointPrint(icDeviceEndpoint* endpoint, const char* prefix)
  * @param context the context
  * @return the cloned metadata object
  */
-static void* cloneMetadataWithContext(void* item, void* context)
+static void *cloneMetadataWithContext(void *item, void *context)
 {
     (void) context;
-    return metadataClone((icDeviceMetadata*) item);
+    return metadataClone((icDeviceMetadata *) item);
 }
 
 /**
@@ -136,10 +136,10 @@ static void* cloneMetadataWithContext(void* item, void* context)
  * @param context the context
  * @return the cloned resource object
  */
-static void* cloneResourceWithContext(void* item, void* context)
+static void *cloneResourceWithContext(void *item, void *context)
 {
     (void) context;
-    return resourceClone((icDeviceResource*) item);
+    return resourceClone((icDeviceResource *) item);
 }
 
 /**
@@ -148,10 +148,10 @@ static void* cloneResourceWithContext(void* item, void* context)
  * @param endpoint the endpoint to clone
  * @return the cloned endpoint object
  */
-icDeviceEndpoint* endpointClone(const icDeviceEndpoint* endpoint)
+icDeviceEndpoint *endpointClone(const icDeviceEndpoint *endpoint)
 {
     // Clone endpoint info
-    icDeviceEndpoint* clone = NULL;
+    icDeviceEndpoint *clone = NULL;
     if (endpoint != NULL)
     {
         clone = calloc(1, sizeof(icDeviceEndpoint));
@@ -191,9 +191,9 @@ icDeviceEndpoint* endpointClone(const icDeviceEndpoint* endpoint)
  * @param endpoint the endpoint to convert
  * @return the JSON object
  */
-cJSON* endpointToJSON(const icDeviceEndpoint* endpoint, const icSerDesContext *context)
+cJSON *endpointToJSON(const icDeviceEndpoint *endpoint, const icSerDesContext *context)
 {
-    cJSON* json = cJSON_CreateObject();
+    cJSON *json = cJSON_CreateObject();
     // Add endpoint info
     cJSON_AddStringToObject(json, ENDPOINT_URI_KEY, endpoint->uri);
     cJSON_AddStringToObject(json, ENDPOINT_ID_KEY, endpoint->id);
@@ -202,11 +202,11 @@ cJSON* endpointToJSON(const icDeviceEndpoint* endpoint, const icSerDesContext *c
     cJSON_AddNumberToObject(json, ENDPOINT_PROFILE_VERSION_KEY, endpoint->profileVersion);
 
     // Add resources by id
-    cJSON* resources = resourcesToJSON(endpoint->resources, context);
+    cJSON *resources = resourcesToJSON(endpoint->resources, context);
     cJSON_AddItemToObject(json, ENDPOINT_RESOURCES_KEY, resources);
 
     // Add metadata by id
-    cJSON* metadatasJson = metadatasToJSON(endpoint->metadata, context);
+    cJSON *metadatasJson = metadatasToJSON(endpoint->metadata, context);
     cJSON_AddItemToObject(json, ENDPOINT_METADATAS_KEY, metadatasJson);
 
     return json;
@@ -218,15 +218,15 @@ cJSON* endpointToJSON(const icDeviceEndpoint* endpoint, const icSerDesContext *c
  * @param endpoints the list of endpoints
  * @return the JSON object
  */
-cJSON* endpointsToJSON(icLinkedList* endpoints, const icSerDesContext *context)
+cJSON *endpointsToJSON(icLinkedList *endpoints, const icSerDesContext *context)
 {
     // Add endpoints by id
-    cJSON* endpointsJson = cJSON_CreateObject();
-    icLinkedListIterator* iter = linkedListIteratorCreate(endpoints);
+    cJSON *endpointsJson = cJSON_CreateObject();
+    icLinkedListIterator *iter = linkedListIteratorCreate(endpoints);
     while (linkedListIteratorHasNext(iter))
     {
-        icDeviceEndpoint* endpoint = (icDeviceEndpoint*) linkedListIteratorGetNext(iter);
-        cJSON* endpointJson = endpointToJSON(endpoint, context);
+        icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iter);
+        cJSON *endpointJson = endpointToJSON(endpoint, context);
         cJSON_AddItemToObject(endpointsJson, endpoint->id, endpointJson);
     }
     linkedListIteratorDestroy(iter);
@@ -241,13 +241,13 @@ cJSON* endpointsToJSON(icLinkedList* endpoints, const icSerDesContext *context)
  * @param endpointJSON the JSON to load
  * @return the endpoint object or NULL if there is an error
  */
-icDeviceEndpoint* endpointFromJSON(const char* deviceUUID, cJSON* endpointJSON, const icSerDesContext *context)
+icDeviceEndpoint *endpointFromJSON(const char *deviceUUID, cJSON *endpointJSON, const icSerDesContext *context)
 {
-    icDeviceEndpoint* endpoint = NULL;
+    icDeviceEndpoint *endpoint = NULL;
 
     if (endpointJSON != NULL && deviceUUID != NULL)
     {
-        scoped_icDeviceEndpoint *tempEndpoint = (icDeviceEndpoint*) calloc(1, sizeof(icDeviceEndpoint));
+        scoped_icDeviceEndpoint *tempEndpoint = (icDeviceEndpoint *) calloc(1, sizeof(icDeviceEndpoint));
         if (stringIsEmpty(deviceUUID) == true)
         {
             icLogError(LOG_TAG, "Invalid endpoint no deviceUUID!");
@@ -293,16 +293,16 @@ icDeviceEndpoint* endpointFromJSON(const char* deviceUUID, cJSON* endpointJSON, 
         getCJSONUInt8(endpointJSON, ENDPOINT_PROFILE_VERSION_KEY, &profileVersion);
         tempEndpoint->profileVersion = profileVersion;
 
-        tempEndpoint->resources = resourcesFromJSON(deviceUUID, tempEndpoint->id,
-                                                    cJSON_GetObjectItem(endpointJSON, ENDPOINT_RESOURCES_KEY), context, false);
+        tempEndpoint->resources = resourcesFromJSON(
+            deviceUUID, tempEndpoint->id, cJSON_GetObjectItem(endpointJSON, ENDPOINT_RESOURCES_KEY), context, false);
         if (tempEndpoint->resources == NULL)
         {
             icLogError(LOG_TAG, "Invalid endpoint %s: invalid resources!", deviceEndpointUri);
             return NULL;
         }
 
-        tempEndpoint->metadata = metadatasFromJSON(deviceUUID, tempEndpoint->id,
-                                                   cJSON_GetObjectItem(endpointJSON, ENDPOINT_METADATAS_KEY), false);
+        tempEndpoint->metadata = metadatasFromJSON(
+            deviceUUID, tempEndpoint->id, cJSON_GetObjectItem(endpointJSON, ENDPOINT_METADATAS_KEY), false);
         if (tempEndpoint->metadata == NULL)
         {
             icLogError(LOG_TAG, "Invalid endpoint %s: invalid metadatas!", deviceEndpointUri);
@@ -323,9 +323,10 @@ icDeviceEndpoint* endpointFromJSON(const char* deviceUUID, cJSON* endpointJSON, 
     return endpoint;
 }
 
-icLinkedList* endpointsFromJSON(const char* deviceUUID, cJSON* endpointsJSON, const icSerDesContext *context, bool permissive)
+icLinkedList *
+endpointsFromJSON(const char *deviceUUID, cJSON *endpointsJSON, const icSerDesContext *context, bool permissive)
 {
-    icLinkedList* endpoints = NULL;
+    icLinkedList *endpoints = NULL;
 
     if (endpointsJSON != NULL)
     {
@@ -334,8 +335,8 @@ icLinkedList* endpointsFromJSON(const char* deviceUUID, cJSON* endpointsJSON, co
 
         for (int i = 0; i < endpointCount; ++i)
         {
-            cJSON* endpointJson = cJSON_GetArrayItem(endpointsJSON, i);
-            icDeviceEndpoint* endpoint = endpointFromJSON(deviceUUID, endpointJson, context);
+            cJSON *endpointJson = cJSON_GetArrayItem(endpointsJSON, i);
+            icDeviceEndpoint *endpoint = endpointFromJSON(deviceUUID, endpointJson, context);
 
             if (endpoint != NULL)
             {
@@ -343,8 +344,7 @@ icLinkedList* endpointsFromJSON(const char* deviceUUID, cJSON* endpointsJSON, co
             }
             else
             {
-                icLogWarn(LOG_TAG, "Failed to read endpoint %s from device %s",
-                          endpointJson->string, deviceUUID);
+                icLogWarn(LOG_TAG, "Failed to read endpoint %s from device %s", endpointJson->string, deviceUUID);
 
                 if (permissive == false)
                 {
@@ -365,13 +365,12 @@ icLinkedList* endpointsFromJSON(const char* deviceUUID, cJSON* endpointsJSON, co
 
 extern inline char *endpointUriCreate(const char *deviceUuid, const char *endpointId);
 
-bool endpointUriIsValid(const char* deviceEndpointUri, const char* deviceUuid, const char *endpointId)
+bool endpointUriIsValid(const char *deviceEndpointUri, const char *deviceUuid, const char *endpointId)
 {
     bool retValue = false;
 
-    if ((stringIsEmpty(deviceEndpointUri) == false) &&
-        (stringIsEmpty(deviceUuid)== false) &&
-        (stringIsEmpty(endpointId)== false))
+    if ((stringIsEmpty(deviceEndpointUri) == false) && (stringIsEmpty(deviceUuid) == false) &&
+        (stringIsEmpty(endpointId) == false))
     {
         scoped_generic char *tempUri = endpointUriCreate(deviceUuid, endpointId);
 
@@ -395,7 +394,7 @@ bool endpointsSetProfileVersion(icLinkedList *endpoints, uint8_t profileVersion)
     scoped_icLinkedListIterator *iter = linkedListIteratorCreate(endpoints);
     while (linkedListIteratorHasNext(iter))
     {
-        icDeviceEndpoint* endpoint = (icDeviceEndpoint*) linkedListIteratorGetNext(iter);
+        icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iter);
         endpoint->profileVersion = profileVersion;
     }
 

@@ -25,14 +25,14 @@
 //
 
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -52,9 +52,11 @@ typedef struct
     const void *callbackContext;
 } ElectricalMeasurementCluster;
 
-ZigbeeCluster *electricalMeasurementClusterCreate(const ElectricalMeasurementClusterCallbacks *callbacks, void *callbackContext)
+ZigbeeCluster *electricalMeasurementClusterCreate(const ElectricalMeasurementClusterCallbacks *callbacks,
+                                                  void *callbackContext)
 {
-    ElectricalMeasurementCluster *result = (ElectricalMeasurementCluster *) calloc(1, sizeof(ElectricalMeasurementCluster));
+    ElectricalMeasurementCluster *result =
+        (ElectricalMeasurementCluster *) calloc(1, sizeof(ElectricalMeasurementCluster));
 
     result->cluster.clusterId = ELECTRICAL_MEASUREMENT_CLUSTER_ID;
     result->cluster.configureCluster = configureCluster;
@@ -72,7 +74,12 @@ bool electricalMeasurementClusterGetActivePower(uint64_t eui64, uint8_t endpoint
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID, true, ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(eui64,
+                                  endpointId,
+                                  ELECTRICAL_MEASUREMENT_CLUSTER_ID,
+                                  true,
+                                  ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ATTRIBUTE_ID,
+                                  &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read active power attribute value", __FUNCTION__);
     }
@@ -91,7 +98,12 @@ bool electricalMeasurementClusterGetAcPowerDivisor(uint64_t eui64, uint8_t endpo
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID, true, ELECTRICAL_MEASUREMENT_AC_DIVISOR_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(eui64,
+                                  endpointId,
+                                  ELECTRICAL_MEASUREMENT_CLUSTER_ID,
+                                  true,
+                                  ELECTRICAL_MEASUREMENT_AC_DIVISOR_ATTRIBUTE_ID,
+                                  &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read ac divisor attribute value", __FUNCTION__);
     }
@@ -110,7 +122,12 @@ bool electricalMeasurementClusterGetAcPowerMultiplier(uint64_t eui64, uint8_t en
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID, true, ELECTRICAL_MEASUREMENT_AC_MULTIPLIER_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(eui64,
+                                  endpointId,
+                                  ELECTRICAL_MEASUREMENT_CLUSTER_ID,
+                                  true,
+                                  ELECTRICAL_MEASUREMENT_AC_MULTIPLIER_ATTRIBUTE_ID,
+                                  &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read ac multiplier attribute value", __FUNCTION__);
     }
@@ -132,12 +149,14 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     uint16_t multiplier;
     uint16_t divisor;
 
-    if(electricalMeasurementClusterGetAcPowerMultiplier(configContext->eui64, configContext->endpointId, &multiplier) == false)
+    if (electricalMeasurementClusterGetAcPowerMultiplier(
+            configContext->eui64, configContext->endpointId, &multiplier) == false)
     {
         return false;
     }
 
-    if(electricalMeasurementClusterGetAcPowerDivisor(configContext->eui64, configContext->endpointId, &divisor) == false)
+    if (electricalMeasurementClusterGetAcPowerDivisor(configContext->eui64, configContext->endpointId, &divisor) ==
+        false)
     {
         return false;
     }
@@ -149,9 +168,10 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     configs[0].attributeInfo.type = ZCL_INT16S_ATTRIBUTE_TYPE;
     configs[0].minInterval = 1;
     configs[0].maxInterval = REPORTING_INTERVAL_MAX;
-    configs[0].reportableChange = divisor / multiplier; //by default, report 1 watt changes
+    configs[0].reportableChange = divisor / multiplier; // by default, report 1 watt changes
 
-    if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID) != 0)
+    if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, ELECTRICAL_MEASUREMENT_CLUSTER_ID) !=
+        0)
     {
         icLogError(LOG_TAG, "%s: failed to bind electrical measurement", __FUNCTION__);
         result = false;
@@ -178,16 +198,14 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     if (electricalMeasurementCluster->callbacks->activePowerChanged != NULL)
     {
         char *uuid = zigbeeSubsystemEui64ToId(report->eui64);
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, report->sourceEndpoint);
 
         if (report->reportDataLen == 5)
         {
             int16_t val = report->reportData[3] + (report->reportData[4] << 8);
-            electricalMeasurementCluster->callbacks->activePowerChanged(report->eui64,
-                                                         report->sourceEndpoint,
-                                                         val,
-                                                         electricalMeasurementCluster->callbackContext);
+            electricalMeasurementCluster->callbacks->activePowerChanged(
+                report->eui64, report->sourceEndpoint, val, electricalMeasurementCluster->callbackContext);
         }
 
         free(uuid);
@@ -196,4 +214,4 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

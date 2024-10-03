@@ -45,8 +45,11 @@ std::unique_ptr<ScopedReadPrepareParams> ReadPrepareParamsBuilder::Build(const c
     return params;
 }
 
-ReadPrepareParamsBuilder &ReadPrepareParamsBuilder::AddAttribute(chip::EndpointId endpointId, chip::ClusterId clusterId,
-                                                                 chip::AttributeId attributeId, uint16_t floor, uint16_t ceil)
+ReadPrepareParamsBuilder &ReadPrepareParamsBuilder::AddAttribute(chip::EndpointId endpointId,
+                                                                 chip::ClusterId clusterId,
+                                                                 chip::AttributeId attributeId,
+                                                                 uint16_t floor,
+                                                                 uint16_t ceil)
 {
     if (UpdateReportIterval(floor, ceil))
     {
@@ -66,8 +69,11 @@ ReadPrepareParamsBuilder &ReadPrepareParamsBuilder::AddAttribute(chip::EndpointI
     return *this;
 }
 
-ReadPrepareParamsBuilder &ReadPrepareParamsBuilder::AddEvent(chip::EndpointId endpointId, chip::ClusterId clusterId,
-                                                             chip::EventId eventId, uint16_t floor, uint16_t ceil)
+ReadPrepareParamsBuilder &ReadPrepareParamsBuilder::AddEvent(chip::EndpointId endpointId,
+                                                             chip::ClusterId clusterId,
+                                                             chip::EventId eventId,
+                                                             uint16_t floor,
+                                                             uint16_t ceil)
 {
     if (UpdateReportIterval(floor, ceil))
     {

@@ -84,19 +84,19 @@
 #define logFmt(fmt) "%s: " fmt, __func__
 #include <icLog/logging.h>
 
-#define DEVICE_DESCRIPTOR_BYPASS_SYSTEM_PROP    "deviceDescriptorBypass"
+#define DEVICE_DESCRIPTOR_BYPASS_SYSTEM_PROP       "deviceDescriptorBypass"
 
 #define SHOULD_NOT_PERSIST_AFTER_RMA_METADATA_NAME "shouldNotPersistAfterRMA"
 
-#define CONFIG_CHANGE_MAX_INTERVAL_MS 5000
+#define CONFIG_CHANGE_MAX_INTERVAL_MS              5000
 
-#define DEFAULT_COMM_FAIL_MINS 56
+#define DEFAULT_COMM_FAIL_MINS                     56
 
 static bool isDeviceServiceInLPM = false;
 
 static pthread_mutex_t lowPowerModeMutex = PTHREAD_MUTEX_INITIALIZER;
 
-char *deviceServiceConfigDir = NULL; //non-static with namespace friendly name so it can be altered by test code
+char *deviceServiceConfigDir = NULL; // non-static with namespace friendly name so it can be altered by test code
 
 static pthread_mutex_t deviceServiceClientMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static BDeviceServiceClient *client = NULL;
@@ -116,7 +116,7 @@ static bool deviceDescriptorsListIsReady(void);
 
 static void scheduleDeviceDescriptorsProcessingTask(void);
 
-static icLinkedList* deviceServiceGetResourcesByUriPatternInternal(const char* uriPattern);
+static icLinkedList *deviceServiceGetResourcesByUriPatternInternal(const char *uriPattern);
 
 static icDeviceResource *deviceServiceGetResourceByIdInternal(const char *deviceUuid,
                                                               const char *endpointId,
@@ -163,7 +163,7 @@ typedef struct
     bool findOrphanedDevices;
     icLinkedList *filters;
 
-    //used for shutdown delay and/or canceling
+    // used for shutdown delay and/or canceling
     bool useMonotonic;
     pthread_cond_t cond;
     pthread_mutex_t mtx;
@@ -172,14 +172,15 @@ typedef struct
 struct ReconfigureDeviceContext
 {
     char *deviceUuid;
-    uint32_t taskHandle; // reconfiguration task handle
-    pthread_mutex_t mtx; // mutex for condition variable not the whole context
-    pthread_cond_t cond; // condition variable to wait for reconfiguration signal
-    bool isSignaled; // boolean predicate for conditional variable
-    bool isAllowedAsap; // indicates if reconfiguration allowed as soon as possible
-    bool shouldTerminate; // set to true only while signaling waiting reconfiguration tasks to terminate
+    uint32_t taskHandle;     // reconfiguration task handle
+    pthread_mutex_t mtx;     // mutex for condition variable not the whole context
+    pthread_cond_t cond;     // condition variable to wait for reconfiguration signal
+    bool isSignaled;         // boolean predicate for conditional variable
+    bool isAllowedAsap;      // indicates if reconfiguration allowed as soon as possible
+    bool shouldTerminate;    // set to true only while signaling waiting reconfiguration tasks to terminate
     uint32_t timeoutSeconds; // timeout to wait for reconfiguration signal
-    reconfigurationCompleteCallback reconfigurationCompleted; // optional callback, triggered once reconfiguration task completes
+    reconfigurationCompleteCallback
+        reconfigurationCompleted; // optional callback, triggered once reconfiguration task completes
 };
 
 static inline void releaseReconfigureDeviceContext(ReconfigureDeviceContext *ctx);
@@ -187,15 +188,18 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(ReconfigureDeviceContext, releaseReconfigureDevice
 
 static pthread_mutex_t discoveryControlMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static icHashMap *activeDiscoveries = NULL;
-#define RECONFIGURATION_TIMEOUT_SEC (30 * 60)
-#define PENDING_RECONFIGURATION_TIMEOUT_SEC (1 * 60)
+#define RECONFIGURATION_TIMEOUT_SEC            (30 * 60)
+#define PENDING_RECONFIGURATION_TIMEOUT_SEC    (1 * 60)
 #define MAX_PENDING_RECONFIGURATION_WAIT_COUNT 2
 static pthread_mutex_t reconfigurationControlMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static pthread_cond_t reconfigurationControlCond = PTHREAD_COND_INITIALIZER;
 static icHashMap *pendingReconfiguration = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
-static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass, icLinkedList *filters, uint16_t timeoutSeconds, bool findOrphanedDevices);
+static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
+                                                                icLinkedList *filters,
+                                                                uint16_t timeoutSeconds,
+                                                                bool findOrphanedDevices);
 
 static bool deviceServiceIsUriAccessible(const char *uri);
 
@@ -207,27 +211,27 @@ static bool isDeviceDescriptorsListReady = false;
 
 static pthread_mutex_t deviceDescriptorsListLatestMutex = PTHREAD_MUTEX_INITIALIZER;
 
-//set of UUIDs that are not fully added yet but have been marked to be removed.
+// set of UUIDs that are not fully added yet but have been marked to be removed.
 static icHashMap *markedForRemoval = NULL;
 
 static pthread_mutex_t markedForRemovalMutex = PTHREAD_MUTEX_INITIALIZER;
 
-//set of UUIDs that were rejected.
+// set of UUIDs that were rejected.
 static icHashMap *rejected = NULL;
 
 static pthread_mutex_t rejectedMutex = PTHREAD_MUTEX_INITIALIZER;
 
-//set of UUIDs that were unsuccessful in pairing
+// set of UUIDs that were unsuccessful in pairing
 static icHashMap *failedToPair = NULL;
 
 static pthread_mutex_t failedToPairMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 static icThreadPool *deviceInitializerThreadPool = NULL;
 #define MAX_DEVICE_SYNC_THREADS 5
-#define MAX_DEVICE_SYNC_QUEUE 128
+#define MAX_DEVICE_SYNC_QUEUE   128
 static void startDeviceInitialization(void);
 
-//1 more minute than we allow for a legacy sensor to upgrade
+// 1 more minute than we allow for a legacy sensor to upgrade
 #define MAX_DRIVERS_SHUTDOWN_SECS (31 * 60)
 static void shutdownDeviceDriverManager();
 
@@ -247,15 +251,15 @@ static void deviceServiceScrubDevices(void)
     // in which case we remove the device
     icLinkedList *devices = jsonDatabaseGetDevices();
     icLinkedListIterator *iter = linkedListIteratorCreate(devices);
-    while(linkedListIteratorHasNext(iter) == true)
+    while (linkedListIteratorHasNext(iter) == true)
     {
-        icDevice *device = (icDevice *)linkedListIteratorGetNext(iter);
+        icDevice *device = (icDevice *) linkedListIteratorGetNext(iter);
 
         bool hasEnabledEndpoint = false;
         icLinkedListIterator *endpointIter = linkedListIteratorCreate(device->endpoints);
-        while(linkedListIteratorHasNext(endpointIter) == true)
+        while (linkedListIteratorHasNext(endpointIter) == true)
         {
-            icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListIteratorGetNext(endpointIter);
+            icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(endpointIter);
             if (endpoint->enabled == true)
             {
                 hasEnabledEndpoint = true;
@@ -272,8 +276,7 @@ static void deviceServiceScrubDevices(void)
     }
     linkedListIteratorDestroy(iter);
 
-    linkedListDestroy(devices, (linkedListItemFreeFunc)deviceDestroy);
-
+    linkedListDestroy(devices, (linkedListItemFreeFunc) deviceDestroy);
 }
 
 bool deviceServiceRestoreConfig(const char *tempRestoreDir)
@@ -287,10 +290,11 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
     //
     while (linkedListIteratorHasNext(driverPreRestoreIterator))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(driverPreRestoreIterator);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverPreRestoreIterator);
         if (driver->preRestoreConfig != NULL)
         {
-            icLogDebug(LOG_TAG, "%s: performing pre restore config actions for driver %s", __FUNCTION__, driver->driverName);
+            icLogDebug(
+                LOG_TAG, "%s: performing pre restore config actions for driver %s", __FUNCTION__, driver->driverName);
             driver->preRestoreConfig(driver->callbackContext);
         }
     }
@@ -314,9 +318,9 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
 
     scoped_icLinkedListIterator *driverRestoreIterator = linkedListIteratorCreate(deviceDrivers);
 
-    while(linkedListIteratorHasNext(driverRestoreIterator))
+    while (linkedListIteratorHasNext(driverRestoreIterator))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(driverRestoreIterator);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverRestoreIterator);
         if (driver->restoreConfig != NULL)
         {
             if (!driver->restoreConfig(driver->callbackContext, tempRestoreDir, storageDir))
@@ -333,18 +337,22 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
     scoped_icDeviceList *deviceList = deviceServiceGetAllDevices();
     scoped_icLinkedListIterator *deviceIterator = linkedListIteratorCreate(deviceList);
 
-    while(linkedListIteratorHasNext(deviceIterator))
+    while (linkedListIteratorHasNext(deviceIterator))
     {
         icDevice *device = (icDevice *) linkedListIteratorGetNext(deviceIterator);
 
         if (device->uuid == NULL || device->deviceClass == NULL)
         {
-            icLogWarn(LOG_TAG, "%s: unable to use device with uuid=%s and deviceClass=%s", __FUNCTION__,
-                      stringCoalesce(device->uuid), stringCoalesce(device->deviceClass));
+            icLogWarn(LOG_TAG,
+                      "%s: unable to use device with uuid=%s and deviceClass=%s",
+                      __FUNCTION__,
+                      stringCoalesce(device->uuid),
+                      stringCoalesce(device->deviceClass));
             continue;
         }
 
-        bool denylistDeviceAfterRma = getBooleanMetadata(device->uuid, NULL, SHOULD_NOT_PERSIST_AFTER_RMA_METADATA_NAME);
+        bool denylistDeviceAfterRma =
+            getBooleanMetadata(device->uuid, NULL, SHOULD_NOT_PERSIST_AFTER_RMA_METADATA_NAME);
 
 #ifndef BARTON_CONFIG_M1LTE
         // If M1 driver is not supported on this platform, then delete device and denylist
@@ -366,12 +374,13 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
 
     // Let any drivers do anything they need to do post config
     //
-    while(linkedListIteratorHasNext(driverPostRestoreIterator))
+    while (linkedListIteratorHasNext(driverPostRestoreIterator))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(driverPostRestoreIterator);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverPostRestoreIterator);
         if (driver->postRestoreConfig != NULL)
         {
-            icLogDebug(LOG_TAG, "%s: performing post restore config actions for driver %s", __FUNCTION__, driver->driverName);
+            icLogDebug(
+                LOG_TAG, "%s: performing post restore config actions for driver %s", __FUNCTION__, driver->driverName);
             driver->postRestoreConfig(driver->callbackContext);
         }
     }
@@ -395,7 +404,8 @@ static icLinkedList *getDriversForDiscovery(const char *deviceClass)
 
             if (!driver->neverReject)
             {
-                icInfo("Removing rejectable driver %s from discovery since device service is not ready yet", driver->driverName);
+                icInfo("Removing rejectable driver %s from discovery since device service is not ready yet",
+                       driver->driverName);
                 linkedListIteratorDeleteCurrent(it, standardDoNotFreeFunc);
             }
         }
@@ -429,12 +439,13 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
         {
             char *deviceClass = linkedListIteratorGetNext(iterator);
 
-            //ensure we arent already discovering for this device class
+            // ensure we arent already discovering for this device class
             if (hashMapGet(activeDiscoveries, deviceClass, (uint16_t) (strlen(deviceClass) + 1)) != NULL)
             {
-                icLogWarn(LOG_TAG,
-                          "deviceServiceDiscoverStart: asked to start discovery for device class %s which is already running",
-                          deviceClass);
+                icLogWarn(
+                    LOG_TAG,
+                    "deviceServiceDiscoverStart: asked to start discovery for device class %s which is already running",
+                    deviceClass);
                 continue;
             }
 
@@ -456,11 +467,11 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
                         }
                         else
                         {
-                            icLogWarn(LOG_TAG,"driver %s does not support device recovery",driver->driverName);
+                            icLogWarn(LOG_TAG, "driver %s does not support device recovery", driver->driverName);
                         }
                     }
                     linkedListIteratorDestroy(driverIterator);
-                    if (recoveryDriversFound  == 0)
+                    if (recoveryDriversFound == 0)
                     {
                         result = false;
                     }
@@ -486,7 +497,8 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
                             if (driver->neverReject == true)
                             {
                                 shouldStartDiscoveryForDeviceClass = true;
-                                icLogInfo(LOG_TAG, "discovery of devices for driver %s can not be rejected",
+                                icLogInfo(LOG_TAG,
+                                          "discovery of devices for driver %s can not be rejected",
                                           driver->driverName);
                             }
                         }
@@ -506,8 +518,8 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
                         // we have Allowlist in bad state and discovery for all devices in a class
                         // can be rejected. Report it as failure for discovery request.
                         //
-                        icLogWarn(LOG_TAG, "discovery for %s cannot be started with allowlist in bad state",
-                                  deviceClass);
+                        icLogWarn(
+                            LOG_TAG, "discovery for %s cannot be started with allowlist in bad state", deviceClass);
                         result = false;
                     }
                 }
@@ -545,7 +557,8 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
             {
                 const char *deviceClass = linkedListIteratorGetNext(iterator);
 
-                discoverDeviceClassContext *ctx = startDiscoveryForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices);
+                discoverDeviceClassContext *ctx =
+                    startDiscoveryForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices);
                 hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
             }
             linkedListIteratorDestroy(iterator);
@@ -563,7 +576,7 @@ bool deviceServiceDiscoverStop(icLinkedList *deviceClasses)
 {
     mutexLock(&discoveryControlMutex);
 
-    if (deviceClasses == NULL) //stop all active discovery
+    if (deviceClasses == NULL) // stop all active discovery
     {
         icLogDebug(LOG_TAG, "deviceServiceDiscoverStop: stopping all active discoveries");
 
@@ -589,16 +602,14 @@ bool deviceServiceDiscoverStop(icLinkedList *deviceClasses)
             char *item = (char *) linkedListIteratorGetNext(iterator);
 
             icLogDebug(LOG_TAG, "deviceServiceDiscoverStop: stopping discovery for device class %s", item);
-            discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) hashMapGet(activeDiscoveries,
-                                                                                        item,
-                                                                                        (uint16_t) (strlen(item) + 1));
+            discoverDeviceClassContext *ctx =
+                (discoverDeviceClassContext *) hashMapGet(activeDiscoveries, item, (uint16_t) (strlen(item) + 1));
             if (ctx != NULL)
             {
                 pthread_cond_signal(&ctx->cond);
             }
         }
         linkedListIteratorDestroy(iterator);
-
     }
 
     mutexUnlock(&discoveryControlMutex);
@@ -627,7 +638,7 @@ struct commissionMatterDeviceArgs
 
 static void *commissionMatterDeviceFunc(void *args)
 {
-    struct commissionMatterDeviceArgs *cmda = (struct commissionMatterDeviceArgs*)args;
+    struct commissionMatterDeviceArgs *cmda = (struct commissionMatterDeviceArgs *) args;
 
     matterSubsystemCommissionDevice(cmda->setupPayload, cmda->timeoutSeconds);
 
@@ -638,7 +649,7 @@ static void *commissionMatterDeviceFunc(void *args)
 
 static void *pairMatterDeviceFunc(void *args)
 {
-    struct OnboardMatterDeviceArgs *cmda = (struct OnboardMatterDeviceArgs*)args;
+    struct OnboardMatterDeviceArgs *cmda = (struct OnboardMatterDeviceArgs *) args;
     matterSubsystemPairDevice(cmda->nodeId, cmda->timeoutSeconds);
     free(cmda);
 
@@ -716,9 +727,9 @@ bool deviceServiceIsInRecoveryMode()
             void *mapKey;
             void *mapVal;
             uint16_t mapKeyLen = 0;
-            if (hashMapIteratorGetNext(iterator,&mapKey,&mapKeyLen,&mapVal) == true)
+            if (hashMapIteratorGetNext(iterator, &mapKey, &mapKeyLen, &mapVal) == true)
             {
-                discoverDeviceClassContext *ddcCtx = (discoverDeviceClassContext *)mapVal;
+                discoverDeviceClassContext *ddcCtx = (discoverDeviceClassContext *) mapVal;
                 if (ddcCtx != NULL)
                 {
                     if (ddcCtx->findOrphanedDevices == true)
@@ -775,12 +786,12 @@ bool deviceServiceRemoveDevice(const char *uuid)
     }
     else if (uuid != NULL)
     {
-        //It may currently be being added. Add the uuid to the toRemove list
+        // It may currently be being added. Add the uuid to the toRemove list
         icLogDebug(LOG_TAG, "Device %s not created yet, marking for removal", uuid);
         pthread_mutex_lock(&markedForRemovalMutex);
         char *key = strdup(uuid);
         uint16_t keyLen = (uint16_t) strlen(key) + 1;
-        int *val = calloc(1, sizeof(int));   //Not used
+        int *val = calloc(1, sizeof(int)); // Not used
         hashMapPut(markedForRemoval, key, keyLen, val);
         pthread_mutex_unlock(&markedForRemovalMutex);
         result = true;
@@ -803,7 +814,7 @@ static bool deviceServiceIsUriAccessible(const char *uri)
         return retVal;
     }
 
-    if((retVal = jsonDatabaseIsUriAccessible(uri)) == false)
+    if ((retVal = jsonDatabaseIsUriAccessible(uri)) == false)
     {
         icLogTrace(LOG_TAG, "%s: URI %s is not accessible", __FUNCTION__, uri);
     }
@@ -860,7 +871,7 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
     // be created with NULL values, unless the driver is going to populate it on its own later
     if (result->cachingPolicy == CACHING_POLICY_NEVER && result->mode & RESOURCE_MODE_READABLE)
     {
-        //gotta go to the device driver
+        // gotta go to the device driver
         DeviceDriver *driver = getDeviceDriverForUri(uri);
 
         if (driver == NULL)
@@ -879,14 +890,14 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
         char *value = NULL;
         if (driver->readResource(driver->callbackContext, result, &value))
         {
-            //free the old value before updating with new
+            // free the old value before updating with new
             free(result->value);
 
             result->value = value;
         }
         else
         {
-            //the read failed... dont send stale data back to caller
+            // the read failed... dont send stale data back to caller
             resourceDestroy(result);
             result = NULL;
         }
@@ -981,8 +992,8 @@ static bool deviceServiceWriteResourceNoPattern(const char *uri, const char *val
     }
     else
     {
-        //The device driver's contract states that they will call us back at updateResource if successful
-        // we save the change there
+        // The device driver's contract states that they will call us back at updateResource if successful
+        //  we save the change there
         result = driver->writeResource(driver->callbackContext, resource, resource->value, value);
     }
 
@@ -1108,7 +1119,7 @@ bool deviceServiceExecuteResource(const char *uri, const char *arg, char **respo
 
 bool deviceServiceChangeResourceMode(const char *uri, uint8_t newMode)
 {
-    icLogDebug(LOG_TAG, "%s: uri=%s, newMode=%"PRIx8, __FUNCTION__, uri, newMode);
+    icLogDebug(LOG_TAG, "%s: uri=%s, newMode=%" PRIx8, __FUNCTION__, uri, newMode);
 
     if (uri == NULL)
     {
@@ -1150,7 +1161,7 @@ bool deviceServiceChangeResourceMode(const char *uri, uint8_t newMode)
         return false;
     }
 
-    //we do not allow removing the sensitive bit
+    // we do not allow removing the sensitive bit
     if ((resource->mode & RESOURCE_MODE_SENSITIVE) && !(newMode & RESOURCE_MODE_SENSITIVE))
     {
         icLogWarn(LOG_TAG, "%s: attempt to remove sensitive mode rejected", __FUNCTION__);
@@ -1180,7 +1191,7 @@ icDeviceEndpoint *deviceServiceGetEndpoint(const char *deviceUuid, const char *e
 
         if (result != NULL && result->enabled == false)
         {
-            //we cant return this endpoint...
+            // we cant return this endpoint...
             endpointDestroy(result);
             result = NULL;
         }
@@ -1193,10 +1204,10 @@ static bool getDeviceDescriptorCascadeAddDeleteEndpoints(icDevice *device)
 {
 
     bool retVal = false;
-    if(device != NULL)
+    if (device != NULL)
     {
         scoped_DeviceDescriptor *dd = deviceServiceGetDeviceDescriptorForDevice(device);
-        if(dd != NULL)
+        if (dd != NULL)
         {
             retVal = dd->cascadeAddDeleteEndpoints;
         }
@@ -1225,37 +1236,37 @@ bool deviceServiceRemoveEndpointById(const char *deviceUuid, const char *endpoin
     {
         bool multiEndpointCascadeDelete = getDeviceDescriptorCascadeAddDeleteEndpoints(device);
 
-        if(multiEndpointCascadeDelete)
+        if (multiEndpointCascadeDelete)
         {
-            icLogInfo(LOG_TAG, "MultiEndpointUnitDeletion (%s)- removing the whole thing.",
-                      endpoint->deviceUuid);
+            icLogInfo(LOG_TAG, "MultiEndpointUnitDeletion (%s)- removing the whole thing.", endpoint->deviceUuid);
             deviceServiceRemoveDevice(endpoint->deviceUuid);
         }
         else
         {
             endpoint->enabled = false;
 
-            //go ahead and save the change to this endpoint now even though we might drop the entire device below
+            // go ahead and save the change to this endpoint now even though we might drop the entire device below
             jsonDatabaseSaveEndpoint(endpoint);
 
-            //check to see if we have any enabled endpoints left and remove the whole device if not
+            // check to see if we have any enabled endpoints left and remove the whole device if not
             bool atLeastOneActiveEndpoint = false;
 
             icLinkedListIterator *iterator = linkedListIteratorCreate(device->endpoints);
             while (linkedListIteratorHasNext(iterator))
+            {
+                icDeviceEndpoint *ep = linkedListIteratorGetNext(iterator);
+                if (ep->enabled == true && strcmp(ep->id, endpoint->id) != 0) // dont count the one we just disabled
                 {
-                    icDeviceEndpoint *ep = linkedListIteratorGetNext(iterator);
-                    if (ep->enabled == true && strcmp(ep->id, endpoint->id) != 0) //dont count the one we just disabled
-                    {
-                        atLeastOneActiveEndpoint = true;
-                        break;
-                    }
+                    atLeastOneActiveEndpoint = true;
+                    break;
                 }
+            }
             linkedListIteratorDestroy(iterator);
             if (atLeastOneActiveEndpoint == false)
             {
-                icLogInfo(LOG_TAG, "No more enabled endpoints exist on this device (%s), removing the whole thing.",
-                      endpoint->deviceUuid);
+                icLogInfo(LOG_TAG,
+                          "No more enabled endpoints exist on this device (%s), removing the whole thing.",
+                          endpoint->deviceUuid);
                 sendEndpointRemovedEvent(endpoint, device->deviceClass, true);
                 deviceServiceRemoveDevice(endpoint->deviceUuid);
             }
@@ -1285,10 +1296,10 @@ DeviceDescriptor *deviceServiceGetDeviceDescriptorForDevice(icDevice *device)
     DeviceDescriptor *dd = NULL;
     icDeviceResource *manufacturer = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MANUFACTURER);
     icDeviceResource *model = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MODEL);
-    icDeviceResource *hardwareVersion = deviceServiceFindDeviceResourceById(device,
-                                                                            COMMON_DEVICE_RESOURCE_HARDWARE_VERSION);
-    icDeviceResource *firmwareVersion = deviceServiceFindDeviceResourceById(device,
-                                                                            COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
+    icDeviceResource *hardwareVersion =
+        deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION);
+    icDeviceResource *firmwareVersion =
+        deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
 
     if (manufacturer != NULL && model != NULL && firmwareVersion != NULL && hardwareVersion != NULL)
     {
@@ -1315,7 +1326,7 @@ void deviceServiceProcessDeviceDescriptors()
         clearPairingFailedDevices();
     }
 
-    //Dont let the device driver manager shutdown while we are processing descriptors
+    // Dont let the device driver manager shutdown while we are processing descriptors
     pthread_mutex_lock(&deviceDriverManagerShutdownMtx);
 
     icLinkedList *devices = jsonDatabaseGetDevices();
@@ -1326,15 +1337,14 @@ void deviceServiceProcessDeviceDescriptors()
         DeviceDriver *driver = getDeviceDriverForUri(device->uri);
         if (driver == NULL)
         {
-            icLogError(LOG_TAG,
-                       "deviceServiceProcessDeviceDescriptors: could not find device driver for %s",
-                       device->uuid);
+            icLogError(
+                LOG_TAG, "deviceServiceProcessDeviceDescriptors: could not find device driver for %s", device->uuid);
             continue;
         }
 
         if (driver->processDeviceDescriptor == NULL)
         {
-            //this driver doesnt support reprocessing device descriptors
+            // this driver doesnt support reprocessing device descriptors
             continue;
         }
 
@@ -1345,9 +1355,7 @@ void deviceServiceProcessDeviceDescriptors()
             // Notice: processDeviceDescriptor doesn't require drivers to
             // update the 'device,' e.g., if metadata changes. Don't count
             // on 'device' being up-to-date after this call.
-            driver->processDeviceDescriptor(driver->callbackContext,
-                                            device,
-                                            dd);
+            driver->processDeviceDescriptor(driver->callbackContext, device, dd);
 
             deviceDescriptorFree(dd);
 
@@ -1444,11 +1452,7 @@ void updateDeviceDateLastContacted(const char *deviceUuid)
 {
     char *dateBuf = getCurrentTimestampString();
 
-    updateResource(deviceUuid,
-                   NULL,
-                   COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED,
-                   dateBuf,
-                   NULL);
+    updateResource(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, dateBuf, NULL);
 
     free(dateBuf);
 }
@@ -1457,9 +1461,8 @@ uint64_t getDeviceDateLastContacted(const char *deviceUuid)
 {
     uint64_t result = 0;
 
-    icDeviceResource *resource = deviceServiceGetResourceById(deviceUuid,
-                                                              NULL,
-                                                              COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED);
+    icDeviceResource *resource =
+        deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED);
 
     if (resource != NULL)
     {
@@ -1548,9 +1551,9 @@ static void stopMainLoop(void)
     g_main_loop_unref(g_steal_pointer(&eventLoop));
 }
 
-//TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
-//TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
-//      callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
+// TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
+// TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
+//       callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
 /**
  * Start up the device service. Drivers and subsystems have a complex lifecycle:
  * 1. Load drivers (driverManagerInitialize) (sync)
@@ -1650,7 +1653,7 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
     // start event tracker
     //
 
-    //FIXME: make this self-init
+    // FIXME: make this self-init
     initEventTracker();
 #endif
 
@@ -1724,13 +1727,13 @@ void deviceServiceShutdown()
     subsystemManagerShutdown();
 
 #ifdef BARTON_CONFIG_ZIGBEE
-    //FIXME: obsolete with self-init
+    // FIXME: obsolete with self-init
     shutDownEventTracker();
 #endif
 
     jsonDatabaseCleanup(true);
 
-    //FIXME: refcount shared objects to cleanly prevent use-after-free
+    // FIXME: refcount shared objects to cleanly prevent use-after-free
 
     mutexLock(&discoveryControlMutex);
     hashMapDestroy(activeDiscoveries, standardDoNotFreeHashMapFunc);
@@ -1777,8 +1780,10 @@ static bool fetchCommonResourcesInitialValues(icDevice *device,
 {
     initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_MANUFACTURER, manufacturer);
     initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_MODEL, model);
-    initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION, hardwareVersion);
-    initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, firmwareVersion);
+    initialResourceValuesPutDeviceValue(
+        initialResourceValues, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION, hardwareVersion);
+    initialResourceValuesPutDeviceValue(
+        initialResourceValues, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, firmwareVersion);
     initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS, NULL);
 
     AUTO_CLEAN(free_generic__auto) const char *dateBuf = getCurrentTimestampString();
@@ -1790,8 +1795,7 @@ static bool fetchCommonResourcesInitialValues(icDevice *device,
     return true;
 }
 
-static bool addCommonResources(icDevice *device,
-                               icInitialResourceValues *initialResourceValues)
+static bool addCommonResources(icDevice *device, icInitialResourceValues *initialResourceValues)
 {
     bool ok = createDeviceResourceIfAvailable(device,
                                               COMMON_DEVICE_RESOURCE_MANUFACTURER,
@@ -1819,14 +1823,16 @@ static bool addCommonResources(icDevice *device,
                                            initialResourceValues,
                                            RESOURCE_TYPE_VERSION,
                                            RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
-                                           CACHING_POLICY_ALWAYS) != NULL); //the device driver will update after firmware upgrade
+                                           CACHING_POLICY_ALWAYS) !=
+           NULL); // the device driver will update after firmware upgrade
 
     ok &= (createDeviceResourceIfAvailable(device,
                                            COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS,
                                            initialResourceValues,
                                            RESOURCE_TYPE_FIRMWARE_VERSION_STATUS,
                                            RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
-                                           CACHING_POLICY_ALWAYS) != NULL); //the device driver will update as it detects status about any updates
+                                           CACHING_POLICY_ALWAYS) !=
+           NULL); // the device driver will update as it detects status about any updates
 
     ok &= (createDeviceResourceIfAvailable(device,
                                            COMMON_DEVICE_RESOURCE_DATE_ADDED,
@@ -1835,12 +1841,13 @@ static bool addCommonResources(icDevice *device,
                                            RESOURCE_MODE_READABLE,
                                            CACHING_POLICY_ALWAYS) != NULL);
 
-    ok &= (createDeviceResourceIfAvailable(device,
-                                           COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED,
-                                           initialResourceValues,
-                                           RESOURCE_TYPE_DATETIME,
-                                           RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_LAZY_SAVE_NEXT,
-                                           CACHING_POLICY_ALWAYS) != NULL);
+    ok &=
+        (createDeviceResourceIfAvailable(device,
+                                         COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED,
+                                         initialResourceValues,
+                                         RESOURCE_TYPE_DATETIME,
+                                         RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                         CACHING_POLICY_ALWAYS) != NULL);
 
     ok &= (createDeviceResourceIfAvailable(device,
                                            COMMON_DEVICE_RESOURCE_COMM_FAIL,
@@ -1850,11 +1857,11 @@ static bool addCommonResources(icDevice *device,
                                            CACHING_POLICY_ALWAYS) != NULL);
 
     ok &= (createDeviceResource(device,
-                               COMMON_DEVICE_FUNCTION_RESET_TO_FACTORY,
-                               NULL,
-                               RESOURCE_TYPE_RESET_TO_FACTORY_OPERATION,
-                               RESOURCE_MODE_EXECUTABLE,
-                               CACHING_POLICY_NEVER) != NULL);
+                                COMMON_DEVICE_FUNCTION_RESET_TO_FACTORY,
+                                NULL,
+                                RESOURCE_TYPE_RESET_TO_FACTORY_OPERATION,
+                                RESOURCE_MODE_EXECUTABLE,
+                                CACHING_POLICY_NEVER) != NULL);
 
     return ok;
 }
@@ -1881,7 +1888,8 @@ static bool isDeviceDescriptorBypassed()
 }
 
 /*
- * Check the discovery filters with the discovered device values, if it match all the filters then it will proceed for the pairing process.
+ * Check the discovery filters with the discovered device values, if it match all the filters then it will proceed for
+ * the pairing process.
  */
 static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValues *initialValues)
 {
@@ -1890,7 +1898,8 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
     // FIXME: big lock. ctx should have a refcount.
     LOCK_SCOPE(discoveryControlMutex);
 
-    discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) hashMapGet(activeDiscoveries, device->deviceClass, (uint16_t)(strlen(device->deviceClass)+1));
+    discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) hashMapGet(
+        activeDiscoveries, device->deviceClass, (uint16_t) (strlen(device->deviceClass) + 1));
     if (ctx != NULL && ctx->filters != NULL)
     {
         icLinkedListIterator *deviceFiltersList = linkedListIteratorCreate(ctx->filters);
@@ -1904,7 +1913,8 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
             int ret2 = regcomp(&valueRegex, filter->valuePattern, 0);
             if ((ret1 == 0) && (ret2 == 0))
             {
-                icStringHashMapIterator *deviceResourceList = stringHashMapIteratorCreate((icStringHashMap *)initialValues);
+                icStringHashMapIterator *deviceResourceList =
+                    stringHashMapIteratorCreate((icStringHashMap *) initialValues);
                 while (stringHashMapIteratorHasNext(deviceResourceList) == true)
                 {
                     char *key;
@@ -1916,7 +1926,7 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
                         ret2 = regexec(&valueRegex, value, 0, NULL, 0);
                         if ((ret1 == 0) && (ret2 == 0))
                         {
-                            //here we got the matching filter value, so go for the next filter checking.
+                            // here we got the matching filter value, so go for the next filter checking.
                             matchFound = true;
                             break;
                         }
@@ -1961,7 +1971,8 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
 bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool neverReject)
 {
     icLogDebug(LOG_TAG,
-               "%s: deviceClass=%s, deviceClassVersion=%u, uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s",
+               "%s: deviceClass=%s, deviceClassVersion=%u, uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, "
+               "firmwareVersion=%s",
                __FUNCTION__,
                deviceFoundDetails->deviceClass,
                deviceFoundDetails->deviceClassVersion,
@@ -1971,7 +1982,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
                deviceFoundDetails->hardwareVersion,
                deviceFoundDetails->firmwareVersion);
 
-    char *deviceClass = (char * )deviceFoundDetails->deviceClass;
+    char *deviceClass = (char *) deviceFoundDetails->deviceClass;
 
     bool inRepairMode = false;
 
@@ -1979,7 +1990,8 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
     if (activeDiscoveries != NULL)
     {
-        discoverDeviceClassContext *ddcCtx = (discoverDeviceClassContext *) hashMapGet(activeDiscoveries, deviceClass, (uint16_t) (strlen(deviceClass) + 1));
+        discoverDeviceClassContext *ddcCtx = (discoverDeviceClassContext *) hashMapGet(
+            activeDiscoveries, deviceClass, (uint16_t) (strlen(deviceClass) + 1));
         if (ddcCtx != NULL)
         {
             inRepairMode = ddcCtx->findOrphanedDevices;
@@ -1989,7 +2001,9 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     mutexUnlock(&discoveryControlMutex);
     if (deviceServiceIsDeviceDenylisted(deviceFoundDetails->deviceUuid) == true)
     {
-        icLogWarn(LOG_TAG, "%s: This device's UUID is denylisted!  Rejecting device %s.", __FUNCTION__,
+        icLogWarn(LOG_TAG,
+                  "%s: This device's UUID is denylisted!  Rejecting device %s.",
+                  __FUNCTION__,
                   deviceFoundDetails->deviceUuid);
 
         markDeviceRejected(deviceFoundDetails->deviceUuid);
@@ -2001,15 +2015,16 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
     bool allowPairing = true;
 
-    //A device has been found.  We now check to see if we will keep or reject it.  If we find a matching device
-    // descriptor, then we keep it.  If we dont find one we will keep it anyway if it is either the XBB battery
-    // backup special device or if device descriptor bypass is enabled (which is used for testing/developement).
+    // A device has been found.  We now check to see if we will keep or reject it.  If we find a matching device
+    //  descriptor, then we keep it.  If we dont find one we will keep it anyway if it is either the XBB battery
+    //  backup special device or if device descriptor bypass is enabled (which is used for testing/developement).
 
-    //Attempt to locate the discovered device's descriptor
-    AUTO_CLEAN(deviceDescriptorFree__auto) DeviceDescriptor *dd = deviceDescriptorsGet(deviceFoundDetails->manufacturer,
-                                                                                       deviceFoundDetails->model,
-                                                                                       deviceFoundDetails->hardwareVersion,
-                                                                                       deviceFoundDetails->firmwareVersion);
+    // Attempt to locate the discovered device's descriptor
+    AUTO_CLEAN(deviceDescriptorFree__auto)
+    DeviceDescriptor *dd = deviceDescriptorsGet(deviceFoundDetails->manufacturer,
+                                                deviceFoundDetails->model,
+                                                deviceFoundDetails->hardwareVersion,
+                                                deviceFoundDetails->firmwareVersion);
 
     if (dd == NULL)
     {
@@ -2028,14 +2043,16 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         }
         else
         {
-            //no device descriptor, no bypass, and not an XBB.  Dont allow pairing
+            // no device descriptor, no bypass, and not an XBB.  Dont allow pairing
             allowPairing = false;
         }
     }
 
     if (!allowPairing)
     {
-        icLogWarn(LOG_TAG, "%s: No device descriptor found!  Rejecting device %s.", __FUNCTION__,
+        icLogWarn(LOG_TAG,
+                  "%s: No device descriptor found!  Rejecting device %s.",
+                  __FUNCTION__,
                   deviceFoundDetails->deviceUuid);
 
         markDeviceRejected(deviceFoundDetails->deviceUuid);
@@ -2047,12 +2064,13 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
     bool pairingSuccessful = true;
 
-    //Create a device instance populated with all required items from the base device class specification
-    AUTO_CLEAN(deviceDestroy__auto) icDevice *device = createDevice(deviceFoundDetails->deviceUuid,
-                                                                    deviceFoundDetails->deviceClass,
-                                                                    deviceFoundDetails->deviceClassVersion,
-                                                                    deviceFoundDetails->deviceDriver->driverName,
-                                                                    dd);
+    // Create a device instance populated with all required items from the base device class specification
+    AUTO_CLEAN(deviceDestroy__auto)
+    icDevice *device = createDevice(deviceFoundDetails->deviceUuid,
+                                    deviceFoundDetails->deviceClass,
+                                    deviceFoundDetails->deviceClassVersion,
+                                    deviceFoundDetails->deviceDriver->driverName,
+                                    dd);
 
     ConfigureDeviceFunc configureFunc;
     FetchInitialResourceValuesFunc fetchValuesFunc;
@@ -2126,7 +2144,8 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
         if (sendEvents == true)
         {
-            sendDeviceConfigureFailedEvent(deviceFoundDetails->deviceClass, deviceFoundDetails->deviceUuid, inRepairMode);
+            sendDeviceConfigureFailedEvent(
+                deviceFoundDetails->deviceClass, deviceFoundDetails->deviceUuid, inRepairMode);
         }
         pairingSuccessful = false;
     }
@@ -2134,7 +2153,8 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     {
         if (sendEvents == true)
         {
-            sendDeviceConfigureCompletedEvent(deviceFoundDetails->deviceClass, deviceFoundDetails->deviceUuid, inRepairMode);
+            sendDeviceConfigureCompletedEvent(
+                deviceFoundDetails->deviceClass, deviceFoundDetails->deviceUuid, inRepairMode);
         }
         icInitialResourceValues *initialValues = initialResourceValuesCreate();
 
@@ -2148,10 +2168,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         if (pairingSuccessful && fetchValuesFunc != NULL)
         {
             // populate initial resource values
-            pairingSuccessful &= fetchValuesFunc(
-                    ctx,
-                    device,
-                    initialValues);
+            pairingSuccessful &= fetchValuesFunc(ctx, device, initialValues);
 
             if (!pairingSuccessful)
             {
@@ -2163,8 +2180,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         {
             initialResourcesValuesLogValues(initialValues);
 
-            pairingSuccessful = addCommonResources(device,
-                                                   initialValues);
+            pairingSuccessful = addCommonResources(device, initialValues);
         }
         else
         {
@@ -2173,11 +2189,8 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
         if (pairingSuccessful)
         {
-            //add driver specific resources
-            pairingSuccessful &= registerFunc(
-                    ctx,
-                    device,
-                    initialValues);
+            // add driver specific resources
+            pairingSuccessful &= registerFunc(ctx, device, initialValues);
         }
         else
         {
@@ -2186,7 +2199,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
         if (pairingSuccessful)
         {
-            //perform device filters checking operation if provided
+            // perform device filters checking operation if provided
             pairingSuccessful = checkDeviceDiscoveryFilters(device, initialValues);
         }
         else
@@ -2202,9 +2215,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
             if (deviceFoundDetails->deviceDriver->processDeviceDescriptor != NULL && dd != NULL)
             {
                 pairingSuccessful &= deviceFoundDetails->deviceDriver->processDeviceDescriptor(
-                        deviceFoundDetails->deviceDriver->callbackContext,
-                        device,
-                        dd);
+                    deviceFoundDetails->deviceDriver->callbackContext, device, dd);
             }
         }
         else
@@ -2215,8 +2226,8 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
     if (pairingSuccessful)
     {
-        //Before we send the discovery complete event, let's do a final check to see if this device has been marked for
-        // removal
+        // Before we send the discovery complete event, let's do a final check to see if this device has been marked for
+        //  removal
         pthread_mutex_lock(&markedForRemovalMutex);
         bool marked = hashMapDelete(markedForRemoval, device->uuid, (uint16_t) strlen(device->uuid) + 1, NULL);
         pthread_mutex_unlock(&markedForRemovalMutex);
@@ -2230,11 +2241,11 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
 
     if (pairingSuccessful)
     {
-        //perform any processing to make this device real and accessible now that the device driver is done
+        // perform any processing to make this device real and accessible now that the device driver is done
         pairingSuccessful = finalizeNewDevice(device, sendEvents, inRepairMode);
     }
 
-    //Finally, if we made it here and are still successful, let everyone know.
+    // Finally, if we made it here and are still successful, let everyone know.
     if (pairingSuccessful)
     {
         if (sendEvents)
@@ -2252,10 +2263,10 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     }
     else
     {
-        //We need to make sure the managing driver is told to remove any persistent models of the device that they
-        //may have (for instance, cameras). Otherwise, they may never be made accessible again in the current process
-        //if the driver thinks it already has discovered the device.
-        if(deviceFoundDetails->deviceMigrator == NULL && deviceFoundDetails->deviceDriver->deviceRemoved != NULL)
+        // We need to make sure the managing driver is told to remove any persistent models of the device that they
+        // may have (for instance, cameras). Otherwise, they may never be made accessible again in the current process
+        // if the driver thinks it already has discovered the device.
+        if (deviceFoundDetails->deviceMigrator == NULL && deviceFoundDetails->deviceDriver->deviceRemoved != NULL)
         {
             deviceFoundDetails->deviceDriver->deviceRemoved(deviceFoundDetails->deviceDriver->callbackContext, device);
         }
@@ -2324,10 +2335,10 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
         return false;
     }
 
-    //populate URIs on the device's tree
+    // populate URIs on the device's tree
     setUris(device);
 
-    //if this device has the timezone resource, set it now
+    // if this device has the timezone resource, set it now
     icDeviceResource *tzResource = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_TIMEZONE);
     if (tzResource != NULL)
     {
@@ -2398,7 +2409,6 @@ void deviceServiceAddEndpoint(icDevice *device, icDeviceEndpoint *endpoint)
         if (endpoint->enabled == true)
         {
             sendEndpointAddedEvent(endpoint, device->deviceClass);
-
         }
     }
 }
@@ -2416,7 +2426,7 @@ static bool updateDataOfRecoveredDevice(icDevice *device)
     sbIcLinkedListIterator *dResourceIter = linkedListIteratorCreate(device->resources);
     while (linkedListIteratorHasNext(dResourceIter))
     {
-        icDeviceResource *resource = (icDeviceResource *)linkedListIteratorGetNext(dResourceIter);
+        icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(dResourceIter);
         updateResource(device->uuid, NULL, resource->id, resource->value, NULL);
     }
 
@@ -2425,7 +2435,7 @@ static bool updateDataOfRecoveredDevice(icDevice *device)
     sbIcLinkedListIterator *dMetadataIter = linkedListIteratorCreate(device->metadata);
     while (linkedListIteratorHasNext(dMetadataIter))
     {
-        icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListIteratorGetNext(dMetadataIter);
+        icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(dMetadataIter);
         setMetadata(device->uuid, NULL, metadata->id, metadata->value);
     }
 
@@ -2434,19 +2444,19 @@ static bool updateDataOfRecoveredDevice(icDevice *device)
     sbIcLinkedListIterator *dEndpointIter = linkedListIteratorCreate(device->endpoints);
     while (linkedListIteratorHasNext(dEndpointIter))
     {
-        icDeviceEndpoint *endpoint = (icDeviceEndpoint *)linkedListIteratorGetNext(dEndpointIter);
+        icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(dEndpointIter);
 
         sbIcLinkedListIterator *eResourceIter = linkedListIteratorCreate(endpoint->resources);
         while (linkedListIteratorHasNext(eResourceIter))
         {
-            icDeviceResource *resource = (icDeviceResource *)linkedListIteratorGetNext(eResourceIter);
+            icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(eResourceIter);
             updateResource(device->uuid, resource->endpointId, resource->id, resource->value, NULL);
         }
 
         sbIcLinkedListIterator *eMetadataIter = linkedListIteratorCreate(endpoint->metadata);
         while (linkedListIteratorHasNext(eMetadataIter))
         {
-            icDeviceMetadata *metadata = (icDeviceMetadata *)linkedListIteratorGetNext(eMetadataIter);
+            icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(eMetadataIter);
             setMetadata(device->uuid, metadata->endpointId, metadata->id, metadata->value);
         }
     }
@@ -2491,8 +2501,8 @@ void deviceServiceUpdateEndpoint(icDevice *device, icDeviceEndpoint *endpoint)
     }
 }
 
-//Used to notify watchers when an resource changes
-//Used by device drivers when they need to update the resource for one of their devices
+// Used to notify watchers when an resource changes
+// Used by device drivers when they need to update the resource for one of their devices
 void updateResource(const char *deviceUuid,
                     const char *endpointId,
                     const char *resourceId,
@@ -2500,11 +2510,15 @@ void updateResource(const char *deviceUuid,
                     cJSON *metadata)
 {
     // dont debug print on frequently updated resource ids to preserve log files
-    if(resourceId != NULL &&
-       strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
+    if (resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
     {
-        icLogDebug(LOG_TAG, "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
-                   __FUNCTION__, deviceUuid, endpointId, resourceId, newValue);
+        icLogDebug(LOG_TAG,
+                   "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
+                   __FUNCTION__,
+                   deviceUuid,
+                   endpointId,
+                   resourceId,
+                   newValue);
     }
 
     icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);
@@ -2513,12 +2527,12 @@ void updateResource(const char *deviceUuid,
     {
         bool sendEvent = false;
 
-        if(resource->cachingPolicy == CACHING_POLICY_NEVER && (resource->mode & RESOURCE_MODE_EMIT_EVENTS))
+        if (resource->cachingPolicy == CACHING_POLICY_NEVER && (resource->mode & RESOURCE_MODE_EMIT_EVENTS))
         {
             // we cannot compare previous values for non cached resources, so just stuff what we got in it and
             // send the event
             free(resource->value);
-            if(newValue != NULL)
+            if (newValue != NULL)
             {
                 resource->value = strdup(newValue);
             }
@@ -2540,7 +2554,7 @@ void updateResource(const char *deviceUuid,
             {
                 if (newValue == NULL)
                 {
-                    //from non-null to null
+                    // from non-null to null
                     didChange = true;
                     free(resource->value);
                     resource->value = NULL;
@@ -2554,7 +2568,7 @@ void updateResource(const char *deviceUuid,
             }
             else if (newValue != NULL)
             {
-                //changed from null to not null
+                // changed from null to not null
                 didChange = true;
 
                 // TODO: We should only update for resources marked as READABLE
@@ -2565,7 +2579,7 @@ void updateResource(const char *deviceUuid,
             {
                 resource->dateOfLastSyncMillis = getCurrentUnixTimeMillis();
 
-                //the database knows how to honor lazy saves
+                // the database knows how to honor lazy saves
                 jsonDatabaseSaveResource(resource);
             }
             else
@@ -2580,7 +2594,7 @@ void updateResource(const char *deviceUuid,
             }
         }
 
-        if(sendEvent)
+        if (sendEvent)
         {
             sendResourceUpdatedEvent(resource, metadata);
         }
@@ -2591,8 +2605,13 @@ void updateResource(const char *deviceUuid,
 
 void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value)
 {
-    icLogDebug(LOG_TAG, "%s: deviceUuid=%s, endpointId=%s, name=%s, value=%s", __FUNCTION__, deviceUuid, endpointId,
-               name, value);
+    icLogDebug(LOG_TAG,
+               "%s: deviceUuid=%s, endpointId=%s, name=%s, value=%s",
+               __FUNCTION__,
+               deviceUuid,
+               endpointId,
+               name,
+               value);
 
     if (deviceUuid == NULL || name == NULL || value == NULL)
     {
@@ -2600,15 +2619,15 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
         return;
     }
 
-    //first lets get any previous value and compare.  If they are not different, we dont need to do anything.
-    // Note: we cannot store NULL for a metadata item.  A null result from getMetadata means it wasnt set at all.
+    // first lets get any previous value and compare.  If they are not different, we dont need to do anything.
+    //  Note: we cannot store NULL for a metadata item.  A null result from getMetadata means it wasnt set at all.
     AUTO_CLEAN(free_generic__auto) const char *metadataUri = metadataUriCreate(deviceUuid, endpointId, name);
     icDeviceMetadata *metadata = jsonDatabaseGetMetadataByUri(metadataUri);
     bool doSave = false;
 
-    if(metadata != NULL)
+    if (metadata != NULL)
     {
-        if(strcmp(metadata->value, value) != 0)
+        if (strcmp(metadata->value, value) != 0)
         {
             free(metadata->value);
             metadata->value = strdup(value);
@@ -2630,7 +2649,7 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
         doSave = true;
     }
 
-    if(doSave)
+    if (doSave)
     {
         jsonDatabaseSaveMetadata(metadata);
     }
@@ -2656,7 +2675,7 @@ char *getMetadata(const char *deviceUuid, const char *endpointId, const char *na
 
     if (metadata != NULL)
     {
-        //we cant return the actual pointer that is stored in our hash map, so we strdup it and the caller must free
+        // we cant return the actual pointer that is stored in our hash map, so we strdup it and the caller must free
         if (metadata->value != NULL)
         {
             result = strdup(metadata->value);
@@ -2668,7 +2687,7 @@ char *getMetadata(const char *deviceUuid, const char *endpointId, const char *na
     return result;
 }
 
-bool deviceServiceRemoveMetadata(const char* deviceUuid, const char* endpointId, const char* name)
+bool deviceServiceRemoveMetadata(const char *deviceUuid, const char *endpointId, const char *name)
 {
     bool retVal = false;
 
@@ -2679,7 +2698,7 @@ bool deviceServiceRemoveMetadata(const char* deviceUuid, const char* endpointId,
 
     scoped_generic char *uri = metadataUriCreate(deviceUuid, endpointId, name);
     retVal = jsonDatabaseRemoveMetadataByUri(uri);
-    if(retVal == false)
+    if (retVal == false)
     {
         icLogDebug(LOG_TAG, "%s failed to remove metadata with uri: %s", __func__, uri);
     }
@@ -2687,18 +2706,18 @@ bool deviceServiceRemoveMetadata(const char* deviceUuid, const char* endpointId,
     return retVal;
 }
 
-void setBooleanMetadata(const char* deviceUuid, const char* endpointId, const char* name, bool value)
+void setBooleanMetadata(const char *deviceUuid, const char *endpointId, const char *name, bool value)
 {
     setMetadata(deviceUuid, endpointId, name, value ? "true" : "false");
 }
 
-bool getBooleanMetadata(const char* deviceUuid, const char* endpointId, const char* name)
+bool getBooleanMetadata(const char *deviceUuid, const char *endpointId, const char *name)
 {
     bool result = false;
 
     char *value = getMetadata(deviceUuid, endpointId, name);
 
-    if(value != NULL && strcmp(value, "true") == 0)
+    if (value != NULL && strcmp(value, "true") == 0)
     {
         result = true;
     }
@@ -2707,7 +2726,7 @@ bool getBooleanMetadata(const char* deviceUuid, const char* endpointId, const ch
     return result;
 }
 
-void setJsonMetadata(const char* deviceUuid, const char* endpointId, const char* name, cJSON* value)
+void setJsonMetadata(const char *deviceUuid, const char *endpointId, const char *name, cJSON *value)
 {
     scoped_generic char *stringvalue = cJSON_Print(value);
     setMetadata(deviceUuid, endpointId, name, (const char *) stringvalue);
@@ -2716,13 +2735,13 @@ void setJsonMetadata(const char* deviceUuid, const char* endpointId, const char*
 /*
  * Caller frees result
  */
-cJSON* getJsonMetadata(const char* deviceUuid, const char* endpointId, const char* name)
+cJSON *getJsonMetadata(const char *deviceUuid, const char *endpointId, const char *name)
 {
     cJSON *result = NULL;
 
     scoped_generic char *value = getMetadata(deviceUuid, endpointId, name);
 
-    if(value != NULL)
+    if (value != NULL)
     {
         result = cJSON_Parse((const char *) value);
     }
@@ -2740,9 +2759,7 @@ icLinkedList *deviceServiceGetDevicesBySubsystem(const char *subsystem)
     {
         icDevice *device = linkedListIteratorGetNext(iterator);
         DeviceDriver *driver = getDeviceDriverForUri(device->uri);
-        if (driver != NULL &&
-            driver->subsystemName != NULL &&
-            strcmp(driver->subsystemName, subsystem) == 0)
+        if (driver != NULL && driver->subsystemName != NULL && strcmp(driver->subsystemName, subsystem) == 0)
         {
             // Take it out of the source list so we can put it in our list
             linkedListIteratorDeleteCurrent(iterator, standardDoNotFreeFunc);
@@ -2773,7 +2790,7 @@ static DeviceDriver *getDeviceDriverForUri(const char *uri)
     return result;
 }
 
-bool addNewResource(const char*ownerUri, icDeviceResource *resource)
+bool addNewResource(const char *ownerUri, icDeviceResource *resource)
 {
     setUriOnResource(ownerUri, resource);
     return jsonDatabaseAddResource(ownerUri, resource);
@@ -2855,10 +2872,8 @@ static void scheduleDeviceDescriptorsProcessingTask(void)
             delayTimeUnits = DELAY_MILLIS;
         }
 
-        deviceDescriptorProcessorTask = scheduleDelayTask(DEVICE_DESCRIPTOR_PROCESSOR_DELAY_SECS,
-                                                          delayTimeUnits,
-                                                          processDeviceDescriptorsBackgroundTask,
-                                                          NULL);
+        deviceDescriptorProcessorTask = scheduleDelayTask(
+            DEVICE_DESCRIPTOR_PROCESSOR_DELAY_SECS, delayTimeUnits, processDeviceDescriptorsBackgroundTask, NULL);
     }
     pthread_mutex_unlock(&deviceDescriptorProcessorMtx);
 }
@@ -2874,7 +2889,7 @@ static void notifyDriversForServiceStatusChange(void)
 
     while (linkedListIteratorHasNext(iter))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(iter);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(iter);
         if (driver->serviceStatusChanged != NULL)
         {
             driver->serviceStatusChanged(driver->callbackContext, status);
@@ -3050,7 +3065,7 @@ static void *discoverDeviceClassThreadProc(void *arg)
 {
     discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) arg;
 
-    //start discovery for all device drivers that support this device class
+    // start discovery for all device drivers that support this device class
 
     icLinkedList *startedDeviceDrivers = linkedListCreate();
 
@@ -3065,9 +3080,11 @@ static void *discoverDeviceClassThreadProc(void *arg)
             // If allowList is missing or could not be downloaded, only devices with `neverReject` equals
             // to true of a class are to be discovered
             //
-            if (driver->neverReject == false &&  deviceDescriptorsListIsReady() == false)
+            if (driver->neverReject == false && deviceDescriptorsListIsReady() == false)
             {
-                icLogInfo(LOG_TAG,"device descriptor list is not latest, skipping discovery for device %s",driver->driverName);
+                icLogInfo(LOG_TAG,
+                          "device descriptor list is not latest, skipping discovery for device %s",
+                          driver->driverName);
                 continue;
             }
 
@@ -3075,25 +3092,25 @@ static void *discoverDeviceClassThreadProc(void *arg)
             {
                 if (driver->recoverDevices != NULL)
                 {
-                    icLogDebug(LOG_TAG,"telling %s to start device recovery...",driver->driverName);
+                    icLogDebug(LOG_TAG, "telling %s to start device recovery...", driver->driverName);
                     bool started = driver->recoverDevices(driver->callbackContext, ctx->deviceClass);
 
                     if (started == false)
                     {
                         // this is only a warning because other drivers for this class might successfully
                         // start recovery
-                        icLogWarn(LOG_TAG, "device driver %s failed to start device recovery",driver->driverName);
+                        icLogWarn(LOG_TAG, "device driver %s failed to start device recovery", driver->driverName);
                     }
                     else
                     {
-                        icLogDebug(LOG_TAG,"device driver %s start device recovery successfully",driver->driverName);
+                        icLogDebug(LOG_TAG, "device driver %s start device recovery successfully", driver->driverName);
                         atLeastOneStarted = true;
-                        linkedListAppend(startedDeviceDrivers,driver);
+                        linkedListAppend(startedDeviceDrivers, driver);
                     }
                 }
                 else
                 {
-                    icLogInfo(LOG_TAG,"device driver %s does not support device recovery",driver->driverName);
+                    icLogInfo(LOG_TAG, "device driver %s does not support device recovery", driver->driverName);
                 }
             }
             else
@@ -3135,14 +3152,14 @@ static void *discoverDeviceClassThreadProc(void *arg)
             icLogDebug(LOG_TAG,
                        "discoverDeviceClassThreadProc: waiting for explicit stop discovery/recovery of %s",
                        ctx->deviceClass);
-            //TODO switch this over to timedWait library
+            // TODO switch this over to timedWait library
             pthread_cond_wait(&ctx->cond, &ctx->mtx);
         }
         pthread_mutex_unlock(&ctx->mtx);
 
         icLogInfo(LOG_TAG, "discoverDeviceClassThreadProc: stopping discovery/recovery of %s", ctx->deviceClass);
 
-        //stop discovery
+        // stop discovery
         icLinkedListIterator *iterator = linkedListIteratorCreate(startedDeviceDrivers);
         while (linkedListIteratorHasNext(iterator))
         {
@@ -3185,7 +3202,10 @@ static void *discoverDeviceClassThreadProc(void *arg)
     return NULL;
 }
 
-static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass, icLinkedList *filters, uint16_t timeoutSeconds, bool findOrphanedDevices)
+static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
+                                                                icLinkedList *filters,
+                                                                uint16_t timeoutSeconds,
+                                                                bool findOrphanedDevices)
 {
     icLogDebug(LOG_TAG, "startDiscoveryForDeviceClass: %s for %d seconds", deviceClass, timeoutSeconds);
 
@@ -3240,10 +3260,8 @@ static char *getPartialUri(const char *uri, int numSlashes)
     return result;
 }
 
-static void yoinkResource(icDeviceResource *oldRes,
-                          icDevice *newDevice,
-                          icLinkedList *resources,
-                          const char *resourceId)
+static void
+yoinkResource(icDeviceResource *oldRes, icDevice *newDevice, icLinkedList *resources, const char *resourceId)
 {
     sbIcLinkedListIterator *newResIt = linkedListIteratorCreate(resources);
     while (linkedListIteratorHasNext(newResIt) == true)
@@ -3275,9 +3293,9 @@ static bool yoinkCustomizedDeviceData(icDevice *oldDevice, icDevice *newDevice)
     oldDevice->metadata = NULL;
 
     // grab the original date added
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *oldDateAddedRes =
-            deviceServiceGetResourceByIdInternal(oldDevice->uuid, NULL, COMMON_DEVICE_RESOURCE_DATE_ADDED,
-                                                 false);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *oldDateAddedRes =
+        deviceServiceGetResourceByIdInternal(oldDevice->uuid, NULL, COMMON_DEVICE_RESOURCE_DATE_ADDED, false);
 
     // yoink the date added from old and apply to new
     if (oldDateAddedRes != NULL)
@@ -3287,19 +3305,19 @@ static bool yoinkCustomizedDeviceData(icDevice *oldDevice, icDevice *newDevice)
 
     // loop over each endpoint on the old device so we can yoink metadata and labels
     sbIcLinkedListIterator *it = linkedListIteratorCreate(oldDevice->endpoints);
-    while(linkedListIteratorHasNext(it) == true)
+    while (linkedListIteratorHasNext(it) == true)
     {
         icDeviceEndpoint *endpoint = linkedListIteratorGetNext(it);
 
         // find the label resource, if it exists
-        AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *oldLabelRes =
-                deviceServiceGetResourceByIdInternal(oldDevice->uuid, endpoint->id, COMMON_ENDPOINT_RESOURCE_LABEL,
-                                                     false);
+        AUTO_CLEAN(resourceDestroy__auto)
+        icDeviceResource *oldLabelRes =
+            deviceServiceGetResourceByIdInternal(oldDevice->uuid, endpoint->id, COMMON_ENDPOINT_RESOURCE_LABEL, false);
 
         // find the matching endpoint on the new instance
         bool endpointMatched = false;
         sbIcLinkedListIterator *newIt = linkedListIteratorCreate(newDevice->endpoints);
-        while(linkedListIteratorHasNext(newIt) == true)
+        while (linkedListIteratorHasNext(newIt) == true)
         {
             icDeviceEndpoint *newEndpoint = linkedListIteratorGetNext(newIt);
 
@@ -3323,8 +3341,10 @@ static bool yoinkCustomizedDeviceData(icDevice *oldDevice, icDevice *newDevice)
 
         if (endpointMatched == false)
         {
-            icLogError(LOG_TAG, "%s: failed to match endpoints for metadata migration! (%s not found)",
-                       __func__, endpoint->id);
+            icLogError(LOG_TAG,
+                       "%s: failed to match endpoints for metadata migration! (%s not found)",
+                       __func__,
+                       endpoint->id);
             result = false;
             break;
         }
@@ -3342,7 +3362,7 @@ static void reconfigureDeviceTask(void *arg)
 
     // holding ctx->mtx only for a short while to avoid dead locks in configureDevice()
     mutexLock(&ctx->mtx);
-    scoped_generic char* deviceUuid = strdup(ctx->deviceUuid);
+    scoped_generic char *deviceUuid = strdup(ctx->deviceUuid);
     mutexUnlock(&ctx->mtx);
     // set the metadata if not already set
     setMetadata(deviceUuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED, "true");
@@ -3364,14 +3384,13 @@ static void reconfigureDeviceTask(void *arg)
     else
     {
         // these resources are destroyed when the device is destroyed in deviceInitializationTask
-        icDeviceResource *manufacturer = deviceServiceFindDeviceResourceById(device,
-                                                                 COMMON_DEVICE_RESOURCE_MANUFACTURER);
-        icDeviceResource *model = deviceServiceFindDeviceResourceById(device,
-                                                                 COMMON_DEVICE_RESOURCE_MODEL);
-        icDeviceResource *hardwareVersion = deviceServiceFindDeviceResourceById(device,
-                                                                 COMMON_DEVICE_RESOURCE_HARDWARE_VERSION);
-        icDeviceResource *firmwareVersion = deviceServiceFindDeviceResourceById(device,
-                                                                 COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
+        icDeviceResource *manufacturer =
+            deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MANUFACTURER);
+        icDeviceResource *model = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_MODEL);
+        icDeviceResource *hardwareVersion =
+            deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_HARDWARE_VERSION);
+        icDeviceResource *firmwareVersion =
+            deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
 
         if (manufacturer == NULL || model == NULL || firmwareVersion == NULL || hardwareVersion == NULL)
         {
@@ -3384,19 +3403,19 @@ static void reconfigureDeviceTask(void *arg)
             // persist it and discard the old one.
 
             uint8_t newDeviceClassVersion = 0;
-            if (driver->getDeviceClassVersion(driver->callbackContext, device->deviceClass, &newDeviceClassVersion) == true)
+            if (driver->getDeviceClassVersion(driver->callbackContext, device->deviceClass, &newDeviceClassVersion) ==
+                true)
             {
                 icInitialResourceValues *initialValues = initialResourceValuesCreate();
 
-                AUTO_CLEAN(deviceDescriptorFree__auto) DeviceDescriptor *dd = deviceDescriptorsGet(manufacturer->value,
-                        model->value, hardwareVersion->value, firmwareVersion->value);
+                AUTO_CLEAN(deviceDescriptorFree__auto)
+                DeviceDescriptor *dd = deviceDescriptorsGet(
+                    manufacturer->value, model->value, hardwareVersion->value, firmwareVersion->value);
 
-                //Create a device instance populated with all required items from the base device class specification
-                AUTO_CLEAN(deviceDestroy__auto) icDevice *newDevice = createDevice(device->uuid,
-                                                                                   device->deviceClass,
-                                                                                   newDeviceClassVersion,
-                                                                                   driver->driverName,
-                                                                                   dd);
+                // Create a device instance populated with all required items from the base device class specification
+                AUTO_CLEAN(deviceDestroy__auto)
+                icDevice *newDevice =
+                    createDevice(device->uuid, device->deviceClass, newDeviceClassVersion, driver->driverName, dd);
 
                 deviceServiceCommFailHintDeviceTimeoutSecs(newDevice,
                                                            deviceServiceCommFailGetDeviceTimeoutSecs(device));
@@ -3438,9 +3457,12 @@ static void reconfigureDeviceTask(void *arg)
                         jsonDatabaseRemoveDeviceById(device->uuid);
                         finalizeNewDevice(newDevice, false, false);
                         // remove the metadata since reconfiguration succeeded
-                        if(deviceServiceRemoveMetadata(deviceUuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED) == false)
+                        if (deviceServiceRemoveMetadata(
+                                deviceUuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED) == false)
                         {
-                            icWarn("Failed to remove metadata %s for device: %s", COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED, ctx->deviceUuid);
+                            icWarn("Failed to remove metadata %s for device: %s",
+                                   COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED,
+                                   ctx->deviceUuid);
                         }
                     }
                 }
@@ -3455,7 +3477,7 @@ static void reconfigureDeviceTask(void *arg)
     }
 
     // invoke the reconfiguration completed callback
-    if(ctx->reconfigurationCompleted != NULL)
+    if (ctx->reconfigurationCompleted != NULL)
     {
         ctx->reconfigurationCompleted(result, ctx->deviceUuid);
     }
@@ -3469,14 +3491,14 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
     bool retVal = false;
 
     scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
-    if(device == NULL)
+    if (device == NULL)
     {
         icError("Failed to get device for uuid: %s", deviceUuid);
         return false;
     }
 
     DeviceDriver *driver = getDeviceDriverForUri(device->uri);
-    if(driver == NULL)
+    if (driver == NULL)
     {
         icError("Failed to get device driver device uri: %s", device->uri);
         return false;
@@ -3489,8 +3511,11 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
     {
         if (device->deviceClassVersion != newDeviceClassVersion)
         {
-            icInfo("device %s has different class version than expected (%"PRIu8" vs %"PRIu8").  Reconfiguration needed",
-                   device->uuid, device->deviceClassVersion, newDeviceClassVersion);
+            icInfo("device %s has different class version than expected (%" PRIu8 " vs %" PRIu8
+                   ").  Reconfiguration needed",
+                   device->uuid,
+                   device->deviceClassVersion,
+                   newDeviceClassVersion);
             retVal = true;
         }
     }
@@ -3503,18 +3528,20 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
     if (retVal == false && driver->endpointProfileVersions != NULL)
     {
         sbIcLinkedListIterator *endpointsIt = linkedListIteratorCreate(device->endpoints);
-        while(linkedListIteratorHasNext(endpointsIt) == true)
+        while (linkedListIteratorHasNext(endpointsIt) == true)
         {
             const icDeviceEndpoint *endpoint = linkedListIteratorGetNext(endpointsIt);
-            const uint8_t *expectedEndpointProfileVersion = hashMapGet(driver->endpointProfileVersions,
-                                                                       endpoint->profile, strlen(endpoint->profile)+1);
+            const uint8_t *expectedEndpointProfileVersion =
+                hashMapGet(driver->endpointProfileVersions, endpoint->profile, strlen(endpoint->profile) + 1);
 
-            if (expectedEndpointProfileVersion != NULL &&
-                endpoint->profileVersion != *expectedEndpointProfileVersion)
+            if (expectedEndpointProfileVersion != NULL && endpoint->profileVersion != *expectedEndpointProfileVersion)
             {
-                icInfo("device %s has an endpoint with differing %s profile version (%"PRIu8" vs %"PRIu8"). "
-                          "Reconfiguration needed", device->uuid, endpoint->profile, endpoint->profileVersion,
-                          *expectedEndpointProfileVersion);
+                icInfo("device %s has an endpoint with differing %s profile version (%" PRIu8 " vs %" PRIu8 "). "
+                       "Reconfiguration needed",
+                       device->uuid,
+                       endpoint->profile,
+                       endpoint->profileVersion,
+                       *expectedEndpointProfileVersion);
                 retVal = true;
                 break;
             }
@@ -3524,10 +3551,12 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid)
     if (retVal == false)
     {
         // check the meta data to see if reconfiguration is requied for this device or not
-        scoped_generic char *reconfRequired = getMetadata(device->uuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED);
-        if(stringToBool(reconfRequired))
+        scoped_generic char *reconfRequired =
+            getMetadata(device->uuid, NULL, COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED);
+        if (stringToBool(reconfRequired))
         {
-            icInfo("device has %s metadata set. Reconfiguration needed", COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED);
+            icInfo("device has %s metadata set. Reconfiguration needed",
+                   COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED);
             retVal = true;
         }
     }
@@ -3539,13 +3568,13 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 {
     // This reconfiguration is part of initial device startup where we either reconfigure or synchronize.
     // If re-configuring failed, then fall back to synchronization.
-    if(result == false && deviceServiceIsReadyForDeviceOperation())
+    if (result == false && deviceServiceIsReadyForDeviceOperation())
     {
         scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
-        if(device != NULL)
+        if (device != NULL)
         {
             DeviceDriver *driver = getDeviceDriverForUri(device->uri);
-            if(driver != NULL)
+            if (driver != NULL)
             {
                 driver->synchronizeDevice(driver->callbackContext, device);
             }
@@ -3555,7 +3584,7 @@ static void reconfigurationCompletedCallback(bool result, const char *deviceUuid
 
 static void deviceInitializationTask(void *arg)
 {
-    char *uuid = (char*)arg;
+    char *uuid = (char *) arg;
 
     if (deviceServiceIsShuttingDown())
     {
@@ -3564,10 +3593,10 @@ static void deviceInitializationTask(void *arg)
     }
 
     scoped_icDevice *device = deviceServiceGetDevice(uuid);
-    if(device != NULL)
+    if (device != NULL)
     {
         DeviceDriver *driver = getDeviceDriverForUri(device->uri);
-        if(driver != NULL)
+        if (driver != NULL)
         {
             // a device can optionally be reconfigured OR synchronized (reconfiguration covers synchronization)
             if (deviceServiceDeviceNeedsReconfiguring(uuid) == true)
@@ -3578,7 +3607,7 @@ static void deviceInitializationTask(void *arg)
             // if reconfiguration is not required, then just synchronize the device.
             // The synchronize device operation is synchronous (ie blocking) unlike
             // reconfiguration which is asynchronous
-            else if(driver->synchronizeDevice != NULL )
+            else if (driver->synchronizeDevice != NULL)
             {
                 driver->synchronizeDevice(driver->callbackContext, device);
             }
@@ -3601,9 +3630,10 @@ static void startDeviceInitialization(void)
     while (linkedListIteratorHasNext(iterator))
     {
         icDevice *device = linkedListIteratorGetNext(iterator);
-        if (threadPoolAddTask(deviceInitializerThreadPool, deviceInitializationTask, strdup(device->uuid), NULL) == false)
+        if (threadPoolAddTask(deviceInitializerThreadPool, deviceInitializationTask, strdup(device->uuid), NULL) ==
+            false)
         {
-            icLogError(LOG_TAG,"%s: failed to add deviceInitializationTask to thread pool",__FUNCTION__ );
+            icLogError(LOG_TAG, "%s: failed to add deviceInitializationTask to thread pool", __FUNCTION__);
         }
     }
     linkedListIteratorDestroy(iterator);
@@ -3634,9 +3664,8 @@ static void shutdownDeviceDriverManager()
 
     createDetachedThread(shutdownDeviceDriverManagerThreadProc, NULL, "driverMgrShutdown");
 
-    if(incrementalCondTimedWait(&deviceDriverManagerShutdownCond,
-                                &deviceDriverManagerShutdownMtx,
-                                MAX_DRIVERS_SHUTDOWN_SECS) != 0)
+    if (incrementalCondTimedWait(
+            &deviceDriverManagerShutdownCond, &deviceDriverManagerShutdownMtx, MAX_DRIVERS_SHUTDOWN_SECS) != 0)
     {
         icLogWarn(LOG_TAG, "%s: timed out waiting for drivers to shut down.", __FUNCTION__);
     }
@@ -3649,25 +3678,25 @@ static void shutdownDeviceDriverManager()
 /****************** Simple Data Accessor Functions ***********************/
 icLinkedList *deviceServiceGetDevicesByProfile(const char *profileId)
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseGetDevicesByEndpointProfile(profileId);
 }
 
 icLinkedList *deviceServiceGetDevicesByDeviceClass(const char *deviceClass)
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseGetDevicesByDeviceClass(deviceClass);
 }
 
 icLinkedList *deviceServiceGetDevicesByDeviceDriver(const char *deviceDriver)
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseGetDevicesByDeviceDriver(deviceDriver);
 }
 
 icLinkedList *deviceServiceGetAllDevices()
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseGetDevices();
 }
 
@@ -3697,13 +3726,13 @@ icLinkedList *deviceServiceGetEndpointsByProfile(const char *profileId)
 
 icDevice *deviceServiceGetDevice(const char *uuid)
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseGetDeviceById(uuid);
 }
 
 bool deviceServiceIsDeviceKnown(const char *uuid)
 {
-    //just pass through to database
+    // just pass through to database
     return jsonDatabaseIsDeviceKnown(uuid);
 }
 
@@ -3761,11 +3790,11 @@ static icDeviceResource *deviceServiceGetResourceByIdInternal(const char *device
     icDeviceResource *result = NULL;
 
     // dont debug print on frequently fetched resource ids to preserve log files
-    if(logDebug == true &&
-       resourceId != NULL &&
-       strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
+    if (logDebug == true && resourceId != NULL && strcmp(COMMON_DEVICE_RESOURCE_DATE_LAST_CONTACTED, resourceId) != 0)
     {
-        icLogDebug(LOG_TAG, "deviceServiceGetResource: deviceUuid=%s, endpointId=%s, resourceId=%s", deviceUuid,
+        icLogDebug(LOG_TAG,
+                   "deviceServiceGetResource: deviceUuid=%s, endpointId=%s, resourceId=%s",
+                   deviceUuid,
                    stringCoalesce(endpointId),
                    resourceId);
     }
@@ -3799,10 +3828,8 @@ bool deviceServiceGetResourceAgeMillis(const char *deviceUuid,
         return false;
     }
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid,
-                                                                                                        endpointId,
-                                                                                                        resourceId,
-                                                                                                        true);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, true);
 
     if (resource != NULL)
     {
@@ -3933,13 +3960,13 @@ bool deviceServiceSetMetadata(const char *uri, const char *value)
     icDeviceMetadata *metadata = jsonDatabaseGetMetadataByUri(uri);
     if (metadata == NULL)
     {
-        //new item
+        // new item
         metadata = (icDeviceMetadata *) calloc(1, sizeof(icDeviceMetadata));
         saveDb = true;
 
-        char *deviceId = (char *) calloc(strlen(uri), 1); //allocate worst case
-        char *name = (char *) calloc(strlen(uri), 1); //allocate worst case
-        char *endpointId = (char *) calloc(strlen(uri), 1); //allocate worst case
+        char *deviceId = (char *) calloc(strlen(uri), 1);   // allocate worst case
+        char *name = (char *) calloc(strlen(uri), 1);       // allocate worst case
+        char *endpointId = (char *) calloc(strlen(uri), 1); // allocate worst case
 
         if (parseMetadataUri(uri, endpointId, deviceId, name) == true)
         {
@@ -3990,7 +4017,7 @@ bool deviceServiceSetMetadata(const char *uri, const char *value)
     }
     else
     {
-        //there was no change, so just return success
+        // there was no change, so just return success
         result = true;
     }
 
@@ -4049,7 +4076,8 @@ icLinkedList *deviceServiceGetDevicesByMetadata(const char *metadataId, const ch
             // now get the metadata value from device
             //
             char *deviceMetadataValue = NULL;
-            if (deviceServiceGetMetadata(deviceMetadataUri, &deviceMetadataValue) == true && deviceMetadataValue != NULL)
+            if (deviceServiceGetMetadata(deviceMetadataUri, &deviceMetadataValue) == true &&
+                deviceMetadataValue != NULL)
             {
                 bool addDevice = false;
 
@@ -4215,7 +4243,7 @@ void deviceServiceNotifySystemPowerEvent(DeviceServiceSystemPowerEventType power
 
     while (linkedListIteratorHasNext(iter))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(iter);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(iter);
         if (driver->systemPowerEvent != NULL)
         {
             driver->systemPowerEvent(driver->callbackContext, powerEvent);
@@ -4223,17 +4251,16 @@ void deviceServiceNotifySystemPowerEvent(DeviceServiceSystemPowerEventType power
     }
     linkedListIteratorDestroy(iter);
     linkedListDestroy(deviceDrivers, standardDoNotFreeFunc);
-
 }
 
-void deviceServiceNotifyPropertyChange (const char *propKey, const char *propValue)
+void deviceServiceNotifyPropertyChange(const char *propKey, const char *propValue)
 {
     icLinkedList *deviceDrivers = deviceDriverManagerGetDeviceDrivers();
     icLinkedListIterator *iter = linkedListIteratorCreate(deviceDrivers);
 
     while (linkedListIteratorHasNext(iter))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(iter);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(iter);
         if (driver->propertyChanged != NULL)
         {
             driver->propertyChanged(driver->callbackContext, propKey, propValue);
@@ -4241,7 +4268,6 @@ void deviceServiceNotifyPropertyChange (const char *propKey, const char *propVal
     }
     linkedListIteratorDestroy(iter);
     linkedListDestroy(deviceDrivers, standardDoNotFreeFunc);
-
 }
 
 static icLinkedList *getSupportedDeviceClasses(void)
@@ -4252,7 +4278,7 @@ static icLinkedList *getSupportedDeviceClasses(void)
     sbIcLinkedListIterator *drivers = linkedListIteratorCreate(deviceDrivers);
     while (linkedListIteratorHasNext(drivers))
     {
-        DeviceDriver *driver = (DeviceDriver *)linkedListIteratorGetNext(drivers);
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(drivers);
         sbIcLinkedListIterator *deviceClassesIter = linkedListIteratorCreate(driver->supportedDeviceClasses);
         while (linkedListIteratorHasNext(deviceClassesIter))
         {
@@ -4301,9 +4327,7 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
             discoverDeviceClassContext *ctx;
             if (hashMapIteratorGetNext(iterator, (void **) &class, &classLen, (void **) &ctx))
             {
-                if (linkedListFind(result->discoveringDeviceClasses,
-                        class,
-                        linkedListStringCompareFunc) == false)
+                if (linkedListFind(result->discoveringDeviceClasses, class, linkedListStringCompareFunc) == false)
                 {
                     linkedListAppend(result->discoveringDeviceClasses, strdup(class));
                 }
@@ -4319,7 +4343,7 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
 
     scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
     sbIcLinkedListIterator *subsystemsIt = linkedListIteratorCreate(subsystems);
-    while(linkedListIteratorHasNext(subsystemsIt))
+    while (linkedListIteratorHasNext(subsystemsIt))
     {
         char *subsystemName = linkedListIteratorGetNext(subsystemsIt);
         hashMapPut(result->subsystemsJsonStatus,
@@ -4340,12 +4364,11 @@ bool deviceServiceIsDeviceInCommFail(const char *deviceUuid)
 
     bool retVal = false;
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *commFailResource =
-            deviceServiceGetResourceById(deviceUuid,
-                                         NULL,
-                                         COMMON_DEVICE_RESOURCE_COMM_FAIL);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *commFailResource =
+        deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_COMM_FAIL);
 
-    if(commFailResource != NULL)
+    if (commFailResource != NULL)
     {
         retVal = stringToBool(commFailResource->value);
     }
@@ -4362,12 +4385,11 @@ char *deviceServiceGetDeviceFirmwareVersion(const char *deviceUuid)
         return NULL;
     }
 
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *fwResource =
-            deviceServiceGetResourceById(deviceUuid,
-                                         NULL,
-                                         COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *fwResource =
+        deviceServiceGetResourceById(deviceUuid, NULL, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION);
 
-    if(fwResource != NULL)
+    if (fwResource != NULL)
     {
         retVal = fwResource->value;
         fwResource->value = NULL;
@@ -4378,12 +4400,12 @@ char *deviceServiceGetDeviceFirmwareVersion(const char *deviceUuid)
 
 static void markDeviceRejected(const char *deviceUuid)
 {
-    icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__ , deviceUuid);
+    icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__, deviceUuid);
 
     mutexLock(&rejectedMutex);
 
     char *key = strdup(deviceUuid);
-    uint16_t keyLen = (uint16_t)strlen(key) + 1;
+    uint16_t keyLen = (uint16_t) strlen(key) + 1;
 
     // Delete previous entry if one exists
     hashMapDelete(rejected, key, keyLen, NULL);
@@ -4391,7 +4413,7 @@ static void markDeviceRejected(const char *deviceUuid)
     // Add the new entry
     if (hashMapPut(rejected, key, keyLen, NULL) == false)
     {
-        icLogWarn(LOG_TAG, "%s: failed to mark device rejected: %s", __FUNCTION__ , deviceUuid);
+        icLogWarn(LOG_TAG, "%s: failed to mark device rejected: %s", __FUNCTION__, deviceUuid);
         free(key);
     }
 
@@ -4401,7 +4423,7 @@ static void markDeviceRejected(const char *deviceUuid)
 bool deviceServiceWasDeviceRejected(const char *deviceUuid)
 {
     pthread_mutex_lock(&rejectedMutex);
-    bool wasRejected = hashMapContains(rejected, (void *)deviceUuid, strlen(deviceUuid) + 1);
+    bool wasRejected = hashMapContains(rejected, (void *) deviceUuid, strlen(deviceUuid) + 1);
     pthread_mutex_unlock(&rejectedMutex);
 
     return wasRejected;
@@ -4423,7 +4445,7 @@ static void markDevicePairingFailed(const char *deviceUuid)
     mutexLock(&failedToPairMutex);
 
     char *key = strdup(deviceUuid);
-    uint16_t keyLen = (uint16_t)strlen(key) + 1;
+    uint16_t keyLen = (uint16_t) strlen(key) + 1;
 
     // Delete previous entry if one exists
     hashMapDelete(failedToPair, key, keyLen, NULL);
@@ -4441,7 +4463,7 @@ static void markDevicePairingFailed(const char *deviceUuid)
 bool deviceServiceDidDeviceFailToPair(const char *deviceUuid)
 {
     mutexLock(&failedToPairMutex);
-    bool failed = hashMapContains(failedToPair, (void *)deviceUuid, strlen(deviceUuid) + 1);
+    bool failed = hashMapContains(failedToPair, (void *) deviceUuid, strlen(deviceUuid) + 1);
     mutexUnlock(&failedToPairMutex);
 
     return failed;
@@ -4456,7 +4478,7 @@ static void clearPairingFailedDevices()
     mutexUnlock(&failedToPairMutex);
 }
 
-static ReconfigureDeviceContext* acquireReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
+static ReconfigureDeviceContext *acquireReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
 {
     ReconfigureDeviceContext *out = NULL;
 
@@ -4478,7 +4500,7 @@ static inline void releaseReconfigureDeviceContext(ReconfigureDeviceContext *ctx
 
 static void destroyReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
 {
-    if(ctx != NULL)
+    if (ctx != NULL)
     {
         free(ctx->deviceUuid);
     }
@@ -4488,7 +4510,7 @@ static void cancelPendingReconfigurationTasks()
 {
     mutexLock(&reconfigurationControlMutex);
     icHashMapIterator *pendingIt = hashMapIteratorCreate(pendingReconfiguration);
-    while(hashMapIteratorHasNext(pendingIt))
+    while (hashMapIteratorHasNext(pendingIt))
     {
         void *deviceUuid;
         uint16_t keyLen;
@@ -4500,7 +4522,7 @@ static void cancelPendingReconfigurationTasks()
         mutexUnlock(&ctx->mtx);
 
         // cancel the waiting tasks
-        if(isDelayTaskWaiting(taskHandle))
+        if (isDelayTaskWaiting(taskHandle))
         {
             cancelDelayTask(taskHandle);
             hashMapIteratorDeleteCurrent(pendingIt, pendingReconfigurationFreeFunc);
@@ -4522,19 +4544,20 @@ static void waitForPendingReconfigurationsToComplete()
     while (waitCount < MAX_PENDING_RECONFIGURATION_WAIT_COUNT)
     {
         uint16_t count = 0;
-        if(pendingReconfiguration != NULL)
+        if (pendingReconfiguration != NULL)
         {
             count = hashMapCount(pendingReconfiguration);
         }
 
-        if(count == 0)
+        if (count == 0)
         {
             break;
         }
         else
         {
-            icDebug("%"PRIu16" reconfiguration tasks are blocking", count);
-            incrementalCondTimedWait(&reconfigurationControlCond, &reconfigurationControlMutex, PENDING_RECONFIGURATION_TIMEOUT_SEC);
+            icDebug("%" PRIu16 " reconfiguration tasks are blocking", count);
+            incrementalCondTimedWait(
+                &reconfigurationControlCond, &reconfigurationControlMutex, PENDING_RECONFIGURATION_TIMEOUT_SEC);
         }
         waitCount++;
     }
@@ -4546,7 +4569,7 @@ static void pendingReconfigurationFreeFunc(void *key, void *value)
 
     if (value != NULL)
     {
-        releaseReconfigureDeviceContext((ReconfigureDeviceContext*) value);
+        releaseReconfigureDeviceContext((ReconfigureDeviceContext *) value);
     }
 }
 
@@ -4554,9 +4577,12 @@ static bool deviceServiceSetReconfigureDeviceContext(ReconfigureDeviceContext *c
 {
     bool result = false;
     mutexLock(&reconfigurationControlMutex);
-    if(ctx != NULL && pendingReconfiguration != NULL)
+    if (ctx != NULL && pendingReconfiguration != NULL)
     {
-        result = hashMapPut(pendingReconfiguration, ctx->deviceUuid, (uint16_t) (strlen(ctx->deviceUuid) + 1), acquireReconfigureDeviceContext(ctx));
+        result = hashMapPut(pendingReconfiguration,
+                            ctx->deviceUuid,
+                            (uint16_t) (strlen(ctx->deviceUuid) + 1),
+                            acquireReconfigureDeviceContext(ctx));
     }
     mutexUnlock(&reconfigurationControlMutex);
     return result;
@@ -4568,20 +4594,21 @@ static ReconfigureDeviceContext *deviceServiceGetReconfigureDeviceContext(const 
 {
     ReconfigureDeviceContext *ctx = NULL;
     mutexLock(&reconfigurationControlMutex);
-    if(deviceUuid != NULL && pendingReconfiguration != NULL)
+    if (deviceUuid != NULL && pendingReconfiguration != NULL)
     {
-        ctx = acquireReconfigureDeviceContext(hashMapGet(pendingReconfiguration, (char*) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1)));
+        ctx = acquireReconfigureDeviceContext(
+            hashMapGet(pendingReconfiguration, (char *) deviceUuid, (uint16_t) (strlen(deviceUuid) + 1)));
     }
     mutexUnlock(&reconfigurationControlMutex);
     return ctx;
 }
 
-bool deviceServiceWaitForReconfigure(const char* deviceUuid)
+bool deviceServiceWaitForReconfigure(const char *deviceUuid)
 {
     bool result = false;
 
     g_autoptr(ReconfigureDeviceContext) ctx = deviceServiceGetReconfigureDeviceContext(deviceUuid);
-    if(ctx != NULL)
+    if (ctx != NULL)
     {
         result = true;
         icDebug("reconfiguration pending for device uuid: %s. Waiting on reconfiguration condition", deviceUuid);
@@ -4620,19 +4647,19 @@ bool deviceServiceWaitForReconfigure(const char* deviceUuid)
     return result;
 }
 
-bool deviceServiceIsReconfigurationPending(const char* deviceUuid)
+bool deviceServiceIsReconfigurationPending(const char *deviceUuid)
 {
     bool result = false;
 
     g_autoptr(ReconfigureDeviceContext) ctx = deviceServiceGetReconfigureDeviceContext(deviceUuid);
-    if(ctx != NULL)
+    if (ctx != NULL)
     {
         result = true;
     }
     return result;
 }
 
-bool deviceServiceIsReconfigurationAllowedAsap(const char* deviceUuid)
+bool deviceServiceIsReconfigurationAllowedAsap(const char *deviceUuid)
 {
     bool result = false;
 
@@ -4649,7 +4676,7 @@ static bool sendReconfigurationSignal(ReconfigureDeviceContext *ctx, bool should
 {
     bool result = false;
 
-    if(ctx != NULL)
+    if (ctx != NULL)
     {
         mutexLock(&ctx->mtx);
         ctx->isSignaled = true;
@@ -4662,7 +4689,7 @@ static bool sendReconfigurationSignal(ReconfigureDeviceContext *ctx, bool should
     return result;
 }
 
-bool deviceServiceSendReconfigurationSignal(const char* deviceUuid, bool shouldTerminate)
+bool deviceServiceSendReconfigurationSignal(const char *deviceUuid, bool shouldTerminate)
 {
     g_autoptr(ReconfigureDeviceContext) ctx = deviceServiceGetReconfigureDeviceContext(deviceUuid);
     return sendReconfigurationSignal(ctx, shouldTerminate);
@@ -4672,9 +4699,12 @@ static bool deviceServiceRemoveReconfigureDeviceContext(ReconfigureDeviceContext
 {
     bool result = false;
     mutexLock(&reconfigurationControlMutex);
-    if(ctx != NULL && pendingReconfiguration != NULL)
+    if (ctx != NULL && pendingReconfiguration != NULL)
     {
-        result = hashMapDelete(pendingReconfiguration, ctx->deviceUuid, (uint16_t) (strlen(ctx->deviceUuid) + 1), pendingReconfigurationFreeFunc);
+        result = hashMapDelete(pendingReconfiguration,
+                               ctx->deviceUuid,
+                               (uint16_t) (strlen(ctx->deviceUuid) + 1),
+                               pendingReconfigurationFreeFunc);
         // signal that pending reconfiguration hasmap has shrunk,
         // which means reconfiguration task has completed.
         pthread_cond_broadcast(&reconfigurationControlCond);
@@ -4683,12 +4713,13 @@ static bool deviceServiceRemoveReconfigureDeviceContext(ReconfigureDeviceContext
     return result;
 }
 
-void deviceServiceReconfigureDevice(const char *deviceUuid, uint32_t delaySeconds,
+void deviceServiceReconfigureDevice(const char *deviceUuid,
+                                    uint32_t delaySeconds,
                                     reconfigurationCompleteCallback reconfigurationCompleted,
                                     bool allowAsap)
 {
     // schedule a reconfiguration task if one is not already scheduled
-    if(deviceServiceIsReconfigurationPending(deviceUuid) == false)
+    if (deviceServiceIsReconfigurationPending(deviceUuid) == false)
     {
         icDebug("Scheduling reconfiguration for device %s after %d seconds", deviceUuid, delaySeconds);
         ReconfigureDeviceContext *ctx = g_atomic_rc_box_new0(ReconfigureDeviceContext);
@@ -4705,9 +4736,10 @@ void deviceServiceReconfigureDevice(const char *deviceUuid, uint32_t delaySecond
         ctx->timeoutSeconds = RECONFIGURATION_TIMEOUT_SEC;
 
         // add the context to pending reconfiguration hashmap
-        if(deviceServiceSetReconfigureDeviceContext(ctx) == false)
+        if (deviceServiceSetReconfigureDeviceContext(ctx) == false)
         {
-            icError("Failed to add reconfiguration device context to pending reconfiguration list, not scheduling reconfiguration task");
+            icError("Failed to add reconfiguration device context to pending reconfiguration list, not scheduling "
+                    "reconfiguration task");
             return;
         }
         // schedule reconfiguration
@@ -4726,12 +4758,12 @@ PostUpgradeAction deviceServiceGetPostUpgradeAction(const char *deviceUuid)
 
     icDebug("device uuid: %s", deviceUuid);
 
-    if(deviceUuid != NULL)
+    if (deviceUuid != NULL)
     {
         scoped_icDevice *device = deviceServiceGetDevice(deviceUuid);
         scoped_DeviceDescriptor *dd = deviceServiceGetDeviceDescriptorForDevice(device);
 
-        if(dd != NULL && dd->latestFirmware != NULL)
+        if (dd != NULL && dd->latestFirmware != NULL)
         {
             // get the post upgrade action from latest firmware
             retVal = dd->latestFirmware->upgradeAction;

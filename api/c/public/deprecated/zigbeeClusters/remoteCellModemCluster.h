@@ -27,11 +27,14 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-typedef struct {
+typedef struct
+{
     void (*onOffStateChanged)(uint64_t eui64, uint8_t endpointId, bool isOn);
 } RemoteCellModemClusterCallbacks;
 
-ZigbeeCluster *remoteCellModemClusterCreate(const RemoteCellModemClusterCallbacks *callbacks, void *callbackContext, uint16_t manufacturerId);
+ZigbeeCluster *remoteCellModemClusterCreate(const RemoteCellModemClusterCallbacks *callbacks,
+                                            void *callbackContext,
+                                            uint16_t manufacturerId);
 
 /**
  * Determines whether or not the remote cell modem is powered on or not.

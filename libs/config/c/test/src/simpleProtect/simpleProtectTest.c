@@ -30,12 +30,15 @@
  * FIXME: upgrade to cmocka testcase
  *-----------------------------------------------*/
 
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <cmocka.h>
+#include <icConfig/simpleProtectConfig.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
-#include <cmocka.h>
-#include <icConfig/simpleProtectConfig.h>
 
 static void testProtectGetSecretFromKeyring(void **state)
 {
@@ -46,15 +49,11 @@ static void testProtectGetSecretFromKeyring(void **state)
     assert_non_null(secret);
 
     simpleProtectDestroySecret(secret);
-
 }
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                cmocka_unit_test(testProtectGetSecretFromKeyring)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(testProtectGetSecretFromKeyring)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

@@ -70,7 +70,8 @@ namespace zilker
             if (error == CHIP_NO_ERROR)
             {
                 int8_t *nullableValue = value.IsNull() ? nullptr : &value.Value();
-                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)->RssiChanged(deviceId, nullableValue, nullptr);
+                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
+                    ->RssiChanged(deviceId, nullableValue, nullptr);
             }
             else
             {
@@ -101,10 +102,9 @@ namespace zilker
         using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
         using TypeInfo = Attributes::Rssi::TypeInfo;
 
-        chip::app::ConcreteAttributePath path(
-            endpointId,
-            chip::app::Clusters::WiFiNetworkDiagnostics::Id,
-            chip::app::Clusters::WiFiNetworkDiagnostics::Attributes::Rssi::Id);
+        chip::app::ConcreteAttributePath path(endpointId,
+                                              chip::app::Clusters::WiFiNetworkDiagnostics::Id,
+                                              chip::app::Clusters::WiFiNetworkDiagnostics::Attributes::Rssi::Id);
         {
             TypeInfo::DecodableType value;
             error = cache->Get<TypeInfo>(path, value);

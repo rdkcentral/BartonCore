@@ -25,14 +25,14 @@
 //
 
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -72,14 +72,14 @@ bool meteringClusterGetInstantaneousDemand(uint64_t eui64, uint8_t endpointId, i
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, METERING_CLUSTER_ID, true,
-                                  METERING_INSTANTANEOUS_DEMAND_ATTRIBUTE_ID, &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, METERING_CLUSTER_ID, true, METERING_INSTANTANEOUS_DEMAND_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read instantaneous power attribute value", __FUNCTION__);
     }
     else
     {
-        *demand = (int32_t) val; //24 bit signed
+        *demand = (int32_t) val; // 24 bit signed
         result = true;
     }
 
@@ -99,7 +99,7 @@ bool meteringClusterGetDivisor(uint64_t eui64, uint8_t endpointId, uint32_t *div
     }
     else
     {
-        *divisor = (uint32_t) (val & 0xffffff); //24 bit unsigned
+        *divisor = (uint32_t) (val & 0xffffff); // 24 bit unsigned
         result = true;
     }
 
@@ -112,14 +112,14 @@ bool meteringClusterGetMultiplier(uint64_t eui64, uint8_t endpointId, uint32_t *
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64, endpointId, METERING_CLUSTER_ID, true, METERING_MULTIPLIER_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, METERING_CLUSTER_ID, true, METERING_MULTIPLIER_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read multiplier attribute value", __FUNCTION__);
     }
     else
     {
-        *multiplier = (uint32_t) (val & 0xffffff); //24 bit unsigned
+        *multiplier = (uint32_t) (val & 0xffffff); // 24 bit unsigned
         result = true;
     }
 
@@ -153,18 +153,15 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     configs[0].minInterval = 1;
     configs[0].maxInterval = REPORTING_INTERVAL_MAX;
     configs[0].reportableChange =
-            divisor / multiplier / 1000; //by default, report 1 watt changes. metering units are kilowats
+        divisor / multiplier / 1000; // by default, report 1 watt changes. metering units are kilowats
 
     if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, METERING_CLUSTER_ID) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to bind metering", __FUNCTION__);
         result = false;
     }
-    else if (zigbeeSubsystemAttributesSetReporting(configContext->eui64,
-                                                   configContext->endpointId,
-                                                   METERING_CLUSTER_ID,
-                                                   configs,
-                                                   numConfigs) != 0)
+    else if (zigbeeSubsystemAttributesSetReporting(
+                 configContext->eui64, configContext->endpointId, METERING_CLUSTER_ID, configs, numConfigs) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to set reporting for metering", __FUNCTION__);
         result = false;
@@ -184,16 +181,14 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
         if (report->reportDataLen == 6)
         {
             int32_t val = report->reportData[3] + (report->reportData[4] << 8) + (report->reportData[5] << 16);
-            icLogDebug(LOG_TAG, "%s: instantaneous power now %"PRId32" kW", __FUNCTION__, val);
+            icLogDebug(LOG_TAG, "%s: instantaneous power now %" PRId32 " kW", __FUNCTION__, val);
 
-            meteringCluster->callbacks->instantaneousDemandChanged(report->eui64,
-                                                                   report->sourceEndpoint,
-                                                                   val,
-                                                                   meteringCluster->callbackContext);
+            meteringCluster->callbacks->instantaneousDemandChanged(
+                report->eui64, report->sourceEndpoint, val, meteringCluster->callbackContext);
         }
     }
 
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

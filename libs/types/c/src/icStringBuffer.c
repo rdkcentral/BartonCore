@@ -26,9 +26,9 @@
 #include "icTypes/icStringBuffer.h"
 #include "icTypes/icFifoBuffer.h"
 #include <memory.h>
-#include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define COMMA_STRING ","
 
@@ -51,7 +51,7 @@ struct _icStringBuffer
  */
 icStringBuffer *stringBufferCreate(uint32_t initialSize)
 {
-    icStringBuffer *stringBuffer = (icStringBuffer *)calloc(1, sizeof(icStringBuffer));
+    icStringBuffer *stringBuffer = (icStringBuffer *) calloc(1, sizeof(icStringBuffer));
     if (stringBuffer != NULL)
     {
         stringBuffer->fifoBuffer = fifoBuffCreate(initialSize);
@@ -84,7 +84,7 @@ void stringBufferAppend(icStringBuffer *stringBuffer, const char *string)
 {
     if (stringBuffer != NULL && string != NULL)
     {
-        fifoBuffPush(stringBuffer->fifoBuffer, (void *)string, strlen(string));
+        fifoBuffPush(stringBuffer->fifoBuffer, (void *) string, strlen(string));
     }
 }
 
@@ -99,7 +99,7 @@ void stringBufferAppendLength(icStringBuffer *stringBuffer, const char *string, 
 {
     if (stringBuffer != NULL && string != NULL && length > 0)
     {
-        fifoBuffPush(stringBuffer->fifoBuffer, (void *)string, sizeof(char) * length);
+        fifoBuffPush(stringBuffer->fifoBuffer, (void *) string, sizeof(char) * length);
     }
 }
 
@@ -122,14 +122,14 @@ void stringBufferAppendWithComma(icStringBuffer *stringBuffer, const char *strin
         {
             if (fifoBuffGetPullAvailable(stringBuffer->fifoBuffer) != 0)
             {
-                fifoBuffPush(stringBuffer->fifoBuffer, (void *)COMMA_STRING, strlen(COMMA_STRING));
+                fifoBuffPush(stringBuffer->fifoBuffer, (void *) COMMA_STRING, strlen(COMMA_STRING));
             }
-            fifoBuffPush(stringBuffer->fifoBuffer, (void *)string, strlen(string));
+            fifoBuffPush(stringBuffer->fifoBuffer, (void *) string, strlen(string));
         }
         else
         {
-            fifoBuffPush(stringBuffer->fifoBuffer, (void *)string, strlen(string));
-            fifoBuffPush(stringBuffer->fifoBuffer, (void *)COMMA_STRING, strlen(COMMA_STRING));
+            fifoBuffPush(stringBuffer->fifoBuffer, (void *) string, strlen(string));
+            fifoBuffPush(stringBuffer->fifoBuffer, (void *) COMMA_STRING, strlen(COMMA_STRING));
         }
     }
 }
@@ -167,7 +167,7 @@ char *stringBufferToString(icStringBuffer *stringBuffer)
         uint32_t available = fifoBuffGetPullAvailable(stringBuffer->fifoBuffer);
         // Just a get a pointer so the read position doesn't change, so they can append more after this
         void *ptr = fifoBuffPullPointer(stringBuffer->fifoBuffer, available);
-        retval = malloc(available+1);
+        retval = malloc(available + 1);
         memcpy(retval, ptr, available);
         retval[available] = '\0';
     }
@@ -190,7 +190,7 @@ void stringBufferClear(icStringBuffer *stringBuffer)
 void stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, ...)
 {
 
-    va_list  arglist;
+    va_list arglist;
 
     // preprocess the format & args
     //
@@ -208,10 +208,10 @@ void stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, 
             va_start(arglist, format);
 
             // get a pointer to the memory for the string, then populate it. vsnprintf wants to write a null terminator
-            // so we have to allocate for the null terminator NULL, let it write it, but then tell fifoBuffAfterPushPointer
-            // that we didn't write it so the write pointer is in the correct place
-            char *buf = fifoBuffPushPointer(stringBuffer->fifoBuffer, strLen+1);
-            vsnprintf(buf, (size_t) strLen+1, format, arglist);
+            // so we have to allocate for the null terminator NULL, let it write it, but then tell
+            // fifoBuffAfterPushPointer that we didn't write it so the write pointer is in the correct place
+            char *buf = fifoBuffPushPointer(stringBuffer->fifoBuffer, strLen + 1);
+            vsnprintf(buf, (size_t) strLen + 1, format, arglist);
             fifoBuffAfterPushPointer(stringBuffer->fifoBuffer, strLen);
         }
     }
@@ -220,4 +220,3 @@ void stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, 
     //
     va_end(arglist);
 }
-

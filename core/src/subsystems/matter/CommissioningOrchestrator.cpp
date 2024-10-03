@@ -39,8 +39,8 @@
 #include "platform/PlatformManager.h"
 
 extern "C" {
-#include <device/icDevice.h>
 #include <device-driver/device-driver.h>
+#include <device/icDevice.h>
 #include <deviceService.h>
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>

@@ -29,14 +29,15 @@
 
 #include "zigbeeCluster.h"
 
-#define TEMPERATURE_MEASUREMENT_CLUSTER_INVALID_TEMPERATURE_VALUE  0x8000
+#define TEMPERATURE_MEASUREMENT_CLUSTER_INVALID_TEMPERATURE_VALUE 0x8000
 
 typedef struct
 {
     void (*measuredValueUpdated)(void *ctx, uint64_t eui64, uint8_t endpointId, int16_t value);
 } TemperatureMeasurementClusterCallbacks;
 
-ZigbeeCluster *temperatureMeasurementClusterCreate(const TemperatureMeasurementClusterCallbacks *callbacks, void *callbackContext);
+ZigbeeCluster *temperatureMeasurementClusterCreate(const TemperatureMeasurementClusterCallbacks *callbacks,
+                                                   void *callbackContext);
 
 bool temperatureMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpointId, int16_t *value);
 
@@ -60,4 +61,4 @@ inline bool temperatureMeasurementClusterIsTemperatureValid(uint16_t value)
     return (value != TEMPERATURE_MEASUREMENT_CLUSTER_INVALID_TEMPERATURE_VALUE);
 }
 
-#endif //ZILKER_TEMPERATUREMEASUREMENTCLUSTER_H
+#endif // ZILKER_TEMPERATUREMEASUREMENTCLUSTER_H

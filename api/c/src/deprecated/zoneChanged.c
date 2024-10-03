@@ -24,13 +24,13 @@
 // Created by tlea on 3/18/19
 //
 
-#include <memory.h>
+#include "resourceContainer.h"
+#include <deviceService/zoneChanged.h>
 #include <errno.h>
 #include <icLog/logging.h>
-#include <jsonHelper/jsonHelper.h>
 #include <icTypes/sbrm.h>
-#include <deviceService/zoneChanged.h>
-#include "resourceContainer.h"
+#include <jsonHelper/jsonHelper.h>
+#include <memory.h>
 
 #define LOG_TAG "ZoneChanged"
 
@@ -53,7 +53,7 @@ ZoneChanged *zoneChangedCreate(uint8_t displayIndex,
         return NULL;
     }
 
-    ZoneChanged *retVal = (ZoneChanged*) calloc(1, sizeof(ZoneChanged));
+    ZoneChanged *retVal = (ZoneChanged *) calloc(1, sizeof(ZoneChanged));
     retVal->displayIndex = displayIndex;
     retVal->label = strdup(label);
     retVal->faulted = faulted;
@@ -100,7 +100,7 @@ int zoneChangedCopy(ZoneChanged *dst, const ZoneChanged *src)
 
 void zoneChangedDestroy(ZoneChanged *zoneChanged)
 {
-    if(zoneChanged != NULL)
+    if (zoneChanged != NULL)
     {
         free(zoneChanged->label);
         zoneChanged->label = NULL;
@@ -199,25 +199,25 @@ ZoneChanged *zoneChangedFromJSON(const char *json)
             ok = false;
         }
 
-        if(!getCJSONBool(parsed, ZONE_CHANGED_FAULTED, &faulted))
+        if (!getCJSONBool(parsed, ZONE_CHANGED_FAULTED, &faulted))
         {
             icLogError(LOG_TAG, "%s: %s failed to parse", __FUNCTION__, ZONE_CHANGED_FAULTED);
             ok = false;
         }
 
-        if(!getCJSONBool(parsed, ZONE_CHANGED_BYPASSED, &bypassed))
+        if (!getCJSONBool(parsed, ZONE_CHANGED_BYPASSED, &bypassed))
         {
             icLogError(LOG_TAG, "%s: %s failed to parse", __FUNCTION__, ZONE_CHANGED_BYPASSED);
             ok = false;
         }
 
-        if(!getCJSONBool(parsed, ZONE_CHANGED_BYPASS_ACTIVE, &bypassActive))
+        if (!getCJSONBool(parsed, ZONE_CHANGED_BYPASS_ACTIVE, &bypassActive))
         {
             icLogError(LOG_TAG, "%s: %s failed to parse", __FUNCTION__, ZONE_CHANGED_BYPASS_ACTIVE);
             ok = false;
         }
 
-        if(!getCJSONDouble(parsed, ZONE_CHANGED_EVENT_ID, &eventId))
+        if (!getCJSONDouble(parsed, ZONE_CHANGED_EVENT_ID, &eventId))
         {
             icLogError(LOG_TAG, "%s: %s failed to parse", __FUNCTION__, ZONE_CHANGED_EVENT_ID);
             ok = false;
@@ -226,7 +226,8 @@ ZoneChanged *zoneChangedFromJSON(const char *json)
         AUTO_CLEAN(free_generic__auto) char *tmp = getCJSONString(parsed, ZONE_CHANGED_REASON);
         if (tmp != NULL)
         {
-            reason = (ZoneChangedReason) findEnumForLabel(tmp, ZoneChangedReasonLabels, ARRAY_LENGTH(ZoneChangedReasonLabels));
+            reason = (ZoneChangedReason) findEnumForLabel(
+                tmp, ZoneChangedReasonLabels, ARRAY_LENGTH(ZoneChangedReasonLabels));
         }
         else
         {

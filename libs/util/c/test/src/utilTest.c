@@ -3,19 +3,19 @@
 //
 
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-//#include <zlog.h>
-#include <icLog/logging.h>
-#include "parsePropTest.h"
+// #include <zlog.h>
 #include "encodeTest.h"
 #include "macAddrTest.h"
+#include "parsePropTest.h"
 #include "versionTest.h"
+#include <icLog/logging.h>
 
 /*
  *

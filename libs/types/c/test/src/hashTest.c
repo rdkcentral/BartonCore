@@ -3,19 +3,19 @@
 //
 
 
-#include <stdio.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include "icTypes/icHashMap.h"
-#include <sys/time.h>
-#include <icTypes/sbrm.h>
 #include "hashTest.h"
+#include "icTypes/icHashMap.h"
+#include <icTypes/sbrm.h>
+#include <sys/time.h>
 
-#define NUM_BUCKETS         31
-#define USEC_PER_SEC        1000000
+#define NUM_BUCKETS  31
+#define USEC_PER_SEC 1000000
 
 /*
  * calculate a hash number based on 'key' and a 'seed'
@@ -26,7 +26,7 @@ static uint32_t defaultHash(const char *key, uint16_t keyLen, uint32_t seed)
 {
     // similar to the 'times 33' hash algo used by Perl and Berkley DB
     //
-    unsigned char *ptr = (unsigned char *)key;
+    unsigned char *ptr = (unsigned char *) key;
     uint16_t i = 0;
     uint32_t hash = seed;
 
@@ -62,7 +62,7 @@ static unsigned long long getTime()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (unsigned long long)(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
+    return (unsigned long long) (tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
 }
 
 /*
@@ -71,27 +71,27 @@ static unsigned long long getTime()
 bool hashAlgoTest()
 {
     const char *samples[] = {
-            "abc",
-            "123456",
-            "",
-            "abc",
-            "null",
-            "ABC",
-            "thisis a test",
-            "this is a test",
-            "this isa test",
-            "this isatest",
-            NULL,
+        "abc",
+        "123456",
+        "",
+        "abc",
+        "null",
+        "ABC",
+        "thisis a test",
+        "this is a test",
+        "this isa test",
+        "this isatest",
+        NULL,
     };
 
-//    unsigned int seed = random();
-    uint32_t seed = (uint32_t)getTime();
+    //    unsigned int seed = random();
+    uint32_t seed = (uint32_t) getTime();
 
     int i = 0;
     uint32_t lastHash = 0;
-    for (i = 0 ; samples[i] != NULL ; i++)
+    for (i = 0; samples[i] != NULL; i++)
     {
-        uint32_t hash = defaultHash(samples[i], (uint16_t)(strlen(samples[i]) + 1), seed);
+        uint32_t hash = defaultHash(samples[i], (uint16_t) (strlen(samples[i]) + 1), seed);
         unsigned int b = assignedBucket(hash);
         printf("k=%s h=%d b=%d\n", samples[i], hash, b);
 
@@ -122,29 +122,29 @@ void printMap(icHashMap *map)
         uint16_t len;
 
         hashMapIteratorGetNext(loop, &k, &len, &v);
-        printf("map: k=%s len=%d v=%s\n", (char *)k, len, (char *)v);
+        printf("map: k=%s len=%d v=%s\n", (char *) k, len, (char *) v);
     }
     hashMapIteratorDestroy(loop);
 }
 
-#define KEY_PREFIX_STR  "test %d"
-#define VAL_PREFIX_STR  "test %d val"
+#define KEY_PREFIX_STR "test %d"
+#define VAL_PREFIX_STR "test %d val"
 
 bool canSetInMap(icHashMap *map, bool withValue)
 {
     printf("\nRunning test %s with value: %s\n", __FUNCTION__, withValue ? "true" : "false");
 
     int i = 0;
-    for (i = 0 ; i < 15 ; i++)
+    for (i = 0; i < 15; i++)
     {
         char *key = malloc(24);
         char *val = NULL;
-        sprintf(key, KEY_PREFIX_STR, (i+1));
+        sprintf(key, KEY_PREFIX_STR, (i + 1));
 
         if (withValue)
         {
             val = malloc(24);
-            sprintf(val, VAL_PREFIX_STR, (i+1));
+            sprintf(val, VAL_PREFIX_STR, (i + 1));
         }
 
         if (hashMapPut(map, key, (uint16_t) (strlen(key) + 1), val) == false)
@@ -165,12 +165,12 @@ bool canSetCopyInMap(icHashMap *map)
     printf("\nRunning test %s\n", __FUNCTION__);
 
     int i = 0;
-    for (i = 15 ; i < 30 ; i++)
+    for (i = 15; i < 30; i++)
     {
         char key[24];
         char val[24];
-        sprintf(key, KEY_PREFIX_STR, (i+1));
-        sprintf(val, VAL_PREFIX_STR, (i+1));
+        sprintf(key, KEY_PREFIX_STR, (i + 1));
+        sprintf(val, VAL_PREFIX_STR, (i + 1));
 
         if (hashMapPutCopy(map, key, (uint16_t) (strlen(key) + 1), val, (uint16_t) (strlen(val) + 1)) == false)
         {
@@ -192,8 +192,8 @@ bool canNotSetDupInMap(icHashMap *map)
     // create another node that is the same as the 'set' above
     // and hope it fails
     //
-    char *key = (char *)malloc(sizeof(char) * 24);
-    char *val = (char *)malloc(sizeof(char) * 24);
+    char *key = (char *) malloc(sizeof(char) * 24);
+    char *val = (char *) malloc(sizeof(char) * 24);
     sprintf(key, KEY_PREFIX_STR, 10);
     sprintf(val, VAL_PREFIX_STR, 10);
 
@@ -321,7 +321,7 @@ bool canIterateMap(icHashMap *map)
         // get the next message from the iterator
         //
         hashMapIteratorGetNext(loop, &mapKey, &mapKeyLen, &mapValue);
-        printf("map: x=%d k=%s len=%d v=%s\n", x, (char *)mapKey, mapKeyLen, (char *)mapValue);
+        printf("map: x=%d k=%s len=%d v=%s\n", x, (char *) mapKey, mapKeyLen, (char *) mapValue);
 
         if (x < 5)
         {
@@ -397,17 +397,17 @@ bool canShallowCloneMap(icHashMap *map)
     return retVal;
 }
 
-//Helper for deep clone (stolen from icStringHashMap since we use strings as keys/vals in this unit test)
+// Helper for deep clone (stolen from icStringHashMap since we use strings as keys/vals in this unit test)
 static void keyValueStringClone(void *key, void *value, void **clonedKey, void **clonedValue, void *context)
 {
-    (void)context; // Unused
+    (void) context; // Unused
     if (key != NULL)
     {
-        *clonedKey =  strdup((char *)key);
+        *clonedKey = strdup((char *) key);
     }
     if (value != NULL)
     {
-        *clonedValue = strdup((char *)value);
+        *clonedValue = strdup((char *) value);
     }
 }
 
@@ -444,7 +444,7 @@ bool canDeepCloneMap(icHashMap *map)
         hashMapIteratorGetNext(iter, &mapKey, &keyLen, &mapValue);
         hashMapIteratorGetNext(clonedIter, &cloneKey, &cloneKeyLen, &cloneVal);
 
-        //Can't be equal pointers
+        // Can't be equal pointers
         if (mapKey == cloneKey || keyLen != cloneKeyLen || mapValue == cloneVal)
         {
             retVal = false;
@@ -542,7 +542,7 @@ bool runHashTests()
 
     worked = true;
 
-    exit:
+exit:
     // mem cleanup
     //
     hashMapDestroy(map, NULL);

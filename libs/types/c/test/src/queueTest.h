@@ -34,4 +34,4 @@
 
 bool runQueueTests();
 
-#endif //FLEXCORE_QUEUETEST_H
+#endif // FLEXCORE_QUEUETEST_H

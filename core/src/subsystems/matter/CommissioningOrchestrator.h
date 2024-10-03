@@ -37,10 +37,10 @@
 
 namespace zilker
 {
-    //keep this in sync with the ostream operator
+    // keep this in sync with the ostream operator
     enum CommissioningStatus
     {
-        //TODO fix these up to whatever makes sense
+        // TODO fix these up to whatever makes sense
         Pending,
         InvalidSetupPayload,
         Started,
@@ -66,31 +66,26 @@ namespace zilker
      *
      * nodeId is optional as it might not be valid for some of the events
      */
-    typedef void (*OnDeviceCommissioningStatusChanged)(void *context, chip::Optional<chip::NodeId> nodeId, CommissioningStatus status);
+    typedef void (*OnDeviceCommissioningStatusChanged)(void *context,
+                                                       chip::Optional<chip::NodeId> nodeId,
+                                                       CommissioningStatus status);
 
     /**
      * CommissioningOrchestrator instances are created to handle a single device's commissioning process.  Progress
      * events as well as final success/failure are delivered asynchronously through the registered callback.
      */
-    class CommissioningOrchestrator : public
-                                      chip::Controller::DeviceDiscoveryDelegate,
+    class CommissioningOrchestrator : public chip::Controller::DeviceDiscoveryDelegate,
                                       chip::Controller::DevicePairingDelegate
     {
     public:
         CommissioningOrchestrator(OnDeviceCommissioningStatusChanged onDeviceCommissioningStatusChangedCb,
                                   void *callbackContext) :
-            finalNodeId(kUndefinedNodeId),
-            commissioningStatus(Pending),
-            callbackContext(callbackContext),
-            discoveredNodeData(nullptr),
-            onDeviceCommissioningStatusChanged(onDeviceCommissioningStatusChangedCb)
+            finalNodeId(kUndefinedNodeId), commissioningStatus(Pending), callbackContext(callbackContext),
+            discoveredNodeData(nullptr), onDeviceCommissioningStatusChanged(onDeviceCommissioningStatusChangedCb)
         {
         }
 
-        ~CommissioningOrchestrator() override
-        {
-            Reset();
-        }
+        ~CommissioningOrchestrator() override { Reset(); }
 
         /**
          * Attempt to commission a device matching the setup payload
@@ -124,19 +119,18 @@ namespace zilker
         ////////////// DevicePairingDelegate overrides ////////////////////
         void OnCommissioningSuccess(chip::PeerId peerId) override;
         void OnCommissioningFailure(
-                chip::PeerId peerId, CHIP_ERROR error, chip::Controller::CommissioningStage stageFailed,
-                chip::Optional<chip::Credentials::AttestationVerificationResult> additionalErrorInfo
-        ) override;
-        void OnCommissioningStatusUpdate(
-                chip::PeerId peerId,
-                chip::Controller::CommissioningStage stageCompleted,
-                CHIP_ERROR error
-        ) override;
-        void OnReadCommissioningInfo(const chip::Controller::ReadCommissioningInfo & info) override;
+            chip::PeerId peerId,
+            CHIP_ERROR error,
+            chip::Controller::CommissioningStage stageFailed,
+            chip::Optional<chip::Credentials::AttestationVerificationResult> additionalErrorInfo) override;
+        void OnCommissioningStatusUpdate(chip::PeerId peerId,
+                                         chip::Controller::CommissioningStage stageCompleted,
+                                         CHIP_ERROR error) override;
+        void OnReadCommissioningInfo(const chip::Controller::ReadCommissioningInfo &info) override;
         ////////////// DevicePairingDelegate overrides ////////////////////
 
         ////////////// DeviceDiscoveryDelegate overrides ////////////////////
-        void OnDiscoveredDevice(const chip::Dnssd::DiscoveredNodeData & nodeData) override;
+        void OnDiscoveredDevice(const chip::Dnssd::DiscoveredNodeData &nodeData) override;
         ////////////// DeviceDiscoveryDelegate overrides ////////////////////
 
     private:
@@ -161,14 +155,15 @@ namespace zilker
             void *localCallbackContext = callbackContext;
             chip::NodeId localNodeId = finalNodeId;
             mtx.unlock();
-            onDeviceCommissioningStatusChanged(localCallbackContext, chip::Optional<chip::NodeId>(localNodeId), newStatus);
+            onDeviceCommissioningStatusChanged(
+                localCallbackContext, chip::Optional<chip::NodeId>(localNodeId), newStatus);
             cond.notify_all();
             mtx.lock();
         }
 
         /**
-         * @brief Per Matter 1.0 Section 5.5 (Commissioning Flows), handle steps 13-15 by connecting over CASE and sending
-         *        the CommissioningComplete message.
+         * @brief Per Matter 1.0 Section 5.5 (Commissioning Flows), handle steps 13-15 by connecting over CASE and
+         * sending the CommissioningComplete message.
          *
          * @param nodeId
          * @return true on success
@@ -180,4 +175,4 @@ namespace zilker
         void CommissionWorkFunc();
         static void CommissionWorkFuncCb(intptr_t arg);
     };
-} //namespace zilker
+} // namespace zilker

@@ -45,8 +45,8 @@
 #ifndef IC_SORTED_LINKEDLIST_H
 #define IC_SORTED_LINKEDLIST_H
 
-#include <stdbool.h>
 #include "icTypes/icLinkedList.h"
+#include <stdbool.h>
 
 /*
  * extend the icLinkedList object

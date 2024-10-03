@@ -29,26 +29,28 @@
  * Author: jelderton -  8/30/16.
  *-----------------------------------------------*/
 
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <cmocka.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
 #include <unistd.h>
-#include <stdarg.h>
-#include <setjmp.h>
-#include <cmocka.h>
 
-#include <icLog/logging.h>
-#include <icUtil//fileUtils.h>
-#include <icUtil/stringUtils.h>
-#include <icConfig/backupUtils.h>
 #include "tests.h"
+#include <icConfig/backupUtils.h>
+#include <icLog/logging.h>
+#include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
 
-#define CONFIG_TESTS_DIR    "/tmp/cfgTest"
-#define CONFIG_TEST_VALID_XML_FILENAME      CONFIG_TESTS_DIR "/valid.xml"
-#define CONFIG_TEST_INVALID_XML_FILENAME    CONFIG_TESTS_DIR "/bad.xml"
-#define CONFIG_TEST_VALID_JSON_FILENAME     CONFIG_TESTS_DIR "/valid.json"
-#define CONFIG_TEST_INVALID_JSON_FILENAME   CONFIG_TESTS_DIR "/bad.json"
+#define CONFIG_TESTS_DIR                  "/tmp/cfgTest"
+#define CONFIG_TEST_VALID_XML_FILENAME    CONFIG_TESTS_DIR "/valid.xml"
+#define CONFIG_TEST_INVALID_XML_FILENAME  CONFIG_TESTS_DIR "/bad.xml"
+#define CONFIG_TEST_VALID_JSON_FILENAME   CONFIG_TESTS_DIR "/valid.json"
+#define CONFIG_TEST_INVALID_JSON_FILENAME CONFIG_TESTS_DIR "/bad.json"
 
 static int runConfigTest();
 
@@ -170,7 +172,8 @@ static int config_test_setup(void **state)
     mkdir_p(CONFIG_TESTS_DIR, 0777);
 
     // create valid XML
-    const char *validXmlContent = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><testConfig><rootNode></rootNode></testConfig>";
+    const char *validXmlContent =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><testConfig><rootNode></rootNode></testConfig>";
     writeContentsToFileName(CONFIG_TEST_VALID_XML_FILENAME, validXmlContent);
 
     // create bad XML
@@ -197,36 +200,32 @@ static int config_test_teardown(void **state)
 static void test_config_load_xml_valid(void **state)
 {
     // ask backupUtil to validate our XML files.  it should chose the valid one (ORIG)
-    fileToRead x = chooseValidFileToRead(CONFIG_TEST_VALID_XML_FILENAME,
-                                         CONFIG_TEST_INVALID_XML_FILENAME,
-                                         CONFIG_FILE_FORMAT_XML);
+    fileToRead x =
+        chooseValidFileToRead(CONFIG_TEST_VALID_XML_FILENAME, CONFIG_TEST_INVALID_XML_FILENAME, CONFIG_FILE_FORMAT_XML);
     assert_int_equal(x, ORIGINAL_FILE);
 }
 
 static void test_config_load_xml_invalid(void **state)
 {
     // ask backupUtil to validate our XML files.  it should chose the valid one (BACK)
-    fileToRead x = chooseValidFileToRead(CONFIG_TEST_INVALID_XML_FILENAME,
-                                         CONFIG_TEST_VALID_XML_FILENAME,
-                                         CONFIG_FILE_FORMAT_XML);
+    fileToRead x =
+        chooseValidFileToRead(CONFIG_TEST_INVALID_XML_FILENAME, CONFIG_TEST_VALID_XML_FILENAME, CONFIG_FILE_FORMAT_XML);
     assert_int_equal(x, BACKUP_FILE);
 }
 
 static void test_config_load_json_valid(void **state)
 {
     // ask backupUtil to validate our JSON files.  it should chose the valid one (ORIG)
-    fileToRead x = chooseValidFileToRead(CONFIG_TEST_VALID_JSON_FILENAME,
-                                         CONFIG_TEST_INVALID_JSON_FILENAME,
-                                         CONFIG_FILE_FORMAT_JSON);
+    fileToRead x = chooseValidFileToRead(
+        CONFIG_TEST_VALID_JSON_FILENAME, CONFIG_TEST_INVALID_JSON_FILENAME, CONFIG_FILE_FORMAT_JSON);
     assert_int_equal(x, ORIGINAL_FILE);
 }
 
 static void test_config_load_json_invalid(void **state)
 {
     // ask backupUtil to validate our JSON files.  it should chose the valid one (BACK)
-    fileToRead x = chooseValidFileToRead(CONFIG_TEST_INVALID_JSON_FILENAME,
-                                         CONFIG_TEST_VALID_JSON_FILENAME,
-                                         CONFIG_FILE_FORMAT_JSON);
+    fileToRead x = chooseValidFileToRead(
+        CONFIG_TEST_INVALID_JSON_FILENAME, CONFIG_TEST_VALID_JSON_FILENAME, CONFIG_FILE_FORMAT_JSON);
     assert_int_equal(x, BACKUP_FILE);
 }
 
@@ -235,15 +234,11 @@ static void test_config_load_json_invalid(void **state)
  */
 static int runConfigTest()
 {
-    const struct CMUnitTest tests[] =
-    {
-        cmocka_unit_test(test_config_load_xml_valid),
-        cmocka_unit_test(test_config_load_xml_invalid),
-        cmocka_unit_test(test_config_load_json_valid),
-        cmocka_unit_test(test_config_load_json_invalid)
-    };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_config_load_xml_valid),
+                                       cmocka_unit_test(test_config_load_xml_invalid),
+                                       cmocka_unit_test(test_config_load_json_valid),
+                                       cmocka_unit_test(test_config_load_json_invalid)};
 
     int rc = cmocka_run_group_tests(tests, config_test_setup, config_test_teardown);
     return rc;
 }
-

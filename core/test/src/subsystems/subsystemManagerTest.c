@@ -1,9 +1,11 @@
-#include "subsystemManager.c"
-#include "icUtil/stringUtils.h"
 #include <setjmp.h>
+#include <stdarg.h>
 #include <stddef.h>
-#include <stdint.h>
+
+#include "icUtil/stringUtils.h"
+#include "subsystemManager.c"
 #include <cmocka.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 

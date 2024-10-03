@@ -55,7 +55,7 @@
 #include <stdbool.h>
 
 // for stateMachineGetCurrentState if current state is undefined
-#define UNDEFINED_STATE_MACHINE_VALUE     -99
+#define UNDEFINED_STATE_MACHINE_VALUE -99
 
 /*
  * Opaque definition of the state machine.
@@ -122,7 +122,8 @@ void stateMachineDestroy(icStateMachine *machine);
  *
  * @see stateMachineSetCurrentState()
  **/
-bool stateMachineAppendState(icStateMachine *machine, int stateValue,
+bool stateMachineAppendState(icStateMachine *machine,
+                             int stateValue,
                              stateTransitionActionFunc transitionActionFunc,
                              stateChangeNotifyFunc notificationFunc);
 
@@ -135,10 +136,11 @@ int stateMachineGetCurrentState(icStateMachine *machine);
 /*
  * return value for stateMachineSetCurrentState()
  */
-typedef enum {
-    FSM_SET_STATE_SUCCESS,           // return code when transition to newStateValue was successful
-    FSM_SET_STATE_INVALID_STATE,     // return code when newStateValue is unknown/invalid
-    FSM_SET_STATE_TRANSITION_FAIL    // return code when stateTransitionActionFunc returned 'false'
+typedef enum
+{
+    FSM_SET_STATE_SUCCESS,        // return code when transition to newStateValue was successful
+    FSM_SET_STATE_INVALID_STATE,  // return code when newStateValue is unknown/invalid
+    FSM_SET_STATE_TRANSITION_FAIL // return code when stateTransitionActionFunc returned 'false'
 } fsmSetStateResult;
 
 /**
@@ -179,4 +181,3 @@ fsmSetStateResult stateMachineSetCurrentState(icStateMachine *machine, int newSt
 fsmSetStateResult stateMachineTravelToState(icStateMachine *machine, int targetStateValue, void *userArg);
 
 #endif // ZILKER_STATE_MACHINE_H
-

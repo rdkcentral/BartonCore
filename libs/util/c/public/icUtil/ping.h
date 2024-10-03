@@ -9,7 +9,8 @@
 
 struct sockaddr;
 
-struct pingResults {
+struct pingResults
+{
     uint32_t transmitted;
     uint32_t received;
 
@@ -33,12 +34,12 @@ struct pingResults {
  *         EPFNOSUPPORT   IPv6 is not currently supported.
  *         ENETUNREACH    The destination host could not be reached.
  */
-int icPing(const char* iface,
-           const struct sockaddr* dst,
+int icPing(const char *iface,
+           const struct sockaddr *dst,
            uint32_t count,
            uint32_t fwmark,
            int ttl,
            int packetTimeoutMs,
-           struct pingResults* results);
+           struct pingResults *results);
 
 #endif //_CCATX_ping_H

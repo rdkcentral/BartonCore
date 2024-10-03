@@ -28,13 +28,13 @@
  * Author: gfaulkner, jelderton
  *-----------------------------------------------*/
 
-#include <stdint.h>
-#include <string.h>
 #include <inttypes.h>
 #include <libxml/parser.h>
+#include <stdint.h>
+#include <string.h>
 
-#include <xmlHelper/xmlHelper.h>
 #include <icUtil/stringUtils.h>
+#include <xmlHelper/xmlHelper.h>
 
 /*
  * read the contents of an XML Node, and interpret as an integer
@@ -47,7 +47,7 @@ int32_t getXmlNodeContentsAsInt(xmlNodePtr node, int32_t defValue)
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlNodeGetContent(node);
+        char *contents = (char *) xmlNodeGetContent(node);
         if (contents != NULL)
         {
             // convert and release memory returned from libxml2
@@ -71,7 +71,7 @@ uint32_t getXmlNodeContentsAsUnsignedInt(xmlNodePtr node, uint32_t defValue)
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlNodeGetContent(node);
+        char *contents = (char *) xmlNodeGetContent(node);
 
         if (contents != NULL)
         {
@@ -96,7 +96,7 @@ uint64_t getXmlNodeContentsAsUnsignedLongLong(xmlNodePtr node, uint64_t defValue
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlNodeGetContent(node);
+        char *contents = (char *) xmlNodeGetContent(node);
         if (contents != NULL)
         {
             // convert and release memory returned from libxml2
@@ -121,7 +121,7 @@ bool getXmlNodeContentsAsBoolean(xmlNodePtr node, bool defValue)
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlNodeGetContent(node);
+        char *contents = (char *) xmlNodeGetContent(node);
         if (contents != NULL)
         {
             // convert and release memory returned from libxml2
@@ -176,7 +176,7 @@ char *getXmlNodeContentsAsString(xmlNodePtr node, char *defValue)
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlNodeGetContent(node);
+        char *contents = (char *) xmlNodeGetContent(node);
         if (contents != NULL)
         {
             // convert and release memory returned from libxml2
@@ -223,7 +223,7 @@ xmlNodePtr appendNewStringNode(xmlNodePtr parentNode, const char *nodeName, cons
     if (contents != NULL)
     {
 
-        tmp = xmlNewTextChild(parentNode,NULL, BAD_CAST nodeName, BAD_CAST contents);
+        tmp = xmlNewTextChild(parentNode, NULL, BAD_CAST nodeName, BAD_CAST contents);
     }
     else
     {
@@ -247,7 +247,7 @@ xmlNodePtr findChildNode(xmlNodePtr base, const char *search, bool recurse)
     //
     xmlNodePtr loopNode, currNode;
     loopNode = base->children;
-    for (currNode = loopNode ; currNode != NULL ; currNode = currNode->next)
+    for (currNode = loopNode; currNode != NULL; currNode = currNode->next)
     {
         // skip comments, blanks, etc
         //
@@ -328,7 +328,7 @@ void setXmlNodeAttributeAsInt(xmlNodePtr node, const char *attributeName, int32_
     // max value would be 2147483647 + possible minus sign + null char + extra to be certain
     //
     char temp[13];
-    sprintf(temp, "%"PRIi32, value);
+    sprintf(temp, "%" PRIi32, value);
 
     // apply the attribute to the node
     //
@@ -395,7 +395,7 @@ bool getXmlNodeAttributeAsBoolean(xmlNodePtr node, const char *attributeName, bo
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlGetProp(node,BAD_CAST attributeName);
+        char *contents = (char *) xmlGetProp(node, BAD_CAST attributeName);
         if (contents != NULL)
         {
             // convert and release memory returned from libxml2
@@ -450,7 +450,7 @@ char *getXmlNodeAttributeAsString(xmlNodePtr node, const char *attributeName, ch
     //
     if (node != NULL)
     {
-        char *contents = (char *)xmlGetProp(node,BAD_CAST attributeName);
+        char *contents = (char *) xmlGetProp(node, BAD_CAST attributeName);
         if (contents != NULL)
         {
             // duplicate the string
@@ -477,4 +477,3 @@ char *getXmlNodeAttributeAsString(xmlNodePtr node, const char *attributeName, ch
     }
     return strdup(defValue);
 }
-

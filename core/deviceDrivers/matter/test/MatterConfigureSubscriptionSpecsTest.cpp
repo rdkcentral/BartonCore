@@ -42,7 +42,7 @@ namespace zilker
 {
     class MockCluster : public MatterCluster
     {
-      public:
+    public:
         MockCluster(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
             MatterCluster(handler, deviceId, endpointId)
         {
@@ -56,17 +56,13 @@ namespace zilker
 
         MOCK_METHOD(void,
                     OnResponse,
-                    (chip::app::CommandSender *apCommandSender,
+                    (chip::app::CommandSender * apCommandSender,
                      const chip::app::ConcreteCommandPath &aPath,
                      const chip::app::StatusIB &aStatusIB,
                      chip::TLV::TLVReader *apData),
                     (override));
 
-        MOCK_METHOD(void,
-                    OnError,
-                    (const chip::app::CommandSender *apCommandSender,
-                     CHIP_ERROR aError),
-                    (override));
+        MOCK_METHOD(void, OnError, (const chip::app::CommandSender *apCommandSender, CHIP_ERROR aError), (override));
 
         MOCK_METHOD(void,
                     OnResponse,
@@ -75,32 +71,26 @@ namespace zilker
                      chip::app::StatusIB status),
                     (override));
 
-        MOCK_METHOD(void,
-                    OnError,
-                    (const chip::app::WriteClient *apWriteClient,
-                     CHIP_ERROR aError),
-                    (override));
+        MOCK_METHOD(void, OnError, (const chip::app::WriteClient *apWriteClient, CHIP_ERROR aError), (override));
     };
 
-    class MockMatterDeviceDriver : public MatterDeviceDriver, MockCluster::EventHandler
+    class MockMatterDeviceDriver : public MatterDeviceDriver,
+                                   MockCluster::EventHandler
     {
-      public:
-          MockMatterDeviceDriver() : MatterDeviceDriver("matterMock", "mock", 0) {}
+    public:
+        MockMatterDeviceDriver() : MatterDeviceDriver("matterMock", "mock", 0) {}
 
-          std::unique_ptr<MatterCluster>
-          MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override
-          {
-              return std::make_unique<MockCluster>((MockCluster::EventHandler *) this, deviceUuid, endpointId);
+        std::unique_ptr<MatterCluster>
+        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override
+        {
+            return std::make_unique<MockCluster>((MockCluster::EventHandler *) this, deviceUuid, endpointId);
         }
 
-        MOCK_METHOD(bool, ClaimDevice, (DiscoveredDeviceDetails *details), (override));
+        MOCK_METHOD(bool, ClaimDevice, (DiscoveredDeviceDetails * details), (override));
 
         MOCK_METHOD(uint32_t, GetCommFailTimeoutSecs, (const char *deviceUuid), (override));
 
-        MOCK_METHOD(std::vector<MatterCluster *>,
-                    GetClustersToSubscribeTo,
-                    (const std::string &deviceId),
-                    (override));
+        MOCK_METHOD(std::vector<MatterCluster *>, GetClustersToSubscribeTo, (const std::string &deviceId), (override));
 
     private:
         std::vector<MatterCluster *> GetCommonClustersToSubscribeTo(const std::string &deviceId) override { return {}; }
@@ -111,10 +101,7 @@ namespace zilker
     public:
         MatterConfigureSubscriptionSpecsTest() {}
 
-        void SetUp() override
-        {
-            deviceId = TEST_DEVICE_ID;
-        }
+        void SetUp() override { deviceId = TEST_DEVICE_ID; }
 
         SubscriptionIntervalSecs CalculateFinalSubscriptionIntervalSecs()
         {
@@ -136,9 +123,7 @@ namespace zilker
      */
     TEST_F(MatterConfigureSubscriptionSpecsTest, ConflictingIntervalParamsTest)
     {
-        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_))
-            .Times(2)
-            .WillRepeatedly(Return(4000));
+        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_)).Times(2).WillRepeatedly(Return(4000));
 
         std::vector<MatterCluster *> clusters;
 
@@ -156,8 +141,7 @@ namespace zilker
 
         clusters.push_back(heatCluster.get());
         clusters.push_back(volumeCluster.get());
-        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_))
-            .WillOnce(Return(clusters));
+        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_)).WillOnce(Return(clusters));
 
         auto intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_EQ(intervalParams.minIntervalFloorSecs, 60);
@@ -173,8 +157,7 @@ namespace zilker
         clusters2.push_back(heatCluster.get());
         clusters2.push_back(volumeCluster.get());
         clusters2.push_back(wifiCluster.get());
-        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_))
-            .WillOnce(Return(clusters2));
+        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_)).WillOnce(Return(clusters2));
 
         intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_EQ(intervalParams.minIntervalFloorSecs, 90);
@@ -188,8 +171,7 @@ namespace zilker
      */
     TEST_F(MatterConfigureSubscriptionSpecsTest, MaxIntervalCeilingLessThanCommfailTimeoutTest)
     {
-        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_))
-            .WillOnce(Return(4000));
+        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_)).WillOnce(Return(4000));
 
         std::vector<MatterCluster *> clusters;
 
@@ -205,8 +187,7 @@ namespace zilker
 
         clusters.push_back(grapeCluster.get());
         clusters.push_back(bananaCluster.get());
-        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_))
-            .WillOnce(Return(clusters));
+        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_)).WillOnce(Return(clusters));
 
         auto intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_EQ(intervalParams.minIntervalFloorSecs, 1);
@@ -221,9 +202,7 @@ namespace zilker
      */
     TEST_F(MatterConfigureSubscriptionSpecsTest, FloorGreaterThanCeilingTest)
     {
-        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_))
-            .Times(2)
-            .WillRepeatedly(Return(4000));
+        EXPECT_CALL(mockDriver, GetCommFailTimeoutSecs(_)).Times(2).WillRepeatedly(Return(4000));
 
         std::vector<MatterCluster *> clusters;
 
@@ -233,8 +212,7 @@ namespace zilker
             .WillOnce(Return(oneClusterIntervalSecs));
 
         clusters.push_back(oneCluster.get());
-        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_))
-            .WillOnce(Return(clusters));
+        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_)).WillOnce(Return(clusters));
 
         auto intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_LE(intervalParams.minIntervalFloorSecs, intervalParams.maxIntervalCeilingSecs);
@@ -253,8 +231,7 @@ namespace zilker
 
         clusters2.push_back(twoCluster.get());
         clusters2.push_back(anotherCluster.get());
-        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_))
-            .WillOnce(Return(clusters2));
+        EXPECT_CALL(mockDriver, GetClustersToSubscribeTo(_)).WillOnce(Return(clusters2));
 
         intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_LE(intervalParams.minIntervalFloorSecs, intervalParams.maxIntervalCeilingSecs);

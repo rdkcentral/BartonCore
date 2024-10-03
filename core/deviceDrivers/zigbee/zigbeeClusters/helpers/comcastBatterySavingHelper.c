@@ -24,20 +24,20 @@
 // Created by tlea on 5/1/19.
 //
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <zigbeeClusters/comcastBatterySaving.h>
-#include <zigbeeClusters/temperatureMeasurementCluster.h>
-#include <stddef.h>
-#include <icLog/logging.h>
-#include <subsystems/zigbee/zigbeeIO.h>
-#include <icTypes/sbrm.h>
+#include "zigbeeClusters/helpers/comcastBatterySavingHelper.h"
 #include <commonDeviceDefs.h>
 #include <deviceDrivers/zigbeeDriverCommon.h>
 #include <deviceServicePrivate.h>
+#include <icLog/logging.h>
+#include <icTypes/sbrm.h>
 #include <icUtil/stringUtils.h>
-#include "zigbeeClusters/helpers/comcastBatterySavingHelper.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <subsystems/zigbee/zigbeeIO.h>
+#include <zigbeeClusters/comcastBatterySaving.h>
+#include <zigbeeClusters/temperatureMeasurementCluster.h>
 
 #define LOG_TAG "ComcastBatterySavingHelper"
 

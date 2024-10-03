@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2020 Comcast
 //
 // All rights reserved.
@@ -168,7 +168,8 @@ bool jsonPointerStringResolveDouble(const cJSON *json, const char *jsonPointerSt
  * NOTE: Does not work correctly if the pointer contains array indices
  * @param baseObject the base object to add items to.  Can be NULL in which case the base object is created if necessary
  * @param pointer the pointer to base the structure on
- * @param value the value to add. This memory is owned by jsonPointerCreateObject upon passing as an argument and will be cleaned up in an error scenario.
+ * @param value the value to add. This memory is owned by jsonPointerCreateObject upon passing as an argument and will
+ * be cleaned up in an error scenario.
  * @return the base object
  */
 cJSON *jsonPointerCreateObject(cJSON *baseObject, const JSONPointer *pointer, cJSON *value);
@@ -275,4 +276,4 @@ cJSON *jsonPointerCreateBoolean(cJSON *baseObject, const JSONPointer *pointer, c
 cJSON *jsonPointerCreateString(cJSON *baseObject, const JSONPointer *pointer, const char *value);
 
 
-#endif //ZILKER_JSONPOINTER_H
+#endif // ZILKER_JSONPOINTER_H

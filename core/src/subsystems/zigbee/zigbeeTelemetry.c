@@ -47,38 +47,38 @@
  *  Created by tlea on 9/11/19.
  */
 
-#include <propsMgr/commonProperties.h>
-#include <propsMgr/propsHelper.h>
-#include <icUtil/stringUtils.h>
-#include <icLog/logging.h>
-#include <propsMgr/paths.h>
 #include "zigbeeTelemetry.h"
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <string.h>
-#include <inttypes.h>
-#include <icConcurrent/repeatingTask.h>
 #include <deviceService.h>
-#include <icTime/timeUtils.h>
 #include <dirent.h>
 #include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <icConcurrent/repeatingTask.h>
+#include <icConcurrent/threadUtils.h>
+#include <icLog/logging.h>
+#include <icTime/timeUtils.h>
 #include <icTypes/icSortedLinkedList.h>
 #include <icUtil/fileUtils.h>
-#include <icConcurrent/threadUtils.h>
+#include <icUtil/stringUtils.h>
+#include <inttypes.h>
+#include <propsMgr/commonProperties.h>
+#include <propsMgr/paths.h>
+#include <propsMgr/propsHelper.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#define LOG_TAG "zigbeeTelemetry"
+#define LOG_TAG                     "zigbeeTelemetry"
 
-#define MONITOR_EXEC_DELAY_MINS 1
-#define CAPTURE_INTERVAL_MINS 15
+#define MONITOR_EXEC_DELAY_MINS     1
+#define CAPTURE_INTERVAL_MINS       15
 
-#define MIN_FILE_STORAGE_MB 1
-#define MAX_FILE_STORAGE_MB 10
+#define MIN_FILE_STORAGE_MB         1
+#define MAX_FILE_STORAGE_MB         10
 
-#define TELEMETRY_SCRIPT_FILENAME "zigbeeTelemetry.sh"
+#define TELEMETRY_SCRIPT_FILENAME   "zigbeeTelemetry.sh"
 #define DATE_TELEMETRY_STARTED_PROP "zigbeeTelemetryStartDate"
-#define TELEMETRY_FILE_EXTENSION ".telemetry"
+#define TELEMETRY_FILE_EXTENSION    ".telemetry"
 
 static pthread_mutex_t settingsMtx = PTHREAD_MUTEX_INITIALIZER;
 static int32_t hoursRemaining = 0;
@@ -88,7 +88,7 @@ static uint64_t captureIntervalStartTimeMillis = 0;
 static char *storageDir = NULL;
 
 static pthread_mutex_t monitorMtx = PTHREAD_MUTEX_INITIALIZER;
-static uint32_t monitorHandle = 0; //0 is invalid
+static uint32_t monitorHandle = 0; // 0 is invalid
 
 static void processProperties(void);
 static int invokeCaptureScript(const char *args, char *output, uint32_t outputLen);
@@ -112,11 +112,12 @@ void zigbeeTelemetryInitialize(void)
 
     if (maxAllowedFileStorageMb > MAX_FILE_STORAGE_MB)
     {
-        icLogWarn(LOG_TAG, "%s: %s exceeds maximum of %d. Using %d instead",
-                __FUNCTION__,
-                TELEMETRY_MAX_ALLOWED_FILE_STORAGE,
-                MAX_FILE_STORAGE_MB,
-                MAX_FILE_STORAGE_MB);
+        icLogWarn(LOG_TAG,
+                  "%s: %s exceeds maximum of %d. Using %d instead",
+                  __FUNCTION__,
+                  TELEMETRY_MAX_ALLOWED_FILE_STORAGE,
+                  MAX_FILE_STORAGE_MB,
+                  MAX_FILE_STORAGE_MB);
 
         maxAllowedFileStorageMb = MAX_FILE_STORAGE_MB;
     }
@@ -193,11 +194,12 @@ void zigbeeTelemetrySetProperty(const char *key, const char *value)
         {
             if (newVal > MAX_FILE_STORAGE_MB)
             {
-                icLogWarn(LOG_TAG, "%s: %s exceeds maximum of %d.  Ignoring and continuing to use %d",
-                        __FUNCTION__,
-                        TELEMETRY_MAX_ALLOWED_FILE_STORAGE,
-                        MAX_FILE_STORAGE_MB,
-                        maxAllowedFileStorageMb);
+                icLogWarn(LOG_TAG,
+                          "%s: %s exceeds maximum of %d.  Ignoring and continuing to use %d",
+                          __FUNCTION__,
+                          TELEMETRY_MAX_ALLOWED_FILE_STORAGE,
+                          MAX_FILE_STORAGE_MB,
+                          maxAllowedFileStorageMb);
             }
             else
             {
@@ -262,7 +264,8 @@ static void processProperties(void)
 static int invokeCaptureScript(const char *args, char *output, uint32_t outputLen)
 {
     AUTO_CLEAN(free_generic__auto) char *homeDir = getStaticPath();
-    AUTO_CLEAN(free_generic__auto) char *command = stringBuilder("%s/bin/%s %s", homeDir, TELEMETRY_SCRIPT_FILENAME, args);
+    AUTO_CLEAN(free_generic__auto)
+    char *command = stringBuilder("%s/bin/%s %s", homeDir, TELEMETRY_SCRIPT_FILENAME, args);
     icLogDebug(LOG_TAG, "%s: executing'%s'", __FUNCTION__, command);
 
     // a bit odd, but if we dont want to capture the scripts output we set the pipe up to write to it instead of
@@ -276,13 +279,13 @@ static int invokeCaptureScript(const char *args, char *output, uint32_t outputLe
 
     if (output != NULL)
     {
-        if(fgets(output, outputLen, fp) == NULL)
+        if (fgets(output, outputLen, fp) == NULL)
         {
             icLogError(LOG_TAG, "%s: unable to capture script output", __FUNCTION__);
         }
     }
 
-    //the result code from the script
+    // the result code from the script
     int rc = pclose(fp);
 
     if (WIFEXITED(rc))
@@ -305,9 +308,9 @@ static bool startCapture(void)
 {
     int rc = invokeCaptureScript("start", NULL, 0);
 
-    switch(rc)
+    switch (rc)
     {
-        case 0: //started
+        case 0: // started
         {
             // record the capture interval start time
             pthread_mutex_lock(&settingsMtx);
@@ -318,12 +321,11 @@ static bool startCapture(void)
             // first time.
             char *origStartDate = NULL;
             if (deviceServiceGetSystemProperty(DATE_TELEMETRY_STARTED_PROP, &origStartDate) == false ||
-                origStartDate == NULL ||
-                strlen(origStartDate) == 0)
+                origStartDate == NULL || strlen(origStartDate) == 0)
             {
                 icLogInfo(LOG_TAG, "%s: starting new capture run", __FUNCTION__);
                 uint64_t startTime = getCurrentUnixTimeMillis();
-                char *startTimeStr = stringBuilder("%"PRIu64, startTime);
+                char *startTimeStr = stringBuilder("%" PRIu64, startTime);
                 deviceServiceSetSystemProperty(DATE_TELEMETRY_STARTED_PROP, startTimeStr);
                 free(startTimeStr);
             }
@@ -338,16 +340,16 @@ static bool startCapture(void)
             return true;
         }
 
-        case 1: //already running
+        case 1: // already running
         {
             // make sure the monitor task is running
             startMonitor();
             return true;
         }
 
-        case 2: //not capable
-        case 3: //failed
-        case -1: //script error
+        case 2:  // not capable
+        case 3:  // failed
+        case -1: // script error
         default:
             return false;
     }
@@ -364,17 +366,17 @@ static bool stopCapture(void)
 
     int rc = invokeCaptureScript("stop", NULL, 0);
 
-    switch(rc)
+    switch (rc)
     {
-        case 0: //stopped or wasnt running previously
+        case 0: // stopped or wasnt running previously
         {
             stopMonitor();
             result = true;
             break;
         }
 
-        case 1: //failed to stop (its still running! keep the monitor going)
-        case -1: //script error
+        case 1:  // failed to stop (its still running! keep the monitor going)
+        case -1: // script error
         default:
         {
             icLogError(LOG_TAG, "%s: failed to stop capture (rc=%d)", __FUNCTION__, rc);
@@ -383,8 +385,8 @@ static bool stopCapture(void)
         }
     }
 
-    //regardless of whether or not we successfully stopped, we need to clean up enough files (if not uploading)
-    // if we are exceeding our storage limits.
+    // regardless of whether or not we successfully stopped, we need to clean up enough files (if not uploading)
+    //  if we are exceeding our storage limits.
     scrubTelemetryStorageDir();
 
     return result;
@@ -399,18 +401,18 @@ static bool isCaptureRunning(void)
 {
     int rc = invokeCaptureScript("status", NULL, 0);
 
-    switch(rc)
+    switch (rc)
     {
-        case 0: //not running
+        case 0: // not running
             return false;
 
-        case 1: //running
+        case 1: // running
             return true;
 
-        case -1: //script error
+        case -1: // script error
         default:
-            icLogError(LOG_TAG, "%s: failed to determine if capture is running (rc=%d), assuming false",
-                    __FUNCTION__, rc);
+            icLogError(
+                LOG_TAG, "%s: failed to determine if capture is running (rc=%d), assuming false", __FUNCTION__, rc);
             return false;
     }
 }
@@ -484,7 +486,7 @@ static void monitorFunc(void *arg)
             }
             else
             {
-                //since we started up again, reset our interval start time
+                // since we started up again, reset our interval start time
                 pthread_mutex_lock(&settingsMtx);
                 captureIntervalStartTimeMillis = getCurrentUnixTimeMillis();
                 pthread_mutex_unlock(&settingsMtx);
@@ -494,7 +496,7 @@ static void monitorFunc(void *arg)
         // we stopped a capture. move any final files into the target directory if we are uploading
         if (localAllowUpload == true)
         {
-            if(moveCompletedCapturesForUpload() == false) // fatal error
+            if (moveCompletedCapturesForUpload() == false) // fatal error
             {
                 shouldStopMonitor = true;
             }
@@ -503,7 +505,7 @@ static void monitorFunc(void *arg)
 
     if (shouldStopMonitor == true)
     {
-        //stop the monitor in the background since we are in the repeating task context
+        // stop the monitor in the background since we are in the repeating task context
         createDetachedThread(stopMonitorBackground, NULL, "stopMon");
     }
 
@@ -557,8 +559,7 @@ static bool shouldCaptureBeRunning(void)
         // we were configured to run for some number of hours.  Check if that time is up.
         char *origStartDateStr = NULL;
         if (deviceServiceGetSystemProperty(DATE_TELEMETRY_STARTED_PROP, &origStartDateStr) == true &&
-            origStartDateStr != NULL &&
-            strlen(origStartDateStr) > 0)
+            origStartDateStr != NULL && strlen(origStartDateStr) > 0)
         {
             uint64_t origStartDate = 0;
             if (stringToUint64(origStartDateStr, &origStartDate) == true &&
@@ -609,7 +610,9 @@ static void scrubTelemetryStorageDir(void)
     // if we are allowed to upload then we will be moving files to upload directory. Hence monitor
     // that directory in that case and if we are not allowed to upload then monitor local staging directory.
     pthread_mutex_lock(&settingsMtx);
-    AUTO_CLEAN(free_generic__auto) char *storageDirToBeChecked = (allowUpload == true) ?  strdup(CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY) : strdup(storageDir);
+    AUTO_CLEAN(free_generic__auto)
+    char *storageDirToBeChecked =
+        (allowUpload == true) ? strdup(CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY) : strdup(storageDir);
     uint32_t localMaxAllowedFileStorageMb = maxAllowedFileStorageMb;
     pthread_mutex_unlock(&settingsMtx);
 
@@ -635,8 +638,11 @@ static bool moveCompletedCapturesForUpload(void)
     // Create CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY if it don't exist
     if (mkdir_p(CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, 0777) != 0)
     {
-        icLogError(LOG_TAG, "%s: cannot create directory for upload (%s)!  errno=%d", __FUNCTION__,
-                   CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, errno);
+        icLogError(LOG_TAG,
+                   "%s: cannot create directory for upload (%s)!  errno=%d",
+                   __FUNCTION__,
+                   CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY,
+                   errno);
         closedir(d);
         return false;
     }
@@ -647,9 +653,8 @@ static bool moveCompletedCapturesForUpload(void)
         if (entry->d_type == DT_REG && strstr(entry->d_name, TELEMETRY_FILE_EXTENSION) != NULL)
         {
             AUTO_CLEAN(free_generic__auto) char *origPath = stringBuilder("%s/%s", storageDir, entry->d_name);
-            AUTO_CLEAN(free_generic__auto) char *destPath = stringBuilder("%s/%s",
-                                                                          CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY,
-                                                                          entry->d_name);
+            AUTO_CLEAN(free_generic__auto)
+            char *destPath = stringBuilder("%s/%s", CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, entry->d_name);
 
             if (moveFile(origPath, destPath) == false)
             {

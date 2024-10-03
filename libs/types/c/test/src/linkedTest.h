@@ -7,4 +7,4 @@
 
 bool runLinkedTests();
 
-#endif //CPE_NATIVE_TEST_LINKEDTEST_H
+#endif // CPE_NATIVE_TEST_LINKEDTEST_H

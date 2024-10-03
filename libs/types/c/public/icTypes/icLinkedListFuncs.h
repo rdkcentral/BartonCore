@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -66,7 +66,8 @@ typedef void *(*linkedListCloneItemFunc)(void *item, void *context);
  */
 typedef void *(*linkedListFilterFunc)(void *item, void *context);
 
-typedef struct MapFuncKeyContext {
+typedef struct MapFuncKeyContext
+{
     void *key;
     uint16_t keyLen;
     void *value;
@@ -104,4 +105,4 @@ void *linkedListCloneStringItemFunc(void *item, void *context);
  */
 void standardDoNotFreeFunc(void *item);
 
-#endif //ZILKER_ICLISTFUNCS_H
+#endif // ZILKER_ICLISTFUNCS_H

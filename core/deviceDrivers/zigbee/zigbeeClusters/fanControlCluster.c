@@ -24,20 +24,20 @@
 // Created by tlea on 3/1/19
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/fanControlCluster.h"
 
-#define LOG_TAG "fanControlCluster"
+#define LOG_TAG                              "fanControlCluster"
 
 #define FAN_CONTROL_CLUSTER_DISABLE_BIND_KEY "fanConClusterDisableBind"
 
@@ -69,9 +69,8 @@ ZigbeeCluster *fanControlClusterCreate(const FanControlClusterCallbacks *callbac
 
 void fanControlClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata,
-                                 FAN_CONTROL_CLUSTER_DISABLE_BIND_KEY,
-                                 bind);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, FAN_CONTROL_CLUSTER_DISABLE_BIND_KEY, bind);
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
@@ -80,15 +79,15 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig *fanReportingConfigs = (zhalAttributeReportingConfig *) calloc(1,
-                                                                                                sizeof(zhalAttributeReportingConfig));
+    zhalAttributeReportingConfig *fanReportingConfigs =
+        (zhalAttributeReportingConfig *) calloc(1, sizeof(zhalAttributeReportingConfig));
     fanReportingConfigs[0].attributeInfo.id = FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID;
     fanReportingConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
     fanReportingConfigs[0].minInterval = 1;
-    fanReportingConfigs[0].maxInterval = 1620; //27 minutes
+    fanReportingConfigs[0].maxInterval = 1620; // 27 minutes
     fanReportingConfigs[0].reportableChange = 1;
 
-    //If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
+    // If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
     if (getBoolConfigurationMetadata(configContext->configurationMetadata, FAN_CONTROL_CLUSTER_DISABLE_BIND_KEY, true))
     {
         if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, FAN_CONTROL_CLUSTER_ID) != 0)
@@ -98,11 +97,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         }
     }
 
-    if (zigbeeSubsystemAttributesSetReporting(configContext->eui64,
-                                              configContext->endpointId,
-                                              FAN_CONTROL_CLUSTER_ID,
-                                              fanReportingConfigs,
-                                              1) != 0)
+    if (zigbeeSubsystemAttributesSetReporting(
+            configContext->eui64, configContext->endpointId, FAN_CONTROL_CLUSTER_ID, fanReportingConfigs, 1) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to set reporting on fan cluster", __FUNCTION__);
         goto exit;
@@ -110,7 +106,7 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     result = true;
 
-    exit:
+exit:
     free(fanReportingConfigs);
 
     return result;
@@ -126,10 +122,8 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     {
         if (report->reportDataLen == 4)
         {
-            fanControlCluster->callbacks->fanModeChanged(report->eui64,
-                                                       report->sourceEndpoint,
-                                                       report->reportData[3],
-                                                       fanControlCluster->callbackContext);
+            fanControlCluster->callbacks->fanModeChanged(
+                report->eui64, report->sourceEndpoint, report->reportData[3], fanControlCluster->callbackContext);
         }
     }
 
@@ -144,12 +138,8 @@ bool fanControlClusterGetFanMode(const ZigbeeCluster *cluster, uint64_t eui64, u
     }
 
     uint64_t tmp = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  FAN_CONTROL_CLUSTER_ID,
-                                  true,
-                                  FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID,
-                                  &tmp) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, FAN_CONTROL_CLUSTER_ID, true, FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID, &tmp) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read fan mode attribute", __FUNCTION__);
         return false;
@@ -162,13 +152,13 @@ bool fanControlClusterGetFanMode(const ZigbeeCluster *cluster, uint64_t eui64, u
 bool fanControlClusterSetFanMode(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId, uint8_t mode)
 {
     if (zigbeeSubsystemWriteNumber(eui64,
-                                  endpointId,
-                                  FAN_CONTROL_CLUSTER_ID,
-                                  true,
-                                  FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID,
-                                  ZCL_ENUM8_ATTRIBUTE_TYPE,
-                                  mode,
-                                  1) != 0)
+                                   endpointId,
+                                   FAN_CONTROL_CLUSTER_ID,
+                                   true,
+                                   FAN_CONTROL_FAN_MODE_ATTRIBUTE_ID,
+                                   ZCL_ENUM8_ATTRIBUTE_TYPE,
+                                   mode,
+                                   1) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to write fan mode attribute", __FUNCTION__);
         return false;
@@ -181,13 +171,13 @@ bool fanControlClusterSetFanMode(const ZigbeeCluster *cluster, uint64_t eui64, u
 const char *fanControlClusterGetFanModeString(uint8_t fanMode)
 {
     // this only returns the values we support setting, not the entire enum
-    //0 = off
-    //1 = low
-    //2 = medium
-    //3 = high
-    //4 = on
-    //5 = auto
-    //6 = smart
+    // 0 = off
+    // 1 = low
+    // 2 = medium
+    // 3 = high
+    // 4 = on
+    // 5 = auto
+    // 6 = smart
 
     switch (fanMode)
     {
@@ -208,4 +198,4 @@ const char *fanControlClusterGetFanModeString(uint8_t fanMode)
     }
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

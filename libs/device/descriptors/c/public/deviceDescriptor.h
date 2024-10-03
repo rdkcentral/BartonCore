@@ -70,7 +70,7 @@ typedef struct
 typedef struct
 {
     char *fileName;
-    char *checksum; //optional, could be NULL
+    char *checksum; // optional, could be NULL
 } DeviceFirmwareFileInfo;
 
 typedef enum
@@ -118,22 +118,22 @@ typedef struct
 {
     DeviceDescriptorType deviceDescriptorType;
     char *uuid;
-    char *description; //optional, could be NULL
+    char *description; // optional, could be NULL
     char *manufacturer;
     char *model;
-    DeviceVersionList *hardwareVersions; //could be complex list, wildcard, or range.  Use version functions to access
-    DeviceVersionList *firmwareVersions; //could be complex list, wildcard, or range.  Use version functions to access
-    char *minSupportedFirmwareVersion; //optional, could be NULL
-    icStringHashMap *metadata; //optional name/value pairs of strings
-    DeviceFirmware *latestFirmware; //optional
-    bool cascadeAddDeleteEndpoints; //optional (only for multi-endpoint devices). Defaults to false
+    DeviceVersionList *hardwareVersions; // could be complex list, wildcard, or range.  Use version functions to access
+    DeviceVersionList *firmwareVersions; // could be complex list, wildcard, or range.  Use version functions to access
+    char *minSupportedFirmwareVersion;   // optional, could be NULL
+    icStringHashMap *metadata;           // optional name/value pairs of strings
+    DeviceFirmware *latestFirmware;      // optional
+    bool cascadeAddDeleteEndpoints;      // optional (only for multi-endpoint devices). Defaults to false
     CategoryType category;
-    MatterTechnology *matter; //optional (only for matter devices). Can be NULL
+    MatterTechnology *matter; // optional (only for matter devices). Can be NULL
 } DeviceDescriptor;
 
 typedef struct
 {
-    bool   enabled;
+    bool enabled;
 
     struct
     {
@@ -162,14 +162,14 @@ typedef struct
 
 typedef struct
 {
-    DeviceDescriptor        baseDescriptor; //must be first to support casting
-    CameraProtocol          protocol;
-    CameraMotionSettings    defaultMotionSettings; //optional
+    DeviceDescriptor baseDescriptor; // must be first to support casting
+    CameraProtocol protocol;
+    CameraMotionSettings defaultMotionSettings; // optional
 } CameraDeviceDescriptor;
 
 typedef struct
 {
-    DeviceDescriptor        baseDescriptor;
+    DeviceDescriptor baseDescriptor;
 
 } ZigbeeDeviceDescriptor;
 
@@ -208,7 +208,6 @@ void destroyDeviceFirmwareFileInfo(void *item);
  * @param key
  * @return const char* The value. This is owned by 'dd'
  */
-const char *deviceDescriptorGetMetadataValue(const DeviceDescriptor *dd,
-                                             const char *key);
+const char *deviceDescriptorGetMetadataValue(const DeviceDescriptor *dd, const char *key);
 
-#endif //FLEXCORE_DEVICEDESCRIPTOR_H
+#endif // FLEXCORE_DEVICEDESCRIPTOR_H

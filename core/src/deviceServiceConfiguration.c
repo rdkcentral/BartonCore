@@ -30,8 +30,8 @@
 #include "icLog/logging.h"
 #include <pthread.h>
 
-#define LOG_TAG     "deviceServiceConfiguration"
-#define logFmt(fmt) "%s: " fmt, __func__
+#define LOG_TAG                   "deviceServiceConfiguration"
+#define logFmt(fmt)               "%s: " fmt, __func__
 
 #define DEFAULT_DS_DIR            "/tmp/barton/device_service"
 #define DEFAULT_STORAGE_DIR       DEFAULT_DS_DIR "/storage"

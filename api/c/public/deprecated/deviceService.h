@@ -42,20 +42,20 @@ bool deviceServiceInitialize(BDeviceServiceClient *service);
 void deviceServiceShutdown();
 void allServicesAvailableNotify(void);
 
-typedef enum {
+typedef enum
+{
     POWER_EVENT_AC_LOST,
     POWER_EVENT_AC_RESTORED,
     POWER_EVENT_LPM_ENTER,
     POWER_EVENT_LPM_EXIT
 } DeviceServiceSystemPowerEventType;
 
-static const char * const DeviceServiceSystemPowerEventTypeLabels[] =
-        {
-                "AC_LOST",
-                "AC_RESTORED",
-                "LPM_ENTER",
-                "LPM_EXIT",
-        };
+static const char *const DeviceServiceSystemPowerEventTypeLabels[] = {
+    "AC_LOST",
+    "AC_RESTORED",
+    "LPM_ENTER",
+    "LPM_EXIT",
+};
 
 /*
  * Restore configuration data from another directory.  This is the standard RMA restore case.
@@ -76,7 +76,7 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir);
  *
  * @returns true if at least one device driver successfully started discovery.
  */
-bool deviceServiceDiscoverStart(icLinkedList* deviceClasses,
+bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
                                 icLinkedList *filters,
                                 uint16_t timeoutSeconds,
                                 bool findOrphanedDevices);
@@ -88,7 +88,7 @@ bool deviceServiceDiscoverStart(icLinkedList* deviceClasses,
  *
  * @returns true if discovery stops successfully.
  */
-bool deviceServiceDiscoverStop(icLinkedList* deviceClasses);
+bool deviceServiceDiscoverStop(icLinkedList *deviceClasses);
 
 /*
  * Commission a specific device as specified in the provided setup payload.  This setup payload is initially
@@ -393,7 +393,7 @@ DeviceDescriptor *deviceServiceGetDeviceDescriptorForDevice(icDevice *device);
 /*
  * Get a debug appropriate dump of our Zigbee configuration.  Caller frees.
  */
-char* deviceServiceDumpZigbeeConfig(void);
+char *deviceServiceDumpZigbeeConfig(void);
 
 /*
  * Query for metadata based on a uri pattern, currently only supported matching is with wildcards, e.g. *
@@ -409,7 +409,7 @@ icLinkedList *deviceServiceGetMetadataByUriPattern(char *uriPattern);
  * @param uriPattern the uri pattern to search with
  * @return the list of matching resources
  */
-icLinkedList* deviceServiceGetResourcesByUriPattern(char* uriPattern);
+icLinkedList *deviceServiceGetResourcesByUriPattern(char *uriPattern);
 
 /*
  * Notify the device service of system power state changes
@@ -447,4 +447,4 @@ bool deviceServiceWasDeviceRejected(const char *deviceUuid);
  */
 bool deviceServiceDidDeviceFailToPair(const char *deviceUuid);
 
-#endif //FLEXCORE_DEVICESERVICE_H
+#endif // FLEXCORE_DEVICESERVICE_H

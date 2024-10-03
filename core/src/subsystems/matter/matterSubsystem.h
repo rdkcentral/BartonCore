@@ -31,14 +31,14 @@
 extern "C" {
 #endif
 
-#define MATTER_SUBSYSTEM_NAME "matter"
+#define MATTER_SUBSYSTEM_NAME    "matter"
 #define MATTER_SUBSYSTEM_VERSION (1U)
 
 
 #include <stdint.h>
 
-#include <device-driver/device-driver.h>
 #include "subsystemManagerCallbacks.h"
+#include <device-driver/device-driver.h>
 
 /*
 typedef struct
@@ -74,4 +74,4 @@ MatterDeviceInfo *matterSubsystemGetDeviceInfo(const char *uuid);
 }
 #endif
 
-#endif //ZILKER_MATTERSUBSYSTEM_H
+#endif // ZILKER_MATTERSUBSYSTEM_H

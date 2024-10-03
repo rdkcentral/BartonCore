@@ -27,18 +27,18 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <cjson/cJSON.h>
-#include <icTypes/icLinkedList.h>
-#include <serial/icSerDesContext.h>
 #include <deviceService/resourceModes.h>
 #include <glib-object.h>
+#include <icTypes/icLinkedList.h>
+#include <serial/icSerDesContext.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef enum
 {
-    CACHING_POLICY_NEVER, //Never cache this attribute and always call the device driver to retrieve the value
-    CACHING_POLICY_ALWAYS, //Always cache this attribute and never call the device driver to retrieve the value
+    CACHING_POLICY_NEVER,  // Never cache this attribute and always call the device driver to retrieve the value
+    CACHING_POLICY_ALWAYS, // Always cache this attribute and never call the device driver to retrieve the value
 } ResourceCachingPolicy;
 
 typedef struct
@@ -49,9 +49,10 @@ typedef struct
     char *deviceUuid;
     char *value;
     char *type;
-    uint8_t mode; //bitmask of RESOURCE_MODE_*
+    uint8_t mode; // bitmask of RESOURCE_MODE_*
     ResourceCachingPolicy cachingPolicy;
-    uint64_t dateOfLastSyncMillis; //GMT epoch based time when this resource was last read from or written to the device.  0 for never.
+    uint64_t dateOfLastSyncMillis; // GMT epoch based time when this resource was last read from or written to the
+                                   // device.  0 for never.
 
 } icDeviceResource;
 
@@ -90,15 +91,15 @@ cJSON *resourceToJSON(const icDeviceResource *resource, const icSerDesContext *c
 cJSON *resourcesToJSON(icLinkedList *resources, const icSerDesContext *context);
 
 /**
-* Load a device resource into memory from JSON
-*
-* @param deviceUUID the deviceUUID for which we are loading the metadata
-* @param endpointId the endpointId for which we are loading the metdata
-* @param resourceJSON the JSON to load
-* @return the resource object or NULL if there is an error
-*/
-icDeviceResource *resourceFromJSON(const char *deviceUUID, const char *endpointId, cJSON *resourceJSON,
-                                   const icSerDesContext *context);
+ * Load a device resource into memory from JSON
+ *
+ * @param deviceUUID the deviceUUID for which we are loading the metadata
+ * @param endpointId the endpointId for which we are loading the metdata
+ * @param resourceJSON the JSON to load
+ * @return the resource object or NULL if there is an error
+ */
+icDeviceResource *
+resourceFromJSON(const char *deviceUUID, const char *endpointId, cJSON *resourceJSON, const icSerDesContext *context);
 
 /**
  * Load the resources for a device and endpoint from JSON
@@ -112,8 +113,11 @@ icDeviceResource *resourceFromJSON(const char *deviceUUID, const char *endpointI
  * @see linkedListDestroy
  * @see resourceDestroy
  */
-icLinkedList *resourcesFromJSON(const char *deviceUUID, const char *endpointId, cJSON *resourcesJSON,
-                                const icSerDesContext *context, bool permissive);
+icLinkedList *resourcesFromJSON(const char *deviceUUID,
+                                const char *endpointId,
+                                cJSON *resourcesJSON,
+                                const icSerDesContext *context,
+                                bool permissive);
 
 /**
  * Find a resource by ID in a resource list
@@ -140,7 +144,7 @@ char *resourceUriCreate(const char *deviceUuid, const char *endpointId, const ch
  * @param resourceId
  * @return true if valid resource uri pattern, otherwise false
  */
-bool resourceUriIsValid(const char* deviceResourceUri,
-                        const char* deviceUuid,
+bool resourceUriIsValid(const char *deviceResourceUri,
+                        const char *deviceUuid,
                         const char *endpointId,
                         const char *resourceId);

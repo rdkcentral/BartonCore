@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -113,12 +113,13 @@ typedef struct
  * applied.  If NULL is passed no auto release is ever performed
  * @param destroyItemFunc function to destroy the wrapped item.  If NULL is passed, then free is used
  */
-#define THREAD_SAFE_WRAPPER_INIT(autoAssignFuncArg, autoReleaseCheckFuncArg, destroyItemFuncArg) \
-{ { .ref = NULL, \
-    .mutex = PTHREAD_MUTEX_INITIALIZER, \
-    .autoAssignFunc = autoAssignFuncArg, \
-    .autoReleaseCheckFunc = autoReleaseCheckFuncArg, \
-    .destroyItemFunc = destroyItemFuncArg } }
+#define THREAD_SAFE_WRAPPER_INIT(autoAssignFuncArg, autoReleaseCheckFuncArg, destroyItemFuncArg)                       \
+    {                                                                                                                  \
+        {                                                                                                              \
+            .ref = NULL, .mutex = PTHREAD_MUTEX_INITIALIZER, .autoAssignFunc = autoAssignFuncArg,                      \
+            .autoReleaseCheckFunc = autoReleaseCheckFuncArg, .destroyItemFunc = destroyItemFuncArg                     \
+        }                                                                                                              \
+    }
 
 /**
  * Structure representing a future for enqueued writes.  Contents should be considered opaque to consumers
@@ -138,8 +139,12 @@ typedef struct
 /**
  * Thread safe wrapper future static initializer
  */
-#define THREAD_SAFE_WRAPPER_FUTURE_INIT \
-{ { .mutex = PTHREAD_MUTEX_INITIALIZER, .condInitialized = false, .complete = false, .applied = false } }
+#define THREAD_SAFE_WRAPPER_FUTURE_INIT                                                                                \
+    {                                                                                                                  \
+        {                                                                                                              \
+            .mutex = PTHREAD_MUTEX_INITIALIZER, .condInitialized = false, .complete = false, .applied = false          \
+        }                                                                                                              \
+    }
 
 /**
  * Manually assign an item to the wrapper.
@@ -171,7 +176,8 @@ void threadSafeWrapperReleaseItem(icThreadSafeWrapper *wrapper);
  * during initialization is used
  * @return true if the release was performed
  */
-bool threadSafeWrapperConditionalReleaseItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperReleaseCheckFunc releaseCheckFunc);
+bool threadSafeWrapperConditionalReleaseItem(icThreadSafeWrapper *wrapper,
+                                             ThreadSafeWrapperReleaseCheckFunc releaseCheckFunc);
 
 /**
  * Perform a read on the item
@@ -193,11 +199,11 @@ bool threadSafeWrapperReadItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperRe
  * will be used.
  * @return true if the modification was successfully enqueued(or applied)
  */
-bool
-threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper, ThreadSafeWrapperModificationFunc modificationFunc,
-                                  void *context,
-                                  ThreadSafeWrapperDestroyContextFunc destroyContextFunc,
-                                  icThreadSafeWrapperFuture *future);
+bool threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper,
+                                          ThreadSafeWrapperModificationFunc modificationFunc,
+                                          void *context,
+                                          ThreadSafeWrapperDestroyContextFunc destroyContextFunc,
+                                          icThreadSafeWrapperFuture *future);
 
 /**
  * Block and perform a modification once no readers are present.  This could block indefinitely
@@ -206,9 +212,9 @@ threadSafeWrapperEnqueueModification(icThreadSafeWrapper *wrapper, ThreadSafeWra
  * @param context a context argument to be passed to the modification callback function
  * @return true if the modification was successfully performed
  */
-bool
-threadSafeWrapperModifyItem(icThreadSafeWrapper *wrapper, ThreadSafeWrapperModificationFunc modificationFunc,
-                            void *context);
+bool threadSafeWrapperModifyItem(icThreadSafeWrapper *wrapper,
+                                 ThreadSafeWrapperModificationFunc modificationFunc,
+                                 void *context);
 
 /**
  * Helper for context items which do not require any cleanup
@@ -251,4 +257,4 @@ bool threadSafeWrapperFutureIsComplete(icThreadSafeWrapperFuture *future);
  */
 bool threadSafeWrapperFutureIsApplied(icThreadSafeWrapperFuture *future);
 
-#endif //ZILKER_ICTHREADSAFEWRAPPER_H
+#endif // ZILKER_ICTHREADSAFEWRAPPER_H

@@ -42,4 +42,4 @@ icLinkedList *deviceDriverManagerGetDeviceDriversByDeviceClass(const char *devic
 icLinkedList *deviceDriverManagerGetDeviceDrivers();
 icLinkedList *deviceDriverManagerGetDeviceDriversBySubsystem(const char *subsystem);
 
-#endif //FLEXCORE_DEVICEDRIVERMANAGER_H
+#endif // FLEXCORE_DEVICEDRIVERMANAGER_H

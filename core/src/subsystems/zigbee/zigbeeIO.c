@@ -21,14 +21,14 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "subsystems/zigbee/zigbeeIO.h"
+#include <errno.h>
+#include <inttypes.h>
+#include <memory.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <memory.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <stdbool.h>
 #include <string.h>
-#include <inttypes.h>
 
 #ifdef CONFIG_OS_DARWIN
 #include <machine/endian.h>
@@ -50,7 +50,8 @@ extern inline void zigbeeIODestroy__auto(ZigbeeIOContext **ctx);
 
 /* Private Data */
 
-struct _ZigbeeIOContext {
+struct _ZigbeeIOContext
+{
     uint8_t *cur;
     const uint8_t *end;
     const ZigbeeIOMode mode;
@@ -68,7 +69,7 @@ static void checkEnd(ZigbeeIOContext *ctx, size_t size)
 
 static bool canPerformOperation(ZigbeeIOContext *ctx, size_t size, ZigbeeIOMode mode)
 {
-    if(ctx->mode != mode)
+    if (ctx->mode != mode)
     {
         ctx->cur = NULL;
         errno = EPERM;
@@ -129,13 +130,13 @@ static void writeVal(ZigbeeIOContext *ctx, void *val, size_t size)
                 uint16_t tmp = htole16(*((uint16_t *) val));
                 memcpy(ctx->cur, &tmp, size);
             }
-                break;
+            break;
             case sizeof(uint32_t):
             {
                 uint32_t tmp = htole32(*((uint32_t *) val));
                 memcpy(ctx->cur, &tmp, size);
             }
-                break;
+            break;
             default:
                 errno = EINVAL;
                 ctx->cur = NULL;
@@ -167,7 +168,8 @@ void zigbeeIODestroy(ZigbeeIOContext *ctx)
 {
     if (!errno && ctx->cur != ctx->end)
     {
-        icLogWarn(LOG_TAG, "Partial %s on payload: result may not be correct", ctx->mode == ZIO_READ ? "read" : "write");
+        icLogWarn(
+            LOG_TAG, "Partial %s on payload: result may not be correct", ctx->mode == ZIO_READ ? "read" : "write");
     }
     free(ctx);
 }
@@ -202,7 +204,7 @@ void zigbeeIOPutInt8(ZigbeeIOContext *ctx, int8_t val)
 
 char *zigbeeIOGetString(ZigbeeIOContext *ctx)
 {
-    char * out = NULL;
+    char *out = NULL;
     uint8_t strlen = zigbeeIOGetUint8(ctx);
 
     if (canPerformOperation(ctx, strlen, ZIO_READ))

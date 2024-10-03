@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2022 Comcast
 //
 // All rights reserved.
@@ -23,18 +23,19 @@
 // Created by mkoch201 on 3/22/22.
 //
 
-#include <stdio.h>
-#include <icLog/logging.h>
-#include <memory.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+#include <icLog/logging.h>
 #include <icTime/timeTracker.h>
 #include <inttypes.h>
+#include <memory.h>
+#include <stdio.h>
 #include <unistd.h>
 
-#define LOG_CAT     "timeTrackerTest"
+#define LOG_CAT "timeTrackerTest"
 
 static void testTimeTracker(void **state)
 {
@@ -52,9 +53,9 @@ static void testTimeTracker(void **state)
     assert_false(timeTrackerExpired(tracker));
     assert_false(timeTrackerRunning(tracker));
 
-    timeTrackerStart(tracker,1);
+    timeTrackerStart(tracker, 1);
     // Sleep 50 millis
-    usleep(1000*50);
+    usleep(1000 * 50);
 
     // Make sure values are reasonable with some buffer
     assert_int_equal(timeTrackerElapsedSeconds(tracker), 0);
@@ -70,7 +71,7 @@ static void testTimeTracker(void **state)
 
     timeTrackerStartWithUnit(tracker, 250, TIME_TRACKER_MILLIS);
     // Sleep 50 millis
-    usleep(1000*50);
+    usleep(1000 * 50);
     // Make sure values are reasonable with some buffer
     assert_int_equal(timeTrackerElapsedSeconds(tracker), 0);
     assert_in_range(timeTrackerElapsedTime(tracker, TIME_TRACKER_MILLIS), 50, 150);
@@ -80,7 +81,7 @@ static void testTimeTracker(void **state)
     assert_true(timeTrackerRunning(tracker));
 
     // Let expire
-    usleep(1000*250);
+    usleep(1000 * 250);
     assert_int_equal(timeTrackerElapsedSeconds(tracker), 0);
     assert_in_range(timeTrackerElapsedTime(tracker, TIME_TRACKER_MILLIS), 300, 400);
     assert_int_equal(timeTrackerSecondsUntilExpiration(tracker), 0);
@@ -95,9 +96,9 @@ static void testTimeTracker(void **state)
 
     // Try the other units for sanity
     timeTrackerStartWithUnit(tracker, 1, TIME_TRACKER_MINS);
-    assert_in_range(timeTrackerTimeUntilExpiration(tracker, TIME_TRACKER_MILLIS), 59*1000, 60*1000);
+    assert_in_range(timeTrackerTimeUntilExpiration(tracker, TIME_TRACKER_MILLIS), 59 * 1000, 60 * 1000);
     timeTrackerStartWithUnit(tracker, 1, TIME_TRACKER_HOURS);
-    assert_in_range(timeTrackerTimeUntilExpiration(tracker, TIME_TRACKER_MILLIS), 59*60*1000, 60*60*1000);
+    assert_in_range(timeTrackerTimeUntilExpiration(tracker, TIME_TRACKER_MILLIS), 59 * 60 * 1000, 60 * 60 * 1000);
 
     timeTrackerDebug(tracker);
 
@@ -106,13 +107,11 @@ static void testTimeTracker(void **state)
 
 int main(int argc, char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(testTimeTracker),
-            };
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(testTimeTracker),
+    };
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 
     return retval;
 }
-

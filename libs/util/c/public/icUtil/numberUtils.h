@@ -30,6 +30,9 @@
 #ifndef ZILKER_NUMBERUTILS_H
 #define ZILKER_NUMBERUTILS_H
 
+#include <inttypes.h>
+#include <stdbool.h>
+
 /*
  * Generate random number between given range
  * NOTE: caller is responsible for passing first arg value lower than second arg.

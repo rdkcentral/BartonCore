@@ -37,8 +37,8 @@
 #ifndef IC_DELAYTASK_H
 #define IC_DELAYTASK_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /*
  * function to run after the delay time has expired.

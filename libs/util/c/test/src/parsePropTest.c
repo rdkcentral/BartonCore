@@ -28,9 +28,9 @@
  * Author: jelderton - 4/13/16
  *-----------------------------------------------*/
 
-#include <stdio.h>
-#include <icUtil/parsePropFile.h>
 #include "parsePropTest.h"
+#include <icUtil/parsePropFile.h>
+#include <stdio.h>
 
 bool runParsePropFileTests()
 {
@@ -61,4 +61,3 @@ bool runParsePropFileTests()
     propIteratorDestroy(loop);
     return true;
 }
-

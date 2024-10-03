@@ -23,33 +23,33 @@
  * Created by Thomas Lea on 3/15/16.
  */
 
-#include <sys/socket.h>
-#include <icLog/logging.h>
-#include <string.h>
-#include <sys/errno.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <pthread.h>
-#include <cjson/cJSON.h>
-#include <icConcurrent/timedWait.h>
-#include <icConcurrent/threadUtils.h>
-#include <icUtil/stringUtils.h>
 #include "zhalAsyncReceiver.h"
 #include "zhalPrivate.h"
+#include <arpa/inet.h>
+#include <cjson/cJSON.h>
+#include <icConcurrent/threadUtils.h>
+#include <icConcurrent/timedWait.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <string.h>
+#include <sys/errno.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-#define ZHAL_EVENT_PORT 8711
+#define ZHAL_EVENT_PORT            8711
 #define ZHAL_EVENT_MULTICAST_GROUP "225.0.0.51"
-#define ASYNC_RECVBUF_SIZE (64 * 1024)
-#define STOP_WAIT_MILLIS (250L)
+#define ASYNC_RECVBUF_SIZE         (64 * 1024)
+#define STOP_WAIT_MILLIS           (250L)
 
 static pthread_t asyncThread;
-static void *asyncReceiverThreadProc(void*);
+static void *asyncReceiverThreadProc(void *);
 static bool asyncReceiverThreadRunning = false;
 
 static zhalIpcResponseHandler myIpcHandler = NULL;
 static zhalEventHandler myEventHandler = NULL;
-static int pipeFDs[2] = {-1,-1};
+static int pipeFDs[2] = {-1, -1};
 static pthread_mutex_t STARTUP_MTX = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t STARTUP_COND = PTHREAD_COND_INITIALIZER;
 
@@ -227,11 +227,11 @@ static void *asyncReceiverThreadProc(void *arg)
     pthread_mutex_unlock(&STARTUP_MTX);
 
     fd_set fds;
-    int maxFD = sockFD > pipeFDs[0] ? sockFD+1 : pipeFDs[0]+1;
+    int maxFD = sockFD > pipeFDs[0] ? sockFD + 1 : pipeFDs[0] + 1;
 
-    char *recvBuf = (char*)malloc(ASYNC_RECVBUF_SIZE * sizeof(char));
+    char *recvBuf = (char *) malloc(ASYNC_RECVBUF_SIZE * sizeof(char));
 
-    while(sockFD >= 0)
+    while (sockFD >= 0)
     {
         struct sockaddr_in remoteAddr;
         unsigned int remoteAddrLen = sizeof(remoteAddr);
@@ -254,13 +254,9 @@ static void *asyncReceiverThreadProc(void *arg)
         }
 
         // block until something shows on this UDP socket
-        ssize_t nbytes = recvfrom(sockFD,
-                                  recvBuf,
-                                  ASYNC_RECVBUF_SIZE-1,
-                                  0,
-                                  (struct sockaddr *) &remoteAddr,
-                                  &remoteAddrLen);
-        if(nbytes < 0)
+        ssize_t nbytes =
+            recvfrom(sockFD, recvBuf, ASYNC_RECVBUF_SIZE - 1, 0, (struct sockaddr *) &remoteAddr, &remoteAddrLen);
+        if (nbytes < 0)
         {
             // read error, loop back around to check if we should cancel
             //
@@ -268,9 +264,9 @@ static void *asyncReceiverThreadProc(void *arg)
             continue;
         }
 
-        recvBuf[nbytes] = '\0'; //null terminate
+        recvBuf[nbytes] = '\0'; // null terminate
 
-        //icLogDebug(LOG_TAG, "received: %s", recvBuf);
+        // icLogDebug(LOG_TAG, "received: %s", recvBuf);
 
         /*
          * Only handle packets sent from our local loopback. Any other
@@ -278,14 +274,14 @@ static void *asyncReceiverThreadProc(void *arg)
          */
         if (remoteAddr.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
         {
-            cJSON* asyncJson = cJSON_Parse(recvBuf);
+            cJSON *asyncJson = cJSON_Parse(recvBuf);
             if (asyncJson == NULL)
             {
                 icLogWarn(LOG_TAG, "Unable to parse async data: %s", recvBuf);
                 continue;
             }
 
-            cJSON* eventType = cJSON_GetObjectItem(asyncJson, "eventType");
+            cJSON *eventType = cJSON_GetObjectItem(asyncJson, "eventType");
             if (eventType != NULL)
             {
                 if (strcmp("ipcResponse", eventType->valuestring) == 0)
@@ -313,14 +309,13 @@ static void *asyncReceiverThreadProc(void *arg)
         }
         else
         {
-            icLogWarn(LOG_TAG,
-                      "Received async event from invalid source address: [%s]",
-                      inet_ntoa(remoteAddr.sin_addr));
+            icLogWarn(
+                LOG_TAG, "Received async event from invalid source address: [%s]", inet_ntoa(remoteAddr.sin_addr));
         }
     }
 
     free(recvBuf);
-    if(sockFD >=0)
+    if (sockFD >= 0)
     {
         close(sockFD);
     }
@@ -331,10 +326,10 @@ static void *asyncReceiverThreadProc(void *arg)
 
 static void *invokeIpcHandlerCallback(void *arg)
 {
-    cJSON *json = (cJSON*)arg;
-    if(myIpcHandler(json) == 0)
+    cJSON *json = (cJSON *) arg;
+    if (myIpcHandler(json) == 0)
     {
-        //it was not handled, so we have to free it here
+        // it was not handled, so we have to free it here
         cJSON_Delete(json);
     }
     return NULL;
@@ -342,10 +337,10 @@ static void *invokeIpcHandlerCallback(void *arg)
 
 static void *invokeEventHandlerCallback(void *arg)
 {
-    cJSON *json = (cJSON*)arg;
-    if(myEventHandler(json) == 0)
+    cJSON *json = (cJSON *) arg;
+    if (myEventHandler(json) == 0)
     {
-        //it was not handled, so we have to free it here
+        // it was not handled, so we have to free it here
         cJSON_Delete(json);
     }
     return NULL;

@@ -28,23 +28,23 @@
  */
 
 #pragma once
+#include <cjson/cJSON.h>
+#include <glib-object.h>
 #include <icTypes/icLinkedList.h>
 #include <icTypes/icStringHashMap.h>
-#include <cjson/cJSON.h>
-#include <serial/icSerDesContext.h>
 #include <icUtil/stringUtils.h>
-#include <glib-object.h>
+#include <serial/icSerDesContext.h>
 
 typedef struct
 {
-    char            *id;
-    char            *uri;
-    char            *profile;
-    uint8_t         profileVersion;
-    char            *deviceUuid;
-    bool            enabled;
-    icLinkedList    *resources;
-    icLinkedList    *metadata;
+    char *id;
+    char *uri;
+    char *profile;
+    uint8_t profileVersion;
+    char *deviceUuid;
+    bool enabled;
+    icLinkedList *resources;
+    icLinkedList *metadata;
 } icDeviceEndpoint;
 
 void endpointDestroy(icDeviceEndpoint *endpoint);
@@ -79,7 +79,7 @@ cJSON *endpointToJSON(const icDeviceEndpoint *endpoint, const icSerDesContext *c
  * @param endpoints the list of endpoints
  * @return the JSON object
  */
-cJSON *endpointsToJSON(icLinkedList *endpoints, const icSerDesContext *context );
+cJSON *endpointsToJSON(icLinkedList *endpoints, const icSerDesContext *context);
 
 /**
  * Load a device endpoint into memory from JSON
@@ -101,7 +101,8 @@ icDeviceEndpoint *endpointFromJSON(const char *deviceUUID, cJSON *endpointJSON, 
  * @see linkedListDestroy
  * @see endpointDestroy
  */
-icLinkedList *endpointsFromJSON(const char *deviceUUID, cJSON *endpointsJSON, const icSerDesContext *context, bool permissive);
+icLinkedList *
+endpointsFromJSON(const char *deviceUUID, cJSON *endpointsJSON, const icSerDesContext *context, bool permissive);
 
 /**
  * Create an endpoint URI
@@ -121,7 +122,7 @@ inline char *endpointUriCreate(const char *deviceUuid, const char *endpointId)
  * @param endpointId
  * @return true if valid endpoint uri pattern, otherwise false
  */
-bool endpointUriIsValid(const char* deviceEndpointUri, const char* deviceUuid, const char *endpointId);
+bool endpointUriIsValid(const char *deviceEndpointUri, const char *deviceUuid, const char *endpointId);
 
 /**
  * Set endpoint profile version
@@ -130,4 +131,3 @@ bool endpointUriIsValid(const char* deviceEndpointUri, const char* deviceUuid, c
  * @return true if profile version is set, otherwise false
  */
 bool endpointsSetProfileVersion(icLinkedList *endpoints, uint8_t profileVersion);
-

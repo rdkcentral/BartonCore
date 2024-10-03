@@ -24,21 +24,21 @@
 // Created by tlea on 2/18/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/temperatureMeasurementCluster.h"
 
-#define LOG_TAG "temperatureMeasurementCluster"
+#define LOG_TAG                   "temperatureMeasurementCluster"
 
 #define TEMPERATURE_REPORTING_KEY "temperatureMeasurementReporting"
 
@@ -59,8 +59,8 @@ extern inline bool temperatureMeasurementClusterIsTemperatureValid(uint16_t valu
 ZigbeeCluster *temperatureMeasurementClusterCreate(const TemperatureMeasurementClusterCallbacks *callbacks,
                                                    void *callbackContext)
 {
-    TemperatureMeasurementCluster *result = (TemperatureMeasurementCluster *) calloc(1,
-                                                                                     sizeof(TemperatureMeasurementCluster));
+    TemperatureMeasurementCluster *result =
+        (TemperatureMeasurementCluster *) calloc(1, sizeof(TemperatureMeasurementCluster));
 
     result->cluster.clusterId = TEMPERATURE_MEASUREMENT_CLUSTER_ID;
 
@@ -85,12 +85,8 @@ bool temperatureMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpo
     }
 
     uint64_t val;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  TEMPERATURE_MEASUREMENT_CLUSTER_ID,
-                                  true,
-                                  TEMP_MEASURED_VALUE_ATTRIBUTE_ID,
-                                  &val) == 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, TEMPERATURE_MEASUREMENT_CLUSTER_ID, true, TEMP_MEASURED_VALUE_ATTRIBUTE_ID, &val) == 0)
     {
         *value = (int16_t) (val & 0xFFFF);
         result = true;
@@ -106,7 +102,8 @@ bool temperatureMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpo
 void temperatureMeasurementSetTemperatureReporting(const DeviceConfigurationContext *deviceConfigurationContext,
                                                    bool configure)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, TEMPERATURE_REPORTING_KEY, configure);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, TEMPERATURE_REPORTING_KEY, configure);
 }
 
 static void handlePollControlCheckin(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId)
@@ -141,7 +138,8 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         temperatureStateConfigs[0].maxInterval = 1620; // 27 minutes
         temperatureStateConfigs[0].reportableChange = 50;
 
-        if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, TEMPERATURE_MEASUREMENT_CLUSTER_ID) != 0)
+        if (zigbeeSubsystemBindingSet(
+                configContext->eui64, configContext->endpointId, TEMPERATURE_MEASUREMENT_CLUSTER_ID) != 0)
         {
             icLogError(LOG_TAG, "%s: failed to bind temperature measurement", __FUNCTION__);
             result = false;
@@ -178,11 +176,9 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
             int16_t measuredTempValue = zigbeeIOGetInt16(zio);
             if (temperatureMeasurementClusterIsTemperatureValid(measuredTempValue) == true)
             {
-                icLogDebug(LOG_TAG, "%s: measuredValueUpdated=%"PRId16, __FUNCTION__, measuredTempValue);
-                cluster->callbacks->measuredValueUpdated(cluster->callbackContext,
-                                                         report->eui64,
-                                                         report->sourceEndpoint,
-                                                         measuredTempValue);
+                icLogDebug(LOG_TAG, "%s: measuredValueUpdated=%" PRId16, __FUNCTION__, measuredTempValue);
+                cluster->callbacks->measuredValueUpdated(
+                    cluster->callbackContext, report->eui64, report->sourceEndpoint, measuredTempValue);
             }
         }
     }
@@ -190,4 +186,4 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

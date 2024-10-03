@@ -31,10 +31,10 @@
 #ifndef IC_STRINGUTILS_H
 #define IC_STRINGUTILS_H
 
-#include <stdint.h>
+#include <icTypes/sbrm.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <icTypes/sbrm.h>
+#include <stdint.h>
 #include <string.h>
 
 /*
@@ -148,8 +148,7 @@ char *stringToCamelCase(const char *inputStr);
  *
  * NOTE: caller must free the returned string
  */
-__attribute__ ((format (__printf__, 1, 2)))
-char *stringBuilder(const char *format, ...);
+__attribute__((format(__printf__, 1, 2))) char *stringBuilder(const char *format, ...);
 
 /**
  * MT-safe strerror (strerror_r adapter for both XSI compliant and _GNU_SOURCE variants)
@@ -226,7 +225,11 @@ bool stringToUint64(const char *str, uint64_t *num);
  * @param maxValue maximum value in range(inclusive)
  * @return true if success and is within range, false otherwise
  */
-bool stringToUnsignedNumberWithinRange(const char *str, uint64_t *num, uint8_t base, uint64_t minValue, uint64_t maxValue);
+bool stringToUnsignedNumberWithinRange(const char *str,
+                                       uint64_t *num,
+                                       uint8_t base,
+                                       uint64_t minValue,
+                                       uint64_t maxValue);
 
 /**
  * Convert a string to a int8_t using standard base detection conventions

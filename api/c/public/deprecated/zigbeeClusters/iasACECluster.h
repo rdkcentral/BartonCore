@@ -28,30 +28,30 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include "zigbeeCluster.h"
 #include "device-driver/device-driver.h"
+#include "zigbeeCluster.h"
 
-//End devices implement ACE client
-#define IAS_ACE_ARM_COMMAND_ID                              0x00
-#define IAS_ACE_BYPASS_COMMAND_ID                           0x01
-#define IAS_ACE_EMERGENCY_COMMAND_ID                        0x02
-#define IAS_ACE_FIRE_COMMAND_ID                             0x03
-#define IAS_ACE_PANIC_COMMAND_ID                            0x04
-#define IAS_ACE_GET_ZONE_ID_MAP_COMMAND_ID                  0x05
-#define IAS_ACE_GET_ZONE_INFO_COMMAND_ID                    0x06
-#define IAS_ACE_GET_PANEL_STATUS_COMMAND_ID                 0x07
-#define IAS_ACE_GET_BYPASSED_ZONE_LIST_COMMAND_ID           0x08
-#define IAS_ACE_GET_ZONE_STATUS_COMMAND_ID                  0x09
-//ACE server commands
-#define IAS_ACE_ARM_RESPONSE_COMMAND_ID                     0x00
-#define IAS_ACE_GET_ZONE_ID_MAP_RESPONSE_COMMAND_ID         0x01
-#define IAS_ACE_GET_ZONE_INFO_RESPONSE_COMMAND_ID           0x02
-#define IAS_ACE_ZONE_STATUS_CHANGED_COMMAND_ID              0x03
-#define IAS_ACE_PANEL_STATUS_CHANGED_COMMAND_ID             0x04
-#define IAS_ACE_GET_PANEL_STATUS_RESPONSE_COMMAND_ID        0x05
-#define IAS_ACE_SET_BYPASSED_ZONE_LIST_COMMAND_ID           0x06
-#define IAS_ACE_BYPASS_RESPONSE_COMMAND_ID                  0x07
-#define IAS_ACE_GET_ZONE_STATUS_RESPONSE_COMMAND_ID         0x08
+// End devices implement ACE client
+#define IAS_ACE_ARM_COMMAND_ID                       0x00
+#define IAS_ACE_BYPASS_COMMAND_ID                    0x01
+#define IAS_ACE_EMERGENCY_COMMAND_ID                 0x02
+#define IAS_ACE_FIRE_COMMAND_ID                      0x03
+#define IAS_ACE_PANIC_COMMAND_ID                     0x04
+#define IAS_ACE_GET_ZONE_ID_MAP_COMMAND_ID           0x05
+#define IAS_ACE_GET_ZONE_INFO_COMMAND_ID             0x06
+#define IAS_ACE_GET_PANEL_STATUS_COMMAND_ID          0x07
+#define IAS_ACE_GET_BYPASSED_ZONE_LIST_COMMAND_ID    0x08
+#define IAS_ACE_GET_ZONE_STATUS_COMMAND_ID           0x09
+// ACE server commands
+#define IAS_ACE_ARM_RESPONSE_COMMAND_ID              0x00
+#define IAS_ACE_GET_ZONE_ID_MAP_RESPONSE_COMMAND_ID  0x01
+#define IAS_ACE_GET_ZONE_INFO_RESPONSE_COMMAND_ID    0x02
+#define IAS_ACE_ZONE_STATUS_CHANGED_COMMAND_ID       0x03
+#define IAS_ACE_PANEL_STATUS_CHANGED_COMMAND_ID      0x04
+#define IAS_ACE_GET_PANEL_STATUS_RESPONSE_COMMAND_ID 0x05
+#define IAS_ACE_SET_BYPASSED_ZONE_LIST_COMMAND_ID    0x06
+#define IAS_ACE_BYPASS_RESPONSE_COMMAND_ID           0x07
+#define IAS_ACE_GET_ZONE_STATUS_RESPONSE_COMMAND_ID  0x08
 
 typedef struct IASACECluster IASACECluster;
 
@@ -73,9 +73,7 @@ typedef struct
                                    const PanelStatus requestedPanic,
                                    const void *ctx);
 
-    void (*onGetPanelStatusReceived)(const uint64_t eui64,
-                                     const uint8_t endpointId,
-                                     const void *ctx);
+    void (*onGetPanelStatusReceived)(const uint64_t eui64, const uint8_t endpointId, const void *ctx);
 } IASACEClusterCallbacks;
 
 ZigbeeCluster *iasACEClusterCreate(const IASACEClusterCallbacks *callbacks, const void *driver);
@@ -100,4 +98,4 @@ void iasACEClusterSendZoneStatus(uint64_t eui64, uint8_t destEndpoint, const Zon
 
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif //ZILKER_IASACECLUSTER_H
+#endif // ZILKER_IASACECLUSTER_H

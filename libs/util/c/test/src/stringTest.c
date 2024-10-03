@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -23,21 +23,22 @@
 // Created by mkoch201 on 10/18/18.
 //
 
-#include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
 #include <limits.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <icLog/logging.h>
-#include <icUtil/stringUtils.h>
-#include <icUtil/array.h>
 #include <icTypes/sbrm.h>
+#include <icUtil/array.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_TAG "stringTest"
+#define LOG_TAG     "stringTest"
 
 #define TEST_STRING "A towel is the most important tool for a hitchhiker."
 
@@ -326,7 +327,7 @@ static void test_safeStringCopy(void **state)
 {
     char newStr[30];
     uint16_t maxDestChars = 10;
-    char* src = "Test String";
+    char *src = "Test String";
     bool resVal = false;
 
     // NULL dest
@@ -364,7 +365,7 @@ static void test_safeStringAppend(void **state)
 {
     char newStr[30] = "Prefix";
     uint16_t maxDestChars = 10;
-    char* src = "Test String";
+    char *src = "Test String";
     bool resVal = false;
 
     // NULL dest
@@ -389,7 +390,7 @@ static void test_safeStringAppend(void **state)
 
     // Correct copy (part of source)
     strcpy(newStr, "Prefix");
-    maxDestChars = 7+strlen(newStr);
+    maxDestChars = 7 + strlen(newStr);
     resVal = safeStringAppend(newStr, maxDestChars, src);
     assert_true(resVal);
     assert_string_equal(newStr, "PrefixTest S");
@@ -1108,26 +1109,27 @@ void test_bitmapToString(void **state)
 
     // No bits set
     char *str = bitmapToStr(val, sizeof(val));
-    assert_string_equal(str,"(none)");
+    assert_string_equal(str, "(none)");
     free(str);
 
     // 1 bit set
     val = 1;
     str = bitmapToStr(val, sizeof(val));
-    assert_string_equal(str,"|1|");
+    assert_string_equal(str, "|1|");
     free(str);
 
     // 2 bits set
     val = 1ULL | 1ULL << 63;
     str = bitmapToStr(val, sizeof(val));
-    assert_string_equal(str,"|1|64|");
+    assert_string_equal(str, "|1|64|");
     free(str);
 
     // all the things...err bits
     val = UINT64_MAX;
     str = bitmapToStr(val, sizeof(val));
     assert_string_equal(str,
-            "|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|");
+                        "|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|"
+                        "35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64|");
     free(str);
 }
 
@@ -1205,7 +1207,7 @@ static void test_stringPad(void **state)
     free(outputStr);
 }
 
-//Old method of running this test. Need to keep defined for utilTest dependency
+// Old method of running this test. Need to keep defined for utilTest dependency
 bool runStringUtilsTest()
 {
     return true;
@@ -1213,30 +1215,27 @@ bool runStringUtilsTest()
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                cmocka_unit_test(test_strReplace),
-                cmocka_unit_test(test_generateRandomToken),
-                cmocka_unit_test(test_safeStringCopy),
-                cmocka_unit_test(test_safeStringAppend),
-                cmocka_unit_test(test_stringCompare),
-                cmocka_unit_test(test_stringStartsWith),
-                cmocka_unit_test(test_stringEndsWith),
-                cmocka_unit_test(test_trimString),
-                cmocka_unit_test(test_stringSplitOnToken),
-                cmocka_unit_test(test_stringToLowerCase),
-                cmocka_unit_test(test_stringToUpperCase),
-                cmocka_unit_test(test_stringToCamelCase),
-                cmocka_unit_test(test_stringBuilder),
-                cmocka_unit_test(test_stringEditDelete),
-                cmocka_unit_test(test_stringEditReplace),
-                cmocka_unit_test(test_stringEditInvalidBounds),
-                cmocka_unit_test(test_stringToNumberConversions),
-                cmocka_unit_test(test_bitmapToString),
-                cmocka_unit_test(test_stringIsEmpty),
-                cmocka_unit_test(test_stringIsPrintable),
-                cmocka_unit_test(test_stringPad)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_strReplace),
+                                       cmocka_unit_test(test_generateRandomToken),
+                                       cmocka_unit_test(test_safeStringCopy),
+                                       cmocka_unit_test(test_safeStringAppend),
+                                       cmocka_unit_test(test_stringCompare),
+                                       cmocka_unit_test(test_stringStartsWith),
+                                       cmocka_unit_test(test_stringEndsWith),
+                                       cmocka_unit_test(test_trimString),
+                                       cmocka_unit_test(test_stringSplitOnToken),
+                                       cmocka_unit_test(test_stringToLowerCase),
+                                       cmocka_unit_test(test_stringToUpperCase),
+                                       cmocka_unit_test(test_stringToCamelCase),
+                                       cmocka_unit_test(test_stringBuilder),
+                                       cmocka_unit_test(test_stringEditDelete),
+                                       cmocka_unit_test(test_stringEditReplace),
+                                       cmocka_unit_test(test_stringEditInvalidBounds),
+                                       cmocka_unit_test(test_stringToNumberConversions),
+                                       cmocka_unit_test(test_bitmapToString),
+                                       cmocka_unit_test(test_stringIsEmpty),
+                                       cmocka_unit_test(test_stringIsPrintable),
+                                       cmocka_unit_test(test_stringPad)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

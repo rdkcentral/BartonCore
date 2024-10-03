@@ -40,8 +40,8 @@
 #ifndef IC_REPEATTASK_H
 #define IC_REPEATTASK_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 
 // utilize common function prototypes and enumerations
@@ -86,8 +86,11 @@ uint32_t createRepeatingTask(uint64_t delayAmount, delayUnits units, taskCallbac
  *
  * @return a repeatingTask handle that can be queried or canceled
  */
-uint32_t createRepeatingTaskWithStartDelay(uint64_t startDelay, uint64_t delayAmount, delayUnits units,
-                                           taskCallbackFunc func, void *userArg);
+uint32_t createRepeatingTaskWithStartDelay(uint64_t startDelay,
+                                           uint64_t delayAmount,
+                                           delayUnits units,
+                                           taskCallbackFunc func,
+                                           void *userArg);
 
 /*
  * create a repeating task that will invoke 'taskCallbackFunc'
@@ -150,9 +153,13 @@ typedef void (*backOffTaskSuccessCallbackFunc)(void *userArg);
  *
  * @return a repeatingTask handle that can be queried or canceled
  */
-uint32_t createBackOffRepeatingTask(uint64_t initDelayAmount, uint64_t maxDelayAmount, uint64_t incrementDelayAmount,
-                                    delayUnits units, backOffTaskRunCallbackFunc runFunc,
-                                    backOffTaskSuccessCallbackFunc cleanFunc, void *userArg);
+uint32_t createBackOffRepeatingTask(uint64_t initDelayAmount,
+                                    uint64_t maxDelayAmount,
+                                    uint64_t incrementDelayAmount,
+                                    delayUnits units,
+                                    backOffTaskRunCallbackFunc runFunc,
+                                    backOffTaskSuccessCallbackFunc cleanFunc,
+                                    void *userArg);
 
 /*
  * change the delayAmount for a traditional repeating or fixed task.  if the 'changeNow' flag
@@ -305,11 +312,11 @@ typedef void (*destroyDelayContextFunc)(void *delayContext);
  */
 struct _repeatingTaskPolicy
 {
-    void    *policyContext;                      // optional data used by the policy implementation
-    getDelayForNextRunFunc   getDelayFunc;       // REQUIRED
-    taskPreRunNotifyFunc     preRunNotifyFunc;   // optional
-    taskPostRunNotifyFunc    postRunNotifyFunc;  // optional
-    destroyDelayContextFunc  destroyContextFunc; // optional - if not defined, will use "free(policyContext)"
+    void *policyContext;                        // optional data used by the policy implementation
+    getDelayForNextRunFunc getDelayFunc;        // REQUIRED
+    taskPreRunNotifyFunc preRunNotifyFunc;      // optional
+    taskPostRunNotifyFunc postRunNotifyFunc;    // optional
+    destroyDelayContextFunc destroyContextFunc; // optional - if not defined, will use "free(policyContext)"
 };
 
 /*
@@ -340,9 +347,8 @@ RepeatingTaskPolicy *createStandardRepeatingTaskPolicy(uint64_t delayAmount, del
  * @param delayAmount - number of 'units' to delay
  * @param units - amount of time 'delayAmount' represents
  */
-RepeatingTaskPolicy *createRepeatingTaskWithStartDelayPolicy(uint64_t startDelayAmount,
-                                                             uint64_t delayAmount,
-                                                             delayUnits units);
+RepeatingTaskPolicy *
+createRepeatingTaskWithStartDelayPolicy(uint64_t startDelayAmount, uint64_t delayAmount, delayUnits units);
 
 /*
  * Create a repeating task policy to execute the task on a fixed interval
@@ -364,7 +370,8 @@ RepeatingTaskPolicy *createFixedRepeatingTaskPolicy(uint64_t delayAmount, delayU
  * @param maxDelayAmount - the max delay amount for the randomization
  * @param units - amount of time each 'amount' represents
  */
-RepeatingTaskPolicy *createRandomRepeatingTaskPolicy(uint32_t minDelayAmount, uint32_t maxDelayAmount, delayUnits units);
+RepeatingTaskPolicy *
+createRandomRepeatingTaskPolicy(uint32_t minDelayAmount, uint32_t maxDelayAmount, delayUnits units);
 
 /*
  * Create a repeating task policy to execute the task using an incremental backoff interval.
@@ -377,8 +384,10 @@ RepeatingTaskPolicy *createRandomRepeatingTaskPolicy(uint32_t minDelayAmount, ui
  * @param units - amount of time each 'amount' represents
  *
  */
-RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmount, uint64_t maxDelayAmount,
-                                                          uint64_t incrementDelayAmount, delayUnits units);
+RepeatingTaskPolicy *createIncrementalRepeatingTaskPolicy(uint64_t initDelayAmount,
+                                                          uint64_t maxDelayAmount,
+                                                          uint64_t incrementDelayAmount,
+                                                          delayUnits units);
 
 /*
  * Create a repeating task policy to execute the task using an exponential backoff interval.

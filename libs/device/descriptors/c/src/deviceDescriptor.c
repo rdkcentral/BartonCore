@@ -26,13 +26,13 @@
 
 #include <deviceDescriptor.h>
 #include <icLog/logging.h>
-#include <stddef.h>
 #include <icTypes/icLinkedList.h>
-#include <stdlib.h>
-#include <inttypes.h>
 #include <icTypes/icStringHashMap.h>
 #include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 #include <string.h>
 
@@ -42,7 +42,7 @@ extern inline void deviceDescriptorFree__auto(DeviceDescriptor **dd);
 
 static void freeDeviceVersionList(DeviceVersionList *list)
 {
-    if(list != NULL)
+    if (list != NULL)
     {
         free(list->format);
         linkedListDestroy(list->list.versionList, NULL);
@@ -54,16 +54,16 @@ static void freeDeviceVersionList(DeviceVersionList *list)
 
 static void *cloneString(void *item, void *context)
 {
-    (void)(context); // prevent unused parameter warning
+    (void) (context); // prevent unused parameter warning
     return strdupOpt((char *) item);
 }
 
 static void *cloneDeviceFirmwareFileInfo(void *item, void *context)
 {
-    (void)(context); // prevent unused parameter warning
+    (void) (context); // prevent unused parameter warning
 
-    DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *)calloc(1, sizeof(DeviceFirmwareFileInfo));
-    DeviceFirmwareFileInfo *tempInfo = (DeviceFirmwareFileInfo *)item;
+    DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *) calloc(1, sizeof(DeviceFirmwareFileInfo));
+    DeviceFirmwareFileInfo *tempInfo = (DeviceFirmwareFileInfo *) item;
 
     info->fileName = strdupOpt(tempInfo->fileName);
     info->checksum = strdupOpt(tempInfo->checksum);
@@ -76,7 +76,7 @@ static DeviceVersionList *cloneDeviceVersionList(DeviceVersionList *list)
     DeviceVersionList *newList = NULL;
     if (list != NULL)
     {
-        newList = (DeviceVersionList *)calloc(1, sizeof(DeviceVersionList));
+        newList = (DeviceVersionList *) calloc(1, sizeof(DeviceVersionList));
         newList->format = strdupOpt(list->format);
         newList->listType = list->listType;
         newList->list.versionList = linkedListDeepClone(list->list.versionList, cloneString, NULL);
@@ -92,7 +92,7 @@ static DeviceFirmware *cloneDeviceFirmware(DeviceFirmware *deviceFirmware)
     DeviceFirmware *newDeviceFirmware = NULL;
     if (deviceFirmware != NULL)
     {
-        newDeviceFirmware = (DeviceFirmware *)calloc(1, sizeof(DeviceFirmware));
+        newDeviceFirmware = (DeviceFirmware *) calloc(1, sizeof(DeviceFirmware));
         newDeviceFirmware->type = deviceFirmware->type;
         newDeviceFirmware->version = strdup(deviceFirmware->version);
     }
@@ -106,7 +106,7 @@ static DeviceFirmware *cloneDeviceFirmware(DeviceFirmware *deviceFirmware)
  */
 void deviceDescriptorFree(DeviceDescriptor *dd)
 {
-    if(dd != NULL)
+    if (dd != NULL)
     {
         free(dd->uuid);
         free(dd->description);
@@ -116,7 +116,7 @@ void deviceDescriptorFree(DeviceDescriptor *dd)
         freeDeviceVersionList(dd->firmwareVersions);
         free(dd->minSupportedFirmwareVersion);
         stringHashMapDestroy(dd->metadata, NULL);
-        if(dd->latestFirmware != NULL)
+        if (dd->latestFirmware != NULL)
         {
             free(dd->latestFirmware->version);
             if (dd->latestFirmware->fileInfos != NULL)
@@ -138,7 +138,7 @@ void destroyDeviceFirmwareFileInfo(void *item)
 {
     if (item != NULL)
     {
-        DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *)item;
+        DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *) item;
         free(info->fileName);
         free(info->checksum);
         free(info);
@@ -166,15 +166,14 @@ static void printVersionList(const char *prefix, DeviceVersionList *versionList)
                 }
             }
 
-            if (versionList->list.versionRange.from != NULL ||
-                versionList->list.versionRange.to != NULL)
+            if (versionList->list.versionRange.from != NULL || versionList->list.versionRange.to != NULL)
             {
-                icLogInfo(LOG_TAG, "%s: range from=%s, to=%s",
+                icLogInfo(LOG_TAG,
+                          "%s: range from=%s, to=%s",
                           prefix,
                           stringCoalesce(versionList->list.versionRange.from),
                           stringCoalesce(versionList->list.versionRange.to));
             }
-
         }
     }
 }
@@ -185,13 +184,13 @@ static void printVersionList(const char *prefix, DeviceVersionList *versionList)
  */
 bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
 {
-    if(dd == NULL)
+    if (dd == NULL)
     {
         icLogInfo(LOG_TAG, "NULL DeviceDescriptor");
         return true;
     }
 
-    switch(dd->deviceDescriptorType)
+    switch (dd->deviceDescriptorType)
     {
         case DEVICE_DESCRIPTOR_TYPE_CAMERA:
             icLogInfo(LOG_TAG, "DeviceDescriptor (Camera)");
@@ -218,7 +217,7 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
     printVersionList("\tfirmwareVersions", dd->firmwareVersions);
     icLogInfo(LOG_TAG, "\tminSupportedFirmwareVersion: %s", dd->minSupportedFirmwareVersion);
 
-    switch(dd->category)
+    switch (dd->category)
     {
         case CATEGORY_TYPE_UNKNOWN:
             icLogInfo(LOG_TAG, "Category: Unknown");
@@ -245,11 +244,11 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
             return true;
     }
 
-    if(dd->metadata != NULL)
+    if (dd->metadata != NULL)
     {
         icLogInfo(LOG_TAG, "\tmetadata:");
         icStringHashMapIterator *it = stringHashMapIteratorCreate(dd->metadata);
-        while(stringHashMapIteratorHasNext(it))
+        while (stringHashMapIteratorHasNext(it))
         {
             char *name;
             char *value;
@@ -269,9 +268,11 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
             icLinkedListIterator *it = linkedListIteratorCreate(dd->latestFirmware->fileInfos);
             while (linkedListIteratorHasNext(it) == true)
             {
-                DeviceFirmwareFileInfo *next = (DeviceFirmwareFileInfo *)linkedListIteratorGetNext(it);
-                icLogInfo(LOG_TAG, "\t\tfilename: %s checksum: %s",
-                          stringCoalesce(next->fileName), stringCoalesceAlt(next->checksum, "(none)"));
+                DeviceFirmwareFileInfo *next = (DeviceFirmwareFileInfo *) linkedListIteratorGetNext(it);
+                icLogInfo(LOG_TAG,
+                          "\t\tfilename: %s checksum: %s",
+                          stringCoalesce(next->fileName),
+                          stringCoalesceAlt(next->checksum, "(none)"));
             }
             linkedListIteratorDestroy(it);
         }
@@ -286,10 +287,10 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
         icLogInfo(LOG_TAG, "\t\tproductId: 0x%04" PRIx16, matter->productId);
     }
 
-    if(dd->deviceDescriptorType == DEVICE_DESCRIPTOR_TYPE_CAMERA)
+    if (dd->deviceDescriptorType == DEVICE_DESCRIPTOR_TYPE_CAMERA)
     {
-        CameraDeviceDescriptor *cdd = (CameraDeviceDescriptor*)dd;
-        switch(cdd->protocol)
+        CameraDeviceDescriptor *cdd = (CameraDeviceDescriptor *) dd;
+        switch (cdd->protocol)
         {
             case CAMERA_PROTOCOL_LEGACY:
                 icLogInfo(LOG_TAG, "\tprotocol: legacy");
@@ -304,20 +305,23 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
                 break;
         }
 
-        if(cdd->defaultMotionSettings.enabled == true)
+        if (cdd->defaultMotionSettings.enabled == true)
         {
             icLogInfo(LOG_TAG, "\tmotion enabled:");
-            icLogInfo(LOG_TAG, "\t\tsensitivity (low,medium,high): %d,%d,%d",
+            icLogInfo(LOG_TAG,
+                      "\t\tsensitivity (low,medium,high): %d,%d,%d",
                       cdd->defaultMotionSettings.sensitivity.low,
                       cdd->defaultMotionSettings.sensitivity.medium,
                       cdd->defaultMotionSettings.sensitivity.high);
 
-            icLogInfo(LOG_TAG, "\t\tdetectionThreshold (low,medium,high): %d,%d,%d",
+            icLogInfo(LOG_TAG,
+                      "\t\tdetectionThreshold (low,medium,high): %d,%d,%d",
                       cdd->defaultMotionSettings.detectionThreshold.low,
                       cdd->defaultMotionSettings.detectionThreshold.medium,
                       cdd->defaultMotionSettings.detectionThreshold.high);
 
-            icLogInfo(LOG_TAG, "\t\tregionOfInterest (width, height, bottom, top, left, right): %d,%d,%d,%d,%d,%d",
+            icLogInfo(LOG_TAG,
+                      "\t\tregionOfInterest (width, height, bottom, top, left, right): %d,%d,%d,%d,%d,%d",
                       cdd->defaultMotionSettings.regionOfInterest.width,
                       cdd->defaultMotionSettings.regionOfInterest.height,
                       cdd->defaultMotionSettings.regionOfInterest.bottom,
@@ -341,7 +345,7 @@ bool deviceDescriptorPrint(DeviceDescriptor *dd, void *arg)
 DeviceDescriptor *deviceDescriptorClone(const DeviceDescriptor *dd)
 {
     DeviceDescriptor *newDD = NULL;
-    if(dd != NULL)
+    if (dd != NULL)
     {
         // Create it of the right size based on the type
         if (dd->deviceDescriptorType == DEVICE_DESCRIPTOR_TYPE_CAMERA)
@@ -365,14 +369,15 @@ DeviceDescriptor *deviceDescriptorClone(const DeviceDescriptor *dd)
         {
             newDD->metadata = stringHashMapDeepClone(dd->metadata);
         }
-        if(dd->latestFirmware != NULL)
+        if (dd->latestFirmware != NULL)
         {
             // Deep clone latestFirmware
-            newDD->latestFirmware = (DeviceFirmware *)calloc(1, sizeof(DeviceFirmware));
+            newDD->latestFirmware = (DeviceFirmware *) calloc(1, sizeof(DeviceFirmware));
             newDD->latestFirmware->version = strdupOpt(dd->latestFirmware->version);
             if (dd->latestFirmware->fileInfos != NULL)
             {
-                newDD->latestFirmware->fileInfos = linkedListDeepClone(dd->latestFirmware->fileInfos, cloneDeviceFirmwareFileInfo, NULL);
+                newDD->latestFirmware->fileInfos =
+                    linkedListDeepClone(dd->latestFirmware->fileInfos, cloneDeviceFirmwareFileInfo, NULL);
             }
             newDD->latestFirmware->type = dd->latestFirmware->type;
             newDD->latestFirmware->upgradeAction = dd->latestFirmware->upgradeAction;
@@ -391,8 +396,8 @@ DeviceDescriptor *deviceDescriptorClone(const DeviceDescriptor *dd)
         // Make sure to do the extra camera bits if necessary
         if (dd->deviceDescriptorType == DEVICE_DESCRIPTOR_TYPE_CAMERA)
         {
-            CameraDeviceDescriptor *cameraDD = (CameraDeviceDescriptor *)dd;
-            CameraDeviceDescriptor *newCameraDD = (CameraDeviceDescriptor *)newDD;
+            CameraDeviceDescriptor *cameraDD = (CameraDeviceDescriptor *) dd;
+            CameraDeviceDescriptor *newCameraDD = (CameraDeviceDescriptor *) newDD;
             newCameraDD->protocol = cameraDD->protocol;
             newCameraDD->defaultMotionSettings = cameraDD->defaultMotionSettings;
         }
@@ -401,9 +406,10 @@ DeviceDescriptor *deviceDescriptorClone(const DeviceDescriptor *dd)
     return newDD;
 }
 
-const char *deviceDescriptorGetMetadataValue(const DeviceDescriptor *dd,
-                                             const char *key) {
-    if (dd == NULL || dd->metadata == NULL) {
+const char *deviceDescriptorGetMetadataValue(const DeviceDescriptor *dd, const char *key)
+{
+    if (dd == NULL || dd->metadata == NULL)
+    {
         return NULL;
     }
 

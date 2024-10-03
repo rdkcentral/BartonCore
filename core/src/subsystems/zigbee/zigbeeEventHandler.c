@@ -26,19 +26,19 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "subsystems/zigbee/zigbeeCommonIds.h"
+#include "subsystems/zigbee/zigbeeSubsystem.h"
+#include "zigbeeDefender.h"
+#include "zigbeeEventHandler.h"
+#include "zigbeeHealthCheck.h"
+#include "zigbeeSubsystemPrivate.h"
+#include <deviceCommunicationWatchdog.h>
+#include <deviceService.h>
+#include <deviceServicePrivate.h>
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
-#include <deviceService.h>
-#include <zhal/zhal.h>
-#include <deviceCommunicationWatchdog.h>
 #include <pthread.h>
-#include <deviceServicePrivate.h>
-#include "zigbeeEventHandler.h"
-#include "subsystems/zigbee/zigbeeSubsystem.h"
-#include "zigbeeSubsystemPrivate.h"
-#include "subsystems/zigbee/zigbeeCommonIds.h"
-#include "zigbeeHealthCheck.h"
-#include "zigbeeDefender.h"
+#include <zhal/zhal.h>
 
 #define LOG_TAG "zigbeeEventHandler"
 
@@ -72,16 +72,13 @@ static void startup(void *ctx)
  *
  * Return true if we have both announce and join info ready.
  */
-static bool saveJoinAnnounceInfo(uint64_t eui64,
-                                 bool isJoin,
-                                 zhalDeviceType deviceType,
-                                 zhalPowerSource powerSource)
+static bool saveJoinAnnounceInfo(uint64_t eui64, bool isJoin, zhalDeviceType deviceType, zhalPowerSource powerSource)
 {
     bool result = false;
 
     pthread_mutex_lock(&announcedDevicesMtx);
 
-    //if we havent yet created the hash map, do it now
+    // if we havent yet created the hash map, do it now
     if (announcedDevices == NULL)
     {
         announcedDevices = hashMapCreate();
@@ -109,9 +106,7 @@ static bool saveJoinAnnounceInfo(uint64_t eui64,
     }
 
     // check to see if this entry is complete
-    if (ad->deviceType != deviceTypeUnknown &&
-        ad->powerSource != powerSourceUnknown &&
-        ad->hasJoined)
+    if (ad->deviceType != deviceTypeUnknown && ad->powerSource != powerSourceUnknown && ad->hasJoined)
     {
         // ok we are all good for this device
         result = true;
@@ -164,8 +159,8 @@ static void processNewDevice(uint64_t eui64)
         }
         pthread_mutex_unlock(&announcedDevicesMtx);
 
-        //Device commissioning may go awry, causing the device to leave and then rejoin to try again, so
-        //the join/announce info needs to be cleared here before the device can try to join/announce again.
+        // Device commissioning may go awry, causing the device to leave and then rejoin to try again, so
+        // the join/announce info needs to be cleared here before the device can try to join/announce again.
         clearJoinAnnounceInfo(eui64);
 
         zigbeeSubsystemDeviceDiscovered(details);
@@ -174,13 +169,13 @@ static void processNewDevice(uint64_t eui64)
     }
     else
     {
-        //forget about this device for now... maybe it will come around again during this discovery session
+        // forget about this device for now... maybe it will come around again during this discovery session
         pthread_mutex_lock(&devicesProcessedMtx);
         hashMapDelete(devicesProcessed, &eui64, sizeof(uint64_t), NULL);
         pthread_mutex_unlock(&devicesProcessedMtx);
 
-        //The device's join/announce info must be cleared here before requesting that it leaves
-        //and thus before the device has a chance to join/announce again.
+        // The device's join/announce info must be cleared here before requesting that it leaves
+        // and thus before the device has a chance to join/announce again.
         clearJoinAnnounceInfo(eui64);
 
         zigbeeSubsystemRequestDeviceLeave(eui64, false, false);
@@ -197,20 +192,19 @@ static void processNewDevice(uint64_t eui64)
  * @param deviceType the {@link DeviceType} of the zigbee device (end device, router, etc)
  * @param powerSource  the {@link PowerSource} for the device (mains, battery, etc)
  */
-static void deviceAnnounced(void *ctx,
-                            uint64_t eui64,
-                            zhalDeviceType deviceType,
-                            zhalPowerSource powerSource)
+static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource)
 {
-    icLogDebug(LOG_TAG, "deviceAnnounced callback: %016"
-            PRIx64, eui64);
+    icLogDebug(LOG_TAG, "deviceAnnounced callback: %016" PRIx64, eui64);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
     bool known = deviceServiceIsDeviceKnown(uuid);
     free(uuid);
     bool repairing = deviceServiceIsInRecoveryMode();
-    icLogDebug(LOG_TAG, "%s: known is %s, repairing is %s",
-               __FUNCTION__, stringValueOfBool(known), stringValueOfBool(repairing));
+    icLogDebug(LOG_TAG,
+               "%s: known is %s, repairing is %s",
+               __FUNCTION__,
+               stringValueOfBool(known),
+               stringValueOfBool(repairing));
     if ((known == true) && (repairing == false))
     {
         icLogWarn(LOG_TAG, "Device already known, notifying zigbee subsystem.");
@@ -224,7 +218,7 @@ static void deviceAnnounced(void *ctx,
     {
         if (saveJoinAnnounceInfo(eui64, false, deviceType, powerSource))
         {
-            //we have everything we need... discover the device and pass it on
+            // we have everything we need... discover the device and pass it on
             processNewDevice(eui64);
         }
     }
@@ -238,10 +232,9 @@ static void deviceAnnounced(void *ctx,
  *
  * @param eui64
  */
-static void deviceJoined(void *ctx,
-                         uint64_t eui64)
+static void deviceJoined(void *ctx, uint64_t eui64)
 {
-    icLogDebug(LOG_TAG, "deviceJoined callback: %016"PRIx64, eui64);
+    icLogDebug(LOG_TAG, "deviceJoined callback: %016" PRIx64, eui64);
 
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
     bool known = deviceServiceIsDeviceKnown(uuid);
@@ -275,14 +268,14 @@ static void deviceJoined(void *ctx,
     {
         if (previouslyFailedToPair == true)
         {
-            //this device was previously claimed but failed to pair, so we'll try processing it again
+            // this device was previously claimed but failed to pair, so we'll try processing it again
             pthread_mutex_lock(&devicesProcessedMtx);
             hashMapDelete(devicesProcessed, &eui64, sizeof(uint64_t), NULL);
             pthread_mutex_unlock(&devicesProcessedMtx);
         }
         if (saveJoinAnnounceInfo(eui64, true, deviceTypeUnknown, powerSourceUnknown))
         {
-            //we have everything we need... discover the device and pass it on
+            // we have everything we need... discover the device and pass it on
             processNewDevice(eui64);
         }
     }
@@ -290,65 +283,54 @@ static void deviceJoined(void *ctx,
     if (shouldRequestLeave == true && zigbeeSubsystemRequestDeviceLeave(eui64, false, false) == false)
     {
         icLogWarn(LOG_TAG, "%s: request for device to leave network failed: %s", __FUNCTION__, uuid);
-
     }
 }
 
-static void deviceLeft(void *ctx,
-                       uint64_t eui64)
+static void deviceLeft(void *ctx, uint64_t eui64)
 {
-    icLogDebug(LOG_TAG, "deviceLeft callback: %016"
-            PRIx64, eui64);
+    icLogDebug(LOG_TAG, "deviceLeft callback: %016" PRIx64, eui64);
 }
 
-static void deviceRejoined(void *ctx,
-                           uint64_t eui64,
-                           bool isSecure)
+static void deviceRejoined(void *ctx, uint64_t eui64, bool isSecure)
 {
-    icLogDebug(LOG_TAG, "deviceRejoined callback: %016"
-            PRIx64" isSecure %s", eui64, isSecure ? "true" : "false");
+    icLogDebug(LOG_TAG, "deviceRejoined callback: %016" PRIx64 " isSecure %s", eui64, isSecure ? "true" : "false");
     zigbeeSubsystemDeviceRejoined(eui64, isSecure);
 }
 
-static void linkKeyUpdated(void *ctx,
-                           uint64_t eui64,
-                           bool isUsingHashBasedKey)
+static void linkKeyUpdated(void *ctx, uint64_t eui64, bool isUsingHashBasedKey)
 {
     icLogDebug(LOG_TAG,
-               "linkKeyUpdated callback: %016"PRIx64" and isUsingHashBasedKey : %s",
+               "linkKeyUpdated callback: %016" PRIx64 " and isUsingHashBasedKey : %s",
                eui64,
                stringValueOfBool(isUsingHashBasedKey));
     zigbeeSubsystemLinkKeyUpdated(eui64, isUsingHashBasedKey);
 }
 
-static void apsAckFailure(void *ctx,
-                          uint64_t eui64)
+static void apsAckFailure(void *ctx, uint64_t eui64)
 {
-    icLogDebug(LOG_TAG, "apsAckFailure callback: %016"
-            PRIx64, eui64);
+    icLogDebug(LOG_TAG, "apsAckFailure callback: %016" PRIx64, eui64);
     zigbeeSubsystemApsAckFailure(eui64);
 }
 
-static void attributeReportReceived(void *ctx,
-                                    ReceivedAttributeReport *report)
+static void attributeReportReceived(void *ctx, ReceivedAttributeReport *report)
 {
-    icLogDebug(LOG_TAG, "attributeReportReceived callback: %016"
-            PRIx64
-            " ep %d, cluster %04x", report->eui64, report->sourceEndpoint, report->clusterId);
+    icLogDebug(LOG_TAG,
+               "attributeReportReceived callback: %016" PRIx64 " ep %d, cluster %04x",
+               report->eui64,
+               report->sourceEndpoint,
+               report->clusterId);
     zigbeeSubsystemAttributeReportReceived(report);
 }
 
-static void clusterCommandReceived(void *ctx,
-                                   ReceivedClusterCommand *command)
+static void clusterCommandReceived(void *ctx, ReceivedClusterCommand *command)
 {
     // The Zigbee UART cluster used by M1 LTE adapter get this cluster command
     // a lot when it is paired and any communication with server is going on
     // over cellular and fills up the device service logs
     if (command->clusterId != ZIGBEE_UART_CLUSTER)
     {
-        icLogDebug(LOG_TAG, "clusterCommandReceived callback: %016"
-                PRIx64
-                " ep %d, profileId %04x, cluster %04x",
+        icLogDebug(LOG_TAG,
+                   "clusterCommandReceived callback: %016" PRIx64 " ep %d, profileId %04x, cluster %04x",
                    command->eui64,
                    command->sourceEndpoint,
                    command->profileId,
@@ -358,27 +340,21 @@ static void clusterCommandReceived(void *ctx,
     zigbeeSubsystemClusterCommandReceived(command);
 }
 
-static void zigbeeDeviceOtaUpgradeMessageSent(void *ctx,
-                                              OtaUpgradeEvent *otaEvent)
+static void zigbeeDeviceOtaUpgradeMessageSent(void *ctx, OtaUpgradeEvent *otaEvent)
 {
-    icLogDebug(LOG_TAG, "%s callback: %016"
-               PRIx64, __func__, otaEvent->eui64);
+    icLogDebug(LOG_TAG, "%s callback: %016" PRIx64, __func__, otaEvent->eui64);
     zigbeeSubsystemDeviceOtaUpgradeMessageSent(otaEvent);
 }
 
-static void zigbeeDeviceOtaUpgradeMessageReceived(void *ctx,
-                                                  OtaUpgradeEvent *otaEvent)
+static void zigbeeDeviceOtaUpgradeMessageReceived(void *ctx, OtaUpgradeEvent *otaEvent)
 {
-    icLogDebug(LOG_TAG, "%s callback: %016"
-               PRIx64, __func__, otaEvent->eui64);
+    icLogDebug(LOG_TAG, "%s callback: %016" PRIx64, __func__, otaEvent->eui64);
     zigbeeSubsystemDeviceOtaUpgradeMessageReceived(otaEvent);
 }
 
-static void deviceCommunicationSucceeded(void *ctx,
-                                         uint64_t eui64)
+static void deviceCommunicationSucceeded(void *ctx, uint64_t eui64)
 {
-    icLogDebug(LOG_TAG, "deviceCommunicationSucceeded callback: %016"
-            PRIx64, eui64);
+    icLogDebug(LOG_TAG, "deviceCommunicationSucceeded callback: %016" PRIx64, eui64);
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
     deviceCommunicationWatchdogPetDevice(uuid);
@@ -386,11 +362,9 @@ static void deviceCommunicationSucceeded(void *ctx,
     free(uuid);
 }
 
-static void deviceCommunicationFailed(void *ctx,
-                                      uint64_t eui64)
+static void deviceCommunicationFailed(void *ctx, uint64_t eui64)
 {
-    icLogDebug(LOG_TAG, "deviceCommunicationFailed callback: %016"
-            PRIx64, eui64);
+    icLogDebug(LOG_TAG, "deviceCommunicationFailed callback: %016" PRIx64, eui64);
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
     deviceCommunicationWatchdogForceDeviceInCommFail(uuid);
@@ -398,13 +372,12 @@ static void deviceCommunicationFailed(void *ctx,
     free(uuid);
 }
 
-static void networkConfigChanged(void *ctx,
-                                 char *networkConfigData)
+static void networkConfigChanged(void *ctx, char *networkConfigData)
 {
     icLogDebug(LOG_TAG, "networkConfigChanged callback: networkConfigData=%s", networkConfigData);
     if (systemReady)
     {
-        //save this
+        // save this
         deviceServiceSetSystemProperty(NETWORK_BLOB_PROPERTY_NAME, networkConfigData);
         icLogDebug(LOG_TAG, "Saved updated network blob");
     }
@@ -502,4 +475,3 @@ void zigbeeEventHandlerDiscoveryRunning(bool isRunning)
         pthread_mutex_unlock(&announcedDevicesMtx);
     }
 }
-

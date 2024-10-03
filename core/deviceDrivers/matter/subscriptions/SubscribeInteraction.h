@@ -36,9 +36,9 @@
  * at least 3 subscribe interactions, each of which only need to support
  * at least 3 event/attribute paths.
  */
-#define MAX_SUBSCRIPTIONS 3
-#define MAX_PATHS_PER_SUBSCRIBE 3
-#define MAX_PATHS_PER_PUBLISHER (MAX_SUBSCRIPTIONS * MAX_PATHS_PER_SUBSCRIBE)
+#define MAX_SUBSCRIPTIONS                             3
+#define MAX_PATHS_PER_SUBSCRIBE                       3
+#define MAX_PATHS_PER_PUBLISHER                       (MAX_SUBSCRIPTIONS * MAX_PATHS_PER_SUBSCRIBE)
 
 /*
  * A ceiling of 10m24s is used for the fibonacci-based backoff algorithm, rather than the SDK's default of 92m18s.
@@ -47,7 +47,7 @@
  * next attempt, whereas with this ceiling we average a more reasonable 6m45s.
  * @see CustomComputeTimeTillNextSubscription for more details.
  */
-#define CUSTOM_RESUBSCRIBE_MAX_FIBONACCI_STEP_INDEX 10
+#define CUSTOM_RESUBSCRIBE_MAX_FIBONACCI_STEP_INDEX   10
 #define CUSTOM_RESUBSCRIBE_MAX_RETRY_WAIT_INTERVAL_MS 624000
 
 namespace zilker
@@ -62,30 +62,35 @@ namespace zilker
             virtual ~EventHandler() = default;
             virtual void OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId,
                                                    std::promise<bool> &subscriptionPromise,
-                                                   std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCache){}
-            virtual void AbandonSubscription(std::promise<bool> &subscriptionPromise){}
+                                                   std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCache)
+            {
+            }
+            virtual void AbandonSubscription(std::promise<bool> &subscriptionPromise) {}
             virtual void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                             const chip::app::ConcreteAttributePath &path,
-                                            const std::string deviceId){}
+                                            const std::string deviceId)
+            {
+            }
             virtual void OnEventData(const chip::app::EventHeader &aEventHeader,
                                      chip::TLV::TLVReader *apData,
                                      const chip::app::StatusIB *apStatus,
                                      const std::string deviceId,
-                                     SubscribeInteraction &outerSubscriber){}
+                                     SubscribeInteraction &outerSubscriber)
+            {
+            }
         };
 
         SubscribeInteraction(std::unique_ptr<EventHandler> handler,
                              std::string deviceId,
                              chip::Messaging::ExchangeManager &exchangeMgr,
-                             std::promise<bool> &promise)
-          : eventHandler(std::move(handler)), deviceUuid(deviceId), subscriptionPromise(promise)
+                             std::promise<bool> &promise) :
+            eventHandler(std::move(handler)), deviceUuid(deviceId), subscriptionPromise(promise)
         {
             clusterStateCache = std::make_shared<chip::app::ClusterStateCache>(*this);
-            readClient =
-                std::make_unique<chip::app::ReadClient>(chip::app::InteractionModelEngine::GetInstance(),
-                                                        &exchangeMgr,
-                                                        clusterStateCache->GetBufferedCallback(),
-                                                        chip::app::ReadClient::InteractionType::Subscribe);
+            readClient = std::make_unique<chip::app::ReadClient>(chip::app::InteractionModelEngine::GetInstance(),
+                                                                 &exchangeMgr,
+                                                                 clusterStateCache->GetBufferedCallback(),
+                                                                 chip::app::ReadClient::InteractionType::Subscribe);
         }
 
         CHIP_ERROR Send(chip::app::ReadPrepareParams &&params)
@@ -105,9 +110,7 @@ namespace zilker
                          const chip::app::StatusIB *apStatus) override;
 
         /* has no real implementation anywhere, probably ignore for now */
-        void OnDone(chip::app::ReadClient *apReadClient) override
-        {
-        }
+        void OnDone(chip::app::ReadClient *apReadClient) override {}
 
         /**
          * @brief Delete allocated path parameters within ReadPrepareParms
@@ -152,10 +155,8 @@ namespace zilker
          * @brief This private constructor is strictly for testing units that do not require the ReadClient
          *        or ClusterStateCache objects.
          */
-        SubscribeInteraction(std::unique_ptr<EventHandler> handler,
-                             std::string deviceId,
-                             std::promise<bool> &promise)
-          : eventHandler(std::move(handler)), deviceUuid(deviceId), subscriptionPromise(promise)
+        SubscribeInteraction(std::unique_ptr<EventHandler> handler, std::string deviceId, std::promise<bool> &promise) :
+            eventHandler(std::move(handler)), deviceUuid(deviceId), subscriptionPromise(promise)
         {
         }
     };
@@ -169,4 +170,4 @@ namespace zilker
         uint16_t minIntervalFloorSecs;
         uint16_t maxIntervalCeilingSecs;
     };
-}
+} // namespace zilker

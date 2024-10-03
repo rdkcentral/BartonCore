@@ -34,19 +34,19 @@
 #include <stdint.h>
 #include <zhal/zhal.h>
 
-#define LOG_TAG "zigbeeHealthCheck"
+#define LOG_TAG                                                             "zigbeeHealthCheck"
 
 // dont allow health checking faster than this
-#define MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS 1000
+#define MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS                            1000
 
-//default to off
-#define NETWORK_HEALTH_CHECK_INTERVAL_MILLIS_DEFAULT  0
+// default to off
+#define NETWORK_HEALTH_CHECK_INTERVAL_MILLIS_DEFAULT                        0
 
 // positive values dont make sense and are used to disable adjusting the CCA threshold
-#define NETWORK_HEALTH_CHECK_CCA_THRESHOLD_DEFAULT 1
+#define NETWORK_HEALTH_CHECK_CCA_THRESHOLD_DEFAULT                          1
 
-#define NETWORK_HEALTH_CHECK_CCA_FAILURE_THRESHOLD_DEFAULT 10
-#define NETWORK_HEALTH_CHECK_RESTORE_THRESHOLD_DEFAULT 600
+#define NETWORK_HEALTH_CHECK_CCA_FAILURE_THRESHOLD_DEFAULT                  10
+#define NETWORK_HEALTH_CHECK_RESTORE_THRESHOLD_DEFAULT                      600
 #define NETWORK_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS_DEFAULT 1000
 
 static pthread_mutex_t interferenceDetectedMtx = PTHREAD_MUTEX_INITIALIZER;
@@ -58,15 +58,15 @@ void zigbeeHealthCheckStart()
 
     uint32_t intervalMillis = b_device_service_property_provider_get_property_as_uint32(
         propertyProvider, ZIGBEE_HEALTH_CHECK_INTERVAL_MILLIS, NETWORK_HEALTH_CHECK_INTERVAL_MILLIS_DEFAULT);
-    if(intervalMillis == 0)
+    if (intervalMillis == 0)
     {
         icLogDebug(LOG_TAG, "%s: not monitoring, feature disabled", __FUNCTION__);
 
         zigbeeHealthCheckStop();
 
-        //if there was interference before, we need to send a clear event since we are stopping monitoring
+        // if there was interference before, we need to send a clear event since we are stopping monitoring
         pthread_mutex_lock(&interferenceDetectedMtx);
-        if(interferenceDetected)
+        if (interferenceDetected)
         {
             interferenceDetected = false;
             sendZigbeeNetworkInterferenceEvent(false);
@@ -75,10 +75,14 @@ void zigbeeHealthCheckStart()
     }
     else
     {
-        if(intervalMillis < MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS)
+        if (intervalMillis < MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS)
         {
-            icLogWarn(LOG_TAG, "%s: Attempt to set network health check intervalMillis to %"PRIu32" is below minimum, using %"PRIu32,
-                    __FUNCTION__, intervalMillis, MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS);
+            icLogWarn(LOG_TAG,
+                      "%s: Attempt to set network health check intervalMillis to %" PRIu32
+                      " is below minimum, using %" PRIu32,
+                      __FUNCTION__,
+                      intervalMillis,
+                      MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS);
 
             intervalMillis = MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS;
         }
@@ -96,11 +100,9 @@ void zigbeeHealthCheckStart()
             ZIGBEE_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS,
             NETWORK_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS_DEFAULT);
 
-        if(zhalConfigureNetworkHealthCheck(intervalMillis,
-                                           ccaThreshold,
-                                           ccaFailureThreshold,
-                                           restoreThreshold,
-                                           delayBetweenRetriesMillis) == false)
+        if (zhalConfigureNetworkHealthCheck(
+                intervalMillis, ccaThreshold, ccaFailureThreshold, restoreThreshold, delayBetweenRetriesMillis) ==
+            false)
         {
             icLogError(LOG_TAG, "%s: failed to start network health checking", __FUNCTION__);
         }
@@ -111,7 +113,7 @@ void zigbeeHealthCheckStop()
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    if(zhalConfigureNetworkHealthCheck(0, 0, 0, 0, 0) == false)
+    if (zhalConfigureNetworkHealthCheck(0, 0, 0, 0, 0) == false)
     {
         icLogError(LOG_TAG, "%s: failed to stop network health checking", __FUNCTION__);
     }

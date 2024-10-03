@@ -48,9 +48,9 @@
 #ifndef IC_HASHMAP_H
 #define IC_HASHMAP_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include "icHashMapFuncs.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /*-------------------------------*
  *
@@ -112,7 +112,8 @@ bool hashMapIsClone(icHashMap *map);
  * if 'key' is already in the map, this will fail
  * as the 'value' should be released first.
  *
- * @note Use caution when key and value point to the same heap region: any custom entry destructors must not try to free both.
+ * @note Use caution when key and value point to the same heap region: any custom entry destructors must not try to free
+ * both.
  *
  * @param map - the HashMap to add key/value to
  * @param key - the unique key to assign 'value'
@@ -193,7 +194,7 @@ typedef struct _icHashMapIterator icHashMapIterator;
  * @deprecated
  * @sa scoped_icHashMapIterator
  */
-#define sbIcHashMapIterator AUTO_CLEAN(hashMapIteratorDestroy__auto) icHashMapIterator
+#define sbIcHashMapIterator      AUTO_CLEAN(hashMapIteratorDestroy__auto) icHashMapIterator
 
 /**
  * Convenience macro to create a scope bound hashMapIterator. When it goes out of scope,

@@ -32,18 +32,18 @@
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE
 #endif
-#include <sys/time.h>
-#include <icTime/timeUtils.h>
-#include <stdint.h>
+#include <errno.h>
 #include <icLog/logging.h>
+#include <icTime/timeUtils.h>
 #include <icUtil/stringUtils.h>
 #include <inttypes.h>
-#include <errno.h>
+#include <stdint.h>
+#include <sys/time.h>
 
-#define LOG_TAG "timeUtils"
+#define LOG_TAG                "timeUtils"
 
-#define MILLIS_PER_SEC 1000UL
-#define NANOS_PER_MILLI 1000000UL
+#define MILLIS_PER_SEC         1000UL
+#define NANOS_PER_MILLI        1000000UL
 #define BEGINNING_OF_2019_SECS 1546300800
 
 /*
@@ -85,7 +85,7 @@ void getCurrentTime(struct timespec *spec, bool useMonotonic)
     //
     struct timeval now;
     gettimeofday(&now, NULL);
-    spec->tv_sec  = now.tv_sec;
+    spec->tv_sec = now.tv_sec;
     spec->tv_nsec = now.tv_usec * 1000;
 
 #else
@@ -131,7 +131,7 @@ time_t getCurrentTime_t(bool useMonotonic)
  */
 time_t convertTimespecToTime_t(struct timespec *spec)
 {
-    return (time_t)spec->tv_sec;
+    return (time_t) spec->tv_sec;
 }
 
 /**
@@ -139,8 +139,8 @@ time_t convertTimespecToTime_t(struct timespec *spec)
  */
 uint64_t convertTimespecToUnixTimeMillis(const struct timespec *spec)
 {
-    uint64_t millis = ((uint64_t)spec->tv_sec)*MILLIS_PER_SEC;
-    millis += spec->tv_nsec/NANOS_PER_MILLI;
+    uint64_t millis = ((uint64_t) spec->tv_sec) * MILLIS_PER_SEC;
+    millis += spec->tv_nsec / NANOS_PER_MILLI;
     return millis;
 }
 
@@ -151,7 +151,7 @@ void convertUnixTimeMillisToTimespec(uint64_t millis, struct timespec *spec)
 {
     if (spec != NULL)
     {
-        spec->tv_sec = millis/MILLIS_PER_SEC;
+        spec->tv_sec = millis / MILLIS_PER_SEC;
         spec->tv_nsec = (millis % MILLIS_PER_SEC) * NANOS_PER_MILLI;
     }
 }
@@ -161,7 +161,7 @@ void convertUnixTimeMillisToTimespec(uint64_t millis, struct timespec *spec)
  */
 time_t convertUnixTimeMillisToTime_t(uint64_t millis)
 {
-    return millis/MILLIS_PER_SEC;
+    return millis / MILLIS_PER_SEC;
 }
 
 /**
@@ -170,7 +170,7 @@ time_t convertUnixTimeMillisToTime_t(uint64_t millis)
 uint64_t convertTime_tToUnixTimeMillis(time_t time)
 {
     uint64_t retVal = time;
-    return retVal*MILLIS_PER_SEC;
+    return retVal * MILLIS_PER_SEC;
 }
 
 /*
@@ -226,10 +226,10 @@ char *unixTimeMillisToISO8601(uint64_t millis)
 
     // convert 'time_t' to 'tm', then place into the necessary format
     //
-    time_t time = millis/MILLIS_PER_SEC;
+    time_t time = millis / MILLIS_PER_SEC;
 
     gmtime_r(&time, &timeval);
-    return stringBuilder("%d-%02d-%02dT%02d:%02d:%02d.%03"PRIu64"Z",
+    return stringBuilder("%d-%02d-%02dT%02d:%02d:%02d.%03" PRIu64 "Z",
                          timeval.tm_year + 1900,
                          timeval.tm_mon + 1,
                          timeval.tm_mday,
@@ -250,18 +250,18 @@ bool convertLocalISO8601ToTM(const char *inputString, struct tm *outputTM)
 {
     if (stringIsEmpty(inputString) == true)
     {
-        icLogError(LOG_TAG,"%s: input time string cannot be null or empty",__func__ );
+        icLogError(LOG_TAG, "%s: input time string cannot be null or empty", __func__);
         return false;
     }
     if (outputTM == NULL)
     {
-        icLogError(LOG_TAG,"%s: output tm struct cannot be null",__func__ );
+        icLogError(LOG_TAG, "%s: output tm struct cannot be null", __func__);
         return false;
     }
-    char *conversionEnd = strptime(inputString,"%Y-%m-%dT%H:%M:%S",outputTM);
+    char *conversionEnd = strptime(inputString, "%Y-%m-%dT%H:%M:%S", outputTM);
     if (conversionEnd == NULL)
     {
-        icLogError(LOG_TAG,"%s: Unable to convert string %s",__func__ ,inputString);
+        icLogError(LOG_TAG, "%s: Unable to convert string %s", __func__, inputString);
         return false;
     }
     return true;
@@ -282,12 +282,12 @@ bool convertLocalISO8601ToMillis(const char *inputString, uint64_t *outputMillis
     // first, some basic parameter validation
     if (stringIsEmpty(inputString) == true)
     {
-        icLogError(LOG_TAG,"%s: Input time string cannot be null or empty",__func__ );
+        icLogError(LOG_TAG, "%s: Input time string cannot be null or empty", __func__);
         return false;
     }
     if (outputMillis == NULL)
     {
-        icLogError(LOG_TAG,"%s: output parameter cannot be null or empty",__func__ );
+        icLogError(LOG_TAG, "%s: output parameter cannot be null or empty", __func__);
         return false;
     }
 
@@ -295,10 +295,10 @@ bool convertLocalISO8601ToMillis(const char *inputString, uint64_t *outputMillis
     // we cannot depend on the usage of the '%z' specifier, not all strptime implementations
     // honor it. That is actually okay, because mktime assumes local time anyway
     //
-    bool conversionWorked = convertLocalISO8601ToTM(inputString,&converted);
+    bool conversionWorked = convertLocalISO8601ToTM(inputString, &converted);
     if (conversionWorked == false)
     {
-        icLogError(LOG_TAG,"%s: Unable to convert string %s",__func__ ,inputString);
+        icLogError(LOG_TAG, "%s: Unable to convert string %s", __func__, inputString);
         return false;
     }
     else
@@ -307,7 +307,7 @@ bool convertLocalISO8601ToMillis(const char *inputString, uint64_t *outputMillis
         // we can set the is_dst flag in the converted tm struct accordingly
         time_t now = time(NULL);
         struct tm myLocalTM;
-        struct tm *nowLocal = localtime_r(&now,&myLocalTM);
+        struct tm *nowLocal = localtime_r(&now, &myLocalTM);
         converted.tm_isdst = nowLocal->tm_isdst;
 
         // by the time we get here, we are good to go on converting to millis
@@ -317,13 +317,13 @@ bool convertLocalISO8601ToMillis(const char *inputString, uint64_t *outputMillis
         int savedErrno = errno;
         if (timeInSecs > 0)
         {
-            *outputMillis = ((int64_t)timeInSecs) * 1000LL;
+            *outputMillis = ((int64_t) timeInSecs) * 1000LL;
             return true;
         }
         else
         {
             scoped_generic char *errorString = strerrorSafe(savedErrno);
-            icLogError(LOG_TAG,"%s: unable to convert obtained tm struct to time_t: %s",__func__ , errorString);
+            icLogError(LOG_TAG, "%s: unable to convert obtained tm struct to time_t: %s", __func__, errorString);
             return false;
         }
     }
@@ -348,7 +348,7 @@ bool isSystemTimeValid()
 
 time_t timegm(struct tm const *t)
 {
-    //check to make sure we don't overflow time_t
+    // check to make sure we don't overflow time_t
     static const time_t kTimeMax = ~(1L << (sizeof(time_t) * CHAR_BIT - 1));
     static const time_t kTimeMin = (1L << (sizeof(time_t) * CHAR_BIT - 1));
     time64_t result = timegm64(t);
@@ -361,7 +361,7 @@ time_t timegm(struct tm const *t)
 
 time_t timelocal(struct tm const *t)
 {
-    //check to make sure we don't overflow time_t
+    // check to make sure we don't overflow time_t
     static const time_t kTimeMax = ~(1L << (sizeof(time_t) * CHAR_BIT - 1));
     static const time_t kTimeMin = (1L << (sizeof(time_t) * CHAR_BIT - 1));
     time64_t result = timelocal64(t);

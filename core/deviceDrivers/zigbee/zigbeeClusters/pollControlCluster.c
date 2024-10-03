@@ -24,39 +24,39 @@
 // Created by tlea on 2/15/19.
 //
 
+#include <errno.h>
+#include <icLog/logging.h>
 #include <stdlib.h>
 #include <string.h>
 #include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
 #include <subsystems/zigbee/zigbeeSubsystem.h>
-#include <errno.h>
 #include <zigbeeClusters/helpers/comcastBatterySavingHelper.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include "zigbeeClusters/pollControlCluster.h"
+#include "icConcurrent/threadUtils.h"
 #include "subsystems/zigbee/zigbeeIO.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
-#include "icConcurrent/threadUtils.h"
+#include "zigbeeClusters/pollControlCluster.h"
 
-#define LOG_TAG "pollControlCluster"
+#define LOG_TAG                                         "pollControlCluster"
 
-#define POLL_CONTROL_FAST_POLL_STOP_COMMAND_ID              0x01
-#define POLL_CONTROL_SET_LONG_POLL_INTERVAL_COMMAND_ID      0x02
-#define POLL_CONTROL_SET_SHORT_POLL_INTERVAL_COMMAND_ID     0x03
-#define POLL_CONTROL_FAST_POLL_TIMEOUT_ATTRIBUTE_ID         0x0003
-#define POLL_CONTROL_CHECKIN_INTERVAL_ATTRIBUTE_ID          0x0000
-#define POLL_CONTROL_CHECKIN_RESPONSE_COMMAND_ID            0x00
+#define POLL_CONTROL_FAST_POLL_STOP_COMMAND_ID          0x01
+#define POLL_CONTROL_SET_LONG_POLL_INTERVAL_COMMAND_ID  0x02
+#define POLL_CONTROL_SET_SHORT_POLL_INTERVAL_COMMAND_ID 0x03
+#define POLL_CONTROL_FAST_POLL_TIMEOUT_ATTRIBUTE_ID     0x0003
+#define POLL_CONTROL_CHECKIN_INTERVAL_ATTRIBUTE_ID      0x0000
+#define POLL_CONTROL_CHECKIN_RESPONSE_COMMAND_ID        0x00
 
-#define POLL_CONTROL_CLUSTER_DISABLE_BIND_KEY "pollConClusterDisableBind"
+#define POLL_CONTROL_CLUSTER_DISABLE_BIND_KEY           "pollConClusterDisableBind"
 
 /* 10s */
-#define FAST_POLL_TIMEOUT_QS 10 * 4
+#define FAST_POLL_TIMEOUT_QS                            10 * 4
 
-#define CHECKIN_INTERVAL_QS ZIGBEE_DEFAULT_CHECKIN_INTERVAL_S * 4
+#define CHECKIN_INTERVAL_QS                             ZIGBEE_DEFAULT_CHECKIN_INTERVAL_S * 4
 
 /* 5 min */
-#define LONG_POLL_INTERVAL_QS 5 * 60 * 4
+#define LONG_POLL_INTERVAL_QS                           5 * 60 * 4
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
 
@@ -101,14 +101,16 @@ ZigbeeCluster *pollControlClusterCreate(const PollControlClusterCallbacks *callb
 
     result->callbackList = linkedListCreate();
 
-    pollControlClusterAddCallback((ZigbeeCluster *)result, callbacks, callbackContext);
+    pollControlClusterAddCallback((ZigbeeCluster *) result, callbacks, callbackContext);
 
     result->cluster.destroy = destroyCluster;
 
     return (ZigbeeCluster *) result;
 }
 
-bool pollControlClusterAddCallback(ZigbeeCluster *baseCluster, const PollControlClusterCallbacks *callback, const void *callbackContext)
+bool pollControlClusterAddCallback(ZigbeeCluster *baseCluster,
+                                   const PollControlClusterCallbacks *callback,
+                                   const void *callbackContext)
 {
     if (baseCluster == NULL || callback == NULL)
     {
@@ -126,9 +128,8 @@ bool pollControlClusterAddCallback(ZigbeeCluster *baseCluster, const PollControl
 
 void pollControlClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata,
-                                 POLL_CONTROL_CLUSTER_DISABLE_BIND_KEY,
-                                 bind);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, POLL_CONTROL_CLUSTER_DISABLE_BIND_KEY, bind);
 }
 
 bool pollControlClusterSendCustomCheckInResponse(uint64_t eui64, uint8_t endpointId)
@@ -146,7 +147,8 @@ bool pollControlClusterSendCustomCheckInResponse(uint64_t eui64, uint8_t endpoin
     return zigbeeSubsystemSendCommand(eui64,
                                       endpointId,
                                       POLL_CONTROL_CLUSTER_ID,
-                                      true, POLL_CONTROL_CHECKIN_RESPONSE_COMMAND_ID,
+                                      true,
+                                      POLL_CONTROL_CHECKIN_RESPONSE_COMMAND_ID,
                                       fastPollMsg,
                                       sizeof(fastPollMsg)) == 0;
 }
@@ -156,10 +158,10 @@ bool pollControlClusterSendCheckInResponse(uint64_t eui64, uint8_t endpointId, b
     // send checkInResponse of 'startFastPolling' with a timeout of 10*4 quarter seconds
     uint8_t fastPollMsg[3];
 
-    fastPollMsg[0] = (startFastPoll == true ? 1 : 0); //bool to start fast polling
+    fastPollMsg[0] = (startFastPoll == true ? 1 : 0); // bool to start fast polling
 
-    //2 bytes of fast poll timeout quarter seconds. If zero, it will use whatever we configured for the fast poll
-    // timeout
+    // 2 bytes of fast poll timeout quarter seconds. If zero, it will use whatever we configured for the fast poll
+    //  timeout
     fastPollMsg[1] = 0;
     fastPollMsg[2] = 0;
 
@@ -174,20 +176,15 @@ bool pollControlClusterSendCheckInResponse(uint64_t eui64, uint8_t endpointId, b
 
 bool pollControlClusterStopFastPoll(uint64_t eui64, uint8_t endpointId)
 {
-    return zigbeeSubsystemSendCommand(eui64,
-                                      endpointId,
-                                      POLL_CONTROL_CLUSTER_ID,
-                                      true,
-                                      POLL_CONTROL_FAST_POLL_STOP_COMMAND_ID,
-                                      NULL,
-                                      0) == 0;
+    return zigbeeSubsystemSendCommand(
+               eui64, endpointId, POLL_CONTROL_CLUSTER_ID, true, POLL_CONTROL_FAST_POLL_STOP_COMMAND_ID, NULL, 0) == 0;
 }
 
 bool pollControlClusterSetLongPollInterval(uint64_t eui64, uint8_t endpointId, uint32_t newIntervalQs)
 {
     bool result;
 
-    //long and short poll intervals are set with a command instead of a write attribute
+    // long and short poll intervals are set with a command instead of a write attribute
     uint8_t longPollPayload[4];
     ZigbeeIOContext *zio = NULL;
 
@@ -211,14 +208,14 @@ static bool setShortPollInterval(uint64_t eui64, uint8_t endpointId, const Devic
 {
     bool result = true;
 
-    //metadata in the device descriptor takes priority over what the device driver may provide.
-    // If no metadata is found in either the device descriptor or from the device driver, dont configure it.
+    // metadata in the device descriptor takes priority over what the device driver may provide.
+    //  If no metadata is found in either the device descriptor or from the device driver, dont configure it.
     const char *shortPollMetadata = NULL;
 
-    if(configContext->deviceDescriptor != NULL)
+    if (configContext->deviceDescriptor != NULL)
     {
-        shortPollMetadata = stringHashMapGet(configContext->deviceDescriptor->metadata,
-                                             SHORT_POLL_INTERVAL_QS_METADATA);
+        shortPollMetadata =
+            stringHashMapGet(configContext->deviceDescriptor->metadata, SHORT_POLL_INTERVAL_QS_METADATA);
     }
 
     if (shortPollMetadata == NULL)
@@ -240,13 +237,12 @@ static bool setShortPollInterval(uint64_t eui64, uint8_t endpointId, const Devic
         // 0 is invalid
         if (errno || *bad || shortPollInterval == 0 || shortPollInterval > UINT16_MAX)
         {
-            icLogWarn(LOG_TAG,
-                      "%s: invalid short poll interval", __FUNCTION__);
+            icLogWarn(LOG_TAG, "%s: invalid short poll interval", __FUNCTION__);
             result = false;
         }
         else
         {
-            //long and short poll intervals are set with a command instead of a write attribute
+            // long and short poll intervals are set with a command instead of a write attribute
             errno = 0;
             zio = zigbeeIOInit(shortPollPayload, sizeof(shortPollPayload), ZIO_WRITE);
             zigbeeIOPutUint16(zio, (uint16_t) shortPollInterval);
@@ -273,14 +269,13 @@ static bool setLongPollInterval(uint64_t eui64, uint8_t endpointId, const Device
 {
     bool result = true;
 
-    //metadata in the device descriptor takes priority over what the device driver may provide.
-    // If no metadata is found in either the device descriptor or from the device driver, dont configure it.
+    // metadata in the device descriptor takes priority over what the device driver may provide.
+    //  If no metadata is found in either the device descriptor or from the device driver, dont configure it.
     const char *longPollMetadata = NULL;
 
-    if(configContext->deviceDescriptor != NULL)
+    if (configContext->deviceDescriptor != NULL)
     {
-        longPollMetadata = stringHashMapGet(configContext->deviceDescriptor->metadata,
-                                                    LONG_POLL_INTERVAL_QS_METADATA);
+        longPollMetadata = stringHashMapGet(configContext->deviceDescriptor->metadata, LONG_POLL_INTERVAL_QS_METADATA);
     }
 
     if (longPollMetadata == NULL)
@@ -300,8 +295,7 @@ static bool setLongPollInterval(uint64_t eui64, uint8_t endpointId, const Device
         // valid range is 0x4 to 0x6e0000
         if (errno || *bad || longPollInterval < 0x4 || longPollInterval > 0x6e0000)
         {
-            icLogWarn(LOG_TAG,
-                      "%s: invalid long poll interval", __FUNCTION__);
+            icLogWarn(LOG_TAG, "%s: invalid long poll interval", __FUNCTION__);
             result = false;
         }
         else
@@ -317,14 +311,14 @@ static bool setFastPollTimeout(uint64_t eui64, uint8_t endpointId, const DeviceC
 {
     bool result = true;
 
-    //metadata in the device descriptor takes priority over what the device driver may provide.
-    // If no metadata is found in either the device descriptor or from the device driver, dont configure it.
+    // metadata in the device descriptor takes priority over what the device driver may provide.
+    //  If no metadata is found in either the device descriptor or from the device driver, dont configure it.
     const char *fastPollTimeoutMetadata = NULL;
 
-    if(configContext->deviceDescriptor != NULL)
+    if (configContext->deviceDescriptor != NULL)
     {
-        fastPollTimeoutMetadata = stringHashMapGet(configContext->deviceDescriptor->metadata,
-                                                   FAST_POLL_TIMEOUT_QS_METADATA);
+        fastPollTimeoutMetadata =
+            stringHashMapGet(configContext->deviceDescriptor->metadata, FAST_POLL_TIMEOUT_QS_METADATA);
     }
 
     if (fastPollTimeoutMetadata == NULL)
@@ -344,8 +338,7 @@ static bool setFastPollTimeout(uint64_t eui64, uint8_t endpointId, const DeviceC
         // valid range is 0x1 to 0xffff
         if (errno || *bad || timeout == 0 || timeout > UINT16_MAX)
         {
-            icLogWarn(LOG_TAG,
-                      "%s: invalid fast poll timeout", __FUNCTION__);
+            icLogWarn(LOG_TAG, "%s: invalid fast poll timeout", __FUNCTION__);
             result = false;
         }
         else
@@ -372,14 +365,14 @@ static bool setCheckinInterval(uint64_t eui64, uint8_t endpointId, const DeviceC
 {
     bool result = true;
 
-    //metadata in the device descriptor takes priority over what the device driver may provide.
-    // If no metadata is found in either the device descriptor or from the device driver, dont configure it.
+    // metadata in the device descriptor takes priority over what the device driver may provide.
+    //  If no metadata is found in either the device descriptor or from the device driver, dont configure it.
     const char *checkinIntervalMetadata = NULL;
 
-    if(configContext->deviceDescriptor != NULL)
+    if (configContext->deviceDescriptor != NULL)
     {
-        checkinIntervalMetadata = stringHashMapGet(configContext->deviceDescriptor->metadata,
-                                                   CHECK_IN_INTERVAL_QS_METADATA);
+        checkinIntervalMetadata =
+            stringHashMapGet(configContext->deviceDescriptor->metadata, CHECK_IN_INTERVAL_QS_METADATA);
     }
 
     if (checkinIntervalMetadata == NULL)
@@ -399,8 +392,7 @@ static bool setCheckinInterval(uint64_t eui64, uint8_t endpointId, const DeviceC
         // valid range is 0x0 to 0x6e0000
         if (errno || *bad || interval > 0x6e0000)
         {
-            icLogWarn(LOG_TAG,
-                      "%s: invalid checkin interval", __FUNCTION__);
+            icLogWarn(LOG_TAG, "%s: invalid checkin interval", __FUNCTION__);
             result = false;
         }
         else
@@ -429,10 +421,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     uint64_t eui64 = configContext->eui64;
     uint8_t endpointId = configContext->endpointId;
 
-    icLogDebug(LOG_TAG, "%s: eui64=%016"
-            PRIx64, __FUNCTION__, eui64);
+    icLogDebug(LOG_TAG, "%s: eui64=%016" PRIx64, __FUNCTION__, eui64);
 
-    //If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
+    // If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
     if (getBoolConfigurationMetadata(configContext->configurationMetadata, POLL_CONTROL_CLUSTER_DISABLE_BIND_KEY, true))
     {
         if (zigbeeSubsystemBindingSet(eui64, endpointId, POLL_CONTROL_CLUSTER_ID) != 0)
@@ -479,7 +470,7 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
         {
             ComcastBatterySavingData *batterySavingData = NULL;
 
-            //if this is a comcast enhanced mfg specific checkin message, parse and handle its payload
+            // if this is a comcast enhanced mfg specific checkin message, parse and handle its payload
             if (command->mfgSpecific && command->mfgCode == COMCAST_MFG_ID)
             {
                 batterySavingData = comcastBatterySavingDataParse(command->commandData, command->commandDataLen);
@@ -492,10 +483,8 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
                 if (callbackItem && callbackItem->callbacks && callbackItem->callbacks->checkin)
                 {
-                    callbackItem->callbacks->checkin(command->eui64,
-                                                     command->sourceEndpoint,
-                                                     batterySavingData,
-                                                     callbackItem->callbackContext);
+                    callbackItem->callbacks->checkin(
+                        command->eui64, command->sourceEndpoint, batterySavingData, callbackItem->callbackContext);
                 }
             }
 
@@ -507,7 +496,6 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
         default:
             icLogError(LOG_TAG, "%s: unexpected command id 0x%02x", __FUNCTION__, command->commandId);
             break;
-
     }
 
     return result;
@@ -515,11 +503,11 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
 static void destroyCluster(const ZigbeeCluster *ctx)
 {
-    PollControlCluster *cluster = (PollControlCluster *)ctx;
+    PollControlCluster *cluster = (PollControlCluster *) ctx;
     if (cluster)
     {
         linkedListDestroy(cluster->callbackList, NULL);
     }
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

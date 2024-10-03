@@ -27,28 +27,26 @@
 #ifndef ZILKER_ZONECHANGED_H
 #define ZILKER_ZONECHANGED_H
 
-#include <stdint.h>
-#include <icUtil/array.h>
 #include "securityState.h"
+#include <icUtil/array.h>
+#include <stdint.h>
 
 #define ZONE_CHANGED_DISPLAY_INDEX "displayIndex"
-#define ZONE_CHANGED_LABEL "label"
-#define ZONE_CHANGED_FAULTED "faulted"
-#define ZONE_CHANGED_BYPASSED "bypassed"
+#define ZONE_CHANGED_LABEL         "label"
+#define ZONE_CHANGED_FAULTED       "faulted"
+#define ZONE_CHANGED_BYPASSED      "bypassed"
 #define ZONE_CHANGED_BYPASS_ACTIVE "bypassActive"
-#define ZONE_CHANGED_INDICATION "indication"
-#define ZONE_CHANGED_EVENT_ID "eventId"
-#define ZONE_CHANGED_REASON "reason"
+#define ZONE_CHANGED_INDICATION    "indication"
+#define ZONE_CHANGED_EVENT_ID      "eventId"
+#define ZONE_CHANGED_REASON        "reason"
 
 #undef ENUM_LABEL
 #define ENUM_LABEL(x) x
-#define ENUM_VALUES                                     \
-    ENUM_LABEL(ZONE_CHANGED_REASON_INVALID),            \
-    ENUM_LABEL(ZONE_CHANGED_REASON_CRUD),               \
-    ENUM_LABEL(ZONE_CHANGED_REASON_FAULT_CHANGED),      \
-    ENUM_LABEL(ZONE_CHANGED_REASON_BYPASS_CHANGED),     \
-    ENUM_LABEL(ZONE_CHANGED_REASON_REORDER)
-//END ENUM_VALUES
+#define ENUM_VALUES                                                                                                    \
+    ENUM_LABEL(ZONE_CHANGED_REASON_INVALID), ENUM_LABEL(ZONE_CHANGED_REASON_CRUD),                                     \
+        ENUM_LABEL(ZONE_CHANGED_REASON_FAULT_CHANGED), ENUM_LABEL(ZONE_CHANGED_REASON_BYPASS_CHANGED),                 \
+        ENUM_LABEL(ZONE_CHANGED_REASON_REORDER)
+// END ENUM_VALUES
 
 typedef enum
 {
@@ -58,9 +56,7 @@ typedef enum
 #undef ENUM_LABEL
 #define ENUM_LABEL(x) #x
 
-static const char *ZoneChangedReasonLabels[] = {
-    ENUM_VALUES
-};
+static const char *ZoneChangedReasonLabels[] = {ENUM_VALUES};
 
 #undef ENUM_VALUES
 #undef ENUM_LABEL
@@ -138,4 +134,4 @@ char *zoneChangedToJSON(ZoneChanged *zoneChanged);
  */
 ZoneChanged *zoneChangedFromJSON(const char *json);
 
-#endif //ZILKER_ZONECHANGED_H
+#endif // ZILKER_ZONECHANGED_H

@@ -47,7 +47,8 @@ namespace zilker
             return AddAttribute(defaultEndpoint, clusterId, attributeId);
         }
 
-        ReadPrepareParamsBuilder &AddAttribute(chip::EndpointId endpointId, chip::ClusterId clusterId, chip::AttributeId attributeId)
+        ReadPrepareParamsBuilder &
+        AddAttribute(chip::EndpointId endpointId, chip::ClusterId clusterId, chip::AttributeId attributeId)
         {
             return AddAttribute(endpointId, clusterId, attributeId, 0, 0);
         }
@@ -57,20 +58,21 @@ namespace zilker
             return AddAttribute(defaultEndpoint, defaultCluster, attributeId, floor, ceil);
         }
 
-        ReadPrepareParamsBuilder &AddAttribute(chip::EndpointId endpointId, chip::ClusterId clusterId,
-                                               chip::AttributeId attributeId, uint16_t floor, uint16_t ceil);
+        ReadPrepareParamsBuilder &AddAttribute(chip::EndpointId endpointId,
+                                               chip::ClusterId clusterId,
+                                               chip::AttributeId attributeId,
+                                               uint16_t floor,
+                                               uint16_t ceil);
 
-        ReadPrepareParamsBuilder &AddEvent(chip::EventId eventId)
-        {
-            return AddEvent(defaultCluster, eventId);
-        }
+        ReadPrepareParamsBuilder &AddEvent(chip::EventId eventId) { return AddEvent(defaultCluster, eventId); }
 
         ReadPrepareParamsBuilder &AddEvent(chip::ClusterId clusterId, chip::EventId eventId)
         {
             return AddEvent(defaultEndpoint, clusterId, eventId);
         }
 
-        ReadPrepareParamsBuilder &AddEvent(chip::EndpointId endpointId, chip::ClusterId clusterId, chip::EventId eventId)
+        ReadPrepareParamsBuilder &
+        AddEvent(chip::EndpointId endpointId, chip::ClusterId clusterId, chip::EventId eventId)
         {
             return AddEvent(endpointId, clusterId, eventId, 0, 0);
         }
@@ -80,8 +82,11 @@ namespace zilker
             return AddEvent(defaultEndpoint, defaultCluster, eventId, floor, ceil);
         }
 
-        ReadPrepareParamsBuilder &AddEvent(chip::EndpointId endpointId, chip::ClusterId clusterId, chip::EventId eventId,
-                                           uint16_t floor, uint16_t ceil);
+        ReadPrepareParamsBuilder &AddEvent(chip::EndpointId endpointId,
+                                           chip::ClusterId clusterId,
+                                           chip::EventId eventId,
+                                           uint16_t floor,
+                                           uint16_t ceil);
 
         std::unique_ptr<ScopedReadPrepareParams> Build(const chip::SessionHandle &sessionHandle);
 

@@ -3,21 +3,21 @@
 //
 
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-//#include <zlog.h>
-#include <icLog/logging.h>
-#include "linkedTest.h"
-#include "sortedTest.h"
-#include "hashTest.h"
-#include "queueTest.h"
+// #include <zlog.h>
 #include "bufferTest.h"
+#include "hashTest.h"
+#include "linkedTest.h"
+#include "queueTest.h"
+#include "sortedTest.h"
 #include "stringBufferTest.h"
+#include <icLog/logging.h>
 
 /*
  *
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
             case 'b':
                 doBuffer = true;
                 break;
-                
+
             case 'x':
                 doStringBuffer = true;
                 break;
@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (doLinked == false && doSorted == false && doHash == false && doQueue == false && doBuffer == false
-            && doStringBuffer == false)
+    if (doLinked == false && doSorted == false && doHash == false && doQueue == false && doBuffer == false &&
+        doStringBuffer == false)
     {
         fprintf(stderr, "no options provided, use -H option for help\n");
         return 1;
@@ -162,5 +162,3 @@ int main(int argc, char *argv[])
     //
     return 0;
 }
-
-

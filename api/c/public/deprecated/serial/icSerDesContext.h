@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -26,10 +26,11 @@
 #ifndef ZILKER_ICSERDESCONTEXT_H
 #define ZILKER_ICSERDESCONTEXT_H
 
-#include <stdbool.h>
 #include <icTypes/icStringHashMap.h>
+#include <stdbool.h>
 
-typedef struct {
+typedef struct
+{
     icStringHashMap *props;
 } icSerDesContext;
 
@@ -43,4 +44,4 @@ bool serDesHasContextValue(const icSerDesContext *context, const char *key);
 
 const char *serDesGetContextValue(const icSerDesContext *context, const char *key);
 
-#endif //ZILKER_ICSERDESCONTEXT_H
+#endif // ZILKER_ICSERDESCONTEXT_H

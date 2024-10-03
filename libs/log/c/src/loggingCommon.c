@@ -22,8 +22,8 @@
 // Created by dcalde202 on 2/12/19.
 //
 
-#include <stdbool.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #ifdef CONFIG_LIB_GLIB
 #include <glib.h>
@@ -167,10 +167,7 @@ bool shouldLogMessage(logPriority priority)
 #ifdef CONFIG_LIB_GLIB
 
 #define GLIB_LOG "glib"
-static void glibLog(const gchar *log_domain,
-                    GLogLevelFlags log_level,
-                    const gchar *message,
-                    gpointer user_data)
+static void glibLog(const gchar *log_domain, GLogLevelFlags log_level, const gchar *message, gpointer user_data)
 {
     switch (log_level)
     {
@@ -200,7 +197,7 @@ static void glibLog(const gchar *log_domain,
 
 #endif
 
-__attribute__ ((constructor)) static void initCommon(void)
+__attribute__((constructor)) static void initCommon(void)
 {
 #ifdef CONFIG_LIB_GLIB
     g_log_set_default_handler(glibLog, NULL);

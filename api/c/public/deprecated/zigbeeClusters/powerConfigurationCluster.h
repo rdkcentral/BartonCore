@@ -58,14 +58,16 @@ typedef struct
     uint8_t *threshold3Percent;
 } PowerConfigurationClusterBatteryThresholds;
 
-ZigbeeCluster *powerConfigurationClusterCreate(const PowerConfigurationClusterCallbacks *callbacks, void *callbackContext);
+ZigbeeCluster *powerConfigurationClusterCreate(const PowerConfigurationClusterCallbacks *callbacks,
+                                               void *callbackContext);
 
 /**
  * Set whether or not to set a binding on this cluster.  By default we bind the cluster.
  * @param deviceConfigurationContext the configuration context
  * @param bind true to bind or false not to
  */
-void powerConfigurationClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind);
+void powerConfigurationClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext,
+                                                bool bind);
 
 /**
  * Retrieves the current battery voltage from the device.
@@ -80,16 +82,19 @@ bool powerConfigurationClusterGetBatteryVoltage(uint64_t eui64, uint8_t endpoint
  * Retrieves the remaining battery life as a percentage of the full battery capacity.
  * @param eui64
  * @param endpointId
- * @param halfIntPercent the percentage capacity remaining in half integer precision (e.g., 69 = 34.5%, 100 = 50%, 200 = 100%)
+ * @param halfIntPercent the percentage capacity remaining in half integer precision (e.g., 69 = 34.5%, 100 = 50%, 200 =
+ * 100%)
  * @return
  */
-bool powerConfigurationClusterGetBatteryPercentageRemaining(uint64_t eui64, uint8_t endpointId, uint8_t *halfIntPercent);
+bool powerConfigurationClusterGetBatteryPercentageRemaining(uint64_t eui64,
+                                                            uint8_t endpointId,
+                                                            uint8_t *halfIntPercent);
 
 /**
  * Retrieves the current ac mains voltage from the device.
  * @param eui64
  * @param endpointId
- * @param decivolts 
+ * @param decivolts
  * @return
  */
 bool powerConfigurationClusterGetMainsVoltage(uint64_t eui64, uint8_t endpointId, uint16_t *decivolts);
@@ -100,7 +105,9 @@ bool powerConfigurationClusterGetMainsVoltage(uint64_t eui64, uint8_t endpointId
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void powerConfigurationClusterSetConfigureBatteryAlarmState(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void powerConfigurationClusterSetConfigureBatteryAlarmState(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure);
 
 /**
  * Set whether or not to configure battery alarm mask.  By default battery alarm mask will not be configured unless
@@ -108,7 +115,8 @@ void powerConfigurationClusterSetConfigureBatteryAlarmState(const DeviceConfigur
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void powerConfigurationClusterSetConfigureBatteryAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void powerConfigurationClusterSetConfigureBatteryAlarmMask(const DeviceConfigurationContext *deviceConfigurationContext,
+                                                           bool configure);
 
 /**
  * Set whether or not to configure battery voltage reporting.  By default battery voltage will not be configured unless
@@ -116,28 +124,35 @@ void powerConfigurationClusterSetConfigureBatteryAlarmMask(const DeviceConfigura
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void powerConfigurationClusterSetConfigureBatteryVoltage(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void powerConfigurationClusterSetConfigureBatteryVoltage(const DeviceConfigurationContext *deviceConfigurationContext,
+                                                         bool configure);
 
 /**
  * Set whether or not to configure battery percent remaining reports.  By default, reports are disabled.
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void powerConfigurationClusterSetConfigureBatteryPercentage(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void powerConfigurationClusterSetConfigureBatteryPercentage(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure);
 
 /**
  * Set whether or not to configure battery recharge cycle reports. By default, reports are disabled.
  * @param deviceConfigurationContext the configuration context
  * @param configure true to configure, false otherwise
  */
-void powerConfigurationClusterSetConfigureBatteryRechargeCycles(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void powerConfigurationClusterSetConfigureBatteryRechargeCycles(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    bool configure);
 
 /**
  * Set the max interval for the battery voltage configuration. By default, it's 27 minutes.
  * @param deviceConfigurationContext the configuration context
  * @param max interval
  */
-void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(const DeviceConfigurationContext *deviceConfigurationContext, uint64_t interval);
+void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(
+    const DeviceConfigurationContext *deviceConfigurationContext,
+    uint64_t interval);
 
 /**
  * Gives initial recharge cycle value
@@ -149,7 +164,9 @@ void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(const Device
  * @return 0 if read was successful, -1 otherwise
  */
 
-int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64, uint8_t endpointId, uint64_t *rechargeCycles);
+int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64,
+                                                                   uint8_t endpointId,
+                                                                   uint64_t *rechargeCycles);
 
 /**
  * Read battery alarm thresholds
@@ -162,11 +179,12 @@ int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui6
  *
  * Note: returned struct needs to be destroyed by calling powerConfigurationClusterBatteryThresholdsDestroy.
  */
-PowerConfigurationClusterBatteryThresholds *powerConfigurationClusterGetBatteryThresholds(uint64_t eui64, uint8_t endpointId);
+PowerConfigurationClusterBatteryThresholds *powerConfigurationClusterGetBatteryThresholds(uint64_t eui64,
+                                                                                          uint8_t endpointId);
 
 /**
  * destroy struct returned from powerConfigurationClusterGetBatteryThresholds function.
  */
 void powerConfigurationClusterBatteryThresholdsDestroy(PowerConfigurationClusterBatteryThresholds *thresholds);
 
-#endif //ZILKER_POWERCONFIGURATIONCLUSTER_H
+#endif // ZILKER_POWERCONFIGURATIONCLUSTER_H

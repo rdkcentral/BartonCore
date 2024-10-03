@@ -29,21 +29,21 @@
  * Author: jgleason - 7/5/16
  *-----------------------------------------------*/
 
+#include <cjson/cJSON.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <libxml/parser.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/errno.h>
-#include <cjson/cJSON.h>
-#include <libxml/parser.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-#include <icLog/logging.h>
 #include <icConfig/backupUtils.h>
-#include <icUtil/stringUtils.h>
+#include <icLog/logging.h>
 #include <icUtil/fileUtils.h>
+#include <icUtil/stringUtils.h>
 
-#define LOG_TAG                     "backupUtil"
+#define LOG_TAG "backupUtil"
 
 /*
  * Backup Utility Functions
@@ -86,7 +86,8 @@ void safeFileSave(char *tempFile, char *originalFile, char *backupFile)
         {
             // This should not happen, but attempt to put the new file into service anyway
             char *errStr = strerrorSafe(errno);
-            icLogWarn(LOG_TAG, "%s: Failed to rename file '%s' to '%s': %s", __FUNCTION__, originalFile, backupFile, errStr);
+            icLogWarn(
+                LOG_TAG, "%s: Failed to rename file '%s' to '%s': %s", __FUNCTION__, originalFile, backupFile, errStr);
             free(errStr);
         }
     }
@@ -103,7 +104,7 @@ void safeFileSave(char *tempFile, char *originalFile, char *backupFile)
  * chooseFileToRead() - determines if Original File exists with size, if not determine if Backup File exists with size
  *
  * returns the fileToRead enum result (ORIGINAL_FILE, BACKUP_FILE, or FILE_NOT_PRESENT)
-*
+ *
  */
 fileToRead chooseFileToRead(const char *originalFile, const char *backupFile, const char *configDir)
 {

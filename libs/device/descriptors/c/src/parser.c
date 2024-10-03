@@ -24,75 +24,75 @@
 // Created by Thomas Lea on 7/31/15.
 //
 
-#include <libxml/tree.h>
+#include "parser.h"
+#include <deviceDescriptor.h>
+#include <glib.h>
 #include <icLog/logging.h>
 #include <icLog/telemetryMarkers.h>
-#include <xmlHelper/xmlHelper.h>
-#include <string.h>
-#include <deviceDescriptor.h>
 #include <icTypes/icStringHashMap.h>
-#include <inttypes.h>
-#include "parser.h"
-#include <icUtil/stringUtils.h>
 #include <icUtil/fileUtils.h>
-#include <glib.h>
+#include <icUtil/stringUtils.h>
+#include <inttypes.h>
+#include <libxml/tree.h>
+#include <string.h>
+#include <xmlHelper/xmlHelper.h>
 
-#define LOG_TAG "libdeviceDescriptorParser"
+#define LOG_TAG                                         "libdeviceDescriptorParser"
 
-#define DDL_ROOT_NODE               "DeviceDescriptorList"
-#define CAMERA_DD_NODE              "CameraDeviceDescriptor"
-#define ZIGBEE_DD_NODE              "DeviceDescriptor"
-#define UUID_NODE                   "uuid"
-#define DESCRIPTION_NODE            "description"
-#define CATEGORY_NODE               "category"
-#define CATEGORY_TYPE_ZIGBEE_NODE   "zigbee"
-#define CATEGORY_TYPE_CAMERA_NODE   "camera"
-#define CATEGORY_TYPE_PHILIPS_HUE_NODE "PhilipsHue"
-#define CATEGORY_TYPE_MATTER_NODE   "matter"
-#define MANUFACTURER_NODE           "manufacturer"
-#define MODEL_NODE                  "model"
-#define HARDWARE_VERSIONS_NODE      "hardwareVersions"
-#define FIRMWARE_VERSIONS_NODE      "firmwareVersions"
-#define MIN_FIRMWARE_VERSIONS_NODE  "minSupportedFirmwareVersion"
-#define METADATA_LIST_NODE          "metadataList"
-#define METADATA_NODE               "metadata"
-#define NAME_NODE                   "name"
-#define VALUE_NODE                  "value"
-#define LATEST_FIRMWARE_NODE        "latestFirmware"
-#define LATEST_FIRMWARE_VERSION_NODE "version"
-#define LATEST_FIRMWARE_FILENAME_NODE "filename"
-#define LATEST_FIRMWARE_TYPE_NODE   "type"
-#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_NODE   "postUpgradeAction"
-#define CASCADE_ADD_DELETE_ENDPOINTS_NODE "cascadeAddDeleteEndpoints"
-#define LATEST_FIRMWARE_TYPE_ZIGBEE_OTA    "ota"
-#define LATEST_FIRMWARE_TYPE_ZIGBEE_LEGACY "legacy"
-#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_NONE   "none"
-#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_RECONFIGURE   "reconfigure"
-#define LATEST_FIRMWARE_CHECKSUM_ATTRIBUTE "checksum"
-#define VERSION_LIST_FORMAT         "format"
-#define PROTOCOL_NODE               "protocol"
-#define MOTION_NODE                 "motion"
-#define MATTER_NODE                 "matter"
-#define MATTER_VENDOR_ID_NODE       "vendorId"
-#define MATTER_PRODUCT_ID_NODE      "productId"
-#define LIST_NODE                   "list"
-#define ANY_NODE                    "any"
-#define RANGE_NODE                  "range"
-#define ENABLED_NODE                "enabled"
-#define SENSITIVITY_NODE            "sensitivityLevel"
-#define LOW_NODE                    "low"
-#define MEDIUM_NODE                 "med"
-#define HIGH_NODE                   "high"
-#define DETECTION_NODE              "detectionThreshold"
-#define REGION_OF_INTEREST_NODE     "regionOfInterest"
-#define WIDTH_NODE                  "width"
-#define HEIGHT_NODE                 "height"
-#define BOTTOM_NODE                 "bottomCoord"
-#define TOP_NODE                    "topCoord"
-#define LEFT_NODE                   "leftCoord"
-#define RIGHT_NODE                  "rightCoord"
-#define FROM_NODE                   "from"
-#define TO_NODE                     "to"
+#define DDL_ROOT_NODE                                   "DeviceDescriptorList"
+#define CAMERA_DD_NODE                                  "CameraDeviceDescriptor"
+#define ZIGBEE_DD_NODE                                  "DeviceDescriptor"
+#define UUID_NODE                                       "uuid"
+#define DESCRIPTION_NODE                                "description"
+#define CATEGORY_NODE                                   "category"
+#define CATEGORY_TYPE_ZIGBEE_NODE                       "zigbee"
+#define CATEGORY_TYPE_CAMERA_NODE                       "camera"
+#define CATEGORY_TYPE_PHILIPS_HUE_NODE                  "PhilipsHue"
+#define CATEGORY_TYPE_MATTER_NODE                       "matter"
+#define MANUFACTURER_NODE                               "manufacturer"
+#define MODEL_NODE                                      "model"
+#define HARDWARE_VERSIONS_NODE                          "hardwareVersions"
+#define FIRMWARE_VERSIONS_NODE                          "firmwareVersions"
+#define MIN_FIRMWARE_VERSIONS_NODE                      "minSupportedFirmwareVersion"
+#define METADATA_LIST_NODE                              "metadataList"
+#define METADATA_NODE                                   "metadata"
+#define NAME_NODE                                       "name"
+#define VALUE_NODE                                      "value"
+#define LATEST_FIRMWARE_NODE                            "latestFirmware"
+#define LATEST_FIRMWARE_VERSION_NODE                    "version"
+#define LATEST_FIRMWARE_FILENAME_NODE                   "filename"
+#define LATEST_FIRMWARE_TYPE_NODE                       "type"
+#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_NODE        "postUpgradeAction"
+#define CASCADE_ADD_DELETE_ENDPOINTS_NODE               "cascadeAddDeleteEndpoints"
+#define LATEST_FIRMWARE_TYPE_ZIGBEE_OTA                 "ota"
+#define LATEST_FIRMWARE_TYPE_ZIGBEE_LEGACY              "legacy"
+#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_NONE        "none"
+#define LATEST_FIRMWARE_POST_UPGRADE_ACTION_RECONFIGURE "reconfigure"
+#define LATEST_FIRMWARE_CHECKSUM_ATTRIBUTE              "checksum"
+#define VERSION_LIST_FORMAT                             "format"
+#define PROTOCOL_NODE                                   "protocol"
+#define MOTION_NODE                                     "motion"
+#define MATTER_NODE                                     "matter"
+#define MATTER_VENDOR_ID_NODE                           "vendorId"
+#define MATTER_PRODUCT_ID_NODE                          "productId"
+#define LIST_NODE                                       "list"
+#define ANY_NODE                                        "any"
+#define RANGE_NODE                                      "range"
+#define ENABLED_NODE                                    "enabled"
+#define SENSITIVITY_NODE                                "sensitivityLevel"
+#define LOW_NODE                                        "low"
+#define MEDIUM_NODE                                     "med"
+#define HIGH_NODE                                       "high"
+#define DETECTION_NODE                                  "detectionThreshold"
+#define REGION_OF_INTEREST_NODE                         "regionOfInterest"
+#define WIDTH_NODE                                      "width"
+#define HEIGHT_NODE                                     "height"
+#define BOTTOM_NODE                                     "bottomCoord"
+#define TOP_NODE                                        "topCoord"
+#define LEFT_NODE                                       "leftCoord"
+#define RIGHT_NODE                                      "rightCoord"
+#define FROM_NODE                                       "from"
+#define TO_NODE                                         "to"
 
 static char *getTrimmedXmlNodeContentsAsString(xmlNodePtr node);
 
@@ -173,7 +173,7 @@ static void parseDeviceVersionList(xmlNodePtr node, DeviceVersionList *list)
                     }
                     else
                     {
-                        //unused
+                        // unused
                         free(version);
                     }
                 }
@@ -188,10 +188,10 @@ static void parseDeviceVersionList(xmlNodePtr node, DeviceVersionList *list)
     }
 }
 
-//given a version string that could be decimal or hex, convert the string to decimal
-static char * versionStringToDecimalString(const char* version)
+// given a version string that could be decimal or hex, convert the string to decimal
+static char *versionStringToDecimalString(const char *version)
 {
-    int value = (int)strtol(version, NULL, 0);
+    int value = (int) strtol(version, NULL, 0);
     char buf[20];
     sprintf(buf, "%" PRIu32, value);
     return trimString(buf);
@@ -199,7 +199,7 @@ static char * versionStringToDecimalString(const char* version)
 
 static void parseZigbeeDeviceVersion(xmlNodePtr node, DeviceVersionList *list, bool forceDecimal)
 {
-    char * versions = getXmlNodeContentsAsString(node, NULL);
+    char *versions = getXmlNodeContentsAsString(node, NULL);
 
     list->format = strdup("Zigbee");
 
@@ -218,10 +218,8 @@ static void parseZigbeeDeviceVersion(xmlNodePtr node, DeviceVersionList *list, b
             if (strstr(token, "-") != NULL)
             {
                 list->listType = DEVICE_VERSION_LIST_TYPE_LIST_AND_RANGE;
-                parseZigbeeDeviceVersionRange(token,
-                                              &list->list.versionRange.from,
-                                              &list->list.versionRange.to,
-                                              forceDecimal);
+                parseZigbeeDeviceVersionRange(
+                    token, &list->list.versionRange.from, &list->list.versionRange.to, forceDecimal);
             }
             else
             {
@@ -237,10 +235,8 @@ static void parseZigbeeDeviceVersion(xmlNodePtr node, DeviceVersionList *list, b
     else if (strstr(versions, "-") != NULL)
     {
         list->listType = DEVICE_VERSION_LIST_TYPE_RANGE;
-        parseZigbeeDeviceVersionRange(versions,
-                                      &list->list.versionRange.from,
-                                      &list->list.versionRange.to,
-                                      forceDecimal);
+        parseZigbeeDeviceVersionRange(
+            versions, &list->list.versionRange.from, &list->list.versionRange.to, forceDecimal);
     }
     else
     {
@@ -302,17 +298,17 @@ static bool parseMetadataList(xmlNodePtr metadataNode, icStringHashMap *map)
             char *name = getXmlNodeAttributeAsString(currNode, NAME_NODE, NULL);
             char *value = getXmlNodeAttributeAsString(currNode, VALUE_NODE, NULL);
 
-            if(name != NULL && value != NULL)
+            if (name != NULL && value != NULL)
             {
                 stringHashMapPut(map, name, value);
             }
             else
             {
-                if(name != NULL)
+                if (name != NULL)
                 {
                     free(name);
                 }
-                if(value != NULL)
+                if (value != NULL)
                 {
                     free(value);
                 }
@@ -417,8 +413,8 @@ static bool parseDescriptorBase(xmlNodePtr ddNode, DeviceDescriptor *dd)
                 }
                 xmlNodePtr latestFirmwareLoopNode = currNode->children;
                 xmlNodePtr latestFirmwareCurrNode = NULL;
-                for (latestFirmwareCurrNode = latestFirmwareLoopNode;
-                     latestFirmwareCurrNode != NULL; latestFirmwareCurrNode = latestFirmwareCurrNode->next)
+                for (latestFirmwareCurrNode = latestFirmwareLoopNode; latestFirmwareCurrNode != NULL;
+                     latestFirmwareCurrNode = latestFirmwareCurrNode->next)
                 {
                     if (strcmp((const char *) latestFirmwareCurrNode->name, LATEST_FIRMWARE_VERSION_NODE) == 0)
                     {
@@ -431,13 +427,13 @@ static bool parseDescriptorBase(xmlNodePtr ddNode, DeviceDescriptor *dd)
                             dd->latestFirmware->fileInfos = linkedListCreate();
                         }
 
-                        DeviceFirmwareFileInfo *fileInfo = (DeviceFirmwareFileInfo *)calloc(1, sizeof(DeviceFirmwareFileInfo));
+                        DeviceFirmwareFileInfo *fileInfo =
+                            (DeviceFirmwareFileInfo *) calloc(1, sizeof(DeviceFirmwareFileInfo));
                         fileInfo->fileName = getTrimmedXmlNodeContentsAsString(latestFirmwareCurrNode);
                         if (fileInfo->fileName != NULL)
                         {
-                            fileInfo->checksum = getXmlNodeAttributeAsString(latestFirmwareCurrNode,
-                                                                             LATEST_FIRMWARE_CHECKSUM_ATTRIBUTE,
-                                                                             NULL);
+                            fileInfo->checksum = getXmlNodeAttributeAsString(
+                                latestFirmwareCurrNode, LATEST_FIRMWARE_CHECKSUM_ATTRIBUTE, NULL);
 
                             linkedListAppend(dd->latestFirmware->fileInfos, fileInfo);
                         }
@@ -446,9 +442,9 @@ static bool parseDescriptorBase(xmlNodePtr ddNode, DeviceDescriptor *dd)
                             free(fileInfo);
                         }
                     }
-                    else if(strcmp((const char*) latestFirmwareCurrNode->name, LATEST_FIRMWARE_TYPE_NODE) == 0)
+                    else if (strcmp((const char *) latestFirmwareCurrNode->name, LATEST_FIRMWARE_TYPE_NODE) == 0)
                     {
-                        char *firmwareType =  getXmlNodeContentsAsString(latestFirmwareCurrNode, NULL);
+                        char *firmwareType = getXmlNodeContentsAsString(latestFirmwareCurrNode, NULL);
                         // Java code uses case insensitive comparison here
                         if (strcasecmp(firmwareType, LATEST_FIRMWARE_TYPE_ZIGBEE_OTA) == 0)
                         {
@@ -460,9 +456,11 @@ static bool parseDescriptorBase(xmlNodePtr ddNode, DeviceDescriptor *dd)
                         }
                         free(firmwareType);
                     }
-                    else if (strcmp((const char*) latestFirmwareCurrNode->name, LATEST_FIRMWARE_POST_UPGRADE_ACTION_NODE) == 0)
+                    else if (strcmp((const char *) latestFirmwareCurrNode->name,
+                                    LATEST_FIRMWARE_POST_UPGRADE_ACTION_NODE) == 0)
                     {
-                        scoped_generic char *postUpgradeAction =  getXmlNodeContentsAsString(latestFirmwareCurrNode, NULL);
+                        scoped_generic char *postUpgradeAction =
+                            getXmlNodeContentsAsString(latestFirmwareCurrNode, NULL);
                         if (strcasecmp(postUpgradeAction, LATEST_FIRMWARE_POST_UPGRADE_ACTION_NONE) == 0)
                         {
                             dd->latestFirmware->upgradeAction = POST_UPGRADE_ACTION_NONE;
@@ -475,9 +473,9 @@ static bool parseDescriptorBase(xmlNodePtr ddNode, DeviceDescriptor *dd)
                 }
             }
         }
-        else if(strcmp((const char *) currNode->name, CASCADE_ADD_DELETE_ENDPOINTS_NODE) == 0)
+        else if (strcmp((const char *) currNode->name, CASCADE_ADD_DELETE_ENDPOINTS_NODE) == 0)
         {
-             dd->cascadeAddDeleteEndpoints = getXmlNodeContentsAsBoolean(currNode,false);
+            dd->cascadeAddDeleteEndpoints = getXmlNodeContentsAsBoolean(currNode, false);
         }
         else if (strcmp((const char *) currNode->name, CATEGORY_NODE) == 0)
         {
@@ -547,7 +545,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                 dd->defaultMotionSettings.enabled = false;
             }
             free(enabled);
-        } else if (strcmp((const char *) currNode->name, SENSITIVITY_NODE) == 0)
+        }
+        else if (strcmp((const char *) currNode->name, SENSITIVITY_NODE) == 0)
         {
             xmlNodePtr innerCurrNode = NULL;
             for (innerCurrNode = currNode->children; innerCurrNode != NULL; innerCurrNode = innerCurrNode->next)
@@ -569,7 +568,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid sensitivityLevel value for low");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, MEDIUM_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, MEDIUM_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -581,7 +581,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid sensitivityLevel value for medium");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, HIGH_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, HIGH_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -595,7 +596,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     }
                 }
             }
-        } else if (strcmp((const char *) currNode->name, DETECTION_NODE) == 0)
+        }
+        else if (strcmp((const char *) currNode->name, DETECTION_NODE) == 0)
         {
             xmlNodePtr innerCurrNode = NULL;
             for (innerCurrNode = currNode->children; innerCurrNode != NULL; innerCurrNode = innerCurrNode->next)
@@ -617,7 +619,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid detectionThreshold value for low");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, MEDIUM_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, MEDIUM_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -629,7 +632,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid detectionThreshold value for medium");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, HIGH_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, HIGH_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -643,7 +647,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     }
                 }
             }
-        } else if (strcmp((const char *) currNode->name, REGION_OF_INTEREST_NODE) == 0)
+        }
+        else if (strcmp((const char *) currNode->name, REGION_OF_INTEREST_NODE) == 0)
         {
             xmlNodePtr innerCurrNode = NULL;
             for (innerCurrNode = currNode->children; innerCurrNode != NULL; innerCurrNode = innerCurrNode->next)
@@ -665,7 +670,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid regionOfInterest value for width");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, HEIGHT_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, HEIGHT_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -677,7 +683,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid regionOfInterest value for height");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, BOTTOM_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, BOTTOM_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -689,7 +696,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid regionOfInterest value for bottom");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, TOP_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, TOP_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -701,7 +709,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid regionOfInterest value for top");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, LEFT_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, LEFT_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -713,7 +722,8 @@ static bool parseCameraMotionNode(xmlNodePtr motionNode, CameraDeviceDescriptor 
                     {
                         icLogError(LOG_TAG, "Invalid regionOfInterest value for left");
                     }
-                } else if (strcmp((const char *) innerCurrNode->name, RIGHT_NODE) == 0)
+                }
+                else if (strcmp((const char *) innerCurrNode->name, RIGHT_NODE) == 0)
                 {
                     char *tmp = getXmlNodeContentsAsString(innerCurrNode, NULL);
                     if (tmp != NULL)
@@ -780,7 +790,7 @@ static bool parseCameraDescriptor(xmlNodePtr cameraNode, CameraDeviceDescriptor 
 static MatterTechnology *parseMatterTechnologyNode(xmlNodePtr matterNode)
 {
     MatterTechnology *result = NULL;
-    MatterTechnology *matter = (MatterTechnology *) calloc (1, sizeof(MatterTechnology));
+    MatterTechnology *matter = (MatterTechnology *) calloc(1, sizeof(MatterTechnology));
 
     bool isValidVID = false;
     bool isValidPID = false;
@@ -799,7 +809,8 @@ static MatterTechnology *parseMatterTechnologyNode(xmlNodePtr matterNode)
             scoped_generic char *vendorId = getTrimmedXmlNodeContentsAsString(currNode);
             if (vendorId == NULL)
             {
-                icLogError(LOG_TAG, "Failed to parse <matter> sub-element at line %" PRIu32 ": '<vendorID>' does not exist",
+                icLogError(LOG_TAG,
+                           "Failed to parse <matter> sub-element at line %" PRIu32 ": '<vendorID>' does not exist",
                            getXmlNodeLineNumber(currNode));
                 break;
             }
@@ -807,10 +818,11 @@ static MatterTechnology *parseMatterTechnologyNode(xmlNodePtr matterNode)
             uint16_t localResult;
             if (hexStringToUint16(vendorId, &localResult) == false)
             {
-                icLogError(LOG_TAG, "Failed to parse <matter> sub-element at line %" PRIu32 ": <vendorId> '%s' must be a valid hex number between 0x0000 and 0xFFFF",
+                icLogError(LOG_TAG,
+                           "Failed to parse <matter> sub-element at line %" PRIu32
+                           ": <vendorId> '%s' must be a valid hex number between 0x0000 and 0xFFFF",
                            getXmlNodeLineNumber(currNode),
-                           vendorId
-                           );
+                           vendorId);
                 break;
             }
 
@@ -822,7 +834,8 @@ static MatterTechnology *parseMatterTechnologyNode(xmlNodePtr matterNode)
             scoped_generic char *productId = getTrimmedXmlNodeContentsAsString(currNode);
             if (productId == NULL)
             {
-                icLogError(LOG_TAG, "Failed to parse <matter> sub-element at line %" PRIu32 ": '<productId>' does not exist",
+                icLogError(LOG_TAG,
+                           "Failed to parse <matter> sub-element at line %" PRIu32 ": '<productId>' does not exist",
                            getXmlNodeLineNumber(currNode));
                 break;
             }
@@ -830,10 +843,11 @@ static MatterTechnology *parseMatterTechnologyNode(xmlNodePtr matterNode)
             uint16_t localResult;
             if (hexStringToUint16(productId, &localResult) == false)
             {
-                icLogError(LOG_TAG, "Failed to parse <matter> sub-element at line %" PRIu32 ": <productId> '%s' must be a valid hex number between 0x0000 and 0xFFFF",
+                icLogError(LOG_TAG,
+                           "Failed to parse <matter> sub-element at line %" PRIu32
+                           ": <productId> '%s' must be a valid hex number between 0x0000 and 0xFFFF",
                            getXmlNodeLineNumber(currNode),
-                           productId
-                           );
+                           productId);
                 break;
             }
 
@@ -858,7 +872,7 @@ icStringHashMap *getDenylistedUuids(const char *denylistPath)
 {
     icStringHashMap *result = NULL;
 
-    if(doesNonEmptyFileExist(denylistPath))
+    if (doesNonEmptyFileExist(denylistPath))
     {
         xmlDocPtr doc = NULL;
         xmlNodePtr topNode = NULL;
@@ -950,10 +964,10 @@ icLinkedList *parseDeviceDescriptors(const char *allowlistPath, const char *deny
         return result;
     }
 
-    //if we have a denylist, go ahead and parse it into a set of uuids
+    // if we have a denylist, go ahead and parse it into a set of uuids
     icStringHashMap *denylistedUuids = getDenylistedUuids(denylistPath);
 
-    //we got this far, so the input looks like something we can work with... allocate our result
+    // we got this far, so the input looks like something we can work with... allocate our result
     result = linkedListCreate();
 
     // loop through the children of ROOT
@@ -975,7 +989,7 @@ icLinkedList *parseDeviceDescriptors(const char *allowlistPath, const char *deny
             dd->deviceDescriptorType = DEVICE_DESCRIPTOR_TYPE_CAMERA;
 
             if (parseDescriptorBase(currNode, (DeviceDescriptor *) dd) == false ||
-                parseCameraDescriptor(currNode, (CameraDeviceDescriptor*)dd) == false)
+                parseCameraDescriptor(currNode, (CameraDeviceDescriptor *) dd) == false)
             {
                 // log line used for Telemetry do not edit/delete
                 //

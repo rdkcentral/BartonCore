@@ -24,40 +24,41 @@
 // Created by tlea on 2/20/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
+#include <ctype.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <subsystems/zigbee/zigbeeIO.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <sys/param.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/doorLockCluster.h"
 
-#define LOG_TAG "doorLockCluster"
+#define LOG_TAG                               "doorLockCluster"
 
 // Alarm codes
-#define BOLT_JAMMED 0x00
-#define LOCK_RESET_TO_FACTORY_DEFAULTS 0x01
-#define BATTERY_REPLACEMENT 0x02
-#define RF_MODULE_POWER_CYCLED 0x03
-#define TAMPER_ALARM_WRONG_CODE_ENTRY_LIMIT 0x04
+#define BOLT_JAMMED                           0x00
+#define LOCK_RESET_TO_FACTORY_DEFAULTS        0x01
+#define BATTERY_REPLACEMENT                   0x02
+#define RF_MODULE_POWER_CYCLED                0x03
+#define TAMPER_ALARM_WRONG_CODE_ENTRY_LIMIT   0x04
 #define TAMPER_ALARM_FRONT_ESCUTCHEON_REMOVED 0x05
-#define DOOR_FORCED_OPEN_WHILE_LOCKED 0x06
+#define DOOR_FORCED_OPEN_WHILE_LOCKED         0x06
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
 
 static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *command);
 
-static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport* report);
+static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *report);
 
-static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry);
 
 typedef struct
 {
@@ -89,12 +90,8 @@ bool doorLockClusterIsLocked(uint64_t eui64, uint8_t endpointId, bool *isLocked)
 
     uint64_t val = 0;
 
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_LOCK_STATE_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_LOCK_STATE_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read lock state attribute value", __FUNCTION__);
     }
@@ -113,27 +110,23 @@ bool doorLockClusterSetLocked(uint64_t eui64, uint8_t endpointId, bool isLocked)
     // since we dont send one.
     uint8_t payload = 0;
 
-    return (zigbeeSubsystemSendCommand(eui64,
-                                       endpointId,
-                                       DOORLOCK_CLUSTER_ID,
-                                       true,
-                                       (uint8_t) (isLocked ? DOORLOCK_LOCK_DOOR_COMMAND_ID
-                                                           : DOORLOCK_UNLOCK_DOOR_COMMAND_ID),
-                                       &payload,
-                                       1) == 0);
+    return (zigbeeSubsystemSendCommand(
+                eui64,
+                endpointId,
+                DOORLOCK_CLUSTER_ID,
+                true,
+                (uint8_t) (isLocked ? DOORLOCK_LOCK_DOOR_COMMAND_ID : DOORLOCK_UNLOCK_DOOR_COMMAND_ID),
+                &payload,
+                1) == 0);
 }
 
-bool doorLockClusterGetInvalidLockoutTimeSecs(uint64_t eui64, uint8_t endpointId, uint8_t* lockoutTimeSecs)
+bool doorLockClusterGetInvalidLockoutTimeSecs(uint64_t eui64, uint8_t endpointId, uint8_t *lockoutTimeSecs)
 {
     bool result = false;
 
     uint64_t val = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_USER_CODE_TEMPORARY_DISABLE_TIME,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_USER_CODE_TEMPORARY_DISABLE_TIME, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read user code temporary disable time attribute value", __FUNCTION__);
     }
@@ -151,12 +144,8 @@ bool doorLockClusterGetMaxPinCodeLength(uint64_t eui64, uint8_t endpointId, uint
     bool result = false;
 
     uint64_t val = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_MAX_PIN_CODE_LENGTH_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_MAX_PIN_CODE_LENGTH_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read max pin code length attribute value", __FUNCTION__);
     }
@@ -174,12 +163,8 @@ bool doorLockClusterGetMinPinCodeLength(uint64_t eui64, uint8_t endpointId, uint
     bool result = false;
 
     uint64_t val = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_MIN_PIN_CODE_LENGTH_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_MIN_PIN_CODE_LENGTH_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read min pin code length attribute value", __FUNCTION__);
     }
@@ -197,12 +182,8 @@ bool doorLockClusterGetMaxPinCodeUsers(uint64_t eui64, uint8_t endpointId, uint1
     bool result = false;
 
     uint64_t val = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_NUM_PIN_USERS_SUPPORTED_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_NUM_PIN_USERS_SUPPORTED_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read num pin users supported attribute value", __FUNCTION__);
     }
@@ -220,12 +201,8 @@ bool doorLockClusterGetAutoRelockTime(uint64_t eui64, uint8_t endpointId, uint32
     bool result = false;
 
     uint64_t val = 0;
-    if (zigbeeSubsystemReadNumber(eui64,
-                                  endpointId,
-                                  DOORLOCK_CLUSTER_ID,
-                                  true,
-                                  DOORLOCK_AUTO_RELOCK_TIME_ATTRIBUTE_ID,
-                                  &val) != 0)
+    if (zigbeeSubsystemReadNumber(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_AUTO_RELOCK_TIME_ATTRIBUTE_ID, &val) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to read auto relock time attribute value", __FUNCTION__);
     }
@@ -265,13 +242,8 @@ bool doorLockClusterClearAllPinCodes(uint64_t eui64, uint8_t endpointId)
 {
     bool result = false;
 
-    if (zigbeeSubsystemSendCommand(eui64,
-                                   endpointId,
-                                   DOORLOCK_CLUSTER_ID,
-                                   true,
-                                   DOORLOCK_CLEAR_ALL_PIN_CODES_COMMAND_ID,
-                                   NULL,
-                                   0) != 0)
+    if (zigbeeSubsystemSendCommand(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_CLEAR_ALL_PIN_CODES_COMMAND_ID, NULL, 0) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to send clear all pin codes command", __func__);
     }
@@ -291,13 +263,8 @@ bool doorLockClusterGetPinCode(uint64_t eui64, uint8_t endpointId, uint16_t user
     sbZigbeeIOContext *zio = zigbeeIOInit(payload, 2, ZIO_WRITE);
     zigbeeIOPutUint16(zio, userId);
 
-    if (zigbeeSubsystemSendCommand(eui64,
-                                   endpointId,
-                                   DOORLOCK_CLUSTER_ID,
-                                   true,
-                                   DOORLOCK_GET_PIN_CODE_COMMAND_ID,
-                                   payload,
-                                   2) != 0)
+    if (zigbeeSubsystemSendCommand(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_GET_PIN_CODE_COMMAND_ID, payload, 2) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to send get pin code command", __func__);
     }
@@ -317,13 +284,8 @@ bool doorLockClusterClearPinCode(uint64_t eui64, uint8_t endpointId, uint16_t us
     sbZigbeeIOContext *zio = zigbeeIOInit(payload, 2, ZIO_WRITE);
     zigbeeIOPutUint16(zio, userId);
 
-    if (zigbeeSubsystemSendCommand(eui64,
-                                   endpointId,
-                                   DOORLOCK_CLUSTER_ID,
-                                   true,
-                                   DOORLOCK_CLEAR_PIN_CODE_COMMAND_ID,
-                                   payload,
-                                   2) != 0)
+    if (zigbeeSubsystemSendCommand(
+            eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_CLEAR_PIN_CODE_COMMAND_ID, payload, 2) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to send clear pin code command", __func__);
     }
@@ -335,9 +297,7 @@ bool doorLockClusterClearPinCode(uint64_t eui64, uint8_t endpointId, uint16_t us
     return result;
 }
 
-bool doorLockClusterSetPinCode(uint64_t eui64,
-                               uint8_t endpointId,
-                               const DoorLockClusterUser *user)
+bool doorLockClusterSetPinCode(uint64_t eui64, uint8_t endpointId, const DoorLockClusterUser *user)
 {
     bool result = false;
 
@@ -373,13 +333,9 @@ bool doorLockClusterSetPinCode(uint64_t eui64,
 
     if (validPin == true)
     {
-        if (zigbeeSubsystemSendCommand(eui64,
-                                       endpointId,
-                                       DOORLOCK_CLUSTER_ID,
-                                       true,
-                                       DOORLOCK_SET_PIN_CODE_COMMAND_ID,
-                                       payload,
-                                       payloadLen) != 0)
+        if (zigbeeSubsystemSendCommand(
+                eui64, endpointId, DOORLOCK_CLUSTER_ID, true, DOORLOCK_SET_PIN_CODE_COMMAND_ID, payload, payloadLen) !=
+            0)
         {
             icLogError(LOG_TAG, "%s: failed to send set pin code command", __func__);
         }
@@ -398,13 +354,14 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    zhalAttributeReportingConfig doorLockConfigs[3]; // the first entry is mandatory, but we could have up to two others.
+    zhalAttributeReportingConfig
+        doorLockConfigs[3]; // the first entry is mandatory, but we could have up to two others.
     uint8_t numConfigs = 1;
     memset(&doorLockConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
     doorLockConfigs[0].attributeInfo.id = DOORLOCK_LOCK_STATE_ATTRIBUTE_ID;
     doorLockConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
     doorLockConfigs[0].minInterval = 1;
-    doorLockConfigs[0].maxInterval = 1620; //every 27 minutes at least.  we need this for comm fail, but only 1 attr.
+    doorLockConfigs[0].maxInterval = 1620; // every 27 minutes at least.  we need this for comm fail, but only 1 attr.
     doorLockConfigs[0].reportableChange = 1;
 
     if (icDiscoveredDeviceDetailsGetAttributeEndpoint(configContext->discoveredDeviceDetails,
@@ -440,11 +397,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         icLogError(LOG_TAG, "%s: failed to bind", __FUNCTION__);
         result = false;
     }
-    else if (zigbeeSubsystemAttributesSetReporting(configContext->eui64,
-                                                   configContext->endpointId,
-                                                   DOORLOCK_CLUSTER_ID,
-                                                   doorLockConfigs,
-                                                   numConfigs) != 0)
+    else if (zigbeeSubsystemAttributesSetReporting(
+                 configContext->eui64, configContext->endpointId, DOORLOCK_CLUSTER_ID, doorLockConfigs, numConfigs) !=
+             0)
     {
         icLogError(LOG_TAG, "%s: failed to set reporting", __FUNCTION__);
         result = false;
@@ -469,13 +424,9 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         }
     }
 
-    uint16_t alarmMask = 1 << BOLT_JAMMED |
-            1 << LOCK_RESET_TO_FACTORY_DEFAULTS |
-            1 << BATTERY_REPLACEMENT |
-            1 << RF_MODULE_POWER_CYCLED |
-            1 << TAMPER_ALARM_WRONG_CODE_ENTRY_LIMIT |
-            1 << TAMPER_ALARM_FRONT_ESCUTCHEON_REMOVED |
-            1 << DOOR_FORCED_OPEN_WHILE_LOCKED;
+    uint16_t alarmMask = 1 << BOLT_JAMMED | 1 << LOCK_RESET_TO_FACTORY_DEFAULTS | 1 << BATTERY_REPLACEMENT |
+                         1 << RF_MODULE_POWER_CYCLED | 1 << TAMPER_ALARM_WRONG_CODE_ENTRY_LIMIT |
+                         1 << TAMPER_ALARM_FRONT_ESCUTCHEON_REMOVED | 1 << DOOR_FORCED_OPEN_WHILE_LOCKED;
     if (zigbeeSubsystemWriteNumber(configContext->eui64,
                                    configContext->endpointId,
                                    DOORLOCK_CLUSTER_ID,
@@ -501,17 +452,17 @@ const char *getSourceString(uint8_t source, uint8_t code)
 
     switch (code)
     {
-        case 0xa: //auto lock
+        case 0xa: // auto lock
             result = DOORLOCK_PROFILE_LOCKED_SOURCE_AUTO;
             break;
 
-        case 0xb: //schedule lock
-        case 0xc: //schedule unlock
+        case 0xb: // schedule lock
+        case 0xc: // schedule unlock
             result = DOORLOCK_PROFILE_LOCKED_SOURCE_SCHEDULE;
             break;
 
         default:
-            //we will use the source
+            // we will use the source
             break;
     }
 
@@ -519,7 +470,7 @@ const char *getSourceString(uint8_t source, uint8_t code)
     {
         switch (source)
         {
-            //TODO when we get to the point where we have all json defined in schemas and structs generated, fixme
+            // TODO when we get to the point where we have all json defined in schemas and structs generated, fixme
             case 0x00:
                 result = DOORLOCK_PROFILE_LOCKED_SOURCE_KEYPAD;
                 break;
@@ -565,20 +516,20 @@ static bool handleOperationEventNotification(DoorLockCluster *cluster, ReceivedC
 
     switch (eventCode)
     {
-        case 0x1: //lock
-        case 0x7: //one touch lock
-        case 0x8: //key lock
-        case 0xa: //auto lock
-        case 0xb: //schedule lock
-        case 0xd: //manual lock
+        case 0x1: // lock
+        case 0x7: // one touch lock
+        case 0x8: // key lock
+        case 0xa: // auto lock
+        case 0xb: // schedule lock
+        case 0xd: // manual lock
             isLocked = true;
             handled = true;
             break;
 
-        case 0x2: //unlock
-        case 0x9: //key unlock
-        case 0xc: //schedule unlock
-        case 0xe: //manual unlock
+        case 0x2: // unlock
+        case 0x9: // key unlock
+        case 0xc: // schedule unlock
+        case 0xe: // manual unlock
             isLocked = false;
             handled = true;
             break;
@@ -594,8 +545,8 @@ static bool handleOperationEventNotification(DoorLockCluster *cluster, ReceivedC
 
         if (cluster->callbacks->lockedStateChanged != NULL)
         {
-            cluster->callbacks->lockedStateChanged(command->eui64, command->sourceEndpoint, isLocked, source, userId,
-                                                   cluster->callbackContext);
+            cluster->callbacks->lockedStateChanged(
+                command->eui64, command->sourceEndpoint, isLocked, source, userId, cluster->callbackContext);
         }
     }
 
@@ -607,19 +558,19 @@ static char *pinToString(ZigbeeIOContext *zio, size_t pinLength)
     char *result = calloc(pinLength + 1, 1);
 
     bool validPin = true;
-    for(int i = 0; i < pinLength; i++)
+    for (int i = 0; i < pinLength; i++)
     {
         uint8_t pinByte = zigbeeIOGetUint8(zio);
 
-        if (isdigit(pinByte) == 0 && pinByte != 0) //0 is allowed for invalid/empty slots
+        if (isdigit(pinByte) == 0 && pinByte != 0) // 0 is allowed for invalid/empty slots
         {
-            icLogError(LOG_TAG, "%s: invalid pin digit %"PRIu8, __func__, pinByte);
+            icLogError(LOG_TAG, "%s: invalid pin digit %" PRIu8, __func__, pinByte);
             validPin = false;
             break;
         }
         else
         {
-            result[i] = (char)pinByte;
+            result[i] = (char) pinByte;
         }
     }
 
@@ -659,7 +610,7 @@ static bool handleProgrammingEventNotification(DoorLockCluster *cluster, Receive
             uint8_t userType = zigbeeIOGetUint8(zio);
             uint8_t userStatus = zigbeeIOGetUint8(zio);
             uint32_t localTime = zigbeeIOGetUint32(zio);
-            AUTO_CLEAN(free_generic__auto) char *data = zigbeeIOGetString(zio); //this can be NULL which is ok
+            AUTO_CLEAN(free_generic__auto) char *data = zigbeeIOGetString(zio); // this can be NULL which is ok
 
             if (cluster->callbacks->keypadProgrammingEventNotification != NULL)
             {
@@ -692,10 +643,8 @@ static bool handleSetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCo
 
     if (cluster->callbacks->setPinCodeResponse != NULL)
     {
-        cluster->callbacks->setPinCodeResponse(command->eui64,
-                                               command->sourceEndpoint,
-                                               command->commandData[0],
-                                               cluster->callbackContext);
+        cluster->callbacks->setPinCodeResponse(
+            command->eui64, command->sourceEndpoint, command->commandData[0], cluster->callbackContext);
     }
 
     return true;
@@ -725,10 +674,8 @@ static bool handleGetPinCodeResponse(DoorLockCluster *cluster, ReceivedClusterCo
     if (pin != NULL && cluster->callbacks->getPinCodeResponse != NULL)
     {
         strncpy(user.pin, pin, MIN(pinLength, sizeof(user.pin) - 1));
-        cluster->callbacks->getPinCodeResponse(command->eui64,
-                                               command->sourceEndpoint,
-                                               &user,
-                                               cluster->callbackContext);
+        cluster->callbacks->getPinCodeResponse(
+            command->eui64, command->sourceEndpoint, &user, cluster->callbackContext);
     }
 
     return handled;
@@ -744,10 +691,8 @@ static bool handleClearPinCodeResponse(DoorLockCluster *cluster, ReceivedCluster
 
     if (cluster->callbacks->clearPinCodeResponse != NULL)
     {
-        cluster->callbacks->clearPinCodeResponse(command->eui64,
-                                                 command->sourceEndpoint,
-                                                 command->commandData[0] == 0,
-                                                 cluster->callbackContext);
+        cluster->callbacks->clearPinCodeResponse(
+            command->eui64, command->sourceEndpoint, command->commandData[0] == 0, cluster->callbackContext);
     }
 
     return true;
@@ -763,10 +708,8 @@ static bool handleClearAllPinCodesResponse(DoorLockCluster *cluster, ReceivedClu
 
     if (cluster->callbacks->clearAllPinCodesResponse != NULL)
     {
-        cluster->callbacks->clearAllPinCodesResponse(command->eui64,
-                                                     command->sourceEndpoint,
-                                                     command->commandData[0] == 0,
-                                                     cluster->callbackContext);
+        cluster->callbacks->clearAllPinCodesResponse(
+            command->eui64, command->sourceEndpoint, command->commandData[0] == 0, cluster->callbackContext);
     }
 
     return true;
@@ -778,16 +721,14 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
 
     icLogDebug(LOG_TAG, "%s: clusterId 0x%04x, commandId 0x%02x", __FUNCTION__, command->clusterId, command->commandId);
 
-    if (command->clusterId != DOORLOCK_CLUSTER_ID ||
-         command->mfgSpecific == true ||
-         command->fromServer == false)
+    if (command->clusterId != DOORLOCK_CLUSTER_ID || command->mfgSpecific == true || command->fromServer == false)
     {
         return false;
     }
 
     DoorLockCluster *cluster = (DoorLockCluster *) ctx;
 
-    switch(command->commandId)
+    switch (command->commandId)
     {
         case DOORLOCK_SET_PIN_CODE_RESPONSE_COMMAND_ID:
             handled = handleSetPinCodeResponse(cluster, command);
@@ -817,7 +758,7 @@ static bool handleClusterCommand(ZigbeeCluster *ctx, ReceivedClusterCommand *com
     return handled;
 }
 
-static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport* report)
+static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *report)
 {
     bool handled = false;
 
@@ -844,20 +785,18 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport* r
             uint32_t autoRelockTime = zigbeeIOGetUint32(zio);
             if (cluster->callbacks->autoRelockTimeChanged != NULL)
             {
-                cluster->callbacks->autoRelockTimeChanged(report->eui64,
-                                                          report->sourceEndpoint,
-                                                          autoRelockTime,
-                                                          cluster->callbackContext);
+                cluster->callbacks->autoRelockTimeChanged(
+                    report->eui64, report->sourceEndpoint, autoRelockTime, cluster->callbackContext);
             }
             break;
         }
 
         case DOORLOCK_LOCK_STATE_ATTRIBUTE_ID:
         {
-            //silently ignore this.  we use it for comm fail prevention.  actual lock state handling
-            // is done through the operation event notification
-            uint8_t lockState = zigbeeIOGetUint8(zio); //read the byte so zio library doesnt complain
-            (void)lockState; // unused
+            // silently ignore this.  we use it for comm fail prevention.  actual lock state handling
+            //  is done through the operation event notification
+            uint8_t lockState = zigbeeIOGetUint8(zio); // read the byte so zio library doesnt complain
+            (void) lockState;                          // unused
             break;
         }
 
@@ -869,7 +808,8 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport* r
     return handled;
 }
 
-static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
+static bool
+handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarmTableEntry)
 {
     bool result = true;
 
@@ -933,4 +873,4 @@ static bool handleAlarm(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, 
     return result;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

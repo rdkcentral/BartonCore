@@ -23,30 +23,30 @@
  * Created by Thomas Lea on 8/6/15.
  */
 
-#include <device/icDevice.h>
-#include <stdlib.h>
-#include <icLog/logging.h>
-#include <string.h>
-#include <stdio.h>
 #include "deviceServicePrivate.h"
-#include <jsonHelper/jsonHelper.h>
 #include <device-driver/device-driver.h>
+#include <device/icDevice.h>
 #include <device/icDeviceMetadata.h>
+#include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <jsonHelper/jsonHelper.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define LOG_TAG "deviceService"
+#define LOG_TAG                  "deviceService"
 
 // Keys for device json representation
-#define DEVICE_DRIVER_KEY "deviceDriver"
-#define DEVICE_CLASS_KEY "deviceClass"
+#define DEVICE_DRIVER_KEY        "deviceDriver"
+#define DEVICE_CLASS_KEY         "deviceClass"
 #define DEVICE_CLASS_VERSION_KEY "deviceClassVersion"
-#define DEVICE_URI_KEY "uri"
-#define DEVICE_UUID_KEY "uuid"
-#define DEVICE_ENDPOINTS_KEY "deviceEndpoints"
-#define DEVICE_RESOURCES_KEY "deviceResources"
-#define DEVICE_METADATAS_KEY "metadatas"
+#define DEVICE_URI_KEY           "uri"
+#define DEVICE_UUID_KEY          "uuid"
+#define DEVICE_ENDPOINTS_KEY     "deviceEndpoints"
+#define DEVICE_RESOURCES_KEY     "deviceResources"
+#define DEVICE_METADATAS_KEY     "metadatas"
 
-void deviceDestroy(icDevice* device)
+void deviceDestroy(icDevice *device)
 {
     if (device != NULL)
     {
@@ -65,7 +65,7 @@ extern inline void deviceDestroy__auto(icDevice **device);
 extern inline void deviceListDestroy(icLinkedList *deviceList);
 extern inline void deviceListDestroy__auto(icLinkedList **deviceList);
 
-void devicePrint(icDevice* device, const char* prefix)
+void devicePrint(icDevice *device, const char *prefix)
 {
     if (device == NULL)
     {
@@ -81,24 +81,24 @@ void devicePrint(icDevice* device, const char* prefix)
         icLogDebug(LOG_TAG, "%s\tmanagingDeviceDriver=%s", prefix, device->managingDeviceDriver);
 
 
-        //add indentation to our lower level stuff
-        char* newPrefix;
+        // add indentation to our lower level stuff
+        char *newPrefix;
         if (prefix == NULL)
         {
-            newPrefix = (char*) malloc(3); // \t\t\0
+            newPrefix = (char *) malloc(3); // \t\t\0
             sprintf(newPrefix, "\t\t");
         }
         else
         {
-            newPrefix = (char*) malloc(strlen(prefix) + 3); //\t\t\0
+            newPrefix = (char *) malloc(strlen(prefix) + 3); //\t\t\0
             sprintf(newPrefix, "%s\t\t", prefix);
         }
 
         icLogDebug(LOG_TAG, "%s\tresources:", prefix);
-        icLinkedListIterator* iterator = linkedListIteratorCreate(device->resources);
+        icLinkedListIterator *iterator = linkedListIteratorCreate(device->resources);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceResource* resource = (icDeviceResource*) linkedListIteratorGetNext(iterator);
+            icDeviceResource *resource = (icDeviceResource *) linkedListIteratorGetNext(iterator);
             resourcePrint(resource, newPrefix);
         }
         linkedListIteratorDestroy(iterator);
@@ -107,7 +107,7 @@ void devicePrint(icDevice* device, const char* prefix)
         iterator = linkedListIteratorCreate(device->endpoints);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceEndpoint* endpoint = (icDeviceEndpoint*) linkedListIteratorGetNext(iterator);
+            icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(iterator);
             endpointPrint(endpoint, newPrefix);
         }
         linkedListIteratorDestroy(iterator);
@@ -116,7 +116,7 @@ void devicePrint(icDevice* device, const char* prefix)
         iterator = linkedListIteratorCreate(device->metadata);
         while (linkedListIteratorHasNext(iterator))
         {
-            icDeviceMetadata* metadata = (icDeviceMetadata*) linkedListIteratorGetNext(iterator);
+            icDeviceMetadata *metadata = (icDeviceMetadata *) linkedListIteratorGetNext(iterator);
             metadataPrint(metadata, newPrefix);
         }
         linkedListIteratorDestroy(iterator);
@@ -132,10 +132,10 @@ void devicePrint(icDevice* device, const char* prefix)
  * @param context the context
  * @return the cloned metadata object
  */
-static void* cloneMetadataWithContext(void* item, void* context)
+static void *cloneMetadataWithContext(void *item, void *context)
 {
     (void) context;
-    return metadataClone((icDeviceMetadata*) item);
+    return metadataClone((icDeviceMetadata *) item);
 }
 
 /**
@@ -145,10 +145,10 @@ static void* cloneMetadataWithContext(void* item, void* context)
  * @param context the context
  * @return the cloned endpoint object
  */
-static void* cloneEndpointWithContext(void* item, void* context)
+static void *cloneEndpointWithContext(void *item, void *context)
 {
     (void) context;
-    return endpointClone((icDeviceEndpoint*) item);
+    return endpointClone((icDeviceEndpoint *) item);
 }
 
 /**
@@ -158,10 +158,10 @@ static void* cloneEndpointWithContext(void* item, void* context)
  * @param context the context
  * @return the cloned resource object
  */
-static void* cloneResourceWithContext(void* item, void* context)
+static void *cloneResourceWithContext(void *item, void *context)
 {
     (void) context;
-    return resourceClone((icDeviceResource*) item);
+    return resourceClone((icDeviceResource *) item);
 }
 
 /**
@@ -170,10 +170,10 @@ static void* cloneResourceWithContext(void* item, void* context)
  * @param device the device to clone
  * @return the cloned device object
  */
-icDevice* deviceClone(const icDevice* device)
+icDevice *deviceClone(const icDevice *device)
 {
     // Clone device info
-    icDevice* clone = NULL;
+    icDevice *clone = NULL;
     if (device != NULL)
     {
         clone = calloc(1, sizeof(icDevice));
@@ -226,9 +226,9 @@ icDevice* deviceClone(const icDevice* device)
  * @param device the device to convert
  * @return the JSON object
  */
-cJSON* deviceToJSON(const icDevice* device, const icSerDesContext *context)
+cJSON *deviceToJSON(const icDevice *device, const icSerDesContext *context)
 {
-    cJSON* json = cJSON_CreateObject();
+    cJSON *json = cJSON_CreateObject();
 
     // Add device info
     cJSON_AddStringToObject(json, DEVICE_DRIVER_KEY, device->managingDeviceDriver);
@@ -238,15 +238,15 @@ cJSON* deviceToJSON(const icDevice* device, const icSerDesContext *context)
     cJSON_AddStringToObject(json, DEVICE_UUID_KEY, device->uuid);
 
     // Add endpoints by id
-    cJSON* endpoints = endpointsToJSON(device->endpoints, context);
+    cJSON *endpoints = endpointsToJSON(device->endpoints, context);
     cJSON_AddItemToObject(json, DEVICE_ENDPOINTS_KEY, endpoints);
 
     // Add resources by id
-    cJSON* resources = resourcesToJSON(device->resources, context);
+    cJSON *resources = resourcesToJSON(device->resources, context);
     cJSON_AddItemToObject(json, DEVICE_RESOURCES_KEY, resources);
 
     // Add metadata by id
-    cJSON* metadatasJson = metadatasToJSON(device->metadata, context);
+    cJSON *metadatasJson = metadatasToJSON(device->metadata, context);
     cJSON_AddItemToObject(json, DEVICE_METADATAS_KEY, metadatasJson);
 
     return json;
@@ -261,15 +261,15 @@ cJSON* deviceToJSON(const icDevice* device, const icSerDesContext *context)
  */
 const char *deviceGetMetadata(const icDevice *device, const char *key)
 {
-    char * result = NULL;
+    char *result = NULL;
 
-    if(device != NULL && device->metadata != NULL)
+    if (device != NULL && device->metadata != NULL)
     {
         icLinkedListIterator *it = linkedListIteratorCreate(device->metadata);
-        while(linkedListIteratorHasNext(it))
+        while (linkedListIteratorHasNext(it))
         {
             icDeviceMetadata *metadata = linkedListIteratorGetNext(it);
-            if(strcmp(metadata->id, key) == 0)
+            if (strcmp(metadata->id, key) == 0)
             {
                 result = metadata->value;
                 break;
@@ -293,9 +293,9 @@ const char *deviceGetResourceValueById(const icDevice *device, const char *resou
     return value;
 }
 
-icDevice* deviceFromJSON(cJSON* json, const icSerDesContext *context, bool permissive)
+icDevice *deviceFromJSON(cJSON *json, const icSerDesContext *context, bool permissive)
 {
-    scoped_icDevice *tempDevice = (icDevice*) calloc(1, sizeof(icDevice));
+    scoped_icDevice *tempDevice = (icDevice *) calloc(1, sizeof(icDevice));
 
     tempDevice->uri = getCJSONString(json, DEVICE_URI_KEY);
     tempDevice->uuid = getCJSONString(json, DEVICE_UUID_KEY);
@@ -334,14 +334,16 @@ icDevice* deviceFromJSON(cJSON* json, const icSerDesContext *context, bool permi
     getCJSONUInt8(json, DEVICE_CLASS_VERSION_KEY, &deviceClassVersion);
     tempDevice->deviceClassVersion = deviceClassVersion;
 
-    tempDevice->endpoints = endpointsFromJSON(tempDevice->uuid, cJSON_GetObjectItem(json, DEVICE_ENDPOINTS_KEY), context, permissive);
+    tempDevice->endpoints =
+        endpointsFromJSON(tempDevice->uuid, cJSON_GetObjectItem(json, DEVICE_ENDPOINTS_KEY), context, permissive);
     if (linkedListCount(tempDevice->endpoints) == 0)
     {
         icLogError(LOG_TAG, "Invalid device %s: no valid endpoints!", tempDevice->uri);
         return NULL;
     }
 
-    tempDevice->resources = resourcesFromJSON(tempDevice->uuid, NULL, cJSON_GetObjectItem(json, DEVICE_RESOURCES_KEY), context, permissive);
+    tempDevice->resources =
+        resourcesFromJSON(tempDevice->uuid, NULL, cJSON_GetObjectItem(json, DEVICE_RESOURCES_KEY), context, permissive);
     if (linkedListCount(tempDevice->resources) == 0)
     {
         icLogError(LOG_TAG, "Invalid device %s: no valid resources!", tempDevice->uri);
@@ -349,7 +351,8 @@ icDevice* deviceFromJSON(cJSON* json, const icSerDesContext *context, bool permi
     }
 
     /* This is allowed to be an empty list */
-    tempDevice->metadata = metadatasFromJSON(tempDevice->uuid, NULL, cJSON_GetObjectItem(json, DEVICE_METADATAS_KEY), permissive);
+    tempDevice->metadata =
+        metadatasFromJSON(tempDevice->uuid, NULL, cJSON_GetObjectItem(json, DEVICE_METADATAS_KEY), permissive);
     if (tempDevice->metadata == NULL)
     {
         icLogError(LOG_TAG, "Invalid device %s: invalid metadatas!", tempDevice->uri);
@@ -364,10 +367,10 @@ icDevice* deviceFromJSON(cJSON* json, const icSerDesContext *context, bool permi
     return device;
 }
 
-bool deviceUriIsValid(const char* deviceUri, const char* deviceUuid)
+bool deviceUriIsValid(const char *deviceUri, const char *deviceUuid)
 {
     bool retValue = false;
-    if ((stringIsEmpty(deviceUri) == false) && (stringIsEmpty(deviceUuid)== false))
+    if ((stringIsEmpty(deviceUri) == false) && (stringIsEmpty(deviceUuid) == false))
     {
         scoped_generic char *tempUri = stringBuilder("/%s", deviceUuid);
         if (stringCompare(deviceUri, tempUri, true) == 0)

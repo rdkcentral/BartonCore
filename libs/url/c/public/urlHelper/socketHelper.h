@@ -88,11 +88,11 @@ socketHelperError socketHelperTryConnectHost(int socketFd, const char *hostname,
  *         socketHelperError corresponding to where the error occurred.
  * @see socketHelperError
  */
-socketHelperError socketHelperTryConnectAddr(int socketFd, const struct sockaddr* addr, socklen_t addrlen);
+socketHelperError socketHelperTryConnectAddr(int socketFd, const struct sockaddr *addr, socklen_t addrlen);
 
 /*
  * Attempts a simple connect to the provided address.
  */
 bool performSimpleConnect(bool useCell, const char *interface, const char *hostname, uint16_t port);
 
-#endif //ZILKER_SOCKETHELPER_H
+#endif // ZILKER_SOCKETHELPER_H

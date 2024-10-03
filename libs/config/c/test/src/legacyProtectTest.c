@@ -28,10 +28,10 @@
  * Author: kgandhi
  *-----------------------------------------------*/
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "icConfig/legacyProtectConfig.h"
 #include "tests.h"
@@ -54,13 +54,11 @@ bool testLegacyProtectConfig()
     // TODO: compare the result to what the correct answer is (commented below)
     //       but right now the conversion has messed up chars at the end and
     //       we need to figure out what's wrong here
-    const char *javaStr[] = {
-            "jVTu3KaArlc0Hxbwg9orAg",       // == mHzD2FOW
-            "IvLmTPgCdGQdAH3caDrtNQ",       // == XHS-E04288B2
-            "V/ZMO9f7LEP9Mr564ZPZzGsMQ9z/SARfo27S6hMqTvWcV9oFpe7lSHwA9piJKH4farcKrgtut0CA2BIIqEOPmg",
-                                            // == ge9HwgQZ4dKXTx1tXejuKWHGgbNFpXhr3vEWTQxcymyjGcP08Oq7gRThS4KD039
-            NULL
-    };
+    const char *javaStr[] = {"jVTu3KaArlc0Hxbwg9orAg", // == mHzD2FOW
+                             "IvLmTPgCdGQdAH3caDrtNQ", // == XHS-E04288B2
+                             "V/ZMO9f7LEP9Mr564ZPZzGsMQ9z/SARfo27S6hMqTvWcV9oFpe7lSHwA9piJKH4farcKrgtut0CA2BIIqEOPmg",
+                             // == ge9HwgQZ4dKXTx1tXejuKWHGgbNFpXhr3vEWTQxcymyjGcP08Oq7gRThS4KD039
+                             NULL};
     unsigned char *buffer = NULL;
     size_t bufferLen = 0;
 
@@ -89,4 +87,3 @@ bool testLegacyProtectConfig()
 
     return true;
 }
-

@@ -78,7 +78,7 @@ bool remoteCliClusterSendCommand(uint64_t eui64, uint8_t endpointId, const char 
     uint16_t payloadLen = strlen(command) + 1; //+1 for length prefix, not null
     scoped_generic char *payload = malloc(payloadLen);
     sbZigbeeIOContext *zio = zigbeeIOInit(payload, payloadLen, ZIO_WRITE);
-    zigbeeIOPutString(zio, (char *)command);
+    zigbeeIOPutString(zio, (char *) command);
 
     return (zigbeeSubsystemSendMfgCommandWithEncryption(eui64,
                                                         endpointId,

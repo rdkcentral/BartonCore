@@ -32,22 +32,22 @@
  * Author: jelderton - 4/13/16
  *-----------------------------------------------*/
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include <icUtil/stringUtils.h>
 #include <icUtil/parsePropFile.h>
+#include <icUtil/stringUtils.h>
 
-#define MAX_LINE_LEN        2048
+#define MAX_LINE_LEN 2048
 
 // model the icPropertyIterator
 //
 struct _icPropIterator
 {
-    FILE    *fp;        // property file currently being parsed
-    char    *key;       //
-    char    *value;     //
+    FILE *fp;    // property file currently being parsed
+    char *key;   //
+    char *value; //
 };
 
 /*
@@ -62,7 +62,7 @@ icPropertyIterator *propIteratorCreate(const char *filename)
 {
     // allocate the return object
     //
-    icPropertyIterator *retVal = (icPropertyIterator *)malloc(sizeof(icPropertyIterator));
+    icPropertyIterator *retVal = (icPropertyIterator *) malloc(sizeof(icPropertyIterator));
     if (retVal != NULL)
     {
         memset(retVal, 0, sizeof(icPropertyIterator));
@@ -92,7 +92,7 @@ icPropertyIterator *propIteratorCreateFromFile(FILE *fp)
 {
     // allocate the return object
     //
-    icPropertyIterator *retVal = (icPropertyIterator *)malloc(sizeof(icPropertyIterator));
+    icPropertyIterator *retVal = (icPropertyIterator *) malloc(sizeof(icPropertyIterator));
     if (retVal != NULL)
     {
         memset(retVal, 0, sizeof(icPropertyIterator));
@@ -177,8 +177,8 @@ bool propIteratorHasNext(icPropertyIterator *iterator)
     bool retVal = false;
     char tempKey[MAX_LINE_LEN];
     char tempVal[MAX_LINE_LEN];
-    char readBuffer[MAX_LINE_LEN+1];
-    while (fgets(readBuffer, MAX_LINE_LEN, iterator->fp) != (char *)0)
+    char readBuffer[MAX_LINE_LEN + 1];
+    while (fgets(readBuffer, MAX_LINE_LEN, iterator->fp) != (char *) 0)
     {
         // since this is a .properties file, skip blank lines
         // and ones that begin with '#'
@@ -233,7 +233,7 @@ icProperty *propIteratorGetNext(icPropertyIterator *iterator)
 
     // create 'property' object, and stuff into it our 'key' and 'value'
     //
-    icProperty *retVal = (icProperty *)malloc(sizeof(icProperty));
+    icProperty *retVal = (icProperty *) malloc(sizeof(icProperty));
     retVal->key = iterator->key;
     retVal->value = iterator->value;
 
@@ -244,5 +244,3 @@ icProperty *propIteratorGetNext(icPropertyIterator *iterator)
 
     return retVal;
 }
-
-

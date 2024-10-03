@@ -20,12 +20,15 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+
+#include <cmocka.h>
+#include <icUtil/systemCommandUtils.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
-#include <cmocka.h>
-#include <icUtil/systemCommandUtils.h>
 
 void test_execute_ok(void **state)
 {
@@ -51,13 +54,10 @@ void test_shell_nofile(void **state)
 
 int main(int argc, const char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_execute_ok),
-                    cmocka_unit_test(test_execute_nofile),
-                    cmocka_unit_test(test_shell_ok),
-                    cmocka_unit_test(test_shell_nofile)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_execute_ok),
+                                       cmocka_unit_test(test_execute_nofile),
+                                       cmocka_unit_test(test_shell_ok),
+                                       cmocka_unit_test(test_shell_nofile)};
 
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

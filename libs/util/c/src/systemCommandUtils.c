@@ -28,28 +28,28 @@
  * Author: eInfochips
  *-----------------------------------------------*/
 
-#include <stdlib.h>
-#include <stdbool.h>
 #include <errno.h>
+#include <icLog/logging.h>
+#include <icTypes/icStringBuffer.h>
+#include <icUtil/stringUtils.h>
+#include <icUtil/systemCommandUtils.h>
+#include <libgen.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <stdarg.h>
 #include <unistd.h>
-#include <icUtil/stringUtils.h>
-#include <icTypes/icStringBuffer.h>
-#include <icLog/logging.h>
-#include <icUtil/systemCommandUtils.h>
-#include <libgen.h>
 
-#define LOG_TAG    "systemCommandUtils"
+#define LOG_TAG "systemCommandUtils"
 
 #undef HAVE_EXECVPE
 #if defined(__GLIBC_PREREQ)
-    #if __GLIBC_PREREQ(2, 11)
-        #define HAVE_EXECVPE
-    #endif
+#if __GLIBC_PREREQ(2, 11)
+#define HAVE_EXECVPE
+#endif
 #endif
 
 int execShellCommand(const char *commandStr)
@@ -59,12 +59,11 @@ int execShellCommand(const char *commandStr)
         return -1;
     }
 
-    icLogDebug(LOG_TAG,"running command '%s'", commandStr);
+    icLogDebug(LOG_TAG, "running command '%s'", commandStr);
     int rc = system(commandStr);
     if (rc != 0)
     {
-        icLogWarn(LOG_TAG, "failed running '%s' script, errorCode : %d",
-                  commandStr, WEXITSTATUS(rc));
+        icLogWarn(LOG_TAG, "failed running '%s' script, errorCode : %d", commandStr, WEXITSTATUS(rc));
     }
     else
     {
@@ -87,7 +86,8 @@ int execSystemCommand(const char *program, ...)
 
     // To determine the number of arguments provided
     //
-    for (argc = 1; va_arg(argList, const char *) != NULL; argc++);
+    for (argc = 1; va_arg(argList, const char *) != NULL; argc++)
+        ;
 
     va_end(argList);
 
@@ -128,7 +128,7 @@ int __executeSystemCommand(const char *path, char *const argv[])
         // We cannot change propEnv, or we are screwing with the environment
         //
         char *localEnv = strdup(propEnv);
-        char *comma = strchr(localEnv,',');
+        char *comma = strchr(localEnv, ',');
 
         // Remove the comma
         //
@@ -204,21 +204,19 @@ int __executeSystemCommand(const char *path, char *const argv[])
                 }
                 else
                 {
-                    icLogError(LOG_TAG, "Command '%s' execution failed - %d [%d]",
-                               argv[0], WEXITSTATUS(status), status);
+                    icLogError(
+                        LOG_TAG, "Command '%s' execution failed - %d [%d]", argv[0], WEXITSTATUS(status), status);
                     return WEXITSTATUS(status);
                 }
             }
             else if (WIFSIGNALED(status) == true)
             {
-                icLogError(LOG_TAG, "Process for command '%s' received signal %d",
-                           argv[0], WTERMSIG(status));
+                icLogError(LOG_TAG, "Process for command '%s' received signal %d", argv[0], WTERMSIG(status));
                 return 128 + WTERMSIG(status);
             }
             else
             {
-                icLogError(LOG_TAG, "Process for command '%s' didn't terminate normally %d",
-                           argv[0], status);
+                icLogError(LOG_TAG, "Process for command '%s' didn't terminate normally %d", argv[0], status);
                 return -1;
             }
         }

@@ -25,22 +25,23 @@
 // Created by Christian Leithner on 11/5/2018.
 //
 
-#include <stdio.h>
-#include <icTypes/icStringHashMap.h>
-#include <icLog/logging.h>
-#include <memory.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
+
 #include <cjson/cJSON.h>
+#include <cmocka.h>
+#include <icLog/logging.h>
+#include <icTypes/icStringHashMap.h>
 #include <icTypes/sbrm.h>
 #include <jsonHelper/jsonHelper.h>
+#include <memory.h>
+#include <stdio.h>
 
-#define LOG_CAT     "logTEST"
+#define LOG_CAT        "logTEST"
 
-#define KEY_PREFIX_STR  "test %d"
-#define VAL_PREFIX_STR  "test %d val"
+#define KEY_PREFIX_STR "test %d"
+#define VAL_PREFIX_STR "test %d val"
 
 static void test_canCreateDestroyStringMap(void **state)
 {
@@ -61,8 +62,8 @@ static void test_canPutGetStringMap(void **state)
 
     icStringHashMap *map = stringHashMapCreate();
 
-    char *key = (char *)malloc(sizeof(char) * 24);
-    char *val = (char *)malloc(sizeof(char) * 24);
+    char *key = (char *) malloc(sizeof(char) * 24);
+    char *val = (char *) malloc(sizeof(char) * 24);
 
     sprintf(key, KEY_PREFIX_STR, 1);
     sprintf(val, VAL_PREFIX_STR, 1);
@@ -86,8 +87,8 @@ static void test_canDeleteStringMap(void **state)
 
     icStringHashMap *map = stringHashMapCreate();
 
-    char *key = (char *)malloc(sizeof(char) * 24);
-    char *val = (char *)malloc(sizeof(char) * 24);
+    char *key = (char *) malloc(sizeof(char) * 24);
+    char *val = (char *) malloc(sizeof(char) * 24);
 
     sprintf(key, KEY_PREFIX_STR, 1);
     sprintf(val, VAL_PREFIX_STR, 1);
@@ -108,10 +109,10 @@ static void test_canIterateStringMap(void **state)
 
     icStringHashMap *map = stringHashMapCreate();
 
-    for(int i = 0; i<15; i++)
+    for (int i = 0; i < 15; i++)
     {
-        char *key = (char *)malloc(sizeof(char) * 24);
-        char *val = (char *)malloc(sizeof(char) * 24);
+        char *key = (char *) malloc(sizeof(char) * 24);
+        char *val = (char *) malloc(sizeof(char) * 24);
 
         sprintf(key, KEY_PREFIX_STR, i);
         sprintf(val, VAL_PREFIX_STR, i);
@@ -122,7 +123,7 @@ static void test_canIterateStringMap(void **state)
     int count = stringHashMapCount(map);
     int x = 0;
     icStringHashMapIterator *loop = stringHashMapIteratorCreate(map);
-    while(stringHashMapIteratorHasNext(loop) == true)
+    while (stringHashMapIteratorHasNext(loop) == true)
     {
         char *mapKey;
         char *mapValue;
@@ -132,7 +133,7 @@ static void test_canIterateStringMap(void **state)
         stringHashMapIteratorGetNext(loop, &mapKey, &mapValue);
         printf("map: x=%d k=%s v=%s\n", x, mapKey, mapValue);
 
-        if(x < 5)
+        if (x < 5)
         {
             // delete the first 5 items
             //
@@ -162,10 +163,10 @@ static void test_canDeepCloneStringMap(void **state)
 
     icStringHashMap *map = stringHashMapCreate();
 
-    for(int i = 0; i<15; i++)
+    for (int i = 0; i < 15; i++)
     {
-        char *key = (char *)malloc(sizeof(char) * 24);
-        char *val = (char *)malloc(sizeof(char) * 24);
+        char *key = (char *) malloc(sizeof(char) * 24);
+        char *val = (char *) malloc(sizeof(char) * 24);
 
         sprintf(key, KEY_PREFIX_STR, i);
         sprintf(val, VAL_PREFIX_STR, i);
@@ -180,7 +181,7 @@ static void test_canDeepCloneStringMap(void **state)
     icStringHashMapIterator *iter = stringHashMapIteratorCreate(map);
     icStringHashMapIterator *clonedIter = stringHashMapIteratorCreate(mapClone);
 
-    while(stringHashMapIteratorHasNext(iter) && stringHashMapIteratorHasNext(clonedIter))
+    while (stringHashMapIteratorHasNext(iter) && stringHashMapIteratorHasNext(clonedIter))
     {
         char *mapKey;
         char *mapValue;
@@ -191,13 +192,12 @@ static void test_canDeepCloneStringMap(void **state)
         stringHashMapIteratorGetNext(iter, &mapKey, &mapValue);
         stringHashMapIteratorGetNext(clonedIter, &cloneKey, &cloneVal);
 
-        //Can't be equal pointers
+        // Can't be equal pointers
         assert_ptr_not_equal(mapKey, cloneKey);
         assert_ptr_not_equal(mapValue, cloneVal);
 
         assert_int_equal(strcmp(mapKey, cloneKey), 0);
         assert_int_equal(strcmp(mapValue, cloneVal), 0);
-
     }
 
     stringHashMapIteratorDestroy(iter);
@@ -217,7 +217,7 @@ static void test_canPutCopyStringMap(void **state)
 
     const char *key = "PUT_COPY_KEY";
     const char *value = "PUT_COPY_VALUE";
-    char *valueCopy = (char *)malloc(strlen(value)+1);
+    char *valueCopy = (char *) malloc(strlen(value) + 1);
     strcpy(valueCopy, value);
 
     stringHashMapPutCopy(map, key, valueCopy);
@@ -301,17 +301,14 @@ static void testCanNotSerializeDeserializeBadInput(void **state)
 
 int main(int argc, char **argv)
 {
-    const struct CMUnitTest tests[] =
-            {
-                    cmocka_unit_test(test_canCreateDestroyStringMap),
-                    cmocka_unit_test(test_canPutGetStringMap),
-                    cmocka_unit_test(test_canDeleteStringMap),
-                    cmocka_unit_test(test_canIterateStringMap),
-                    cmocka_unit_test(test_canDeepCloneStringMap),
-                    cmocka_unit_test(test_canPutCopyStringMap),
-                    cmocka_unit_test(testCanSerializeDeserializeMap),
-                    cmocka_unit_test(testCanNotSerializeDeserializeBadInput)
-            };
+    const struct CMUnitTest tests[] = {cmocka_unit_test(test_canCreateDestroyStringMap),
+                                       cmocka_unit_test(test_canPutGetStringMap),
+                                       cmocka_unit_test(test_canDeleteStringMap),
+                                       cmocka_unit_test(test_canIterateStringMap),
+                                       cmocka_unit_test(test_canDeepCloneStringMap),
+                                       cmocka_unit_test(test_canPutCopyStringMap),
+                                       cmocka_unit_test(testCanSerializeDeserializeMap),
+                                       cmocka_unit_test(testCanNotSerializeDeserializeBadInput)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

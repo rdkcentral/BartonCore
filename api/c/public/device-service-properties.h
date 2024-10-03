@@ -35,9 +35,9 @@ G_BEGIN_DECLS
  */
 
 // Prefix for all barton properties
-#define BARTON_PREFIX "barton."
+#define BARTON_PREFIX             "barton."
 // Prefix for 802.15.4 related properties
-#define FIFTEEN_FOUR_PREFIX "fifteenfour."
+#define FIFTEEN_FOUR_PREFIX       "fifteenfour."
 
 /**
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")

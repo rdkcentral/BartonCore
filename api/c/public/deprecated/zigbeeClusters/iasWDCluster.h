@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2019 Comcast
 //
 // All rights reserved.
@@ -35,7 +35,8 @@ typedef struct
 {
 } IASWDClusterCallbacks;
 
-typedef enum {
+typedef enum
+{
     IASWD_WARNING_MODE_STOP = 0,
     IASWD_WARNING_MODE_BURGLAR,
     IASWD_WARNING_MODE_FIRE,
@@ -46,14 +47,16 @@ typedef enum {
     IASWD_WARNING_MODE_CO
 } IASWDWarningMode;
 
-typedef enum {
+typedef enum
+{
     IASWD_SIREN_LEVEL_LOW = 0,
     IASWD_SIREN_LEVEL_MEDIUM,
     IASWD_SIREN_LEVEL_HIGH,
     IASWD_SIREN_LEVEL_MAXIMUM
 } IASWDSirenLevel;
 
-typedef enum {
+typedef enum
+{
     IASWD_STROBE_LEVEL_LOW = 0,
     IASWD_STROBE_LEVEL_MEDIUM,
     IASWD_STROBE_LEVEL_HIGH,
@@ -74,4 +77,4 @@ bool iasWDClusterStartWarning(uint64_t eui64,
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_IASWDCLUSTER_H
+#endif // ZILKER_IASWDCLUSTER_H

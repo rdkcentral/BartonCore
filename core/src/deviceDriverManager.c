@@ -28,12 +28,12 @@
  * Created by Thomas Lea on 7/28/15.
  */
 
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <icLog/logging.h>
 #include "device-driver/device-driver.h"
 #include <deviceService.h>
+#include <icLog/logging.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define LOG_TAG "deviceDriverManager"
 
@@ -46,9 +46,9 @@
 
 #include "subsystemManager.h"
 
-static bool driverSupportsDeviceClass(const DeviceDriver* driver, const char* deviceClass);
+static bool driverSupportsDeviceClass(const DeviceDriver *driver, const char *deviceClass);
 
-static void destroyDeviceDriverMapEntry(void* key, void* value);
+static void destroyDeviceDriverMapEntry(void *key, void *value);
 
 static icHashMap *deviceDrivers = NULL;
 static icLinkedList *orderedDeviceDrivers = NULL; // an ordered index (by load) onto the drivers. Does not own drivers.
@@ -75,7 +75,7 @@ bool deviceDriverManagerStartDeviceDrivers()
     sbIcLinkedListIterator *it = linkedListIteratorCreate(orderedDeviceDrivers);
     while (linkedListIteratorHasNext(it))
     {
-        DeviceDriver* driver = linkedListIteratorGetNext(it);
+        DeviceDriver *driver = linkedListIteratorGetNext(it);
         driver->startup(driver->callbackContext);
     }
 
@@ -155,9 +155,9 @@ bool deviceDriverManagerRegisterDriver(DeviceDriver *driver)
     return result;
 }
 
-icLinkedList* deviceDriverManagerGetDeviceDriversByDeviceClass(const char* deviceClass)
+icLinkedList *deviceDriverManagerGetDeviceDriversByDeviceClass(const char *deviceClass)
 {
-    icLinkedList* result = NULL;
+    icLinkedList *result = NULL;
 
     icLogDebug(LOG_TAG, "deviceDriverManagerGetDeviceDriversByDeviceClass: deviceClass=%s", deviceClass);
 
@@ -167,13 +167,13 @@ icLinkedList* deviceDriverManagerGetDeviceDriversByDeviceClass(const char* devic
     {
         result = linkedListCreate();
 
-        icHashMapIterator* iterator = hashMapIteratorCreate(deviceDrivers);
+        icHashMapIterator *iterator = hashMapIteratorCreate(deviceDrivers);
         while (hashMapIteratorHasNext(iterator))
         {
-            char* driverName;
-            uint16_t driverNameLen; //will be 1 more than strlen
-            DeviceDriver* driver;
-            hashMapIteratorGetNext(iterator, (void**) &driverName, &driverNameLen, (void**) &driver);
+            char *driverName;
+            uint16_t driverNameLen; // will be 1 more than strlen
+            DeviceDriver *driver;
+            hashMapIteratorGetNext(iterator, (void **) &driverName, &driverNameLen, (void **) &driver);
             if (driverSupportsDeviceClass(driver, deviceClass))
             {
                 linkedListAppend(result, driver);
@@ -184,9 +184,8 @@ icLinkedList* deviceDriverManagerGetDeviceDriversByDeviceClass(const char* devic
 
     if (result == NULL)
     {
-        icLogWarn(LOG_TAG,
-                  "deviceDriverManagerGetDeviceDriversByDeviceClass: deviceClass=%s: NO DRIVER FOUND",
-                  deviceClass);
+        icLogWarn(
+            LOG_TAG, "deviceDriverManagerGetDeviceDriversByDeviceClass: deviceClass=%s: NO DRIVER FOUND", deviceClass);
     }
 
     return result;
@@ -194,9 +193,9 @@ icLinkedList* deviceDriverManagerGetDeviceDriversByDeviceClass(const char* devic
 
 icLinkedList *deviceDriverManagerGetDeviceDriversBySubsystem(const char *subsystem)
 {
-    icLinkedList* result = NULL;
+    icLinkedList *result = NULL;
 
-    icLogDebug(LOG_TAG, "%s: subsystem=%s", __FUNCTION__ , subsystem);
+    icLogDebug(LOG_TAG, "%s: subsystem=%s", __FUNCTION__, subsystem);
 
     LOCK_SCOPE(deviceDriversMtx);
 
@@ -204,42 +203,40 @@ icLinkedList *deviceDriverManagerGetDeviceDriversBySubsystem(const char *subsyst
     {
         result = linkedListCreate();
 
-        icHashMapIterator* iterator = hashMapIteratorCreate(deviceDrivers);
+        icHashMapIterator *iterator = hashMapIteratorCreate(deviceDrivers);
         while (hashMapIteratorHasNext(iterator))
         {
-            char* driverName;
+            char *driverName;
             uint16_t driverNameLen; // will be 1 more than strlen()
 
-            DeviceDriver* driver;
-            hashMapIteratorGetNext(iterator, (void**) &driverName, &driverNameLen, (void**) &driver);
+            DeviceDriver *driver;
+            hashMapIteratorGetNext(iterator, (void **) &driverName, &driverNameLen, (void **) &driver);
 
             if (stringCompare(driver->subsystemName, subsystem, false) == 0)
             {
                 linkedListAppend(result, driver);
             }
-
         }
         hashMapIteratorDestroy(iterator);
     }
 
     if (result == NULL)
     {
-        icLogWarn(LOG_TAG, "%s: subsystem=%s: NO DRIVER FOUND", __FUNCTION__ , subsystem);
+        icLogWarn(LOG_TAG, "%s: subsystem=%s: NO DRIVER FOUND", __FUNCTION__, subsystem);
     }
 
     return result;
-
 }
 
-DeviceDriver* deviceDriverManagerGetDeviceDriver(const char* driverName)
+DeviceDriver *deviceDriverManagerGetDeviceDriver(const char *driverName)
 {
-    DeviceDriver* result = NULL;
+    DeviceDriver *result = NULL;
 
     LOCK_SCOPE(deviceDriversMtx);
 
     if (deviceDrivers != NULL)
     {
-        result = (DeviceDriver*) hashMapGet(deviceDrivers, (void*) driverName, (int16_t) (strlen(driverName) + 1));
+        result = (DeviceDriver *) hashMapGet(deviceDrivers, (void *) driverName, (int16_t) (strlen(driverName) + 1));
     }
     else
     {
@@ -249,30 +246,30 @@ DeviceDriver* deviceDriverManagerGetDeviceDriver(const char* driverName)
     return result;
 }
 
-icLinkedList* deviceDriverManagerGetDeviceDrivers()
+icLinkedList *deviceDriverManagerGetDeviceDrivers()
 {
     // FIXME: refcount!
     return linkedListClone(orderedDeviceDrivers);
 }
 
-typedef DeviceDriver* (* driverInitFn)(void);
+typedef DeviceDriver *(*driverInitFn)(void);
 
 static void loadDriver(driverInitFn fn)
 {
-    DeviceDriver* driver = fn();
+    DeviceDriver *driver = fn();
 
     deviceDriverManagerRegisterDriver(driver);
 }
 
-static bool driverSupportsDeviceClass(const DeviceDriver* driver, const char* deviceClass)
+static bool driverSupportsDeviceClass(const DeviceDriver *driver, const char *deviceClass)
 {
     bool result = false;
     if (driver != NULL && driver->supportedDeviceClasses != NULL)
     {
-        icLinkedListIterator* iterator = linkedListIteratorCreate(driver->supportedDeviceClasses);
+        icLinkedListIterator *iterator = linkedListIteratorCreate(driver->supportedDeviceClasses);
         while (linkedListIteratorHasNext(iterator))
         {
-            char* supportedDeviceClass = (char*) linkedListIteratorGetNext(iterator);
+            char *supportedDeviceClass = (char *) linkedListIteratorGetNext(iterator);
             if (strcmp(deviceClass, supportedDeviceClass) == 0)
             {
                 result = true;
@@ -286,7 +283,7 @@ static bool driverSupportsDeviceClass(const DeviceDriver* driver, const char* de
     return result;
 }
 
-static void destroyDeviceDriverMapEntry(void* key, void* value)
+static void destroyDeviceDriverMapEntry(void *key, void *value)
 {
     // Key is the driverName member, ignore it
     (void) key;

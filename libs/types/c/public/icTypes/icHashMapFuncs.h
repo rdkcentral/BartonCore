@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -44,4 +44,4 @@ typedef void (*hashMapCloneFunc)(void *key, void *value, void **clonedKey, void 
  */
 void standardDoNotFreeHashMapFunc(void *key, void *value);
 
-#endif //ZILKER_ICHASHMAPFUNCS_H
+#endif // ZILKER_ICHASHMAPFUNCS_H

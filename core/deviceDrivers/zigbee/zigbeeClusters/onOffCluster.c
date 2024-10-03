@@ -24,20 +24,20 @@
 // Created by tlea on 2/13/19.
 //
 
-#include <stdlib.h>
-#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <commonDeviceDefs.h>
 #include <icLog/logging.h>
 #include <memory.h>
-#include <subsystems/zigbee/zigbeeAttributeTypes.h>
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include <stdio.h>
-#include <commonDeviceDefs.h>
+#include <stdlib.h>
+#include <subsystems/zigbee/zigbeeAttributeTypes.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #include "zigbeeClusters/onOffCluster.h"
 
-#define LOG_TAG "onOffCluster"
+#define LOG_TAG                         "onOffCluster"
 
 #define ON_OFF_CLUSTER_DISABLE_BIND_KEY "onOffClusterDisableBind"
 
@@ -69,8 +69,8 @@ ZigbeeCluster *onOffClusterCreate(const OnOffClusterCallbacks *callbacks, void *
 
 void onOffClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind)
 {
-    addBoolConfigurationMetadata(deviceConfigurationContext->configurationMetadata, ON_OFF_CLUSTER_DISABLE_BIND_KEY,
-            bind);
+    addBoolConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, ON_OFF_CLUSTER_DISABLE_BIND_KEY, bind);
 }
 
 bool onOffClusterIsOn(uint64_t eui64, uint8_t endpointId, bool *isOn)
@@ -115,14 +115,10 @@ bool onOffClusterSetAttributeReporting(uint64_t eui64, uint8_t endpointId)
     onOffConfigs[0].attributeInfo.id = ON_OFF_ATTRIBUTE_ID;
     onOffConfigs[0].attributeInfo.type = ZCL_BOOLEAN_ATTRIBUTE_TYPE;
     onOffConfigs[0].minInterval = 1;
-    onOffConfigs[0].maxInterval = 1620; //every 27 minutes at least.  we need this for comm fail, but only 1 attr.
+    onOffConfigs[0].maxInterval = 1620; // every 27 minutes at least.  we need this for comm fail, but only 1 attr.
     onOffConfigs[0].reportableChange = 1;
 
-    if (zigbeeSubsystemAttributesSetReporting(eui64,
-                                              endpointId,
-                                              ON_OFF_CLUSTER_ID,
-                                              onOffConfigs,
-                                              numConfigs) != 0)
+    if (zigbeeSubsystemAttributesSetReporting(eui64, endpointId, ON_OFF_CLUSTER_ID, onOffConfigs, numConfigs) != 0)
     {
         icLogError(LOG_TAG, "%s: failed to set reporting for on off", __FUNCTION__);
         result = false;
@@ -137,7 +133,7 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    //If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
+    // If the property is set to false we skip, otherwise accept its value or the default of true if nothing was set
     if (getBoolConfigurationMetadata(configContext->configurationMetadata, ON_OFF_CLUSTER_DISABLE_BIND_KEY, true))
     {
         if (zigbeeSubsystemBindingSet(configContext->eui64, configContext->endpointId, ON_OFF_CLUSTER_ID) != 0)
@@ -165,14 +161,12 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     {
         if (report->reportDataLen == 4)
         {
-            onOffCluster->callbacks->onOffStateChanged(report->eui64,
-                                                       report->sourceEndpoint,
-                                                       report->reportData[3] != 0,
-                                                       onOffCluster->callbackContext);
+            onOffCluster->callbacks->onOffStateChanged(
+                report->eui64, report->sourceEndpoint, report->reportData[3] != 0, onOffCluster->callbackContext);
         }
     }
 
     return true;
 }
 
-#endif //BARTON_CONFIG_ZIGBEE
+#endif // BARTON_CONFIG_ZIGBEE

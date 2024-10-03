@@ -24,67 +24,59 @@
 // Created by tlea on 2/20/19.
 //
 
-#include <subsystems/zigbee/zigbeeCommonIds.h>
-#include <icLog/logging.h>
-#include <stdio.h>
-#include <resourceTypes.h>
+#include "device-driver/device-driver-manager.h"
+#include "deviceDrivers/zigbeeDriverCommon.h"
 #include <commonDeviceDefs.h>
 #include <device/deviceModelHelper.h>
+#include <deviceServicePrivate.h>
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
 #include <memory.h>
-#include <zigbeeClusters/thermostatCluster.h>
+#include <resourceTypes.h>
+#include <stdio.h>
+#include <subsystems/zigbee/zigbeeCommonIds.h>
 #include <zigbeeClusters/fanControlCluster.h>
 #include <zigbeeClusters/pollControlCluster.h>
 #include <zigbeeClusters/powerConfigurationCluster.h>
-#include <icUtil/stringUtils.h>
-#include <deviceServicePrivate.h>
-#include "deviceDrivers/zigbeeDriverCommon.h"
-#include "device-driver/device-driver-manager.h"
+#include <zigbeeClusters/thermostatCluster.h>
 
-#define LOG_TAG "zigbeeThermostatDD"
-#define DRIVER_NAME "zigbeeThermostat"
-#define DEVICE_CLASS_NAME "thermostat"
-#define MY_DC_VERSION 1
+#define LOG_TAG                       "zigbeeThermostatDD"
+#define DRIVER_NAME                   "zigbeeThermostat"
+#define DEVICE_CLASS_NAME             "thermostat"
+#define MY_DC_VERSION                 1
 #define MY_THERMOSTAT_PROFILE_VERSION 2
-#define MAX_TEMP_VALUE 9999
-#define FAST_POLL_RATE_QS 2
-#define REGULAR_POLL_RATE_QS 28
-#define CENTRALITE_MANUFACTURER_NAME "CentraLite Systems"
-#define CENTRALITE_MODEL_NAME "3156105"
-#define RTCOA_MANUFACTURER_NAME "RTCOA"
-#define RTCOA_MODEL_NAME "CT30S"
+#define MAX_TEMP_VALUE                9999
+#define FAST_POLL_RATE_QS             2
+#define REGULAR_POLL_RATE_QS          28
+#define CENTRALITE_MANUFACTURER_NAME  "CentraLite Systems"
+#define CENTRALITE_MODEL_NAME         "3156105"
+#define RTCOA_MANUFACTURER_NAME       "RTCOA"
+#define RTCOA_MODEL_NAME              "CT30S"
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-static uint16_t myDeviceIds[] =
-        {
-                THERMOSTAT_DEVICE_ID
-        };
+static uint16_t myDeviceIds[] = {THERMOSTAT_DEVICE_ID};
 
-static bool claimDevice(ZigbeeDriverCommon *ctx,
-                        IcDiscoveredDeviceDetails *details);
+static bool claimDevice(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details);
 
 static bool configureDevice(ZigbeeDriverCommon *ctx,
                             icDevice *device,
                             DeviceDescriptor *descriptor,
                             IcDiscoveredDeviceDetails *discoveredDeviceDetails);
 
-static void deviceRejoined(ZigbeeDriverCommon *ctx,
-                           uint64_t eui64,
-                           bool isSecure,
-                           IcDiscoveredDeviceDetails *details);
+static void deviceRejoined(ZigbeeDriverCommon *ctx, uint64_t eui64, bool isSecure, IcDiscoveredDeviceDetails *details);
 
 static bool devicePersisted(ZigbeeDriverCommon *ctx, icDevice *device);
 
-static void handleAlarm(ZigbeeDriverCommon *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarm);
+static void
+handleAlarm(ZigbeeDriverCommon *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarm);
 
 static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDiscoveredDeviceDetails *details);
 
 static const char *mapDeviceIdToProfile(ZigbeeDriverCommon *ctx, uint16_t deviceId);
 
-static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx, icDevice *device,
+static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
+                                       icDevice *device,
                                        IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                                        icInitialResourceValues *initialResourceValues);
 
@@ -93,9 +85,8 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                               IcDiscoveredDeviceDetails *discoveredDeviceDetails,
                               icInitialResourceValues *initialResourceValues);
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext);
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext);
 
 static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
                                   uint32_t endpointNumber,
@@ -104,57 +95,31 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
                                   const char *newValue,
                                   bool *baseDriverUpdatesResource);
 
-static void localTemperatureChanged(uint64_t eui64,
-                                    uint8_t endpointId,
-                                    int16_t temp,
-                                    const void *ctx);
+static void localTemperatureChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-static void occupiedHeatingSetpointChanged(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx);
+static void occupiedHeatingSetpointChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-static void occupiedCoolingSetpointChanged(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx);
+static void occupiedCoolingSetpointChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx);
 
-static void systemModeChanged(uint64_t eui64,
-                              uint8_t endpointId,
-                              uint8_t mode,
-                              const void *ctx);
+static void systemModeChanged(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx);
 
-static void runningStateChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t state,
-                                const void *ctx);
+static void runningStateChanged(uint64_t eui64, uint8_t endpointId, uint16_t state, const void *ctx);
 
-static void setpointHoldChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool holdOn,
-                                const void *ctx);
+static void setpointHoldChanged(uint64_t eui64, uint8_t endpointId, bool holdOn, const void *ctx);
 
-static void ctrlSeqOpChanged(uint64_t eui64,
-                             uint8_t endpointId,
-                             uint8_t ctrlSeqOp,
-                             const void *ctx);
+static void ctrlSeqOpChanged(uint64_t eui64, uint8_t endpointId, uint8_t ctrlSeqOp, const void *ctx);
 
-static void fanModeChanged(uint64_t eui64,
-                           uint8_t endpointId,
-                           uint8_t mode,
-                           const void *ctx);
+static void fanModeChanged(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx);
 
 static void legacyOperationInfoReceived(uint64_t eui64,
                                         uint8_t endpointId,
-                                        uint8_t runningMode,      // 0=off, 1=heat, 2=cool
+                                        uint8_t runningMode, // 0=off, 1=heat, 2=cool
                                         bool holdOn,
                                         uint8_t runningState,     // 0=off, 1=heat, 2=cool, 0xff=not used
                                         uint8_t fanRunningState); // 0=off, 1=running, 0xff=not used
 
-static void localTemperatureCalibrationChanged(uint64_t eui64,
-                                               uint8_t endpointId,
-                                               int8_t calibrationTemp,
-                                               const void *ctx);
+static void
+localTemperatureCalibrationChanged(uint64_t eui64, uint8_t endpointId, int8_t calibrationTemp, const void *ctx);
 
 static bool isLegacyThermostat(const char *model);
 
@@ -162,46 +127,42 @@ static bool isLegacyRtcoaThermostat(const char *model);
 
 static bool isLegacyCentraliteThermostat(const char *model);
 
-static const ZigbeeDriverCommonCallbacks commonCallbacks =
-        {
-                .fetchInitialResourceValues = fetchInitialResourceValues,
-                .registerResources = registerResources,
-                .writeEndpointResource = writeEndpointResource,
-                .mapDeviceIdToProfile = mapDeviceIdToProfile,
-                .preConfigureCluster = preConfigureCluster,
-                .claimDevice = claimDevice,
-                .configureDevice = configureDevice,
-                .deviceRejoined = deviceRejoined,
-                .devicePersisted = devicePersisted,
-                .handleAlarm = handleAlarm,
-                .synchronizeDevice = synchronizeDevice,
-        };
+static const ZigbeeDriverCommonCallbacks commonCallbacks = {
+    .fetchInitialResourceValues = fetchInitialResourceValues,
+    .registerResources = registerResources,
+    .writeEndpointResource = writeEndpointResource,
+    .mapDeviceIdToProfile = mapDeviceIdToProfile,
+    .preConfigureCluster = preConfigureCluster,
+    .claimDevice = claimDevice,
+    .configureDevice = configureDevice,
+    .deviceRejoined = deviceRejoined,
+    .devicePersisted = devicePersisted,
+    .handleAlarm = handleAlarm,
+    .synchronizeDevice = synchronizeDevice,
+};
 
 static ZigbeeCluster *thermostatCluster = NULL;
 
 static ZigbeeCluster *fanControlCluster = NULL;
 
-static ThermostatClusterCallbacks thermostatClusterCallbacks =
-        {
-                .systemModeChanged = systemModeChanged,
-                .localTemperatureChanged = localTemperatureChanged,
-                .occupiedHeatingSetpointChanged = occupiedHeatingSetpointChanged,
-                .occupiedCoolingSetpointChanged = occupiedCoolingSetpointChanged,
-                .runningStateChanged = runningStateChanged,
-                .setpointHoldChanged = setpointHoldChanged,
-                .ctrlSeqOpChanged = ctrlSeqOpChanged,
-                .legacyOperationInfoReceived = legacyOperationInfoReceived,
-                .localTemperatureCalibrationChanged = localTemperatureCalibrationChanged,
-        };
+static ThermostatClusterCallbacks thermostatClusterCallbacks = {
+    .systemModeChanged = systemModeChanged,
+    .localTemperatureChanged = localTemperatureChanged,
+    .occupiedHeatingSetpointChanged = occupiedHeatingSetpointChanged,
+    .occupiedCoolingSetpointChanged = occupiedCoolingSetpointChanged,
+    .runningStateChanged = runningStateChanged,
+    .setpointHoldChanged = setpointHoldChanged,
+    .ctrlSeqOpChanged = ctrlSeqOpChanged,
+    .legacyOperationInfoReceived = legacyOperationInfoReceived,
+    .localTemperatureCalibrationChanged = localTemperatureCalibrationChanged,
+};
 
-static FanControlClusterCallbacks fanControlClusterCallbacks =
-        {
-                .fanModeChanged = fanModeChanged,
-        };
+static FanControlClusterCallbacks fanControlClusterCallbacks = {
+    .fanModeChanged = fanModeChanged,
+};
 
-//zigbee device driver registration order matters, so we pick constructor priority carefully
-__attribute__ ((constructor (290)))
-static void driverRegister(void)
+// zigbee device driver registration order matters, so we pick constructor priority carefully
+__attribute__((constructor(290))) static void driverRegister(void)
 {
     DeviceDriver *myDriver = zigbeeDriverCommonCreateDeviceDriver(DRIVER_NAME,
                                                                   DEVICE_CLASS_NAME,
@@ -220,10 +181,10 @@ static void driverRegister(void)
     fanControlCluster = fanControlClusterCreate(&fanControlClusterCallbacks, myDriver);
     zigbeeDriverCommonAddCluster(myDriver, fanControlCluster);
 
-    //enable periodic collection of common diagnostics info (rssi, lqi, etc).
+    // enable periodic collection of common diagnostics info (rssi, lqi, etc).
     zigbeeDriverCommonSetDiagnosticsCollectionEnabled(myDriver, true);
 
-    //enable pair time reading of battery voltage alarm thresholds
+    // enable pair time reading of battery voltage alarm thresholds
     zigbeeDriverCommonRegisterBatteryThresholdResource(myDriver, true);
 
     deviceDriverManagerRegisterDriver(myDriver);
@@ -244,20 +205,18 @@ static bool configureDevice(ZigbeeDriverCommon *ctx,
         return false;
     }
 
-    if(isLegacyRtcoaThermostat(discoveredDeviceDetails->model) == true)
+    if (isLegacyRtcoaThermostat(discoveredDeviceDetails->model) == true)
     {
         uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
-        result = thermostatClusterSetAbsoluteSetpointModeLegacy(thermostatCluster,
-                                                                eui64,
-                                                                discoveredDeviceDetails->endpointDetails[0].endpointId);
+        result = thermostatClusterSetAbsoluteSetpointModeLegacy(
+            thermostatCluster, eui64, discoveredDeviceDetails->endpointDetails[0].endpointId);
     }
 
     return result;
 }
 
-static bool claimDevice(ZigbeeDriverCommon *ctx,
-                        IcDiscoveredDeviceDetails *details)
+static bool claimDevice(ZigbeeDriverCommon *ctx, IcDiscoveredDeviceDetails *details)
 {
     bool result = false;
 
@@ -271,13 +230,10 @@ static bool claimDevice(ZigbeeDriverCommon *ctx,
     {
         IcDiscoveredEndpointDetails *endpoint = &details->endpointDetails[0];
 
-        if (endpoint->appDeviceId == 0x301 &&
-            details->manufacturer == NULL &&
-            details->hardwareVersion == 0 &&
-            details->model == NULL &&
-            endpoint->endpointId == 10)
+        if (endpoint->appDeviceId == 0x301 && details->manufacturer == NULL && details->hardwareVersion == 0 &&
+            details->model == NULL && endpoint->endpointId == 10)
         {
-            //all that matches RTCoA so we can proceed to the final check that it has a server cluster id 0x800.
+            // all that matches RTCoA so we can proceed to the final check that it has a server cluster id 0x800.
             for (uint8_t i = 0; i < endpoint->numServerClusterDetails; i++)
             {
                 if (endpoint->serverClusterDetails[i].clusterId == 0x800)
@@ -286,22 +242,19 @@ static bool claimDevice(ZigbeeDriverCommon *ctx,
                     result = true;
                     details->manufacturer = strdup(RTCOA_MANUFACTURER_NAME);
                     details->model = strdup(RTCOA_MODEL_NAME);
-                    details->hardwareVersion = 199; //only versions 192 and 199 are supported anyway.  This is a guess.
-                    details->firmwareVersion = 0x00000592; //we do not manage firmware on these, and this was the latest
+                    details->hardwareVersion = 199; // only versions 192 and 199 are supported anyway.  This is a guess.
+                    details->firmwareVersion = 0x00000592; // we do not manage firmware on these, and this was the
+                                                           // latest
                     break;
                 }
             }
         }
-        else if (endpoint->appDeviceId == 0x301 &&
-                 details->manufacturer != NULL &&
-                 strcmp(CENTRALITE_MANUFACTURER_NAME, details->manufacturer) == 0 &&
-                 details->hardwareVersion == 2 &&
-                 details->appVersion == 2 &&
-                 details->model != NULL &&
-                 strcmp(CENTRALITE_MODEL_NAME, details->model) == 0 &&
-                 endpoint->endpointId == 1)
+        else if (endpoint->appDeviceId == 0x301 && details->manufacturer != NULL &&
+                 strcmp(CENTRALITE_MANUFACTURER_NAME, details->manufacturer) == 0 && details->hardwareVersion == 2 &&
+                 details->appVersion == 2 && details->model != NULL &&
+                 strcmp(CENTRALITE_MODEL_NAME, details->model) == 0 && endpoint->endpointId == 1)
         {
-            //all that matches CentraLite so we can proceed to the final check that it has a server cluster id 0x204.
+            // all that matches CentraLite so we can proceed to the final check that it has a server cluster id 0x204.
             for (uint8_t i = 0; i < endpoint->numServerClusterDetails; i++)
             {
                 if (endpoint->serverClusterDetails[i].clusterId == 0x204)
@@ -316,21 +269,16 @@ static bool claimDevice(ZigbeeDriverCommon *ctx,
 
     if (result == true)
     {
-        //we are claiming this legacy device.  Crank up its poll frequency until configuration is complete.
-        thermostatClusterSetPollRateLegacy(thermostatCluster,
-                                           details->eui64,
-                                           details->endpointDetails[0].endpointId,
-                                           FAST_POLL_RATE_QS);
+        // we are claiming this legacy device.  Crank up its poll frequency until configuration is complete.
+        thermostatClusterSetPollRateLegacy(
+            thermostatCluster, details->eui64, details->endpointDetails[0].endpointId, FAST_POLL_RATE_QS);
     }
 
     return result;
 }
 
 // legacy thermostats that rejoin may have rebooted and they need some stuff to be reconfigured.
-static void deviceRejoined(ZigbeeDriverCommon *ctx,
-                           uint64_t eui64,
-                           bool isSecure,
-                           IcDiscoveredDeviceDetails *details)
+static void deviceRejoined(ZigbeeDriverCommon *ctx, uint64_t eui64, bool isSecure, IcDiscoveredDeviceDetails *details)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -343,81 +291,68 @@ static void deviceRejoined(ZigbeeDriverCommon *ctx,
     bool isLegacyRtcoa = isLegacyRtcoaThermostat(details->model);
     bool isLegacyCentralite = isLegacyCentraliteThermostat(details->model);
 
-    if(isLegacyRtcoa || isLegacyCentralite)
+    if (isLegacyRtcoa || isLegacyCentralite)
     {
-        if(isLegacyRtcoa == true)
+        if (isLegacyRtcoa == true)
         {
-            uint8_t endpointId =details->endpointDetails[0].endpointId;
+            uint8_t endpointId = details->endpointDetails[0].endpointId;
 
-            //set absolute set point mode
-            thermostatClusterSetAbsoluteSetpointModeLegacy(thermostatCluster,
-                                                           eui64,
-                                                           endpointId);
+            // set absolute set point mode
+            thermostatClusterSetAbsoluteSetpointModeLegacy(thermostatCluster, eui64, endpointId);
 
-            //restore occupied heating and cooling set points and system mode from our cached resource values
-            char epName[4]; //max uint8_t + \0
+            // restore occupied heating and cooling set points and system mode from our cached resource values
+            char epName[4]; // max uint8_t + \0
             sprintf(epName, "%" PRIu8, endpointId);
             AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
-            AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *cooling =
-                    deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT);
+            AUTO_CLEAN(resourceDestroy__auto)
+            icDeviceResource *cooling =
+                deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT);
 
             int16_t temp;
 
-            if(cooling != NULL && thermostatClusterGetTemperatureValue(cooling->value, &temp))
+            if (cooling != NULL && thermostatClusterGetTemperatureValue(cooling->value, &temp))
             {
-                thermostatClusterSetOccupiedCoolingSetpoint(thermostatCluster,
-                                                            eui64,
-                                                            endpointId,
-                                                            temp);
+                thermostatClusterSetOccupiedCoolingSetpoint(thermostatCluster, eui64, endpointId, temp);
             }
             else
             {
                 icLogError(LOG_TAG, "%s: failed to re-set cooling setpoint", __FUNCTION__);
             }
 
-            AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *heating =
-                    deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT);
+            AUTO_CLEAN(resourceDestroy__auto)
+            icDeviceResource *heating =
+                deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT);
 
-            if(heating != NULL && thermostatClusterGetTemperatureValue(heating->value, &temp))
+            if (heating != NULL && thermostatClusterGetTemperatureValue(heating->value, &temp))
             {
-                thermostatClusterSetOccupiedHeatingSetpoint(thermostatCluster,
-                                                            eui64,
-                                                            endpointId,
-                                                            temp);
+                thermostatClusterSetOccupiedHeatingSetpoint(thermostatCluster, eui64, endpointId, temp);
             }
             else
             {
                 icLogError(LOG_TAG, "%s: failed to re-set heating setpoint", __FUNCTION__);
             }
 
-            AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *mode =
-                    deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE);
+            AUTO_CLEAN(resourceDestroy__auto)
+            icDeviceResource *mode =
+                deviceServiceGetResourceById(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE);
 
-            if(mode != NULL)
+            if (mode != NULL)
             {
-                thermostatClusterSetSystemMode(thermostatCluster,
-                                               eui64,
-                                               endpointId,
-                                               thermostatClusterGetSystemModeFromString(mode->value));
+                thermostatClusterSetSystemMode(
+                    thermostatCluster, eui64, endpointId, thermostatClusterGetSystemModeFromString(mode->value));
             }
 
-            //reapply attribute reportings
-            AUTO_CLEAN(deviceDescriptorFree__auto) DeviceDescriptor *dd =
-                    zigbeeDriverCommonGetDeviceDescriptor(details->manufacturer,
-                                                          details->model,
-                                                          details->hardwareVersion,
-                                                          details->firmwareVersion);
+            // reapply attribute reportings
+            AUTO_CLEAN(deviceDescriptorFree__auto)
+            DeviceDescriptor *dd = zigbeeDriverCommonGetDeviceDescriptor(
+                details->manufacturer, details->model, details->hardwareVersion, details->firmwareVersion);
 
-            zigbeeDriverCommonConfigureEndpointClusters(eui64,
-                                                        endpointId,
-                                                        ctx,
-                                                        details,
-                                                        dd);
+            zigbeeDriverCommonConfigureEndpointClusters(eui64, endpointId, ctx, details, dd);
         }
 
-        //for both of these legacy thermostats we clear any low battery on rejoin
-       zigbeeDriverCommonUpdateBatteryChargeStatus((DeviceDriver*)ctx, eui64, false);
+        // for both of these legacy thermostats we clear any low battery on rejoin
+        zigbeeDriverCommonUpdateBatteryChargeStatus((DeviceDriver *) ctx, eui64, false);
     }
 }
 
@@ -433,19 +368,17 @@ static bool devicePersisted(ZigbeeDriverCommon *ctx, icDevice *device)
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
 
-    //for legacy thermostats, we need to trigger it to send us the mfg specific command to get real values
-    //  for the resources mapped to the operational info message.
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *model =
-            deviceServiceGetResourceById(device->uuid,
-                                         NULL,
-                                         COMMON_DEVICE_RESOURCE_MODEL);
+    // for legacy thermostats, we need to trigger it to send us the mfg specific command to get real values
+    //   for the resources mapped to the operational info message.
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *model = deviceServiceGetResourceById(device->uuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
     if (model != NULL && model->value != NULL)
     {
         if (isLegacyThermostat(model->value) == true)
         {
-            //its safe to use just the first endpoint on these legacy devices since they have only 1
+            // its safe to use just the first endpoint on these legacy devices since they have only 1
             icDeviceEndpoint *endpoint = linkedListGetElementAt(device->endpoints, 0);
-            if(endpoint != NULL)
+            if (endpoint != NULL)
             {
                 uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
                 uint8_t endpointId;
@@ -454,11 +387,8 @@ static bool devicePersisted(ZigbeeDriverCommon *ctx, icDevice *device)
                     result = thermostatClusterRequestOperationalInfoLegacy(thermostatCluster, eui64, endpointId);
                 }
 
-                //Turn back down the fast poll rate now that we are done with onboarding.  Discard any error here.
-                thermostatClusterSetPollRateLegacy(thermostatCluster,
-                                                   eui64,
-                                                   endpointId,
-                                                   REGULAR_POLL_RATE_QS);
+                // Turn back down the fast poll rate now that we are done with onboarding.  Discard any error here.
+                thermostatClusterSetPollRateLegacy(thermostatCluster, eui64, endpointId, REGULAR_POLL_RATE_QS);
             }
         }
         else
@@ -470,10 +400,7 @@ static bool devicePersisted(ZigbeeDriverCommon *ctx, icDevice *device)
     return result;
 }
 
-static void handleAlarm(ZigbeeDriverCommon *ctx,
-                        uint64_t eui64,
-                        uint8_t endpointId,
-                        const ZigbeeAlarmTableEntry *alarm)
+static void handleAlarm(ZigbeeDriverCommon *ctx, uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *alarm)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -483,19 +410,18 @@ static void handleAlarm(ZigbeeDriverCommon *ctx,
         return;
     }
 
-    //All basic/common alarm handling is done in the cluster or the common driver except for the legacy
-    // CentraLite thermostat which sends alarm code 1 on the power configuration cluster for low battery
-    //  instead of the correct 0x10.  For efficiency, we will first check the cluster and alarm code.
-    if(alarm->clusterId == POWER_CONFIGURATION_CLUSTER_ID && alarm->alarmCode == 0x1)
+    // All basic/common alarm handling is done in the cluster or the common driver except for the legacy
+    //  CentraLite thermostat which sends alarm code 1 on the power configuration cluster for low battery
+    //   instead of the correct 0x10.  For efficiency, we will first check the cluster and alarm code.
+    if (alarm->clusterId == POWER_CONFIGURATION_CLUSTER_ID && alarm->alarmCode == 0x1)
     {
         AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
-        AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *model = deviceServiceGetResourceById(uuid,
-                                                                                                 NULL,
-                                                                                                 COMMON_DEVICE_RESOURCE_MODEL);
+        AUTO_CLEAN(resourceDestroy__auto)
+        icDeviceResource *model = deviceServiceGetResourceById(uuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
 
         if (model != NULL && model->value != NULL && isLegacyCentraliteThermostat(model->value) == true)
         {
-            zigbeeDriverCommonUpdateBatteryChargeStatus((DeviceDriver*)ctx, eui64, true);
+            zigbeeDriverCommonUpdateBatteryChargeStatus((DeviceDriver *) ctx, eui64, true);
         }
     }
 }
@@ -512,31 +438,22 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
 
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
-    //reapply attribute reportings for legacy thermostats on startup
+    // reapply attribute reportings for legacy thermostats on startup
     if (isLegacyThermostat(details->model) == true)
     {
         // Crank up the poll rate while we do this work
-        thermostatClusterSetPollRateLegacy(thermostatCluster,
-                                           details->eui64,
-                                           details->endpointDetails[0].endpointId,
-                                           FAST_POLL_RATE_QS);
+        thermostatClusterSetPollRateLegacy(
+            thermostatCluster, details->eui64, details->endpointDetails[0].endpointId, FAST_POLL_RATE_QS);
 
-        scoped_DeviceDescriptor *dd =
-                zigbeeDriverCommonGetDeviceDescriptor(details->manufacturer,
-                                                      details->model,
-                                                      details->hardwareVersion,
-                                                      details->firmwareVersion);
+        scoped_DeviceDescriptor *dd = zigbeeDriverCommonGetDeviceDescriptor(
+            details->manufacturer, details->model, details->hardwareVersion, details->firmwareVersion);
 
         scoped_icLinkedListIterator *it = linkedListIteratorCreate(device->endpoints);
         while (linkedListIteratorHasNext(it))
         {
             icDeviceEndpoint *endpoint = (icDeviceEndpoint *) linkedListIteratorGetNext(it);
             uint8_t endpointId = zigbeeDriverCommonGetEndpointNumber(ctx, endpoint);
-            zigbeeDriverCommonConfigureEndpointClusters(eui64,
-                                                        endpointId,
-                                                        ctx,
-                                                        details,
-                                                        dd);
+            zigbeeDriverCommonConfigureEndpointClusters(eui64, endpointId, ctx, details, dd);
         }
     }
     else
@@ -555,7 +472,7 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
         return;
     }
 
-    //Fetch the current state of the thermostat in case we missed an attribute report during reboot, etc.
+    // Fetch the current state of the thermostat in case we missed an attribute report during reboot, etc.
     scoped_icLinkedListIterator *it = linkedListIteratorCreate(device->endpoints);
     while (linkedListIteratorHasNext(it))
     {
@@ -564,14 +481,10 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
         int16_t temp; // used for various temperature reads
 
         // Local temperature
-        if(thermostatClusterGetLocalTemperature(thermostatCluster, eui64, endpointId, &temp) == true)
+        if (thermostatClusterGetLocalTemperature(thermostatCluster, eui64, endpointId, &temp) == true)
         {
             scoped_generic char *tempStr = thermostatClusterGetTemperatureString(temp);
-            updateResource(device->uuid,
-                           endpoint->id,
-                           THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP,
-                           tempStr,
-                           NULL);
+            updateResource(device->uuid, endpoint->id, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP, tempStr, NULL);
         }
 
         if (deviceServiceIsShuttingDown())
@@ -581,7 +494,7 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
 
         // System mode
         uint8_t systemMode;
-        if(thermostatClusterGetSystemMode(thermostatCluster, eui64, endpointId, &systemMode) == true)
+        if (thermostatClusterGetSystemMode(thermostatCluster, eui64, endpointId, &systemMode) == true)
         {
             updateResource(device->uuid,
                            endpoint->id,
@@ -596,14 +509,10 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
         }
 
         // Heat setpoint
-        if(thermostatClusterGetOccupiedHeatingSetpoint(thermostatCluster, eui64, endpointId, &temp) == true)
+        if (thermostatClusterGetOccupiedHeatingSetpoint(thermostatCluster, eui64, endpointId, &temp) == true)
         {
             scoped_generic char *tempStr = thermostatClusterGetTemperatureString(temp);
-            updateResource(device->uuid,
-                           endpoint->id,
-                           THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT,
-                           tempStr,
-                           NULL);
+            updateResource(device->uuid, endpoint->id, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT, tempStr, NULL);
         }
 
         if (deviceServiceIsShuttingDown())
@@ -612,14 +521,10 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
         }
 
         // Cool setpoint
-        if(thermostatClusterGetOccupiedCoolingSetpoint(thermostatCluster, eui64, endpointId, &temp) == true)
+        if (thermostatClusterGetOccupiedCoolingSetpoint(thermostatCluster, eui64, endpointId, &temp) == true)
         {
             scoped_generic char *tempStr = thermostatClusterGetTemperatureString(temp);
-            updateResource(device->uuid,
-                           endpoint->id,
-                           THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT,
-                           tempStr,
-                           NULL);
+            updateResource(device->uuid, endpoint->id, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT, tempStr, NULL);
         }
 
         if (deviceServiceIsShuttingDown())
@@ -655,11 +560,8 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
             bool isHoldOn;
             if (thermostatClusterIsHoldOn(thermostatCluster, eui64, endpointId, &isHoldOn) == true)
             {
-                updateResource(device->uuid,
-                               endpoint->id,
-                               THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
-                               isHoldOn ? "true" : "false",
-                               NULL);
+                updateResource(
+                    device->uuid, endpoint->id, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON, isHoldOn ? "true" : "false", NULL);
             }
         }
         else
@@ -672,10 +574,8 @@ static void synchronizeDevice(ZigbeeDriverCommon *ctx, icDevice *device, IcDisco
     // turn down the poll rate to standard now that we are done
     if (isLegacyThermostat(details->model) == true)
     {
-        thermostatClusterSetPollRateLegacy(thermostatCluster,
-                                           details->eui64,
-                                           details->endpointDetails[0].endpointId,
-                                           REGULAR_POLL_RATE_QS);
+        thermostatClusterSetPollRateLegacy(
+            thermostatCluster, details->eui64, details->endpointDetails[0].endpointId, REGULAR_POLL_RATE_QS);
     }
     else
     {
@@ -697,7 +597,7 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
 
         uint8_t mode;
@@ -707,7 +607,9 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE,
                                               thermostatClusterGetSystemModeString(mode));
 
         if (fanControlClusterGetFanMode(thermostatCluster, eui64, endpointId, &mode) == false)
@@ -716,7 +618,9 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_MODE,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_FAN_MODE,
                                               fanControlClusterGetFanModeString(mode));
 
         int16_t temp;
@@ -733,8 +637,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetAbsMinHeatSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -749,8 +653,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for abs min heat attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_HEAT,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_HEAT, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetAbsMaxHeatSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -765,8 +669,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for abs max heat attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MAX_HEAT,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MAX_HEAT, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetAbsMinCoolSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -781,8 +685,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for abs min cool attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_COOL,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_COOL, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetAbsMaxCoolSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -797,8 +701,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for abs max cool attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MAX_COOL,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_ABS_MAX_COOL, tmpStr);
         free(tmpStr);
 
         int8_t cal;
@@ -814,8 +718,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for local temp calibration attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP_CALIBRATION,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP_CALIBRATION, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetOccupiedHeatingSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -830,8 +734,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for occupied heating setpoint attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT, tmpStr);
         free(tmpStr);
 
         if (thermostatClusterGetOccupiedCoolingSetpoint(thermostatCluster, eui64, endpointId, &temp) == false)
@@ -846,8 +750,8 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             icLogError(LOG_TAG, "%s: failed to get valid value for occupied cooling setpoint attribute", __FUNCTION__);
             goto exit;
         }
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT,
-                                              tmpStr);
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT, tmpStr);
         free(tmpStr);
 
         uint8_t ctrlSeqOp;
@@ -857,13 +761,15 @@ static bool fetchInitialResourceValuesCommon(ZigbeeDriverCommon *ctx,
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_CONTROL_SEQ,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_CONTROL_SEQ,
                                               thermostatClusterGetCtrlSeqOpString(ctrlSeqOp));
     }
 
     result = true;
 
-    exit:
+exit:
     return result;
 }
 
@@ -881,18 +787,20 @@ static bool fetchAdditionalInitialResourceValuesLegacy(ZigbeeDriverCommon *ctx,
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
 
-        //Since we cant read these values as attributes, assume false/off for now.
-        // once this device is persisted we will trigger it to send us an 'operational info request' with
-        // the real values for these.
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
+        // Since we cant read these values as attributes, assume false/off for now.
+        //  once this device is persisted we will trigger it to send us an 'operational info request' with
+        //  the real values for these.
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
                                               THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE_OFF);
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_ON,
-                                              "false");
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
-                                              "false");
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_ON, "false");
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON, "false");
     }
 
     return result;
@@ -912,7 +820,7 @@ static bool fetchAdditionalInitialResourceValuesStandard(ZigbeeDriverCommon *ctx
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
 
         uint16_t state;
@@ -922,9 +830,13 @@ static bool fetchAdditionalInitialResourceValuesStandard(ZigbeeDriverCommon *ctx
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
                                               thermostatClusterGetSystemState(state));
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_ON,
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              epName,
+                                              THERMOSTAT_PROFILE_RESOURCE_FAN_ON,
                                               thermostatClusterIsFanOn(state) ? "true" : "false");
 
         bool isOn;
@@ -934,14 +846,13 @@ static bool fetchAdditionalInitialResourceValuesStandard(ZigbeeDriverCommon *ctx
             goto exit;
         }
 
-        initialResourceValuesPutEndpointValue(initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
-                                              isOn ? "true" : "false");
-
+        initialResourceValuesPutEndpointValue(
+            initialResourceValues, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON, isOn ? "true" : "false");
     }
 
     result = true;
 
-    exit:
+exit:
     return result;
 }
 
@@ -960,26 +871,20 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
 
-    //get the eui64 for the device, which is the uuid
+    // get the eui64 for the device, which is the uuid
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
-    if(fetchInitialResourceValuesCommon(ctx, eui64, device, discoveredDeviceDetails, initialResourceValues) == true)
+    if (fetchInitialResourceValuesCommon(ctx, eui64, device, discoveredDeviceDetails, initialResourceValues) == true)
     {
         if (isLegacyThermostat(discoveredDeviceDetails->model) == true)
         {
-            result = fetchAdditionalInitialResourceValuesLegacy(ctx,
-                                                                eui64,
-                                                                device,
-                                                                discoveredDeviceDetails,
-                                                                initialResourceValues);
+            result = fetchAdditionalInitialResourceValuesLegacy(
+                ctx, eui64, device, discoveredDeviceDetails, initialResourceValues);
         }
         else
         {
-            result = fetchAdditionalInitialResourceValuesStandard(ctx,
-                                                                  eui64,
-                                                                  device,
-                                                                  discoveredDeviceDetails,
-                                                                  initialResourceValues);
+            result = fetchAdditionalInitialResourceValuesStandard(
+                ctx, eui64, device, discoveredDeviceDetails, initialResourceValues);
         }
     }
 
@@ -995,8 +900,8 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
 
     if (ctx == NULL || device == NULL || discoveredDeviceDetails == NULL || initialResourceValues == NULL)
     {
-         icLogError(LOG_TAG, "%s: invalid arguments", __FUNCTION__);
-         return false;
+        icLogError(LOG_TAG, "%s: invalid arguments", __FUNCTION__);
+        return false;
     }
 
     icLogDebug(LOG_TAG, "%s: uuid=%s", __FUNCTION__, device->uuid);
@@ -1005,7 +910,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
     {
         uint8_t endpointId = discoveredDeviceDetails->endpointDetails[i].endpointId;
 
-        char epName[4]; //max uint8_t + \0
+        char epName[4]; // max uint8_t + \0
         sprintf(epName, "%" PRIu8, endpointId);
         icDeviceEndpoint *endpoint = createEndpoint(device, epName, THERMOSTAT_PROFILE, true);
         endpoint->profileVersion = MY_THERMOSTAT_PROFILE_VERSION;
@@ -1015,7 +920,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TSTAT_SYSTEM_STATE,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1023,7 +928,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1031,14 +936,14 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TSTAT_SYSTEM_MODE,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
         result &= createEndpointResourceIfAvailable(endpoint,
                                                     THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_BOOLEAN,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1046,7 +951,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TSTAT_FAN_MODE,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1054,7 +959,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TEMPERATURE,
                                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
+                                                        RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1072,11 +977,11 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
-                               THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_COOL,
-                               initialResourceValues,
-                               RESOURCE_TYPE_TEMPERATURE,
-                               RESOURCE_MODE_READABLE,
-                               CACHING_POLICY_ALWAYS) != NULL;
+                                                    THERMOSTAT_PROFILE_RESOURCE_ABS_MIN_COOL,
+                                                    initialResourceValues,
+                                                    RESOURCE_TYPE_TEMPERATURE,
+                                                    RESOURCE_MODE_READABLE,
+                                                    CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
                                                     THERMOSTAT_PROFILE_RESOURCE_ABS_MAX_COOL,
@@ -1090,7 +995,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TEMPERATURE,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1098,7 +1003,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TEMPERATURE,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1106,7 +1011,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TEMPERATURE,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         result &= createEndpointResourceIfAvailable(endpoint,
@@ -1114,7 +1019,7 @@ static bool registerResources(ZigbeeDriverCommon *ctx,
                                                     initialResourceValues,
                                                     RESOURCE_TYPE_TSTAT_CTRL_SEQ_OP,
                                                     RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC |
-                                                    RESOURCE_MODE_EMIT_EVENTS,
+                                                        RESOURCE_MODE_EMIT_EVENTS,
                                                     CACHING_POLICY_ALWAYS) != NULL;
 
         zigbeeDriverCommonSetEndpointNumber(endpoint, endpointId);
@@ -1156,7 +1061,8 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
         return false;
     }
 
-    icLogDebug(LOG_TAG, "%s: endpoint %s: id=%s, previousValue=%s, newValue=%s",
+    icLogDebug(LOG_TAG,
+               "%s: endpoint %s: id=%s, previousValue=%s, newValue=%s",
                __FUNCTION__,
                resource->endpointId,
                resource->id,
@@ -1202,15 +1108,14 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
         {
             result = thermostatClusterSetSystemMode(thermostatCluster, eui64, endpointId, mode);
 
-            //if the system mode change failed and its a legacy centralite tstat, treat as success since these
-            // have some problems in some deployments.  Not a great workaround however since these are out of
-            // circulation, and the company dead, we implement the minimal surgical workaround that was accepted
-            // in the field through a similar change at the UI layer.
+            // if the system mode change failed and its a legacy centralite tstat, treat as success since these
+            //  have some problems in some deployments.  Not a great workaround however since these are out of
+            //  circulation, and the company dead, we implement the minimal surgical workaround that was accepted
+            //  in the field through a similar change at the UI layer.
             if (result == false)
             {
-                scoped_icDeviceResource *model = deviceServiceGetResourceById(resource->deviceUuid,
-                                                                              NULL,
-                                                                              COMMON_DEVICE_RESOURCE_MODEL);
+                scoped_icDeviceResource *model =
+                    deviceServiceGetResourceById(resource->deviceUuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
                 if (model != NULL && model->value != NULL && isLegacyCentraliteThermostat(model->value))
                 {
                     icLogInfo(LOG_TAG, "changing system mode failed, but we are ignoring since its a CentraLite");
@@ -1236,12 +1141,11 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
     {
         bool holdOn = strcmp("true", newValue) == 0;
 
-        //For RTCoA thermostats, we dont use the hold attribute on the device, but instead just track
-        // it as a simple read/writable resource
-        AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *model =
-                deviceServiceGetResourceById(resource->deviceUuid,
-                                             NULL,
-                                             COMMON_DEVICE_RESOURCE_MODEL);
+        // For RTCoA thermostats, we dont use the hold attribute on the device, but instead just track
+        //  it as a simple read/writable resource
+        AUTO_CLEAN(resourceDestroy__auto)
+        icDeviceResource *model =
+            deviceServiceGetResourceById(resource->deviceUuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
         if (model != NULL && model->value != NULL)
         {
             if (isLegacyRtcoaThermostat(model->value) == true)
@@ -1281,19 +1185,16 @@ static bool writeEndpointResource(ZigbeeDriverCommon *ctx,
         }
         else
         {
-            result = thermostatClusterSetLocalTemperatureCalibration(thermostatCluster,
-                                                                     eui64,
-                                                                     endpointId,
-                                                                     newCalibration);
+            result =
+                thermostatClusterSetLocalTemperatureCalibration(thermostatCluster, eui64, endpointId, newCalibration);
         }
     }
 
     return result;
 }
 
-static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
-                                ZigbeeCluster *cluster,
-                                DeviceConfigurationContext *deviceConfigContext)
+static bool
+preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfigurationContext *deviceConfigContext)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1303,7 +1204,7 @@ static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
         return false;
     }
 
-    if(isLegacyThermostat(deviceConfigContext->discoveredDeviceDetails->model))
+    if (isLegacyThermostat(deviceConfigContext->discoveredDeviceDetails->model))
     {
         if (cluster->clusterId == THERMOSTAT_CLUSTER_ID)
         {
@@ -1331,159 +1232,113 @@ static bool preConfigureCluster(ZigbeeDriverCommon *ctx,
 
     if (cluster->clusterId == POLL_CONTROL_CLUSTER_ID)
     {
-        char qs[6]; //32767 + \0 worst case
-        snprintf(qs, sizeof(qs), "%"PRIu16, REGULAR_POLL_RATE_QS);
-        //set the long poll interval to 54 quarter seconds, which is 14 seconds.
-        stringHashMapPutCopy(deviceConfigContext->configurationMetadata,
-                LONG_POLL_INTERVAL_QS_METADATA, qs);
+        char qs[6]; // 32767 + \0 worst case
+        snprintf(qs, sizeof(qs), "%" PRIu16, REGULAR_POLL_RATE_QS);
+        // set the long poll interval to 54 quarter seconds, which is 14 seconds.
+        stringHashMapPutCopy(deviceConfigContext->configurationMetadata, LONG_POLL_INTERVAL_QS_METADATA, qs);
     }
 
     return true;
 }
 
-static void localTemperatureChanged(uint64_t eui64,
-                                    uint8_t endpointId,
-                                    int16_t temp,
-                                    const void *ctx)
+static void localTemperatureChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *tempStr = thermostatClusterGetTemperatureString(temp);
     if (tempStr != NULL)
     {
-        updateResource(uuid,
-                       epName,
-                       THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP,
-                       tempStr,
-                       NULL);
+        updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP, tempStr, NULL);
     }
     free(tempStr);
     free(uuid);
 }
 
-static void occupiedHeatingSetpointChanged(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx)
+static void occupiedHeatingSetpointChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *tempStr = thermostatClusterGetTemperatureString(temp);
     if (tempStr != NULL)
     {
-        updateResource(uuid,
-                       epName,
-                       THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT,
-                       tempStr,
-                       NULL);
+        updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_HEAT_SETPOINT, tempStr, NULL);
     }
     free(tempStr);
     free(uuid);
 }
 
-static void occupiedCoolingSetpointChanged(uint64_t eui64,
-                                           uint8_t endpointId,
-                                           int16_t temp,
-                                           const void *ctx)
+static void occupiedCoolingSetpointChanged(uint64_t eui64, uint8_t endpointId, int16_t temp, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *tempStr = thermostatClusterGetTemperatureString(temp);
     if (tempStr != NULL)
     {
-        updateResource(uuid,
-                       epName,
-                       THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT,
-                       tempStr,
-                       NULL);
+        updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_COOL_SETPOINT, tempStr, NULL);
     }
     free(tempStr);
     free(uuid);
 }
 
-static void systemModeChanged(uint64_t eui64,
-                              uint8_t endpointId,
-                              uint8_t mode,
-                              const void *ctx)
+static void systemModeChanged(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE,
-                   thermostatClusterGetSystemModeString(mode),
-                   NULL);
+    updateResource(
+        uuid, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_MODE, thermostatClusterGetSystemModeString(mode), NULL);
     free(uuid);
 }
 
-static void runningStateChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t state,
-                                const void *ctx)
+static void runningStateChanged(uint64_t eui64, uint8_t endpointId, uint16_t state, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
-                   thermostatClusterGetSystemState(state),
-                   NULL);
+    updateResource(
+        uuid, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE, thermostatClusterGetSystemState(state), NULL);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_FAN_ON,
-                   thermostatClusterIsFanOn(state) ? "true" : "false",
-                   NULL);
+    updateResource(
+        uuid, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_ON, thermostatClusterIsFanOn(state) ? "true" : "false", NULL);
     free(uuid);
 }
 
-static void setpointHoldChanged(uint64_t eui64,
-                                uint8_t endpointId,
-                                bool holdOn,
-                                const void *ctx)
+static void setpointHoldChanged(uint64_t eui64, uint8_t endpointId, bool holdOn, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    //For RTCoA thermostats, we dont use the hold attribute on the device, but instead just track
-    // it as a simple read/writable resource
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *model =
-            deviceServiceGetResourceById(uuid,
-                                         NULL,
-                                         COMMON_DEVICE_RESOURCE_MODEL);
+    // For RTCoA thermostats, we dont use the hold attribute on the device, but instead just track
+    //  it as a simple read/writable resource
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *model = deviceServiceGetResourceById(uuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
     if (model != NULL && model->value != NULL)
     {
-        //just ignore this change for rtcoa
+        // just ignore this change for rtcoa
         if (isLegacyRtcoaThermostat(model->value) == false)
         {
-            updateResource(uuid,
-                           epName,
-                           THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
-                           holdOn ? "true" : "false",
-                           NULL);
+            updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON, holdOn ? "true" : "false", NULL);
         }
     }
     else
@@ -1494,61 +1349,49 @@ static void setpointHoldChanged(uint64_t eui64,
     free(uuid);
 }
 
-static void ctrlSeqOpChanged(uint64_t eui64,
-                             uint8_t endpointId,
-                             uint8_t ctrlSeqOp,
-                             const void *ctx)
+static void ctrlSeqOpChanged(uint64_t eui64, uint8_t endpointId, uint8_t ctrlSeqOp, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_CONTROL_SEQ,
-                   thermostatClusterGetCtrlSeqOpString(ctrlSeqOp),
-                   NULL);
+    updateResource(
+        uuid, epName, THERMOSTAT_PROFILE_RESOURCE_CONTROL_SEQ, thermostatClusterGetCtrlSeqOpString(ctrlSeqOp), NULL);
     free(uuid);
 }
 
-static void fanModeChanged(uint64_t eui64,
-                           uint8_t endpointId,
-                           uint8_t mode,
-                           const void *ctx)
+static void fanModeChanged(uint64_t eui64, uint8_t endpointId, uint8_t mode, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_FAN_MODE,
-                   fanControlClusterGetFanModeString(mode),
-                   NULL);
+    updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_MODE, fanControlClusterGetFanModeString(mode), NULL);
     free(uuid);
 }
 
 static void legacyOperationInfoReceived(uint64_t eui64,
                                         uint8_t endpointId,
-                                        uint8_t runningMode,      // 0=off, 1=heat, 2=cool
+                                        uint8_t runningMode, // 0=off, 1=heat, 2=cool
                                         bool holdOn,
-                                        uint8_t runningState,     // 0=off, 1=heat, 2=cool, 0xff=not used
-                                        uint8_t fanRunningState)  // 0=off, 1=running, 0xff=not used
+                                        uint8_t runningState,    // 0=off, 1=heat, 2=cool, 0xff=not used
+                                        uint8_t fanRunningState) // 0=off, 1=running, 0xff=not used
 {
-    icLogDebug(LOG_TAG, "%s: runningMode=%d, holdOn=%s, runningState=%d, fanRunningState=%d",
-            __FUNCTION__,
-            runningMode,
-            holdOn ? "true" : "false",
-            runningState,
-            fanRunningState);
+    icLogDebug(LOG_TAG,
+               "%s: runningMode=%d, holdOn=%s, runningState=%d, fanRunningState=%d",
+               __FUNCTION__,
+               runningMode,
+               holdOn ? "true" : "false",
+               runningState,
+               fanRunningState);
 
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
 
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     const char *state = THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE_OFF;
@@ -1565,32 +1408,18 @@ static void legacyOperationInfoReceived(uint64_t eui64,
             state = THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE_OFF;
             break;
     }
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE,
-                   state,
-                   NULL);
+    updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_SYSTEM_STATE, state, NULL);
 
-    updateResource(uuid,
-                   epName,
-                   THERMOSTAT_PROFILE_RESOURCE_FAN_ON,
-                   (fanRunningState == 1) ? "true" : "false",
-                   NULL);
+    updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_FAN_ON, (fanRunningState == 1) ? "true" : "false", NULL);
 
-    //RTCoA thermostats should ignore the holdOn field
-    AUTO_CLEAN(resourceDestroy__auto) icDeviceResource *model =
-            deviceServiceGetResourceById(uuid,
-                                         NULL,
-                                         COMMON_DEVICE_RESOURCE_MODEL);
+    // RTCoA thermostats should ignore the holdOn field
+    AUTO_CLEAN(resourceDestroy__auto)
+    icDeviceResource *model = deviceServiceGetResourceById(uuid, NULL, COMMON_DEVICE_RESOURCE_MODEL);
     if (model != NULL && model->value != NULL)
     {
         if (isLegacyRtcoaThermostat(model->value) == false)
         {
-            updateResource(uuid,
-                           epName,
-                           THERMOSTAT_PROFILE_RESOURCE_HOLD_ON,
-                           holdOn ? "true" : "false",
-                           NULL);
+            updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_HOLD_ON, holdOn ? "true" : "false", NULL);
         }
     }
     else
@@ -1599,37 +1428,31 @@ static void legacyOperationInfoReceived(uint64_t eui64,
     }
 }
 
-static void localTemperatureCalibrationChanged(uint64_t eui64,
-                                               uint8_t endpointId,
-                                               int8_t calibrationTemp,
-                                               const void *ctx)
+static void
+localTemperatureCalibrationChanged(uint64_t eui64, uint8_t endpointId, int8_t calibrationTemp, const void *ctx)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
-    char epName[4]; //max uint8_t + \0
+    char epName[4]; // max uint8_t + \0
     sprintf(epName, "%" PRIu8, endpointId);
 
     char *tempStr = thermostatClusterGetTemperatureString(calibrationTemp);
     if (tempStr != NULL)
     {
-        updateResource(uuid,
-                       epName,
-                       THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP_CALIBRATION,
-                       tempStr,
-                       NULL);
+        updateResource(uuid, epName, THERMOSTAT_PROFILE_RESOURCE_LOCAL_TEMP_CALIBRATION, tempStr, NULL);
     }
     free(tempStr);
     free(uuid);
 }
 
-//since we have already claimed it, the check can simply be on the model name
+// since we have already claimed it, the check can simply be on the model name
 static bool isLegacyRtcoaThermostat(const char *model)
 {
     return strcmp(model, RTCOA_MODEL_NAME) == 0;
 }
 
-//since we have already claimed it, the check can simply be on the model name
+// since we have already claimed it, the check can simply be on the model name
 static bool isLegacyCentraliteThermostat(const char *model)
 {
     return strcmp(model, CENTRALITE_MODEL_NAME) == 0;

@@ -26,6 +26,7 @@
 
 #include "eventHandler.h"
 #include "device-service-client.h"
+#include "device-service-device-found-details.h"
 #include "events/device-service-device-added-event.h"
 #include "events/device-service-device-discovered-event.h"
 #include "events/device-service-device-discovery-completed-event.h"
@@ -34,7 +35,6 @@
 #include "events/device-service-discovery-started-event.h"
 #include "events/device-service-discovery-stopped-event.h"
 #include "events/device-service-endpoint-added-event.h"
-#include "device-service-device-found-details.h"
 #include <stdio.h>
 
 static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStartedEvent *event);
@@ -43,20 +43,32 @@ static void deviceDiscoveredHandler(BDeviceServiceClient *source, BDeviceService
 static void deviceRejectedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceRejectedEvent *event);
 static void deviceAddedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceAddedEvent *event);
 static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEndpointAddedEvent *event);
-static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryCompletedEvent *event);
+static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source,
+                                            BDeviceServiceDeviceDiscoveryCompletedEvent *event);
 static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryFailedEvent *event);
 
 
 void registerEventHandlers(BDeviceServiceClient *client)
 {
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED, G_CALLBACK(discoveryStartedHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED, G_CALLBACK(discoveryStoppedHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED, G_CALLBACK(deviceDiscoveredHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED, G_CALLBACK(deviceRejectedHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED, G_CALLBACK(discoveryStartedHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED, G_CALLBACK(discoveryStoppedHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED, G_CALLBACK(deviceDiscoveredHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED, G_CALLBACK(deviceRejectedHandler), NULL);
     g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_ADDED, G_CALLBACK(deviceAddedHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(endpointAddedHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED, G_CALLBACK(deviceDiscoveryCompletedHandler), NULL);
-    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED, G_CALLBACK(deviceDiscoveryFailedHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED, G_CALLBACK(endpointAddedHandler), NULL);
+    g_signal_connect(client,
+                     B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED,
+                     G_CALLBACK(deviceDiscoveryCompletedHandler),
+                     NULL);
+    g_signal_connect(client,
+                     B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED,
+                     G_CALLBACK(deviceDiscoveryFailedHandler),
+                     NULL);
 }
 
 void unregisterEventHandlers(void)
@@ -69,11 +81,15 @@ static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceService
     printf("\r\ndiscoveryStarted [");
 
     g_autoptr(GList) deviceClasses = NULL;
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROP_DEVICE_CLASSES], &deviceClasses, NULL);
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROP_DEVICE_CLASSES],
+                 &deviceClasses,
+                 NULL);
     while (deviceClasses != NULL)
     {
-        const char *deviceClass = (const char *)deviceClasses->data;
-        printf("%s", (char *)deviceClasses->data);
+        const char *deviceClass = (const char *) deviceClasses->data;
+        printf("%s", (char *) deviceClasses->data);
         deviceClasses = deviceClasses->next;
         if (deviceClasses)
         {
@@ -96,22 +112,40 @@ static void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDevic
     g_autofree gchar *model = NULL;
     g_autofree gchar *hardwareVersion = NULL;
     g_autofree gchar *firmwareVersion = NULL;
-    g_object_get(G_OBJECT(deviceFoundDetails), B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_UUID], &deviceId,
-                  B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MANUFACTURER], &manufacturer,
-                  B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MODEL], &model,
-                  B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_HARDWARE_VERSION], &hardwareVersion,
-                  B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_FIRMWARE_VERSION], &firmwareVersion,
-                  NULL);
+    g_object_get(
+        G_OBJECT(deviceFoundDetails),
+        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_UUID],
+        &deviceId,
+        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MANUFACTURER],
+        &manufacturer,
+        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MODEL],
+        &model,
+        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
+            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_HARDWARE_VERSION],
+        &hardwareVersion,
+        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
+            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_FIRMWARE_VERSION],
+        &firmwareVersion,
+        NULL);
 
-    printf("\r\n%s uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s\n", printPrefix, deviceId, manufacturer, model, hardwareVersion, firmwareVersion);
+    printf("\r\n%s uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s\n",
+           printPrefix,
+           deviceId,
+           manufacturer,
+           model,
+           hardwareVersion,
+           firmwareVersion);
 }
 
 static void deviceDiscoveredHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveredEvent *event)
 {
     g_autoptr(BDeviceServiceDeviceFoundDetails) deviceFoundDetails = NULL;
 
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DEVICE_DISCOVERED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_DISCOVERED_EVENT_PROP_DEVICE_FOUND_DETAILS], &deviceFoundDetails,
-                  NULL);
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_DEVICE_DISCOVERED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_DEVICE_DISCOVERED_EVENT_PROP_DEVICE_FOUND_DETAILS],
+                 &deviceFoundDetails,
+                 NULL);
 
     g_return_if_fail(deviceFoundDetails != NULL);
 
@@ -122,8 +156,11 @@ static void deviceRejectedHandler(BDeviceServiceClient *source, BDeviceServiceDe
 {
     g_autoptr(BDeviceServiceDeviceFoundDetails) deviceFoundDetails = NULL;
 
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DEVICE_REJECTED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_REJECTED_EVENT_PROP_DEVICE_FOUND_DETAILS], &deviceFoundDetails,
-                  NULL);
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_DEVICE_REJECTED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_DEVICE_REJECTED_EVENT_PROP_DEVICE_FOUND_DETAILS],
+                 &deviceFoundDetails,
+                 NULL);
 
     g_return_if_fail(deviceFoundDetails != NULL);
 
@@ -136,11 +173,18 @@ static void deviceAddedHandler(BDeviceServiceClient *source, BDeviceServiceDevic
     g_autofree gchar *uri = NULL;
     g_autofree gchar *deviceClass = NULL;
     gint deviceClassVersion = 0;
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_UUID], &deviceId,
-                  B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_URI], &uri,
-                  B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS], &deviceClass,
-                  B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION], &deviceClassVersion,
-                  NULL);
+    g_object_get(
+        G_OBJECT(event),
+        B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_UUID],
+        &deviceId,
+        B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_URI],
+        &uri,
+        B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS],
+        &deviceClass,
+        B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES
+            [B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],
+        &deviceClassVersion,
+        NULL);
 
     printf("\r\ndevice added! deviceId=%s, uri=%s, deviceClass=%s, deviceClassVersion=%d\n",
            deviceId,
@@ -152,8 +196,11 @@ static void deviceAddedHandler(BDeviceServiceClient *source, BDeviceServiceDevic
 static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEndpointAddedEvent *event)
 {
     g_autoptr(BDeviceServiceEndpoint) endpoint = NULL;
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_PROP_ENDPOINT], &endpoint,
-                  NULL);
+    g_object_get(
+        G_OBJECT(event),
+        B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_PROP_ENDPOINT],
+        &endpoint,
+        NULL);
 
     g_return_if_fail(endpoint != NULL);
 
@@ -162,12 +209,18 @@ static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEnd
     g_autofree gchar *uri = NULL;
     g_autofree gchar *profile = NULL;
     gint profileVersion = 0;
-    g_object_get(G_OBJECT(endpoint), B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID], &deviceUuid,
-                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID], &id,
-                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_URI], &uri,
-                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE], &profile,
-                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION], &profileVersion,
-                  NULL);
+    g_object_get(G_OBJECT(endpoint),
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
+                 &deviceUuid,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
+                 &id,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_URI],
+                 &uri,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
+                 &profile,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
+                 &profileVersion,
+                 NULL);
     printf("\r\nendpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d\n",
            deviceUuid,
            id,
@@ -176,33 +229,40 @@ static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEnd
            profileVersion);
 }
 
-static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryCompletedEvent *event)
+static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source,
+                                            BDeviceServiceDeviceDiscoveryCompletedEvent *event)
 {
     g_autoptr(BDeviceServiceDevice) device = NULL;
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_PROP_DEVICE], &device,
-                  NULL);
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_PROP_DEVICE],
+                 &device,
+                 NULL);
 
     g_return_if_fail(device != NULL);
 
     g_autofree gchar *uuid = NULL;
     g_autofree gchar *deviceClass = NULL;
-    g_object_get(G_OBJECT(device), B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID], &uuid,
-                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS], &deviceClass,
-                  NULL);
+    g_object_get(G_OBJECT(device),
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                 &uuid,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
+                 &deviceClass,
+                 NULL);
 
-    printf("\r\ndevice discovery completed! uuid=%s, class=%s\n",
-           uuid,
-           deviceClass);
+    printf("\r\ndevice discovery completed! uuid=%s, class=%s\n", uuid, deviceClass);
 }
 
 static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryFailedEvent *event)
 {
     g_autoptr(BDeviceServiceDeviceFoundDetails) deviceFoundDetails = NULL;
-    g_object_get(G_OBJECT(event), B_DEVICE_SERVICE_DEVICE_DISCOVERY_FAILED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_DISCOVERY_FAILED_EVENT_PROP_DEVICE_FOUND_DETAILS], &deviceFoundDetails,
-                  NULL);
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_DEVICE_DISCOVERY_FAILED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_DEVICE_DISCOVERY_FAILED_EVENT_PROP_DEVICE_FOUND_DETAILS],
+                 &deviceFoundDetails,
+                 NULL);
 
     g_return_if_fail(deviceFoundDetails != NULL);
 
     printDeviceFoundDetails("device discovery failed!", deviceFoundDetails);
 }
-

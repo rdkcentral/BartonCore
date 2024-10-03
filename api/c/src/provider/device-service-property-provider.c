@@ -35,7 +35,7 @@
 #define logFmt(fmt) "%s: " fmt, __func__
 
 G_DEFINE_INTERFACE(BDeviceServicePropertyProvider, b_device_service_property_provider, G_TYPE_OBJECT)
-G_DEFINE_QUARK(b-device-service-property-provider-error-quark, b_device_service_property_provider_error)
+G_DEFINE_QUARK(b - device - service - property - provider - error - quark, b_device_service_property_provider_error)
 
 enum DEVICE_SERVICE_PROPERTY_PROVIDER_SIGNALS
 {

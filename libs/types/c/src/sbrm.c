@@ -20,13 +20,13 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+#include "icTypes/sbrm.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <icLog/logging.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <icLog/logging.h>
-#include "icTypes/sbrm.h"
 
 #define LOG_CAT "SBRM"
 
@@ -52,7 +52,7 @@ void fclose__auto(FILE **fp)
              * complain with EBADF.
              * There is no readonly bit to test for (like darkness, readonly is the absence of write bits).
              */
-            if ((flags & (O_RDWR|O_WRONLY)) != 0)
+            if ((flags & (O_RDWR | O_WRONLY)) != 0)
             {
                 if (fflush(*fp) != 0)
                 {

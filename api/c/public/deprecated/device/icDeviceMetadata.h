@@ -25,18 +25,18 @@
 
 #pragma once
 
+#include "icDeviceEndpoint.h"
+#include <cjson/cJSON.h>
+#include <glib-object.h>
 #include <icTypes/icHashMap.h>
 #include <icTypes/icLinkedList.h>
-#include <cjson/cJSON.h>
 #include <serial/icSerDesContext.h>
-#include "icDeviceEndpoint.h"
-#include <glib-object.h>
 
 typedef struct
 {
     char *id;
     char *uri;
-    char *endpointId; //or NULL if on root device
+    char *endpointId; // or NULL if on root device
     char *deviceUuid;
     char *value;
 } icDeviceMetadata;
@@ -116,8 +116,7 @@ char *metadataUriCreate(const char *deviceUuid, const char *endpointId, const ch
  * @param metadataId
  * @return true if valid metadata uri pattern, otherwise false
  */
-bool metadataUriIsValid(const char* deviceMetadataUri,
-                        const char* deviceUuid,
+bool metadataUriIsValid(const char *deviceMetadataUri,
+                        const char *deviceUuid,
                         const char *endpointId,
                         const char *metadataId);
-

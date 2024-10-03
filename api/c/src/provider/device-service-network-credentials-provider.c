@@ -131,7 +131,7 @@ BDeviceServiceWifiNetworkCredentials *b_device_service_wifi_network_credentials_
 G_DEFINE_INTERFACE(BDeviceServiceNetworkCredentialsProvider,
                    b_device_service_network_credentials_provider,
                    G_TYPE_OBJECT)
-G_DEFINE_QUARK(b-device-service-network-credentials-provider-error-quark,
+G_DEFINE_QUARK(b - device - service - network - credentials - provider - error - quark,
                b_device_service_network_credentials_provider_error)
 
 static void

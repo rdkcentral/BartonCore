@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2018 Comcast
 //
 // All rights reserved.
@@ -34,16 +34,9 @@
 
 typedef struct
 {
-    void (*refreshRequested)(uint64_t eui64,
-                             uint8_t endpointId,
-                             const void *ctx);
-    void (*refreshCompleted)(uint64_t eui64,
-                             uint8_t endpointId,
-                             const void *ctx);
-    void (*bridgeTamperStatusChanged)(uint64_t eui64,
-                                      uint8_t endpointId,
-                                      const void *ctx,
-                                      bool isTampered);
+    void (*refreshRequested)(uint64_t eui64, uint8_t endpointId, const void *ctx);
+    void (*refreshCompleted)(uint64_t eui64, uint8_t endpointId, const void *ctx);
+    void (*bridgeTamperStatusChanged)(uint64_t eui64, uint8_t endpointId, const void *ctx, bool isTampered);
 } BridgeClusterCallbacks;
 
 ZigbeeCluster *bridgeClusterCreate(const BridgeClusterCallbacks *callbacks, const void *callbackContext);
@@ -56,11 +49,8 @@ bool bridgeClusterStopConfiguration(uint64_t eui64, uint8_t endpointId);
 
 bool bridgeClusterReset(uint64_t eui64, uint8_t endpointId);
 
-bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx,
-                                  uint64_t eui64,
-                                  uint8_t endpointId,
-                                  bool *result);
+bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, bool *result);
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_BRIDGECLUSTER_H
+#endif // ZILKER_BRIDGECLUSTER_H

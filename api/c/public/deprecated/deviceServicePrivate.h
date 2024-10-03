@@ -32,14 +32,14 @@
 #include <deviceService/securityState.h>
 #include <stdbool.h>
 
-#define CURRENT_DEVICE_DESCRIPTOR_URL   "currentDeviceDescriptorUrl"
-#define CURRENT_DEVICE_DESCRIPTOR_MD5   "currentDeviceDescriptorMd5"
-#define CURRENT_DENYLIST_URL            "currentDenylistUrl"
-#define CURRENT_DENYLIST_MD5            "currentDenylistMd5"
+#define CURRENT_DEVICE_DESCRIPTOR_URL "currentDeviceDescriptorUrl"
+#define CURRENT_DEVICE_DESCRIPTOR_MD5 "currentDeviceDescriptorMd5"
+#define CURRENT_DENYLIST_URL          "currentDenylistUrl"
+#define CURRENT_DENYLIST_MD5          "currentDenylistMd5"
 
-bool deviceServiceDeviceFound(DeviceFoundDetails* deviceFoundDetails, bool neverReject);
+bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool neverReject);
 
-void deviceConfigured(icDevice* device);
+void deviceConfigured(icDevice *device);
 
 typedef struct ReconfigureDeviceContext ReconfigureDeviceContext;
 typedef void (*reconfigurationCompleteCallback)(bool result, const char *deviceUuid);
@@ -70,7 +70,7 @@ bool deviceServiceGetResourceAgeMillis(const char *deviceUuid,
  *
  * @returns the icDeviceResource or NULL if not found
  */
-icDeviceResource* deviceServiceGetResourceById(const char* deviceUuid, const char* endpointId, const char* resourceId);
+icDeviceResource *deviceServiceGetResourceById(const char *deviceUuid, const char *endpointId, const char *resourceId);
 
 /*
  * Retrieve an icDeviceResource by id.  This will not look on any endpoints, but only on the device itself
@@ -82,25 +82,25 @@ icDeviceResource* deviceServiceGetResourceById(const char* deviceUuid, const cha
  *
  * @returns the icDeviceResource or NULL if not found
  */
-icDeviceResource* deviceServiceFindDeviceResourceById(icDevice* device, const char* resourceId);
+icDeviceResource *deviceServiceFindDeviceResourceById(icDevice *device, const char *resourceId);
 
-void updateResource(const char* deviceUuid,
-                    const char* endpointId,
-                    const char* resourceId,
-                    const char* newValue,
-                    cJSON* metadata);
+void updateResource(const char *deviceUuid,
+                    const char *endpointId,
+                    const char *resourceId,
+                    const char *newValue,
+                    cJSON *metadata);
 
-void setMetadata(const char* deviceUuid, const char* endpointId, const char* name, const char* value);
-char* getMetadata(const char* deviceUuid, const char* endpointId, const char* name);
-bool deviceServiceRemoveMetadata(const char* deviceUuid, const char* endpointId, const char* name);
-void setBooleanMetadata(const char* deviceUuid, const char* endpointId, const char* name, bool value);
-bool getBooleanMetadata(const char* deviceUuid, const char* endpointId, const char* name);
-cJSON* getJsonMetadata(const char* deviceUuid, const char* endpointId, const char* name);
-void setJsonMetadata(const char* deviceUuid, const char* endpointId, const char* name, cJSON* value);
+void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value);
+char *getMetadata(const char *deviceUuid, const char *endpointId, const char *name);
+bool deviceServiceRemoveMetadata(const char *deviceUuid, const char *endpointId, const char *name);
+void setBooleanMetadata(const char *deviceUuid, const char *endpointId, const char *name, bool value);
+bool getBooleanMetadata(const char *deviceUuid, const char *endpointId, const char *name);
+cJSON *getJsonMetadata(const char *deviceUuid, const char *endpointId, const char *name);
+void setJsonMetadata(const char *deviceUuid, const char *endpointId, const char *name, cJSON *value);
 void deviceServiceProcessDeviceDescriptors();
-void timeZoneChanged(const char* timeZone);
+void timeZoneChanged(const char *timeZone);
 void processDenylistedDevices(const char *propValue);
-bool addNewResource(const char*ownerUri, icDeviceResource *resource);
+bool addNewResource(const char *ownerUri, icDeviceResource *resource);
 
 /**
  * Caller must call resourceOperationResultDestroy
@@ -193,7 +193,8 @@ bool deviceServiceDeviceNeedsReconfiguring(const char *deviceUuid);
  * @param reconfigurationCompleted callback that will be triggered when reconfiguration is complete
  * @param allowAsap indicates if reconfiguration allowed as soon as possible
  */
-void deviceServiceReconfigureDevice(const char *deviceUuid, uint32_t delaySeconds,
+void deviceServiceReconfigureDevice(const char *deviceUuid,
+                                    uint32_t delaySeconds,
                                     reconfigurationCompleteCallback reconfigurationCompleted,
                                     bool allowAsap);
 
@@ -210,26 +211,26 @@ PostUpgradeAction deviceServiceGetPostUpgradeAction(const char *deviceUuid);
  *         else returns false in case of a timeout
  * @see deviceServiceSendReconfigurationSignal
  */
-bool deviceServiceWaitForReconfigure(const char* deviceUuid);
+bool deviceServiceWaitForReconfigure(const char *deviceUuid);
 
 /*
  * Sends a signal on reconfiguration condition variable.
  * @param shouldTerminate if true terminates reconfiguration task
  * @return true if signal is sent successfully
  */
-bool deviceServiceSendReconfigurationSignal(const char* deviceUuid, bool shouldTerminate);
+bool deviceServiceSendReconfigurationSignal(const char *deviceUuid, bool shouldTerminate);
 
 /*
  * @return true if reconfiguration is pending for the device
  */
-bool deviceServiceIsReconfigurationPending(const char* deviceUuid);
+bool deviceServiceIsReconfigurationPending(const char *deviceUuid);
 
 /*
  * Check if reconfiguration allowed as soon as possible
  * @param deviceUuid the uuid of device to be reconfigured
  * @return true if reconfiguration allowed on device rejoin
  */
-bool deviceServiceIsReconfigurationAllowedAsap(const char* deviceUuid);
+bool deviceServiceIsReconfigurationAllowedAsap(const char *deviceUuid);
 
 /**
  * Determine if the service is to stop. Use this when
@@ -245,4 +246,4 @@ bool deviceServiceIsShuttingDown(void);
  */
 BDeviceServiceTokenProvider *deviceServiceGetTokenProvider(void);
 
-#endif //FLEXCORE_DEVICESERVICEPRIVATE_H
+#endif // FLEXCORE_DEVICESERVICEPRIVATE_H

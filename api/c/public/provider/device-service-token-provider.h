@@ -44,7 +44,7 @@ typedef enum
 
 // This the old school way of creating GEnum types. We should be using G_DEFINE_ENUM_TYPE but that requires glib >=2.74
 GType b_device_service_token_type_get_type(void);
-#define B_DEVICE_SERVICE_TOKEN_TYPE_TYPE (b_device_service_token_type_get_type())
+#define B_DEVICE_SERVICE_TOKEN_TYPE_TYPE      (b_device_service_token_type_get_type())
 
 #define B_DEVICE_SERVICE_TOKEN_PROVIDER_ERROR (b_device_service_token_provider_error_quark())
 

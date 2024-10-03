@@ -29,14 +29,14 @@
  * Author: jelderton -  6/16/16.
  *-----------------------------------------------*/
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
 #include "versionUtils.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define DEFAULT_ARRAY_LEN   16
-#define DEFAULT_BUFF_LEN    32
+#define DEFAULT_ARRAY_LEN 16
+#define DEFAULT_BUFF_LEN  32
 
 /*
  * parse a version string, breaking it into an
@@ -90,7 +90,7 @@ uint32_t *versionStringToInt(const char *versionStr, uint16_t *arrayLen)
             // append to buffer, keeping it NULL terminated
             //
             buffer[bufferLen] = versionStr[i];
-            buffer[bufferLen+1] = '\0';
+            buffer[bufferLen + 1] = '\0';
             bufferLen++;
         }
         else
@@ -102,7 +102,7 @@ uint32_t *versionStringToInt(const char *versionStr, uint16_t *arrayLen)
             {
                 // save in array
                 //
-                retVal[*arrayLen] = (uint32_t)atoi(buffer);
+                retVal[*arrayLen] = (uint32_t) atoi(buffer);
                 *arrayLen += 1;
                 bufferLen = 0;
             }
@@ -119,7 +119,7 @@ uint32_t *versionStringToInt(const char *versionStr, uint16_t *arrayLen)
     {
         // save in array
         //
-        retVal[*arrayLen] = (uint32_t)atoi(buffer);
+        retVal[*arrayLen] = (uint32_t) atoi(buffer);
         *arrayLen += 1;
     }
 
@@ -139,7 +139,7 @@ int8_t compareVersionArrays(uint32_t *left, uint16_t leftLen, uint32_t *right, u
     // this allows the right to be longer, potentially with trailing 0s
     //
     int i;
-    for (i = 0 ; i < leftLen ; i++)
+    for (i = 0; i < leftLen; i++)
     {
         if (i >= rightLen)
         {
@@ -206,4 +206,3 @@ int8_t compareVersionStrings(const char *leftVersion, const char *rightVersion)
     free(arrayR);
     return rc;
 }
-

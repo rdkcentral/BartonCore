@@ -36,11 +36,12 @@
 #ifndef FLEXCORE_TIMETRACKER_H
 #define FLEXCORE_TIMETRACKER_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 
-typedef enum timeTrackerUnit {
+typedef enum timeTrackerUnit
+{
     TIME_TRACKER_MILLIS,
     TIME_TRACKER_SECS,
     TIME_TRACKER_MINS,
@@ -48,13 +49,7 @@ typedef enum timeTrackerUnit {
 } timeTrackerUnit;
 
 // NULL array with string representations of trimeTrackerUnit (debugging)
-static const char *timeTrackerUnitLabels[] = {
-     "MILLIS",
-     "SECS",
-     "MINS",
-     "HOURS",
-     NULL
-};
+static const char *timeTrackerUnitLabels[] = {"MILLIS", "SECS", "MINS", "HOURS", NULL};
 
 /*
  * define object for tracking time

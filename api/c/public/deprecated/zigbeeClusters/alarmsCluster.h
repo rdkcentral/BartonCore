@@ -35,15 +35,9 @@
 
 typedef struct
 {
-    void (*alarmReceived)(uint64_t eui64,
-                          uint8_t endpointId,
-                          const ZigbeeAlarmTableEntry *entry,
-                          const void *ctx);
+    void (*alarmReceived)(uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *entry, const void *ctx);
 
-    void (*alarmCleared)(uint64_t eui64,
-                         uint8_t endpointId,
-                         const ZigbeeAlarmTableEntry *entry,
-                         const void *ctx);
+    void (*alarmCleared)(uint64_t eui64, uint8_t endpointId, const ZigbeeAlarmTableEntry *entry, const void *ctx);
 } AlarmsClusterCallbacks;
 
 ZigbeeCluster *alarmsClusterCreate(const AlarmsClusterCallbacks *callbacks, const void *callbackContext);
@@ -67,4 +61,4 @@ void alarmsClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConf
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_ALARMSCLUSTER_H
+#endif // ZILKER_ALARMSCLUSTER_H

@@ -13,32 +13,28 @@ extern "C" {
  * Method:    save
  * Signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_save
-  (JNIEnv *, jclass, jstring, jstring, jstring);
+JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_save(JNIEnv *, jclass, jstring, jstring, jstring);
 
 /*
  * Class:     com_icontrol_configLib_Storage
  * Method:    load
  * Signature: (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
  */
-JNIEXPORT jstring JNICALL Java_com_icontrol_configLib_Storage_load
-  (JNIEnv *, jclass, jstring, jstring);
+JNIEXPORT jstring JNICALL Java_com_icontrol_configLib_Storage_load(JNIEnv *, jclass, jstring, jstring);
 
 /*
  * Class:     com_icontrol_configLib_Storage
  * Method:    delete
  * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_delete
-  (JNIEnv *, jclass, jstring, jstring);
+JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_delete(JNIEnv *, jclass, jstring, jstring);
 
 /*
  * Class:     com_icontrol_configLib_Storage
  * Method:    deleteNamespace
  * Signature: (Ljava/lang/String;)Z
  */
-JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_deleteNamespace
-  (JNIEnv *, jclass, jstring);
+JNIEXPORT jboolean JNICALL Java_com_icontrol_configLib_Storage_deleteNamespace(JNIEnv *, jclass, jstring);
 
 #ifdef __cplusplus
 }

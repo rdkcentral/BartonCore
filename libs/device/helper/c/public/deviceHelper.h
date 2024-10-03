@@ -1,5 +1,5 @@
 //------------------------------ tabstop = 4 ----------------------------------
-// 
+//
 // Copyright (C) 2015 iControl Networks, Inc.
 //
 // All rights reserved.
@@ -39,21 +39,21 @@
  *
  * Caller frees result.
  */
-char* createDeviceUri(const char *deviceUuid);
+char *createDeviceUri(const char *deviceUuid);
 
 /*
  * Helper to create a URI to an endpoint on a device.
  *
  * Caller frees result.
  */
-char* createEndpointUri(const char *deviceUuid, const char *endpointId);
+char *createEndpointUri(const char *deviceUuid, const char *endpointId);
 
 /*
  * Helper to create a URI to an resource on a device.
  *
  * Caller frees result.
  */
-char* createDeviceResourceUri(const char *deviceUuid, const char *resourceId);
+char *createDeviceResourceUri(const char *deviceUuid, const char *resourceId);
 
 /*
  * Helper to create a URI to an metadata on a device
@@ -67,13 +67,13 @@ char *createDeviceMetadataUri(const char *deviceUuid, const char *metadataId);
  *
  * Caller frees result.
  */
-char* createEndpointResourceUri(const char *deviceUuid, const char *endpointId, const char *resourceId);
+char *createEndpointResourceUri(const char *deviceUuid, const char *endpointId, const char *resourceId);
 
 /*
  * Helper to create a URI to a metadata item on an endpoint.
  *
  * Caller frees result.
  */
-char* createEndpointMetadataUri(const char *deviceUuid, const char *endpointId, const char *metadataId);
+char *createEndpointMetadataUri(const char *deviceUuid, const char *endpointId, const char *metadataId);
 
-#endif //FLEXCORE_DEVICEHELPER_H
+#endif // FLEXCORE_DEVICEHELPER_H

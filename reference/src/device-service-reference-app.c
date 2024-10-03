@@ -24,29 +24,29 @@
  * Created by Micah Koch on 09/17/24.
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <pwd.h>
-#include <linenoise.h>
-#include <icUtil/stringUtils.h>
-#include <icLog/logging.h>
 #include "coreCategory.h"
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
 #include "eventHandler.h"
+#include <icLog/logging.h>
+#include <icUtil/stringUtils.h>
+#include <linenoise.h>
+#include <pwd.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#define HISTORY_FILE ".barton-ds-reference-history"
-#define HISTORY_MAX 100
+#define HISTORY_FILE          ".barton-ds-reference-history"
+#define HISTORY_MAX           100
 #define DEFAULT_CONF_DIR_MODE (0755)
-#define PROMPT "deviceService> "
+#define PROMPT                "deviceService> "
 
 static bool VT100_MODE = true;
 
 static bool showAdvanced = false;
 
-static bool running = true; //Global for now, a command could set to false to terminate interactive session
+static bool running = true; // Global for now, a command could set to false to terminate interactive session
 static GList *categories = NULL;
 
 static void buildCategories()
@@ -56,14 +56,14 @@ static void buildCategories()
 
 static void destroyCategories()
 {
-    g_list_free_full(categories, (GDestroyNotify)categoryDestroy);
+    g_list_free_full(categories, (GDestroyNotify) categoryDestroy);
 }
 
 static void showInteractiveHelp(bool isInteractive)
 {
-    for(GList *it = categories; it != NULL; it = it->next)
+    for (GList *it = categories; it != NULL; it = it->next)
     {
-        Category *category = (Category *)it->data;
+        Category *category = (Category *) it->data;
         categoryPrint(category, isInteractive, showAdvanced);
     }
 }
@@ -72,9 +72,9 @@ static Command *findCommand(char *name)
 {
     Command *result = NULL;
 
-    for(GList *it = categories; it != NULL && result == NULL; it = it->next)
+    for (GList *it = categories; it != NULL && result == NULL; it = it->next)
     {
-        Category *category = (Category *)it->data;
+        Category *category = (Category *) it->data;
         stringToLowerCase(name);
         result = categoryGetCommand(category, name);
     }
@@ -82,9 +82,7 @@ static Command *findCommand(char *name)
     return result;
 }
 
-static bool handleInteractiveCommand(BDeviceServiceClient *client,
-                                     char **args,
-                                     int numArgs)
+static bool handleInteractiveCommand(BDeviceServiceClient *client, char **args, int numArgs)
 {
     bool result = true;
 
@@ -138,15 +136,15 @@ static bool handleInteractiveCommand(BDeviceServiceClient *client,
 static void completionCallback(const char *buf, linenoiseCompletions *lc)
 {
     g_autofree gchar *myBuf = g_strdup(buf);
-    for(GList *it = categories; it != NULL; it = it->next)
+    for (GList *it = categories; it != NULL; it = it->next)
     {
-        Category *category = (Category *)it->data;
+        Category *category = (Category *) it->data;
         stringToLowerCase(myBuf);
 
         g_autoptr(GList) completions = categoryGetCompletions(category, myBuf);
-        for(GList *completionsIt = completions; completionsIt != NULL; completionsIt = completionsIt->next)
+        for (GList *completionsIt = completions; completionsIt != NULL; completionsIt = completionsIt->next)
         {
-            char *aCompletion = (char*)completionsIt->data;
+            char *aCompletion = (char *) completionsIt->data;
             linenoiseAddCompletion(lc, aCompletion);
         }
     }
@@ -173,7 +171,7 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
     return b_device_service_client_new(params);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     bool rc = false;
 
@@ -195,7 +193,7 @@ int main(int argc, char** argv)
     {
         VT100_MODE = false;
 
-        //remove this from our cmd line
+        // remove this from our cmd line
         argc--;
         argv++;
     }
@@ -205,7 +203,7 @@ int main(int argc, char** argv)
         linenoiseSetCompletionCallback(completionCallback);
         linenoiseHistorySetMaxLen(HISTORY_MAX);
 
-        if(confDir != NULL)
+        if (confDir != NULL)
         {
             linenoiseHistoryLoad(histFile);
         }
@@ -215,11 +213,11 @@ int main(int argc, char** argv)
     {
         // Some excess unknown arguments
         fprintf(stderr, "Ignoring unknown arguments:");
-        for(int i = 1; i < argc; ++i)
+        for (int i = 1; i < argc; ++i)
         {
             fprintf(stderr, " %s", argv[i]);
         }
-        fprintf(stderr,"\n");
+        fprintf(stderr, "\n");
     }
 
     g_autoptr(BDeviceServiceClient) client = initializeClient(confDir);
@@ -253,7 +251,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            printf("\n"PROMPT);
+            printf("\n" PROMPT);
             fflush(stdout);
             GIOStatus status = g_io_channel_read_line(inputChannel, &line, NULL, NULL, NULL);
             if (status == G_IO_STATUS_EOF)
@@ -272,7 +270,7 @@ int main(int argc, char** argv)
         {
             if (numArgs > 0)
             {
-                 handleInteractiveCommand(client, args, numArgs);
+                handleInteractiveCommand(client, args, numArgs);
             }
         }
         else
@@ -289,7 +287,7 @@ int main(int argc, char** argv)
     unregisterEventHandlers();
     rc = true;
 
-    if(confDir != NULL)
+    if (confDir != NULL)
     {
         linenoiseHistorySave(histFile);
     }

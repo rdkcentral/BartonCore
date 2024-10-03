@@ -24,15 +24,15 @@
 // Created by tlea on 4/4/18.
 //
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <inttypes.h>
+#include <dirent.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <stdio.h>
-#include <dirent.h>
-#include <pthread.h>
+#include <unistd.h>
 
 #include <fcntl.h>
 #include <icConcurrent/threadUtils.h>
@@ -48,12 +48,12 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-#define LOG_TAG "storage"
+#define LOG_TAG     "storage"
 #define logFmt(fmt) "%s: " fmt, __func__
 
 #define STORAGE_DIR "storage"
 
-//FIXME: this big lock can likely go away with atomic fs ops
+// FIXME: this big lock can likely go away with atomic fs ops
 static pthread_mutex_t mtx;
 static bool loadInternalLocked(const char *namespace, const char *key, char **contentOut, const StorageCallbacks *cb);
 
@@ -67,13 +67,13 @@ static void oneTimeInit(void)
 
 typedef struct
 {
-    char* main; // the primary filename
-    char* backup; // the backup
-    char* temp; //the temporary working file
-    char* bad; //path to move any invalid files to
+    char *main;   // the primary filename
+    char *backup; // the backup
+    char *temp;   // the temporary working file
+    char *bad;    // path to move any invalid files to
 } StorageFilePaths;
 
-static char* getNamespacePath(const char* namespace)
+static char *getNamespacePath(const char *namespace)
 {
     char *configDir = strdupOpt(configPath);
     char *path = NULL;
@@ -87,9 +87,9 @@ static char* getNamespacePath(const char* namespace)
     return path;
 }
 
-static void getFilepaths(const char* namespace, const char* key, StorageFilePaths* paths)
+static void getFilepaths(const char *namespace, const char *key, StorageFilePaths *paths)
 {
-    char* path = getNamespacePath(namespace);
+    char *path = getNamespacePath(namespace);
 
     paths->main = stringBuilder("%s/%s", path, key);
 
@@ -102,7 +102,7 @@ static void getFilepaths(const char* namespace, const char* key, StorageFilePath
     free(path);
 }
 
-static void freeFilePaths(StorageFilePaths* paths)
+static void freeFilePaths(StorageFilePaths *paths)
 {
     free(paths->main);
     free(paths->backup);
@@ -133,7 +133,7 @@ const char *storageRestoreErrorDescribe(StorageRestoreErrorCode code)
     return descr;
 }
 
-bool storageSave(const char* namespace, const char* key, const char* value)
+bool storageSave(const char *namespace, const char *key, const char *value)
 {
     bool result = true;
 
@@ -152,8 +152,8 @@ bool storageSave(const char* namespace, const char* key, const char* value)
     StorageFilePaths paths;
     getFilepaths(namespace, key, &paths);
 
-    //ensure the namespace directory exists
-    char* path = getNamespacePath(namespace);
+    // ensure the namespace directory exists
+    char *path = getNamespacePath(namespace);
 
     struct stat buf;
     if (stat(path, &buf) && errno == ENOENT)
@@ -167,8 +167,8 @@ bool storageSave(const char* namespace, const char* key, const char* value)
 
     if (result == true)
     {
-        //write to the temp file first, then safely move with our backupUtils
-        FILE* fp = fopen(paths.temp, "w");
+        // write to the temp file first, then safely move with our backupUtils
+        FILE *fp = fopen(paths.temp, "w");
         if (fp != NULL)
         {
             if (fputs(value, fp) < 0)
@@ -180,16 +180,21 @@ bool storageSave(const char* namespace, const char* key, const char* value)
             if (fflush(fp) != 0)
             {
                 char *errStr = strerrorSafe(errno);
-                icLogError(LOG_TAG, "%s: fflush failed when trying to save %s with error: %s", __func__, paths.temp, errStr);
+                icLogError(
+                    LOG_TAG, "%s: fflush failed when trying to save %s with error: %s", __func__, paths.temp, errStr);
                 free(errStr);
                 result = false;
             }
             int fd = fileno(fp);
             int rc = fsync(fd);
-            if(rc != 0)
+            if (rc != 0)
             {
                 char *errStr = strerrorSafe(errno);
-                icLogError(LOG_TAG, "storageSave:  fsync on %s failed when trying to save %s with error: %s",paths.temp,path,errStr);
+                icLogError(LOG_TAG,
+                           "storageSave:  fsync on %s failed when trying to save %s with error: %s",
+                           paths.temp,
+                           path,
+                           errStr);
                 free(errStr);
                 result = false;
             }
@@ -197,10 +202,11 @@ bool storageSave(const char* namespace, const char* key, const char* value)
 
             if (result == true)
             {
-                safeFileSave(paths.temp, paths.main, paths.backup); //make the swap safely and with backup
+                safeFileSave(paths.temp, paths.main, paths.backup); // make the swap safely and with backup
 
                 uint64_t endMillis = getMonotonicMillis();
-                icLogDebug(LOG_TAG, "%s: saved file %s in %" PRId64 "ms", __FUNCTION__, paths.main, endMillis - startMillis);
+                icLogDebug(
+                    LOG_TAG, "%s: saved file %s in %" PRId64 "ms", __FUNCTION__, paths.main, endMillis - startMillis);
             }
         }
         else
@@ -225,11 +231,9 @@ static inline bool parseAny(const char *fileData, void *data)
     return fileData != NULL;
 }
 
-static const StorageCallbacks parseAnyCallbacks = {
-        .parse = parseAny
-};
+static const StorageCallbacks parseAnyCallbacks = {.parse = parseAny};
 
-bool storageLoad(const char* namespace, const char* key, char** value)
+bool storageLoad(const char *namespace, const char *key, char **value)
 {
     bool result = false;
 
@@ -305,7 +309,7 @@ static bool loadInternalLocked(const char *namespace, const char *key, char **co
             {
                 icLogWarn(LOG_TAG,
                           "Unable to parse file at %s, attempting to use backup. "
-                              "The bad file, if it exists, will be moved to %s",
+                          "The bad file, if it exists, will be moved to %s",
                           filepath,
                           paths.bad);
 
@@ -314,7 +318,8 @@ static bool loadInternalLocked(const char *namespace, const char *key, char **co
                     if (isIcLogPriorityTrace() == true)
                     {
                         char *errStr = strerrorSafe(errno);
-                        icLogTrace(LOG_TAG, "%s: unable to rename %s to %s: %s", __func__, paths.main, paths.bad, errStr);
+                        icLogTrace(
+                            LOG_TAG, "%s: unable to rename %s to %s: %s", __func__, paths.main, paths.bad, errStr);
                         free(errStr);
                     }
                 }
@@ -371,12 +376,12 @@ static bool loadInternalLocked(const char *namespace, const char *key, char **co
 
     if (contentOut != NULL)
     {
-        //coverity[use] data is locally owned heap, underlying file changes do not affect it
+        // coverity[use] data is locally owned heap, underlying file changes do not affect it
         *contentOut = data;
         data = NULL;
     }
 
-    //coverity[use] data is locally owned heap, underlying file changes do not affect it
+    // coverity[use] data is locally owned heap, underlying file changes do not affect it
     free(data);
     freeFilePaths(&paths);
 
@@ -472,11 +477,8 @@ static bool parseXML(const char *fileData, void *xmlCtx)
 
     if (stringIsEmpty(fileData) == false)
     {
-        xmlContext->doc = xmlReadMemory(fileData,
-                                        (int) strlen(fileData),
-                                        xmlContext->docName,
-                                        xmlContext->encoding,
-                                        xmlContext->parseOptions);
+        xmlContext->doc = xmlReadMemory(
+            fileData, (int) strlen(fileData), xmlContext->docName, xmlContext->encoding, xmlContext->parseOptions);
 
         xmlIsValid = xmlContext->doc != NULL;
     }
@@ -486,16 +488,11 @@ static bool parseXML(const char *fileData, void *xmlCtx)
 
 xmlDoc *storageLoadXML(const char *namespace, const char *key, const char *encoding, int xmlParserOptions)
 {
-    XMLContext ctx = {
-            .doc = NULL,
-            .encoding = encoding,
-            .docName = key,
-            .parseOptions = xmlParserOptions
-    };
+    XMLContext ctx = {.doc = NULL, .encoding = encoding, .docName = key, .parseOptions = xmlParserOptions};
 
     const StorageCallbacks xmlParser = {
-            .parse = parseXML,
-            .parserCtx = &ctx,
+        .parse = parseXML,
+        .parserCtx = &ctx,
     };
 
     if (storageParse(namespace, key, &xmlParser) == false)
@@ -517,14 +514,9 @@ static bool parseJSON(const char *fileData, void *jsonCtx)
 
 cJSON *storageLoadJSON(const char *namespace, const char *key)
 {
-    JSONContext ctx = {
-            .json = NULL
-    };
+    JSONContext ctx = {.json = NULL};
 
-    const StorageCallbacks jsonParser = {
-            .parse = parseJSON,
-            .parserCtx = &ctx
-    };
+    const StorageCallbacks jsonParser = {.parse = parseJSON, .parserCtx = &ctx};
 
     if (storageParse(namespace, key, &jsonParser) == false)
     {
@@ -537,7 +529,7 @@ cJSON *storageLoadJSON(const char *namespace, const char *key)
 /*
  * delete the main file, its backup, and any temp file
  */
-bool storageDelete(const char* namespace, const char* key)
+bool storageDelete(const char *namespace, const char *key)
 {
     bool result = true;
 
@@ -560,7 +552,7 @@ bool storageDelete(const char* namespace, const char* key)
         result = false;
     }
 
-    //silently ignore any errors deleting temp or backup
+    // silently ignore any errors deleting temp or backup
     unlink(paths.backup);
     unlink(paths.temp);
     unlink(paths.bad);
@@ -571,7 +563,7 @@ bool storageDelete(const char* namespace, const char* key)
     return result;
 }
 
-bool storageDeleteNamespace(const char* namespace)
+bool storageDeleteNamespace(const char *namespace)
 {
     bool result = true;
 
@@ -583,7 +575,7 @@ bool storageDeleteNamespace(const char* namespace)
 
     pthread_once(&initOnce, oneTimeInit);
 
-    char* path = getNamespacePath(namespace);
+    char *path = getNamespacePath(namespace);
     mutexLock(&mtx);
     result = deleteDirectory(path);
     mutexUnlock(&mtx);
@@ -598,7 +590,7 @@ bool storageDeleteNamespace(const char* namespace)
  * @param key
  * @return the if the key is the ORIGINAL_FILE, BACKUP_FILE, or missing
  */
-fileToRead storageHasKey(const char* namespace, const char *key)
+fileToRead storageHasKey(const char *namespace, const char *key)
 {
     // determine the location of where the file would be
     //
@@ -614,7 +606,7 @@ fileToRead storageHasKey(const char* namespace, const char *key)
     return whichFile;
 }
 
-icLinkedList* storageGetKeys(const char* namespace)
+icLinkedList *storageGetKeys(const char *namespace)
 {
     if (namespace == NULL)
     {
@@ -624,10 +616,10 @@ icLinkedList* storageGetKeys(const char* namespace)
 
     pthread_once(&initOnce, oneTimeInit);
 
-    icLinkedList* result = NULL;
-    char* path = getNamespacePath(namespace);
+    icLinkedList *result = NULL;
+    char *path = getNamespacePath(namespace);
 
-    DIR* dir;
+    DIR *dir;
     struct dirent *entry;
 
     mutexLock(&mtx);
@@ -639,53 +631,53 @@ icLinkedList* storageGetKeys(const char* namespace)
     {
         result = linkedListCreate();
 
-        icStringHashMap* regularFiles = stringHashMapCreate();
-        icStringHashMap* bakFiles = stringHashMapCreate();
+        icStringHashMap *regularFiles = stringHashMapCreate();
+        icStringHashMap *bakFiles = stringHashMapCreate();
 
-        while((entry = readdir(dir)) != NULL)
+        while ((entry = readdir(dir)) != NULL)
         {
             if (entry->d_type != DT_DIR)
             {
-                //our list of keys will be all files that are not .bak, .bad or .tmp PLUS any .bak files that are
-                // missing their regular entry
-                //dont add our backup or temp files
+                // our list of keys will be all files that are not .bak, .bad or .tmp PLUS any .bak files that are
+                //  missing their regular entry
+                // dont add our backup or temp files
                 if (strcmp(entry->d_name, STORAGE_KEY_FILE_NAME) == 0)
                 {
                     icLogDebug(LOG_TAG, "Skipping storage key file");
                     continue;
                 }
                 size_t nameLen = strlen(entry->d_name);
-                if(nameLen > 4) //the only ones that could have a .bak, .bad, or .tmp extension
+                if (nameLen > 4) // the only ones that could have a .bak, .bad, or .tmp extension
                 {
-                    char* extension = entry->d_name + (nameLen - 4);
-                    if(strcmp(extension, ".bak") == 0)
+                    char *extension = entry->d_name + (nameLen - 4);
+                    if (strcmp(extension, ".bak") == 0)
                     {
                         stringHashMapPut(bakFiles, strdup(entry->d_name), NULL);
                     }
-                    else if(strcmp(extension, ".tmp") != 0 && strcmp(extension, ".bad") != 0)
+                    else if (strcmp(extension, ".tmp") != 0 && strcmp(extension, ".bad") != 0)
                     {
                         stringHashMapPut(regularFiles, strdup(entry->d_name), NULL);
                     }
                 }
-                else //it was too short to be one of the files we are trying to filter... just add it
+                else // it was too short to be one of the files we are trying to filter... just add it
                 {
                     stringHashMapPut(regularFiles, strdup(entry->d_name), NULL);
                 }
             }
         }
 
-        //now we have a list of regular files (keys) and .bak files.  If we have a .bak file for which there is no
-        // regular file, add it to our results
-        icStringHashMapIterator* it = stringHashMapIteratorCreate(bakFiles);
-        while(stringHashMapIteratorHasNext(it))
+        // now we have a list of regular files (keys) and .bak files.  If we have a .bak file for which there is no
+        //  regular file, add it to our results
+        icStringHashMapIterator *it = stringHashMapIteratorCreate(bakFiles);
+        while (stringHashMapIteratorHasNext(it))
         {
-            char* key;
-            char* value;
-            if(stringHashMapIteratorGetNext(it, &key, &value))
+            char *key;
+            char *value;
+            if (stringHashMapIteratorGetNext(it, &key, &value))
             {
-                //truncate the .bak file at the dot
+                // truncate the .bak file at the dot
                 key[strlen(key) - 4] = '\0';
-                if(stringHashMapContains(regularFiles, key) == false)
+                if (stringHashMapContains(regularFiles, key) == false)
                 {
                     stringHashMapPut(regularFiles, strdup(key), NULL);
                 }
@@ -693,13 +685,13 @@ icLinkedList* storageGetKeys(const char* namespace)
         }
         stringHashMapIteratorDestroy(it);
 
-        //now collect our final results from regularFiles
+        // now collect our final results from regularFiles
         it = stringHashMapIteratorCreate(regularFiles);
-        while(stringHashMapIteratorHasNext(it))
+        while (stringHashMapIteratorHasNext(it))
         {
-            char* key;
-            char* value;
-            if(stringHashMapIteratorGetNext(it, &key, &value))
+            char *key;
+            char *value;
+            if (stringHashMapIteratorGetNext(it, &key, &value))
             {
                 linkedListAppend(result, strdup(key));
             }
@@ -716,21 +708,21 @@ icLinkedList* storageGetKeys(const char* namespace)
     return result;
 }
 
-StorageRestoreErrorCode storageRestoreNamespace(const char* namespace, const char* basePath)
+StorageRestoreErrorCode storageRestoreNamespace(const char *namespace, const char *basePath)
 {
     // Assume success, set in failure cases
     StorageRestoreErrorCode ret = STORAGE_RESTORE_ERROR_NONE;
 
     struct stat sinfo;
 
-    char* restorePath = stringBuilder("%s/%s/%s", basePath, STORAGE_DIR, namespace);
+    char *restorePath = stringBuilder("%s/%s/%s", basePath, STORAGE_DIR, namespace);
 
     pthread_once(&initOnce, oneTimeInit);
 
     if (doesDirExist(restorePath) == true)
     {
         bool pathExists = false;
-        char* configPath = getNamespacePath(namespace);
+        char *configPath = getNamespacePath(namespace);
 
         mutexLock(&mtx);
         if (stat(configPath, &sinfo) == 0)
@@ -743,8 +735,10 @@ StorageRestoreErrorCode storageRestoreNamespace(const char* namespace, const cha
                  */
                 ret = STORAGE_RESTORE_ERROR_OLD_CONFIG_DELETE;
                 pathExists = true;
-                icLogError(LOG_TAG, "storageRestoreNamespace: failed to delete namespace directory %s: %s",
-                           configPath, strerror(errno));
+                icLogError(LOG_TAG,
+                           "storageRestoreNamespace: failed to delete namespace directory %s: %s",
+                           configPath,
+                           strerror(errno));
             }
         }
 
@@ -759,14 +753,19 @@ StorageRestoreErrorCode storageRestoreNamespace(const char* namespace, const cha
             if (!copyDirectory(restorePath, configPath))
             {
                 ret = STORAGE_RESTORE_ERROR_FAILED_COPY;
-                icLogError(LOG_TAG, "storageRestoreNamespace: failed to copy namespace directory %s -> %s: %s",
-                           restorePath, configPath, strerror(errno));
+                icLogError(LOG_TAG,
+                           "storageRestoreNamespace: failed to copy namespace directory %s -> %s: %s",
+                           restorePath,
+                           configPath,
+                           strerror(errno));
             }
         }
         else
         {
-            icLogError(LOG_TAG, "storageRestoreNamespace: failed to create namespace directory %s: %s",
-                       configPath, strerror(errno));
+            icLogError(LOG_TAG,
+                       "storageRestoreNamespace: failed to create namespace directory %s: %s",
+                       configPath,
+                       strerror(errno));
         }
         mutexUnlock(&mtx);
 
@@ -775,8 +774,7 @@ StorageRestoreErrorCode storageRestoreNamespace(const char* namespace, const cha
     else
     {
         ret = STORAGE_RESTORE_ERROR_NEW_DIR_MISSING;
-        icLogDebug(LOG_TAG, "storageRestoreNamespace: failed to find namespace directory %s to restore",
-                   restorePath);
+        icLogDebug(LOG_TAG, "storageRestoreNamespace: failed to find namespace directory %s to restore", restorePath);
     }
 
     free(restorePath);

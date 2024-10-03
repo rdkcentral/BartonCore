@@ -77,100 +77,100 @@
 #include <zigbeeClusters/zigbeeCluster.h>
 
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+#include "icSoftwareWatchdog/icSoftwareWatchdog.h"
 #include <watchdog/watchdogService_eventAdapter.h>
 #include <watchdog/watchdogService_ipc.h>
-#include "icSoftwareWatchdog/icSoftwareWatchdog.h"
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
 
 #undef LOG_TAG
-#define LOG_TAG "zigbeeSubsystem"
+#define LOG_TAG                                            "zigbeeSubsystem"
 
-#define ZIGBEE_CORE_IP_PROPERTY_NAME "ZIGBEE_CORE_IP"
-#define ZIGBEE_CORE_PORT_PROPERTY_NAME "ZIGBEE_CORE_PORT"
-#define ZIGBEE_CORE_SIMPLE_NETWORK_CREATED "ZIGBEE_CORE_SIMPLE_NETWORK_CREATED"
-#define ZIGBEE_PREVIOUS_CHANNEL_NAME "ZIGBEE_PREVIOUS_CHANNEL"
-#define ZIGBEE_REJECT_UNKNOWN_DEVICES "ZIGBEE_REJECT_UNKNOWN_DEVICES"
-#define ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT "ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT"
+#define ZIGBEE_CORE_IP_PROPERTY_NAME                       "ZIGBEE_CORE_IP"
+#define ZIGBEE_CORE_PORT_PROPERTY_NAME                     "ZIGBEE_CORE_PORT"
+#define ZIGBEE_CORE_SIMPLE_NETWORK_CREATED                 "ZIGBEE_CORE_SIMPLE_NETWORK_CREATED"
+#define ZIGBEE_PREVIOUS_CHANNEL_NAME                       "ZIGBEE_PREVIOUS_CHANNEL"
+#define ZIGBEE_REJECT_UNKNOWN_DEVICES                      "ZIGBEE_REJECT_UNKNOWN_DEVICES"
+#define ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT             "ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT"
 
-#define ZIGBEE_HEALTH_CHECK_PROPS_PREFIX "cpe.zigbee.healthCheck"
-#define ZIGBEE_DEFENDER_PROPS_PREFIX     "cpe.zigbee.defender"
-#define ZIGBEE_WATCHDOG_ENABLED_PROP      "cpe.zigbee.watchdog.enabled.flag"
-#define ZIGBEE_LINK_QUALITY_PROPS_PREFIX  "cpe.zigbee.linkQuality"
-#define ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".lqi.enabled"
-#define ZIGBEE_LINK_QUALITY_LQI_WARN_THRESHOLD_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".lqi.warnThreshold"
-#define ZIGBEE_LINK_QUALITY_LQI_BAD_THRESHOLD_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".lqi.badThreshold"
-#define ZIGBEE_LINK_QUALITY_RSSI_ENABLED_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".rssi.enabled"
-#define ZIGBEE_LINK_QUALITY_RSSI_WARN_THRESHOLD_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".rssi.warnThreshold"
-#define ZIGBEE_LINK_QUALITY_RSSI_BAD_THRESHOLD_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".rssi.badThreshold"
-#define ZIGBEE_LINK_QUALITY_RSSI_CROSS_ABOVE_DB_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".rssi.crossAboveDb"
-#define ZIGBEE_LINK_QUALITY_RSSI_CROSS_BELOW_DB_PROP ZIGBEE_LINK_QUALITY_PROPS_PREFIX".rssi.crossBelowDb"
+#define ZIGBEE_HEALTH_CHECK_PROPS_PREFIX                   "cpe.zigbee.healthCheck"
+#define ZIGBEE_DEFENDER_PROPS_PREFIX                       "cpe.zigbee.defender"
+#define ZIGBEE_WATCHDOG_ENABLED_PROP                       "cpe.zigbee.watchdog.enabled.flag"
+#define ZIGBEE_LINK_QUALITY_PROPS_PREFIX                   "cpe.zigbee.linkQuality"
+#define ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP               ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.enabled"
+#define ZIGBEE_LINK_QUALITY_LQI_WARN_THRESHOLD_PROP        ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.warnThreshold"
+#define ZIGBEE_LINK_QUALITY_LQI_BAD_THRESHOLD_PROP         ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".lqi.badThreshold"
+#define ZIGBEE_LINK_QUALITY_RSSI_ENABLED_PROP              ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".rssi.enabled"
+#define ZIGBEE_LINK_QUALITY_RSSI_WARN_THRESHOLD_PROP       ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".rssi.warnThreshold"
+#define ZIGBEE_LINK_QUALITY_RSSI_BAD_THRESHOLD_PROP        ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".rssi.badThreshold"
+#define ZIGBEE_LINK_QUALITY_RSSI_CROSS_ABOVE_DB_PROP       ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".rssi.crossAboveDb"
+#define ZIGBEE_LINK_QUALITY_RSSI_CROSS_BELOW_DB_PROP       ZIGBEE_LINK_QUALITY_PROPS_PREFIX ".rssi.crossBelowDb"
 
 #define DEFAULT_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES 30
 
-#define DEFAULT_ZIGBEE_CORE_IP "127.0.0.1"
-#define DEFAULT_ZIGBEE_CORE_PORT "18443"
+#define DEFAULT_ZIGBEE_CORE_IP                             "127.0.0.1"
+#define DEFAULT_ZIGBEE_CORE_PORT                           "18443"
 
-#define DELAY_BETWEEN_INITIAL_HEARTBEATS_SECONDS 1
+#define DELAY_BETWEEN_INITIAL_HEARTBEATS_SECONDS           1
 
-#define LEGACY_FIRMWARE_SUBDIR "legacy"
-#define OTA_FIRMWARE_SUBDIR "ota"
-#define ZIGBEE_FIRMWARE_SUBDIR "zigbeeFirmware"
+#define LEGACY_FIRMWARE_SUBDIR                             "legacy"
+#define OTA_FIRMWARE_SUBDIR                                "ota"
+#define ZIGBEE_FIRMWARE_SUBDIR                             "zigbeeFirmware"
 
-#define EUI64_JSON_PROP "eui64"
-#define MANUF_JSON_PROP "manufacturer"
-#define MODEL_JSON_PROP "model"
-#define HWVER_JSON_PROP "hwVer"
-#define FWVER_JSON_PROP "fwVer"
-#define APPVER_JSON_PROP "appVer"
-#define ID_JSON_PROP "id"
-#define IS_SERVER_JSON_PROP "isServer"
-#define ATTRIBUTE_IDS_JSON_PROP "attributeIds"
-#define PROFILEID_JSON_PROP "profileId"
-#define DEVICEID_JSON_PROP "deviceId"
-#define DEVICEVER_JSON_PROP "deviceVer"
-#define SERVERCLUSTERINFOS_JSON_PROP "serverClusterInfos"
-#define CLIENTCLUSTERINFOS_JSON_PROP "clientClusterInfos"
-#define ENDDEVICE_JSON_PROP "end"
-#define ROUTERDEVICE_JSON_PROP "router"
-#define UNKNOWN_JSON_PROP "unknown"
-#define DEVICETYPE_JSON_PROP "type"
-#define MAINS_JSON_PROP "mains"
-#define BATT_JSON_PROP "batt"
-#define POWERSOURCE_JSON_PROP "power"
-#define ENDPOINTS_JSON_PROP "endpoints"
+#define EUI64_JSON_PROP                                    "eui64"
+#define MANUF_JSON_PROP                                    "manufacturer"
+#define MODEL_JSON_PROP                                    "model"
+#define HWVER_JSON_PROP                                    "hwVer"
+#define FWVER_JSON_PROP                                    "fwVer"
+#define APPVER_JSON_PROP                                   "appVer"
+#define ID_JSON_PROP                                       "id"
+#define IS_SERVER_JSON_PROP                                "isServer"
+#define ATTRIBUTE_IDS_JSON_PROP                            "attributeIds"
+#define PROFILEID_JSON_PROP                                "profileId"
+#define DEVICEID_JSON_PROP                                 "deviceId"
+#define DEVICEVER_JSON_PROP                                "deviceVer"
+#define SERVERCLUSTERINFOS_JSON_PROP                       "serverClusterInfos"
+#define CLIENTCLUSTERINFOS_JSON_PROP                       "clientClusterInfos"
+#define ENDDEVICE_JSON_PROP                                "end"
+#define ROUTERDEVICE_JSON_PROP                             "router"
+#define UNKNOWN_JSON_PROP                                  "unknown"
+#define DEVICETYPE_JSON_PROP                               "type"
+#define MAINS_JSON_PROP                                    "mains"
+#define BATT_JSON_PROP                                     "batt"
+#define POWERSOURCE_JSON_PROP                              "power"
+#define ENDPOINTS_JSON_PROP                                "endpoints"
 
-#define DEVICE_USES_HASH_BASED_LINK_KEY_METADATA "usesHashBasedLinkKey"
-#define DO_NOT_UPGRADE_TO_HASH_BASED_LINK_KEY_METADATA "doNotUpgradeToHashBasedLinkKey"
+#define DEVICE_USES_HASH_BASED_LINK_KEY_METADATA           "usesHashBasedLinkKey"
+#define DO_NOT_UPGRADE_TO_HASH_BASED_LINK_KEY_METADATA     "doNotUpgradeToHashBasedLinkKey"
 
-#define DEVICE_LAST_BEACON_METADATA "lastBeacon"
+#define DEVICE_LAST_BEACON_METADATA                        "lastBeacon"
 
-#define MIN_ZIGBEE_CHANNEL 11
-#define MAX_ZIGBEE_CHANNEL 26
+#define MIN_ZIGBEE_CHANNEL                                 11
+#define MAX_ZIGBEE_CHANNEL                                 26
 
-#define DEFAULT_ZIGBEE_CHANNEL_SCAN_DUR_MILLIS 30
-#define DEFAULT_ZIGBEE_PER_CHANNEL_NUMBER_OF_SCANS 16
+#define DEFAULT_ZIGBEE_CHANNEL_SCAN_DUR_MILLIS             30
+#define DEFAULT_ZIGBEE_PER_CHANNEL_NUMBER_OF_SCANS         16
 
-//Our pre-HA 1.2 sensors/devices reported this as their device id.  We will make a risky assumption that
-// any device with this ID is one of these and we will skip discovery of attributes on the basic cluster.
-#define ICONTROL_BOGUS_DEVICE_ID 0xFFFF
+// Our pre-HA 1.2 sensors/devices reported this as their device id.  We will make a risky assumption that
+//  any device with this ID is one of these and we will skip discovery of attributes on the basic cluster.
+#define ICONTROL_BOGUS_DEVICE_ID                           0xFFFF
 
 // The amount we should increment the counters after things like RMA.  The values here are what we have historically
 // used
-#define NONCE_COUNTER_INCREMENT_AMOUNT 0x1000
-#define FRAME_COUNTER_INCREMENT_AMOUNT 0x1000
+#define NONCE_COUNTER_INCREMENT_AMOUNT                     0x1000
+#define FRAME_COUNTER_INCREMENT_AMOUNT                     0x1000
 
-#define MAX_NETWORK_INIT_RETRIES 3
-#define NETWORK_INITIALIZATION_TIMEOUT_SECS (MAX_NETWORK_INIT_RETRIES * 30)
-#define MAX_INITIAL_ZIGBEECORE_RESTARTS 3
+#define MAX_NETWORK_INIT_RETRIES                           3
+#define NETWORK_INITIALIZATION_TIMEOUT_SECS                (MAX_NETWORK_INIT_RETRIES * 30)
+#define MAX_INITIAL_ZIGBEECORE_RESTARTS                    3
 
-#define WILDCARD_EUI64 0xFFFFFFFFFFFFFFFF
+#define WILDCARD_EUI64                                     0xFFFFFFFFFFFFFFFF
 
-#define DEFAULT_RSSI_QUALITY_CROSS_ABOVE_DB 6
-#define DEFAULT_RSSI_QUALITY_CROSS_BELOW_DB 6
+#define DEFAULT_RSSI_QUALITY_CROSS_ABOVE_DB                6
+#define DEFAULT_RSSI_QUALITY_CROSS_BELOW_DB                6
 
-#define ZIGBEE_CORE_PROCESS_NAME "ZigbeeCore"
+#define ZIGBEE_CORE_PROCESS_NAME                           "ZigbeeCore"
 
-#define COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS (60*60)
+#define COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS           (60 * 60)
 
 typedef enum
 {
@@ -179,17 +179,11 @@ typedef enum
     ZIGBEE_CORE_RECOVERY_ENITITY_NETWORK_BUSY
 } ZigbeeCoreRecoveryEntity;
 
-static const char *ZigbeeCoreRecoveryEntityLabels[] = {
-        "heartbeat",
-        "communication failure",
-        "network busy"
-};
+static const char *ZigbeeCoreRecoveryEntityLabels[] = {"heartbeat", "communication failure", "network busy"};
 
-static const char *zigbeeCoreRecoveryReasonLabels[] = {
-        "Recovery reason: heartbeat",
-        "Recovery reason: communication failure",
-        "Recovery reason: network busy"
-};
+static const char *zigbeeCoreRecoveryReasonLabels[] = {"Recovery reason: heartbeat",
+                                                       "Recovery reason: communication failure",
+                                                       "Recovery reason: network busy"};
 
 static bool actionOnZigbeeCoreInProgress = false; // zigbeeCore recovery is in progress or not
 
@@ -215,11 +209,11 @@ static bool initializeNetwork(void);
 
 static uint64_t loadLocalEui64(void);
 
-static void prematureClusterCommandsFreeFunc(void *key,
-                                             void *value);
+static void prematureClusterCommandsFreeFunc(void *key, void *value);
 
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity, uint16_t petFrequencySeconds,
+static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity,
+                                                    uint16_t petFrequencySeconds,
                                                     uint16_t numOfFailuresToRestart,
                                                     uint16_t numOfFailuresToReboot);
 
@@ -239,12 +233,9 @@ static bool isDeviceUsingHashBasedLinkKey(const icDevice *device);
 
 static bool shouldUpgradeToHashBasedLinkKey(const icDevice *device);
 
-static bool setDeviceUsingHashBasedLinkKey(const icDevice *device,
-                                           bool isUsingHashBasedKey,
-                                           bool setMetadataOnly);
+static bool setDeviceUsingHashBasedLinkKey(const icDevice *device, bool isUsingHashBasedKey, bool setMetadataOnly);
 
-static void startChannelChangeDeviceWatchdog(uint8_t previousChannel,
-                                             uint8_t targetedChannel);
+static void startChannelChangeDeviceWatchdog(uint8_t previousChannel, uint8_t targetedChannel);
 
 static void restartChannelChangeDeviceWatchdogIfRequired(void);
 
@@ -273,8 +264,7 @@ typedef struct
     bool registered;
 } DeviceCallbacksRegisterContext;
 
-static void deviceCallbacksRegister(void *item,
-                                    void *context);
+static void deviceCallbacksRegister(void *item, void *context);
 
 typedef struct
 {
@@ -282,11 +272,9 @@ typedef struct
     bool unregistered;
 } DeviceCallbacksUnregisterContext;
 
-static void deviceCallbacksUnregister(void *item,
-                                      void *context);
+static void deviceCallbacksUnregister(void *item, void *context);
 
-static void deviceCallbacksAttributeReport(const void *item,
-                                           const void *context);
+static void deviceCallbacksAttributeReport(const void *item, const void *context);
 
 typedef struct
 {
@@ -294,11 +282,9 @@ typedef struct
     bool isSecure;
 } DeviceCallbacksRejoinContext;
 
-static void deviceCallbacksRejoined(const void *item,
-                                    const void *context);
+static void deviceCallbacksRejoined(const void *item, const void *context);
 
-static void deviceCallbacksLeft(const void *item,
-                                const void *context);
+static void deviceCallbacksLeft(const void *item, const void *context);
 
 typedef struct
 {
@@ -313,8 +299,7 @@ typedef struct
     zhalPowerSource powerSource;
 } DeviceAnnouncedContext;
 
-static void deviceCallbacksClusterCommandReceived(const void *item,
-                                                  const void *context);
+static void deviceCallbacksClusterCommandReceived(const void *item, const void *context);
 
 typedef struct
 {
@@ -322,11 +307,9 @@ typedef struct
     bool isSentFromServer;
 } DeviceCallbacksOtaUpgradeEventContext;
 
-static void deviceCallbacksOtaUpgradeMessageSent(const void *item,
-                                                 const void *context);
+static void deviceCallbacksOtaUpgradeMessageSent(const void *item, const void *context);
 
-static void deviceCallbacksOtaUpgradeMessageReceived(const void *item,
-                                                     const void *context);
+static void deviceCallbacksOtaUpgradeMessageReceived(const void *item, const void *context);
 
 static void zigbeeLinkQualityConfigure(void);
 
@@ -337,14 +320,13 @@ static icLinkedList *discoveringDeviceCallbacks = NULL;
 
 static pthread_mutex_t discoveringDeviceCallbacksMutex = PTHREAD_MUTEX_INITIALIZER;
 
-static icThreadSafeWrapper deviceCallbacksWrapper = THREAD_SAFE_WRAPPER_INIT(createDeviceCallbacks,
-                                                                             releaseIfDeviceCallbacksEmpty,
-                                                                             deviceCallbackDestroy);
+static icThreadSafeWrapper deviceCallbacksWrapper =
+    THREAD_SAFE_WRAPPER_INIT(createDeviceCallbacks, releaseIfDeviceCallbacksEmpty, deviceCallbackDestroy);
 
-//in order to support the pairing process for legacy sensors, which send a command to us
-// immediately after joining but before we have recognized it, we must hold on to commands
-// sent from devices that are not yet paired while we are in discovery.
-static icHashMap *prematureClusterCommands = NULL; //eui64 to linked list of ReceivedClusterCommands
+// in order to support the pairing process for legacy sensors, which send a command to us
+//  immediately after joining but before we have recognized it, we must hold on to commands
+//  sent from devices that are not yet paired while we are in discovery.
+static icHashMap *prematureClusterCommands = NULL; // eui64 to linked list of ReceivedClusterCommands
 static pthread_mutex_t prematureClusterCommandsMtx = PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_cond_t prematureClusterCommandsCond;
@@ -367,7 +349,7 @@ static icSoftwareWatchdogContext *networkBusySoftwareWatchdogCtx = NULL;
 static icSoftwareWatchdogContext *commFailSoftwareWatchdogCtx = NULL;
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
 
-//this mutex provides protection for the above three watchdog handles
+// this mutex provides protection for the above three watchdog handles
 static pthread_mutex_t watchdogsMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 // Set a default for waiting for zigbee core to recover, could make this configurable later
@@ -402,22 +384,20 @@ static icHashMap *unclaimedDevices = NULL;
 static pthread_mutex_t unclaimedDevicesMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 // From stock branding for Healthcheck
-#define BAD_RSSI_LIMIT_DEFAULT -75
+#define BAD_RSSI_LIMIT_DEFAULT  -75
 #define WARN_RSSI_LIMIT_DEFAULT -65
 
 // From stock branding for Healthcheck
-#define BAD_LQI_LIMIT_DEFAULT 150
-#define WARN_LQI_LIMIT_DEFAULT 236
+#define BAD_LQI_LIMIT_DEFAULT   150
+#define WARN_LQI_LIMIT_DEFAULT  236
 
-#define WARN_THRESHOLD_INDEX 0
-#define BAD_THRESHOLD_INDEX 1
+#define WARN_THRESHOLD_INDEX    0
+#define BAD_THRESHOLD_INDEX     1
 
-static const char *linkQualityLevelLabels[] = {
-        LINK_QUALITY_UNKNOWN,
-        LINK_QUALITY_POOR,
-        LINK_QUALITY_FAIR,
-        LINK_QUALITY_GOOD
-};
+static const char *linkQualityLevelLabels[] = {LINK_QUALITY_UNKNOWN,
+                                               LINK_QUALITY_POOR,
+                                               LINK_QUALITY_FAIR,
+                                               LINK_QUALITY_GOOD};
 
 static bool useLqiForLinkQuality = false;
 
@@ -444,20 +424,20 @@ static void zigbeeSubsystemSetOtaUpgradeDelay(uint32_t delaySeconds);
 static void zigbeeSubsystemShutdown(void);
 static cJSON *getStatusJson(void);
 
-__attribute__ ((constructor)) static void registerSubsystem(void)
+__attribute__((constructor)) static void registerSubsystem(void)
 {
     static Subsystem zigbeeSubsystem = {
-            .name = ZIGBEE_SUBSYSTEM_NAME,
-            .onPostRestoreConfig = zigbeeSubsystemPostRestoreConfig,
-            .onAllServicesAvailable = zigbeeSubsystemAllServicesAvailable,
-            .onAllDriversStarted = zigbeeSubsystemAllDriversStarted,
-            .onRestoreConfig = zigbeeSubsystemRestoreConfig,
-            .onLPMStart = zigbeeSubsystemEnterLPM,
-            .onLPMEnd = zigbeeSubsystemExitLPM,
-            .setOtaUpgradeDelay = zigbeeSubsystemSetOtaUpgradeDelay,
-            .initialize = zigbeeSubsystemInitialize,
-            .shutdown = zigbeeSubsystemShutdown,
-            .getStatusJson = getStatusJson,
+        .name = ZIGBEE_SUBSYSTEM_NAME,
+        .onPostRestoreConfig = zigbeeSubsystemPostRestoreConfig,
+        .onAllServicesAvailable = zigbeeSubsystemAllServicesAvailable,
+        .onAllDriversStarted = zigbeeSubsystemAllDriversStarted,
+        .onRestoreConfig = zigbeeSubsystemRestoreConfig,
+        .onLPMStart = zigbeeSubsystemEnterLPM,
+        .onLPMEnd = zigbeeSubsystemExitLPM,
+        .setOtaUpgradeDelay = zigbeeSubsystemSetOtaUpgradeDelay,
+        .initialize = zigbeeSubsystemInitialize,
+        .shutdown = zigbeeSubsystemShutdown,
+        .getStatusJson = getStatusJson,
     };
 
     subsystemManagerRegister(&zigbeeSubsystem);
@@ -484,8 +464,7 @@ static void waitForInitialZigbeeCoreStartup(void)
                    "Starting timer of %d seconds to wait for Zigbee startup",
                    BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
         timeTrackerStart(timer, BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS);
-        while ((zhalHeartbeatRc = zhalHeartbeat(NULL, NULL)) != 0 &&
-               timeTrackerExpired(timer) == false)
+        while ((zhalHeartbeatRc = zhalHeartbeat(NULL, NULL)) != 0 && timeTrackerExpired(timer) == false)
         {
             icLogDebug(LOG_TAG, "Waiting for ZigbeeCore to be ready.");
             sleep(DELAY_BETWEEN_INITIAL_HEARTBEATS_SECONDS);
@@ -502,14 +481,15 @@ static void waitForInitialZigbeeCoreStartup(void)
         {
             icLogWarn(LOG_TAG, "Restarting ZigbeeCore, count %d", zigbeeCoreRestartCount);
             const char *reasonString = zigbeeCoreRecoveryReasonLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT];
-            scoped_generic char *troubleString = stringBuilder("ZigbeeCore was not responding at startup. %s",
-                                                               reasonString);
+            scoped_generic char *troubleString =
+                stringBuilder("ZigbeeCore was not responding at startup. %s", reasonString);
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
 #ifdef DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG
-            if (softwareWatchdogImmediateRecoverServiceWithTrouble(ZIGBEE_CORE_PROCESS_NAME,
-                                                                   ZigbeeCoreRecoveryEntityLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT],
-                                                                   troubleString,
-                                                                   DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG) == false)
+            if (softwareWatchdogImmediateRecoverServiceWithTrouble(
+                    ZIGBEE_CORE_PROCESS_NAME,
+                    ZigbeeCoreRecoveryEntityLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT],
+                    troubleString,
+                    DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG) == false)
             {
                 icLogError(LOG_TAG, "immediate zigbeeCore recovery request failed");
             }
@@ -671,7 +651,7 @@ static void zigbeeSubsystemShutdown(void)
     {
         pthread_join(commFailMonitorThreadId, NULL);
     }
-    //cleanup/shutdown the watchdogs
+    // cleanup/shutdown the watchdogs
     {
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
         LOCK_SCOPE(watchdogsMtx);
@@ -699,14 +679,14 @@ static void zigbeeSubsystemShutdown(void)
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
     }
 
-    //clean up any premature cluster commands we may have received while in discovery
+    // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
     hashMapDestroy(prematureClusterCommands, prematureClusterCommandsFreeFunc);
     prematureClusterCommands = NULL;
     pthread_mutex_unlock(&prematureClusterCommandsMtx);
 
-    //clean up any devices in our map/set that may have updated to the hash based link key
-    // before we were ready to save that fact.
+    // clean up any devices in our map/set that may have updated to the hash based link key
+    //  before we were ready to save that fact.
     pthread_mutex_lock(&earlyHashBasedLinkKeyDevicesMtx);
     if (earlyHashedBasedLinkKeyDevices != NULL)
     {
@@ -840,8 +820,7 @@ static bool initializeNetwork(void)
         char *key = NULL;
         char *val = NULL;
 
-        if (stringHashMapIteratorGetNext(it, &key, &val) == true &&
-            strlen(key) > prefixLen)
+        if (stringHashMapIteratorGetNext(it, &key, &val) == true && strlen(key) > prefixLen)
         {
             char *newKey = strdup(key + strlen(ZIGBEE_PROPS_PREFIX));
             stringHashMapPut(zhalProps, newKey, strdupOpt(val));
@@ -874,7 +853,8 @@ static bool initializeNetwork(void)
         }
         else
         {
-            icLogError(LOG_TAG, "zhalNetworkInit failed(rc=%d)!!! Retries remaining = %d",
+            icLogError(LOG_TAG,
+                       "zhalNetworkInit failed(rc=%d)!!! Retries remaining = %d",
                        initResult,
                        MAX_NETWORK_INIT_RETRIES - i - 1);
         }
@@ -883,8 +863,7 @@ static bool initializeNetwork(void)
     return result;
 }
 
-bool zigbeeSubsystemSetNetworkConfig(uint64_t eui64,
-                                     const char *networkBlob)
+bool zigbeeSubsystemSetNetworkConfig(uint64_t eui64, const char *networkBlob)
 {
     scoped_generic char *localEui64 = zigbeeSubsystemEui64ToId(eui64);
 
@@ -897,8 +876,7 @@ bool zigbeeSubsystemSetNetworkConfig(uint64_t eui64,
     return allSet;
 }
 
-int zigbeeSubsystemRegisterDiscoveryHandler(const char *name,
-                                            ZigbeeSubsystemDeviceDiscoveredHandler *handler)
+int zigbeeSubsystemRegisterDiscoveryHandler(const char *name, ZigbeeSubsystemDeviceDiscoveredHandler *handler)
 {
     icLogDebug(LOG_TAG, "%s: %s", __FUNCTION__, name);
 
@@ -923,8 +901,8 @@ int zigbeeSubsystemUnregisterDiscoveryHandler(ZigbeeSubsystemDeviceDiscoveredHan
     icLinkedListIterator *iterator = linkedListIteratorCreate(discoveringDeviceCallbacks);
     while (linkedListIteratorHasNext(iterator))
     {
-        ZigbeeSubsystemDeviceDiscoveredHandler *item = (ZigbeeSubsystemDeviceDiscoveredHandler *) linkedListIteratorGetNext(
-                iterator);
+        ZigbeeSubsystemDeviceDiscoveredHandler *item =
+            (ZigbeeSubsystemDeviceDiscoveredHandler *) linkedListIteratorGetNext(iterator);
         if (handler == item)
         {
             linkedListIteratorDeleteCurrent(iterator, standardDoNotFreeFunc);
@@ -936,31 +914,22 @@ int zigbeeSubsystemUnregisterDiscoveryHandler(ZigbeeSubsystemDeviceDiscoveredHan
     return 0;
 }
 
-int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64,
-                                          ZigbeeSubsystemDeviceCallbacks *cbs)
+int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64, ZigbeeSubsystemDeviceCallbacks *cbs)
 {
-    DeviceCallbacksRegisterContext context = {
-            .eui64 = eui64,
-            .callbacks = cbs,
-            .registered = false
-    };
+    DeviceCallbacksRegisterContext context = {.eui64 = eui64, .callbacks = cbs, .registered = false};
     threadSafeWrapperModifyItem(&deviceCallbacksWrapper, deviceCallbacksRegister, &context);
 
     return context.registered == true ? 0 : -1;
 }
 
-static void freeDeviceCallbackEntry(void *key,
-                                    void *value)
+static void freeDeviceCallbackEntry(void *key, void *value)
 {
     free(key);
 }
 
 int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64)
 {
-    DeviceCallbacksUnregisterContext context = {
-            .eui64 = eui64,
-            .unregistered = false
-    };
+    DeviceCallbacksUnregisterContext context = {.eui64 = eui64, .unregistered = false};
     threadSafeWrapperModifyItem(&deviceCallbacksWrapper, deviceCallbacksUnregister, &context);
 
     return context.unregistered == true ? 0 : -1;
@@ -969,8 +938,7 @@ int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64)
 void zigbeeSubsystemDumpDeviceDiscovered(IcDiscoveredDeviceDetails *details)
 {
     icLogDebug(LOG_TAG, "IcDiscoveredDeviceDetails:");
-    icLogDebug(LOG_TAG, "\tEUI64: %016"
-            PRIx64, details->eui64);
+    icLogDebug(LOG_TAG, "\tEUI64: %016" PRIx64, details->eui64);
     switch (details->deviceType)
     {
         case deviceTypeEndDevice:
@@ -999,52 +967,47 @@ void zigbeeSubsystemDumpDeviceDiscovered(IcDiscoveredDeviceDetails *details)
     }
     icLogDebug(LOG_TAG, "\tManufacturer: %s", details->manufacturer);
     icLogDebug(LOG_TAG, "\tModel: %s", details->model);
-    icLogDebug(LOG_TAG, "\tHardware Version: 0x%"
-            PRIx64, details->hardwareVersion);
-    icLogDebug(LOG_TAG, "\tFirmware Version: 0x%"
-            PRIx64, details->firmwareVersion);
+    icLogDebug(LOG_TAG, "\tHardware Version: 0x%" PRIx64, details->hardwareVersion);
+    icLogDebug(LOG_TAG, "\tFirmware Version: 0x%" PRIx64, details->firmwareVersion);
     icLogDebug(LOG_TAG, "\tNumber of endpoints: %d", details->numEndpoints);
     for (int i = 0; i < details->numEndpoints; i++)
     {
         icLogDebug(LOG_TAG, "\t\tEndpoint ID: %d", details->endpointDetails[i].endpointId);
-        icLogDebug(LOG_TAG, "\t\tProfile ID: 0x%04"
-                PRIx16, details->endpointDetails[i].appProfileId);
-        icLogDebug(LOG_TAG, "\t\tDevice ID: 0x%04"
-                PRIx16, details->endpointDetails[i].appDeviceId);
+        icLogDebug(LOG_TAG, "\t\tProfile ID: 0x%04" PRIx16, details->endpointDetails[i].appProfileId);
+        icLogDebug(LOG_TAG, "\t\tDevice ID: 0x%04" PRIx16, details->endpointDetails[i].appDeviceId);
         icLogDebug(LOG_TAG, "\t\tDevice Version: %d", details->endpointDetails[i].appDeviceVersion);
 
         icLogDebug(LOG_TAG, "\t\tServer Cluster IDs:");
         for (int j = 0; j < details->endpointDetails[i].numServerClusterDetails; j++)
         {
-            icLogDebug(LOG_TAG, "\t\t\t0x%04"
-                    PRIx16, details->endpointDetails[i].serverClusterDetails[j].clusterId);
+            icLogDebug(LOG_TAG, "\t\t\t0x%04" PRIx16, details->endpointDetails[i].serverClusterDetails[j].clusterId);
 
             icLogDebug(LOG_TAG, "\t\t\tAttribute IDs:");
             for (int k = 0; k < details->endpointDetails[i].serverClusterDetails[j].numAttributeIds; k++)
             {
-                icLogDebug(LOG_TAG, "\t\t\t\t0x%04"
-                        PRIx16, details->endpointDetails[i].serverClusterDetails[j].attributeIds[k]);
+                icLogDebug(LOG_TAG,
+                           "\t\t\t\t0x%04" PRIx16,
+                           details->endpointDetails[i].serverClusterDetails[j].attributeIds[k]);
             }
         }
 
         icLogDebug(LOG_TAG, "\t\tClient Cluster IDs:");
         for (int j = 0; j < details->endpointDetails[i].numClientClusterDetails; j++)
         {
-            icLogDebug(LOG_TAG, "\t\t\t0x%04"
-                    PRIx16, details->endpointDetails[i].clientClusterDetails[j].clusterId);
+            icLogDebug(LOG_TAG, "\t\t\t0x%04" PRIx16, details->endpointDetails[i].clientClusterDetails[j].clusterId);
 
             icLogDebug(LOG_TAG, "\t\t\tAttribute IDs:");
             for (int k = 0; k < details->endpointDetails[i].clientClusterDetails[j].numAttributeIds; k++)
             {
-                icLogDebug(LOG_TAG, "\t\t\t\t0x%04"
-                        PRIx16, details->endpointDetails[i].clientClusterDetails[j].attributeIds[k]);
+                icLogDebug(LOG_TAG,
+                           "\t\t\t\t0x%04" PRIx16,
+                           details->endpointDetails[i].clientClusterDetails[j].attributeIds[k]);
             }
         }
     }
 }
 
-bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details,
-                                          DeviceMigrator *deviceMigrator)
+bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details, DeviceMigrator *deviceMigrator)
 {
     pthread_mutex_lock(&discoveringDeviceCallbacksMutex);
     icLinkedListIterator *iterator = linkedListIteratorCreate(discoveringDeviceCallbacks);
@@ -1053,7 +1016,7 @@ bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details,
     while (linkedListIteratorHasNext(iterator) && deviceClaimed == false)
     {
         ZigbeeSubsystemDeviceDiscoveredHandler *item =
-                (ZigbeeSubsystemDeviceDiscoveredHandler *) linkedListIteratorGetNext(iterator);
+            (ZigbeeSubsystemDeviceDiscoveredHandler *) linkedListIteratorGetNext(iterator);
         deviceClaimed = item->callback(item->callbackContext, details, deviceMigrator);
     }
     linkedListIteratorDestroy(iterator);
@@ -1064,8 +1027,8 @@ bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details,
 
 void zigbeeSubsystemHandleZhalStartupEvent(void)
 {
-    //we received a zhal startup event.  Indicate that the network needs to be initialized and tickle our zigbee core
-    // watchdog to run now in case init is required
+    // we received a zhal startup event.  Indicate that the network needs to be initialized and tickle our zigbee core
+    //  watchdog to run now in case init is required
     zigbeeSubsystemSetUnready();
 
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
@@ -1127,8 +1090,7 @@ void zigbeeSubsystemSetRejectUnknownDevices(bool doReject)
     deviceServiceSetSystemProperty(ZIGBEE_REJECT_UNKNOWN_DEVICES, doReject ? "true" : "false");
 }
 
-static bool deviceShouldBeRejected(uint64_t eui64,
-                                   bool *discovering)
+static bool deviceShouldBeRejected(uint64_t eui64, bool *discovering)
 {
     bool result = false;
 
@@ -1152,7 +1114,7 @@ static bool deviceShouldBeRejected(uint64_t eui64,
 
     if (rejectEnabled == true)
     {
-        //if we are discovering, allow device to talk to us, otherwise see if we know it
+        // if we are discovering, allow device to talk to us, otherwise see if we know it
         if (*discovering == false)
         {
             // Discovery might have ended but the device might not yet be persisted, so check if its still in process
@@ -1206,10 +1168,7 @@ void zigbeeSubsystemClusterCommandReceived(ReceivedClusterCommand *command)
     }
     else
     {
-        DeviceCallbacksClusterCommandReceivedContext context = {
-                .command = command,
-                .deviceFound = false
-        };
+        DeviceCallbacksClusterCommandReceivedContext context = {.command = command, .deviceFound = false};
         threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksClusterCommandReceived, &context);
 
         bool repairing = deviceServiceIsInRecoveryMode();
@@ -1220,7 +1179,8 @@ void zigbeeSubsystemClusterCommandReceived(ReceivedClusterCommand *command)
             if (discovering)
             {
                 icLogDebug(LOG_TAG,
-                           "%s: saving premature cluster command for uuid %"PRIx64" device while repairing = %s and device found = %s",
+                           "%s: saving premature cluster command for uuid %" PRIx64
+                           " device while repairing = %s and device found = %s",
                            __FUNCTION__,
                            command->eui64,
                            stringValueOfBool(repairing),
@@ -1242,21 +1202,16 @@ void zigbeeSubsystemDeviceLeft(uint64_t eui64)
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksLeft, &eui64);
 }
 
-void zigbeeSubsystemDeviceRejoined(uint64_t eui64,
-                                   bool isSecure)
+void zigbeeSubsystemDeviceRejoined(uint64_t eui64, bool isSecure)
 {
-    DeviceCallbacksRejoinContext context = {
-            .eui64 = eui64,
-            .isSecure = isSecure
-    };
+    DeviceCallbacksRejoinContext context = {.eui64 = eui64, .isSecure = isSecure};
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksRejoined, &context);
 
     // add event to tracker after device driver(s) have a chance with it
     zigbeeEventTrackerAddRejoinEvent(eui64, isSecure);
 }
 
-void zigbeeSubsystemLinkKeyUpdated(uint64_t eui64,
-                                   bool isUsingHashBasedKey)
+void zigbeeSubsystemLinkKeyUpdated(uint64_t eui64, bool isUsingHashBasedKey)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -1283,12 +1238,12 @@ void zigbeeSubsystemLinkKeyUpdated(uint64_t eui64,
             setDeviceUsingHashBasedLinkKey(device, isUsingHashBasedKey, false);
             deviceDestroy(device);
         }
-            // if its call to clear and we don't have device yet, do not worry about it for now.
-            // only keep if its call to set.
+        // if its call to clear and we don't have device yet, do not worry about it for now.
+        // only keep if its call to set.
         else if (isUsingHashBasedKey == true)
         {
-            //device service doesnt yet know about this device which must be in the middle of discovery.  Save
-            // off this device for use later when we set the devices with their flags.
+            // device service doesnt yet know about this device which must be in the middle of discovery.  Save
+            //  off this device for use later when we set the devices with their flags.
             pthread_mutex_lock(&earlyHashBasedLinkKeyDevicesMtx);
             if (earlyHashedBasedLinkKeyDevices == NULL)
             {
@@ -1311,8 +1266,8 @@ void zigbeeSubsystemApsAckFailure(uint64_t eui64)
 void zigbeeSubsystemDeviceOtaUpgradeMessageSent(OtaUpgradeEvent *otaEvent)
 {
     DeviceCallbacksOtaUpgradeEventContext context = {
-            .otaEvent = otaEvent,
-            .isSentFromServer = true,
+        .otaEvent = otaEvent,
+        .isSentFromServer = true,
     };
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksOtaUpgradeMessageSent, &context);
 }
@@ -1320,8 +1275,8 @@ void zigbeeSubsystemDeviceOtaUpgradeMessageSent(OtaUpgradeEvent *otaEvent)
 void zigbeeSubsystemDeviceOtaUpgradeMessageReceived(OtaUpgradeEvent *otaEvent)
 {
     DeviceCallbacksOtaUpgradeEventContext context = {
-            .otaEvent = otaEvent,
-            .isSentFromServer = false,
+        .otaEvent = otaEvent,
+        .isSentFromServer = false,
     };
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksOtaUpgradeMessageReceived, &context);
 }
@@ -1341,13 +1296,16 @@ void zigbeeSubsystemDeviceBeaconReceived(uint64_t eui64,
         // first lets log something if there is a capacity issue so something like telemetry can pick it up
         if (!hasEndDeviceCapacity || !hasRouterCapability)
         {
-            icLogWarn(LOG_TAG, "%s: zigbee router has no capacity! (end device cap = %s, router cap = %s)",
-                      uuid, stringValueOfBool(hasEndDeviceCapacity), stringValueOfBool(hasRouterCapability));
+            icLogWarn(LOG_TAG,
+                      "%s: zigbee router has no capacity! (end device cap = %s, router cap = %s)",
+                      uuid,
+                      stringValueOfBool(hasEndDeviceCapacity),
+                      stringValueOfBool(hasRouterCapability));
         }
 
         scoped_cJSON *beacon = cJSON_CreateObject();
 
-        cJSON_AddNumberToObject(beacon, "ts", (double)getCurrentUnixTimeMillis()); //precision loss is safe here
+        cJSON_AddNumberToObject(beacon, "ts", (double) getCurrentUnixTimeMillis()); // precision loss is safe here
         cJSON_AddNumberToObject(beacon, "panId", panId);
         cJSON_AddBoolToObject(beacon, "isOpen", isOpen);
         cJSON_AddBoolToObject(beacon, "endDevCap", hasEndDeviceCapacity);
@@ -1357,10 +1315,10 @@ void zigbeeSubsystemDeviceBeaconReceived(uint64_t eui64,
         scoped_generic char *beaconStr = cJSON_PrintUnformatted(beacon);
         scoped_generic char *uri = createDeviceMetadataUri(device->uuid, DEVICE_LAST_BEACON_METADATA);
 
-       if (!deviceServiceSetMetadata(uri, beaconStr))
-       {
-           icLogWarn(LOG_TAG, "%s: failed to set beacon metadata", __func__);
-       }
+        if (!deviceServiceSetMetadata(uri, beaconStr))
+        {
+            icLogWarn(LOG_TAG, "%s: failed to set beacon metadata", __func__);
+        }
     }
 }
 
@@ -1386,7 +1344,7 @@ void zigbeeSubsystemRequestUnclaimedDevicesLeave(void)
         int *val;
         uint16_t keyLen = 0;
 
-        hashMapIteratorGetNext(iterator, (void **)&deviceUuid, &keyLen, (void **)&val);
+        hashMapIteratorGetNext(iterator, (void **) &deviceUuid, &keyLen, (void **) &val);
         zhalRequestLeave(*deviceUuid, false, false);
     }
 
@@ -1396,7 +1354,8 @@ void zigbeeSubsystemRequestUnclaimedDevicesLeave(void)
 }
 
 /*
- * Enter discovery mode if we are not already.  Increment discovery counter and send the enable join command if we are starting for the first time.
+ * Enter discovery mode if we are not already.  Increment discovery counter and send the enable join command if we are
+ * starting for the first time.
  */
 int zigbeeSubsystemStartDiscoveringDevices(void)
 {
@@ -1410,7 +1369,7 @@ int zigbeeSubsystemStartDiscoveringDevices(void)
     {
         enableJoin = true;
 
-        //clean up any premature cluster commands we may have received while in prior discovery
+        // clean up any premature cluster commands we may have received while in prior discovery
         pthread_mutex_lock(&prematureClusterCommandsMtx);
         hashMapDestroy(prematureClusterCommands, prematureClusterCommandsFreeFunc);
         pthread_mutex_unlock(&prematureClusterCommandsMtx);
@@ -1425,7 +1384,7 @@ int zigbeeSubsystemStartDiscoveringDevices(void)
         prematureClusterCommands = hashMapCreate();
         pthread_mutex_unlock(&prematureClusterCommandsMtx);
 
-        //this can block for a while... put it in the background
+        // this can block for a while... put it in the background
         createDetachedThread(enableJoinThreadProc, NULL, "zbEnableJoin");
     }
 
@@ -1450,16 +1409,15 @@ int zigbeeSubsystemStopDiscoveringDevices(void)
 
     if (discoveringRefCount < 0)
     {
-        icLogError(LOG_TAG,
-                   "zigbeeSubsystemStopDiscoveringDevices: discoveringRefCount is negative! %d",
-                   discoveringRefCount);
+        icLogError(
+            LOG_TAG, "zigbeeSubsystemStopDiscoveringDevices: discoveringRefCount is negative! %d", discoveringRefCount);
     }
 
     pthread_mutex_unlock(&discoveringRefCountMutex);
 
     if (disableJoin)
     {
-        //no more devices being discovered... we can stop
+        // no more devices being discovered... we can stop
         zhalNetworkDisableJoin();
 
         zigbeeSubsystemRequestUnclaimedDevicesLeave();
@@ -1478,7 +1436,7 @@ int zigbeeSubsystemSendCommand(uint64_t eui64,
                                uint8_t *message,
                                uint16_t messageLen)
 {
-    //for now just pass through
+    // for now just pass through
     return zhalSendCommand(eui64, endpointId, clusterId, toServer, false, false, commandId, message, messageLen);
 }
 
@@ -1490,7 +1448,7 @@ int zigbeeSubsystemSendCommandDefaultResponse(uint64_t eui64,
                                               uint8_t *message,
                                               uint16_t messageLen)
 {
-    //for now just pass through
+    // for now just pass through
     return zhalSendCommand(eui64, endpointId, clusterId, toServer, false, true, commandId, message, messageLen);
 }
 
@@ -1502,7 +1460,7 @@ int zigbeeSubsystemSendCommandWithEncryption(uint64_t eui64,
                                              uint8_t *message,
                                              uint16_t messageLen)
 {
-    //for now just pass through
+    // for now just pass through
     return zhalSendCommand(eui64, endpointId, clusterId, toServer, true, false, commandId, message, messageLen);
 }
 
@@ -1515,8 +1473,9 @@ int zigbeeSubsystemSendMfgCommand(uint64_t eui64,
                                   uint8_t *message,
                                   uint16_t messageLen)
 {
-    //for now just pass through
-    return zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, false, false, commandId, mfgId, message, messageLen);
+    // for now just pass through
+    return zhalSendMfgCommand(
+        eui64, endpointId, clusterId, toServer, false, false, commandId, mfgId, message, messageLen);
 }
 
 int zigbeeSubsystemSendMfgCommandDefaultResponse(uint64_t eui64,
@@ -1528,8 +1487,9 @@ int zigbeeSubsystemSendMfgCommandDefaultResponse(uint64_t eui64,
                                                  uint8_t *message,
                                                  uint16_t messageLen)
 {
-    //for now just pass through
-    return zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, false, true, commandId, mfgId, message, messageLen);
+    // for now just pass through
+    return zhalSendMfgCommand(
+        eui64, endpointId, clusterId, toServer, false, true, commandId, mfgId, message, messageLen);
 }
 
 int zigbeeSubsystemSendMfgCommandWithEncryption(uint64_t eui64,
@@ -1541,8 +1501,9 @@ int zigbeeSubsystemSendMfgCommandWithEncryption(uint64_t eui64,
                                                 uint8_t *message,
                                                 uint16_t messageLen)
 {
-    //for now just pass through
-    return zhalSendMfgCommand(eui64, endpointId, clusterId, toServer, true, false, commandId, mfgId, message, messageLen);
+    // for now just pass through
+    return zhalSendMfgCommand(
+        eui64, endpointId, clusterId, toServer, true, false, commandId, mfgId, message, messageLen);
 }
 
 int zigbeeSubsystemSendViaApsAck(uint64_t eui64,
@@ -1552,7 +1513,7 @@ int zigbeeSubsystemSendViaApsAck(uint64_t eui64,
                                  uint8_t *message,
                                  uint16_t messageLen)
 {
-    //for now just pass through
+    // for now just pass through
     return zhalSendViaApsAck(eui64, endpointId, clusterId, sequenceNum, message, messageLen);
 }
 
@@ -1581,14 +1542,8 @@ static int readString(uint64_t eui64,
 
         if (isMfgSpecific)
         {
-            result = zhalAttributesReadMfgSpecific(eui64,
-                                                   endpointId,
-                                                   clusterId,
-                                                   mfgId,
-                                                   toServer,
-                                                   attributeIds,
-                                                   1,
-                                                   attributeData);
+            result = zhalAttributesReadMfgSpecific(
+                eui64, endpointId, clusterId, mfgId, toServer, attributeIds, 1, attributeData);
         }
         else
         {
@@ -1644,9 +1599,9 @@ static int readNumbers(uint64_t eui64,
                        uint16_t mfgId,
                        bool toServer,
                        uint8_t numAttributes,
-                       const uint16_t* attributeIds,
-                       uint64_t* values,
-                       bool* readSuccesses)
+                       const uint16_t *attributeIds,
+                       uint64_t *values,
+                       bool *readSuccesses)
 {
     int result = 0;
 
@@ -1662,33 +1617,21 @@ static int readNumbers(uint64_t eui64,
 
     if (isMfgSpecific)
     {
-        result = zhalAttributesReadMfgSpecific(eui64,
-                                               endpointId,
-                                               clusterId,
-                                               mfgId,
-                                               toServer,
-                                               attributeIds,
-                                               numAttributes,
-                                               attributeData);
+        result = zhalAttributesReadMfgSpecific(
+            eui64, endpointId, clusterId, mfgId, toServer, attributeIds, numAttributes, attributeData);
     }
     else
     {
-        result = zhalAttributesRead(eui64,
-                                    endpointId,
-                                    clusterId,
-                                    toServer,
-                                    attributeIds,
-                                    numAttributes,
-                                    attributeData);
+        result = zhalAttributesRead(eui64, endpointId, clusterId, toServer, attributeIds, numAttributes, attributeData);
     }
 
     if (result == 0)
     {
         for (uint8_t attIdx = 0; attIdx < numAttributes; attIdx++)
         {
-            if (attributeData[attIdx].dataLen > 0 && attributeData[attIdx].dataLen <= 8) //these will fit in uint64_t
+            if (attributeData[attIdx].dataLen > 0 && attributeData[attIdx].dataLen <= 8) // these will fit in uint64_t
             {
-                readSuccesses[attIdx] = true; //we got data for this attribute, so mark it as successful
+                readSuccesses[attIdx] = true; // we got data for this attribute, so mark it as successful
 
                 for (uint16_t i = 0; i < attributeData[attIdx].dataLen; i++)
                 {
@@ -1697,7 +1640,8 @@ static int readNumbers(uint64_t eui64,
             }
             else
             {
-                icLogError(LOG_TAG, "%s: error, no data returned for attributeId %"PRIu16, __func__, attributeIds[attIdx]);
+                icLogError(
+                    LOG_TAG, "%s: error, no data returned for attributeId %" PRIu16, __func__, attributeIds[attIdx]);
                 readSuccesses[attIdx] = false;
             }
 
@@ -1724,16 +1668,9 @@ int zigbeeSubsystemReadNumber(uint64_t eui64,
     uint16_t attributeIds[1] = {attributeId};
     bool readSuccesses[1];
 
-    if (readNumbers(eui64,
-                    endpointId,
-                    clusterId,
-                    false,
-                    0xFFFF,
-                    toServer,
-                    1,
-                    attributeIds,
-                    value,
-                    readSuccesses) == 0 && readSuccesses[0] == true)
+    if (readNumbers(eui64, endpointId, clusterId, false, 0xFFFF, toServer, 1, attributeIds, value, readSuccesses) ==
+            0 &&
+        readSuccesses[0] == true)
     {
         return 0;
     }
@@ -1752,7 +1689,8 @@ int zigbeeSubsystemReadNumbers(uint64_t eui64,
                                uint64_t *values,
                                bool *readSuccesses)
 {
-    return readNumbers(eui64, endpointId, clusterId, false, 0xFFFF, toServer, numAttributes, attributeIds, values, readSuccesses);
+    return readNumbers(
+        eui64, endpointId, clusterId, false, 0xFFFF, toServer, numAttributes, attributeIds, values, readSuccesses);
 }
 
 int zigbeeSubsystemReadNumberMfgSpecific(uint64_t eui64,
@@ -1766,16 +1704,8 @@ int zigbeeSubsystemReadNumberMfgSpecific(uint64_t eui64,
     uint16_t attributeIds[1] = {attributeId};
     bool readSuccesses[1];
 
-    if (readNumbers(eui64,
-                    endpointId,
-                    clusterId,
-                    true,
-                    mfgId,
-                    toServer,
-                    1,
-                    attributeIds,
-                    value,
-                    readSuccesses) == 0 && readSuccesses[0] == true)
+    if (readNumbers(eui64, endpointId, clusterId, true, mfgId, toServer, 1, attributeIds, value, readSuccesses) == 0 &&
+        readSuccesses[0] == true)
     {
         return 0;
     }
@@ -1791,11 +1721,12 @@ int zigbeeSubsystemReadNumbersMfgSpecific(uint64_t eui64,
                                           uint16_t mfgId,
                                           bool toServer,
                                           uint8_t numAttributes,
-                                          const uint16_t* attributeIds,
-                                          uint64_t* values,
-                                          bool* readSuccesses)
+                                          const uint16_t *attributeIds,
+                                          uint64_t *values,
+                                          bool *readSuccesses)
 {
-    return readNumbers(eui64, endpointId, clusterId, true, mfgId, toServer, numAttributes, attributeIds, values, readSuccesses);
+    return readNumbers(
+        eui64, endpointId, clusterId, true, mfgId, toServer, numAttributes, attributeIds, values, readSuccesses);
 }
 
 static int writeNumber(uint64_t eui64,
@@ -1817,7 +1748,7 @@ static int writeNumber(uint64_t eui64,
 
     int retVal = 0;
 
-    //note that this implementation only supports writing up to 8 bytes (what fits in uint64_t)
+    // note that this implementation only supports writing up to 8 bytes (what fits in uint64_t)
     for (int i = 0; i < numBytes; i++)
     {
         attributeData.data[i] = (uint8_t) ((value >> 8 * i) & 0xff);
@@ -1833,7 +1764,7 @@ static int writeNumber(uint64_t eui64,
         retVal = zhalAttributesWrite(eui64, endpointId, clusterId, toServer, &attributeData, 1);
     }
 
-    //cleanup
+    // cleanup
     free(attributeData.data);
 
     return retVal;
@@ -1848,16 +1779,8 @@ int zigbeeSubsystemWriteNumber(uint64_t eui64,
                                uint64_t value,
                                uint8_t numBytes)
 {
-    return writeNumber(eui64,
-                       endpointId,
-                       clusterId,
-                       false,
-                       0xFFFF,
-                       toServer,
-                       attributeId,
-                       attributeType,
-                       value,
-                       numBytes);
+    return writeNumber(
+        eui64, endpointId, clusterId, false, 0xFFFF, toServer, attributeId, attributeType, value, numBytes);
 }
 
 int zigbeeSubsystemWriteNumberMfgSpecific(uint64_t eui64,
@@ -1870,21 +1793,11 @@ int zigbeeSubsystemWriteNumberMfgSpecific(uint64_t eui64,
                                           uint64_t value,
                                           uint8_t numBytes)
 {
-    return writeNumber(eui64,
-                       endpointId,
-                       clusterId,
-                       true,
-                       mfgId,
-                       toServer,
-                       attributeId,
-                       attributeType,
-                       value,
-                       numBytes);
+    return writeNumber(
+        eui64, endpointId, clusterId, true, mfgId, toServer, attributeId, attributeType, value, numBytes);
 }
 
-int zigbeeSubsystemBindingSet(uint64_t eui64,
-                              uint8_t endpointId,
-                              uint16_t clusterId)
+int zigbeeSubsystemBindingSet(uint64_t eui64, uint8_t endpointId, uint16_t clusterId)
 {
     return zhalBindingSet(eui64, endpointId, clusterId);
 }
@@ -1894,9 +1807,7 @@ icLinkedList *zigbeeSubsystemBindingGet(uint64_t eui64)
     return zhalBindingGet(eui64);
 }
 
-int zigbeeSubsystemBindingClear(uint64_t eui64,
-                                uint8_t endpointId,
-                                uint16_t clusterId)
+int zigbeeSubsystemBindingClear(uint64_t eui64, uint8_t endpointId, uint16_t clusterId)
 {
     return zhalBindingClear(eui64, endpointId, clusterId);
 }
@@ -1930,9 +1841,7 @@ int zigbeeSubsystemAttributesSetReportingMfgSpecific(uint64_t eui64,
     return zhalAttributesSetReportingMfgSpecific(eui64, endpointId, clusterId, mfgId, configs, numConfigs);
 }
 
-int zigbeeSubsystemGetEndpointIds(uint64_t eui64,
-                                  uint8_t **endpointIds,
-                                  uint8_t *numEndpointIds)
+int zigbeeSubsystemGetEndpointIds(uint64_t eui64, uint8_t **endpointIds, uint8_t *numEndpointIds)
 {
     return zhalGetEndpointIds(eui64, endpointIds, numEndpointIds);
 }
@@ -1977,7 +1886,7 @@ static uint64_t loadLocalEui64(void)
 
 int zigbeeSubsystemSetAddresses(void)
 {
-    //get all paired zigbee devices and set their addresses in zigbee core
+    // get all paired zigbee devices and set their addresses in zigbee core
     icLinkedList *devices = deviceServiceGetDevicesBySubsystem(ZIGBEE_SUBSYSTEM_NAME);
 
     uint16_t numEui64s = linkedListCount(devices);
@@ -2006,15 +1915,15 @@ int zigbeeSubsystemSetAddresses(void)
             }
             else
             {
-                //check to see if we got an early notification that this device uses hash based link key
+                // check to see if we got an early notification that this device uses hash based link key
                 pthread_mutex_lock(&earlyHashBasedLinkKeyDevicesMtx);
                 if (hashMapDelete(earlyHashedBasedLinkKeyDevices, device->uuid, strlen(device->uuid), NULL) == true)
                 {
                     deviceEntries[i].flags.bits.useHashBasedLinkKey = 1;
 
-                    //since we found it here, that means that it has not yet been set as metadata on the device
-                    // set it now.  Don't send to zhal from here since we do it below.
-                    // we only add device to earlyHashedBasedLinkKeyDevices if it has flag set. so mark as using it.
+                    // since we found it here, that means that it has not yet been set as metadata on the device
+                    //  set it now.  Don't send to zhal from here since we do it below.
+                    //  we only add device to earlyHashedBasedLinkKeyDevices if it has flag set. so mark as using it.
                     setDeviceUsingHashBasedLinkKey(device, true, true);
                 }
                 pthread_mutex_unlock(&earlyHashBasedLinkKeyDevicesMtx);
@@ -2044,8 +1953,7 @@ int zigbeeSubsystemRemoveDeviceAddress(uint64_t eui64)
     return zhalRemoveDeviceAddress(eui64);
 }
 
-static void prematureClusterCommandsFreeFunc(void *key,
-                                             void *value)
+static void prematureClusterCommandsFreeFunc(void *key, void *value)
 {
     icLinkedList *list = (icLinkedList *) value;
     linkedListDestroy(list, (linkedListItemFreeFunc) freeReceivedClusterCommand);
@@ -2054,7 +1962,7 @@ static void prematureClusterCommandsFreeFunc(void *key,
 
 char *zigbeeSubsystemEui64ToId(uint64_t eui64)
 {
-    char *result = (char *) malloc(21); //max uint64_t
+    char *result = (char *) malloc(21); // max uint64_t
     sprintf(result, "%016" PRIx64, eui64);
     return result;
 }
@@ -2087,8 +1995,8 @@ char *zigbeeSubsystemGetAndCreateFirmwareFileDirectory(DeviceFirmwareType firmwa
 {
     g_autofree gchar *firmwareFileRootDir = deviceServiceConfigurationGetFirmwareFileDir();
 
-    char *lastSubdir = firmwareType == DEVICE_FIRMWARE_TYPE_ZIGBEE_LEGACY ?
-                       LEGACY_FIRMWARE_SUBDIR : OTA_FIRMWARE_SUBDIR;
+    char *lastSubdir =
+        firmwareType == DEVICE_FIRMWARE_TYPE_ZIGBEE_LEGACY ? LEGACY_FIRMWARE_SUBDIR : OTA_FIRMWARE_SUBDIR;
     // 2 path delimiters and NULL terminator
     int directoryLen = 3 + strlen(firmwareFileRootDir) + strlen(ZIGBEE_FIRMWARE_SUBDIR) + strlen(lastSubdir);
     char *firmwareFileDirectory = (char *) malloc(sizeof(char) * directoryLen);
@@ -2121,7 +2029,7 @@ IcDiscoveredDeviceDetails *createIcDiscoveredDeviceDetails(void)
 static void cloneIcDiscoveredClusterDetails(const IcDiscoveredClusterDetails *original,
                                             IcDiscoveredClusterDetails *target)
 {
-    //copy the static stuff
+    // copy the static stuff
     memcpy(target, original, sizeof(IcDiscoveredClusterDetails));
     target->numAttributeIds = original->numAttributeIds;
     // Passing 0 for calloc nmemb param can actually cause memory to be allocated.  Skip that if nothing is there.
@@ -2132,8 +2040,8 @@ static void cloneIcDiscoveredClusterDetails(const IcDiscoveredClusterDetails *or
         // Copy attribute values if they are there
         if (original->attributeValues != NULL)
         {
-            target->attributeValues = (IcDiscoveredAttributeValue *) calloc(original->numAttributeIds,
-                                                                            sizeof(IcDiscoveredAttributeValue));
+            target->attributeValues =
+                (IcDiscoveredAttributeValue *) calloc(original->numAttributeIds, sizeof(IcDiscoveredAttributeValue));
             for (int i = 0; i < target->numAttributeIds; ++i)
             {
                 target->attributeValues[i].attributeType = original->attributeValues[i].attributeType;
@@ -2141,7 +2049,8 @@ static void cloneIcDiscoveredClusterDetails(const IcDiscoveredClusterDetails *or
                 if (target->attributeValues[i].dataLen > 0)
                 {
                     target->attributeValues[i].data = malloc(original->attributeValues[i].dataLen);
-                    memcpy(target->attributeValues[i].data, original->attributeValues[i].data,
+                    memcpy(target->attributeValues[i].data,
+                           original->attributeValues[i].data,
                            original->attributeValues[i].dataLen);
                 }
             }
@@ -2162,12 +2071,12 @@ static void cloneIcDiscoveredClusterDetails(const IcDiscoveredClusterDetails *or
 static void cloneIcDiscoveredEndpointDetails(const IcDiscoveredEndpointDetails *original,
                                              IcDiscoveredEndpointDetails *target)
 {
-    //copy the static stuff
+    // copy the static stuff
     memcpy(target, original, sizeof(IcDiscoveredEndpointDetails));
 
-    //deal with dynamic parts
+    // deal with dynamic parts
 
-    //server clusters
+    // server clusters
     target->numServerClusterDetails = original->numServerClusterDetails;
     // Passing 0 for calloc nmemb param can actually cause memory to be allocated.  Skip that if nothing is there.
     if (original->numServerClusterDetails > 0 && original->serverClusterDetails != NULL)
@@ -2189,7 +2098,7 @@ static void cloneIcDiscoveredEndpointDetails(const IcDiscoveredEndpointDetails *
         target->serverClusterDetails = NULL;
     }
 
-    //client clusters
+    // client clusters
     target->numClientClusterDetails = original->numClientClusterDetails;
     // Passing 0 for calloc nmemb param can actually cause memory to be allocated.  Skip that if nothing is there.
     if (original->numClientClusterDetails > 0 && original->clientClusterDetails != NULL)
@@ -2231,8 +2140,8 @@ IcDiscoveredDeviceDetails *cloneIcDiscoveredDeviceDetails(const IcDiscoveredDevi
     }
     if (original->numEndpoints > 0 && original->endpointDetails != NULL)
     {
-        result->endpointDetails = (IcDiscoveredEndpointDetails *) calloc(original->numEndpoints,
-                                                                         sizeof(IcDiscoveredEndpointDetails));
+        result->endpointDetails =
+            (IcDiscoveredEndpointDetails *) calloc(original->numEndpoints, sizeof(IcDiscoveredEndpointDetails));
         result->numEndpoints = original->numEndpoints;
 
         for (int i = 0; i < original->numEndpoints; i++)
@@ -2401,8 +2310,7 @@ cJSON *icDiscoveredDeviceDetailsToJson(const IcDiscoveredDeviceDetails *details)
     return result;
 }
 
-static bool icDiscoveredClusterDetailsFromJson(const cJSON *detailsJson,
-                                               IcDiscoveredClusterDetails *details)
+static bool icDiscoveredClusterDetailsFromJson(const cJSON *detailsJson, IcDiscoveredClusterDetails *details)
 {
     bool success = true;
 
@@ -2436,12 +2344,11 @@ static bool icDiscoveredClusterDetailsFromJson(const cJSON *detailsJson,
         details->attributeIds[j++] = (uint16_t) attributeId->valueint;
     }
 
-    exit:
+exit:
     return success;
 }
 
-static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
-                                                IcDiscoveredEndpointDetails *details)
+static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson, IcDiscoveredEndpointDetails *details)
 {
     bool success = true;
 
@@ -2479,7 +2386,7 @@ static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
     }
     details->appDeviceVersion = (uint8_t) tmpInt;
 
-    //server cluster infos
+    // server cluster infos
     serverClusterInfos = cJSON_GetObjectItem(detailsJson, SERVERCLUSTERINFOS_JSON_PROP);
     if (serverClusterInfos == NULL)
     {
@@ -2487,8 +2394,8 @@ static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
         goto exit;
     }
     details->numServerClusterDetails = (uint8_t) cJSON_GetArraySize(serverClusterInfos);
-    details->serverClusterDetails = (IcDiscoveredClusterDetails *) calloc(details->numServerClusterDetails,
-                                                                          sizeof(IcDiscoveredClusterDetails));
+    details->serverClusterDetails =
+        (IcDiscoveredClusterDetails *) calloc(details->numServerClusterDetails, sizeof(IcDiscoveredClusterDetails));
     j = 0;
     cJSON_ArrayForEach(serverClusterInfo, serverClusterInfos)
     {
@@ -2498,7 +2405,7 @@ static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
         }
     }
 
-    //client cluster infos
+    // client cluster infos
     clientClusterInfos = cJSON_GetObjectItem(detailsJson, CLIENTCLUSTERINFOS_JSON_PROP);
     if (clientClusterInfos == NULL)
     {
@@ -2506,8 +2413,8 @@ static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
         goto exit;
     }
     details->numClientClusterDetails = (uint8_t) cJSON_GetArraySize(clientClusterInfos);
-    details->clientClusterDetails = (IcDiscoveredClusterDetails *) calloc(details->numClientClusterDetails,
-                                                                          sizeof(IcDiscoveredClusterDetails));
+    details->clientClusterDetails =
+        (IcDiscoveredClusterDetails *) calloc(details->numClientClusterDetails, sizeof(IcDiscoveredClusterDetails));
     j = 0;
     cJSON_ArrayForEach(clientClusterInfo, clientClusterInfos)
     {
@@ -2517,7 +2424,7 @@ static bool icDiscoveredEndpointDetailsFromJson(const cJSON *detailsJson,
         }
     }
 
-    exit:
+exit:
     return success;
 }
 
@@ -2590,8 +2497,8 @@ IcDiscoveredDeviceDetails *icDiscoveredDeviceDetailsFromJson(const cJSON *detail
     }
 
     result->numEndpoints = (uint8_t) cJSON_GetArraySize(endpoints);
-    result->endpointDetails = (IcDiscoveredEndpointDetails *) calloc(result->numEndpoints,
-                                                                     sizeof(IcDiscoveredEndpointDetails));
+    result->endpointDetails =
+        (IcDiscoveredEndpointDetails *) calloc(result->numEndpoints, sizeof(IcDiscoveredEndpointDetails));
     i = 0;
     cJSON_ArrayForEach(endpoint, endpoints)
     {
@@ -2643,7 +2550,7 @@ IcDiscoveredDeviceDetails *icDiscoveredDeviceDetailsFromJson(const cJSON *detail
     }
     free(powerSource);
 
-    exit:
+exit:
     if (!success)
     {
         icLogError(LOG_TAG, "%s: failed to parse", __FUNCTION__);
@@ -2657,16 +2564,14 @@ IcDiscoveredDeviceDetails *icDiscoveredDeviceDetailsFromJson(const cJSON *detail
     return result;
 }
 
-static void freeFirmwareFilesMap(void *key,
-                                 void *value)
+static void freeFirmwareFilesMap(void *key, void *value)
 {
     // key is the firmware file, which is contained within the device descriptor which is the value
     DeviceDescriptor *dd = (DeviceDescriptor *) value;
     deviceDescriptorFree(dd);
 }
 
-static void cleanupFirmwareFilesByType(DeviceFirmwareType deviceFirmwareType,
-                                       icHashMap *allFirmwareFiles)
+static void cleanupFirmwareFilesByType(DeviceFirmwareType deviceFirmwareType, icHashMap *allFirmwareFiles)
 {
     // Get the path to the firmware files for this type
     char *dirPath = zigbeeSubsystemGetAndCreateFirmwareFileDirectory(deviceFirmwareType);
@@ -2689,11 +2594,11 @@ static void cleanupFirmwareFilesByType(DeviceFirmwareType deviceFirmwareType,
                 if ((statBuf.st_mode & S_IFMT) != S_IFDIR && (statBuf.st_mode & S_IFMT) != S_IFLNK)
                 {
                     // Check if we still need the file
-                    DeviceDescriptor *dd = (DeviceDescriptor *) hashMapGet(allFirmwareFiles, dp->d_name,
-                                                                           strlen(dp->d_name) + 1);
-                    // Either it wasn't found, or the file is of a different firmware type(and as such is in another directory)
-                    // This second case is weird, but just covers the fact that you could technically have legacy and OTA
-                    // firmware files with the same name
+                    DeviceDescriptor *dd =
+                        (DeviceDescriptor *) hashMapGet(allFirmwareFiles, dp->d_name, strlen(dp->d_name) + 1);
+                    // Either it wasn't found, or the file is of a different firmware type(and as such is in another
+                    // directory) This second case is weird, but just covers the fact that you could technically have
+                    // legacy and OTA firmware files with the same name
                     if (dd == NULL || dd->latestFirmware->type != deviceFirmwareType)
                     {
                         if (remove(filePath) == 0)
@@ -2728,8 +2633,7 @@ static void cleanupFirmwareFilesByType(DeviceFirmwareType deviceFirmwareType,
     free(dirPath);
 }
 
-static bool findDeviceResource(void *searchVal,
-                               void *item)
+static bool findDeviceResource(void *searchVal, void *item)
 {
     icDeviceResource *resourceItem = (icDeviceResource *) item;
     return strcmp(searchVal, resourceItem->id) == 0;
@@ -2752,23 +2656,24 @@ void zigbeeSubsystemCleanupFirmwareFiles(void)
     {
         icDevice *device = (icDevice *) linkedListIteratorGetNext(iterator);
         DeviceDescriptor *dd = deviceServiceGetDeviceDescriptorForDevice(device);
-        if (dd != NULL &&
-            dd->latestFirmware != NULL &&
-            dd->latestFirmware->fileInfos != NULL &&
+        if (dd != NULL && dd->latestFirmware != NULL && dd->latestFirmware->fileInfos != NULL &&
             dd->latestFirmware->version != NULL)
         {
             icLogDebug(LOG_TAG, "For device %s, found device descriptor uuid %s", device->uuid, dd->uuid);
             // Get the device's current firmware version, we only want to keep what we still need, e.g.
             // if there is a newer firmware version that we haven't upgraded to yet.
             icDeviceResource *firmwareVersionResource = (icDeviceResource *) linkedListFind(
-                    device->resources, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, findDeviceResource);
+                device->resources, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, findDeviceResource);
             if (firmwareVersionResource != NULL && firmwareVersionResource->value != NULL)
             {
-                icLogDebug(LOG_TAG, "For device %s we are at version %s, latest version is %s",
-                           device->uuid, firmwareVersionResource->value, dd->latestFirmware->version);
+                icLogDebug(LOG_TAG,
+                           "For device %s we are at version %s, latest version is %s",
+                           device->uuid,
+                           firmwareVersionResource->value,
+                           dd->latestFirmware->version);
                 // Check if latest version is newer than our version
-                int versionComparison = compareVersionStrings(dd->latestFirmware->version,
-                                                              firmwareVersionResource->value);
+                int versionComparison =
+                    compareVersionStrings(dd->latestFirmware->version, firmwareVersionResource->value);
                 if (versionComparison == -1)
                 {
                     icLinkedListIterator *fileIter = linkedListIteratorCreate(dd->latestFirmware->fileInfos);
@@ -2777,14 +2682,15 @@ void zigbeeSubsystemCleanupFirmwareFiles(void)
                         DeviceFirmwareFileInfo *info = (DeviceFirmwareFileInfo *) linkedListIteratorGetNext(fileIter);
 
                         icLogDebug(LOG_TAG, "For device %s we need firmware file %s", device->uuid, info->fileName);
-                        //Have to put clones in the map in case there is more than one filename
+                        // Have to put clones in the map in case there is more than one filename
                         DeviceDescriptor *ddClone = deviceDescriptorClone(dd);
-                        //Have to use the clone's filename as the key for memory reasons.
-                        icLinkedListIterator *cloneFileIter = linkedListIteratorCreate(
-                                ddClone->latestFirmware->fileInfos);
+                        // Have to use the clone's filename as the key for memory reasons.
+                        icLinkedListIterator *cloneFileIter =
+                            linkedListIteratorCreate(ddClone->latestFirmware->fileInfos);
                         while (linkedListIteratorHasNext(cloneFileIter) == true)
                         {
-                            DeviceFirmwareFileInfo *cloneInfo = (DeviceFirmwareFileInfo *) linkedListIteratorGetNext(cloneFileIter);
+                            DeviceFirmwareFileInfo *cloneInfo =
+                                (DeviceFirmwareFileInfo *) linkedListIteratorGetNext(cloneFileIter);
                             if (stringCompare(info->fileName, cloneInfo->fileName, true) == 0)
                             {
                                 hashMapPut(allFirmwareFiles, cloneInfo->fileName, strlen(info->fileName) + 1, ddClone);
@@ -2800,7 +2706,6 @@ void zigbeeSubsystemCleanupFirmwareFiles(void)
         }
         // The map will clean up the clones, but we need to free this copy here.
         deviceDescriptorFree(dd);
-
     }
     // Go ahead and cleanup devices as we don't need those anymore
     linkedListIteratorDestroy(iterator);
@@ -2814,11 +2719,10 @@ void zigbeeSubsystemCleanupFirmwareFiles(void)
     hashMapDestroy(allFirmwareFiles, freeFirmwareFilesMap);
 }
 
-static void prematureClusterCommandFreeKeyFunc(void *key,
-                                               void *value)
+static void prematureClusterCommandFreeKeyFunc(void *key, void *value)
 {
-    (void) value; //unused
-    //only free the key (an eui64)
+    (void) value; // unused
+    // only free the key (an eui64)
     free(key);
 }
 
@@ -2849,11 +2753,11 @@ void zigbeeSubsystemDestroyPrematureClusterCommands(uint64_t eui64)
     pthread_mutex_unlock(&prematureClusterCommandsMtx);
 }
 
-ReceivedClusterCommand *zigbeeSubsystemGetPrematureClusterCommand(uint64_t eui64,
-                                                                  uint8_t commandId,
-                                                                  uint32_t timeoutSeconds)
+ReceivedClusterCommand *
+zigbeeSubsystemGetPrematureClusterCommand(uint64_t eui64, uint8_t commandId, uint32_t timeoutSeconds)
 {
-    icLogDebug(LOG_TAG, "%s: looking for command 0x%02x for %016"PRIx64" for %"PRIu32" seconds",
+    icLogDebug(LOG_TAG,
+               "%s: looking for command 0x%02x for %016" PRIx64 " for %" PRIu32 " seconds",
                __FUNCTION__,
                commandId,
                eui64,
@@ -2892,8 +2796,7 @@ ReceivedClusterCommand *zigbeeSubsystemGetPrematureClusterCommand(uint64_t eui64
     return result;
 }
 
-void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64,
-                                                  uint8_t commandId)
+void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64, uint8_t commandId)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
@@ -2913,7 +2816,7 @@ void zigbeeSubsystemRemovePrematureClusterCommand(uint64_t eui64,
         }
         linkedListIteratorDestroy(it);
 
-        //if the list is now empty, go ahead and destroy the whole enchilada
+        // if the list is now empty, go ahead and destroy the whole enchilada
         if (linkedListCount(result) == 0)
         {
             hashMapDelete(prematureClusterCommands, &eui64, sizeof(uint64_t), prematureClusterCommandFreeKeyFunc);
@@ -2931,8 +2834,7 @@ void zigbeeSubsystemAddPrematureClusterCommand(const ReceivedClusterCommand *com
 {
     if (command != NULL)
     {
-        icLogDebug(LOG_TAG, "Adding premature cluster command for device %016"
-                PRIx64, command->eui64);
+        icLogDebug(LOG_TAG, "Adding premature cluster command for device %016" PRIx64, command->eui64);
 
         // save it
         pthread_mutex_lock(&prematureClusterCommandsMtx);
@@ -2974,8 +2876,7 @@ bool icDiscoveredDeviceDetailsGetAttributeEndpoint(const IcDiscoveredDeviceDetai
             {
                 IcDiscoveredClusterDetails *clusterDetails = &details->endpointDetails[i].serverClusterDetails[j];
 
-                if (clusterDetails->clusterId == clusterId &&
-                    clusterDetails->isServer)
+                if (clusterDetails->clusterId == clusterId && clusterDetails->isServer)
                 {
                     for (int k = 0; k < clusterDetails->numAttributeIds; k++)
                     {
@@ -3044,8 +2945,8 @@ bool icDiscoveredDeviceDetailsEndpointHasCluster(const IcDiscoveredDeviceDetails
                 int detailsLen = wantServer ? epDetails.numServerClusterDetails : epDetails.numClientClusterDetails;
                 for (int j = 0; j < detailsLen; j++)
                 {
-                    IcDiscoveredClusterDetails *clusterDetails = wantServer ? &epDetails.serverClusterDetails[j]
-                                                                            : &epDetails.clientClusterDetails[j];
+                    IcDiscoveredClusterDetails *clusterDetails =
+                        wantServer ? &epDetails.serverClusterDetails[j] : &epDetails.clientClusterDetails[j];
 
                     if (clusterDetails->clusterId == clusterId && clusterDetails->isServer == wantServer)
                     {
@@ -3080,8 +2981,8 @@ bool icDiscoveredDeviceDetailsClusterHasAttribute(const IcDiscoveredDeviceDetail
                 int detailsLen = wantServer ? epDetails.numServerClusterDetails : epDetails.numClientClusterDetails;
                 for (int j = 0; j < detailsLen; j++)
                 {
-                    IcDiscoveredClusterDetails *clusterDetails = wantServer ? &epDetails.serverClusterDetails[j]
-                                                                            : &epDetails.clientClusterDetails[j];
+                    IcDiscoveredClusterDetails *clusterDetails =
+                        wantServer ? &epDetails.serverClusterDetails[j] : &epDetails.clientClusterDetails[j];
 
                     if (clusterDetails->clusterId == clusterId)
                     {
@@ -3123,8 +3024,8 @@ bool icDiscoveredDeviceDetailsClusterGetAttributeValue(const IcDiscoveredDeviceD
                 int detailsLen = wantServer ? epDetails.numServerClusterDetails : epDetails.numClientClusterDetails;
                 for (int j = 0; j < detailsLen; j++)
                 {
-                    IcDiscoveredClusterDetails *clusterDetails = wantServer ? &epDetails.serverClusterDetails[j]
-                                                                            : &epDetails.clientClusterDetails[j];
+                    IcDiscoveredClusterDetails *clusterDetails =
+                        wantServer ? &epDetails.serverClusterDetails[j] : &epDetails.clientClusterDetails[j];
 
                     if (clusterDetails->clusterId == clusterId)
                     {
@@ -3191,7 +3092,7 @@ cJSON *zigbeeSubsystemGetAndClearCounters(void)
 
 static uint8_t calculateBestChannel(void)
 {
-    uint8_t result = 0; //invalid channel default
+    uint8_t result = 0; // invalid channel default
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     uint32_t scanDurationMillis = b_device_service_property_provider_get_property_as_uint32(
@@ -3217,9 +3118,7 @@ static uint8_t calculateBestChannel(void)
             {
                 bestScore = scanResult->score;
                 result = scanResult->channel;
-                icLogDebug(LOG_TAG, "%s: channel %"
-                        PRIu8
-                        " is now the best channel", __FUNCTION__, result);
+                icLogDebug(LOG_TAG, "%s: channel %" PRIu8 " is now the best channel", __FUNCTION__, result);
             }
         }
 
@@ -3246,9 +3145,8 @@ static icHashMap *getDeviceIdsInCommFail()
     {
         icDevice *device = linkedListIteratorGetNext(it);
 
-        icDeviceResource *commFailResource = deviceServiceGetResourceById(device->uuid,
-                                                                          NULL,
-                                                                          COMMON_DEVICE_RESOURCE_COMM_FAIL);
+        icDeviceResource *commFailResource =
+            deviceServiceGetResourceById(device->uuid, NULL, COMMON_DEVICE_RESOURCE_COMM_FAIL);
 
         if (commFailResource != NULL && strcmp(commFailResource->value, "true") == 0)
         {
@@ -3263,8 +3161,7 @@ static icHashMap *getDeviceIdsInCommFail()
     return result;
 }
 
-static bool isTimedOut(uint64_t dateOfLastContactMillis,
-                       uint64_t maxRejoinTimeoutMillis)
+static bool isTimedOut(uint64_t dateOfLastContactMillis, uint64_t maxRejoinTimeoutMillis)
 {
     return ((getCurrentUnixTimeMillis() - dateOfLastContactMillis) > maxRejoinTimeoutMillis);
 }
@@ -3293,8 +3190,8 @@ static void channelChangeDeviceWatchdogTask(void *arg)
     {
         icDevice *device = linkedListIteratorGetNext(it);
 
-        //if we have not heard from this device and it was not in comm fail before the channel
-        // change, then we have a problem and need to change back to the original channel.
+        // if we have not heard from this device and it was not in comm fail before the channel
+        //  change, then we have a problem and need to change back to the original channel.
 
         if (hashMapContains(myArg->deviceIdsPreviouslyInCommFail, device->uuid, strlen(device->uuid)) == true)
         {
@@ -3304,8 +3201,10 @@ static void channelChangeDeviceWatchdogTask(void *arg)
 
         if (isTimedOut(getDeviceDateLastContacted(device->uuid), myArg->maxRejoinTimeoutMillis) == true)
         {
-            icLogWarn(LOG_TAG, "%s: device %s has not joined back in time.  Reverting to previous channel.",
-                      __FUNCTION__, device->uuid);
+            icLogWarn(LOG_TAG,
+                      "%s: device %s has not joined back in time.  Reverting to previous channel.",
+                      __FUNCTION__,
+                      device->uuid);
 
             needsToFallBackToPreviousChannel = true;
             break;
@@ -3315,10 +3214,8 @@ static void channelChangeDeviceWatchdogTask(void *arg)
     if (needsToFallBackToPreviousChannel)
     {
         char *channelStr = NULL;
-        if (deviceServiceGetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, &channelStr) &&
-            channelStr != NULL &&
-            strlen(channelStr) > 0 &&
-            stringToUint8(channelStr, &previousChannel))
+        if (deviceServiceGetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, &channelStr) && channelStr != NULL &&
+            strlen(channelStr) > 0 && stringToUint8(channelStr, &previousChannel))
         {
             zhalNetworkChangeRequest networkChangeRequest;
             memset(&networkChangeRequest, 0, sizeof(zhalNetworkChangeRequest));
@@ -3335,8 +3232,8 @@ static void channelChangeDeviceWatchdogTask(void *arg)
         }
         else
         {
-            icLogError(LOG_TAG, "%s: needed to change back to previous channel, but no previous channel found!",
-                       __FUNCTION__);
+            icLogError(
+                LOG_TAG, "%s: needed to change back to previous channel, but no previous channel found!", __FUNCTION__);
         }
     }
     else
@@ -3344,7 +3241,7 @@ static void channelChangeDeviceWatchdogTask(void *arg)
         icLogDebug(LOG_TAG, "%s: channel change request fully completed successfully", __FUNCTION__);
     }
 
-    //set the previous channel to empty string
+    // set the previous channel to empty string
     deviceServiceSetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, "");
     isChannelChangeInProgress = false;
 
@@ -3360,12 +3257,11 @@ static void channelChangeDeviceWatchdogTask(void *arg)
     pthread_mutex_unlock(&channelChangeMutex);
 }
 
-static void startChannelChangeDeviceWatchdog(uint8_t previousChannel,
-                                             uint8_t targetedChannel)
+static void startChannelChangeDeviceWatchdog(uint8_t previousChannel, uint8_t targetedChannel)
 {
-    //Get the list of device ids for devices that are in comm fail before we even try to change
-    // channels.  These devices wont prevent a channel change if they don't follow to the new
-    // channel.
+    // Get the list of device ids for devices that are in comm fail before we even try to change
+    //  channels.  These devices wont prevent a channel change if they don't follow to the new
+    //  channel.
     icHashMap *deviceIdsInCommFail = getDeviceIdsInCommFail();
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
@@ -3374,7 +3270,7 @@ static void startChannelChangeDeviceWatchdog(uint8_t previousChannel,
                                                                   CPE_ZIGBEE_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES,
                                                                   DEFAULT_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES);
 
-    //the task will clean up the deviceIdsInCommFail and the arg instance
+    // the task will clean up the deviceIdsInCommFail and the arg instance
     ChannelChangeDeviceWatchdogArg *arg = calloc(1, sizeof(*arg));
     arg->deviceIdsPreviouslyInCommFail = deviceIdsInCommFail;
     arg->previousChannel = previousChannel;
@@ -3383,20 +3279,19 @@ static void startChannelChangeDeviceWatchdog(uint8_t previousChannel,
     // read fast timers property
     bool fastTimersForTesting =
         b_device_service_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false);
-    scheduleDelayTask(rejoinTimeoutMinutes, fastTimersForTesting ? DELAY_MILLIS : DELAY_MINS, channelChangeDeviceWatchdogTask, arg);
+    scheduleDelayTask(
+        rejoinTimeoutMinutes, fastTimersForTesting ? DELAY_MILLIS : DELAY_MINS, channelChangeDeviceWatchdogTask, arg);
 }
 
 static void restartChannelChangeDeviceWatchdogIfRequired(void)
 {
     char *channelStr = NULL;
     uint8_t previousChannel = 0;
-    if (deviceServiceGetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, &channelStr) &&
-        channelStr != NULL &&
-        strlen(channelStr) > 0 &&
-        stringToUint8(channelStr, &previousChannel))
+    if (deviceServiceGetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, &channelStr) && channelStr != NULL &&
+        strlen(channelStr) > 0 && stringToUint8(channelStr, &previousChannel))
     {
-        icLogInfo(LOG_TAG, "%s: a channel change was in progress, starting channel change watchdog again",
-                  __FUNCTION__);
+        icLogInfo(
+            LOG_TAG, "%s: a channel change was in progress, starting channel change watchdog again", __FUNCTION__);
 
         zhalSystemStatus status;
         memset(&status, 0, sizeof(zhalSystemStatus));
@@ -3411,8 +3306,7 @@ static void restartChannelChangeDeviceWatchdogIfRequired(void)
     }
 }
 
-ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
-                                                   bool dryRun)
+ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
 {
     ChannelChangeResponse result = {.channelNumber = 0, .responseCode = channelChangeFailed};
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
@@ -3426,7 +3320,9 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
     if (b_device_service_property_provider_get_property_as_bool(
             propertyProvider, CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY, true) == false)
     {
-        icLogWarn(LOG_TAG, "%s: attempt to change to channel while %s=false.  Denied", __FUNCTION__,
+        icLogWarn(LOG_TAG,
+                  "%s: attempt to change to channel while %s=false.  Denied",
+                  __FUNCTION__,
                   CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY);
         result.responseCode = channelChangeNotAllowed;
     }
@@ -3434,7 +3330,9 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
     else if (supportAlarms() == true && state->panelStatus != PANEL_STATUS_DISARMED &&
              state->panelStatus != PANEL_STATUS_UNREADY)
     {
-        icLogWarn(LOG_TAG, "%s: attempt to change to channel while panel status %s denied", __FUNCTION__,
+        icLogWarn(LOG_TAG,
+                  "%s: attempt to change to channel while panel status %s denied",
+                  __FUNCTION__,
                   PanelStatusLabels[state->panelStatus]);
         result.responseCode = channelChangeNotAllowed;
     }
@@ -3443,7 +3341,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
     {
         result.responseCode = channelChangeInProgress;
     }
-    else if (channel != 0 && (channel < MIN_ZIGBEE_CHANNEL || channel > MAX_ZIGBEE_CHANNEL))  //0 means 'calculate'
+    else if (channel != 0 && (channel < MIN_ZIGBEE_CHANNEL || channel > MAX_ZIGBEE_CHANNEL)) // 0 means 'calculate'
     {
         icLogWarn(LOG_TAG, "%s: attempt to change to channel out of range %d", __FUNCTION__, channel);
         result.responseCode = channelChangeInvalidChannel;
@@ -3459,7 +3357,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
 
         result.channelNumber = channel;
 
-        if (channel == 0) //we did not find a good channel
+        if (channel == 0) // we did not find a good channel
         {
             result.responseCode = channelChangeUnableToCalculate;
         }
@@ -3481,7 +3379,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
                 {
                     // Record the previous version so we can swap back if needed
                     char buf[4];
-                    snprintf(buf, sizeof(buf), "%"PRIu8, status.channel);
+                    snprintf(buf, sizeof(buf), "%" PRIu8, status.channel);
                     deviceServiceSetSystemProperty(ZIGBEE_PREVIOUS_CHANNEL_NAME, buf);
                     zhalNetworkChangeRequest networkChangeRequest;
                     memset(&networkChangeRequest, 0, sizeof(zhalNetworkChangeRequest));
@@ -3489,7 +3387,8 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
 
                     if (zhalNetworkChange(&networkChangeRequest) == 0)
                     {
-                        icLogDebug(LOG_TAG, "%s: successfully changed channel, now we wait for devices to move.",
+                        icLogDebug(LOG_TAG,
+                                   "%s: successfully changed channel, now we wait for devices to move.",
                                    __FUNCTION__);
 
                         isChannelChangeInProgress = true;
@@ -3513,8 +3412,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel,
     return result;
 }
 
-static int32_t findLqiInTable(uint64_t eui64,
-                              icLinkedList *lqiTable)
+static int32_t findLqiInTable(uint64_t eui64, icLinkedList *lqiTable)
 {
     int32_t lqi = -1;
     if (lqiTable != NULL)
@@ -3535,8 +3433,7 @@ static int32_t findLqiInTable(uint64_t eui64,
     return lqi;
 }
 
-static void freeNextCloserHopToLqi(void *key,
-                                   void *value)
+static void freeNextCloserHopToLqi(void *key, void *value)
 {
     (void) key; // Not owned by map
     icLinkedList *lqiTable = (icLinkedList *) value;
@@ -3594,8 +3491,8 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
             linkedListDestroy(hops, NULL);
         }
 
-        ZigbeeSubsystemNetworkMapEntry *entry = (ZigbeeSubsystemNetworkMapEntry *) calloc(1,
-                                                                                          sizeof(ZigbeeSubsystemNetworkMapEntry));
+        ZigbeeSubsystemNetworkMapEntry *entry =
+            (ZigbeeSubsystemNetworkMapEntry *) calloc(1, sizeof(ZigbeeSubsystemNetworkMapEntry));
         entry->address = deviceEui64;
         entry->nextCloserHop = nextCloserHop;
         // Get the lqiTable
@@ -3620,8 +3517,8 @@ icLinkedList *zigbeeSubsystemGetNetworkMap(void)
         icLinkedListIterator *addressTableIter = linkedListIteratorCreate(addressTable);
         while (linkedListIteratorHasNext(addressTableIter) == true)
         {
-            const zhalAddressTableEntry *tableEntry = (const zhalAddressTableEntry *) linkedListIteratorGetNext(
-                    addressTableIter);
+            const zhalAddressTableEntry *tableEntry =
+                (const zhalAddressTableEntry *) linkedListIteratorGetNext(addressTableIter);
             if (stringCompare(tableEntry->strEui64, item->uuid, false) == 0)
             {
                 entry->nodeId = tableEntry->nodeId;
@@ -3670,7 +3567,7 @@ static void zigbeeCoreWatchdogFunc(void *arg)
     {
 
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        //always pet the software watchdog
+        // always pet the software watchdog
         {
             mutexLock(&watchdogsMtx);
             scoped_icSoftwareWatchdogContext context = softwareWatchdogAcquireContext(heartbeatSoftwareWatchdogCtx);
@@ -3681,7 +3578,7 @@ static void zigbeeCoreWatchdogFunc(void *arg)
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
 
         mutexLock(&networkInitializedMtx);
-        bool ourInitialized = networkInitialized; //indicates if we think the network is initialized
+        bool ourInitialized = networkInitialized; // indicates if we think the network is initialized
         mutexUnlock(&networkInitializedMtx);
 
         if (zigbeeCoreInitialized == false || ourInitialized == false)
@@ -3704,10 +3601,9 @@ static bool waitForNetworkInitialization(void)
 
     LOCK_SCOPE(networkInitializedMtx);
 
-    if (networkInitialized == false &&
-        incrementalCondTimedWait(&networkInitializedCond,
-                                 &networkInitializedMtx,
-                                 NETWORK_INITIALIZATION_TIMEOUT_SECS) != ETIMEDOUT)
+    if (networkInitialized == false && incrementalCondTimedWait(&networkInitializedCond,
+                                                                &networkInitializedMtx,
+                                                                NETWORK_INITIALIZATION_TIMEOUT_SECS) != ETIMEDOUT)
     {
         result = networkInitialized;
     }
@@ -3723,11 +3619,11 @@ static void zigbeeCoreWatchdogTickle(void)
 
 static bool isDeviceAutoApsAcked(const icDevice *device)
 {
-    //siren repeaters and PIMs.  For the siren/repeater we have to key off of the driver name since other devices
-    // share its device class.  Yuck.
+    // siren repeaters and PIMs.  For the siren/repeater we have to key off of the driver name since other devices
+    //  share its device class.  Yuck.
     if (stringCompare(PIM_DC, device->deviceClass, false) == 0
 #ifdef LEGACY_SIREN_REPEATER_DRIVER_NAME
-    || stringCompare(LEGACY_SIREN_REPEATER_DRIVER_NAME, device->managingDeviceDriver, false) == 0
+        || stringCompare(LEGACY_SIREN_REPEATER_DRIVER_NAME, device->managingDeviceDriver, false) == 0
 #endif
     )
     {
@@ -3764,9 +3660,7 @@ static bool shouldUpgradeToHashBasedLinkKey(const icDevice *device)
     return result;
 }
 
-static bool setDeviceUsingHashBasedLinkKey(const icDevice *device,
-                                           bool isUsingHashBasedKey,
-                                           bool setMetadataOnly)
+static bool setDeviceUsingHashBasedLinkKey(const icDevice *device, bool isUsingHashBasedKey, bool setMetadataOnly)
 {
     bool result = true;
 
@@ -3787,13 +3681,13 @@ static bool setDeviceUsingHashBasedLinkKey(const icDevice *device,
                    DEVICE_USES_HASH_BASED_LINK_KEY_METADATA,
                    device->uuid,
                    isUsingHashBasedKeyStr);
-        AUTO_CLEAN(free_generic__auto) char *uri = createDeviceMetadataUri(device->uuid,
-                                                                           DEVICE_USES_HASH_BASED_LINK_KEY_METADATA);
+        AUTO_CLEAN(free_generic__auto)
+        char *uri = createDeviceMetadataUri(device->uuid, DEVICE_USES_HASH_BASED_LINK_KEY_METADATA);
         result = deviceServiceSetMetadata(uri, isUsingHashBasedKeyStr);
 
         if (setMetadataOnly == false)
         {
-            //update the device flags in ZigbeeCore/xNCP
+            // update the device flags in ZigbeeCore/xNCP
             zigbeeSubsystemSetAddresses();
         }
     }
@@ -3828,8 +3722,8 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
 
                 // allocate room for another endpoint details
                 details->numEndpoints++;
-                details->endpointDetails = realloc(details->endpointDetails,
-                                                   details->numEndpoints * sizeof(IcDiscoveredEndpointDetails));
+                details->endpointDetails =
+                    realloc(details->endpointDetails, details->numEndpoints * sizeof(IcDiscoveredEndpointDetails));
 
                 IcDiscoveredEndpointDetails *epDetails = &details->endpointDetails[details->numEndpoints - 1];
                 memset(epDetails, 0, sizeof(*epDetails));
@@ -3840,8 +3734,7 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
                 epDetails->appDeviceVersion = endpointInfo.appDeviceVersion;
                 epDetails->numServerClusterDetails = endpointInfo.numServerClusterIds;
                 epDetails->serverClusterDetails = (IcDiscoveredClusterDetails *) calloc(
-                        endpointInfo.numServerClusterIds,
-                        sizeof(IcDiscoveredClusterDetails));
+                    endpointInfo.numServerClusterIds, sizeof(IcDiscoveredClusterDetails));
                 for (uint8_t j = 0; j < endpointInfo.numServerClusterIds; j++)
                 {
                     epDetails->serverClusterDetails[j].clusterId = endpointInfo.serverClusterIds[j];
@@ -3850,8 +3743,7 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
 
                 epDetails->numClientClusterDetails = endpointInfo.numClientClusterIds;
                 epDetails->clientClusterDetails = (IcDiscoveredClusterDetails *) calloc(
-                        endpointInfo.numClientClusterIds,
-                        sizeof(IcDiscoveredClusterDetails));
+                    endpointInfo.numClientClusterIds, sizeof(IcDiscoveredClusterDetails));
                 for (uint8_t j = 0; j < endpointInfo.numClientClusterIds; j++)
                 {
                     if (endpointInfo.clientClusterIds[j] == OTA_UPGRADE_CLUSTER_ID)
@@ -3865,43 +3757,63 @@ IcDiscoveredDeviceDetails *zigbeeSubsystemDiscoverDeviceDetails(uint64_t eui64)
 
                 if (endpointInfo.appDeviceId != ICONTROL_BOGUS_DEVICE_ID)
                 {
-                    //we will get the manufacturer and model from the first endpoint.  We currently have never heard of
-                    // a device with different manufacturer and models on different endpoints, and that doesnt really
-                    // make sense anyway.  The complexity to handle that scenario is not worth it at this time.
+                    // we will get the manufacturer and model from the first endpoint.  We currently have never heard of
+                    //  a device with different manufacturer and models on different endpoints, and that doesnt really
+                    //  make sense anyway.  The complexity to handle that scenario is not worth it at this time.
                     if (details->manufacturer == NULL)
                     {
-                        //if it fails we will just try again on the next endpoint
-                        //coverity[check_return]
-                        zigbeeSubsystemReadString(eui64, endpointIds[i], BASIC_CLUSTER_ID, true,
-                                                  BASIC_MANUFACTURER_NAME_ATTRIBUTE_ID, &details->manufacturer);
+                        // if it fails we will just try again on the next endpoint
+                        // coverity[check_return]
+                        zigbeeSubsystemReadString(eui64,
+                                                  endpointIds[i],
+                                                  BASIC_CLUSTER_ID,
+                                                  true,
+                                                  BASIC_MANUFACTURER_NAME_ATTRIBUTE_ID,
+                                                  &details->manufacturer);
                     }
                     if (details->model == NULL)
                     {
-                        //if it fails we will just try again on the next endpoint
-                        //coverity[check_return]
-                        zigbeeSubsystemReadString(eui64, endpointIds[i], BASIC_CLUSTER_ID, true,
-                                                  BASIC_MODEL_IDENTIFIER_ATTRIBUTE_ID, &details->model);
+                        // if it fails we will just try again on the next endpoint
+                        // coverity[check_return]
+                        zigbeeSubsystemReadString(eui64,
+                                                  endpointIds[i],
+                                                  BASIC_CLUSTER_ID,
+                                                  true,
+                                                  BASIC_MODEL_IDENTIFIER_ATTRIBUTE_ID,
+                                                  &details->model);
                     }
                     if (details->hardwareVersion == 0)
                     {
-                        //if it fails we will just try again on the next endpoint
-                        //coverity[check_return]
-                        zigbeeSubsystemReadNumber(eui64, endpointIds[i], BASIC_CLUSTER_ID, true,
-                                                  BASIC_HARDWARE_VERSION_ATTRIBUTE_ID, &details->hardwareVersion);
+                        // if it fails we will just try again on the next endpoint
+                        // coverity[check_return]
+                        zigbeeSubsystemReadNumber(eui64,
+                                                  endpointIds[i],
+                                                  BASIC_CLUSTER_ID,
+                                                  true,
+                                                  BASIC_HARDWARE_VERSION_ATTRIBUTE_ID,
+                                                  &details->hardwareVersion);
                     }
                     if (details->appVersion == 0)
                     {
-                        //if it fails we will just try again on the next endpoint
-                        //coverity[check_return]
-                        zigbeeSubsystemReadNumber(eui64, endpointIds[i], BASIC_CLUSTER_ID, true,
-                                                  BASIC_APPLICATION_VERSION_ATTRIBUTE_ID, &details->appVersion);
+                        // if it fails we will just try again on the next endpoint
+                        // coverity[check_return]
+                        zigbeeSubsystemReadNumber(eui64,
+                                                  endpointIds[i],
+                                                  BASIC_CLUSTER_ID,
+                                                  true,
+                                                  BASIC_APPLICATION_VERSION_ATTRIBUTE_ID,
+                                                  &details->appVersion);
                     }
                     if (details->firmwareVersion == 0 && hasOtaCluster)
                     {
-                        //if it fails we will just try again on the next endpoint
-                        //coverity[check_return]
-                        zigbeeSubsystemReadNumber(eui64, endpointIds[i], OTA_UPGRADE_CLUSTER_ID, false,
-                                                  OTA_CURRENT_FILE_VERSION_ATTRIBUTE_ID, &details->firmwareVersion);
+                        // if it fails we will just try again on the next endpoint
+                        // coverity[check_return]
+                        zigbeeSubsystemReadNumber(eui64,
+                                                  endpointIds[i],
+                                                  OTA_UPGRADE_CLUSTER_ID,
+                                                  false,
+                                                  OTA_CURRENT_FILE_VERSION_ATTRIBUTE_ID,
+                                                  &details->firmwareVersion);
                     }
                 }
 
@@ -3993,8 +3905,7 @@ static bool isLPMMonitoredDevice(const char *deviceUUID)
  *
  * returns - the message handling type for device
  */
-static zhalMessageHandlingType determineLPMDeviceMessage(const char *deviceUUID,
-                                                         PanelStatus panelStatus)
+static zhalMessageHandlingType determineLPMDeviceMessage(const char *deviceUUID, PanelStatus panelStatus)
 {
     zhalMessageHandlingType retVal = MESSAGE_HANDLING_IGNORE_ALL;
 
@@ -4032,8 +3943,11 @@ static zhalMessageHandlingType determineLPMDeviceMessage(const char *deviceUUID,
     }
     else
     {
-        icLogWarn(LOG_TAG, "%s: unable to find the metadata value for %s on device %s",
-                  __FUNCTION__, LPM_POLICY_METADATA, deviceUUID);
+        icLogWarn(LOG_TAG,
+                  "%s: unable to find the metadata value for %s on device %s",
+                  __FUNCTION__,
+                  LPM_POLICY_METADATA,
+                  deviceUUID);
     }
 
     // cleanup
@@ -4087,8 +4001,8 @@ static void zigbeeSubsystemEnterLPM(void)
             if (isLPMMonitoredDevice(device->uuid) == true)
             {
 #ifdef BRTN_DS_SUPPORT_ALARMS
-                zhalMessageHandlingType messageHandlingType = determineLPMDeviceMessage(device->uuid,
-                                                                                        state->panelStatus);
+                zhalMessageHandlingType messageHandlingType =
+                    determineLPMDeviceMessage(device->uuid, state->panelStatus);
 #else
                 zhalMessageHandlingType messageHandlingType = MESSAGE_HANDLING_NORMAL;
 #endif
@@ -4115,7 +4029,9 @@ static void zigbeeSubsystemEnterLPM(void)
             }
             else
             {
-                icLogDebug(LOG_TAG, "%s: not monitoring device %s since it's not an LPM monitored device", __func__,
+                icLogDebug(LOG_TAG,
+                           "%s: not monitoring device %s since it's not an LPM monitored device",
+                           __func__,
                            device->uuid);
             }
         }
@@ -4154,8 +4070,8 @@ static void zigbeeSubsystemExitLPM(void)
         icLinkedListIterator *listIter = linkedListIteratorCreate(monitoredDevicesInfoList);
         while (linkedListIteratorHasNext(listIter) == true)
         {
-            zhalLpmMonitoredDeviceInfo *monitoredDeviceInfo = (zhalLpmMonitoredDeviceInfo *) linkedListIteratorGetNext(
-                    listIter);
+            zhalLpmMonitoredDeviceInfo *monitoredDeviceInfo =
+                (zhalLpmMonitoredDeviceInfo *) linkedListIteratorGetNext(listIter);
 
             AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(monitoredDeviceInfo->eui64);
 
@@ -4181,8 +4097,7 @@ static void zigbeeSubsystemExitLPM(void)
 #endif
 }
 
-void zigbeeSubsystemHandlePropertyChange(const char *prop,
-                                         const char *value)
+void zigbeeSubsystemHandlePropertyChange(const char *prop, const char *value)
 {
     icLogDebug(LOG_TAG, "%s: prop=%s, value=%s", __FUNCTION__, prop, value);
     if (prop == NULL)
@@ -4193,12 +4108,12 @@ void zigbeeSubsystemHandlePropertyChange(const char *prop,
 
     if (strncmp(prop, ZIGBEE_HEALTH_CHECK_PROPS_PREFIX, strlen(ZIGBEE_HEALTH_CHECK_PROPS_PREFIX)) == 0)
     {
-        //some property related to zigbee network health check changed, let that code determine what to do about it
+        // some property related to zigbee network health check changed, let that code determine what to do about it
         zigbeeHealthCheckStart();
     }
     else if (strncmp(prop, ZIGBEE_DEFENDER_PROPS_PREFIX, strlen(ZIGBEE_DEFENDER_PROPS_PREFIX)) == 0)
     {
-        //some property related to zigbee defender changed, let that code determine what to do about it
+        // some property related to zigbee defender changed, let that code determine what to do about it
         zigbeeDefenderConfigure();
     }
     else if (strncmp(prop, TELEMETRY_PROPS_PREFIX, strlen(TELEMETRY_PROPS_PREFIX)) == 0)
@@ -4213,7 +4128,7 @@ void zigbeeSubsystemHandlePropertyChange(const char *prop,
     }
     else if (stringStartsWith(prop, ZIGBEE_PROPS_PREFIX, false) == true)
     {
-        //pass all other properties down to the stack, chopping the prefix off.
+        // pass all other properties down to the stack, chopping the prefix off.
         const size_t prefixLen = strlen(ZIGBEE_PROPS_PREFIX);
         if (strlen(prop) > prefixLen)
         {
@@ -4230,10 +4145,10 @@ void zigbeeSubsystemHandlePropertyChange(const char *prop,
 
         fastCommFailTimer = stringToBool(value);
 
-        // FOR COMM FAIL TEST ONLY: If event is received and fastCommFailTimer value is false, it means test is in progress
-        // and server has received the software trouble, which was required. There is no need to send signal now as that
-        // would lead to conditional wait function to return and next action of "restart all services" would be triggered,
-        // which will lead to failure of the test. Check comm fail monitoring task for more information.
+        // FOR COMM FAIL TEST ONLY: If event is received and fastCommFailTimer value is false, it means test is in
+        // progress and server has received the software trouble, which was required. There is no need to send signal
+        // now as that would lead to conditional wait function to return and next action of "restart all services" would
+        // be triggered, which will lead to failure of the test. Check comm fail monitoring task for more information.
         if (fastCommFailTimer)
         {
             pthread_cond_broadcast(&commFailControlCond);
@@ -4247,10 +4162,7 @@ icLinkedList *zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
                                                uint32_t scanDurationMillis,
                                                uint32_t numScans)
 {
-    return zhalPerformEnergyScan(channelsToScan,
-                                 numChannelsToScan,
-                                 scanDurationMillis,
-                                 numScans);
+    return zhalPerformEnergyScan(channelsToScan, numChannelsToScan, scanDurationMillis, numScans);
 }
 
 void zigbeeSubsystemNotifyDeviceCommRestored(icDevice *device)
@@ -4283,7 +4195,6 @@ void zigbeeSubsystemNotifyDeviceCommFail(icDevice *device)
     pthread_cond_broadcast(&commFailControlCond);
 
     mutexUnlock(&commFailControlMutex);
-
 }
 
 static void *checkAllDevicesInCommThreadProc(void *arg)
@@ -4305,13 +4216,13 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
                 // Each "all devices are in comm fail" status would trigger recovery. So, we need to provide
                 // ample time for trouble to be sent to server, before reboot recovery is started.
                 //
-                incrementalCondTimedWaitMillis(&commFailControlCond, &commFailControlMutex,
-                                               COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS);
+                incrementalCondTimedWaitMillis(
+                    &commFailControlCond, &commFailControlMutex, COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS);
             }
             else
             {
-                incrementalCondTimedWait(&commFailControlCond, &commFailControlMutex,
-                                         COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS);
+                incrementalCondTimedWait(
+                    &commFailControlCond, &commFailControlMutex, COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS);
             }
 
             // We may get signalled from shutdown function, so check again if we can proceed
@@ -4401,17 +4312,16 @@ static void deviceCallbackDestroy(void *item)
     hashMapDestroy(map, freeDeviceCallbackEntry);
 }
 
-static void deviceCallbacksRegister(void *item,
-                                    void *context)
+static void deviceCallbacksRegister(void *item, void *context)
 {
     icHashMap *map = (icHashMap *) item;
     DeviceCallbacksRegisterContext *ctx = (DeviceCallbacksRegisterContext *) context;
 
     if (hashMapGet(map, &ctx->eui64, sizeof(uint64_t)) != NULL)
     {
-        icLogError(LOG_TAG, "zigbeeSubsystemRegisterDeviceListener: listener already registered for %016"
-                PRIx64
-                "!", ctx->eui64);
+        icLogError(LOG_TAG,
+                   "zigbeeSubsystemRegisterDeviceListener: listener already registered for %016" PRIx64 "!",
+                   ctx->eui64);
         ctx->registered = false;
     }
     else
@@ -4423,17 +4333,15 @@ static void deviceCallbacksRegister(void *item,
     }
 }
 
-static void deviceCallbacksUnregister(void *item,
-                                      void *context)
+static void deviceCallbacksUnregister(void *item, void *context)
 {
     icHashMap *map = (icHashMap *) item;
     DeviceCallbacksUnregisterContext *ctx = (DeviceCallbacksUnregisterContext *) context;
 
     if (hashMapDelete(map, &ctx->eui64, sizeof(uint64_t), freeDeviceCallbackEntry) == false)
     {
-        icLogError(LOG_TAG, "zigbeeSubsystemUnregisterDeviceListener: no listener registered for %016"
-                PRIx64
-                "!", ctx->eui64);
+        icLogError(
+            LOG_TAG, "zigbeeSubsystemUnregisterDeviceListener: no listener registered for %016" PRIx64 "!", ctx->eui64);
         ctx->unregistered = false;
     }
     else
@@ -4442,8 +4350,7 @@ static void deviceCallbacksUnregister(void *item,
     }
 }
 
-static void deviceCallbacksAttributeReport(const void *item,
-                                           const void *context)
+static void deviceCallbacksAttributeReport(const void *item, const void *context)
 {
     icHashMap *map = (icHashMap *) item;
     ReceivedAttributeReport *report = (ReceivedAttributeReport *) context;
@@ -4458,8 +4365,7 @@ static void deviceCallbacksAttributeReport(const void *item,
     }
 }
 
-static void deviceCallbacksRejoined(const void *item,
-                                    const void *context)
+static void deviceCallbacksRejoined(const void *item, const void *context)
 {
     icHashMap *map = (icHashMap *) item;
     DeviceCallbacksRejoinContext *rejoinContext = (DeviceCallbacksRejoinContext *) context;
@@ -4474,8 +4380,7 @@ static void deviceCallbacksRejoined(const void *item,
     }
 }
 
-static void deviceCallbacksLeft(const void *item,
-                                const void *context)
+static void deviceCallbacksLeft(const void *item, const void *context)
 {
     icHashMap *map = (icHashMap *) item;
     uint64_t eui64 = *(uint64_t *) context;
@@ -4490,8 +4395,7 @@ static void deviceCallbacksLeft(const void *item,
     }
 }
 
-static void deviceCallbacksOtaUpgradeMessageSent(const void *item,
-                                                 const void *context)
+static void deviceCallbacksOtaUpgradeMessageSent(const void *item, const void *context)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
     icHashMap *map = (icHashMap *) item;
@@ -4507,8 +4411,7 @@ static void deviceCallbacksOtaUpgradeMessageSent(const void *item,
     }
 }
 
-static void deviceCallbacksOtaUpgradeMessageReceived(const void *item,
-                                                     const void *context)
+static void deviceCallbacksOtaUpgradeMessageReceived(const void *item, const void *context)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
     icHashMap *map = (icHashMap *) item;
@@ -4524,8 +4427,7 @@ static void deviceCallbacksOtaUpgradeMessageReceived(const void *item,
     }
 }
 
-static void deviceCallbacksClusterCommandReceived(const void *item,
-                                                  const void *context)
+static void deviceCallbacksClusterCommandReceived(const void *item, const void *context)
 {
     icHashMap *map = (icHashMap *) item;
     DeviceCallbacksClusterCommandReceivedContext *ctx = (DeviceCallbacksClusterCommandReceivedContext *) context;
@@ -4544,8 +4446,7 @@ static void deviceCallbacksClusterCommandReceived(const void *item,
     }
 }
 
-static void deviceCallbacksDeviceAnnounced(const void *item,
-                                           const void *context)
+static void deviceCallbacksDeviceAnnounced(const void *item, const void *context)
 {
     icHashMap *map = (icHashMap *) item;
     DeviceAnnouncedContext *ctx = (DeviceAnnouncedContext *) context;
@@ -4561,7 +4462,7 @@ static void deviceCallbacksDeviceAnnounced(const void *item,
 
 static void zigbeeSubsystemPostRestoreConfig(void)
 {
-    //mark the network uninitialized so it will re-init
+    // mark the network uninitialized so it will re-init
     zigbeeSubsystemSetUnready();
 
     // make the watchdog run now so the initialization will occur
@@ -4594,14 +4495,17 @@ static void zigbeeLinkQualityConfigure(void)
     rssiThresholds[BAD_THRESHOLD_INDEX] = b_device_service_property_provider_get_property_as_int8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_BAD_THRESHOLD_PROP, BAD_RSSI_LIMIT_DEFAULT);
     icLogDebug(LOG_TAG,
-               "linkQuality configuration: lqiEnabled=%s, lqiWarn=%"PRIu8", lqiBad=%"PRIu8", rssiEnabled=%s, rssiWarn=%"PRId8", rssiBad=%"PRId8",crossAboveDb=%"PRIu8", crossBelowDb=%"PRIu8,
+               "linkQuality configuration: lqiEnabled=%s, lqiWarn=%" PRIu8 ", lqiBad=%" PRIu8
+               ", rssiEnabled=%s, rssiWarn=%" PRId8 ", rssiBad=%" PRId8 ",crossAboveDb=%" PRIu8
+               ", crossBelowDb=%" PRIu8,
                stringValueOfBool(useLqiForLinkQuality),
                lqiThresholds[WARN_THRESHOLD_INDEX],
                lqiThresholds[BAD_THRESHOLD_INDEX],
                stringValueOfBool(useRssiForLinkQuality),
                rssiThresholds[WARN_THRESHOLD_INDEX],
                rssiThresholds[BAD_THRESHOLD_INDEX],
-               crossAboveDb, crossBelowDb);
+               crossAboveDb,
+               crossBelowDb);
     pthread_mutex_unlock(&configMtx);
 }
 
@@ -4645,7 +4549,7 @@ ZigbeeSubsystemLinkQualityLevel zigbeeSubsystemLinkQualityStringToEnum(const cha
             }
         }
 
-        //if we didnt exceed the label list, that means we found a match.  Otherwise the input was bogus
+        // if we didnt exceed the label list, that means we found a match.  Otherwise the input was bogus
         if (i < ARRAY_LENGTH(linkQualityLevelLabels))
         {
             result = i;
@@ -4763,7 +4667,7 @@ const char *zigbeeSubsystemDetermineLinkQuality(int8_t neRssi,
     if (isIcLogPriorityTrace() == true)
     {
         icLogTrace(LOG_TAG,
-                   "neRssi = %"PRId8", feRssi= %"PRId8", neLqi = %"PRIu8", feLqi = %"PRIu8", linkQuality=%s",
+                   "neRssi = %" PRId8 ", feRssi= %" PRId8 ", neLqi = %" PRIu8 ", feLqi = %" PRIu8 ", linkQuality=%s",
                    neRssi,
                    feRssi,
                    neLqi,
@@ -4774,9 +4678,7 @@ const char *zigbeeSubsystemDetermineLinkQuality(int8_t neRssi,
     return linkQuality;
 }
 
-bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64,
-                                       bool withRejoin,
-                                       bool isEndDevice)
+bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64, bool withRejoin, bool isEndDevice)
 {
     return zhalRequestLeave(eui64, withRejoin, isEndDevice) == ZHAL_STATUS_OK;
 }
@@ -4787,15 +4689,9 @@ bool zigbeeSubsystemRequestDeviceLeave(uint64_t eui64,
  * @param deviceType
  * @param powerSource
  */
-void zigbeeSubsystemDeviceAnnounced(uint64_t eui64,
-                                    zhalDeviceType deviceType,
-                                    zhalPowerSource powerSource)
+void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, zhalPowerSource powerSource)
 {
-    DeviceAnnouncedContext ctx = {
-            .eui64 = eui64,
-            .deviceType = deviceType,
-            .powerSource = powerSource
-    };
+    DeviceAnnouncedContext ctx = {.eui64 = eui64, .deviceType = deviceType, .powerSource = powerSource};
     threadSafeWrapperReadItem(&deviceCallbacksWrapper, deviceCallbacksDeviceAnnounced, &ctx);
 }
 
@@ -4855,8 +4751,8 @@ static void configureWatchdogs(void)
         // Start our repeating task which, when successful, pets the software watchdog for ZigbeeCore and
         // ensures the network is initialized.  We will do this even if the software watchdog configuration fails
         // since it takes care of network health as well
-        zigbeeCoreWatchdogTask = createRepeatingTask(zigbeeCoreHeartbeatPetFrequencySecs, DELAY_SECS,
-                                                     zigbeeCoreWatchdogFunc, NULL);
+        zigbeeCoreWatchdogTask =
+            createRepeatingTask(zigbeeCoreHeartbeatPetFrequencySecs, DELAY_SECS, zigbeeCoreWatchdogFunc, NULL);
 
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
         // configure watchdog for network busy
@@ -4866,10 +4762,8 @@ static void configureWatchdogs(void)
                                                            maxZigbeeCoreNetworkBusyFailures);
 
         // configure watchdog for comm fail
-        commFailSoftwareWatchdogCtx = configureWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL,
-                                                        0,
-                                                        maxAllDevCommFailures,
-                                                        maxAllDevCommFailures);
+        commFailSoftwareWatchdogCtx =
+            configureWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL, 0, maxAllDevCommFailures, maxAllDevCommFailures);
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
         mutexUnlock(&watchdogsMtx);
         // Start thread to check if all devices are in comm fail. We are not checking it only when
@@ -4885,13 +4779,15 @@ static void configureWatchdogs(void)
         fastCommFailTimer =
             b_device_service_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
         initTimedWaitCond(&commFailControlCond);
-        commfailMonitorThreadRunning = createThread(&commFailMonitorThreadId, checkAllDevicesInCommThreadProc , NULL, "commFailPoll");
+        commfailMonitorThreadRunning =
+            createThread(&commFailMonitorThreadId, checkAllDevicesInCommThreadProc, NULL, "commFailPoll");
         bool monitoringCommFail = commfailMonitorThreadRunning;
         mutexUnlock(&commFailControlMutex);
 
         if (monitoringCommFail == false)
         {
-            icLogError(LOG_TAG, "Failed to create thread for comm fail monitoring. Comm Fail recovery will be disabled");
+            icLogError(LOG_TAG,
+                       "Failed to create thread for comm fail monitoring. Comm Fail recovery will be disabled");
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
             LOCK_SCOPE(watchdogsMtx);
             if (commFailSoftwareWatchdogCtx != NULL)
@@ -4907,7 +4803,10 @@ static void configureWatchdogs(void)
     {
         // we still need to perform a valid startup for this case, which is only used for buildtime tests where
         // there is no ZigbeeCore
-        icLogWarn(LOG_TAG, "%s: watchdog is DISABLED which prevents normal operation.  Proceeding with faked startup for test mode", __func__);
+        icLogWarn(
+            LOG_TAG,
+            "%s: watchdog is DISABLED which prevents normal operation.  Proceeding with faked startup for test mode",
+            __func__);
 
         zigbeeSubsystemSetReady();
     }
@@ -4918,36 +4817,30 @@ static void configureWatchdogs(void)
  * ensures any related watchdogs are running and configured.  These include the software watchdog and the
  * ZigbeeCore watchdog.
  */
-static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity, uint16_t petFrequencySeconds,
+static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity,
+                                                    uint16_t petFrequencySeconds,
                                                     uint16_t numOfFailuresToRestart,
                                                     uint16_t numOfFailuresToReboot)
 {
     icSoftwareWatchdogContext *context = NULL;
 
     const char *reasonString = zigbeeCoreRecoveryReasonLabels[entity];
-    scoped_generic char *troubleString = stringBuilder("ZigbeeCore was not responding. %s",
-                                                       reasonString);
+    scoped_generic char *troubleString = stringBuilder("ZigbeeCore was not responding. %s", reasonString);
 #ifdef DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG
 
     // configure the software watchdog to first create a software trouble with diag
-    icSoftwareWatchdogRecoveryActionStep *step =
-            softwareWatchdogRecoveryActionStepCreateWithTrouble(DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG,
-                                                                troubleString,
-                                                                true,
-                                                                numOfFailuresToRestart);
+    icSoftwareWatchdogRecoveryActionStep *step = softwareWatchdogRecoveryActionStepCreateWithTrouble(
+        DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG, troubleString, true, numOfFailuresToRestart);
 #endif // DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG`
     if (entity == ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT)
     {
-        context = softwareWatchdogContextCreate(ZigbeeCoreRecoveryEntityLabels[entity],
-                                                ZIGBEE_CORE_PROCESS_NAME,
-                                                petFrequencySeconds,
-                                                step);
+        context = softwareWatchdogContextCreate(
+            ZigbeeCoreRecoveryEntityLabels[entity], ZIGBEE_CORE_PROCESS_NAME, petFrequencySeconds, step);
     }
     else
     {
-        context = softwareWatchdogContextCreateForFailureCount(ZigbeeCoreRecoveryEntityLabels[entity],
-                                                               ZIGBEE_CORE_PROCESS_NAME,
-                                                               step);
+        context = softwareWatchdogContextCreateForFailureCount(
+            ZigbeeCoreRecoveryEntityLabels[entity], ZIGBEE_CORE_PROCESS_NAME, step);
     }
 
     if (context == NULL)
@@ -4958,9 +4851,8 @@ static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity ent
     else
     {
         // append an additional recovery step to restart ZigbeeCore immediately after the trouble
-        step = softwareWatchdogRecoveryActionStepCreate(SOFTWARE_WATCHDOG_RECOVERY_ACTION_RESTART_PROCESS,
-                                                        troubleString,
-                                                        0);
+        step = softwareWatchdogRecoveryActionStepCreate(
+            SOFTWARE_WATCHDOG_RECOVERY_ACTION_RESTART_PROCESS, troubleString, 0);
 
         if (softwareWatchdogContextAppendRecoveryActionStep(context, step) == false)
         {
@@ -4973,9 +4865,8 @@ static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity ent
         if (context != NULL)
         {
             // finally, append another step to reboot if we are still in a failure state after restarting ZigbeeCore
-            step = softwareWatchdogRecoveryActionStepCreate(SOFTWARE_WATCHDOG_RECOVERY_ACTION_REBOOT,
-                                                            troubleString,
-                                                            numOfFailuresToReboot);
+            step = softwareWatchdogRecoveryActionStepCreate(
+                SOFTWARE_WATCHDOG_RECOVERY_ACTION_REBOOT, troubleString, numOfFailuresToReboot);
 
             if (softwareWatchdogContextAppendRecoveryActionStep(context, step) == false)
             {

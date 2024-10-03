@@ -30,19 +30,22 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
-#include "zigbeeCluster.h"
 #include "comcastBatterySaving.h"
+#include "zigbeeCluster.h"
 
 #define SHORT_POLL_INTERVAL_QS_METADATA "pollControl.shortPollIntervalQS"
-#define LONG_POLL_INTERVAL_QS_METADATA "pollControl.longPollIntervalQS"
-#define FAST_POLL_TIMEOUT_QS_METADATA "pollControl.fastPollTimeoutQS"
-#define CHECK_IN_INTERVAL_QS_METADATA "pollControl.checkInIntervalQS"
+#define LONG_POLL_INTERVAL_QS_METADATA  "pollControl.longPollIntervalQS"
+#define FAST_POLL_TIMEOUT_QS_METADATA   "pollControl.fastPollTimeoutQS"
+#define CHECK_IN_INTERVAL_QS_METADATA   "pollControl.checkInIntervalQS"
 
 #define POLL_CONTROL_CHECKIN_COMMAND_ID 0x00
 
 typedef struct
 {
-    void (*checkin)(uint64_t eui64, uint8_t endpointId, const ComcastBatterySavingData *batterySavingData, const void *ctx);
+    void (*checkin)(uint64_t eui64,
+                    uint8_t endpointId,
+                    const ComcastBatterySavingData *batterySavingData,
+                    const void *ctx);
 } PollControlClusterCallbacks;
 
 
@@ -56,7 +59,9 @@ ZigbeeCluster *pollControlClusterCreate(const PollControlClusterCallbacks *callb
  * @param callbackContext
  * @return True on success
  */
-bool pollControlClusterAddCallback(ZigbeeCluster *baseCluster, const PollControlClusterCallbacks *callback, const void *callbackContext);
+bool pollControlClusterAddCallback(ZigbeeCluster *baseCluster,
+                                   const PollControlClusterCallbacks *callback,
+                                   const void *callbackContext);
 
 /**
  * Set whether or not to set a binding on this cluster.  By default we bind the cluster.
@@ -85,4 +90,4 @@ bool pollControlClusterSetLongPollInterval(uint64_t eui64, uint8_t endpointId, u
 
 #endif // BARTON_CONFIG_ZIGBEE
 
-#endif //ZILKER_POLLCONTROLCLUSTER_H
+#endif // ZILKER_POLLCONTROLCLUSTER_H
