@@ -187,7 +187,14 @@ FROM third_party_builder AS user_builder
 # Install packages useful for development
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     clangd \
-    clang-format
+    clang-format \
+    silversearcher-ag \
+    fd-find \
+    gdb \
+    rr \
+    vim \
+    pipx \
+    gh
 
 ARG BUILDER_USER=""
 ARG BUILDER_GID=""

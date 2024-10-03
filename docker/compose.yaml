@@ -53,6 +53,7 @@ services:
 
         cap_add:
             - SYS_PTRACE
+            - PERFMON
         device_cgroup_rules:
             - 'a 189:* rmw'
         extra_hosts:
