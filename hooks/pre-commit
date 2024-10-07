@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+MY_DIR=$(realpath $(dirname $0))
+
+# Runs all pre-commit hooks
+${MY_DIR}/pre-commit-clang-format
