@@ -39,7 +39,7 @@ using namespace zilker;
 class FakeSession : public chip::Transport::Session
 {
 public:
-    FakeSession() : remoteMRPConfig(chip::System::Clock::kZero, chip::System::Clock::kZero) {}
+    FakeSession() {}
 
     SessionType GetSessionType() const override { return SessionType::kSecure; }
 
@@ -55,16 +55,20 @@ public:
 
     chip::Access::SubjectDescriptor GetSubjectDescriptor() const override { return {}; }
 
-    bool RequireMRP() const override { return false; }
+    bool AllowsMRP() const override { return false; }
 
-    const chip::ReliableMessageProtocolConfig &GetRemoteMRPConfig() const override { return remoteMRPConfig; }
+    bool AllowsLargePayload() const override { return false; }
+
+    const chip::SessionParameters &GetRemoteSessionParameters() const override { return remoteSessionParams; }
 
     chip::System::Clock::Timestamp GetMRPBaseTimeout() const override { return chip::System::Clock::kZero; }
 
     chip::System::Clock::Milliseconds32 GetAckTimeout() const override { return chip::System::Clock::kZero; }
 
+    chip::System::Clock::Milliseconds32 GetMessageReceiptTimeout(chip::System::Clock::Timestamp ourLastActivity) const override { return chip::System::Clock::kZero; }
+
 private:
-    chip::ReliableMessageProtocolConfig remoteMRPConfig;
+    chip::SessionParameters remoteSessionParams;
 };
 
 class MatterReadPrepareParamsTest : public ::testing::Test

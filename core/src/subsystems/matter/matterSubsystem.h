@@ -66,6 +66,20 @@ bool matterSubsystemCommissionDevice(const char *setupPayload, uint16_t timeoutS
  */
 bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds);
 
+/**
+ * Open the commissioning window so that other devices on the network can commision this device.
+ *
+ * @return true on success
+ */
+bool matterSubsystemOpenCommissioningWindow(void);
+
+/**
+ * Clear the AccessRestrictionList for certification testing.
+ *
+ * @return true on success
+ */
+bool matterSubsystemClearAccessRestrictionList(void);
+
 /*
 MatterDeviceInfo *matterSubsystemGetDeviceInfo(const char *uuid);
  */

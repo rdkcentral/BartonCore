@@ -24,6 +24,10 @@
  * Created by Thomas Lea on 10/6/21.
  */
 
+#include "app-common/zap-generated/ids/Clusters.h"
+#include "app/server/CommissioningWindowManager.h"
+#include "protocols/secure_channel/Constants.h"
+#include "system/SystemClock.h"
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
@@ -51,8 +55,9 @@ extern "C" {
 
 #include <ZilkerProjectConfig.h>
 #include <app/clusters/ota-provider/ota-provider.h>
+#include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
+#include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
 #include <app/server/Dnssd.h>
-#include <controller-clusters/zap-generated/CHIPClusters.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CHIPDeviceControllerFactory.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
@@ -66,6 +71,7 @@ extern "C" {
 #include <platform/TestOnlyCommissionableDataProvider.h>
 #include <protocols/secure_channel/RendezvousParameters.h>
 #include <transport/SessionMessageDelegate.h>
+#include <crypto/CHIPCryptoPAL.h>
 
 #include <lib/support/TestGroupData.h>
 
@@ -79,8 +85,8 @@ extern "C" {
 #include <CertifierOperationalCredentialsIssuer.hpp>
 
 #include "AccessControlDelegate.h"
-#include "RdkbClusterServer.h"
 #include "rdkb-cluster-server.hpp"
+#include "RdkbClusterServer.h"
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 // Only used in development environments
@@ -109,12 +115,18 @@ extern "C" {
 
 #define MATTER_COMCAST_VID                      ((chip::VendorId) 0x111D)
 
+/*
+ * The SDK's example apps arbitrarily use +12 as a way to differentiate the commissioner port from the server one.
+ * That should be good enough for us at the moment.
+ */
+#define COMMISSIONER_CHIP_PORT CHIP_PORT + 12
+
 using namespace std;
 using namespace ::zilker;
 using namespace std::chrono_literals;
 using namespace chip;
+using namespace chip::Crypto;
 using chip::Callback::Callback;
-using chip::Controller::DescriptorCluster;
 
 #include <credentials/attestation_verifier/FileAttestationTrustStore.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
@@ -124,6 +136,11 @@ static constexpr uint16_t kMaxGroupKeysPerFabric = 8;
 
 namespace
 {
+    std::optional<DefaultThreadNetworkDirectoryServer> threadNetworkDirectoryServer;
+    EndpointId threadNetworkDirectoryServerEndpointId = UINT16_MAX;
+    std::optional<WiFiNetworkManagementServer> wifiNetworkManagementServer;
+    EndpointId wifiNetworkManagementServerEndpointId = UINT16_MAX;
+
     constexpr uint8_t COMCAST_TEST_CD_KID[20] = {0x9C, 0x60, 0x2C, 0x46, 0x48, 0xE8, 0x7D, 0xD8, 0x26, 0x47,
                                                  0xF4, 0x5E, 0x94, 0x39, 0xB3, 0x85, 0x16, 0xC2, 0xF2, 0x4F};
 
@@ -231,13 +248,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
-    if ((err = attributePersistenceProvider.Init(&storageDelegate)) != CHIP_NO_ERROR)
-    {
-        icError("attributePersistenceProvider.Init() failed: %s", err.AsString());
-        return false;
-    }
-    chip::app::SetAttributePersistenceProvider(&attributePersistenceProvider);
-
     MatterRDKBGatewayPluginServerSetDelegate(&rdkbClusterServer);
 
     return result;
@@ -261,15 +271,40 @@ bool Matter::Start()
         return true;
     }
 
-    if ((err = serverInitParams.InitializeStaticResourcesBeforeServerInit()) != CHIP_NO_ERROR)
+    // If Server::Init succeeded in a previous attempt, we shouldn't perform these steps again
+    if (!serverIsInitialized)
     {
-        icError("InitializeStaticResourcesBeforeServerInit failed: %s", err.AsString());
-        return false;
+        if ((err = serverInitParams.InitializeStaticResourcesBeforeServerInit()) != CHIP_NO_ERROR)
+        {
+            icError("InitializeStaticResourcesBeforeServerInit failed: %s", err.AsString());
+            return false;
+        }
+
+        chip::Access::AccessControl::Delegate *aclDelegate = GetAccessControlDelegate();
+        serverInitParams.accessDelegate = aclDelegate;
+
+        // We need to set DeviceInfoProvider before Server::Init to setup the storage of DeviceInfoProvider properly.
+        chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
+
+        serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
+
+#if 0
+        if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
+        {
+            icError("Server::Init failed: %s", err.AsString());
+            return false;
+        }
+#endif
+
+        serverIsInitialized = true;
     }
 
-    // We need to set DeviceInfoProvider before Server::Init to setup the storage of DeviceInfoProvider properly.
-    deviceInfoProvider.SetStorageDelegate(&storageDelegate);
-    chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
+    // Now that the server has started and we are done with our startup logging, log our discovery/onboarding
+    // information again so it's not lost in the noise.
+    ConfigurationMgr().LogDeviceConfig();
+
+    // Initialize device attestation config
+    SetDeviceAttestationCredentialsProvider(chip::Credentials::Examples::GetExampleDACProvider());
 
     if ((err = InitCommissioner()) != CHIP_NO_ERROR)
     {
@@ -279,7 +314,39 @@ bool Matter::Start()
 
     state.store(State::running);
 
+    SetAccessRestrictionList();
+
     stackThread = new std::thread(&Matter::StackThreadProc, this);
+
+    //TODO this should also be called if/when the local wifi network is changed
+    g_autoptr(GError) error = NULL;
+    g_autoptr(BDeviceServiceNetworkCredentialsProvider) provider =
+        deviceServiceConfigurationGetNetworkCredentialsProvider();
+    g_autoptr(BDeviceServiceWifiNetworkCredentials) wifiCredentials =
+        b_device_service_network_credentials_provider_get_wifi_network_credentials(provider, &error);
+
+    if (error == NULL && wifiCredentials != NULL)
+    {
+        g_autofree gchar *ssid = NULL;
+        g_autofree gchar *psk = NULL;
+        g_object_get(wifiCredentials,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     &ssid,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     &psk,
+                     NULL);
+
+        chip::DeviceLayer::PlatformMgr().LockChipStack();
+        wifiNetworkManagementServer->SetNetworkCredentials(ByteSpan(Uint8::from_const_char(ssid), strlen(ssid)),
+                                                           ByteSpan(Uint8::from_const_char(psk), strlen(psk)));
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    }
+    else
+    {
+        icError("Failed to get WiFi credentials: [%d] %s", error->code, stringCoalesce(error->message));
+    }
 
     return true;
 }
@@ -340,20 +407,12 @@ CHIP_ERROR Matter::InitCommissioner()
     groupDataProvider.SetStorageDelegate(&storageDelegate);
     groupDataProvider.SetSessionKeystore(&sessionKeystore);
     factoryParams.groupDataProvider = &groupDataProvider;
-    factoryParams.enableServerInteractions = true;
 
 #ifdef BARTON_CONFIG_MATTER_USE_RANDOM_PORT
     factoryParams.listenPort = 0;
 #else
-    factoryParams.listenPort = CHIP_PORT;
+    factoryParams.listenPort = COMMISSIONER_CHIP_PORT;
 #endif
-
-    chip::FabricTable::InitParams fabricTableInitParams;
-    fabricTableInitParams.opCertStore = opCertStore.get();
-    fabricTableInitParams.operationalKeystore = operationalKeystore.get();
-    fabricTableInitParams.storage = &storageDelegate;
-
-    ReturnLogErrorOnFailure(factoryParams.fabricTable->Init(fabricTableInitParams));
 
     factoryParams.opCertStore = opCertStore.get();
 
@@ -430,9 +489,9 @@ CHIP_ERROR Matter::InitCommissioner()
         SetOperationalCredsIssuerApiEnv();
 
         chip::Platform::ScopedMemoryBuffer<uint8_t> csr;
-        VerifyOrReturnError(csr.Alloc(kMAX_CSR_Length), CHIP_ERROR_NO_MEMORY);
+        VerifyOrReturnError(csr.Alloc(kMIN_CSR_Buffer_Size), CHIP_ERROR_NO_MEMORY);
 
-        chip::MutableByteSpan csrSpan(csr.Get(), kMAX_CSR_Length);
+        chip::MutableByteSpan csrSpan(csr.Get(), kMIN_CSR_Buffer_Size);
         Optional<FabricIndex> nextAvailableIndex;
 
         /*
@@ -500,32 +559,9 @@ CHIP_ERROR Matter::InitCommissioner()
     chip::CharSpan labelSpan = CharSpan::fromCharString("controller");
     fabricTable->SetFabricLabel(fabricIndex, labelSpan);
 
-    chip::Access::AccessControl::Delegate *aclDelegate = GetAccessControlDelegate();
-    chip::Access::AccessControl &accessControl = chip::Access::GetAccessControl();
-    ReturnErrorOnFailure(accessControl.Init(aclDelegate, deviceTypeResolver));
-    chip::Access::SetAccessControl(accessControl);
-
-    ReturnErrorOnFailure(aclStorage.Init(storageDelegate, fabricTable->begin(), fabricTable->end()));
     ReturnErrorOnFailure(ConfigureOTAProviderNode());
 
     ReturnLogErrorOnFailure(fabricTable->CommitPendingFabricData());
-
-    // Initialize event logging subsystem
-    ReturnErrorOnFailure(globalEventIdCounter.Init(&storageDelegate,
-                                                   chip::DefaultStorageKeyAllocator::IMEventNumber(),
-                                                   CHIP_DEVICE_CONFIG_EVENT_ID_COUNTER_EPOCH));
-    chip::app::LogStorageResources logStorageResources[] = {
-        {debugEventBuffer, sizeof(debugEventBuffer),    chip::app::PriorityLevel::Debug},
-        { infoEventBuffer,  sizeof(infoEventBuffer),     chip::app::PriorityLevel::Info},
-        { critEventBuffer,  sizeof(critEventBuffer), chip::app::PriorityLevel::Critical}
-    };
-
-    chip::app::EventManagement::GetInstance().Init(&chip::Server::GetInstance().GetExchangeManager(),
-                                                   CHIP_NUM_EVENT_LOGGING_BUFFERS,
-                                                   &loggingBuffer[0],
-                                                   &logStorageResources[0],
-                                                   &globalEventIdCounter,
-                                                   System::SystemClock().GetMonotonicMilliseconds64());
 
     // advertise operational since we are an admin
     chip::app::DnssdServer::Instance().AdvertiseOperational();
@@ -1220,6 +1256,79 @@ exit:
 }
 #endif
 
+bool Matter::OpenCommissioningWindow()
+{
+    bool success;
+
+    icInfo("Opening Commissioning Window");
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+    //HACK: dont do it like this and dont check this in.  Testing only.
+    success = CHIP_NO_ERROR == Server::GetInstance().GetCommissioningWindowManager()
+        .OpenBasicCommissioningWindow(System::Clock::Seconds16(15 * 60),
+                                      CommissioningWindowAdvertisement::kDnssdOnly);
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    ConfigurationMgr().LogDeviceConfig();
+
+    return success;
+}
+
+bool Matter::SetAccessRestrictionList()
+{
+    bool success = false;
+
+    //TODO make these real.  The restrictions now are just for certification testing and only block some attribute that wont cause cert issue
+    icWarn("Setting Access Restrictions");
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+    Access::AccessRestrictionProvider::Entry locationEntry;
+    locationEntry.endpointNumber = 1;
+    locationEntry.clusterId = app::Clusters::WiFiNetworkManagement::Id;
+    Access::AccessRestrictionProvider::Restriction restriction;
+    restriction.restrictionType = Access::AccessRestrictionProvider::Type::kAttributeAccessForbidden;
+    restriction.id.SetValue(app::Clusters::WiFiNetworkManagement::Attributes::Ssid::Id);
+    locationEntry.restrictions.push_back(restriction);
+
+    success = (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
+
+    //TODO proactively set for fabrics.  This should instead be done at commissioning time.
+    for (FabricIndex fabric = 1; fabric <=10; fabric++)
+    {
+        locationEntry.fabricIndex = fabric;
+        success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(fabric, std::vector<Access::AccessRestrictionProvider::Entry>({locationEntry})));
+    }
+
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    return success;
+}
+
+bool Matter::ClearAccessRestrictionList()
+{
+    bool success = true;
+
+    icWarn("Certification: Clearing AccessRestrictions");
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+    success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetCommissioningEntries(std::vector<Access::AccessRestrictionProvider::Entry>()));
+
+    //FabricTable *fabricTable = &Server::GetInstance().GetFabricTable();
+    //for (const auto & iterFabricInfo : *fabricTable)
+    //TODO clear our proactively configured fabric indices. Once the hard-coded fabric id range is deprecated from above, work with actual fabrics
+    for (FabricIndex fabric = 1; fabric <=10; fabric++)
+    {
+        success &= (CHIP_NO_ERROR == accessRestrictionProvider.SetEntries(fabric, std::vector<Access::AccessRestrictionProvider::Entry>()));
+    }
+
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    return success;
+}
+
 std::string Matter::GetAuthToken()
 {
     g_autoptr(BDeviceServiceTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
@@ -1312,4 +1421,35 @@ void Matter::SetOperationalCredsIssuerApiEnv()
     Matter::OperationalEnvironment env = GetOperationalEnvironment(envString);
     Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv = GetIssuerApiEnv(env);
     operationalCredentialsIssuer.SetApiEnv(apiEnv);
+}
+
+// Note: Because we have initialized two parts of the stack (commissioner and commissionee), the callback functions
+// below are invoked twice. As long as they're attempting to perform the exact same initialization each time, we can
+// safely ignore calls after the first as a workaround.
+void emberAfThreadNetworkDirectoryClusterInitCallback(EndpointId endpoint)
+{
+    if (threadNetworkDirectoryServer)
+    {
+        VerifyOrDie(endpoint == threadNetworkDirectoryServerEndpointId);
+    }
+    else
+    {
+        threadNetworkDirectoryServer.emplace(endpoint).Init();
+        // The server object's endpointId accessor is private,
+        // so this is the only way to track previously received endpoints
+        threadNetworkDirectoryServerEndpointId = endpoint;
+    }
+}
+
+void emberAfWiFiNetworkManagementClusterInitCallback(EndpointId endpoint)
+{
+    if (wifiNetworkManagementServer)
+    {
+        VerifyOrDie(endpoint == wifiNetworkManagementServerEndpointId);
+    }
+    else
+    {
+        wifiNetworkManagementServer.emplace(endpoint).Init();
+        wifiNetworkManagementServerEndpointId = endpoint;
+    }
 }

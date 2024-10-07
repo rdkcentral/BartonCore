@@ -86,15 +86,15 @@ namespace zilker
                 info.networkType = [&]() -> std::string {
                     switch (interface.type)
                     {
-                        case EMBER_ZCL_INTERFACE_TYPE_ENUM_WI_FI:
+                    case chip::app::Clusters::GeneralDiagnostics::InterfaceTypeEnum::kWiFi:
                             return NETWORK_TYPE_WIFI;
-                        case EMBER_ZCL_INTERFACE_TYPE_ENUM_ETHERNET:
+                    case chip::app::Clusters::GeneralDiagnostics::InterfaceTypeEnum::kEthernet:
                             return NETWORK_TYPE_ETHERNET;
-                        case EMBER_ZCL_INTERFACE_TYPE_ENUM_CELLULAR:
+                    case chip::app::Clusters::GeneralDiagnostics::InterfaceTypeEnum::kCellular:
                             return NETWORK_TYPE_CELLULAR;
-                        case EMBER_ZCL_INTERFACE_TYPE_ENUM_THREAD:
+                    case chip::app::Clusters::GeneralDiagnostics::InterfaceTypeEnum::kThread:
                             return NETWORK_TYPE_THREAD;
-                        case EMBER_ZCL_INTERFACE_TYPE_ENUM_UNSPECIFIED:
+                    case chip::app::Clusters::GeneralDiagnostics::InterfaceTypeEnum::kUnspecified:
                         default:
                             return "";
                     }

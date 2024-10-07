@@ -35,7 +35,7 @@
 #    --build-arg BUILDER_USER=$(id -u -n) \
 #    --build-arg BUILDER_GID=$(id -g) \
 #    --build-arg BUILDER_UID=$(id -u) \
-#    -t barton_builder .
+#    -t barton_builder_$USER .
 
 ###############################################################################
 # base stage which provides a base image which has packages to support basic
@@ -49,7 +49,6 @@ RUN touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     build-essential \
     libarchive-tools \
-    python3-pip \
     unzip \
     wget \
     zip \
@@ -75,6 +74,28 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libsystemd-dev
 
 ###############################################################################
+# Add support for Python including GObject introspection
+###############################################################################
+RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
+    python3-full \
+    python3-dev \
+    python3-mako \
+    python3-markdown \
+    python3-pip \
+    python3-venv \
+    flex \
+    bison \
+    libglib2.0-dev \
+    libcairo2-dev \
+    libffi-dev \
+    gtk-doc-tools \
+    libgirepository1.0-dev
+
+RUN pip3 install --upgrade --break-system-packages \
+    pygobject \
+    setuptools
+
+###############################################################################
 # Third party build stage
 #
 # This stage is responsible for building specific third-party libraries that
@@ -96,13 +117,10 @@ RUN chmod +x ${APPLY_PATCHES_PATH}
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     lsb-release \
     ninja-build \
-    python3 \
-    python3-venv \
     sudo \
     jq \
     cmake \
     meson \
-    libglib2.0-dev \
     libcjson-dev \
     libcmocka-dev \
     libgtest-dev \
@@ -111,7 +129,10 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libcurl4-openssl-dev \
     uuid-dev \
     libxml2-dev \
-    libmbedtls-dev
+    libmbedtls-dev \
+    libdbus-1-dev \
+    libavahi-client-dev \
+    libreadline-dev
 
 # 'gn' (generate ninja)
 RUN cd /tmp && \
@@ -148,32 +169,50 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/linenoise
 
-# matter
+###############################################################################
+# matter begin
 # Dependencies: curl, openssl
 # Matter has a few git clone commands to private repos, so we need to get the ssh credentials
 # from the host machine. The docker builder cannot access the hosts $HOME folder by default, so
 # the home folder must be declared as an additional context in the docker build command.
 # See the example build command at the top of this file.
+
+# some parts of the build fail due to mount options on /tmp, so we use this for tmp and clean up later
+ARG SDK_TMP_DIR=/var/tmp
+
 RUN --mount=from=home,type=bind,source=.ssh,target=/root/.ssh \
-    cd /tmp && \
+    mkdir -p ${SDK_TMP_DIR} && \
+    cd ${SDK_TMP_DIR} && \
     git clone \
+    --branch 1.4-update-2 \
     --depth 1 \
-    --shallow-submodules \
-    --recurse-submodules=third_party/mbedtls/ \
-    --recurse-submodules=third_party/nlunit-test/repo \
-    --recurse-submodules=third_party/nlassert/repo \
-    --recurse-submodules=third_party/nlio/repo \
-    --recurse-submodules=third_party/comcast \
-    --recurse-submodules=third_party/pigweed/repo \
-    --recurse-submodules=third_party/jsoncpp \
     ssh://rdkgerrithub.stb.r53.xcal.tv:29418/comcast-matter/sdk && \
-    cd sdk/third_party/comcast/config/zilker && \
-    cmake -B cmake-build-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DMATTER_CONF_DIR:PATH=/tmp/matter-zilker && \
+    cd sdk && ./scripts/checkout_submodules.py --shallow --platform linux && \
+    cd third_party/comcast/config/zilker && \
+    cmake -B cmake-build-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DMATTER_CONF_DIR:PATH=${SDK_TMP_DIR}/matter-zilker && \
     cmake --build cmake-build-debug && \
     cd cmake-build-debug && \
     make install && \
-    cd /tmp && \
-    rm -rf sdk
+    cd ${SDK_TMP_DIR}/sdk && \
+    git reset --hard
+
+# change the shell used for RUN commands to bash (affects the remainder of this file)
+SHELL ["/bin/bash", "-c"]
+
+# Build and install the Matter example apps for use as test targets
+RUN cd ${SDK_TMP_DIR}/sdk && \
+    export TMPDIR=${SDK_TMP_DIR} && \
+    export TERM=xterm && \
+    . ./scripts/activate.sh && \
+    ./scripts/build/build_examples.py --target linux-x64-light-rpc build && cp out/linux-x64-light-rpc/chip-lighting-app /usr/local/bin && \
+    ./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/chip-lock-app /usr/local/bin && \
+    ./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/thermostat-app /usr/local/bin && \
+    ./scripts/build/build_examples.py --target linux-x64-chip-tool build && cp out/linux-x64-chip-tool/chip-tool /usr/local/bin
+
+# clean up
+RUN rm -rf ${SDK_TMP_DIR}
+# matter end
+###############################################################################
 
 ###############################################################################
 # User creation stage
@@ -194,7 +233,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     rr \
     vim \
     pipx \
-    gh
+    gh \
+    fish
 
 ARG BUILDER_USER=""
 ARG BUILDER_GID=""

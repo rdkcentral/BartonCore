@@ -32,7 +32,6 @@
 #include "app/WriteClient.h"
 #include "matter/subscriptions/SubscribeInteraction.h"
 #include "subsystems/matter/MatterCommon.h"
-#include "transport/SessionHandle.h"
 #include <memory>
 #include <mutex>
 #include <string>

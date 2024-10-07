@@ -27,13 +27,14 @@
 #pragma once
 
 #include "rdkb-cluster-server.hpp"
+#include <protocols/interaction_model/StatusCode.h>
 
 class RdkbClusterServer : public RdkbClusterServerDelegate
 {
 public:
     virtual ~RdkbClusterServer() {}
 
-    EmberAfStatus OnAttributeRead(const EmberAfAttributeMetadata *attributeMetadata,
-                                  uint8_t *buffer,
-                                  uint16_t maxReadLength) override;
+    chip::Protocols::InteractionModel::Status OnAttributeRead(const EmberAfAttributeMetadata *attributeMetadata,
+                                                              uint8_t *buffer,
+                                                              uint16_t maxReadLength) override;
 };

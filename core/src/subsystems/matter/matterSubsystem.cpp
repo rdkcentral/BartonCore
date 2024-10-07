@@ -380,6 +380,16 @@ bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     return orchestrator.Pair(nodeId, timeoutSeconds);
 }
 
+bool matterSubsystemOpenCommissioningWindow(void)
+{
+    return Matter::GetInstance().OpenCommissioningWindow();
+}
+
+bool matterSubsystemClearAccessRestrictionList(void)
+{
+    return Matter::GetInstance().ClearAccessRestrictionList();
+}
+
 static bool matterSubsystemMigrate(uint16_t oldVersion, uint16_t newVersion)
 {
     icDebug();

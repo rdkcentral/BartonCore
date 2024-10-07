@@ -40,7 +40,6 @@ extern "C" {
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/BufferedReadCallback.h"
 #include "app/InteractionModelEngine.h"
-#include "matter/zap-generated/CHIPClusters.h"
 
 #define PLAY_SOUND_TIMEOUT_SECONDS 15
 #define STOP_SOUND_TIMEOUT_SECONDS PLAY_SOUND_TIMEOUT_SECONDS

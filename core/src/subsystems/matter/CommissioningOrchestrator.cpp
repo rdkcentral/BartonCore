@@ -32,7 +32,6 @@
 #include "DiscoveredDeviceDetails.h"
 #include "DiscoveredDeviceDetailsStore.h"
 #include "Matter.h"
-#include "controller-clusters/zap-generated/CHIPClusters.h"
 #include "matter/MatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
 #include "matterSubsystem.h"
@@ -228,14 +227,22 @@ namespace zilker
         chip::Callback::Callback<chip::OnDeviceConnected> onDeviceConnectedCallback(
             [](void *context, chip::Messaging::ExchangeManager &exchangeMgr, const chip::SessionHandle &sessionHandle) {
                 chip::app::CommandSender commandSender(nullptr, &exchangeMgr);
+
+                chip::app::CommandSender::PrepareCommandParameters prepareParams;
+                chip::app::CommandSender::FinishCommandParameters finishParams;
+                // TODO what are these command refs (passed to SetCommandRef)?
+                prepareParams.SetStartDataStruct(true).SetCommandRef(0);
+                finishParams.SetEndDataStruct(true).SetCommandRef(0);
+
                 chip::app::CommandPathParams commandPath(
                     0, /* endpoint 0 holds the GeneralCommissioning cluster*/
                     0, /* group not used */
                     chip::app::Clusters::GeneralCommissioning::Id,
                     chip::app::Clusters::GeneralCommissioning::Commands::CommissioningComplete::Id,
                     (chip::app::CommandPathFlags::kEndpointIdValid));
-                commandSender.PrepareCommand(commandPath);
-                commandSender.FinishCommand();
+
+                commandSender.PrepareCommand(commandPath, prepareParams);
+                commandSender.FinishCommand(finishParams);
                 static_cast<std::promise<bool> *>(context)->set_value(commandSender.SendCommandRequest(sessionHandle) ==
                                                                       CHIP_NO_ERROR);
             },
@@ -368,10 +375,10 @@ namespace zilker
 
     void CommissioningOrchestrator::OnReadCommissioningInfo(const chip::Controller::ReadCommissioningInfo &info)
     {
-        icDebug("Node %016" PRIx64, info.nodeId);
+        icDebug("Node %016" PRIx64, info.remoteNodeId);
     }
 
-    void CommissioningOrchestrator::OnDiscoveredDevice(const chip::Dnssd::DiscoveredNodeData &nodeData)
+    void CommissioningOrchestrator::OnDiscoveredDevice(const chip::Dnssd::CommissionNodeData &nodeData)
     {
         std::unique_lock<std::mutex> lock_guard(mtx);
 
@@ -379,12 +386,12 @@ namespace zilker
         if (discoveredNodeData == nullptr)
         {
             char buf[chip::Inet::IPAddress::kMaxStringLength];
-            nodeData.resolutionData.ipAddress[0].ToString(buf);
+            nodeData.ipAddress[0].ToString(buf);
 
             icLogDebug(LOG_TAG, "%s: %s", __func__, buf);
             nodeData.LogDetail();
 
-            discoveredNodeData = new chip::Dnssd::DiscoveredNodeData;
+            discoveredNodeData = new chip::Dnssd::CommissionNodeData;
             *discoveredNodeData = nodeData;
 
             SetCommissioningStatus(DeviceFound);

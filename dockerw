@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+#  Copyright (C) 2024 Comcast Corporation
+#
+#  All rights reserved.
+#
+#  This software is protected by copyright laws of the United States
+#  and of foreign countries. This material may also be protected by
+#  patent laws of the United States and of foreign countries.
+#
+#  This software is furnished under a license agreement and/or a
+#  nondisclosure agreement and may only be used or copied in accordance
+#  with the terms of those agreements.
+#
+#  The mere transfer of this software does not imply any licenses of trade
+#  secrets, proprietary technology, copyrights, patents, trademarks, or
+#  any other form of intellectual property whatsoever.
+#
+#  Comcast Corporation retains all ownership rights.
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+notice() {
+  echo "-- $0: $@"
+}
+
+set -e
+
+INTERACTIVE_FLAGS="-it"
+EXTRA_ENV="-e SSH_AUTH_SOCK"
+DEV_VOL=""
+
+while getopts ":npe:t:d" opt; do
+  case ${opt} in
+  n) # process option n
+    INTERACTIVE_FLAGS=""
+    ;;
+  p) # pull docker
+    docker pull $IMAGE
+    ;;
+  e) # extra environment variables
+    EXTRA_ENV="${EXTRA_ENV} -e ${OPTARG}"
+    ;;
+  t) # Specific tag to use, otherwise 'latest'
+    TAG="${OPTARG}"
+    ;;
+  d) # add /dev volume mapping
+    DEV_VOL="-v /dev:/dev"
+    ;;
+  esac
+done
+shift "$(($OPTIND - 1))"
+
+IMAGE="barton_builder_$USER"
+
+DIR=$(pwd)
+
+EXTRA_VOLUMES="${DEV_VOL}"
+
+if [ -f /.dockerenv ]; then
+  CURR_CONTAINER=$(hostname)
+  VOLUMES_ARGS="--volumes-from $CURR_CONTAINER"
+else
+
+  VOLUMES_ARGS="-v $DIR:$DIR
+                 -v $HOME:$HOME
+                 --mount type=tmpfs,destination=/tmp
+                 $EXTRA_VOLUMES"
+fi
+
+# create a unique container name prefixed with the user id, useful when on a shared machine
+USER_ID=$(id -u -n)
+RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
+CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
+
+docker run -u $USER --rm --name $CONTAINER_NAME $INTERACTIVE_FLAGS --privileged --cap-add SYS_PTRACE $VOLUMES_ARGS -w "$DIR" -e BUILDER_USER=$USER_ID -e BUILDER_UID=$(id -u) -e BUILDER_GID=$(id -g) $EXTRA_ENV $IMAGE $*

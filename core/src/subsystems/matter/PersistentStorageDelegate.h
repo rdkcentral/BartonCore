@@ -40,7 +40,8 @@ namespace zilker
     class PersistentStorageDelegate : public chip::PersistentStorageDelegate
     {
     public:
-        CHIP_ERROR Init(const char *identity) { return CHIP_NO_ERROR; }
+        PersistentStorageDelegate() = default;
+        ~PersistentStorageDelegate() = default;
 
         // These are from the PersistentStorageDelegate interface
         CHIP_ERROR SyncGetKeyValue(const char *key, void *buffer, uint16_t &size) override;

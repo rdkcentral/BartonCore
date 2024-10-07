@@ -48,7 +48,7 @@ namespace zilker
             device(nullptr), onDeviceConnectedCallback(OnDeviceConnectedFn, this),
             onDeviceConnectionFailureCallback(OnDeviceConnectionFailureFn, this) {};
 
-        ~DeviceDiscoverer() = default;
+        ~DeviceDiscoverer();
 
         /**
          * @brief Start discovery asynchronously.
@@ -80,6 +80,7 @@ namespace zilker
         std::unique_ptr<chip::app::ReadClient> readClient;
         chip::OperationalDeviceProxy *device;
 
+        static void CleanupReader(intptr_t arg);
         static void DiscoverWorkFuncCb(intptr_t arg);
         static void OnDeviceConnectedFn(void *context,
                                         chip::Messaging::ExchangeManager &exchangeMgr,

@@ -36,18 +36,17 @@ extern "C" {
 
 #include "RdkbClusterServer.h"
 #include "app-common/zap-generated/ids/Attributes.h"
-#include "app/util/af-enums.h"
 #include <cstring>
 
 #define LOG_TAG     "RdkbClusterServer"
 #define logFmt(fmt) "%s: " fmt, __func__
 
 
-EmberAfStatus RdkbClusterServer::OnAttributeRead(const EmberAfAttributeMetadata *attributeMetadata,
-                                                 uint8_t *buffer,
-                                                 uint16_t maxReadLength)
+chip::Protocols::InteractionModel::Status RdkbClusterServer::OnAttributeRead(const EmberAfAttributeMetadata *attributeMetadata,
+                                                                             uint8_t *buffer,
+                                                                             uint16_t maxReadLength)
 {
-    EmberAfStatus result = EMBER_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE;
+    chip::Protocols::InteractionModel::Status result = chip::Protocols::InteractionModel::Status::UnsupportedAttribute;
 
     switch (attributeMetadata->attributeId)
     {
@@ -84,17 +83,17 @@ EmberAfStatus RdkbClusterServer::OnAttributeRead(const EmberAfAttributeMetadata 
                 {
                     memcpy(buffer, &jsonStrLen, sizeof(jsonStrLen));
                     memcpy(buffer + sizeof(jsonStrLen), jsonStr, jsonStrLen);
-                    result = EMBER_ZCL_STATUS_SUCCESS;
+                    result = chip::Protocols::InteractionModel::Status::Success;
                 }
                 else
                 {
-                    result = EMBER_ZCL_STATUS_FAILURE;
+                    result = chip::Protocols::InteractionModel::Status::Failure;
                 }
             }
             else
             {
                 icError("Failed to get WiFi credentials: [%d] %s", error->code, stringCoalesce(error->message));
-                result = EMBER_ZCL_STATUS_FAILURE;
+                result = chip::Protocols::InteractionModel::Status::Failure;
             }
             break;
         }

@@ -21,7 +21,7 @@
 
 #include "AccessControlDelegate.h"
 
-#include <controller-clusters/zap-generated/CHIPClusters.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 #include <lib/core/CHIPConfig.h>
 
 #include <algorithm>

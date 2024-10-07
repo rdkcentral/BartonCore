@@ -58,7 +58,6 @@
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
-#include "controller-clusters/zap-generated/CHIPClusters.h"
 #include "controller/CHIPCluster.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
@@ -194,7 +193,7 @@ void MatterDeviceDriver::ReadCurrentFabricIndex(std::forward_list<std::promise<b
         new AttributeReadRequestContext<chip::FabricIndex>(this, &readPromise, &fabricIndex, deviceId);
     AssociateStoredContext(readRequestContext->readComplete);
 
-    chip::Controller::OperationalCredentialsCluster cluster(exchangeMgr, sessionHandle, 0);
+    chip::Controller::ClusterBase cluster(exchangeMgr, sessionHandle, 0);
 
     CHIP_ERROR error =
         cluster.ReadAttribute<chip::app::Clusters::OperationalCredentials::Attributes::CurrentFabricIndex::TypeInfo>(

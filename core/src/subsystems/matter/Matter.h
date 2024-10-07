@@ -39,10 +39,12 @@ extern "C" {
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
 #include "PersistentStorageDelegate.h"
+#include "AccessRestrictionProvider.h"
 #include "SessionMessageHandler.hpp"
 #include "credentials/attestation_verifier/FileAttestationTrustStore.h"
 #include "crypto/CHIPCryptoPAL.h"
 #include <app/server/Server.h>
+#include <app/util/ember-compatibility-functions.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/ExampleOperationalCredentialsIssuer.h>
 #include <credentials/GroupDataProviderImpl.h>
@@ -148,6 +150,20 @@ namespace zilker
         }
 
         CHIP_ERROR AccessControlDump(const chip::Access::AccessControl::Entry &entry);
+
+        /**
+         * @brief Open the commissioning window so that other devices can commission us.
+         *
+         * @return true on success
+         */
+        bool OpenCommissioningWindow();
+
+        /**
+         * @brief Clear the AccessRestrictionList for certification testing
+         *
+         * @return true on success
+         */
+        bool ClearAccessRestrictionList();
 
         /**
          * @brief Get the endpoint id for "this" node that hosts utility servers (Basic Information, OTA provider, etc)
@@ -262,6 +278,16 @@ namespace zilker
 
         void SetOperationalCredsIssuerApiEnv();
 
+        /**
+         * Configure our access restrictions.  This includes setting the CommissioningARL attribute as
+         * well as setting the current ARL entries for each fabric.
+         *
+         * @return true on success
+         */
+        bool SetAccessRestrictionList();
+
+        bool serverIsInitialized = false;
+
         std::thread *stackThread {};
         chip::NodeId myNodeId = kUndefinedNodeId;
         chip::FabricId myFabricId {};
@@ -271,6 +297,8 @@ namespace zilker
         std::unique_ptr<std::vector<uint8_t>> threadOperationalDataset;
         std::unique_ptr<chip::Controller::DeviceCommissioner> commissionerController;
 
+        PersistentStorageDelegate storageDelegate;
+
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
         chip::Controller::SelfSignedCertifierOperationalCredentialsIssuer operationalCredentialsIssuer;
 #else
@@ -278,17 +306,13 @@ namespace zilker
 #endif
 
         std::unique_ptr<chip::PersistentStorageOperationalKeystore> operationalKeystore;
-        PersistentStorageDelegate storageDelegate;
         std::unique_ptr<chip::Credentials::PersistentStorageOpCertStore> opCertStore;
         chip::Crypto::DefaultSessionKeystore sessionKeystore;
         chip::CommonCaseDeviceServerInitParams serverInitParams;
         DeviceInfoProviderImpl deviceInfoProvider;
         chip::Credentials::GroupDataProviderImpl groupDataProvider;
-        chip::app::DefaultAttributePersistenceProvider attributePersistenceProvider;
         char *wifiSsid {};
         char *wifiPass {};
-
-        chip::app::DefaultAclStorage aclStorage;
 
         uint8_t infoEventBuffer[CHIP_DEVICE_CONFIG_EVENT_LOGGING_INFO_BUFFER_SIZE];
         uint8_t debugEventBuffer[CHIP_DEVICE_CONFIG_EVENT_LOGGING_DEBUG_BUFFER_SIZE];
@@ -310,15 +334,7 @@ namespace zilker
 
         std::atomic<State> state = {State::stopped};
 
-        class DeviceTypeResolver : public chip::Access::AccessControl::DeviceTypeResolver
-        {
-        public:
-            bool IsDeviceTypeOnEndpoint(chip::DeviceTypeId deviceType, chip::EndpointId endpoint) override
-            {
-                return chip::app::IsDeviceTypeOnEndpoint(deviceType, endpoint);
-            }
-        } deviceTypeResolver;
-
         SessionMessageHandler sessionMessageHandler;
+        AccessRestrictionProvider accessRestrictionProvider;
     };
 } // namespace zilker

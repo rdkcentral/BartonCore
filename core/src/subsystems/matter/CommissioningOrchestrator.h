@@ -130,7 +130,7 @@ namespace zilker
         ////////////// DevicePairingDelegate overrides ////////////////////
 
         ////////////// DeviceDiscoveryDelegate overrides ////////////////////
-        void OnDiscoveredDevice(const chip::Dnssd::DiscoveredNodeData &nodeData) override;
+        void OnDiscoveredDevice(const chip::Dnssd::CommissionNodeData &nodeData) override;
         ////////////// DeviceDiscoveryDelegate overrides ////////////////////
 
     private:
@@ -140,7 +140,7 @@ namespace zilker
         void *callbackContext;
         std::mutex mtx;
         std::condition_variable cond;
-        chip::Dnssd::DiscoveredNodeData *discoveredNodeData;
+        chip::Dnssd::CommissionNodeData *discoveredNodeData;
 
         /**
          * Set the status and invoke callback.

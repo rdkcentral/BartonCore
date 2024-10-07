@@ -139,7 +139,7 @@ namespace
                                      false,
                                      (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E",
                                      6,
-                                     EMBER_ZCL_INTERFACE_TYPE_ENUM_ETHERNET,
+                                     InterfaceTypeEnum::kEthernet,
                                      ipv6Addresses);
 
         uint8_t decodableListBuffer[ARRAY_SIZE];
@@ -154,7 +154,7 @@ namespace
     TEST_F(ExtractOperationalInterfaceInfoTest, NoIPv6Addresses)
     {
         Type iface = CreateInterface(
-            "eth0", true, (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E", 6, EMBER_ZCL_INTERFACE_TYPE_ENUM_ETHERNET, {});
+            "eth0", true, (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E", 6, InterfaceTypeEnum::kEthernet, {});
 
         uint8_t decodableListBuffer[ARRAY_SIZE];
         DecodableType list;
@@ -173,7 +173,7 @@ namespace
                                      true,
                                      (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E",
                                      6,
-                                     EMBER_ZCL_INTERFACE_TYPE_ENUM_ETHERNET,
+                                     InterfaceTypeEnum::kEthernet,
                                      ipv6Addresses);
 
         uint8_t decodableListBuffer[ARRAY_SIZE];

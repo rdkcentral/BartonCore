@@ -52,7 +52,6 @@ extern "C" {
 
 #include <chrono>
 #include <cinttypes>
-#include <controller-clusters/zap-generated/CHIPClusters.h>
 #include <subsystems/matter/DiscoveredDeviceDetailsStore.h>
 #include <subsystems/matter/Matter.h>
 

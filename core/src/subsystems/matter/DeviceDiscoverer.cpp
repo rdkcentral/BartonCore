@@ -37,7 +37,6 @@ extern "C" {
 #include "Matter.h"
 #include "MatterCommon.h"
 #include "ReadPrepareParamsBuilder.hpp"
-#include "controller-clusters/zap-generated/CHIPClusters.h"
 #include "platform/PlatformManager.h"
 #include "protocols/interaction_model/StatusCode.h"
 #include <assert.h>
@@ -63,6 +62,20 @@ namespace zilker
     static void OnCLReadResponse(void *context, const app::DataModel::DecodableList<ClusterId> &responseList);
     static void OnPLReadResponse(void *context, const app::DataModel::DecodableList<EndpointId> &responseList);
     static void AddEndpointDataToResultIfComplete(EndpointDiscoveryContext *ctx);
+
+    DeviceDiscoverer::~DeviceDiscoverer()
+    {
+        if (readClient)
+        {
+            chip::DeviceLayer::PlatformMgr().ScheduleWork(CleanupReader, reinterpret_cast<intptr_t>(readClient.release()));
+        }
+    }
+
+    void DeviceDiscoverer::CleanupReader(intptr_t arg)
+    {
+        auto *readClient = reinterpret_cast<chip::app::ReadClient *>(arg);
+        delete readClient;
+    }
 
     std::future<bool> DeviceDiscoverer::Start()
     {
@@ -372,7 +385,7 @@ namespace zilker
         {
             using namespace chip::app::Clusters::Descriptor;
 
-            chip::Controller::DescriptorCluster cluster(exchangeMgr, device->GetSecureSession().Value(), endpointId);
+            chip::Controller::ClusterBase cluster(exchangeMgr, device->GetSecureSession().Value(), endpointId);
 
             // TODO use smart pointer instead since we are hading off...
             auto context = new EndpointDiscoveryContext;
