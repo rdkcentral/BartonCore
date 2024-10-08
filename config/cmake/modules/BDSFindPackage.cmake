@@ -25,6 +25,11 @@ function(bds_find_package)
     pkg_check_modules(BDS_PACKAGE ${BDS_FIND_PACKAGE_NAME}${PKG_CONFIG_VERSION_CHECK})
 
     if (NOT BDS_PACKAGE_FOUND)
-        find_package(${BDS_FIND_PACKAGE_NAME} ${FIND_PACKAGE_VERSION_CHECK} ${PACKAGE_REQUIRED})
+        find_package(${BDS_FIND_PACKAGE_NAME} ${FIND_PACKAGE_VERSION_CHECK})
+
+	if (NOT ${BDS_FIND_PACKAGE_NAME}_FOUND)
+	    # Last ditch, try find_library
+	    find_library(BDS_LIBRARY NAMES ${BDS_FIND_PACKAGE_NAME} ${PACKAGE_REQUIRED})
+	endif()
     endif()
 endfunction()
