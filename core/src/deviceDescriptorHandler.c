@@ -261,7 +261,9 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
         bool useAggressivePolicy = false;
 
 #ifdef BARTON_CONFIG_SETUP_WIZARD
-        int32_t activationState = getPropertyAsInt32(PERSIST_CPE_SETUPWIZARD_STATE, ACTIVATION_NOT_STARTED);
+        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        int32_t activationState = b_device_service_property_provider_get_property_as_int32(
+            propertyProvider, PERSIST_CPE_SETUPWIZARD_STATE, ACTIVATION_NOT_STARTED);
         if (activationState < ACTIVATION_COMPLETE)
         {
             useAggressivePolicy = true;
