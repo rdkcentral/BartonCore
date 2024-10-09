@@ -71,6 +71,8 @@ bool __wrap_storageParse(const char *namespace, const char *key, const StorageCa
 bool __wrap_storageSave(const char *namespace, const char *key, const char *value);
 icLinkedList *__wrap_storageGetKeys(const char *namespace);
 bool __wrap_storageDelete(const char *namespace, const char *key);
+char *__wrap_simpleProtectConfigData(const char *namespace, const char *dataToProtect);
+char *__wrap_simpleUnprotectConfigData(const char *namespace, const char *protectedData);
 static icDevice *createDummyDevice();
 static icDevice *createCorruptedDummyDevice();
 static void dummyStoragePut(const char *namespace, const char *key, const char *value);
@@ -161,6 +163,7 @@ static void test_jsonDatabaseAddDeviceWithSensitiveResourceData(void **state)
 
     // mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device =
         createDeviceWithSensitiveResourceData("944a0c1c0ae4", "AdminUserNameValue", "AdminPasswordValue");
@@ -191,6 +194,8 @@ static void test_jsonDatabaseAddDeviceWithSensitiveResourceData(void **state)
     will_return(__wrap_storageGetKeys, USE_DUMMY_STORAGE);
     will_return(__wrap_storageLoadJSON, USE_DUMMY_STORAGE);
 
+    jsonDatabaseInitialize();
+
     // Test that we read the device back in
     icDevice *savedDevice = jsonDatabaseGetDeviceById(device->uuid);
     assert_non_null(savedDevice);
@@ -219,6 +224,8 @@ static void test_jsonDatabaseInitializeEmptyAndCleanup(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     char *version;
     jsonDatabaseGetSystemProperty(JSON_DATABASE_SCHEMA_VERSION_KEY, &version);
 
@@ -239,6 +246,8 @@ static void test_jsonDatabaseSetSystemPropertyAndCleanup(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     // Set a property, which will do an immediate save
     will_return(__wrap_storageSave, true);
     jsonDatabaseSetSystemProperty("dummyKey", "dummyValue");
@@ -257,6 +266,8 @@ static void test_jsonDatabaseAddOneDeviceAndCleanup(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -281,6 +292,8 @@ static void test_jsonDatabaseSetSystemPropertyAndReadItBack(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     // Set a property, which will do an immediate save
     will_return(__wrap_storageSave, true);
     jsonDatabaseSetSystemProperty("dummyKey", "dummyValue");
@@ -294,6 +307,7 @@ static void test_jsonDatabaseSetSystemPropertyAndReadItBack(void **state)
     will_return(__wrap_storageLoadJSON, USE_DUMMY_STORAGE);
     // Read device
     will_return(__wrap_storageGetKeys, USE_DUMMY_STORAGE);
+    jsonDatabaseInitialize();
 
     char *value;
     // Should only read from memory at this point
@@ -317,6 +331,8 @@ static void test_jsonDatabaseAddOneDeviceAndReadItBack(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -333,6 +349,7 @@ static void test_jsonDatabaseAddOneDeviceAndReadItBack(void **state)
     will_return(__wrap_storageLoadJSON, USE_DUMMY_STORAGE);
     // Read device
     will_return(__wrap_storageGetKeys, USE_DUMMY_STORAGE);
+    jsonDatabaseInitialize();
 
     // Test that we read the device back in
     icDevice *loadedDevice = jsonDatabaseGetDeviceById(device->uuid);
@@ -359,6 +376,8 @@ static void test_jsonDatabaseGetDevices(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -412,6 +431,8 @@ static void test_jsonDatabaseGetDevicesByEndpointProfile(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -494,6 +515,8 @@ static void test_jsonDatabaseGetDevicesByDeviceClass(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -570,6 +593,8 @@ static void test_jsonDatabaseGetDevicesByDeviceDriver(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -648,6 +673,8 @@ static void test_jsonDatabaseGetDeviceById(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -698,6 +725,8 @@ static void test_jsonDatabaseGetDeviceByUri(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -750,6 +779,8 @@ static void test_jsonDatabaseRemoveDeviceById(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -776,6 +807,7 @@ static void test_jsonDatabaseRemoveDeviceById(void **state)
     // Reopen database
     will_return(__wrap_storageLoadJSON, USE_DUMMY_STORAGE);
     will_return(__wrap_storageGetKeys, USE_DUMMY_STORAGE);
+    assert_true(jsonDatabaseInitialize());
 
     // Should still be gone
     foundDevice = jsonDatabaseGetDeviceById(device->uuid);
@@ -799,6 +831,8 @@ static void test_jsonDatabaseGetEndpointsByEndpointProfile(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -882,6 +916,8 @@ static void test_jsonDatabaseGetEndpointById(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -930,6 +966,8 @@ static void test_jsonDatabaseGetEndpointByUri(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -970,6 +1008,8 @@ static void test_jsonDatabaseSaveEndpoint(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -1013,6 +1053,8 @@ static void test_jsonDatabaseGetResourceByUri(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1053,6 +1095,8 @@ static void test_jsonDatabaseSaveResource(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -1099,6 +1143,8 @@ static void test_jsonDatabaseGetEndpointResourceByUri(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1141,6 +1187,8 @@ static void test_jsonDatabaseSaveEndpointResource(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -1190,6 +1238,8 @@ static void test_jsonDatabaseGetMetadataByUri(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1232,6 +1282,7 @@ static void test_jsonDatabaseRemoveMetadataByUri(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+    assert_true(jsonDatabaseInitialize());
 
     // add a device
     icDevice *device = createDummyDevice();
@@ -1301,6 +1352,8 @@ static void test_jsonDatabaseSaveMetadata(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1361,6 +1414,8 @@ static void test_jsonDatabaseGetDeviceByOtherUris(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1413,6 +1468,8 @@ static void test_jsonDatabaseGetEndpointByOtherUris(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1451,6 +1508,8 @@ static void test_jsonDatabaseGetResourcesByUriRegex(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -1491,6 +1550,8 @@ static void test_jsonDatabaseAddNewDeviceMetdata(void **state)
     /// mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     icDevice *device = createDummyDevice();
 
     // Mock saving the device
@@ -1513,6 +1574,7 @@ static void test_jsonDatabaseAddNewDeviceMetdata(void **state)
     // Read device
     will_return(__wrap_storageGetKeys, USE_DUMMY_STORAGE);
     will_return(__wrap_storageLoadJSON, USE_DUMMY_STORAGE);
+    jsonDatabaseInitialize();
 
     // Test that we read the device back in
     icDevice *loadedDevice = jsonDatabaseGetDeviceById(device->uuid);
@@ -1542,6 +1604,8 @@ static void test_jsonDatabaseAddDeviceResource(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     // mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
 
@@ -1591,6 +1655,8 @@ static void test_jsonDatabaseAddEndpointResource(void **state)
     will_return(__wrap_storageLoadJSON, NULL);
     // mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     icDevice *device = createDummyDevice();
     // Just get the first endpoint
@@ -1643,6 +1709,8 @@ static void test_jsonDatabaseAddDeviceWithBadEndpoint(void **state)
     // mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
+    assert_true(jsonDatabaseInitialize());
+
     // corrupted dummy device
     scoped_icDevice *badDevice = createCorruptedDummyDevice();
 
@@ -1663,6 +1731,8 @@ static void test_jsonDatabaseAddDuplicateEndpoint(void **state)
 
     // Mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
+
+    assert_true(jsonDatabaseInitialize());
 
     // Create dummy device
     scoped_icDevice *device = createDummyDevice();
@@ -1700,8 +1770,7 @@ static void test_jsonDatabaseLoadDeviceWithBadEndpoint(void **state)
     // Mock initialization of systemProperties database
     will_return(__wrap_storageSave, true);
 
-    // Force an initialize
-    assert_null(jsonDatabaseGetDeviceById("dummy"));
+    assert_true(jsonDatabaseInitialize());
 
     // Device UUID of the corrupted dummy file
     const char *corruptedDeviceUuid = "000d6f000f08366d";
@@ -1725,6 +1794,8 @@ static void test_jsonDatabaseLoadDeviceWithBadEndpoint(void **state)
     will_return_always(__wrap_storageLoad, USE_DUMMY_STORAGE);
 
     // Load the devices
+    assert_true(jsonDatabaseInitialize());
+
     // Should not load corrupted devices
     icLinkedList *devices = jsonDatabaseGetDevices();
     assert_int_equal(linkedListCount(devices), 1);
@@ -2340,6 +2411,17 @@ bool __wrap_storageDelete(const char *namespace, const char *key)
 StorageRestoreErrorCode __wrap_storageRestoreNamespace(const char *namespace, const char *basePath)
 {
     return mock_type(StorageRestoreErrorCode);
+}
+
+char *__wrap_simpleProtectConfigData(const char *namespace, const char *dataToProtect)
+{
+    return g_base64_encode(dataToProtect, strlen(dataToProtect));
+}
+
+char *__wrap_simpleUnprotectConfigData(const char *namespace, const char *protectedData)
+{
+    gsize length = 0;
+    return g_base64_decode(protectedData, &length);
 }
 
 int main(int argc, const char **argv)

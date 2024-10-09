@@ -109,10 +109,6 @@ static icHashMap *devices = NULL;
 static icHashMap *resourcesByUri = NULL;
 // Map of system properties, simple name value pairs
 static icStringHashMap *systemProperties = NULL;
-// Used in place of pthread_once to ease testing
-static bool initialized = false;
-// Used to track whether we need to register cleanup on exit
-static bool initializedOnce = false;
 // Lock when we want to read or write our in memory cache.  The locking strategy of this class is
 // static (private) functions assume the lock is held.   All public functions should lock before
 // calling functions which manipulate global data structures
@@ -740,11 +736,6 @@ static bool saveDevice(icDevice *device)
     return didSave;
 }
 
-static void jsonDatabaseDeinitialize(void)
-{
-    jsonDatabaseCleanup(true);
-}
-
 /**
  * Open or create our jsonDatabase.  Assumes caller owns the mutex
  *
@@ -752,30 +743,35 @@ static void jsonDatabaseDeinitialize(void)
  */
 static bool jsonDatabaseInitializeNoLock()
 {
-    bool retval = initialized;
-    if (!initialized)
+    bool retval = false;
+    if (loadSystemProperties())
     {
+        // Load devices
+        retval = loadDevices();
+    }
+    else
+    {
+        // Intialize empty database
+        devices = hashMapCreate();
+        resourcesByUri = hashMapCreate();
+        jsonDatabaseSetSystemPropertyNoLock(JSON_DATABASE_SCHEMA_VERSION_KEY, JSON_DATABASE_CURRENT_SCHEMA_VERSION);
+        retval = true;
+    }
+    return retval;
+}
 
-        if (loadSystemProperties())
-        {
-            // Load devices
-            retval = loadDevices();
-        }
-        else
-        {
-            // Intialize empty database
-            devices = hashMapCreate();
-            resourcesByUri = hashMapCreate();
-            jsonDatabaseSetSystemPropertyNoLock(JSON_DATABASE_SCHEMA_VERSION_KEY, JSON_DATABASE_CURRENT_SCHEMA_VERSION);
-            retval = true;
-        }
-        initialized = true;
-    }
-    if (!initializedOnce)
-    {
-        atexit(jsonDatabaseDeinitialize);
-        initializedOnce = true;
-    }
+/**
+ * Open or create our jsonDatabase.
+ *
+ * @return true on success (either opening existing or creating new)
+ */
+bool jsonDatabaseInitialize()
+{
+    bool retval = false;
+    // Take the lock to initialize things
+    pthread_mutex_lock(&mtx);
+    retval = jsonDatabaseInitializeNoLock();
+    pthread_mutex_unlock(&mtx);
 
     return retval;
 }
@@ -833,7 +829,6 @@ static void jsonDatabaseCleanupNoLock(bool persist)
     // Should be nothing left, but to clean up the map itself
     hashMapDestroy(resourcesByUri, NULL);
     resourcesByUri = NULL;
-    initialized = false;
 }
 
 /**
@@ -844,10 +839,7 @@ static void jsonDatabaseCleanupNoLock(bool persist)
 void jsonDatabaseCleanup(bool persist)
 {
     pthread_mutex_lock(&mtx);
-    if (initialized)
-    {
-        jsonDatabaseCleanupNoLock(persist);
-    }
+    jsonDatabaseCleanupNoLock(persist);
     pthread_mutex_unlock(&mtx);
 }
 
@@ -858,15 +850,12 @@ void jsonDatabaseCleanup(bool persist)
  *
  * @return true on success
  */
-bool jsonDatabaseReload(void)
+bool jsonDatabaseReload()
 {
     bool retval = false;
     pthread_mutex_lock(&mtx);
-    if (initialized)
-    {
-        // Cleanup without pushing contents out to stoarge
-        jsonDatabaseCleanupNoLock(false);
-    }
+    // Cleanup without pushing contents out to stoarge
+    jsonDatabaseCleanupNoLock(false);
     // Re-initialize based on what's in storage
     retval = jsonDatabaseInitializeNoLock();
     pthread_mutex_unlock(&mtx);
@@ -880,10 +869,7 @@ bool jsonDatabaseRestore(const char *tempRestoreDir)
 
     LOCK_SCOPE(mtx);
 
-    if (initialized)
-    {
-        jsonDatabaseCleanupNoLock(false);
-    }
+    jsonDatabaseCleanupNoLock(false);
 
     // Restore the configuration. The current namespace will
     // be deleted automatically.
@@ -936,7 +922,6 @@ bool jsonDatabaseRestore(const char *tempRestoreDir)
 bool jsonDatabaseGetSystemProperty(const char *key, char **value)
 {
     pthread_mutex_lock(&mtx);
-    jsonDatabaseInitializeNoLock();
     bool didGet = jsonDatabaseGetSystemPropertyNoLock(key, value);
     pthread_mutex_unlock(&mtx);
     return didGet;
@@ -945,7 +930,6 @@ bool jsonDatabaseGetSystemProperty(const char *key, char **value)
 bool jsonDatabaseGetAllSystemProperties(icStringHashMap *map)
 {
     pthread_mutex_lock(&mtx);
-    jsonDatabaseInitializeNoLock();
     bool didGet = jsonDatabaseGetAllSystemPropertiesNoLock(map);
     pthread_mutex_unlock(&mtx);
     return didGet;
@@ -1031,7 +1015,6 @@ static bool jsonDatabaseSetSystemPropertyNoLock(const char *key, const char *val
 bool jsonDatabaseSetSystemProperty(const char *key, const char *value)
 {
     pthread_mutex_lock(&mtx);
-    jsonDatabaseInitializeNoLock();
     bool retval = jsonDatabaseSetSystemPropertyNoLock(key, value);
     pthread_mutex_unlock(&mtx);
 
@@ -1096,7 +1079,6 @@ bool jsonDatabaseAddDevice(icDevice *device)
     {
         icDevice *newDevice = deviceClone(device);
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         if (loadDeviceIntoCache(newDevice))
         {
             if (!saveDevice(newDevice))
@@ -1130,7 +1112,6 @@ bool jsonDatabaseAddEndpoint(icDeviceEndpoint *endpoint)
         icDeviceEndpoint *newEndpoint = endpointClone(endpoint);
 
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *deviceCacheEntry =
             (DeviceCacheEntry *) hashMapGet(devices, (void *) endpoint->deviceUuid, strlen(endpoint->deviceUuid) + 1);
         if (deviceCacheEntry != NULL)
@@ -1184,10 +1165,9 @@ bool jsonDatabaseAddEndpoint(icDeviceEndpoint *endpoint)
  * @see deviceDestroy
  *
  */
-icLinkedList *jsonDatabaseGetDevices(void)
+icLinkedList *jsonDatabaseGetDevices()
 {
     pthread_mutex_lock(&mtx);
-    jsonDatabaseInitializeNoLock();
     icLinkedList *devicesCopy = linkedListCreate();
     icHashMapIterator *iter = hashMapIteratorCreate(devices);
     while (hashMapIteratorHasNext(iter))
@@ -1219,7 +1199,6 @@ icLinkedList *jsonDatabaseGetDevicesByEndpointProfile(const char *profileId)
     if (profileId != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         icHashMapIterator *iter = hashMapIteratorCreate(devices);
         while (hashMapIteratorHasNext(iter))
         {
@@ -1262,7 +1241,6 @@ icLinkedList *jsonDatabaseGetDevicesByDeviceClass(const char *deviceClass)
     if (deviceClass != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         icHashMapIterator *iter = hashMapIteratorCreate(devices);
         while (hashMapIteratorHasNext(iter))
         {
@@ -1299,7 +1277,6 @@ icLinkedList *jsonDatabaseGetDevicesByDeviceDriver(const char *deviceDriverName)
     if (deviceDriverName != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         icHashMapIterator *iter = hashMapIteratorCreate(devices);
         while (hashMapIteratorHasNext(iter))
         {
@@ -1334,7 +1311,6 @@ icDevice *jsonDatabaseGetDeviceById(const char *uuid)
     if (uuid != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *deviceCacheEntry = (DeviceCacheEntry *) hashMapGet(devices, (void *) uuid, strlen(uuid) + 1);
         if (deviceCacheEntry != NULL)
         {
@@ -1361,7 +1337,6 @@ icDevice *jsonDatabaseGetDeviceByUri(const char *uri)
     if (uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL)
         {
@@ -1404,7 +1379,6 @@ bool jsonDatabaseIsDeviceKnown(const char *uuid)
     if (uuid != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         retval = hashMapContains(devices, (void *) uuid, strlen(uuid) + 1);
         pthread_mutex_unlock(&mtx);
     }
@@ -1424,7 +1398,6 @@ bool jsonDatabaseRemoveDeviceById(const char *uuid)
     if (uuid != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *cacheEntry = hashMapGet(devices, (void *) uuid, strlen(uuid) + 1);
         if (cacheEntry != NULL)
         {
@@ -1461,7 +1434,6 @@ icLinkedList *jsonDatabaseGetEndpointsByProfile(const char *profileId)
     if (profileId != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         icHashMapIterator *iter = hashMapIteratorCreate(devices);
         while (hashMapIteratorHasNext(iter))
         {
@@ -1502,7 +1474,6 @@ icDeviceEndpoint *jsonDatabaseGetEndpointById(const char *deviceUuid, const char
     if (endpointId != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *deviceCacheEntry = hashMapGet(devices, (void *) deviceUuid, strlen(deviceUuid) + 1);
         if (deviceCacheEntry != NULL)
         {
@@ -1538,7 +1509,6 @@ icDeviceEndpoint *jsonDatabaseGetEndpointByUri(const char *uri)
     if (uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL)
         {
@@ -1585,7 +1555,6 @@ bool jsonDatabaseSaveEndpoint(icDeviceEndpoint *endpoint)
     if (endpoint != NULL && endpoint->uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, endpoint->uri, strlen(endpoint->uri) + 1);
         if (locator != NULL)
@@ -1639,7 +1608,6 @@ icDeviceResource *jsonDatabaseGetResourceByUri(const char *uri)
     if (uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
         {
@@ -1667,7 +1635,6 @@ bool jsonDatabaseSaveResource(icDeviceResource *resource)
     if (resource != NULL && resource->uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
@@ -1717,7 +1684,6 @@ bool jsonDatabaseUpdateDateOfLastSyncMillis(icDeviceResource *resource)
     if (resource != NULL && resource->uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         // Take out the bits we can update and update our internal cache
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, resource->uri, strlen(resource->uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_RESOURCE)
@@ -1776,7 +1742,6 @@ icDeviceMetadata *jsonDatabaseGetMetadataByUri(const char *uri)
     if (uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
         if (locator != NULL && locator->locatorType == LOCATOR_TYPE_METADATA)
         {
@@ -1800,7 +1765,6 @@ bool jsonDatabaseSaveMetadata(icDeviceMetadata *metadata)
     if (metadata != NULL && metadata->uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         DeviceCacheEntry *entry = NULL;
         // Copy over the pieces we can update in our internal cache
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, metadata->uri, strlen(metadata->uri) + 1);
@@ -1888,7 +1852,6 @@ static icLinkedList *getItemsByUriRegex(const char *uriRegex, LocatorType locato
         if (ret == 0)
         {
             pthread_mutex_lock(&mtx);
-            jsonDatabaseInitializeNoLock();
             icHashMapIterator *iter = hashMapIteratorCreate(resourcesByUri);
             while (hashMapIteratorHasNext(iter))
             {
@@ -1976,7 +1939,6 @@ bool jsonDatabaseAddResource(const char *ownerUri, icDeviceResource *resource)
     if (ownerUri != NULL && resource != NULL && resource->id != NULL && resource->uri != NULL)
     {
         pthread_mutex_lock(&mtx);
-        jsonDatabaseInitializeNoLock();
         Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) ownerUri, strlen(ownerUri) + 1);
         if (locator != NULL)
         {
@@ -2051,7 +2013,6 @@ bool jsonDatabaseIsUriAccessible(const char *uri)
     }
 
     pthread_mutex_lock(&mtx);
-    jsonDatabaseInitializeNoLock();
     Locator *locator = (Locator *) hashMapGet(resourcesByUri, (void *) uri, strlen(uri) + 1);
     if (locator != NULL)
     {
@@ -2235,7 +2196,6 @@ bool jsonDatabaseRemoveMetadataByUri(const char *uri)
     if (uri != NULL)
     {
         LOCK_SCOPE(mtx);
-        jsonDatabaseInitializeNoLock();
         scoped_generic char *metadataUri = strdup(uri);
 
         // get the locator to required metadata from our URI hashmap

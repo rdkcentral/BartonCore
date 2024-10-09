@@ -39,22 +39,32 @@
 #define JSON_DATABASE_ENDPOINT_MARKER        "/ep/"
 
 /**
- * Close the jsonDatabase and release any related resources.  If not called
- * explicitly this will happen atexit with persist set as true.
+ * Open or create our jsonDatabase.
+ *
+ * @return true on success (either opening existing or creating new)
+ */
+bool jsonDatabaseInitialize();
+
+/**
+ * Close the jsonDatabase and release any related resources.
  *
  * @param persist Whether or not to persist everything while shutting down
  */
 void jsonDatabaseCleanup(bool persist);
 
 /**
- * Reload the database from storage without flushing the current contents.
+ * Reload the database from storage without flushing the current contents.  Basically
+ * the equivalent of calling jsonDatabaseCleanup(false), and then jsonDatabaseInitialize(),
+ * but this method is atomic under a lock to prevent races
  *
  * @return true on success
  */
-bool jsonDatabaseReload(void);
+bool jsonDatabaseReload();
 
 /**
  * Restore a database from a previous backup without flushing the current contents.
+ * Basically the equivalent of calling jsonDatabaseCleanup(false), and then jsonDatabaseInitialize(),
+ * but this method is atomic under a lock to prevent races.
  *
  * @param tempRestoreDir The configuration directory to restore from.
  * @return True on success.
@@ -120,7 +130,7 @@ bool jsonDatabaseAddEndpoint(icDeviceEndpoint *endpoint);
  * @see deviceDestroy
  *
  */
-icLinkedList *jsonDatabaseGetDevices(void);
+icLinkedList *jsonDatabaseGetDevices();
 
 /**
  * Retrieve all devices that have an endpoint with the given profile

@@ -1625,6 +1625,14 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
 
         deviceDescriptorsInit(allowlistPath, denylistPath);
 
+        if (jsonDatabaseInitialize() != true)
+        {
+            icLogError(LOG_TAG, "Failed to initialize database.");
+            free(allowlistPath);
+            free(denylistPath);
+            return false;
+        }
+
         // Clean up any things that should not be
         deviceServiceScrubDevices();
 

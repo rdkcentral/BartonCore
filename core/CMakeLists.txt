@@ -285,6 +285,8 @@ if (BDS_ZIGBEE)
                 storageGetKeys
                 storageDelete
                 storageRestoreNamespace
+                simpleProtectConfigData
+                simpleUnprotectConfigData
             LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceHelper
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
