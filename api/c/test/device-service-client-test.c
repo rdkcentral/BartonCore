@@ -29,7 +29,6 @@
 #include <stddef.h>
 
 #include "cjson/cJSON.h"
-#include "deprecated/subsystems/zigbee/zigbeeSubsystem.h"
 #include "device-driver/device-driver.h"
 #include "device-service-client.h"
 #include "device-service-device-found-details.h"
@@ -77,6 +76,7 @@
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icStringHashMap.h"
 #include "jsonHelper/jsonHelper.h"
+#include "private/subsystems/zigbee/zigbeeSubsystem.h"
 #include "zhal/zhal.h"
 #include <cmocka.h>
 #include <string.h>

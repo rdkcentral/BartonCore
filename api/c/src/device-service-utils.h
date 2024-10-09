@@ -27,10 +27,6 @@
 // Some helper utilities for translating between interanl/external interface types.
 #pragma once
 
-#include "deprecated/device/icDeviceEndpoint.h"
-#include "deprecated/device/icDeviceMetadata.h"
-#include "deprecated/device/icDeviceResource.h"
-#include "deprecated/deviceServiceStatus.h"
 #include "device-driver/device-driver.h"
 #include "device-service-device-found-details.h"
 #include "device-service-discovery-filter.h"
@@ -40,6 +36,10 @@
 #include "device-service-status.h"
 #include "device-service-zigbee-energy-scan-result.h"
 #include "events/device-service-status-event.h"
+#include "private/device/icDeviceEndpoint.h"
+#include "private/device/icDeviceMetadata.h"
+#include "private/device/icDeviceResource.h"
+#include "private/deviceServiceStatus.h"
 #include "zhal/zhal.h"
 
 

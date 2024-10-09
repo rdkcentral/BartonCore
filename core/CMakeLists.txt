@@ -13,7 +13,7 @@ include(BDSAddCMockaTest)
 include(BDSAddCppTest)
 
 file(GLOB_RECURSE BRTN_DS_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c)
-set(PRIVATE_API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/deprecated)
+set(PRIVATE_API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/private)
 
 # define source files
 # first the main source files (regardless of build options)

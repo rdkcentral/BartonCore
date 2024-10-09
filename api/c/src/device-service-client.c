@@ -25,9 +25,6 @@
  */
 
 #include "device-service-client.h"
-#include "deprecated/deviceService.h"
-#include "deprecated/deviceServicePrivate.h"
-#include "deprecated/subsystems/zigbee/zigbeeSubsystem.h"
 #include "device-service-discovery-filter.h"
 #include "device-service-endpoint.h"
 #include "device-service-initialize-params-container.h"
@@ -39,6 +36,9 @@
 #include "event/deviceEventProducer.h"
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
+#include "private/deviceService.h"
+#include "private/deviceServicePrivate.h"
+#include "private/subsystems/zigbee/zigbeeSubsystem.h"
 #include "provider/device-service-token-provider.h"
 
 G_DEFINE_QUARK(b - device - service - client - error - quark, b_device_service_client_error)
