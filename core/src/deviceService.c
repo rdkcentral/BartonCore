@@ -31,6 +31,7 @@
 #include "deviceDescriptor.h"
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
+#include "icConfig/storage.h"
 #include "provider/device-service-property-provider.h"
 #include <curl/curl.h>
 #include <glib.h>
@@ -1551,23 +1552,6 @@ static void stopMainLoop(void)
     g_main_loop_unref(g_steal_pointer(&eventLoop));
 }
 
-// TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
-// TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
-//       callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
-/**
- * Start up the device service. Drivers and subsystems have a complex lifecycle:
- * 1. Load drivers (driverManagerInitialize) (sync)
- * 2. Init subsystems (sync + async). Subsystems not ready until async readyForDevices callback received
- * 3. Start drivers. This may occur before subsystems are ready for devices. Subsystems MUST be able to support
- *    DeviceDriver::startup immediately after Subsystem::initialize()
- * 4. Async wait for subsystemManager to signal subsystemManagerReadyForDevicesCallback: all drivers started and all
- * subsystem hardware (e.g., Zigbee network) is ready. When there are no subsystems, this is still called after all
- * drivers are started. Once ready for devices, a service status event is emitted to signal clients that they may use
- * devices.
- * 5. Run normal operations (indefinitely)
- * 6. Shutdown subsystems. Subsystems asynchronously become unready
- * 7. Stop device drivers; drivers receive DeviceDriver::shutdown()
- */
 bool deviceServiceInitialize(BDeviceServiceClient *service)
 {
     g_return_val_if_fail(service != NULL, false);
@@ -1590,6 +1574,37 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
 #ifdef HAVE_STORAGE_SET_CONFIG_PATH
     storageSetConfigPath(deviceServiceConfigDir);
 #endif
+
+    if (!jsonDatabaseInitialize())
+    {
+        icLogError(LOG_TAG, "Failed to initialize database.");
+        return false;
+    }
+}
+
+// TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
+// TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
+//       callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
+/**
+ * Start up the device service. Drivers and subsystems have a complex lifecycle:
+ * 1. Load drivers (driverManagerInitialize) (sync)
+ * 2. Init subsystems (sync + async). Subsystems not ready until async readyForDevices callback received
+ * 3. Start drivers. This may occur before subsystems are ready for devices. Subsystems MUST be able to support
+ *    DeviceDriver::startup immediately after Subsystem::initialize()
+ * 4. Async wait for subsystemManager to signal subsystemManagerReadyForDevicesCallback: all drivers started and all
+ * subsystem hardware (e.g., Zigbee network) is ready. When there are no subsystems, this is still called after all
+ * drivers are started. Once ready for devices, a service status event is emitted to signal clients that they may use
+ * devices.
+ * 5. Run normal operations (indefinitely)
+ * 6. Shutdown subsystems. Subsystems asynchronously become unready
+ * 7. Stop device drivers; drivers receive DeviceDriver::shutdown()
+ */
+bool deviceServiceStart(void)
+{
+    g_autoptr(BDeviceServiceClient) service = NULL;
+    mutexLock(&deviceServiceClientMutex);
+    service = g_object_ref(client);
+    mutexUnlock(&deviceServiceClientMutex);
 
     deviceEventProducerStartup(service);
 
@@ -1624,14 +1639,6 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
         sprintf(denylistPath, "%s/DenyList.xml", deviceServiceConfigDir);
 
         deviceDescriptorsInit(allowlistPath, denylistPath);
-
-        if (jsonDatabaseInitialize() != true)
-        {
-            icLogError(LOG_TAG, "Failed to initialize database.");
-            free(allowlistPath);
-            free(denylistPath);
-            return false;
-        }
 
         // Clean up any things that should not be
         deviceServiceScrubDevices();

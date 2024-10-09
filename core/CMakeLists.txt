@@ -251,7 +251,7 @@ if (BDS_ZIGBEE)
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/subsystems/zigbee/zigbeeSubsystemTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem deviceServiceGetDeviceDescriptorForDevice deviceServiceConfigurationGetFirmwareFileDir
             LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/public ${PRIVATE_API_INCLUDES}
+            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
     bds_add_cmocka_test(
@@ -262,7 +262,7 @@ if (BDS_ZIGBEE)
                 subsystemManagerRestoreConfig
                 openHomeCameraPreZilkerRestoreConfig
             LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${PRIVATE_API_INCLUDES}
+            INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
     bds_add_cmocka_test(
@@ -270,7 +270,7 @@ if (BDS_ZIGBEE)
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/deviceDrivers/zigbeeDriverCommonTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem
             LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/public ${PRIVATE_API_INCLUDES}
+            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
     bds_add_cmocka_test(
@@ -515,7 +515,7 @@ bds_add_glib_test(
 bds_add_glib_test(
     NAME device-service-utils-test
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-utils-test.c
-    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES}
+    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
     GLOG_DOMAIN BDeviceServiceUtilsTest
 )
 

@@ -39,6 +39,7 @@
 
 // TODO: These three shouldn't be public, just moving them here now for compiling deviceServiceMain on the zilker side
 bool deviceServiceInitialize(BDeviceServiceClient *service);
+bool deviceServiceStart(void);
 void deviceServiceShutdown();
 void allServicesAvailableNotify(void);
 

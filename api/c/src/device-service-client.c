@@ -32,12 +32,12 @@
 #include "device-service-zigbee-energy-scan-result.h"
 #include "device/icDeviceEndpoint.h"
 #include "deviceDiscoveryFilters.h"
+#include "deviceService.h"
 #include "deviceServiceConfiguration.h"
+#include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
-#include "private/deviceService.h"
-#include "private/deviceServicePrivate.h"
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
 #include "provider/device-service-token-provider.h"
 
@@ -73,6 +73,7 @@ static void b_device_service_client_class_init(BDeviceServiceClientClass *klass)
 
 static void b_device_service_client_init(BDeviceServiceClient *self)
 {
+    deviceServiceInitialize(self);
     self->fifteen_four_channel = 25;
 }
 
@@ -82,6 +83,7 @@ BDeviceServiceClient *b_device_service_client_new(BDeviceServiceInitializeParams
 
     BDeviceServiceClient *self = g_object_new(B_DEVICE_SERVICE_CLIENT_TYPE, NULL);
     self->initializeParams = g_object_ref(params);
+
     return self;
 }
 
@@ -96,7 +98,7 @@ gboolean b_device_service_client_start(BDeviceServiceClient *self)
 {
     g_return_val_if_fail(self != NULL, FALSE);
 
-    return deviceServiceInitialize(self) ? TRUE : FALSE;
+    return deviceServiceStart() ? TRUE : FALSE;
 }
 
 void b_device_service_client_stop(BDeviceServiceClient *self)

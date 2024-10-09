@@ -33,7 +33,6 @@
 #ifndef ZILKER_STORAGE_H
 #define ZILKER_STORAGE_H
 
-#include "icConfig/storage.h"
 #include <cjson/cJSON.h>
 #include <icConfig/backupUtils.h>
 #include <icTypes/icLinkedList.h>

@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 {
     bool rc = false;
 
-    setIcLogPriorityFilter(IC_LOG_ERROR);
+    setIcLogPriorityFilter(IC_LOG_DEBUG);
 
     g_autofree gchar *confDir = getDefaultConfigDirectory();
     g_autofree gchar *histFile = stringBuilder("%s/%s", confDir, HISTORY_FILE);

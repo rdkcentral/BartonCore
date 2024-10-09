@@ -23,9 +23,9 @@
  * Created by Thomas Lea on 3/10/16.
  */
 
+#include "deviceService.h"
 #include "deviceServiceConfiguration.h"
 #include "icUtil/stringUtils.h"
-#include "private/deviceService.h"
 #include "provider/device-service-property-provider.h"
 #define LOG_TAG     "deviceService"
 #define logFmt(fmt) "subsystemManager: %s - " fmt, __func__
