@@ -59,7 +59,6 @@ typedef enum
 
 typedef enum
 {
-
     ZIGBEE_CHANNEL_CHANGE_FAILED = 100,
     ZIGBEE_CHANNEL_CHANGE_NOT_ALLOWED,
     ZIGBEE_CHANNEL_CHANGE_INVALID_CHANNEL,
@@ -126,9 +125,17 @@ GQuark b_device_service_client_error_quark(void);
 
 /****************** Signals End **********************************/
 
+typedef enum
+{
+    B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS = 1,  // BDeviceServiceInitializeParamsContainer*
+
+    N_B_DEVICE_SERVICE_CLIENT_PROPERTIES
+} BDeviceServiceClientProperty;
+
+static const char *B_DEVICE_SERVICE_CLIENT_PROPERTY_NAMES[] = {NULL, "initialize-params"};
+
 /**
  * b_device_service_client_new
- *
  * @params: the BDeviceServiceInitializeParamsContainer instance containing injected implementations
  * of device service dependencies and configuration.
  *
@@ -378,7 +385,7 @@ guint8 b_device_service_client_change_zigbee_channel(BDeviceServiceClient *self,
                                                      GError **err);
 
 /**
- * b_device_service_client_get_devices_by_class
+ * b_device_service_client_get_devices_by_device_class
  * @self: the BDeviceServiceClient instance.
  * @deviceClass: the device class to search for.
  *
@@ -446,7 +453,7 @@ b_device_service_client_write_resource(BDeviceServiceClient *self, const gchar *
 /**
  * b_device_service_client_get_devices_by_subsystem
  * @self: the BDeviceServiceClient instance.
- * @deviceClass: the subsystem to search for.
+ * @subsystem: the subsystem to search for.
  *
  * @brief Get all devices within the given subsystem.
  *
@@ -593,7 +600,7 @@ gchar *b_device_service_client_zigbee_test(BDeviceServiceClient *self);
 /**
  * b_device_service_client_zigbee_energy_scan
  * @self: the BDeviceServiceClient instance.
- * @channels: List of guint8 types representing the set of channels to perform the scan on.
+ * @channels: (element-type guint8): List of guint8 types representing the set of channels to perform the scan on.
  *     - Channel values must be valid 802.15.4 channels [11-26].
  * @maxScanDuration: The maximum time to scan each channel in milliseconds.
  * @scanCount: The number of scans to perform on each channel.

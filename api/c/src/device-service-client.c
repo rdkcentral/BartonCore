@@ -29,7 +29,6 @@
 #include "device-service-endpoint.h"
 #include "device-service-initialize-params-container.h"
 #include "device-service-utils.h"
-#include "device-service-zigbee-energy-scan-result.h"
 #include "device/icDeviceEndpoint.h"
 #include "deviceDiscoveryFilters.h"
 #include "deviceService.h"
@@ -39,7 +38,6 @@
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
-#include "provider/device-service-token-provider.h"
 
 G_DEFINE_QUARK(b - device - service - client - error - quark, b_device_service_client_error)
 
@@ -48,11 +46,43 @@ struct _BDeviceServiceClient
     GObject parent_instance;
 
     BDeviceServiceInitializeParamsContainer *initializeParams;
-
-    uint8_t fifteen_four_channel;
 };
 
 G_DEFINE_TYPE(BDeviceServiceClient, b_device_service_client, G_TYPE_OBJECT)
+
+static GParamSpec *properties[N_B_DEVICE_SERVICE_CLIENT_PROPERTIES];
+
+static void
+b_device_service_client_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec)
+{
+    BDeviceServiceClient *self = B_DEVICE_SERVICE_CLIENT(object);
+
+    switch (property_id)
+    {
+        case B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS:
+            g_clear_object(&self->initializeParams);
+            self->initializeParams = g_value_dup_object(value);
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
+
+static void b_device_service_client_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec)
+{
+    BDeviceServiceClient *self = B_DEVICE_SERVICE_CLIENT(object);
+
+    switch (property_id)
+    {
+        case B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS:
+            g_value_set_object(value, self->initializeParams);
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
 
 static void b_device_service_client_finalize(GObject *object)
 {
@@ -63,27 +93,56 @@ static void b_device_service_client_finalize(GObject *object)
     G_OBJECT_CLASS(b_device_service_client_parent_class)->finalize(object);
 }
 
+static void b_device_service_client_constructed(GObject *object)
+{
+    BDeviceServiceClient *self = B_DEVICE_SERVICE_CLIENT(object);
+
+    G_OBJECT_CLASS(b_device_service_client_parent_class)->constructed(object);
+
+    // Constructed callback basically means the object has been created and
+    // constructor properties have been set.
+    deviceServiceInitialize(self);
+}
+
 static void b_device_service_client_class_init(BDeviceServiceClientClass *klass)
 {
     deviceEventProducerClassInit(klass);
 
     GObjectClass *objectClass = G_OBJECT_CLASS(klass);
     objectClass->finalize = b_device_service_client_finalize;
+    objectClass->constructed = b_device_service_client_constructed;
+    objectClass->set_property = b_device_service_client_set_property;
+    objectClass->get_property = b_device_service_client_get_property;
+
+    /**
+     * BDeviceServiceClient:initialize-params: (type BDeviceServiceInitializeParamsContainer)
+     *
+     * The initialize params for the BDeviceServiceClient
+     */
+    properties[B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS] =
+        g_param_spec_object(B_DEVICE_SERVICE_CLIENT_PROPERTY_NAMES[B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS],
+                            "Initialize Params",
+                            "The initialize params for the BDeviceServiceClient",
+                            B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_TYPE,
+                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+
+    g_object_class_install_properties(objectClass, N_B_DEVICE_SERVICE_CLIENT_PROPERTIES, properties);
 }
 
 static void b_device_service_client_init(BDeviceServiceClient *self)
 {
-    deviceServiceInitialize(self);
-    self->fifteen_four_channel = 25;
+    self->initializeParams = NULL;
 }
 
 BDeviceServiceClient *b_device_service_client_new(BDeviceServiceInitializeParamsContainer *params)
 {
     g_return_val_if_fail(params != NULL, NULL);
 
-    BDeviceServiceClient *self = g_object_new(B_DEVICE_SERVICE_CLIENT_TYPE, NULL);
-    self->initializeParams = g_object_ref(params);
-
+    BDeviceServiceClient *self =
+        g_object_new(B_DEVICE_SERVICE_CLIENT_TYPE,
+                     B_DEVICE_SERVICE_CLIENT_PROPERTY_NAMES[B_DEVICE_SERVICE_CLIENT_PROP_INITIALIZE_PARAMS],
+                     params,
+                     NULL);
     return self;
 }
 
