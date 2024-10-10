@@ -29,7 +29,7 @@ include(BDSFindPackage)
 # These are intended to be set at the project level as other cmake refer to them.
 set(GLIB_MIN_VERSION 2.70.2)
 set(CMOCKA_MIN_VERSION 1.1.5)
-set(CURL_MIN_VERSION 8.4.0)
+set(CURL_MIN_VERSION 7.82.0)
 set(GOOGLETEST_MIN_VERSION 1.14.0)
 set(OPENSSL_MIN_VERSION 1.1.1v)
 set(UUID_MIN_VERSION 1.0.3)
