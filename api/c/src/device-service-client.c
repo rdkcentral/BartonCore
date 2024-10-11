@@ -37,7 +37,10 @@
 #include "event/deviceEventProducer.h"
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icLinkedListFuncs.h"
+
+#ifdef BARTON_CONFIG_ZIGBEE
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
+#endif
 
 G_DEFINE_QUARK(b - device - service - client - error - quark, b_device_service_client_error)
 
@@ -530,6 +533,11 @@ gboolean b_device_service_change_resource_mode(BDeviceServiceClient *self, const
 guint8
 b_device_service_client_change_zigbee_channel(BDeviceServiceClient *self, guint8 channel, gboolean dryRun, GError **err)
 {
+#ifndef BARTON_CONFIG_ZIGBEE
+    g_set_error_literal(
+        err, B_DEVICE_SERVICE_CLIENT_ERROR, ZIGBEE_CHANNEL_CHANGE_NOT_ALLOWED, "Zigbee is not supported");
+    return 0;
+#else
     g_return_val_if_fail(self != NULL, 0);
     g_return_val_if_fail(err == NULL || *err == NULL, 0);
 
@@ -574,6 +582,7 @@ b_device_service_client_change_zigbee_channel(BDeviceServiceClient *self, guint8
         }
     }
     return channelChangeResponse.channelNumber;
+#endif
 }
 
 void b_device_service_process_device_descriptors(BDeviceServiceClient *self)
@@ -583,6 +592,7 @@ void b_device_service_process_device_descriptors(BDeviceServiceClient *self)
     deviceServiceProcessDeviceDescriptors();
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 gchar *b_device_service_client_zigbee_test(BDeviceServiceClient *self)
 {
     g_return_val_if_fail(self != NULL, NULL);
@@ -622,6 +632,7 @@ GList *b_device_service_client_zigbee_energy_scan(BDeviceServiceClient *self,
 
     return retVal;
 }
+#endif
 
 gboolean b_device_service_client_config_restore(BDeviceServiceClient *self, const gchar *tempRestoreDir)
 {

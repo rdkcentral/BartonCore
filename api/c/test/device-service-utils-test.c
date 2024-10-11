@@ -34,7 +34,11 @@
 #include "device/icDeviceResource.h"
 #include "deviceServiceStatus.h"
 #include "icTypes/icLinkedList.h"
+
+#ifdef BARTON_CONFIG_ZIGBEE
 #include "zhal/zhal.h"
+#endif
+
 #include <glib.h>
 
 static icDeviceResource resource = {.id = "resourceId",
@@ -71,11 +75,13 @@ static icDevice device = {.uuid = "deviceUuid",
                           .resources = NULL,
                           .metadata = NULL};
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static zhalEnergyScanResult zigbeeEnergyScanResult = {.channel = 14,
                                                       .maxRssi = -10,
                                                       .minRssi = -50,
                                                       .averageRssi = -30,
                                                       .score = 98};
+#endif
 
 static void verifyBDeviceServiceResource(BDeviceServiceResource *dsResource)
 {
@@ -249,6 +255,7 @@ static void verifyBDeviceServiceDevice(BDeviceServiceDevice *dsDevice)
     verifyBDeviceServiceMetadata(dsMetadata);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void verifyBDeviceServiceZigbeeEnergyScanResults(BDeviceServiceZigbeeEnergyScanResult *dsZigbeeEnergyScanResult)
 {
     g_assert_nonnull(dsZigbeeEnergyScanResult);
@@ -283,6 +290,7 @@ static void verifyBDeviceServiceZigbeeEnergyScanResults(BDeviceServiceZigbeeEner
     g_assert_cmpint(avgRssi, ==, zigbeeEnergyScanResult.averageRssi);
     g_assert_cmpuint(score, ==, zigbeeEnergyScanResult.score);
 }
+#endif
 
 static void test_convertIcDeviceEndpointToGObject(void)
 {
@@ -308,12 +316,14 @@ static void test_convertIcDeviceToGObject(void)
     verifyBDeviceServiceDevice(dsDevice);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void test_convertIcZigbeeEnergyScanResultToGObject(void)
 {
     g_autoptr(BDeviceServiceZigbeeEnergyScanResult) dsZigbeeEnergyScanResult =
         convertZhalEnergyScanResultToGObject(&zigbeeEnergyScanResult);
     verifyBDeviceServiceZigbeeEnergyScanResults(dsZigbeeEnergyScanResult);
 }
+#endif
 
 static void test_convertIcDeviceEndpointListToGList(void)
 {
@@ -351,6 +361,7 @@ static void test_convertIcDeviceMetadataListToGList(void)
     verifyBDeviceServiceMetadata(dsMetadata);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void test_convertIcZigbeeEnergyScanResultListToGList(void)
 {
     scoped_icLinkedListNofree *zigbeeEnergyScanResults = linkedListCreate();
@@ -363,6 +374,7 @@ static void test_convertIcZigbeeEnergyScanResultListToGList(void)
     BDeviceServiceZigbeeEnergyScanResult *dsZigbeeEnergyScanResult = g_list_first(dsZigbeeEnergyScanResults)->data;
     verifyBDeviceServiceZigbeeEnergyScanResults(dsZigbeeEnergyScanResult);
 }
+#endif
 
 static void test_convertResourceCachingPolicyToGObject(void)
 {
@@ -515,20 +527,22 @@ int main(int argc, char *argv[])
     g_test_add_func("/device-service-utils/convertIcDeviceResourceToGObject", test_convertIcDeviceResourceToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceMetadataToGObject", test_convertIcDeviceMetadataToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceToGObject", test_convertIcDeviceToGObject);
-    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultToGObject",
-                    test_convertIcZigbeeEnergyScanResultToGObject);
     g_test_add_func("/device-service-utils/convertIcDeviceEndpointListToGList",
                     test_convertIcDeviceEndpointListToGList);
     g_test_add_func("/device-service-utils/convertIcDeviceResourceListToGList",
                     test_convertIcDeviceResourceListToGList);
     g_test_add_func("/device-service-utils/convertIcDeviceMetadataListToGList",
                     test_convertIcDeviceMetadataListToGList);
-    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultListToGList",
-                    test_convertIcZigbeeEnergyScanResultListToGList);
     g_test_add_func("/device-service-utils/convertResourceCachingPolicyToGObject",
                     test_convertResourceCachingPolicyToGObject);
     g_test_add_func("/device-service-utils/convertDeviceServiceStatusToGObject",
                     test_convertDeviceServiceStatusToGObject);
+#ifdef BARTON_CONFIG_ZIGBEE
+    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultToGObject",
+                    test_convertIcZigbeeEnergyScanResultToGObject);
+    g_test_add_func("/device-service-utils/convertIcZigbeeEnergyScanResultListToGList",
+                    test_convertIcZigbeeEnergyScanResultListToGList);
+#endif
 
     // Run tests
     return g_test_run();

@@ -76,8 +76,12 @@
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icStringHashMap.h"
 #include "jsonHelper/jsonHelper.h"
+
+#ifdef BARTON_CONFIG_ZIGBEE
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
 #include "zhal/zhal.h"
+#endif
+
 #include <cmocka.h>
 #include <string.h>
 
@@ -155,10 +159,13 @@ checkBDeviceServiceZigbeePanIdAttackChangedEventContents(BDeviceServiceZigbeePan
 static bool checkBDeviceServiceZigbeeEnergyScanResultChannelContents(uint8_t *input, ArrayCompareParams *expected);
 static int checkBDeviceServiceDeviceDatabaseFailureEventContents(BDeviceServiceDeviceDatabaseFailureEvent *input,
                                                                  BDeviceServiceDeviceDatabaseFailureEvent *expected);
+
+#ifdef BARTON_CONFIG_ZIGBEE
 static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
                                                 uint8_t channel,
                                                 ChannelChangeResponse channelChangeResponse,
                                                 BDeviceServiceZigbeeChannelChangeError changeError);
+#endif
 
 // Wraps
 bool __wrap_deviceServiceInitialize(void);
@@ -191,7 +198,11 @@ bool __wrap_deviceServiceSetMetadata(const char *uri, const char *value);
 bool __wrap_deviceServiceGetMetadata(const char *uri, char **value);
 icLinkedList *__wrap_deviceServiceGetResourcesByUriPattern(char *uri);
 bool __wrap_deviceServiceChangeResourceMode(const char *uri, uint8_t newMode);
+
+#ifdef BARTON_CONFIG_ZIGBEE
 ChannelChangeResponse __wrap_zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun);
+#endif
+
 icLinkedList *__wrap_deviceServiceGetMetadataByUriPattern(const char *uriPattern);
 void __wrap_deviceServiceProcessDeviceDescriptors(void);
 char *__wrap_zhalTest(void);
@@ -379,6 +390,7 @@ static void *icMetadataLinkedListCloneFunction(void *input, void *context)
     return metadataClone((icDeviceMetadata *) input);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void *zhalEnergyScanResultsLinkedListCloneFunction(void *input, void *context)
 {
     (void) context;
@@ -398,6 +410,7 @@ static void *zhalEnergyScanResultsLinkedListCloneFunction(void *input, void *con
 
     return retVal;
 }
+#endif
 
 static void test_b_device_service_client_get_endpoints_by_profile(void **state)
 {
@@ -1625,6 +1638,7 @@ static void test_b_device_service_client_change_resource_mode(void **state)
     assert_true(result);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void test_b_device_service_client_change_zigbee_channel(void **state)
 {
     BDeviceServiceClient *client = *state;
@@ -1693,6 +1707,7 @@ static void test_b_device_service_client_change_zigbee_channel(void **state)
     assert_null(err);
     g_clear_error(&err);
 }
+#endif
 
 static void test_b_device_service_client_get_metadata_by_uri(void **state)
 {
@@ -1752,6 +1767,7 @@ static void test_b_device_service_client_get_metadata_by_uri(void **state)
     linkedListDestroy(metadatasClone, (linkedListItemFreeFunc) metadataDestroy);
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void test_b_device_service_client_zigbee_test(void **state)
 {
     BDeviceServiceClient *client = *state;
@@ -1880,6 +1896,7 @@ static void test_b_device_service_client_zigbee_energy_scan(void **state)
     free(channelsArray);
     free(arrayCompareParams);
 }
+#endif
 
 static void test_b_device_service_client_config_restore(void **state)
 {
@@ -4919,6 +4936,7 @@ static int checkBDeviceServiceDeviceDatabaseFailureEventContents(BDeviceServiceD
     return 1;
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
                                                 uint8_t channel,
                                                 ChannelChangeResponse channelChangeResponse,
@@ -4937,7 +4955,7 @@ static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
     assert_int_equal(err->code, changeError);
     g_clear_error(&err);
 }
-
+#endif
 
 bool __wrap_deviceServiceInitialize(void)
 {
@@ -5163,6 +5181,7 @@ bool __wrap_deviceServiceChangeResourceMode(const char *uri, u_int8_t newMode)
     return (bool) mock();
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 ChannelChangeResponse __wrap_zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
 {
     function_called();
@@ -5176,6 +5195,7 @@ ChannelChangeResponse __wrap_zigbeeSubsystemChangeChannel(uint8_t channel, bool 
 
     return mock;
 }
+#endif
 
 void __wrap_deviceServiceProcessDeviceDescriptors(void)
 {
@@ -5272,11 +5292,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_b_device_service_client_read_metadata),
         cmocka_unit_test(test_b_device_service_client_query_resources_by_uri),
         cmocka_unit_test(test_b_device_service_client_change_resource_mode),
-        cmocka_unit_test(test_b_device_service_client_change_zigbee_channel),
         cmocka_unit_test(test_b_device_service_client_get_metadata_by_uri),
         cmocka_unit_test(test_b_device_service_process_device_descriptors),
-        cmocka_unit_test(test_b_device_service_client_zigbee_test),
-        cmocka_unit_test(test_b_device_service_client_zigbee_energy_scan),
         cmocka_unit_test(test_b_device_service_client_config_restore),
         cmocka_unit_test(test_sendDiscoveryStartedEvent),
         cmocka_unit_test(test_sendRecoveryStartedEvent),
@@ -5301,6 +5318,11 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sendZigbeeInterferenceEvent),
         cmocka_unit_test(test_sendZigbeePanIdAttackChangedEvent),
         cmocka_unit_test(test_sendDeviceDatabaseFailureEvent),
+#ifdef BARTON_CONFIG_ZIGBEE
+        cmocka_unit_test(test_b_device_service_client_zigbee_test),
+        cmocka_unit_test(test_b_device_service_client_change_zigbee_channel),
+        cmocka_unit_test(test_b_device_service_client_zigbee_energy_scan),
+#endif
     };
 
     int retval = cmocka_run_group_tests(tests, setup_b_device_service_client, teardown_b_device_service_client);

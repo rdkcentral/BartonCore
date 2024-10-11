@@ -63,7 +63,11 @@
 #include <icUtil/stringUtils.h>
 #include <jsonHelper/jsonHelper.h>
 #include <resourceTypes.h>
+
+#ifdef BARTON_CONFIG_ZIGBEE
 #include <subsystems/zigbee/zigbeeSubsystem.h>
+#include "subsystems/zigbee/zigbeeEventTracker.h"
+#endif
 
 #ifdef BARTON_CONFIG_MATTER
 #include <subsystems/matter/matterSubsystem.h>
@@ -80,7 +84,6 @@
 #include "event/deviceEventProducer.h"
 #include "icUtil/systemCommandUtils.h"
 #include "subsystemManager.h"
-#include "subsystems/zigbee/zigbeeEventTracker.h"
 
 #define logFmt(fmt) "%s: " fmt, __func__
 #include <icLog/logging.h>

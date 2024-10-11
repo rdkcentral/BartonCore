@@ -38,7 +38,10 @@
 #include <icTypes/icHashMap.h>
 #include <pthread.h>
 #include <string.h>
+
+#ifdef BARTON_CONFIG_ZIGBEE
 #include <zhal/zhal.h>
+#endif
 
 #include "subsystemManager.h"
 

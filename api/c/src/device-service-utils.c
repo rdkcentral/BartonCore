@@ -169,6 +169,7 @@ BDeviceServiceDevice *convertIcDeviceToGObject(const icDevice *device)
     return retVal;
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 BDeviceServiceZigbeeEnergyScanResult *
 convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergyScanResult)
 {
@@ -199,6 +200,7 @@ convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergySca
 
     return retVal;
 }
+#endif
 
 GList *convertIcDeviceEndpointListToGList(const icLinkedList *endpoints)
 {
@@ -266,6 +268,7 @@ GList *convertIcDeviceMetadataListToGList(const icLinkedList *metadata)
     return retVal;
 }
 
+#ifdef BARTON_CONFIG_ZIGBEE
 GList *convertIcZigbeeEnergyScanResultListToGList(const icLinkedList *zigbeeEnergyScanResults)
 {
     GList *retVal = NULL;
@@ -287,6 +290,7 @@ GList *convertIcZigbeeEnergyScanResultListToGList(const icLinkedList *zigbeeEner
 
     return retVal;
 }
+#endif
 
 BDeviceServiceResourceCachingPolicy convertResourceCachingPolicyToGObject(ResourceCachingPolicy policy)
 {
