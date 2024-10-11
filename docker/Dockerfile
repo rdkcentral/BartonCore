@@ -37,7 +37,11 @@
 #    --build-arg BUILDER_UID=$(id -u) \
 #    -t barton_builder_$USER .
 
-FROM ubuntu:24.04
+###############################################################################
+# base stage which provides a base image which has packages to support basic
+# download functionality
+###############################################################################
+FROM ubuntu:24.04 AS base
 
 # Delete the default ubuntu docker user: it can cause issues with user id 1000 on the host.
 RUN touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu
@@ -58,8 +62,9 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 30 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20
 
 ###############################################################################
-# expands to allow for building of packages with common tools
+# expands the base stage to allow for building of packages with common tools
 ###############################################################################
+FROM base AS base_builder
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     autoconf \
     autoconf-archive \
@@ -98,6 +103,8 @@ RUN pip3 install --upgrade --break-system-packages \
 # be relied upon to provide the correct versions, these libraries must be built
 # from source.
 ###############################################################################
+FROM base_builder AS third_party_builder
+
 ARG LINENOISE_GIT_TAG="97d2850af13c339369093b78abe5265845d78220"
 ARG OTBR_GIT_TAG="790dc775144e33995cd1cb2c15b348849cacf737"
 
@@ -169,6 +176,7 @@ RUN cd /tmp && \
 # installing packages useful for development. This stage is primarily intended
 # for development purposes, i.e. a devcontainer in VSCode.
 ###############################################################################
+FROM third_party_builder AS user_builder
 
 # Install packages useful for development
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
