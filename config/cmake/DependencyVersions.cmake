@@ -53,5 +53,5 @@ bds_find_package(NAME libxml-2.0 MIN_VERSION ${XML_MIN_VERSION} REQUIRED)
 bds_find_package(NAME mbedcrypto MIN_VERSION ${MBEDCRYPTO_MIN_VERSION} REQUIRED)
 
 if (BDS_MATTER)
-    find_library(MATTER NAMES ${BDS_MATTER_LIB} REQUIRED)
+    find_library(MATTER NAMES ${BDS_MATTER_LIB} PATHS ${CMAKE_BINARY_DIR}/matter-install/lib REQUIRED)
 endif()
