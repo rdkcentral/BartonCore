@@ -288,13 +288,11 @@ bool Matter::Start()
 
         serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
 
-#if 0
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
             icError("Server::Init failed: %s", err.AsString());
             return false;
         }
-#endif
 
         serverIsInitialized = true;
     }
@@ -345,7 +343,14 @@ bool Matter::Start()
     }
     else
     {
-        icError("Failed to get WiFi credentials: [%d] %s", error->code, stringCoalesce(error->message));
+        if (error != NULL)
+        {
+            icError("Failed to get WiFi credentials: [%d] %s", error->code, stringCoalesce(error->message));
+        }
+        else
+        {
+            icError("Failed to get WiFi credentials");
+        }
     }
 
     return true;

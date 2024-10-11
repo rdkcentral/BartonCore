@@ -28,6 +28,7 @@
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
 #include "eventHandler.h"
+#include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
 #include <linenoise.h>
@@ -167,6 +168,11 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
     g_mkdir_with_parents(matterConfDir, DEFAULT_CONF_DIR_MODE);
     b_device_service_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
     b_device_service_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
+
+    g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider =
+        b_reference_network_credentials_provider_new();
+    b_device_service_initialize_params_container_set_network_credentials_provider(
+        params, B_DEVICE_SERVICE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
 
     return b_device_service_client_new(params);
 }
