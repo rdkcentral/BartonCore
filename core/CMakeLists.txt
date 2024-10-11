@@ -86,8 +86,9 @@ if (BDS_MATTER)
 
     pkg_check_modules(OPENSSL REQUIRED openssl)
 
-    list(APPEND XTRA_INCLUDES ${CMAKE_PREFIX_PATH}/include/matter ${OPENSSL_INCLUDE_DIRS})
+    list(APPEND XTRA_INCLUDES ${CMAKE_BINARY_DIR}/matter-install/include/matter ${OPENSSL_INCLUDE_DIRS})
     list(APPEND XTRA_LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES})
+    link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
 
 if (BDS_THREAD)
@@ -330,7 +331,7 @@ bds_add_cmocka_test(
 if (BDS_MATTER)
     bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
         LIBS brtnDeviceServiceStatic
-        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_PREFIX_PATH}/include/matter ${PRIVATE_API_INCLUDES}
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
     )
 

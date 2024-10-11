@@ -37,11 +37,7 @@
 #    --build-arg BUILDER_UID=$(id -u) \
 #    -t barton_builder_$USER .
 
-###############################################################################
-# base stage which provides a base image which has packages to support basic
-# download functionality
-###############################################################################
-FROM ubuntu:24.04 AS base
+FROM ubuntu:24.04
 
 # Delete the default ubuntu docker user: it can cause issues with user id 1000 on the host.
 RUN touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu
@@ -62,9 +58,8 @@ RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 30 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20
 
 ###############################################################################
-# expands the base stage to allow for building of packages with common tools
+# expands to allow for building of packages with common tools
 ###############################################################################
-FROM base AS base_builder
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
     autoconf \
     autoconf-archive \
@@ -103,8 +98,6 @@ RUN pip3 install --upgrade --break-system-packages \
 # be relied upon to provide the correct versions, these libraries must be built
 # from source.
 ###############################################################################
-FROM base_builder AS third_party_builder
-
 ARG LINENOISE_GIT_TAG="97d2850af13c339369093b78abe5265845d78220"
 ARG OTBR_GIT_TAG="790dc775144e33995cd1cb2c15b348849cacf737"
 
@@ -170,58 +163,12 @@ RUN cd /tmp && \
     rm -rf /tmp/linenoise
 
 ###############################################################################
-# matter begin
-# Dependencies: curl, openssl
-# Matter has a few git clone commands to private repos, so we need to get the ssh credentials
-# from the host machine. The docker builder cannot access the hosts $HOME folder by default, so
-# the home folder must be declared as an additional context in the docker build command.
-# See the example build command at the top of this file.
-
-# some parts of the build fail due to mount options on /tmp, so we use this for tmp and clean up later
-ARG SDK_TMP_DIR=/var/tmp
-
-RUN --mount=from=home,type=bind,source=.ssh,target=/root/.ssh \
-    mkdir -p ${SDK_TMP_DIR} && \
-    cd ${SDK_TMP_DIR} && \
-    git clone \
-    --branch 1.4-update-2 \
-    --depth 1 \
-    ssh://rdkgerrithub.stb.r53.xcal.tv:29418/comcast-matter/sdk && \
-    cd sdk && ./scripts/checkout_submodules.py --shallow --platform linux && \
-    cd third_party/comcast/config/zilker && \
-    cmake -B cmake-build-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DMATTER_CONF_DIR:PATH=${SDK_TMP_DIR}/matter-zilker && \
-    cmake --build cmake-build-debug && \
-    cd cmake-build-debug && \
-    make install && \
-    cd ${SDK_TMP_DIR}/sdk && \
-    git reset --hard
-
-# change the shell used for RUN commands to bash (affects the remainder of this file)
-SHELL ["/bin/bash", "-c"]
-
-# Build and install the Matter example apps for use as test targets
-RUN cd ${SDK_TMP_DIR}/sdk && \
-    export TMPDIR=${SDK_TMP_DIR} && \
-    export TERM=xterm && \
-    . ./scripts/activate.sh && \
-    ./scripts/build/build_examples.py --target linux-x64-light-rpc build && cp out/linux-x64-light-rpc/chip-lighting-app /usr/local/bin && \
-    ./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/chip-lock-app /usr/local/bin && \
-    ./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/thermostat-app /usr/local/bin && \
-    ./scripts/build/build_examples.py --target linux-x64-chip-tool build && cp out/linux-x64-chip-tool/chip-tool /usr/local/bin
-
-# clean up
-RUN rm -rf ${SDK_TMP_DIR}
-# matter end
-###############################################################################
-
-###############################################################################
 # User creation stage
 #
 # This stage is responsible for creating a non-root user within the image and
 # installing packages useful for development. This stage is primarily intended
 # for development purposes, i.e. a devcontainer in VSCode.
 ###############################################################################
-FROM third_party_builder AS user_builder
 
 # Install packages useful for development
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \

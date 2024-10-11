@@ -31,6 +31,7 @@ file(GLOB_RECURSE BRTN_DS_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 add_executable(brtn-ds-reference ${BRTN_DS_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
+target_link_options(brtn-ds-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
 target_link_libraries(brtn-ds-reference brtnDeviceServiceShared linenoise)
 
 bds_configure_glib()

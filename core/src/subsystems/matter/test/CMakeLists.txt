@@ -16,7 +16,7 @@ bds_add_cpp_test(NAME testMatterSDKTooling
                 LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil
                 INCLUDES ${CMAKE_SOURCE_DIR}/src
                          ${CMAKE_CURRENT_SOURCE_DIR}/..
-                         ${CMAKE_PREFIX_PATH}/include/matter
+                         ${CMAKE_BINARY_DIR}/matter-install/include/matter
                          ${PRIVATE_API_INCLUDES}
                 SOURCES ${TEST_SRC}
 )

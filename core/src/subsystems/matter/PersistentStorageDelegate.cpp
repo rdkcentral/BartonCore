@@ -39,7 +39,7 @@ extern "C" {
 
 #include "PersistentStorageDelegate.h"
 #include <cstring>
-#include <matter/platform/KeyValueStoreManager.h>
+#include <platform/KeyValueStoreManager.h>
 #include <system/SystemConfig.h>
 
 using namespace chip::DeviceLayer::PersistedStorage;
