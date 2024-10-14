@@ -1,0 +1,87 @@
+#
+#########################
+# Start of Commit Message
+#########################
+#
+# Header
+# <type>(<scope>): <subject>
+# ------- Try to limit to 50 Characters --------|
+
+
+# Body
+# --------------- Maximum line length is 72 Characters ---------------|
+
+
+# Footer
+
+#
+#
+#######################
+# End of Commit Message
+#######################
+#
+#
+#
+#
+# Barton Commit Message Format
+# =============================
+#
+# The following is a summary of the Barton commit message format, but
+# the full specification can be found at:
+# https://github.com/rdkcentral/BartonCore/blob/main/CONTRIBUTING.md#commit-message-format
+#
+# A Barton commit messages must be structured as follows:
+#
+# <header>
+# <BLANK LINE>
+# <body>
+# <BLANK LINE>
+# <footer>
+#
+# Where the header is mandatory and the body and footer are optional.
+#
+# Commit Message Header
+# ---------------------
+#
+# Header format:
+# <type>(<scope>): <subject>
+#
+# The header is composed of three sections:
+# 1. `type` - required
+# 2. `scope` - optional
+# 3. `subject` - required
+#
+# The following are the types that should be used:
+# - `build:` Modifications impacting the build system or external
+#            dependencies
+# - `ci:` Changes to our CI configuration files and scripts
+# - `docs:` Documentation only changes
+# - `feat:` A new feature
+# - `fix:` A bug fix
+# - `refactor:` A code change that neither fixes a bug nor adds a
+#               feature
+# - `revert:` A commit that reverts a previous commit
+# - `style:` Changes that do not affect the meaning of the code
+#            (white-space, formatting, missing semi-colons, etc)
+# - `test:` Adding missing tests or correcting existing tests
+#
+# Scopes can include device drivers, subsystems, documentation or
+# nothing at all.
+#
+# The subject is a distinct, succinct description of the change
+#
+# Commit Message Body
+# -------------------
+#
+# Explain in detail what was done in this commit and what this is
+# supposed to achieve. Wrap all lines at 72 characters.
+#
+# Commit Message Footer
+# ---------------------
+#
+# The footer is optional and may include details about breaking changes
+# and deprecations. It is also the appropriate section to reference
+# GitHub issues, Jira tickets, and other PRs that this commit closes or
+# relates to.
+#
+#
