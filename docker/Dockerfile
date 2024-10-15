@@ -24,14 +24,8 @@
 # Created by Kevin Funderburg on 09/11/2024
 #
 
-#
-# This build needs access to private repositories. Use the following build
-# command to create this image. Ensure that the $HOME folder includes the .ssh
-# folder with the necessary ssh credentials to access the private repositories.
-#
-# Build command:
+# Example build command:
 #    docker build \
-#    --build-context home=$HOME \
 #    --build-arg BUILDER_USER=$(id -u -n) \
 #    --build-arg BUILDER_GID=$(id -g) \
 #    --build-arg BUILDER_UID=$(id -u) \

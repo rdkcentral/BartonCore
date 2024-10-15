@@ -23,7 +23,6 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 docker build \
-    --build-context home=$HOME \
     --build-arg BUILDER_USER=$(id -u -n) \
     --build-arg BUILDER_GID=$(id -g) \
     --build-arg BUILDER_UID=$(id -u) \

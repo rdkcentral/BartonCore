@@ -45,10 +45,5 @@ echo "BUILDER_USER=$USER" > $OUTFILE
 echo "BUILDER_UID=$(id -u)" >> $OUTFILE
 echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 
-# The image build process requires access certain private repositories. Rather than forward the
-# SSH agent, we will mount the ~/.ssh directory for the builder. So save off the home directory
-# for the host so we can mount it during the build process
-echo "BUILDER_HOME=$HOME" >> $OUTFILE
-
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE

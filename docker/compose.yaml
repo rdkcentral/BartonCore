@@ -39,11 +39,6 @@ services:
             context: .
             dockerfile: Dockerfile
 
-            # Provide the hosts $HOME directory as an additional context to the builder so it can have
-            # access to the ssh directory.
-            additional_contexts:
-                - home=$BUILDER_HOME
-
             # This top level compose build target will set up the barton environment, but specifically exludes
             # non-root user creation. Non-root user creation is handled in the extended compose.devcontainer.yaml.
             # The primary reason to separate the two is to allow for a Barton image to be built
