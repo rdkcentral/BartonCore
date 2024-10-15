@@ -525,6 +525,7 @@ bds_add_cmocka_test(
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-client-test.c
     WRAPPED_FUNCTIONS
         deviceServiceInitialize
+        deviceServiceStart
         allServicesAvailableNotify
         deviceServiceShutdown
         deviceServiceGetEndpointsByProfile

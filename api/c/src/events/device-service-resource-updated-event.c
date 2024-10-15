@@ -88,10 +88,6 @@ static void b_device_service_resource_updated_event_set_property(GObject *object
     switch (property_id)
     {
         case B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROP_RESOURCE:
-            if (self->resource)
-            {
-                g_object_unref(self->resource);
-            }
             g_set_object(&self->resource, g_value_get_object(value));
             break;
         case B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROP_METADATA:

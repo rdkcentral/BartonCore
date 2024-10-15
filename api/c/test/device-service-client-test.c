@@ -168,7 +168,8 @@ static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
 #endif
 
 // Wraps
-bool __wrap_deviceServiceInitialize(void);
+bool __wrap_deviceServiceInitialize(BDeviceServiceClient *service);
+bool __wrap_deviceServiceStart(void);
 void __wrap_allServicesAvailableNotify(void);
 void __wrap_deviceServiceShutdown(void);
 icLinkedList *__wrap_deviceServiceGetEndpointsByProfile(const char *profile);
@@ -340,9 +341,11 @@ static int setup_b_device_service_client(void **state)
 {
     g_autoptr(BDeviceServiceInitializeParamsContainer) params = b_device_service_initialize_params_container_new();
 
-    *state = b_device_service_client_new(params);
-    will_return(__wrap_deviceServiceInitialize, true);
     expect_function_call(__wrap_deviceServiceInitialize);
+    will_return(__wrap_deviceServiceInitialize, true);
+    *state = b_device_service_client_new(params);
+    expect_function_call(__wrap_deviceServiceStart);
+    will_return(__wrap_deviceServiceStart, true);
     assert_true(b_device_service_client_start(*state));
 
     expect_function_call(__wrap_allServicesAvailableNotify);
@@ -4957,7 +4960,13 @@ static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
 }
 #endif
 
-bool __wrap_deviceServiceInitialize(void)
+bool __wrap_deviceServiceInitialize(BDeviceServiceClient *service)
+{
+    function_called();
+    return mock();
+}
+
+bool __wrap_deviceServiceStart(void)
 {
     function_called();
     return mock();
