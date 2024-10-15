@@ -22,7 +22,7 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 notice() {
-  echo "-- $0: $@"
+    echo "-- $0: $@"
 }
 
 set -e
@@ -32,23 +32,23 @@ EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 
 while getopts ":npe:t:d" opt; do
-  case ${opt} in
-  n) # process option n
-    INTERACTIVE_FLAGS=""
-    ;;
-  p) # pull docker
-    docker pull $IMAGE
-    ;;
-  e) # extra environment variables
-    EXTRA_ENV="${EXTRA_ENV} -e ${OPTARG}"
-    ;;
-  t) # Specific tag to use, otherwise 'latest'
-    TAG="${OPTARG}"
-    ;;
-  d) # add /dev volume mapping
-    DEV_VOL="-v /dev:/dev"
-    ;;
-  esac
+    case ${opt} in
+    n) # process option n
+        INTERACTIVE_FLAGS=""
+        ;;
+    p) # pull docker
+        docker pull $IMAGE
+        ;;
+    e) # extra environment variables
+        EXTRA_ENV="${EXTRA_ENV} -e ${OPTARG}"
+        ;;
+    t) # Specific tag to use, otherwise 'latest'
+        TAG="${OPTARG}"
+        ;;
+    d) # add /dev volume mapping
+        DEV_VOL="-v /dev:/dev"
+        ;;
+    esac
 done
 shift "$(($OPTIND - 1))"
 
@@ -59,11 +59,11 @@ DIR=$(pwd)
 EXTRA_VOLUMES="${DEV_VOL}"
 
 if [ -f /.dockerenv ]; then
-  CURR_CONTAINER=$(hostname)
-  VOLUMES_ARGS="--volumes-from $CURR_CONTAINER"
+    CURR_CONTAINER=$(hostname)
+    VOLUMES_ARGS="--volumes-from $CURR_CONTAINER"
 else
 
-  VOLUMES_ARGS="-v $DIR:$DIR
+    VOLUMES_ARGS="-v $DIR:$DIR
                  -v $HOME:$HOME
                  --mount type=tmpfs,destination=/tmp
                  $EXTRA_VOLUMES"
@@ -74,4 +74,4 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker run -u $USER --rm --name $CONTAINER_NAME $INTERACTIVE_FLAGS --privileged --cap-add SYS_PTRACE $VOLUMES_ARGS -w "$DIR" -e BUILDER_USER=$USER_ID -e BUILDER_UID=$(id -u) -e BUILDER_GID=$(id -g) $EXTRA_ENV $IMAGE $*
+docker run -u $USER --rm --name $CONTAINER_NAME $INTERACTIVE_FLAGS --privileged --cap-add SYS_PTRACE $VOLUMES_ARGS -w "$DIR" $EXTRA_ENV $IMAGE $*
