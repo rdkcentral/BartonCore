@@ -9,6 +9,6 @@ pushd ${MY_DIR}
 ./build-matter.sh
 
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBDS_MATTER_LIB=ZilkerMatter $@
-cmake --build build
+cmake --build build --parallel $(($(nproc) - 1))
 
 popd
