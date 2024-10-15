@@ -194,3 +194,8 @@ RUN groupadd --gid $BUILDER_GID $BUILDER_USER && \
     useradd --uid $BUILDER_UID --gid $BUILDER_GID -m $BUILDER_USER && \
     echo $BUILDER_USER ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$BUILDER_USER && \
     chmod 0440 /etc/sudoers.d/$BUILDER_USER
+
+USER $BUILDER_USER
+
+RUN pipx install stack-pr && \
+    pipx ensurepath
