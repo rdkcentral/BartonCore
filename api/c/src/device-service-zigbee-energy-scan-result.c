@@ -33,11 +33,11 @@ struct _BDeviceServiceZigbeeEnergyScanResult
 {
     GObject parent_instance;
 
-    guint8 channel; // the channel this result corresponds to
-    gint8 maxRssi;  // the maximum RSSI value
-    gint8 minRssi;  // the minimum RSSI value
-    gint8 avgRssi;  // the average RSSI value
-    guint32 score;  // A quantifier for how "good" the channel is.
+    guint channel; // the channel this result corresponds to
+    gint maxRssi;  // the maximum RSSI value
+    gint minRssi;  // the minimum RSSI value
+    gint avgRssi;  // the average RSSI value
+    guint score;   // A quantifier for how "good" the channel is.
 };
 
 G_DEFINE_TYPE(BDeviceServiceZigbeeEnergyScanResult, b_device_service_zigbee_energy_scan_result, G_TYPE_OBJECT)
@@ -167,7 +167,7 @@ static void b_device_service_zigbee_energy_scan_result_class_init(BDeviceService
                           "Score",
                           "A quantifier for how 'good' the channel is",
                           0,
-                          G_MAXUINT32,
+                          G_MAXUINT,
                           0,
                           G_PARAM_READWRITE);
 

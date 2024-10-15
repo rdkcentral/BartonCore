@@ -38,7 +38,7 @@ struct _BDeviceServiceEndpoint
     gchar *id;
     gchar *uri;
     gchar *profile;
-    guint8 profileVersion;
+    guint profileVersion;
     gchar *deviceUuid;
     gboolean enabled;
     GList *resources;

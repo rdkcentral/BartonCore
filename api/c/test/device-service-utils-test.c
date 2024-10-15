@@ -93,7 +93,7 @@ static void verifyBDeviceServiceResource(BDeviceServiceResource *dsResource)
     g_autofree gchar *resourceDeviceUuid = NULL;
     g_autofree gchar *resourceValue = NULL;
     g_autofree gchar *resourceType = NULL;
-    guint8 resourceMode = 0;
+    guint resourceMode = 0;
     BDeviceServiceResourceCachingPolicy resourceCachingPolicy = B_DEVICE_SERVICE_RESOURCE_CACHING_POLICY_NEVER;
 
     g_object_get(dsResource,
@@ -163,7 +163,7 @@ static void verifyBDeviceServiceEndpoint(BDeviceServiceEndpoint *dsEndpoint)
     g_autofree gchar *endpointId = NULL;
     g_autofree gchar *endpointUri = NULL;
     g_autofree gchar *endpointProfile = NULL;
-    guint8 endpointProfileVersion = 0;
+    guint endpointProfileVersion = 0;
     g_autofree gchar *endpointDeviceUuid = NULL;
     gboolean endpointEnabled = false;
     g_autolist(BDeviceServiceResource) endpointResources = NULL;
@@ -444,7 +444,7 @@ static void test_convertDeviceServiceStatusToGObject(void)
     g_list_free_full(searching_device_classes_test, g_free);
 
     // test discovery seconds
-    guint32 discovery_seconds = 0;
+    guint discovery_seconds = 0;
     g_object_get(converted_status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS],
                  &discovery_seconds,

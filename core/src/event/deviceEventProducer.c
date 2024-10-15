@@ -391,6 +391,7 @@ void sendDiscoveryStartedEvent(const icLinkedList *deviceClasses, uint16_t timeo
 {
     g_autoptr(GList) deviceClassesList = convertLinkedListToGListGeneric((icLinkedList *) deviceClasses);
 
+    guint timeout = timeoutSeconds;
     if (findOrphanedDevices)
     {
         g_autoptr(BDeviceServiceRecoveryStartedEvent) event = b_device_service_recovery_started_event_new();
@@ -400,7 +401,7 @@ void sendDiscoveryStartedEvent(const icLinkedList *deviceClasses, uint16_t timeo
                      deviceClassesList,
                      B_DEVICE_SERVICE_RECOVERY_STARTED_EVENT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_RECOVERY_STARTED_EVENT_PROP_TIMEOUT],
-                     timeoutSeconds,
+                     timeout,
                      NULL);
         g_signal_emit(service, signals[SIGNAL_RECOVERY_STARTED], 0, event);
     }
@@ -413,7 +414,7 @@ void sendDiscoveryStartedEvent(const icLinkedList *deviceClasses, uint16_t timeo
                      deviceClassesList,
                      B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_DISCOVERY_STARTED_EVENT_PROP_TIMEOUT],
-                     timeoutSeconds,
+                     timeout,
                      NULL);
         g_signal_emit(service, signals[SIGNAL_DISCOVERY_STARTED], 0, event);
     }
@@ -542,7 +543,7 @@ void sendDeviceAddedEvent(const char *uuid)
     {
         g_autofree gchar *uri = NULL;
         g_autofree gchar *deviceClass = NULL;
-        guint8 deviceClassVersion = 0;
+        guint deviceClassVersion = 0;
 
         g_object_get(device,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
@@ -578,7 +579,7 @@ void sendDeviceRecoveredEvent(const char *uuid)
     {
         g_autofree gchar *uri = NULL;
         g_autofree gchar *deviceClass = NULL;
-        guint8 deviceClassVersion = 0;
+        guint deviceClassVersion = 0;
 
         g_object_get(device,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
@@ -699,16 +700,18 @@ void sendZigbeeChannelChangedEvent(bool success, uint8_t currentChannel, uint8_t
 {
     g_autoptr(BDeviceServiceZigbeeChannelChangedEvent) event = b_device_service_zigbee_channel_changed_event_new();
 
+    guint current = currentChannel;
+    guint targeted = targetedChannel;
     g_object_set(event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CHANNEL_CHANGED],
                  success,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
-                 currentChannel,
+                 current,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],
-                 targetedChannel,
+                 targeted,
                  NULL);
 
     g_signal_emit(service, signals[SIGNAL_ZIGBEE_CHANNEL_CHANGED], 0, event);

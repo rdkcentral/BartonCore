@@ -36,7 +36,7 @@ struct _BDeviceServiceStatus
     GList *device_classes;
     BDeviceServiceDiscoveryType discovery_type;
     GList *searching_device_classes;
-    guint32 discovery_seconds;
+    guint discovery_seconds;
     gboolean ready_for_operation;
     gboolean ready_for_pairing;
     GHashTable *subsystems;
@@ -182,7 +182,7 @@ static void b_device_service_status_class_init(BDeviceServiceStatusClass *klass)
                           "Discovery Seconds",
                           "Discovery Seconds",
                           0,
-                          G_MAXUINT32,
+                          G_MAXUINT,
                           0,
                           G_PARAM_READWRITE);
 

@@ -31,6 +31,7 @@
 #include "device-service-resource.h"
 #include "device-service-status.h"
 #include "events/device-service-status-event.h"
+#include "glibconfig.h"
 #include "icTypes/icLinkedList.h"
 
 BDeviceServiceEndpoint *convertIcDeviceEndpointToGObject(const icDeviceEndpoint *endpoint)
@@ -44,6 +45,7 @@ BDeviceServiceEndpoint *convertIcDeviceEndpointToGObject(const icDeviceEndpoint 
         GList *resources = convertIcDeviceResourceListToGList(endpoint->resources);
         GList *metadata = convertIcDeviceMetadataListToGList(endpoint->metadata);
 
+        guint profileVersion = endpoint->profileVersion;
         g_object_set(retVal,
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
                      endpoint->id,
@@ -52,7 +54,7 @@ BDeviceServiceEndpoint *convertIcDeviceEndpointToGObject(const icDeviceEndpoint 
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
                      endpoint->profile,
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
-                     endpoint->profileVersion,
+                     profileVersion,
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
                      endpoint->deviceUuid,
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ENABLED],
@@ -78,6 +80,8 @@ BDeviceServiceResource *convertIcDeviceResourceToGObject(const icDeviceResource 
         BDeviceServiceResourceCachingPolicy cachingPolicy =
             convertResourceCachingPolicyToGObject(resource->cachingPolicy);
 
+        guint mode = resource->mode;
+        guint64 dateOfLastSyncMillis = resource->dateOfLastSyncMillis;
         g_object_set(retVal,
                      B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_ID],
                      resource->id,
@@ -92,9 +96,9 @@ BDeviceServiceResource *convertIcDeviceResourceToGObject(const icDeviceResource 
                      B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
                      resource->type,
                      B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_MODE],
-                     resource->mode,
+                     mode,
                      B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_DATE_OF_LAST_SYNC_MILLIS],
-                     resource->dateOfLastSyncMillis,
+                     dateOfLastSyncMillis,
                      NULL);
 
         if (cachingPolicy != 0)
@@ -146,13 +150,14 @@ BDeviceServiceDevice *convertIcDeviceToGObject(const icDevice *device)
         GList *resources = convertIcDeviceResourceListToGList(device->resources);
         GList *metadata = convertIcDeviceMetadataListToGList(device->metadata);
 
+        guint deviceClassVersion = device->deviceClassVersion;
         g_object_set(retVal,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
                      device->uuid,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
                      device->deviceClass,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
-                     device->deviceClassVersion,
+                     deviceClassVersion,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
                      device->uri,
                      B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER],
@@ -179,22 +184,27 @@ convertZhalEnergyScanResultToGObject(const zhalEnergyScanResult *zigbeeEnergySca
     {
         retVal = b_device_service_zigbee_energy_scan_result_new();
 
+        guint channel = zigbeeEnergyScanResult->channel;
+        gint maxRssi = zigbeeEnergyScanResult->maxRssi;
+        gint minRssi = zigbeeEnergyScanResult->minRssi;
+        gint averageRssi = zigbeeEnergyScanResult->averageRssi;
+        guint score = zigbeeEnergyScanResult->score;
         g_object_set(retVal,
                      B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROP_CHANNEL],
-                     zigbeeEnergyScanResult->channel,
+                     channel,
                      B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROP_RSSI_MAX],
-                     zigbeeEnergyScanResult->maxRssi,
+                     maxRssi,
                      B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROP_RSSI_MIN],
-                     zigbeeEnergyScanResult->minRssi,
+                     minRssi,
                      B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROP_RSSI_AVG],
-                     zigbeeEnergyScanResult->averageRssi,
+                     averageRssi,
                      B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES
                          [B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROP_SCORE],
-                     zigbeeEnergyScanResult->score,
+                     score,
                      NULL);
     }
 

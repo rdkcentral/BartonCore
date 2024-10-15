@@ -36,7 +36,7 @@ struct _BDeviceServiceDevice
 
     gchar *uuid;
     gchar *deviceClass;
-    uint8_t deviceClassVersion;
+    guint deviceClassVersion;
     gchar *uri;
     gchar *managingDeviceDriver;
     GList *endpoints;

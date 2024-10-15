@@ -90,7 +90,7 @@ static void test_property_access(BDeviceServiceEndpointTest *test, gconstpointer
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
                  G_MAXUINT8,
                  NULL);
-    guint8 profileVersion = 0;
+    guint profileVersion = 0;
     g_object_get(test->endpoint,
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
                  &profileVersion,

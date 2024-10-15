@@ -95,14 +95,14 @@ static void test_property_access(BDeviceServiceDeviceAddedEventTest *test, gcons
 
     g_assert_cmpstr(device_class_test, ==, device_class);
 
-    const guint8 device_class_version = 1;
+    guint device_class_version = 1;
     g_object_set(test->event,
                  B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],
                  device_class_version,
                  NULL);
 
-    guint8 device_class_version_test = 0;
+    guint device_class_version_test = 0;
     g_object_get(test->event,
                  B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_DEVICE_CLASS_VERSION],

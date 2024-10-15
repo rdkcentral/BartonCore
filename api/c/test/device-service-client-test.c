@@ -1858,11 +1858,11 @@ static void test_b_device_service_client_zigbee_energy_scan(void **state)
             BDeviceServiceZigbeeEnergyScanResult *self = (BDeviceServiceZigbeeEnergyScanResult *) curr->data;
             zhalEnergyScanResult *icResult = linkedListIteratorGetNext(iter);
 
-            guint8 dsChannel = 0;
-            gint8 dsMaxRssi = 0;
-            gint8 dsMinRssi = 0;
-            gint8 dsAverageRssi = 0;
-            guint32 dsScore = 0;
+            guint dsChannel = 0;
+            gint dsMaxRssi = 0;
+            gint dsMinRssi = 0;
+            gint dsAverageRssi = 0;
+            guint dsScore = 0;
 
             if (self)
             {
@@ -1942,7 +1942,7 @@ static void test_sendDiscoveryStartedEvent(void **state)
 {
     scoped_icLinkedListNofree *deviceClasses = NULL;
     g_autoptr(GList) deviceClassesGList = NULL;
-    uint16_t timeoutSeconds = 10;
+    guint timeoutSeconds = 10;
     g_autoptr(BDeviceServiceDiscoveryStartedEvent) comparisonFixture = b_device_service_discovery_started_event_new();
 
     expect_function_call(mockHandleDiscoveryStartedEvent);
@@ -2023,7 +2023,7 @@ static void test_sendRecoveryStartedEvent(void **state)
 {
     scoped_icLinkedListNofree *deviceClasses = NULL;
     g_autoptr(GList) deviceClassesGList = NULL;
-    uint16_t timeoutSeconds = 10;
+    guint timeoutSeconds = 10;
     g_autoptr(BDeviceServiceRecoveryStartedEvent) comparisonFixture = b_device_service_recovery_started_event_new();
 
     expect_function_call(mockHandleRecoveryStartedEvent);
@@ -2171,6 +2171,8 @@ static void test_sendDeviceServiceStatusEvent(void **state)
     g_autofree gchar *subsystemStatusJson = cJSON_Print(subsystemStatus);
     g_hash_table_insert(subsystems, strdup("zigbee"), strdup(subsystemStatusJson));
     g_autofree gchar *json2 = deviceServiceStatusToJson(statusFixture);
+
+    guint timeout = statusFixture->discoveryTimeoutSeconds;
     g_object_set(status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DEVICE_CLASSES],
                  deviceClasses,
@@ -2181,7 +2183,7 @@ static void test_sendDeviceServiceStatusEvent(void **state)
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_SEARCHING_DEVICE_CLASSES],
                  searchingDeviceClasses,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS],
-                 statusFixture->discoveryTimeoutSeconds,
+                 timeout,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_OPERATION],
                  statusFixture->isReadyForDeviceOperation,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_READY_FOR_PAIRING],
@@ -2771,7 +2773,7 @@ static void test_sendDeviceAddedEvent(void **state)
     const gchar *deviceUuid = "uuid";
     const gchar *deviceUri = "uri";
     const gchar *deviceClass = "deviceClass";
-    guint8 deviceClassVersion = 1;
+    guint deviceClassVersion = 1;
 
     g_autoptr(BDeviceServiceDeviceAddedEvent) comparisonFixture = b_device_service_device_added_event_new();
 
@@ -2823,7 +2825,7 @@ static void test_sendDeviceRecoveredEvent(void **state)
     const gchar *deviceUuid = "uuid";
     const gchar *deviceUri = "uri";
     const gchar *deviceClass = "deviceClass";
-    guint8 deviceClassVersion = 1;
+    guint deviceClassVersion = 1;
 
     g_autoptr(BDeviceServiceDeviceRecoveredEvent) comparisonFixture = b_device_service_device_recovered_event_new();
 
@@ -2906,13 +2908,14 @@ static void test_sendDeviceDiscoveryCompletedEvent(void **state)
     sendDeviceDiscoveryCompletedEvent(NULL, false);
 
     expect_function_call(mockHandleDeviceDiscoveryCompletedEvent);
+    guint deviceClassVersion = discoveredDevice.deviceClassVersion;
     g_object_set(deviceFixture,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
                  discoveredDevice.uuid,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
                  discoveredDevice.deviceClass,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
-                 discoveredDevice.deviceClassVersion,
+                 deviceClassVersion,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
                  discoveredDevice.uri,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER],
@@ -3316,8 +3319,8 @@ static void test_sendEndpointAddedEvent(void **state)
 static void test_sendZigbeeChannelChangedEvent(void **state)
 {
     gboolean channel_changed = true;
-    guint8 current_channel = 16;
-    guint8 targeted_channel = 16;
+    guint current_channel = 16;
+    guint targeted_channel = 16;
 
     // When channel is changed
     g_autoptr(BDeviceServiceZigbeeChannelChangedEvent) comparisonFixture =
@@ -3592,8 +3595,8 @@ static int checkBDeviceServiceDiscoveryStartedEventContents(BDeviceServiceDiscov
 {
     GList *inputDeviceClasses = NULL;
     GList *expectedDeviceClasses = NULL;
-    guint16 inputTimeoutSeconds = 0;
-    guint16 expectedTimeoutSeconds = 0;
+    guint inputTimeoutSeconds = 0;
+    guint expectedTimeoutSeconds = 0;
 
     g_object_get(
         input,
@@ -3628,8 +3631,8 @@ static int checkBDeviceServiceRecoveryStartedEventContents(BDeviceServiceRecover
 {
     GList *inputDeviceClasses = NULL;
     GList *expectedDeviceClasses = NULL;
-    guint16 inputTimeoutSeconds = 0;
-    guint16 expectedTimeoutSeconds = 0;
+    guint inputTimeoutSeconds = 0;
+    guint expectedTimeoutSeconds = 0;
 
     g_object_get(
         input,
@@ -3667,8 +3670,8 @@ static bool checkBDeviceServiceStatusContents(BDeviceServiceStatus *inputStatus,
     BDeviceServiceDiscoveryType expectedDiscoveryType = 0;
     GList *inputSearchingDeviceClasses = NULL;
     GList *expectedSearchingDeviceClasses = NULL;
-    guint32 inputDiscoverySeconds = 0;
-    guint32 expectedDiscoverySeconds = 0;
+    guint inputDiscoverySeconds = 0;
+    guint expectedDiscoverySeconds = 0;
     gboolean inputReadyForOperation = false;
     gboolean expectedReadyForOperation = false;
     gboolean inputReadyForPairing = false;
@@ -4110,8 +4113,8 @@ static int checkBDeviceServiceDeviceAddedEventContents(BDeviceServiceDeviceAdded
     g_autofree gchar *expectedUri = NULL;
     g_autofree gchar *inputDeviceClass = NULL;
     g_autofree gchar *expectedDeviceClass = NULL;
-    guint8 inputDeviceClassVersion = 0;
-    guint8 expectedDeviceClassVersion = 0;
+    guint inputDeviceClassVersion = 0;
+    guint expectedDeviceClassVersion = 0;
 
     g_object_get(
         input,
@@ -4158,8 +4161,8 @@ static int checkBDeviceServiceDeviceRecoveredEventContents(BDeviceServiceDeviceR
     g_autofree gchar *expectedUri = NULL;
     g_autofree gchar *inputDeviceClass = NULL;
     g_autofree gchar *expectedDeviceClass = NULL;
-    guint8 inputDeviceClassVersion = 0;
-    guint8 expectedDeviceClassVersion = 0;
+    guint inputDeviceClassVersion = 0;
+    guint expectedDeviceClassVersion = 0;
 
     g_object_get(
         input,
@@ -4244,8 +4247,8 @@ static int checkBDeviceServiceDeviceContents(BDeviceServiceDevice *input, BDevic
     g_autofree gchar *expectedUuid = NULL;
     g_autofree gchar *inputDeviceClass = NULL;
     g_autofree gchar *expectedDeviceClass = NULL;
-    guint8 inputDeviceClassVersion = 0;
-    guint8 expectedDeviceClassVersion = 0;
+    guint inputDeviceClassVersion = 0;
+    guint expectedDeviceClassVersion = 0;
     g_autofree gchar *inputUri = NULL;
     g_autofree gchar *expectedUri = NULL;
     g_autofree gchar *inputManagingDeviceDriver = NULL;
@@ -4360,8 +4363,8 @@ static int checkBDeviceServiceEndpointContents(BDeviceServiceEndpoint *input, BD
     g_autofree gchar *expectedUri = NULL;
     g_autofree gchar *inputProfile = NULL;
     g_autofree gchar *expectedProfile = NULL;
-    guint8 inputProfileVersion = 0;
-    guint8 expectedProfileVersion = 0;
+    guint inputProfileVersion = 0;
+    guint expectedProfileVersion = 0;
     g_autofree gchar *inputDeviceUuid = NULL;
     g_autofree gchar *expectedDeviceUuid = NULL;
     gboolean inputEnabled = FALSE;
@@ -4467,8 +4470,8 @@ static int checkBDeviceServiceResourceContents(BDeviceServiceResource *input, BD
     g_autofree gchar *expectedValue = NULL;
     g_autofree gchar *inputType = NULL;
     g_autofree gchar *expectedType = NULL;
-    guint8 inputMode = 0;
-    guint8 expectedMode = 0;
+    guint inputMode = 0;
+    guint expectedMode = 0;
     BDeviceServiceResourceCachingPolicy inputCachingPolicy = 0;
     BDeviceServiceResourceCachingPolicy expectedCachingPolicy = 0;
     guint64 inputDateOfLastSyncMillis = 0;

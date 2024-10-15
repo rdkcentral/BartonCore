@@ -67,14 +67,14 @@ static void test_property_access(BDeviceServiceZigbeeChannelChangedEventTest *te
 
     g_assert_cmpint(channel_changed_test, ==, channel_changed);
 
-    const guint8 current_channel = 25;
+    guint current_channel = 25;
     g_object_set(test->event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
                  current_channel,
                  NULL);
 
-    guint8 current_channel_test = 0;
+    guint current_channel_test = 0;
     g_object_get(test->event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_CURRENT_CHANNEL],
@@ -83,14 +83,14 @@ static void test_property_access(BDeviceServiceZigbeeChannelChangedEventTest *te
 
     g_assert_cmpint(current_channel, ==, current_channel_test);
 
-    const guint8 targeted_channel = 16;
+    guint targeted_channel = 16;
     g_object_set(test->event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],
                  targeted_channel,
                  NULL);
 
-    guint8 targeted_channel_test = 0;
+    guint targeted_channel_test = 0;
     g_object_get(test->event,
                  B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_ZIGBEE_CHANNEL_CHANGED_EVENT_PROP_TARGETED_CHANNEL],

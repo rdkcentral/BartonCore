@@ -35,7 +35,7 @@ struct _BDeviceServiceDiscoveryStartedEvent
     BDeviceServiceEvent parent_instance;
 
     GList *device_classes;
-    guint16 timeout;
+    guint timeout;
 };
 
 G_DEFINE_TYPE(BDeviceServiceDiscoveryStartedEvent,

@@ -110,7 +110,7 @@ static void test_property_access(BDeviceServiceStatusTest *test, gconstpointer u
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS],
                  G_MAXUINT,
                  NULL);
-    guint32 discovery_seconds = 0;
+    guint discovery_seconds = 0;
     g_object_get(test->status,
                  B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_DISCOVERY_SECONDS],
                  &discovery_seconds,

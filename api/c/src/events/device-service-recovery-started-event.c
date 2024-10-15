@@ -32,7 +32,7 @@ struct _BDeviceServiceRecoveryStartedEvent
     BDeviceServiceEvent parent_instance;
 
     GList *device_classes;
-    guint16 timeout;
+    guint timeout;
 };
 
 G_DEFINE_TYPE(BDeviceServiceRecoveryStartedEvent, b_device_service_recovery_started_event, B_DEVICE_SERVICE_EVENT_TYPE);

@@ -33,7 +33,7 @@ struct _BDeviceServiceDeviceAddedEvent
     gchar *uuid;
     gchar *uri;
     gchar *device_class;
-    guint8 device_class_version;
+    guint device_class_version;
 };
 
 G_DEFINE_TYPE(BDeviceServiceDeviceAddedEvent, b_device_service_device_added_event, B_DEVICE_SERVICE_EVENT_TYPE);

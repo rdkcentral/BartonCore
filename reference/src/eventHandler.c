@@ -172,7 +172,7 @@ static void deviceAddedHandler(BDeviceServiceClient *source, BDeviceServiceDevic
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *uri = NULL;
     g_autofree gchar *deviceClass = NULL;
-    gint deviceClassVersion = 0;
+    guint deviceClassVersion = 0;
     g_object_get(
         G_OBJECT(event),
         B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_ADDED_EVENT_PROP_UUID],
@@ -208,7 +208,7 @@ static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEnd
     g_autofree gchar *id = NULL;
     g_autofree gchar *uri = NULL;
     g_autofree gchar *profile = NULL;
-    gint profileVersion = 0;
+    guint profileVersion = 0;
     g_object_get(G_OBJECT(endpoint),
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
                  &deviceUuid,

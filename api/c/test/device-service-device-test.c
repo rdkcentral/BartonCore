@@ -81,7 +81,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
                  G_MAXUINT8,
                  NULL);
-    guint8 deviceClassVersion = 0;
+    guint deviceClassVersion = 0;
     g_object_get(test->device,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
                  &deviceClassVersion,

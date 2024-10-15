@@ -31,8 +31,8 @@ struct _BDeviceServiceZigbeeChannelChangedEvent
     BDeviceServiceEvent parent_instance;
 
     gboolean channel_changed;
-    guint8 current_channel;
-    guint8 targeted_channel;
+    guint current_channel;
+    guint targeted_channel;
 };
 
 G_DEFINE_TYPE(BDeviceServiceZigbeeChannelChangedEvent,

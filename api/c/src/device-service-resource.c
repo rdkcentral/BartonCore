@@ -37,7 +37,7 @@ struct _BDeviceServiceResource
     gchar *device_uuid;
     gchar *value;
     gchar *type;
-    guint8 mode;
+    guint mode;
     BDeviceServiceResourceCachingPolicy caching_policy;
     guint64 date_of_last_sync_millis;
 };
