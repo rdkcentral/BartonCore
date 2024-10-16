@@ -171,6 +171,10 @@ bds_option(NAME BDS_SETUP_WIZARD
 bds_option(NAME BDS_SUPPORT_SOFTWARE_WATCHDOG
            DEFINITION BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
            DESCRIPTION "Support for zigbee watchdog feature using the software watchdog library.")
+bds_int_option(NAME BDS_SOFTWARE_WATCHDOG_TROUBLE_CODE_ZIGBEE_CORE
+              DEFINITION BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
+              DESCRIPTION "The trouble code to use when reporting a zigbee core failure to the software watchdog library."
+              VALUE 11)
 bds_option(NAME BDS_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")

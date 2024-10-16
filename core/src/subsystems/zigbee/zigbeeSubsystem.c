@@ -484,16 +484,16 @@ static void waitForInitialZigbeeCoreStartup(void)
             scoped_generic char *troubleString =
                 stringBuilder("ZigbeeCore was not responding at startup. %s", reasonString);
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-#ifdef DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG
+#ifdef BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
             if (softwareWatchdogImmediateRecoverServiceWithTrouble(
                     ZIGBEE_CORE_PROCESS_NAME,
                     ZigbeeCoreRecoveryEntityLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT],
                     troubleString,
-                    DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG) == false)
+                    BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG) == false)
             {
                 icLogError(LOG_TAG, "immediate zigbeeCore recovery request failed");
             }
-#endif // DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG
+#endif // BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
 #endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
             zigbeeCoreRestartCount++;
         }
@@ -4826,12 +4826,11 @@ static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity ent
 
     const char *reasonString = zigbeeCoreRecoveryReasonLabels[entity];
     scoped_generic char *troubleString = stringBuilder("ZigbeeCore was not responding. %s", reasonString);
-#ifdef DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG
-
+#ifdef BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
     // configure the software watchdog to first create a software trouble with diag
     icSoftwareWatchdogRecoveryActionStep *step = softwareWatchdogRecoveryActionStepCreateWithTrouble(
-        DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG, troubleString, true, numOfFailuresToRestart);
-#endif // DIAG_SOFTWARE_TROUBLE_ZIGBEE_CORE_WATCHDOG`
+        BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG, troubleString, true, numOfFailuresToRestart);
+#endif // BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG`
     if (entity == ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT)
     {
         context = softwareWatchdogContextCreate(
