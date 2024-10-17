@@ -2379,7 +2379,7 @@ icLinkedList *__wrap_storageGetKeys(const char *namespace)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s", __FUNCTION__, namespace);
 
-    void *mockReturn = (void *) mock();
+    void *mockReturn = mock_type(void *);
     if (mockReturn != NULL && strcmp(mockReturn, USE_DUMMY_STORAGE) == 0)
     {
         icLogDebug(LOG_TAG, "%s: namespace=%s - getting keys from memory storage", __FUNCTION__, namespace);
@@ -2388,14 +2388,14 @@ icLinkedList *__wrap_storageGetKeys(const char *namespace)
     }
     else
     {
-        return (icLinkedList *) mockReturn;
+        return mock_type(icLinkedList *);
     }
 }
 
 bool __wrap_storageDelete(const char *namespace, const char *key)
 {
     icLogDebug(LOG_TAG, "%s: namespace=%s, key=%s", __FUNCTION__, namespace, key);
-    void *mockReturn = (void *) mock();
+    void *mockReturn = mock_type(void *);
     if (mockReturn != NULL && strcmp(mockReturn, USE_DUMMY_STORAGE) == 0)
     {
         icLogDebug(LOG_TAG, "%s: namespace=%s - deleting from memory storage", __FUNCTION__, namespace);

@@ -343,7 +343,7 @@ icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem)
 {
     icLogDebug(LOG_TAG, "%s: subsystem=%s", __FUNCTION__, subsystem);
 
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 

@@ -4991,7 +4991,7 @@ icLinkedList *__wrap_deviceServiceGetEndpointsByProfile(const char *profile)
 {
     function_called();
     check_expected(profile);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5018,7 +5018,7 @@ bool __wrap_deviceServiceDiscoverStop(icLinkedList *deviceClasses)
 DeviceServiceStatus *__wrap_deviceServiceGetStatus(void)
 {
     function_called();
-    DeviceServiceStatus *mock = (DeviceServiceStatus *) mock();
+    DeviceServiceStatus *mock = mock_type(DeviceServiceStatus *);
 
     g_return_val_if_fail(mock != NULL, NULL);
 
@@ -5031,7 +5031,7 @@ icDevice *__wrap_deviceServiceGetDevice(const char *uuid)
 {
     function_called();
     check_expected(uuid);
-    icDevice *mock = (icDevice *) mock();
+    icDevice *mock = mock_type(icDevice *);
     return mock;
 }
 
@@ -5056,7 +5056,7 @@ icDeviceEndpoint *__wrap_deviceServiceGetEndpointById(const char *deviceUuid, co
     function_called();
     check_expected(deviceUuid);
     check_expected(endpointId);
-    icDeviceEndpoint *mock = (icDeviceEndpoint *) mock();
+    icDeviceEndpoint *mock = mock_type(icDeviceEndpoint *);
     return mock;
 }
 
@@ -5064,14 +5064,14 @@ icDeviceEndpoint *__wrap_deviceServiceGetEndpointByUri(const char *uri)
 {
     function_called();
     check_expected(uri);
-    icDeviceEndpoint *mock = (icDeviceEndpoint *) mock();
+    icDeviceEndpoint *mock = mock_type(icDeviceEndpoint *);
     return mock;
 }
 
 icLinkedList *__wrap_deviceServiceGetAllDevices()
 {
     function_called();
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5079,7 +5079,7 @@ icLinkedList *__wrap_deviceServiceGetDevicesByDeviceClass(const char *deviceClas
 {
     function_called();
     check_expected(deviceClass);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5087,7 +5087,7 @@ icDeviceResource *__wrap_deviceServiceGetResourceByUri(const char *uri)
 {
     function_called();
     check_expected(uri);
-    icDeviceResource *mock = (icDeviceResource *) mock();
+    icDeviceResource *mock = mock_type(icDeviceResource *);
     return mock;
 }
 
@@ -5095,7 +5095,7 @@ icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem)
 {
     function_called();
     check_expected(subsystem);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5103,7 +5103,7 @@ icDevice *__wrap_deviceServiceGetDeviceByUri(const char *uri)
 {
     function_called();
     check_expected(uri);
-    icDevice *mock = (icDevice *) mock();
+    icDevice *mock = mock_type(icDevice *);
     return mock;
 }
 
@@ -5133,7 +5133,7 @@ bool __wrap_deviceServiceGetSystemProperty(const char *key, char **value)
 {
     function_called();
     check_expected(key);
-    *value = (char *) mock();
+    *value = mock_type(char *);
     return *value != NULL;
 }
 
@@ -5141,7 +5141,7 @@ bool __wrap_deviceServiceGetMetadata(const char *uri, char **value)
 {
     function_called();
     check_expected(uri);
-    *value = (char *) mock();
+    *value = mock_type(char *);
     return *value != NULL;
 }
 
@@ -5173,7 +5173,7 @@ icLinkedList *__wrap_deviceServiceGetResourcesByUriPattern(char *uri)
 {
     function_called();
     check_expected(uri);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5181,7 +5181,7 @@ icLinkedList *__wrap_deviceServiceGetMetadataByUriPattern(const char *uri)
 {
     function_called();
     check_expected(uri);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 
@@ -5218,7 +5218,7 @@ void __wrap_deviceServiceProcessDeviceDescriptors(void)
 char *__wrap_zhalTest(void)
 {
     function_called();
-    return (char *) mock();
+    return mock_type(char *);
 }
 
 icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
@@ -5231,7 +5231,7 @@ icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToS
     check_expected(numChannelsToScan);
     check_expected(scanDurationMillis);
     check_expected(numScans);
-    icLinkedList *result = (icLinkedList *) mock();
+    icLinkedList *result = mock_type(icLinkedList *);
     return result;
 }
 

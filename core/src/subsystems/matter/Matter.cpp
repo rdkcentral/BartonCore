@@ -466,7 +466,7 @@ CHIP_ERROR Matter::InitCommissioner()
     chip::MutableByteSpan rcacSpan(rcac.Get(), chip::Controller::kMaxCHIPDERCertLength);
 
     CHIP_ERROR chainAvailable = LoadNOCChain(rcacSpan, icacSpan, nocSpan);
-    bool fabricFound;
+    bool fabricFound = false;
 
     if (ChipError::IsSuccess(chainAvailable))
     {
