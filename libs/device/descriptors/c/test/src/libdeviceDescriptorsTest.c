@@ -25,13 +25,15 @@
 //
 
 #include "../../src/parser.h"
-#include <cmocka.h>
 #include <deviceDescriptors.h>
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
-#include <setjmp.h>
 #include <stdio.h>
 #include <versionUtils.h>
+
+// cmocka and its dependencies
+#include <setjmp.h>
+#include <cmocka.h>
 
 /*
  * This tests the internal parser to ensure it parses all device descriptors from AllowList.xml

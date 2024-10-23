@@ -307,6 +307,7 @@ static void test_copyFileByPath_fread_fail(void **state)
     will_return_always(__wrap_feof, pass);
     will_return_always(__wrap_ferror, fail);
     will_return_always(__wrap_fread, fail);
+    will_return(__wrap_fflush, pass);
 
     // copying file
     result = copyFileByPath(sourcePath, destPath);
@@ -323,6 +324,7 @@ static void test_copyFileByPath_fwrite_fail(void **state)
     will_return_always(__wrap_fread, pass);
     will_return(__wrap_ferror, pass);
     will_return(__wrap_fwrite, fail);
+    will_return(__wrap_fflush, pass);
 
     // copying file
     result = copyFileByPath(sourcePath, destPath);
@@ -340,6 +342,7 @@ static void test_copyFileByPath_fsync_fail(void **state)
     will_return_always(__wrap_fwrite, pass);
     will_return_always(__wrap_ferror, pass);
     will_return_always(__wrap_fsync, fail);
+    will_return(__wrap_fflush, pass);
 
     // copying file
     result = copyFileByPath(sourcePath, destPath);

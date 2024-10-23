@@ -123,6 +123,6 @@ namespace zilker
         chip::EndpointId defaultEndpoint;
         chip::ClusterId defaultCluster;
         uint16_t reportFloorSecs = UINT8_MAX;
-        uint16_t reportCeilSecs;
+        uint16_t reportCeilSecs = 0;
     };
 } // namespace zilker

@@ -18,8 +18,7 @@ if ("${CMAKE_PREFIX_PATH}" STREQUAL "")
     set(CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX})
 endif()
 
-# FIXME: These tastes don't work right yet.
-# enable_testing()
+enable_testing()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/config/cmake/modules")
 include("${PROJECT_SOURCE_DIR}/config/cmake/options.cmake")
