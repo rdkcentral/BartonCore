@@ -1,27 +1,51 @@
-# Device Service Overview
-In Zilker, Device Service is responsible for the management and interactions
+# Barton Device Service Overview
+In Barton, Device Service is responsible for the management and interactions
 with all devices.  Devices can connect with various protocols and technologies
-including Zigbee and OpenHome (with BLE, Thread, CHIP, and others
-possible in the future).  Note that much of the discussion in this
+including Zigbee, Matter, and OpenHome. Note that much of the discussion in this
 documentation is about Zigbee devices, but many of the concepts applies to
 devices on other technologies.  Devices belong to a Device Class which defines
-the type of device.  Some examples of Device Classes are PIM, Light, Door Lock,
+the type of device.  Some examples of Device Classes are Camera, Light, Door Lock,
 and Sensor (and many others).  Each Device Class supports one or more
 endpoints, each of which supports an Endpoint Profile.  An endpoint on a device
 can be thought of as a port number in networking.  An endpoint provides a
 logical set of functionality such as a light switch.  For example, a single
-physical device such as a PIM would have endpoints for a siren, a keypad, and
-several sensors.
+physical device such as a refrigerator could have endpoints for temperature,
+lights, door sensors, etc.
 
 Devices are exposed to clients as a set of resources that can be read, written,
 and executed depending on their type and purpose.  More details on how devices
 are composed and how to interact with their resources are below.
 
-Device Service's log file can be found in /tmp/logs/xhDeviceService.log on
-devices other than gateways.  For gateways the entire stack (except ZigbeeCore)
-log to /rdklogs/logs/ZilkerLog.txt.
-
 ![arch](docs/device-service-arch.png)
+
+# Hardware Dependencies
+Device Service can function without any hardware dependencies, however its
+capabilities might be reduced.  Below are the common potential hardware
+dependencies depending on configuration.
+## Zigbee
+If Device Service is built with Zigbee support there should be an implementation of
+ZHAL, which is the Zigbee Hardware Abstraction Layer.  This HAL is an atypical HAL
+due to the high level application capabilities it is required to provide.  The intent
+of ZHAL is to enable portability to different Zigbee stack and silicon vendors.  These
+stacks typically provide high level features such as OTA software updating, however if
+a stack does not provide these features, the ZHAL implementor must.
+## Thread
+If Device Service is built with Thread support it will backup and restore configuration
+for a local OpenThread Border Router instance.  Additionally it will retrieve and use
+the associated Thread network credentials when commissioning Matter over Thread devices.
+Additional capabilities such as detailed Thread network health monitoring, Thread 1.4
+ephemeral code commissioning and others are anticipated enhanceents.  Device Service
+expects an OpenThread API over dbus.
+## Bluetooth/BLE
+If Device Service is built with BLE support, Matter devices may be commissioned directly
+by Device Service for Thread or Wi-Fi Operational Network access.  Device Service, the
+Matter stack actually, expects a Bluez API over dbus.
+## Matter
+Matter has no hardware requirements for basic functionality since it is an IPv6 based
+specification.  It can make use of Thread and BLE for commissioning of new devices,
+but after a device has been commissioned for the first time (by any admin/Fabric),
+subsequent commissioning is performed only over IPv6.
+
 
 # Key Concepts
 ## Device Descriptor List (aka Whitelist / Allowlist)
@@ -61,7 +85,7 @@ needs a firmware upgrade.
 ## Resource Model
 As previously described, devices use a URI based resource model to expose
 functionality.  One architectural goal of the resource model is to hide the
-underlying technology that the device uses (Zigbee, BLE, etc.).  This allows
+underlying technology that the device uses (Zigbee, Matter, etc.).  This allows
 clients of devices to function without change against devices of any class and
 to get automatic support for new devices once new subsystems and device drivers
 are added.
@@ -138,7 +162,7 @@ and to its resources.
 ## Subsystems
 Subsystems in Device Service provide access to lower level parts of the stack
 in a manner safe for concurrent use by device drivers.  Currently Zilker has a
-subsystem for Zigbee.  Future subsystems for BLE, CHIP, and Thread are
+subsystem for Zigbee, Matter, and Thread.  Future subsystems for BLE and others are
 possible.
 
 ## Database
@@ -693,34 +717,34 @@ Core:
     getDeviceCountBySubsystem <subsystem> : Get the number of devices by subsystem
     Examples:
         getDeviceCountBySubsystem zigbee
- 
+
     printDevice|pd <uuid> : print information for a device
     printAllDevices|pa [device class] : print information for all devices, or all devices in a class
     readResource|rr <uri> : read the value of a resource
     Examples:
         readResource /000d6f000aae8410/r/communicationFailure
- 
+
     writeResource|wr <uri> [value] : write the value of a resource
     Examples:
         writeResource /000d6f000aae8410/ep/1/r/label "Front Door"
- 
+
     execResource|er <uri> [value] : execute a resource
     queryResources|qr <uri pattern> : query resources with a pattern
     Examples:
         qr */lowBatt
- 
+
     readMetadata|rm <uri> : read metadata
     Examples:
         rm /000d6f000aae8410/m/lpmPolicy
- 
+
     writeMetadata|wm <uri> : write metadata
     Examples:
         wm /000d6f000aae8410/m/lpmPolicy never
- 
+
     queryMetadata|qm <uri pattern> : query metadata through a uri pattern
     Examples:
         qm */rejoins
- 
+
     discoverStart|dstart <device class> : Start discovery for a device class
     discoverRepairStart|drstart <device class> : Start discovery for orphaned devices in a device class
     discoverStop|dstop  : Stop device discovery
@@ -737,7 +761,7 @@ Core:
         ddl process
         ddl bypass
         ddl clearbypass
- 
+
     getStatus|gs  : Get the status of device service
 Zigbee:
     zigbeeStatus|zs  : get the status of the zigbee subsystem
@@ -747,7 +771,7 @@ Zigbee:
     Examples:
         zigbeeSetChannel 25
         zigbeeSetChannel 0 dryrun
- 
+
     zigbeeEnergyScan [<duration mS> <number of scans> <channels to scan...>] : Scan for background noise on Zigbee channels
     Examples:
         zigbeeEnergyScan
@@ -812,17 +836,17 @@ execute a resource).  For example, to turn on a light:
 
 ~~~
 deviceUtil> writeResource /0022a300002f164c/ep/1/r/isOn true
- 
+
 resourceUpdated: id=isOn, uri=/0022a300002f164c/ep/1/r/isOn, ownerId=1, ownerClass=light, value=true, type=com.icontrol.boolean, mode=0x7b (rw-del-)
 deviceUtil>
 resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=0, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
- 
+
 resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=35, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
- 
+
 resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=69, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
- 
+
 resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=99, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
- 
+
 resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=100, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
 ~~~
 
