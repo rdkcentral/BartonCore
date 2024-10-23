@@ -30,7 +30,7 @@ name: $BUILDER_USER
 
 services:
     barton:
-        image: barton_builder
+        image: barton_builder_$BUILDER_USER
 
         # If the the image must be built, a few environment variables must be set. The devcontainer
         # will take care of this for you, but if you want to build from the CLI, leverage dockerw
