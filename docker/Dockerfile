@@ -88,8 +88,19 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 # Fix setuptools on v73. v74+ removed some distutils modules that breaks gobject introspection (among a lot of other projects)
 RUN pip3 install --upgrade --break-system-packages \
     pygobject \
+    pygobject-stubs \
     setuptools==73.0.0 \
     python_stdnum
+
+# pygobject-stubs distributed the stub (pyi) files for standard distribution girs, but we also want its tools so we can make
+# out own stubs. Those don't come with the pip package.
+RUN cd /tmp && \
+    git clone https://github.com/pygobject/pygobject-stubs.git && \
+    cd pygobject-stubs/tools && \
+    mkdir -p /usr/bin/pygobject-stubs && \
+    cp generate.py /usr/bin/pygobject-stubs && \
+    cp parse.py /usr/bin/pygobject-stubs && \
+    rm -rf /tmp/pygobject-stubs
 
 ###############################################################################
 # Third party build stage

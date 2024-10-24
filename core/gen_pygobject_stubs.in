@@ -1,0 +1,29 @@
+set -e
+
+BDS_LIBRARY_LOCATION=@BDS_LIBRARY_LOCATION@
+GIR_NAME=@GIR_NAME@
+GIR_VERSION=@GIR_VERSION@
+GENERATE_DIR=@GENERATE_DIR@
+OUTPUT_FILE=@OUTPUT_FILE@
+
+GENERATE_SCRIPT_NAME=generate.py
+GENERATE_SCRIPT=${GENERATE_DIR}/${GENERATE_SCRIPT_NAME}
+
+STUBS_PACKAGE_DIR=$(pip show pygobject-stubs | grep Location | cut -d ' ' -f 2)
+
+if [ -z ${STUBS_PACKAGE_DIR} ]; then
+    echo "pygobject-stubs package not found. Please install it."
+    exit 1
+fi
+
+STUBS_DIR=${STUBS_PACKAGE_DIR}/gi-stubs/repository
+STUB_FILE=${STUBS_DIR}/${GIR_NAME}.pyi
+
+echo "Running: LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BDS_LIBRARY_LOCATION} python3 ${GENERATE_SCRIPT} ${GIR_NAME} ${GIR_VERSION} -u ${STUB_FILE}"
+echo "Output supressed for brevity. See ${OUTPUT_FILE} for output. Note: failure cases may not be detectable if script does not call sys.exit() with error codes."
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BDS_LIBRARY_LOCATION} python3 ${GENERATE_SCRIPT} ${GIR_NAME} ${GIR_VERSION} -u ${STUB_FILE} >${OUTPUT_FILE} 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "Failed to generate pygobject stubs. Refer to ${OUTPUT_FILE} for more information."
+    exit 1
+fi

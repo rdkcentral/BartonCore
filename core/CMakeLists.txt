@@ -241,6 +241,18 @@ if (BDS_GEN_GIR)
 
     install(FILES ${GIR_OUTPUT} DESTINATION ${EXPECTED_XDG_DATA_DIR}/share/gir-1.0)
     install(FILES ${TYPELIB_OUTPUT} DESTINATION ${EXPECTED_XDG_DATA_DIR}/lib/girepository-1.0)
+
+    # Next up is python stubs, which are good for development.
+    set(BDS_LIBRARY_LOCATION ${CMAKE_INSTALL_PREFIX}/lib)
+    set(GIR_NAME ${NAMESPACE})
+    set(GIR_VERSION ${NAMESPACE_VERSION})
+    # We install this in our Dockerfile
+    set(GENERATE_DIR /usr/bin/pygobject-stubs)
+    set(OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/pygobject-stubs-generate-output.txt)
+    configure_file(gen_pygobject_stubs.in gen_pygobject_stubs @ONLY)
+
+    # We need to run gen_pygobject_stubs after install for it to work.
+    install(CODE "execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs)")
 endif()
 
 
