@@ -136,7 +136,8 @@ bds_option(NAME BDS_PHILIPS_HUE
            DESCRIPTION "Enable Philips Hue support")
 bds_option(NAME BDS_GEN_GIR
            DEFINITION BARTON_CONFIG_GEN_GIR
-           DESCRIPTION "Enable generating GIR and typelib information")
+           DESCRIPTION "Enable generating GIR and typelib information"
+           ENABLE)
 bds_option(NAME BDS_GENERATE_DEFAULT_LABELS
            DEFINITION BARTON_CONFIG_GENERATE_DEFAULT_LABELS
            DESCRIPTION "Enable generating default labels for devices that support the label resource")

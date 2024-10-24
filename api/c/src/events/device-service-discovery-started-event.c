@@ -112,7 +112,7 @@ static void b_device_service_discovery_started_event_class_init(BDeviceServiceDi
     object_class->set_property = b_device_service_discovery_started_event_set_property;
 
     /**
-     * BDeviceServiceDiscoveryStartedEvent:device-classes: (type GLib.GList(utf8))
+     * BDeviceServiceDiscoveryStartedEvent:device-classes: (type GList(utf8))
      *
      * GList of strings describing which device classes discovery was started for
      */

@@ -106,7 +106,7 @@ static void b_device_service_recovery_started_event_class_init(BDeviceServiceRec
     object_class->set_property = b_device_service_recovery_started_event_set_property;
 
     /**
-     * BDeviceServiceRecoveryStartedEvent:device-classes: (type GLib.GList(utf8))
+     * BDeviceServiceRecoveryStartedEvent:device-classes: (type GList(utf8))
      *
      * GList of strings describing which device classes recovery was started for
      */

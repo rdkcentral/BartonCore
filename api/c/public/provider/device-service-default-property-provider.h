@@ -30,7 +30,7 @@
 
 G_BEGIN_DECLS
 
-/**
+/*
  * An empty default implementation of the property provider interface. Only exists so that
  * device service can use one if a client fails to provide an implementation.
  */

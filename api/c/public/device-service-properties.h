@@ -30,20 +30,20 @@
 
 G_BEGIN_DECLS
 
-/**
+/*
  * A collection of public property keys
  */
 
 // Prefix for all barton properties
-#define BARTON_PREFIX             "barton."
+#define B_DEVICE_SERVICE_BARTON_PREFIX             "barton."
 // Prefix for 802.15.4 related properties
-#define FIFTEEN_FOUR_PREFIX       "fifteenfour."
+#define B_DEVICE_SERVICE_FIFTEEN_FOUR_PREFIX       "fifteenfour."
 
 /**
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")
  *
  * The local 802.15.4 eui64 address of this installation.
  */
-#define BARTON_FIFTEEN_FOUR_EUI64 BARTON_PREFIX FIFTEEN_FOUR_PREFIX "eui64"
+#define B_DEVICE_SERVICE_BARTON_FIFTEEN_FOUR_EUI64 B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_FIFTEEN_FOUR_PREFIX "eui64"
 
 G_END_DECLS

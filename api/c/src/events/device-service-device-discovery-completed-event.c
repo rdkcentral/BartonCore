@@ -115,13 +115,6 @@ b_device_service_device_discovery_completed_event_class_init(BDeviceServiceDevic
         object_class, N_B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_PROPERTIES, properties);
 }
 
-/**
- * b_device_service_device_discovery_completed_event_new
- *
- * @brief
- *
- * Returns: (transfer full): BDeviceServiceDeviceDiscoveryCompletedEvent*
- */
 BDeviceServiceDeviceDiscoveryCompletedEvent *b_device_service_device_discovery_completed_event_new(void)
 {
     return g_object_new(B_DEVICE_SERVICE_DEVICE_DISCOVERY_COMPLETED_EVENT_TYPE, NULL);

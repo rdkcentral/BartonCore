@@ -52,9 +52,9 @@ static const char *B_DEVICE_SERVICE_ZIGBEE_ENERGY_SCAN_RESULT_PROPERTY_NAMES[] =
     {NULL, "channel", "max-rssi", "min-rssi", "avg-rssi", "score"};
 
 /**
- * b_device_service_device_found_details_new
+ * b_device_service_zigbee_energy_scan_result_new
  *
- * Returns: (transfer full): BDeviceServiceDeviceFoundDetails*
+ * Returns: (transfer full): BDeviceServiceZigbeeEnergyScanResult*
  */
 BDeviceServiceZigbeeEnergyScanResult *b_device_service_zigbee_energy_scan_result_new(void);
 

@@ -127,13 +127,6 @@ static void b_device_service_endpoint_added_event_class_init(BDeviceServiceEndpo
     g_object_class_install_properties(objectClass, N_B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_PROPERTIES, properties);
 }
 
-/**
- * b_device_service_endpoint_added_event_new
- *
- * @brief
- *
- * Returns: (transfer full): BDeviceServiceEndpointAddedEvent*
- */
 BDeviceServiceEndpointAddedEvent *b_device_service_endpoint_added_event_new(void)
 {
     return g_object_new(B_DEVICE_SERVICE_ENDPOINT_ADDED_EVENT_TYPE, NULL);

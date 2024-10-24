@@ -4,3 +4,7 @@ cmake_install.cmake
 .env
 build
 .cache
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]

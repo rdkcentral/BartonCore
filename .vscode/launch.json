@@ -34,6 +34,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "PATH": "${env:PATH}:${workspaceFolder}/build/matter-install/bin",
+                "LD_LIBRARY_PATH": "${env:LD_LIBRARY_PATH}:/usr/local/lib:${workspaceFolder}/build/matter-install/lib"
+            }
+        },
+        {
             "name": "(gdb) Reference App",
             "type": "cppdbg",
             "request": "launch",

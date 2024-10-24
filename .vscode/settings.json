@@ -111,5 +111,9 @@
             "backgroundColor": "transparent"
         }
     ],
-    "cmake.configureArgs": ["-DBDS_MATTER_LIB=ZilkerMatter"]
+    "cmake.configureArgs": [
+        "-DBDS_MATTER_LIB=ZilkerMatter",
+        "-DBDS_MATTER_SELF_SIGNED_OP_CREDS_ISSUER=ON",
+        "-DBDS_MATTER_USE_RANDOM_PORT=ON"
+    ]
 }

@@ -81,7 +81,6 @@ BDeviceServiceInitializeParamsContainer *b_device_service_initialize_params_cont
 
 /**
  * b_device_service_initialize_params_container_get_token_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The token provider for device service
@@ -91,7 +90,6 @@ b_device_service_initialize_params_container_get_token_provider(BDeviceServiceIn
 
 /**
  * b_device_service_initialize_params_container_get_network_credentials_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The network credentials provider for device service
@@ -101,7 +99,6 @@ BDeviceServiceNetworkCredentialsProvider *b_device_service_initialize_params_con
 
 /**
  * b_device_service_initialize_params_container_get_property_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The property provider for device service
@@ -111,7 +108,6 @@ b_device_service_initialize_params_container_get_property_provider(BDeviceServic
 
 /**
  * b_device_service_initialize_params_container_get_storage_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The storage directory for device service configuration
@@ -120,7 +116,6 @@ gchar *b_device_service_initialize_params_container_get_storage_dir(BDeviceServi
 
 /**
  * b_device_service_initialize_params_container_get_firmware_file_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The directory device service will install firmware files
@@ -130,7 +125,6 @@ b_device_service_initialize_params_container_get_firmware_file_dir(BDeviceServic
 
 /**
  * b_device_service_initialize_params_container_get_matter_storage_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The storage directory for externally managed Matter configuration
@@ -140,7 +134,6 @@ b_device_service_initialize_params_container_get_matter_storage_dir(BDeviceServi
 
 /**
  * b_device_service_initialize_params_container_get_matter_attestation_trust_store_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The directory device service will use as an atttestation trust store for Matter. Supported
@@ -151,7 +144,6 @@ gchar *b_device_service_initialize_params_container_get_matter_attestation_trust
 
 /**
  * b_device_service_initialize_params_container_get_account_id
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  *
  * Returns: (transfer full): The account ID for device service
@@ -160,7 +152,6 @@ gchar *b_device_service_initialize_params_container_get_account_id(BDeviceServic
 
 /**
  * b_device_service_initialize_params_container_set_token_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @tokenProvider: BDeviceServiceTokenProvider*
  *
@@ -171,7 +162,6 @@ gboolean b_device_service_initialize_params_container_set_token_provider(BDevice
 
 /**
  * b_device_service_initialize_params_container_set_property_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @propertyProvider: BDeviceServicePropertyProvider*
  *
@@ -183,7 +173,6 @@ b_device_service_initialize_params_container_set_property_provider(BDeviceServic
 
 /**
  * b_device_service_initialize_params_container_set_network_credentials_provider
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @networkCredentialsProvider: BDeviceServiceNetworkCredentialsProvider*
  *
@@ -195,7 +184,6 @@ gboolean b_device_service_initialize_params_container_set_network_credentials_pr
 
 /**
  * b_device_service_initialize_params_container_set_storage_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @storageDir: const gchar*
  */
@@ -204,7 +192,6 @@ void b_device_service_initialize_params_container_set_storage_dir(BDeviceService
 
 /**
  * b_device_service_initialize_params_container_set_firmware_file_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @firmwareFileDir: const gchar*
  */
@@ -213,7 +200,6 @@ void b_device_service_initialize_params_container_set_firmware_file_dir(BDeviceS
 
 /**
  * b_device_service_initialize_params_container_set_matter_storage_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @matterStorageDire: const gchar*
  */
@@ -222,7 +208,6 @@ void b_device_service_initialize_params_container_set_matter_storage_dir(BDevice
 
 /**
  * b_device_service_initialize_params_container_set_matter_attestation_trust_store_dir
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @matterAttestationTrustStoreDir: const gchar*
  */
@@ -232,7 +217,6 @@ void b_device_service_initialize_params_container_set_matter_attestation_trust_s
 
 /**
  * b_device_service_initialize_params_container_set_account_id
- *
  * @self: BDeviceServiceInitializeParamsContainer*
  * @accountId: const gchar*
  */

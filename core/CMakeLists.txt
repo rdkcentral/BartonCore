@@ -196,7 +196,7 @@ if (BDS_GEN_GIR)
 
     set(SCANNER_ARGS
     --namespace=${NAMESPACE}
-    --symbol-prefix=device_service
+    --symbol-prefix=b_device_service
     --nsversion=${NAMESPACE_VERSION}
     --warn-all
     --no-libtool
@@ -206,13 +206,14 @@ if (BDS_GEN_GIR)
     --library=brtnDeviceServiceShared
     --library=stdc++
     --library-path=${CMAKE_PREFIX_PATH}/lib
-    --library-path=$<JOIN:$<TARGET_FILE_DIR:brtnDeviceServiceShared>, --library-path=>
     -I$<JOIN:$<TARGET_PROPERTY:brtnDeviceServiceShared,INCLUDE_DIRECTORIES>, -I>)
 
     file(GLOB API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/*.h
-                           ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/events/*.h)
+                           ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/events/*.h
+                           ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/provider/*.h)
     file(GLOB API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c
-                          ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/events/*.c)
+                          ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/events/*.c
+                          ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/provider/*.c)
     string(REPLACE ";" " " SCANNER_ARGS "${SCANNER_ARGS}")
     string(REPLACE ";" " " API_INCLUDES "${API_INCLUDES}")
     string(REPLACE ";" " " API_SOURCES "${API_SOURCES}")
@@ -233,6 +234,13 @@ if (BDS_GEN_GIR)
         COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
+
+    # gir/typelib files fall under subdirs in paths defined by
+    # XDG_DATA_DIRS. We know we wanna be in /usr so just use that prefix
+    set(EXPECTED_XDG_DATA_DIR "/usr")
+
+    install(FILES ${GIR_OUTPUT} DESTINATION ${EXPECTED_XDG_DATA_DIR}/share/gir-1.0)
+    install(FILES ${TYPELIB_OUTPUT} DESTINATION ${EXPECTED_XDG_DATA_DIR}/lib/girepository-1.0)
 endif()
 
 

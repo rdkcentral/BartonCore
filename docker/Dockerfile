@@ -85,9 +85,11 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     gtk-doc-tools \
     libgirepository1.0-dev
 
+# Fix setuptools on v73. v74+ removed some distutils modules that breaks gobject introspection (among a lot of other projects)
 RUN pip3 install --upgrade --break-system-packages \
     pygobject \
-    setuptools
+    setuptools==73.0.0 \
+    python_stdnum
 
 ###############################################################################
 # Third party build stage
@@ -183,7 +185,15 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     vim \
     pipx \
     gh \
-    fish
+    fish \
+    strace \
+    tcpdump
+
+# Make some /usr/ stuff open permissions. These are individual containers,
+# so this will let people install barton outputs.
+RUN chmod -R +777 /usr/local && \
+    chmod +777 /usr/lib && \
+    chmod -R +777 /usr/share/gir-1.0
 
 ARG BUILDER_USER=""
 ARG BUILDER_GID=""
@@ -194,6 +204,12 @@ RUN groupadd --gid $BUILDER_GID $BUILDER_USER && \
     useradd --uid $BUILDER_UID --gid $BUILDER_GID -m $BUILDER_USER && \
     echo $BUILDER_USER ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$BUILDER_USER && \
     chmod 0440 /etc/sudoers.d/$BUILDER_USER
+
+# Set up pcap permissions
+RUN groupadd pcap && usermod -a -G pcap $BUILDER_USER \
+    && chgrp pcap /usr/bin/tcpdump \
+    && chmod 750 /usr/bin/tcpdump \
+    && setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
 
 USER $BUILDER_USER
 
