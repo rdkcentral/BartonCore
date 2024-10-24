@@ -1695,8 +1695,6 @@ void deviceServiceShutdown()
 
     deviceEventHandlerShutdown();
 
-    deviceEventProducerShutdown();
-
     deviceStorageMonitorStop();
 
     // cleanup
@@ -1748,6 +1746,8 @@ void deviceServiceShutdown()
     // FIXME: obsolete with self-init
     shutDownEventTracker();
 #endif
+
+    deviceEventProducerShutdown();
 
     jsonDatabaseCleanup(true);
 
