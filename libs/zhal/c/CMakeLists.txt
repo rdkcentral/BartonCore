@@ -23,9 +23,6 @@ target_link_libraries(zhal xhLog xhTypes xhUtil xhConcurrent cjson m ${CONFIG_LD
 # export our 'public' folder so others can include our headers
 target_include_directories(zhal PUBLIC public)
 
-# install in $PREFIX/lib
-#install(TARGETS zhal DESTINATION lib)
-
 bds_add_cmocka_test(
         NAME testZhalImpl
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/zhalImplUnitTest.c

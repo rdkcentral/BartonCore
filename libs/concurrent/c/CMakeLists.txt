@@ -23,9 +23,6 @@ target_link_libraries(xhConcurrent xhLog xhTypes xhTime ${ZILKER_EXE_LIBS})
 # export our 'public' folder so others can include our headers
 target_include_directories(xhConcurrent PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhConcurrent DESTINATION lib)
-
 bds_configure_glib()
 
 # add our 'unit tests' (part of the "make unitTest")

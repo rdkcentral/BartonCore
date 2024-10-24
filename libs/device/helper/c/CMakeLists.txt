@@ -23,7 +23,4 @@ target_link_libraries(xhDeviceHelper xhUtil xhLog xhTypes)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhDeviceHelper PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhDeviceHelper DESTINATION lib)
-
 #TODO: test target

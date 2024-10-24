@@ -22,8 +22,5 @@ target_link_libraries(xhTypes xhLog cjson)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhTypes PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhTypes DESTINATION lib)
-
 # add our 'unit test' to be part of the "make unitTest"
 add_subdirectory(test)

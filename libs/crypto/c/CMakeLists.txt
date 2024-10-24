@@ -24,7 +24,4 @@ target_link_libraries(xhCrypto ssl crypto xhTypes xhUtil xhConcurrent)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhCrypto PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhCrypto DESTINATION lib)
-
 add_subdirectory(test)

@@ -23,9 +23,6 @@ target_link_libraries(xhDeviceDescriptors xhLog xhTypes xhUtil xhXmlHelper)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhDeviceDescriptors PUBLIC public PRIVATE)
 
-# install in $PREFIX/lib
-install(TARGETS xhDeviceDescriptors DESTINATION lib)
-
 bds_configure_glib()
 
 # add our test to be part of the "make manualTest"

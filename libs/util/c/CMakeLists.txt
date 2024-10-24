@@ -28,9 +28,6 @@ target_link_libraries(xhUtil xhLog xhTypes uuid mbedcrypto)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhUtil PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhUtil DESTINATION lib)
-
 add_compile_definitions(PRIVATE RESOURCES_DIR="${CMAKE_CURRENT_LIST_DIR}/test/etc")
 
 bds_add_cmocka_test(

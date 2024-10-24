@@ -23,9 +23,6 @@ target_link_libraries(xhTime xhLog xhUtil m ${CONFIG_LDFLAG})
 # export our 'public' folder so others can include our headers
 target_include_directories(xhTime PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhTime DESTINATION lib)
-
 # add our 'unit test' to be part of the "make unitTest"
 bds_add_cmocka_test(
         NAME testTimeUtils

@@ -34,7 +34,4 @@ bds_configure_glib()
 # export our 'public' folder so others can include our headers
 target_include_directories(xhLog PUBLIC public)
 
-# install in $PREFIX/lib
-install(TARGETS xhLog DESTINATION lib)
-
 #TODO: test target
