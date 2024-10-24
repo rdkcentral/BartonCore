@@ -187,9 +187,6 @@ message(STATUS "Barton Device Service String Configs.")
 bds_string_option(NAME BDS_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "soname of the provided Matter library.")
-bds_string_option(NAME BDS_XFINITY_DOOR_BELL_MULTICAST_LAN_INTERFACE
-                  DEFINITION BARTON_CONFIG_XFINITY_DOOR_BELL_MULTICAST_LAN_INTERFACE
-                  DESCRIPTION "Network interface to use for xfinity doorbell multicast traffic.")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
