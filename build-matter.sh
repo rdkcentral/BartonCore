@@ -17,7 +17,7 @@ rm -rf ${MATTER_INSTALL_DIR}
 mkdir -p ${BUILD_DIR}
 cd ${BUILD_DIR}
 git clone \
-    --branch 1.4-update-2 \
+    --branch main \
     --depth 1 \
     ssh://rdkgerrithub.stb.r53.xcal.tv:29418/comcast-matter/sdk \
     matter

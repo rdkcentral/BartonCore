@@ -58,7 +58,7 @@ namespace zilker
                                                  CHIME_CLUSTER_PLAY_URL_COMMAND_ID,
                                                  (chip::app::CommandPathFlags::kEndpointIdValid));
 
-        chip::app::Clusters::Chime::Commands::PlayUrl::Type request;
+        chip::app::Clusters::ComcastChime::Commands::PlayUrl::Type request;
         request.url = chip::CharSpan::fromCharString(url.c_str());
         commandSender->AddRequestData(
             commandPath, request, chip::Optional<uint16_t>(PLAY_SOUND_TIMEOUT_SECONDS * 1000));
@@ -71,7 +71,7 @@ namespace zilker
                                 chip::Messaging::ExchangeManager &exchangeMgr,
                                 const chip::SessionHandle &sessionHandle)
     {
-        using namespace chip::app::Clusters::Chime::Commands;
+        using namespace chip::app::Clusters::ComcastChime::Commands;
 
         auto commandSender = new chip::app::CommandSender(this, &exchangeMgr, true);
         chip::app::CommandPathParams commandPath(endpointId,
@@ -90,11 +90,11 @@ namespace zilker
     void ComcastChime::OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                           const chip::app::ConcreteAttributePath &path)
     {
-        using namespace chip::app::Clusters::Chime;
+        using namespace chip::app::Clusters::ComcastChime;
         using TypeInfo = Attributes::AudioAssets::TypeInfo;
 
-        if (path.mClusterId == chip::app::Clusters::Chime::Id &&
-            path.mAttributeId == chip::app::Clusters::Chime::Attributes::AudioAssets::Id)
+        if (path.mClusterId == chip::app::Clusters::ComcastChime::Id &&
+            path.mAttributeId == chip::app::Clusters::ComcastChime::Attributes::AudioAssets::Id)
         {
             TypeInfo::DecodableType value;
             CHIP_ERROR error = cache->Get<TypeInfo>(path, value);
@@ -130,11 +130,12 @@ namespace zilker
         }
 
         CHIP_ERROR error = CHIP_NO_ERROR;
-        using namespace chip::app::Clusters::Chime;
+        using namespace chip::app::Clusters::ComcastChime;
         using TypeInfo = Attributes::AudioAssets::TypeInfo;
 
-        chip::app::ConcreteAttributePath path(
-            endpointId, chip::app::Clusters::Chime::Id, chip::app::Clusters::Chime::Attributes::AudioAssets::Id);
+        chip::app::ConcreteAttributePath path(endpointId,
+                                              chip::app::Clusters::ComcastChime::Id,
+                                              chip::app::Clusters::ComcastChime::Attributes::AudioAssets::Id);
         {
             TypeInfo::DecodableType value;
             error = cache->Get<TypeInfo>(path, value);
