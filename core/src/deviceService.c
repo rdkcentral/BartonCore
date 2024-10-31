@@ -1583,6 +1583,8 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
         icLogError(LOG_TAG, "Failed to initialize database.");
         return false;
     }
+
+    return true;
 }
 
 // TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
