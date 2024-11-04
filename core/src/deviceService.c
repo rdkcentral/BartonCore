@@ -710,6 +710,17 @@ bool deviceServiceAddMatterDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     return result;
 }
 
+bool deviceServiceOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSeconds, char **setupCode, char **qrCode)
+{
+    bool result = false;
+
+#ifdef BARTON_CONFIG_MATTER
+    result = matterSubsystemOpenCommissioningWindow(nodeId, timeoutSeconds, setupCode, qrCode);
+#endif
+
+    return result;
+}
+
 bool deviceServiceIsDiscoveryActive()
 {
     bool result;

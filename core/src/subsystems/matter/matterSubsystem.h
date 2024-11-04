@@ -66,12 +66,17 @@ bool matterSubsystemCommissionDevice(const char *setupPayload, uint16_t timeoutS
  */
 bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds);
 
-/**
- * Open the commissioning window so that other devices on the network can commision this device.
+/*
+ * Open a commissioning window locally or for a specific device. When successful, the generated setup code and
+ * QR code are returned.  The caller is responsible for freeing the setupCode and qrCode.
  *
- * @return true on success
+ * @param nodeId - the nodeId of the device to open the commissioning window for, or NULL for local
+ * @param timeoutSeconds - the number of seconds to perform discovery before automatically stopping or 0 for default
+ * @param setupCode - receives the setup code if successful (caller frees)
+ * @param qrCode - receives the QR code if successful (caller frees)
+ * @returns true if commissioning window is opened
  */
-bool matterSubsystemOpenCommissioningWindow(void);
+bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSeconds, char **setupCode, char **qrCode);
 
 /**
  * Clear the AccessRestrictionList for certification testing.

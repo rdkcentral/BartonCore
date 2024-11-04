@@ -152,11 +152,17 @@ namespace zilker
         CHIP_ERROR AccessControlDump(const chip::Access::AccessControl::Entry &entry);
 
         /**
-         * @brief Open the commissioning window so that other devices can commission us.
+         * @brief Open a commissioning window locally or for a specific device. When successful, the
+         *        generated setup code and QR code are returned.  The caller is responsible for
+         *        freeing the setupCode and qrCode.
          *
+         * @param nodeId the nodeId of the device to open the commissioning window for, or NULL for local
+         * @param timeoutSeconds the number of seconds to perform discovery before automatically stopping or 0 for default
+         * @param setupCode receives the setup code if successful
+         * @param qrCode receives the QR code if successful
          * @return true on success
          */
-        bool OpenCommissioningWindow();
+        bool OpenCommissioningWindow(chip::NodeId nodeId, uint16_t timeoutSecs, std::string &setupCode, std::string &qrCode);
 
         /**
          * @brief Clear the AccessRestrictionList for certification testing
@@ -285,6 +291,10 @@ namespace zilker
          * @return true on success
          */
         bool SetAccessRestrictionList();
+
+        bool OpenLocalCommissioningWindow(uint16_t discriminator,
+                                          uint16_t timeoutSecs,
+                                          SetupPayload &setupPayload);
 
         bool serverIsInitialized = false;
 

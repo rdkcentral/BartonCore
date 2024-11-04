@@ -80,6 +80,46 @@ static bool discoverStopFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return rc;
 }
 
+static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    (void) argc; // unused
+    bool rc = false;
+
+    guint16 timeoutSeconds = 0; //let device service pick the default
+    if (argc == 2)
+    {
+        timeoutSeconds = (guint16) g_ascii_strtoull(argv[1], NULL, 10);
+    }
+
+    BDeviceServiceCommissioningInfo *commissioningInfo = b_device_service_client_open_commissioning_window(client, argv[0], timeoutSeconds);
+
+    if (commissioningInfo == NULL)
+    {
+        fprintf(stderr, "Failed to open commissioning window\n");
+    }
+    else
+    {
+        // print the manual and qr codes to stdout.  First get them from the object properties
+        g_autofree gchar *manualCode = NULL;
+        g_autofree gchar *qrCode = NULL;
+        g_object_get(
+            commissioningInfo,
+            B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_MANUAL_CODE],
+            &manualCode,
+            B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_QR_CODE],
+            &qrCode,
+            NULL);
+
+        fprintf(stdout, "Commissioning window opened:\n");
+        fprintf(stdout, "\tManual code: %s\n", manualCode);
+        fprintf(stdout, "\tQR code: %s\n", qrCode);
+
+        rc = true;
+    }
+
+    return rc;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -98,6 +138,14 @@ Category *buildCoreCategory(void)
     command = commandCreate("discoverStop", "dstop", NULL, "Stop device discovery", 0, 0, discoverStopFunc);
     categoryAddCommand(cat, command);
 
+    command = commandCreate("openCommissioningWindow",
+                            "ocw",
+                            "<node id> [timeout secs]",
+                            "Open the commissioning window locally (node id 0) or for a specific node id. Omit timeout for defaults",
+                            1,
+                            2,
+                            openCommissioningWindow);
+    categoryAddCommand(cat, command);
 
     return cat;
 }

@@ -114,6 +114,18 @@ bool deviceServiceCommissionDevice(const char *setupPayload, uint16_t timeoutSec
 bool deviceServiceAddMatterDevice(uint64_t nodeId, uint16_t timeoutSeconds);
 
 /*
+ * Open a commissioning window locally or for a specific device. When successful, the generated setup code and
+ * QR code are returned.  The caller is responsible for freeing the setupCode and qrCode.
+ *
+ * @param nodeId - the nodeId of the device to open the commissioning window for, or NULL for local
+ * @param timeoutSeconds - the number of seconds to perform discovery before automatically stopping or 0 for default
+ * @param setupCode - receives the setup code if successful (caller frees)
+ * @param qrCode - receives the QR code if successful (caller frees)
+ * @returns true if commissioning window is opened
+ */
+bool deviceServiceOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSeconds, char **setupCode, char **qrCode);
+
+/*
  * Determine if any device discovery is currently running.
  *
  * @return true if any discovery is running

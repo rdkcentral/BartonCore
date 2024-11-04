@@ -25,6 +25,7 @@
  */
 
 #include "device-service-client.h"
+#include "device-service-commissioning-info.h"
 #include "device-service-discovery-filter.h"
 #include "device-service-endpoint.h"
 #include "device-service-initialize-params-container.h"
@@ -648,4 +649,28 @@ void b_device_service_client_set_account_id(BDeviceServiceClient *self, const gc
     g_return_if_fail(accountId != NULL);
 
     deviceServiceConfigurationSetAccountId(accountId);
+}
+
+BDeviceServiceCommissioningInfo *b_device_service_client_open_commissioning_window(BDeviceServiceClient *self, const gchar *deviceId, guint16 timeoutSeconds)
+{
+    BDeviceServiceCommissioningInfo *result = NULL;
+
+    g_return_val_if_fail(self != NULL, NULL);
+
+    g_autofree gchar *manualCode = NULL;
+    g_autofree gchar *qrCode = NULL;
+
+    if (deviceServiceOpenCommissioningWindow(deviceId, timeoutSeconds, &manualCode, &qrCode))
+    {
+        result = b_device_service_commissioning_info_new();
+
+        g_object_set(result,
+                     B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_MANUAL_CODE],
+                     manualCode,
+                     B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_QR_CODE],
+                     qrCode,
+                     NULL);
+    }
+
+    return result;
 }

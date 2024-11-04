@@ -32,6 +32,7 @@
 #include "device-service-initialize-params-container.h"
 #include "device-service-resource.h"
 #include "device-service-status.h"
+#include "device-service-commissioning-info.h"
 #include <glib-object.h>
 
 #include <stdint.h>
@@ -642,5 +643,22 @@ gboolean b_device_service_client_config_restore(BDeviceServiceClient *self, cons
  * @note Once an account id is set, changing it could have undefined behavior.
  */
 void b_device_service_client_set_account_id(BDeviceServiceClient *self, const gchar *accountId);
+
+/**
+ * b_device_service_client_open_commissioning_window
+ * @self: the BDeviceServiceClient instance.
+ * @deviceId: the device id to open the commissioning window for or NULL to open locally on this device. "0" also
+ *            indicates local commissioning.
+ * @timeoutSeconds: the number of seconds to keep the commissioning window open or 0 to use the default timeout.
+
+ * @brief Open a Matter commissioning window for a remote device or locally on this device.  Upon success, a 11 digit
+ * setup code and a textual QR code will be returned for use by a commissioner to commission the device over the
+ * operational network.
+ *
+ * Returns: (transfer full): BDeviceServiceCommissioningInfo* - the info about the open commissioning window upon
+ *                           success
+ * or NULL upon failure.
+ */
+BDeviceServiceCommissioningInfo *b_device_service_client_open_commissioning_window(BDeviceServiceClient *self, const gchar *deviceId, guint16 timeoutSeconds);
 
 G_END_DECLS

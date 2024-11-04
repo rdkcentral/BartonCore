@@ -26,6 +26,8 @@
 
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/server/CommissioningWindowManager.h"
+#include "icTypes/icLinkedList.h"
+#include "lib/core/Optional.h"
 #include "protocols/secure_channel/Constants.h"
 #include "system/SystemClock.h"
 #define LOG_TAG     "Matter"
@@ -60,6 +62,7 @@ extern "C" {
 #include <app/server/Dnssd.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CHIPDeviceControllerFactory.h>
+#include <controller/CommissioningWindowOpener.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
 #include <credentials/FabricTable.h>
 #include <credentials/attestation_verifier/DefaultDeviceAttestationVerifier.h>
@@ -70,8 +73,10 @@ extern "C" {
 #include <platform/Linux/ConfigurationManagerImpl.h>
 #include <platform/TestOnlyCommissionableDataProvider.h>
 #include <protocols/secure_channel/RendezvousParameters.h>
+#include <setup_payload/ManualSetupPayloadGenerator.h>
+#include <setup_payload/QRCodeSetupPayloadGenerator.h>
+#include <setup_payload/SetupPayload.h>
 #include <transport/SessionMessageDelegate.h>
-#include <crypto/CHIPCryptoPAL.h>
 
 #include <lib/support/TestGroupData.h>
 
@@ -133,6 +138,8 @@ using chip::Callback::Callback;
 
 static constexpr uint16_t kMaxGroupsPerFabric = 5;
 static constexpr uint16_t kMaxGroupKeysPerFabric = 8;
+static constexpr uint16_t kMaxDiscriminator = 4096;
+static constexpr uint16_t kDefaultPAKEIterationCount = 1000;
 
 namespace
 {
@@ -1261,19 +1268,140 @@ exit:
 }
 #endif
 
-bool Matter::OpenCommissioningWindow()
+bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeoutSecs, SetupPayload &setupPayload)
 {
-    bool success;
+    bool success = false;
 
-    icInfo("Opening Commissioning Window");
+    auto &commissioningWindowManager = Server::GetInstance().GetCommissioningWindowManager();
+    uint32_t iterations = kDefaultPAKEIterationCount;
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
 
-    //HACK: dont do it like this and dont check this in.  Testing only.
-    success = CHIP_NO_ERROR == Server::GetInstance().GetCommissioningWindowManager()
-        .OpenBasicCommissioningWindow(System::Clock::Seconds16(15 * 60),
-                                      CommissioningWindowAdvertisement::kDnssdOnly);
+    if (commissioningWindowManager.IsCommissioningWindowOpen())
+    {
+        icWarn("Commissioning window already open");
+        success = false;
+    }
+    else
+    {
+
+        uint8_t pbkdfSaltBuffer[Crypto::kSpake2p_Max_PBKDF_Salt_Length];
+        ByteSpan pbkdfSalt;
+        Crypto::Spake2pVerifierSerialized pakePasscodeVerifierBuffer;
+
+        Crypto::DRBG_get_bytes(pbkdfSaltBuffer, sizeof(pbkdfSaltBuffer));
+        pbkdfSalt = ByteSpan(pbkdfSaltBuffer);
+
+        Spake2pVerifier verifier;
+        if (CHIP_NO_ERROR != verifier.Generate(iterations, pbkdfSalt, setupPayload.setUpPINCode))
+        {
+            icError("Failed to generate verifier");
+            success = false;
+        }
+        else
+        {
+            success = CHIP_NO_ERROR ==
+                      commissioningWindowManager.OpenEnhancedCommissioningWindow(System::Clock::Seconds16(timeoutSecs),
+                                                                                 discriminator,
+                                                                                 verifier,
+                                                                                 iterations,
+                                                                                 pbkdfSalt,
+                                                                                 myFabricIndex,
+                                                                                 MATTER_COMCAST_VID);
+        }
+    }
+
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    return success;
+}
+
+bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
+                                     uint16_t timeoutSecs,
+                                     std::string &setupCode,
+                                     std::string &qrCode)
+{
+    bool success;
+
+    SetupPayload setupPayload;
+    auto &commissioningWindowManager = Server::GetInstance().GetCommissioningWindowManager();
+
+    // since we (or the remote device) are already commissioned, we can only support on network commissioning
+    setupPayload.rendezvousInformation.SetValue(RendezvousInformationFlags(RendezvousInformationFlag::kOnNetwork));
+
+    uint16_t discriminator = Crypto::GetRandU16() % kMaxDiscriminator;
+    setupPayload.discriminator.SetLongValue(discriminator);
+
+    DRBG_get_bytes(reinterpret_cast<uint8_t *>(&setupPayload.setUpPINCode), sizeof(setupPayload.setUpPINCode));
+    // Passcodes shall be restricted to the values 00000001 to 99999998 in decimal, see 5.1.1.6
+    setupPayload.setUpPINCode = (setupPayload.setUpPINCode % kSetupPINCodeMaximumValue) + 1;
+
+    if (timeoutSecs == 0)
+    {
+        // zero means 'use default' which is max
+        timeoutSecs = commissioningWindowManager.MaxCommissioningTimeout().count();
+    }
+    else
+    {
+        if (timeoutSecs > commissioningWindowManager.MaxCommissioningTimeout().count())
+        {
+            icWarn("Requested commissioning window timeout of %" PRIu16 " seconds is too long, using max of %" PRIu16
+                   " seconds",
+                   timeoutSecs,
+                   commissioningWindowManager.MaxCommissioningTimeout().count());
+            timeoutSecs = commissioningWindowManager.MaxCommissioningTimeout().count();
+        }
+        else if (timeoutSecs < commissioningWindowManager.MinCommissioningTimeout().count())
+        {
+            icWarn("Requested commissioning window timeout of %" PRIu16 " seconds is too short, using min of %" PRIu16
+                   " seconds",
+                   timeoutSecs,
+                   commissioningWindowManager.MinCommissioningTimeout().count());
+            timeoutSecs = commissioningWindowManager.MinCommissioningTimeout().count();
+        }
+    }
+
+    if (nodeId == 0)
+    {
+        icInfo("Opening Local Commissioning Window for %" PRIu16 " seconds", timeoutSecs);
+    }
+    else
+    {
+        icInfo("Opening Commissioning Window on node 0x%" PRIx64 " for %" PRIu16 " seconds", nodeId, timeoutSecs);
+    }
+
+
+    if (nodeId == 0)
+    {
+        success = OpenLocalCommissioningWindow(discriminator, timeoutSecs, setupPayload);
+    }
+    else
+    {
+        chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+        success = CHIP_NO_ERROR == Controller::AutoCommissioningWindowOpener::OpenCommissioningWindow(
+                                       commissionerController.get(),
+                                       nodeId,
+                                       System::Clock::Seconds16(timeoutSecs),
+                                       kDefaultPAKEIterationCount,
+                                       discriminator,
+                                       MakeOptional<uint32_t>(setupPayload.setUpPINCode),
+                                       NullOptional,
+                                       setupPayload);
+
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    }
+
+
+    if (success)
+    {
+        QRCodeSetupPayloadGenerator qrGenerator(setupPayload);
+        success &= CHIP_NO_ERROR == qrGenerator.payloadBase38RepresentationWithAutoTLVBuffer(qrCode);
+
+        ManualSetupPayloadGenerator manualGenerator(setupPayload);
+        success &= CHIP_NO_ERROR == manualGenerator.payloadDecimalStringRepresentation(setupCode);
+    }
+
 
     ConfigurationMgr().LogDeviceConfig();
 

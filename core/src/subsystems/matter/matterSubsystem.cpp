@@ -380,9 +380,38 @@ bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     return orchestrator.Pair(nodeId, timeoutSeconds);
 }
 
-bool matterSubsystemOpenCommissioningWindow(void)
+bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSeconds, char **setupCode, char **qrCode)
 {
-    return Matter::GetInstance().OpenCommissioningWindow();
+    bool result = false;
+
+    chip::NodeId _nodeId = 0;
+    std::string _setupCode;
+    std::string _qrCode;
+
+    if (setupCode == nullptr || qrCode == nullptr)
+    {
+        icError("Invalid arguments");
+        return false;
+    }
+
+    if (nodeId != nullptr)
+    {
+        if (!stringToUint64(nodeId, &_nodeId))
+        {
+            icError("Invalid nodeId");
+            return false;
+        }
+    }
+
+    result = Matter::GetInstance().OpenCommissioningWindow(_nodeId, timeoutSeconds, _setupCode, _qrCode);
+
+    if (result)
+    {
+        *setupCode = strdup(_setupCode.c_str());
+        *qrCode = strdup(_qrCode.c_str());
+    }
+
+    return result;
 }
 
 bool matterSubsystemClearAccessRestrictionList(void)
