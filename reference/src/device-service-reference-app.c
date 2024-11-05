@@ -28,6 +28,7 @@
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
 #include "eventHandler.h"
+#include "matterCategory.h"
 #include "provider/device-service-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
@@ -65,6 +66,7 @@ static GOptionEntry entries[] = {
 static void buildCategories()
 {
     categories = g_list_append(categories, buildCoreCategory());
+    categories = g_list_append(categories, buildMatterCategory());
 }
 
 static void destroyCategories()
