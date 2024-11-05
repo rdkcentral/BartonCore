@@ -28,6 +28,7 @@
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
 #include "eventHandler.h"
+#include "provider/device-service-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
@@ -43,12 +44,23 @@
 #define DEFAULT_CONF_DIR_MODE (0755)
 #define PROMPT                "deviceService> "
 
-static bool VT100_MODE = true;
+static gboolean NO_VT100_MODE = TRUE;
+static gboolean NO_ZIGBEE = FALSE;
+static gboolean NO_THREAD = FALSE;
+static gboolean NO_MATTER = FALSE;
 
 static bool showAdvanced = false;
 
 static bool running = true; // Global for now, a command could set to false to terminate interactive session
 static GList *categories = NULL;
+
+static GOptionEntry entries[] = {
+    { "novt100", '1', 0, G_OPTION_ARG_NONE, &NO_VT100_MODE, "", NULL},
+    {"noZigbee", 'z', 0, G_OPTION_ARG_NONE,     &NO_ZIGBEE, "", NULL},
+    {"noThread", 't', 0, G_OPTION_ARG_NONE,     &NO_THREAD, "", NULL},
+    {"noMatter", 'm', 0, G_OPTION_ARG_NONE,     &NO_MATTER, "", NULL},
+    G_OPTION_ENTRY_NULL
+};
 
 static void buildCategories()
 {
@@ -159,6 +171,48 @@ static gchar *getDefaultConfigDirectory(void)
     return confDir;
 }
 
+static void configureSubsystems(BDeviceServiceInitializeParamsContainer *params)
+{
+    BDeviceServicePropertyProvider *propProvider =
+        b_device_service_initialize_params_container_get_property_provider(params);
+    if (propProvider != NULL)
+    {
+        g_autofree gchar *disableSubsystems = g_strdup("");
+        if (NO_ZIGBEE)
+        {
+            disableSubsystems = g_strdup("zigbee");
+        }
+        if (NO_THREAD)
+        {
+            if (disableSubsystems != NULL)
+            {
+                disableSubsystems = g_strdup_printf("%s,thread", disableSubsystems);
+            }
+            else
+            {
+                disableSubsystems = g_strdup("thread");
+            }
+        }
+        if (NO_MATTER)
+        {
+            if (disableSubsystems != NULL)
+            {
+                disableSubsystems = g_strdup_printf("%s,matter", disableSubsystems);
+            }
+            else
+            {
+                disableSubsystems = g_strdup("matter");
+            }
+        }
+
+        if (disableSubsystems != NULL)
+        {
+            b_device_service_property_provider_set_property_string(
+                propProvider, "device.subsystem.disable", disableSubsystems);
+        }
+    }
+}
+
 static BDeviceServiceClient *initializeClient(gchar *confDir)
 {
     g_autoptr(BDeviceServiceInitializeParamsContainer) params = b_device_service_initialize_params_container_new();
@@ -174,12 +228,25 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
     b_device_service_initialize_params_container_set_network_credentials_provider(
         params, B_DEVICE_SERVICE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
 
-    return b_device_service_client_new(params);
+    BDeviceServiceClient *client = b_device_service_client_new(params);
+    configureSubsystems(params);
+    return client;
 }
 
 int main(int argc, char **argv)
 {
     bool rc = false;
+
+    GError *cmdLineError = NULL;
+    GOptionContext *context;
+    context = g_option_context_new("- reference app for running barton device service");
+    g_option_context_add_main_entries(context, entries, NULL);
+    if (!g_option_context_parse(context, &argc, &argv, &cmdLineError))
+    {
+        fprintf(stderr, "Error parsing command line: %s\n", cmdLineError->message);
+        g_error_free(cmdLineError);
+        return EXIT_FAILURE;
+    }
 
     setIcLogPriorityFilter(IC_LOG_DEBUG);
 
@@ -187,24 +254,7 @@ int main(int argc, char **argv)
     g_autofree gchar *histFile = stringBuilder("%s/%s", confDir, HISTORY_FILE);
     buildCategories();
 
-    // handle the --help command, then exit
-    if (stringCompare("--help", argv[1], true) == 0)
-    {
-        showInteractiveHelp(false);
-        destroyCategories();
-        return EXIT_SUCCESS;
-    }
-
-    if (stringCompare("--novt100", argv[1], true) == 0)
-    {
-        VT100_MODE = false;
-
-        // remove this from our cmd line
-        argc--;
-        argv++;
-    }
-
-    if (VT100_MODE == true)
+    if (!NO_VT100_MODE)
     {
         linenoiseSetCompletionCallback(completionCallback);
         linenoiseHistorySetMaxLen(HISTORY_MAX);
@@ -227,6 +277,7 @@ int main(int argc, char **argv)
     }
 
     g_autoptr(BDeviceServiceClient) client = initializeClient(confDir);
+
     b_device_service_client_start(client);
     // TODO remove once ddl command available
     b_device_service_client_set_system_property(client, "deviceDescriptorBypass", "true");
@@ -234,7 +285,7 @@ int main(int argc, char **argv)
     registerEventHandlers(client);
 
     g_autoptr(GIOChannel) inputChannel = NULL;
-    if (!VT100_MODE)
+    if (NO_VT100_MODE)
     {
         inputChannel = g_io_channel_unix_new(STDIN_FILENO);
     }
@@ -244,7 +295,7 @@ int main(int argc, char **argv)
         gint numArgs = 0;
         g_autofree gchar *line = NULL;
 
-        if (VT100_MODE == true)
+        if (!NO_VT100_MODE)
         {
             line = linenoise(PROMPT);
 
