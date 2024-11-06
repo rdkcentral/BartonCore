@@ -343,11 +343,17 @@ static void matterSubsystemShutdown()
 
     subsystemMtx.lock();
     initialized = false;
-    g_source_remove(sourceId);
-    sourceId = 0;
-    g_main_loop_quit(matterInitLoop);
-    g_main_loop_unref(matterInitLoop);
-    matterInitLoop = nullptr;
+    if (sourceId)
+    {
+        g_source_remove(sourceId);
+        sourceId = 0;
+    }
+    if (matterInitLoop)
+    {
+        g_main_loop_quit(matterInitLoop);
+        g_main_loop_unref(matterInitLoop);
+        matterInitLoop = nullptr;
+    }
     subsystemMtx.unlock();
 
     Matter::GetInstance().Stop();

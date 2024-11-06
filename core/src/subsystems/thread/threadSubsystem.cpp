@@ -143,12 +143,18 @@ static cJSON *getStatusJson()
     bool localInitialized = initialized;
     lifecycleDataGuard.unlock();
 
-    g_return_val_if_fail(localInitialized, nullptr);
+    cJSON *retVal = NULL;
 
-    g_autoptr(ThreadNetworkInfo) threadInfo = threadNetworkInfoCreate();
-    g_return_val_if_fail(threadSubsystemGetNetworkInfo(threadInfo), nullptr);
-
-    cJSON *retVal = threadNetworkInfoToJson(threadInfo);
+    if (localInitialized)
+    {
+        g_autoptr(ThreadNetworkInfo) threadInfo = threadNetworkInfoCreate();
+        g_return_val_if_fail(threadSubsystemGetNetworkInfo(threadInfo), nullptr);
+        retVal = threadNetworkInfoToJson(threadInfo);
+    }
+    else
+    {
+        retVal = cJSON_CreateObject();
+    }
 
     cJSON_AddBoolToObject(retVal, SUBSYSTEM_STATUS_COMMON_READY, localInitialized);
 
