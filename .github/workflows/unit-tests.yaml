@@ -1,0 +1,95 @@
+---
+#------------------------------ tabstop = 4 ----------------------------------
+#
+# Copyright (C) 2024 Comcast
+#
+# All rights reserved.
+#
+# This software is protected by copyright laws of the United States
+# and of foreign countries. This material may also be protected by
+# patent laws of the United States and of foreign countries.
+#
+# This software is furnished under a license agreement and/or a
+# nondisclosure agreement and may only be used or copied in accordance
+# with the terms of those agreements.
+#
+# The mere transfer of this software does not imply any licenses of trade
+# secrets, proprietary technology, copyrights, patents, trademarks, or
+# any other form of intellectual property whatsoever.
+#
+# Comcast retains all ownership rights.
+#
+#------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 10/08/2024
+#
+
+name: Build Barton and Run Unit Tests
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+    workflow_dispatch:
+
+env:
+    GERRIT_HOST: rdkgerrithub.stb.r53.xcal.tv
+
+jobs:
+
+    build_image_and_bartoncore_and_run_tests:
+        name: Build Barton Image/BartonCore and Run Unit Tests
+        runs-on: ubuntu-latest
+
+        steps:
+            -
+                name: Checkout code
+                uses: actions/checkout@v4
+                with:
+                    repository: ${{ github.repository }}
+                    token: ${{ secrets.RDKCM_BARTON }}
+            -
+                name: Create ssh credentials
+                run: |
+                    mkdir -p -m 0700 $HOME/.ssh
+                    ssh-keyscan -p 29418 ${{ env.GERRIT_HOST }} >> $HOME/.ssh/known_hosts
+                    echo "${{ secrets.BARTON_SVC_PRIVATE_KEY }}" > $HOME/.ssh/id_ed25519
+                    chmod 600 $HOME/.ssh/id_ed25519
+                    cat <<EOF > $HOME/.ssh/config
+                    Host ${{ env.GERRIT_HOST }}
+                        User svc_barton
+                        IdentityFile $HOME/.ssh/id_ed25519
+                    EOF
+                    chmod 600 $HOME/.ssh/config
+            -
+                name: Set up Docker Buildx
+                uses: docker/setup-buildx-action@v3
+            -
+                name: Set environment variables
+                run: |
+                    echo "USER=$USER" >> $GITHUB_ENV
+                    echo "GID=$(id -g)" >> $GITHUB_ENV
+                    echo "UID=$(id -u)" >> $GITHUB_ENV
+            -
+                name: Build Docker image
+                uses: docker/build-push-action@v6
+                with:
+                    context: ./docker
+                    file: ./docker/Dockerfile
+                    tags: barton_builder_${{ env.USER }}:latest
+                    cache-from: type=gha
+                    cache-to: type=gha,mode=max
+                    load: true
+                    build-args: |
+                        BUILDER_USER=${{ env.USER }}
+                        BUILDER_GID=${{ env.GID }}
+                        BUILDER_UID=${{ env.UID }}
+            -
+                name: Build BartonCore
+                run: |
+                    ./dockerw -n ./build.sh
+            -
+                name: Run unit tests
+                run: ./dockerw -n ctest --test-dir build
