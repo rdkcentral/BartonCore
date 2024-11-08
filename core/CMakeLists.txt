@@ -86,6 +86,12 @@ if (BDS_MATTER)
 
     pkg_check_modules(OPENSSL REQUIRED openssl)
 
+    list(APPEND CMAKE_BUILD_RPATH "/usr/local/openssl/lib")
+    list(APPEND CMAKE_INSTALL_RPATH "/usr/local/openssl/lib")
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
+
     list(APPEND XTRA_INCLUDES ${CMAKE_BINARY_DIR}/matter-install/include/matter ${OPENSSL_INCLUDE_DIRS})
     list(APPEND XTRA_LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES})
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
@@ -111,6 +117,10 @@ list(APPEND SOURCES
         ${SOURCES}
         ${zigSubSrc}
         ${zigbeeDrivers})
+
+pkg_check_modules(CURL REQUIRED libcurl)
+link_directories(${CURL_LIBRARY_DIRS})
+list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 
 # add library dependencies for this binary
 set(btnDSLinkLibraries brtnDeviceServiceConfig xhLog xhTypes xhTime xhUtil
@@ -231,7 +241,7 @@ if (BDS_GEN_GIR)
 
     add_custom_command(
         TARGET brtnDeviceServiceShared POST_BUILD
-        COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
+        COMMAND env LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
 
@@ -350,8 +360,9 @@ bds_add_cmocka_test(
 
 if (BDS_MATTER)
     bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
-        LIBS brtnDeviceServiceStatic
-        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
+        LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
+        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
     )
 
