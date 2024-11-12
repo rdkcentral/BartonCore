@@ -42,11 +42,11 @@ mkdir -p ${MATTER_INSTALL_BIN_DIR}
 export TMPDIR=${BUILD_DIR}/tmp
 export TERM=xterm
 . ./scripts/activate.sh
-./scripts/build/build_examples.py --target linux-x64-light-rpc build && cp out/linux-x64-light-rpc/chip-lighting-app ${MATTER_INSTALL_BIN_DIR}
-./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/chip-lock-app ${MATTER_INSTALL_BIN_DIR}
-./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/thermostat-app ${MATTER_INSTALL_BIN_DIR}
-./scripts/build/build_examples.py --target linux-x64-chip-tool build && cp out/linux-x64-chip-tool/chip-tool ${MATTER_INSTALL_BIN_DIR}
+
+./scripts/build/build_examples.py --target linux-x64-light-rpc build && cp out/linux-x64-light-rpc/chip-lighting-app ${MATTER_INSTALL_BIN_DIR} && rm -rf out
+./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/chip-lock-app ${MATTER_INSTALL_BIN_DIR} && rm -rf out
+./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/thermostat-app ${MATTER_INSTALL_BIN_DIR} && rm -rf out
+./scripts/build/build_examples.py --target linux-x64-chip-tool build && cp out/linux-x64-chip-tool/chip-tool ${MATTER_INSTALL_BIN_DIR} && rm -rf out
 
 # Clean up
-rm -rf out
 rm -rf .environment

@@ -92,4 +92,4 @@ jobs:
                     ./dockerw -n ./build.sh
             -
                 name: Run unit tests
-                run: ./dockerw -n ctest --test-dir build
+                run: ./dockerw -n ctest --output-on-failure --test-dir build
