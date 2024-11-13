@@ -25,9 +25,6 @@ git clone \
 cd ${MATTER_BUILD_DIR}
 ./scripts/checkout_submodules.py --shallow --platform linux
 
-# Ensure that the older OpenSSL version is used for the build
-export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
-
 cd third_party/comcast/config/zilker
 cmake -B cmake-build-debug -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=${MATTER_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Debug -DMATTER_CONF_DIR:PATH=~/.brtn-ds/matter
 cmake --build cmake-build-debug
