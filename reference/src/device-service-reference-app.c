@@ -27,6 +27,7 @@
 #include "coreCategory.h"
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
+#include "device-service-reference-io.h"
 #include "eventHandler.h"
 #include "matterCategory.h"
 #include "provider/device-service-property-provider.h"
@@ -34,6 +35,7 @@
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
 #include <linenoise.h>
+#include <pthread.h>
 #include <pwd.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -43,16 +45,14 @@
 #define HISTORY_FILE          ".barton-ds-reference-history"
 #define HISTORY_MAX           100
 #define DEFAULT_CONF_DIR_MODE (0755)
-#define PROMPT                "deviceService> "
 
-static gboolean NO_VT100_MODE = TRUE;
+static gboolean NO_VT100_MODE = FALSE;
 static gboolean NO_ZIGBEE = FALSE;
 static gboolean NO_THREAD = FALSE;
 static gboolean NO_MATTER = FALSE;
 
 static bool showAdvanced = false;
 
-static bool running = true; // Global for now, a command could set to false to terminate interactive session
 static GList *categories = NULL;
 
 static GOptionEntry entries[] = {
@@ -99,14 +99,14 @@ static Command *findCommand(char *name)
 
 static bool handleInteractiveCommand(BDeviceServiceClient *client, char **args, int numArgs)
 {
-    bool result = true;
+    bool keepGoing = true;
 
     if (args != NULL && numArgs > 0)
     {
         // check for a couple of special commands first
         if (stringCompare(args[0], "quit", true) == 0 || stringCompare(args[0], "exit", true) == 0)
         {
-            running = false;
+            keepGoing = false;
         }
         else if (stringCompare(args[0], "help", true) == 0)
         {
@@ -120,7 +120,7 @@ static bool handleInteractiveCommand(BDeviceServiceClient *client, char **args, 
                 }
                 else
                 {
-                    printf("Invalid command\n");
+                    emitError("Invalid command\n");
                 }
             }
             else
@@ -135,17 +135,16 @@ static bool handleInteractiveCommand(BDeviceServiceClient *client, char **args, 
             if (command != NULL)
             {
                 char **argv = (numArgs == 1) ? NULL : &(args[1]);
-                result = commandExecute(client, command, numArgs - 1, argv);
+                commandExecute(client, command, numArgs - 1, argv);
             }
             else
             {
-                printf("Invalid command\n");
-                result = false;
+                emitError("Invalid command\n");
             }
         }
     }
 
-    return result;
+    return keepGoing;
 }
 
 static void completionCallback(const char *buf, linenoiseCompletions *lc)
@@ -235,9 +234,49 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
     return client;
 }
 
+static bool handleLine(const char *line, BDeviceServiceClient *client)
+{
+    bool retVal = true;
+
+    gint numArgs = 0;
+
+    if (!NO_VT100_MODE && line != NULL)
+    {
+        linenoiseHistoryAdd(line);
+    }
+
+    if (line == NULL)
+    {
+        line = "exit";
+    }
+
+    gchar **args = NULL;
+    g_autoptr(GError) parseErr = NULL;
+    if (g_shell_parse_argv(line, &numArgs, &args, &parseErr))
+    {
+        if (numArgs > 0)
+        {
+            retVal = handleInteractiveCommand(client, args, numArgs);
+        }
+    }
+    else
+    {
+        if (parseErr != NULL && parseErr->code != G_SHELL_ERROR_EMPTY_STRING)
+        {
+            emitError("Error parsing command: %s\n", parseErr->message);
+        }
+    }
+
+    g_strfreev(args);
+
+    return retVal;
+}
+
 int main(int argc, char **argv)
 {
     bool rc = false;
+
+    setIcLogPriorityFilter(IC_LOG_DEBUG);
 
     GError *cmdLineError = NULL;
     GOptionContext *context;
@@ -249,8 +288,6 @@ int main(int argc, char **argv)
         g_error_free(cmdLineError);
         return EXIT_FAILURE;
     }
-
-    setIcLogPriorityFilter(IC_LOG_DEBUG);
 
     g_autofree gchar *confDir = getDefaultConfigDirectory();
     g_autofree gchar *histFile = stringBuilder("%s/%s", confDir, HISTORY_FILE);
@@ -286,62 +323,7 @@ int main(int argc, char **argv)
 
     registerEventHandlers(client);
 
-    g_autoptr(GIOChannel) inputChannel = NULL;
-    if (NO_VT100_MODE)
-    {
-        inputChannel = g_io_channel_unix_new(STDIN_FILENO);
-    }
-
-    while (running)
-    {
-        gint numArgs = 0;
-        g_autofree gchar *line = NULL;
-
-        if (!NO_VT100_MODE)
-        {
-            line = linenoise(PROMPT);
-
-            if (line == NULL)
-            {
-                break;
-            }
-
-            linenoiseHistoryAdd(line);
-        }
-        else
-        {
-            printf("\n" PROMPT);
-            fflush(stdout);
-            GIOStatus status = g_io_channel_read_line(inputChannel, &line, NULL, NULL, NULL);
-            if (status == G_IO_STATUS_EOF)
-            {
-                line = strdup("exit");
-            }
-            else if (status != G_IO_STATUS_NORMAL)
-            {
-                break;
-            }
-        }
-
-        gchar **args = NULL;
-        g_autoptr(GError) parseErr = NULL;
-        if (g_shell_parse_argv(line, &numArgs, &args, &parseErr))
-        {
-            if (numArgs > 0)
-            {
-                handleInteractiveCommand(client, args, numArgs);
-            }
-        }
-        else
-        {
-            if (parseErr != NULL && parseErr->code != G_SHELL_ERROR_EMPTY_STRING)
-            {
-                fprintf(stderr, "Error parsing command: %s\n", parseErr->message);
-            }
-        }
-
-        g_strfreev(args);
-    }
+    device_service_reference_io_process(!NO_VT100_MODE, (processLineCallback) handleLine, client);
 
     unregisterEventHandlers();
     rc = true;

@@ -31,6 +31,7 @@
 #include "device-service-resource.h"
 #include "glib-object.h"
 #include "glib.h"
+#include "device-service-reference-io.h"
 #include <linenoise.h>
 #include <private/resourceTypes.h>
 #include <stdio.h>
@@ -42,7 +43,7 @@ static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **a
     (void) argc; // unused
     bool rc = false;
 
-    fprintf(stdout, "Starting discovery of %s for %d seconds\n", argv[0], DISCOVERY_SECONDS);
+    emitOutput("Starting discovery of %s for %d seconds\n", argv[0], DISCOVERY_SECONDS);
 
     g_autoptr(GList) deviceClasses = NULL;
     deviceClasses = g_list_append(deviceClasses, argv[0]);
@@ -52,11 +53,11 @@ static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **a
     {
         if (err != NULL)
         {
-            fprintf(stderr, "Failed to start discovery : %d - %s\n", err->code, err->message);
+            emitError("Failed to start discovery : %d - %s\n", err->code, err->message);
         }
         else
         {
-            fprintf(stderr, "Unable to start discovery of %s\n", argv[0]);
+            emitError("Unable to start discovery of %s\n", argv[0]);
         }
     }
     else
@@ -76,7 +77,7 @@ static bool discoverStopFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     g_autoptr(GError) err = NULL;
     if (!b_device_service_client_discover_stop(client, NULL))
     {
-        fprintf(stderr, "Failed to stop discovery\n");
+        emitError("Failed to stop discovery\n");
     }
     else
     {
@@ -103,7 +104,7 @@ static void listDeviceEntry(BDeviceServiceDevice *device)
                  &endpoints,
                  NULL);
 
-    printf("%s: Class: %s\n", deviceId, deviceClass);
+    emitOutput("%s: Class: %s\n", deviceId, deviceClass);
 
 
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
@@ -141,7 +142,7 @@ static void listDeviceEntry(BDeviceServiceDevice *device)
                 }
             }
 
-            printf("\tEndpoint %s: Profile: %s, Label: %s\n", endpointId, endpointProfile, label);
+            emitOutput("\tEndpoint %s: Profile: %s, Label: %s\n", endpointId, endpointProfile, label);
         }
     }
 }
@@ -183,7 +184,7 @@ static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **arg
                     device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID], &deviceId, NULL);
                 if (deviceId != NULL)
                 {
-                    printf("%s\n", deviceId);
+                    emitOutput("%s\n", deviceId);
                 }
             }
             else
@@ -196,7 +197,7 @@ static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **arg
     }
     else
     {
-        fprintf(stderr, "Failed to get devices\n");
+        emitOutput("No devices\n");
     }
 
     return rc;
@@ -276,7 +277,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
                  &endpoints,
                  NULL);
 
-    printf("%s: %s, Class: %s\n", deviceId, label == NULL ? "(no label)" : label, deviceClass);
+    emitOutput("%s: %s, Class: %s\n", deviceId, label == NULL ? "(no label)" : label, deviceClass);
 
     // gather device level resources
     g_autolist(BDeviceServiceResource) sortedResources = NULL;
@@ -298,7 +299,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
                      B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
                      &resourceValue,
                      NULL);
-        printf("\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
+        emitOutput("\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
     }
 
     // loop through each endpoint
@@ -330,7 +331,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
                      B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
                      &endpointProfile,
                      NULL);
-        printf("\tEndpoint %s: Profile: %s\n", endpointId, endpointProfile);
+        emitOutput("\tEndpoint %s: Profile: %s\n", endpointId, endpointProfile);
 
         for (GList *resourcesIter = sortedEndpointResources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
         {
@@ -343,7 +344,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
                          B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
                          &resourceValue,
                          NULL);
-            printf("\t\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
+            emitOutput("\t\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
         }
     }
 }
@@ -385,7 +386,7 @@ static bool printAllDevicesFunc(BDeviceServiceClient *client, gint argc, gchar *
     }
     else
     {
-        fprintf(stderr, "Failed to get devices\n");
+        emitError("Failed to get devices\n");
     }
 
     return rc;

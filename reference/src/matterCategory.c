@@ -28,6 +28,7 @@
 #include "matterCategory.h"
 
 #include "device-service-client.h"
+#include "device-service-reference-io.h"
 #include <stdio.h>
 
 static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
@@ -42,17 +43,17 @@ static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar 
     rc = b_device_service_client_commission_device(client, argv[0], 120, &error);
     if (rc)
     {
-        printf("Attempting to commission device\n");
+        emitOutput("Attempting to commission device\n");
     }
     else
     {
         if (error != NULL && error->message != NULL)
         {
-            fprintf(stderr, "Failed to commission device: %s\n", error->message);
+            emitError("Failed to commission device: %s\n", error->message);
         }
         else
         {
-            fprintf(stderr, "Failed to commission device: Unknown error\n");
+            emitError("Failed to commission device: Unknown error\n");
         }
     }
 
@@ -73,17 +74,17 @@ static bool addMatterDeviceFunc(BDeviceServiceClient *client, gint argc, gchar *
     rc = b_device_service_client_add_matter_device(client, nodeId, 120, &error);
     if (rc)
     {
-        printf("Attempting to add Matter device\n");
+        emitOutput("Attempting to add Matter device\n");
     }
     else
     {
         if (error != NULL && error->message != NULL)
         {
-            fprintf(stderr, "Failed to add Matter device: %s\n", error->message);
+            emitError("Failed to add Matter device: %s\n", error->message);
         }
         else
         {
-            fprintf(stderr, "Failed to add Matter device: Unknown error\n");
+            emitError("Failed to add Matter device: Unknown error\n");
         }
     }
 
@@ -106,7 +107,7 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
 
     if (commissioningInfo == NULL)
     {
-        fprintf(stderr, "Failed to open commissioning window\n");
+        emitError("Failed to open commissioning window\n");
     }
     else
     {
@@ -121,9 +122,9 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
             &qrCode,
             NULL);
 
-        fprintf(stdout, "Commissioning window opened:\n");
-        fprintf(stdout, "\tManual code: %s\n", manualCode);
-        fprintf(stdout, "\tQR code: %s\n", qrCode);
+        emitOutput("Commissioning window opened:\n");
+        emitOutput("\tManual code: %s\n", manualCode);
+        emitOutput("\tQR code: %s\n", qrCode);
 
         rc = true;
     }

@@ -1,6 +1,6 @@
-From 144be38a9e19b34fd028c1db5b0acb42f2e916c6 Mon Sep 17 00:00:00 2001
-From: Micah Koch <micah_koch@comcast.com>
-Date: Mon, 23 Sep 2024 19:17:01 +0000
+From 965f31750ed1d66482a0e3e533fd73ddbfc854f8 Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Mon, 4 Nov 2024 16:01:34 -0600
 Subject: [PATCH] Add history print and CMake build
 
 Add API to print history and also a CMake build file to build as library
@@ -37,10 +37,10 @@ index 0000000..52198f9
 +# install header in /usr/local/include
 +install(FILES linenoise.h DESTINATION include)
 diff --git a/linenoise.c b/linenoise.c
-index cfe51e7..e0f7a7e 100644
+index 574ab1f..8565fa8 100644
 --- a/linenoise.c
 +++ b/linenoise.c
-@@ -1152,6 +1152,16 @@ int linenoiseHistoryAdd(const char *line) {
+@@ -1276,6 +1276,16 @@ int linenoiseHistoryAdd(const char *line) {
      return 1;
  }
  
@@ -58,17 +58,18 @@ index cfe51e7..e0f7a7e 100644
   * if there is already some history, the function will make sure to retain
   * just the latest 'len' elements if the new history length value is smaller
 diff --git a/linenoise.h b/linenoise.h
-index 6dfee73..6d9f7bc 100644
+index 3f0270e..8d8dd21 100644
 --- a/linenoise.h
 +++ b/linenoise.h
-@@ -62,6 +62,7 @@ int linenoiseHistoryAdd(const char *line);
+@@ -98,6 +98,7 @@ int linenoiseHistoryAdd(const char *line);
  int linenoiseHistorySetMaxLen(int len);
  int linenoiseHistorySave(const char *filename);
  int linenoiseHistoryLoad(const char *filename);
 +int linenoiseHistoryPrint(void);
+ 
+ /* Other utilities. */
  void linenoiseClearScreen(void);
- void linenoiseSetMultiLine(int ml);
- void linenoisePrintKeyCodes(void);
 -- 
 2.43.0
+
 

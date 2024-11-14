@@ -27,6 +27,7 @@
 #include "eventHandler.h"
 #include "device-service-client.h"
 #include "device-service-device-found-details.h"
+#include "device-service-reference-io.h"
 #include "events/device-service-device-added-event.h"
 #include "events/device-service-device-discovered-event.h"
 #include "events/device-service-device-discovery-completed-event.h"
@@ -78,7 +79,7 @@ void unregisterEventHandlers(void)
 
 static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStartedEvent *event)
 {
-    printf("\r\ndiscoveryStarted [");
+    emitOutput("discoveryStarted [");
 
     g_autoptr(GList) deviceClasses = NULL;
     g_object_get(G_OBJECT(event),
@@ -89,20 +90,20 @@ static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceService
     while (deviceClasses != NULL)
     {
         const char *deviceClass = (const char *) deviceClasses->data;
-        printf("%s", (char *) deviceClasses->data);
+        emitOutput("%s", (char *) deviceClasses->data);
         deviceClasses = deviceClasses->next;
         if (deviceClasses)
         {
-            printf(", ");
+            emitOutput(", ");
         }
     }
 
-    printf("]\n");
+    emitOutput("]\n");
 }
 
 static void discoveryStoppedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStoppedEvent *event)
 {
-    printf("\r\ndiscoveryStopped\n");
+    emitOutput("discoveryStopped\n");
 }
 
 static void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundDetails *deviceFoundDetails)
@@ -128,13 +129,13 @@ static void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDevic
         &firmwareVersion,
         NULL);
 
-    printf("\r\n%s uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s\n",
-           printPrefix,
-           deviceId,
-           manufacturer,
-           model,
-           hardwareVersion,
-           firmwareVersion);
+    emitOutput("%s uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s\n",
+               printPrefix,
+               deviceId,
+               manufacturer,
+               model,
+               hardwareVersion,
+               firmwareVersion);
 }
 
 static void deviceDiscoveredHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveredEvent *event)
@@ -186,11 +187,11 @@ static void deviceAddedHandler(BDeviceServiceClient *source, BDeviceServiceDevic
         &deviceClassVersion,
         NULL);
 
-    printf("\r\ndevice added! deviceId=%s, uri=%s, deviceClass=%s, deviceClassVersion=%d\n",
-           deviceId,
-           uri,
-           deviceClass,
-           deviceClassVersion);
+    emitOutput("device added! deviceId=%s, uri=%s, deviceClass=%s, deviceClassVersion=%d\n",
+               deviceId,
+               uri,
+               deviceClass,
+               deviceClassVersion);
 }
 
 static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEndpointAddedEvent *event)
@@ -221,12 +222,12 @@ static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEnd
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
                  &profileVersion,
                  NULL);
-    printf("\r\nendpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d\n",
-           deviceUuid,
-           id,
-           uri,
-           profile,
-           profileVersion);
+    emitOutput("endpoint added! deviceUuid=%s, id=%s, uri=%s, profile=%s, profileVersion=%d\n",
+               deviceUuid,
+               id,
+               uri,
+               profile,
+               profileVersion);
 }
 
 static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source,
@@ -250,7 +251,7 @@ static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source,
                  &deviceClass,
                  NULL);
 
-    printf("\r\ndevice discovery completed! uuid=%s, class=%s\n", uuid, deviceClass);
+    emitOutput("device discovery completed! uuid=%s, class=%s\n", uuid, deviceClass);
 }
 
 static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryFailedEvent *event)

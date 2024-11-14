@@ -112,7 +112,7 @@ RUN cd /tmp && \
 ###############################################################################
 FROM base_builder AS third_party_builder
 
-ARG LINENOISE_GIT_TAG="97d2850af13c339369093b78abe5265845d78220"
+ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="790dc775144e33995cd1cb2c15b348849cacf737"
 
 # Copy over the third party patches

@@ -26,6 +26,7 @@
 
 #include "category.h"
 #include "command.h"
+#include "device-service-reference-io.h"
 #include <icUtil/stringUtils.h>
 #include <stdbool.h>
 #include <string.h>
@@ -154,7 +155,7 @@ void categoryPrint(const Category *category, bool isInteractive, bool showAdvanc
 
     if (category->isAdvanced == false || showAdvanced == true)
     {
-        printf("%s:\n", category->name);
+        emitOutput("%s:\n", category->name);
         for (GList *it = category->commands; it != NULL; it = it->next)
         {
             Command *command = (Command *) it->data;

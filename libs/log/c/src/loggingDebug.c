@@ -44,15 +44,33 @@
 #include "loggingCommon.h"
 #include <glib.h>
 
+static FILE *outputFile = NULL;
 
 static char *getTimeString(void);
+
+int __attribute__((weak)) getDebugLoggerFileDescriptor(void)
+{
+    return STDOUT_FILENO;
+}
 
 /*
  * initialize the logger
  */
-__attribute__((constructor)) static void initIcLogger(void)
+__attribute__((constructor(101))) static void initIcLogger(void)
 {
-    // uses STDOUT, so nothing to open
+    int outputFd = getDebugLoggerFileDescriptor();
+    if (outputFd == STDOUT_FILENO)
+    {
+        outputFile = stdout;
+    }
+    else if (outputFd == STDERR_FILENO)
+    {
+        outputFile = stderr;
+    }
+    else
+    {
+        outputFile = fdopen(outputFd, "w");
+    }
 }
 
 
@@ -120,9 +138,13 @@ void icLogMsg(const char *file,
     g_autofree char *logOut = g_strdup_vprintf(format, arglist);
     va_end(arglist);
 
-    printf("%s%s%s%s\n", timeStr, catPidStr, priorityStr, logOut);
+    if (outputFile == NULL)
+    {
+        outputFile = stdout;
+    }
+    fprintf(outputFile, "%s%s%s%s\n", timeStr, catPidStr, priorityStr, logOut);
 
-    if (fflush(stdout) == EOF)
+    if (fflush(outputFile) == EOF)
     {
         // Output is gone, prevent an infinite cycle when logging any SIGPIPEs
         setIcLogPriorityFilter(IC_LOG_NONE);

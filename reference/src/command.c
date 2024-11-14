@@ -26,6 +26,7 @@
 
 #include "command.h"
 #include "device-service-client.h"
+#include "device-service-reference-io.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -120,7 +121,7 @@ bool commandExecute(BDeviceServiceClient *client, const Command *command, gint a
         }
         else
         {
-            printf("Invalid args\n");
+            emitError("Invalid args\n");
         }
     }
 
@@ -143,7 +144,7 @@ void commandPrintUsage(const Command *command, bool isInteractive, bool showAdva
         {
             if (command->shortInteractiveName != NULL)
             {
-                printf("\t%s|%s %s : %s\n",
+                emitOutput("\t%s|%s %s : %s\n",
                        command->name,
                        command->shortInteractiveName,
                        command->argUsage == NULL ? "" : command->argUsage,
@@ -151,31 +152,31 @@ void commandPrintUsage(const Command *command, bool isInteractive, bool showAdva
             }
             else
             {
-                printf(
+                emitOutput(
                     "\t%s %s : %s\n", command->name, command->argUsage == NULL ? "" : command->argUsage, command->help);
             }
         }
         else
         {
-            printf(
+            emitOutput(
                 "\t--%s %s : %s\n", command->name, command->argUsage == NULL ? "" : command->argUsage, command->help);
         }
 
         if (command->examples != NULL)
         {
-            printf("\tExamples:\n");
+            emitOutput("\tExamples:\n");
             for (GList *it = command->examples; it != NULL; it = it->next)
             {
                 if (isInteractive == true)
                 {
-                    printf("\t\t%s\n", (gchar *) it->data);
+                    emitOutput("\t\t%s\n", (gchar *) it->data);
                 }
                 else
                 {
-                    printf("\t\t--%s\n", (gchar *) it->data);
+                    emitOutput("\t\t--%s\n", (gchar *) it->data);
                 }
             }
-            printf("\n");
+            emitOutput("\n");
         }
     }
 }
