@@ -37,7 +37,7 @@ namespace zilker
     class IcLogger
     {
     public:
-        void Connect()
+        IcLogger()
         {
             chip::Logging::SetLogRedirectCallback(OnLogMessage);
 

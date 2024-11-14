@@ -199,8 +199,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 
     icDebug();
 
-    logger.Connect();
-
     mkdir_p(CHIP_ZILKER_CONF_DIR, 0700);
 
     myFabricId = accountId;
@@ -212,8 +210,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         icError("MemoryInit failed: %s", err.AsString());
         return false;
     }
-
-    chip::Logging::SetLogFilter(chip::Logging::kLogCategory_Max);
 
     if ((err = chip::DeviceLayer::PlatformMgr().InitChipStack()) != CHIP_NO_ERROR)
     {
