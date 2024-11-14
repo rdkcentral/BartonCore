@@ -430,7 +430,6 @@ b_device_service_client_write_resource(BDeviceServiceClient *self, const gchar *
 {
     g_return_val_if_fail(self != NULL, FALSE);
     g_return_val_if_fail(uri != NULL, FALSE);
-    g_return_val_if_fail(resourceValue != NULL, FALSE);
 
     return deviceServiceWriteResource(uri, resourceValue);
 }

@@ -1342,13 +1342,18 @@ static void test_b_device_service_client_write_resource(void **state)
     assert_false(result2);
 
     // valid client, valid uri, NULL resource value
+    expect_function_call(__wrap_deviceServiceWriteResource);
+    expect_string(__wrap_deviceServiceWriteResource, uri, uri);
+    expect_value(__wrap_deviceServiceWriteResource, resourceValue, NULL);
+    will_return(__wrap_deviceServiceWriteResource, true);
+
     bool result3 = b_device_service_client_write_resource(client, uri, NULL);
-    assert_false(result3);
+    assert_true(result3);
 
     // valid client, valid uri, valid resource value
     expect_function_call(__wrap_deviceServiceWriteResource);
     expect_string(__wrap_deviceServiceWriteResource, uri, uri);
-    expect_string(__wrap_deviceServiceWriteResource, resourceValue, resourceValue);
+    expect_value(__wrap_deviceServiceWriteResource, resourceValue, resourceValue);
     will_return(__wrap_deviceServiceWriteResource, true);
 
     bool result4 = b_device_service_client_write_resource(client, uri, resourceValue);

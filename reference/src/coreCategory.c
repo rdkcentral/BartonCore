@@ -28,10 +28,12 @@
 #include "device-service-client.h"
 #include "device-service-device.h"
 #include "device-service-endpoint.h"
+#include "device-service-metadata.h"
 #include "device-service-resource.h"
 #include "glib-object.h"
 #include "glib.h"
 #include "device-service-reference-io.h"
+#include "icUtil/stringUtils.h"
 #include <linenoise.h>
 #include <private/resourceTypes.h>
 #include <stdio.h>
@@ -149,7 +151,6 @@ static void listDeviceEntry(BDeviceServiceDevice *device)
 
 static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
 {
-    bool rc = false;
     bool idOnly = false;
 
     if (argc > 0 && g_ascii_strcasecmp(argv[0], "-i") == 0)
@@ -192,15 +193,13 @@ static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **arg
                 listDeviceEntry(device);
             }
         }
-
-        rc = true;
     }
     else
     {
         emitOutput("No devices\n");
     }
 
-    return rc;
+    return true;
 }
 
 static gchar *getDeviceLabel(BDeviceServiceDevice *device)
@@ -392,6 +391,173 @@ static bool printAllDevicesFunc(BDeviceServiceClient *client, gint argc, gchar *
     return rc;
 }
 
+static bool readResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+    bool result = true;
+    g_autoptr(GError) err = NULL;
+    g_autofree gchar *value = b_device_service_client_read_resource(client, argv[0], &err);
+
+    if (err == NULL)
+    {
+        emitOutput("%s\n", stringCoalesce(value));
+    }
+    else
+    {
+        emitError("Failed: %s\n", err->message);
+
+        result = false;
+    }
+
+    return result;
+}
+
+static bool writeResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1 || argc == 2, false);
+    bool result = false;
+
+    const gchar *resourceValue = NULL;
+    if (argc == 2)
+    {
+        resourceValue = argv[1];
+    }
+
+    result = b_device_service_client_write_resource(client, argv[0], resourceValue);
+    if (!result)
+    {
+        emitError("Failed to write resource\n");
+    }
+
+    return result;
+}
+
+static bool execResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1 || argc == 2, false);
+    bool result;
+
+    const gchar *payload = NULL;
+    if (argc == 2)
+    {
+        payload = argv[1];
+    }
+
+    g_autofree gchar *response = NULL;
+    result = b_device_service_client_execute_resource(client, argv[0], payload, &response);
+
+    if (!result)
+    {
+        emitError("Failed to execute resource\n");
+    }
+    else if (response != NULL)
+    {
+        emitOutput("Execute Response: %s\n", response);
+    }
+    else
+    {
+        emitOutput("Execute Succeeded!\n");
+    }
+
+    return result;
+}
+
+static bool queryResourcesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+
+    g_autolist(BDeviceServiceResource) resources = b_device_service_client_query_resources_by_uri(client, argv[0]);
+    if (resources)
+    {
+        emitOutput("resources:\n");
+
+        GList *sortedResources = NULL;
+        for (GList *iter = resources; iter != NULL; iter = g_list_next(iter))
+        {
+            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(iter->data);
+            sortedResources = g_list_insert_sorted(sortedResources, resource, (GCompareFunc) resourceSort);
+        }
+
+        for (GList *iter = sortedResources; iter != NULL; iter = g_list_next(iter))
+        {
+            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(iter->data);
+            g_autofree gchar *uri = NULL;
+            g_autofree gchar *value = NULL;
+
+            g_object_get(resource,
+                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                         &uri,
+                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                         &value,
+                         NULL);
+            emitOutput("\t%s = %s\n", uri, stringCoalesce(value));
+        }
+
+        g_list_free(sortedResources);
+    }
+    else
+    {
+        emitOutput("No resources found\n");
+    }
+
+    return true;
+}
+
+static bool readMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+
+    g_autofree gchar *value = b_device_service_client_read_metadata(client, argv[0]);
+
+    emitOutput("%s\n", stringCoalesce(value));
+
+    return true;
+}
+
+static bool writeMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1 || argc == 2, false);
+
+    bool result = b_device_service_client_write_metadata(client, argv[0], argc == 2 ? argv[1] : NULL);
+    if (!result)
+    {
+        emitError("Failed to write metadata\n");
+    }
+
+    return result;
+}
+
+static bool queryMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+
+    g_autolist(BDeviceServiceMetadata) metadata = b_device_service_client_get_metadata_by_uri(client, argv[0]);
+
+    if (metadata)
+    {
+        emitOutput("metadata:\n");
+        for (GList *iter = metadata; iter != NULL; iter = g_list_next(iter))
+        {
+            BDeviceServiceMetadata *meta = B_DEVICE_SERVICE_METADATA(iter->data);
+            g_autofree gchar *uri = NULL;
+            g_autofree gchar *value = NULL;
+            g_object_get(meta,
+                         B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_URI],
+                         &uri,
+                         B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE],
+                         &value,
+                         NULL);
+            emitOutput("\t%s=%s\n", uri, stringCoalesce(value));
+        }
+    }
+    else
+    {
+        emitOutput("No metadata found\n");
+    }
+
+    return true;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -432,6 +598,43 @@ Category *buildCoreCategory(void)
                             0,
                             1,
                             printAllDevicesFunc);
+    categoryAddCommand(cat, command);
+
+    // read resource
+    command = commandCreate("readResource", "rr", "<uri>", "read the value of a resource", 1, 1, readResourceFunc);
+    commandAddExample(command, "readResource /000d6f000aae8410/r/communicationFailure");
+    categoryAddCommand(cat, command);
+
+    // write resource
+    command =
+        commandCreate("writeResource", "wr", "<uri> [value]", "write the value of a resource", 1, 2, writeResourceFunc);
+    commandAddExample(command, "writeResource /000d6f000aae8410/ep/1/r/label \"Front Door\"");
+    categoryAddCommand(cat, command);
+
+    // execute resource
+    command = commandCreate("execResource", "er", "<uri> [value]", "execute a resource", 1, 2, execResourceFunc);
+    categoryAddCommand(cat, command);
+
+    // query resources
+    command = commandCreate(
+        "queryResources", "qr", "<uri pattern>", "query resources with a pattern", 1, 1, queryResourcesFunc);
+    commandAddExample(command, "qr */lowBatt");
+    categoryAddCommand(cat, command);
+
+    // read metadata
+    command = commandCreate("readMetadata", "rm", "<uri>", "read metadata", 1, 1, readMetadataFunc);
+    commandAddExample(command, "rm /000d6f000aae8410/m/lpmPolicy");
+    categoryAddCommand(cat, command);
+
+    // write metadata
+    command = commandCreate("writeMetadata", "wm", "<uri>", "write metadata", 1, 2, writeMetadataFunc);
+    commandAddExample(command, "wm /000d6f000aae8410/m/lpmPolicy never");
+    categoryAddCommand(cat, command);
+
+    // query metadata
+    command = commandCreate(
+        "queryMetadata", "qm", "<uri pattern>", "query metadata through a uri pattern", 1, 1, queryMetadataFunc);
+    commandAddExample(command, "qm */rejoins");
     categoryAddCommand(cat, command);
 
     return cat;
