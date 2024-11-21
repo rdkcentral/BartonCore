@@ -139,7 +139,9 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libmbedtls-dev \
     libdbus-1-dev \
     libavahi-client-dev \
-    libreadline-dev
+    libreadline-dev \
+    checkinstall \
+    zlib1g-dev
 
 # 'gn' (generate ninja)
 RUN cd /tmp && \
@@ -175,6 +177,29 @@ RUN cd /tmp && \
     cmake .. && \
     make install && \
     rm -rf /tmp/linenoise
+
+# Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
+RUN cd /tmp && \
+    wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1v/openssl-1.1.1v.tar.gz && \
+    tar -xzvf openssl-1.1.1v.tar.gz && \
+    cd openssl-1.1.1v && \
+    ./config --prefix=/usr/local/openssl --openssldir=/usr/local/openssl && \
+    make && \
+    make install && \
+    rm -rf /tmp/openssl-1.1.1v.tar.gz /tmp/openssl-1.1.1v
+
+# Download, build, and install libcurl, but link against OpenSSL 1.1.1v specifically
+RUN cd /tmp && \
+    wget https://curl.se/download/curl-7.82.0.tar.gz && \
+    tar -xzvf curl-7.82.0.tar.gz && \
+    cd curl-7.82.0 && \
+    ./configure --with-ssl=/usr/local/openssl && \
+    make && \
+    make install && \
+    rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
+
+# Ensure the system uses OpenSSL 3 by default
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
 
 ###############################################################################
 # User creation stage
