@@ -95,6 +95,12 @@ typedef struct ArrayCompareParams
     size_t arraySize;
 } ArrayCompareParams;
 
+typedef struct GetMetadataReturnVal
+{
+    char *value;
+    bool success;
+} GetMetadataReturnVal;
+
 static bool compareStringGLists(GList *first, GList *second);
 
 // Custom Checkers
@@ -1522,27 +1528,42 @@ static void test_b_device_service_client_read_metadata(void **state)
     BDeviceServiceClient *client = *state;
     const char *uri = "testUri";
     char *expectedValue = "testMetadataValue";
+    g_autoptr(GError) err = NULL;
 
     // NULL client, NULL uri
-    g_autofree gchar *result = b_device_service_client_read_metadata(NULL, NULL);
+    g_autofree gchar *result = b_device_service_client_read_metadata(NULL, NULL, &err);
     assert_null(result);
 
     // NULL client, valid uri
-    g_autofree gchar *result1 = b_device_service_client_read_metadata(NULL, uri);
+    g_autofree gchar *result1 = b_device_service_client_read_metadata(NULL, uri, &err);
     assert_null(result1);
 
     // valid client, NULL uri
-    g_autofree gchar *result2 = b_device_service_client_read_metadata(client, NULL);
+    g_autofree gchar *result2 = b_device_service_client_read_metadata(client, NULL, &err);
     assert_null(result2);
 
-    // valid client, valid uri
+    // valid client, inaccessible uri
+    GetMetadataReturnVal getMetadataReturnVal = {NULL, false};
     expect_function_call(__wrap_deviceServiceGetMetadata);
     expect_string(__wrap_deviceServiceGetMetadata, uri, uri);
-    will_return(__wrap_deviceServiceGetMetadata, strdup(expectedValue));
+    will_return(__wrap_deviceServiceGetMetadata, &getMetadataReturnVal);
+    g_autofree gchar *result3 = b_device_service_client_read_metadata(client, uri, &err);
+    assert_null(result3);
+    assert_non_null(err);
+    assert_int_equal(err->code, METADATA_NOT_ACCESSIBLE);
 
-    g_autofree gchar *result3 = b_device_service_client_read_metadata(client, uri);
-    assert_non_null(result3);
-    assert_string_equal(result3, expectedValue);
+    // valid client, valid uri
+    free(err);
+    err = NULL;
+    expect_function_call(__wrap_deviceServiceGetMetadata);
+    expect_string(__wrap_deviceServiceGetMetadata, uri, uri);
+    getMetadataReturnVal.value = strdup(expectedValue);
+    getMetadataReturnVal.success = true;
+    will_return(__wrap_deviceServiceGetMetadata, &getMetadataReturnVal);
+
+    g_autofree gchar *result4 = b_device_service_client_read_metadata(client, uri, &err);
+    assert_non_null(result4);
+    assert_string_equal(result4, expectedValue);
 }
 
 static void test_b_device_service_client_query_resources_by_uri(void **state)
@@ -5146,8 +5167,9 @@ bool __wrap_deviceServiceGetMetadata(const char *uri, char **value)
 {
     function_called();
     check_expected(uri);
-    *value = mock_type(char *);
-    return *value != NULL;
+    GetMetadataReturnVal *retVal = mock_type(GetMetadataReturnVal *);
+    *value = retVal->value;
+    return retVal->success;
 }
 
 bool __wrap_deviceServiceSetSystemProperty(const char *name, const char *value)

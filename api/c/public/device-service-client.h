@@ -52,6 +52,7 @@ G_DECLARE_FINAL_TYPE(BDeviceServiceClient, b_device_service_client, B_DEVICE_SER
 // Error code range specifications:
 // - BDeviceServiceReadResourceError: 1-99
 // - BDeviceServiceZigbeeChannelChangeError: 100-199
+// - BDeviceServiceReadMetadataError: 200-299
 
 typedef enum
 {
@@ -66,6 +67,11 @@ typedef enum
     ZIGBEE_CHANNEL_CHANGE_IN_PROGRESS,
     ZIGBEE_CHANNEL_CHANGE_UNABLE_TO_CALCULATE,
 } BDeviceServiceZigbeeChannelChangeError;
+
+typedef enum
+{
+    METADATA_NOT_ACCESSIBLE = 200 // The metadata is not accessible
+} BDeviceServiceReadMetadataError;
 
 GQuark b_device_service_client_error_quark(void);
 
@@ -547,13 +553,14 @@ GList *b_device_service_client_get_metadata_by_uri(BDeviceServiceClient *self, g
  * b_device_service_client_read_metadata
  * @self: the BDeviceServiceClient instance.
  * @uri: the URI to a metadata item.
+ * @err: a GError to store any error that occurs.
  *
  * @brief Get the value of a metadata item at the provided URI.
  *
  * Returns: gchar* - the value of the metadata if successful and NULL on failure.
  *
  */
-gchar *b_device_service_client_read_metadata(BDeviceServiceClient *self, const gchar *uri);
+gchar *b_device_service_client_read_metadata(BDeviceServiceClient *self, const gchar *uri, GError **err);
 
 /**
  * b_device_service_client_query_resources_by_uri

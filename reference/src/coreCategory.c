@@ -507,9 +507,17 @@ static bool readMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **ar
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autofree gchar *value = b_device_service_client_read_metadata(client, argv[0]);
+    g_autoptr(GError) err;
+    g_autofree gchar *value = b_device_service_client_read_metadata(client, argv[0], &err);
 
-    emitOutput("%s\n", stringCoalesce(value));
+    if (err == NULL)
+    {
+        emitOutput("%s\n", stringCoalesce(value));
+    }
+    else
+    {
+        emitError("Failed to read metadata: %s\n", err->message);
+    }
 
     return true;
 }

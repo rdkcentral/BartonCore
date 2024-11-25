@@ -482,13 +482,16 @@ gboolean b_device_service_client_write_metadata(BDeviceServiceClient *self, cons
     return deviceServiceSetMetadata(uri, value) ? TRUE : FALSE;
 }
 
-gchar *b_device_service_client_read_metadata(BDeviceServiceClient *self, const gchar *uri)
+gchar *b_device_service_client_read_metadata(BDeviceServiceClient *self, const gchar *uri, GError **err)
 {
     g_return_val_if_fail(self != NULL, NULL);
     g_return_val_if_fail(uri != NULL, NULL);
 
     gchar *value = NULL;
-    deviceServiceGetMetadata(uri, &value);
+    if (!deviceServiceGetMetadata(uri, &value))
+    {
+        g_set_error_literal(err, B_DEVICE_SERVICE_CLIENT_ERROR, METADATA_NOT_ACCESSIBLE, "Metadata not accessible");
+    }
     return value;
 }
 
