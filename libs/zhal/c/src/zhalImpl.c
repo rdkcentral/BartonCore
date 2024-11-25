@@ -782,7 +782,7 @@ static bool xmit(WorkItem *item)
         return false;
     }
 
-    char *payload = cJSON_PrintUnformatted(item->request);
+    scoped_generic char *payload = cJSON_PrintUnformatted(item->request);
     uint16_t payloadLen = (uint16_t) strlen(payload);
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -801,11 +801,8 @@ static bool xmit(WorkItem *item)
     {
         icLogError(LOG_TAG, "error sending payload: %s", strerror(errno));
         close(sock);
-        free(payload);
         return false;
     }
-
-    free(payload);
 
     // recv taints msgLen but we can only receive 2 bytes into a unit16 - there are no sane bounds checks
     // coverity[tainted_argument]
