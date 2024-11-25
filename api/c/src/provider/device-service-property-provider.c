@@ -175,7 +175,7 @@ gchar *b_device_service_property_provider_get_property_as_string(BDeviceServiceP
     g_autofree gchar *property_value = b_device_service_property_provider_get_property(self, property_name, &error);
     if (error)
     {
-        icWarn("Error getting property: %s", error->message);
+        icWarn("Error getting property '%s': %s", stringCoalesce(property_name), error->message);
         return g_strdup(default_value);
     }
 
@@ -192,7 +192,7 @@ gboolean b_device_service_property_provider_get_property_as_bool(BDeviceServiceP
     g_autofree gchar *property_value = b_device_service_property_provider_get_property(self, property_name, &error);
     if (error)
     {
-        icWarn("Error getting property: %s", error->message);
+        icWarn("Error getting property '%s': %s", stringCoalesce(property_name), error->message);
         return default_value;
     }
 
@@ -257,7 +257,7 @@ gint64 b_device_service_property_provider_get_property_as_int64(BDeviceServicePr
     g_autofree gchar *property_value = b_device_service_property_provider_get_property(self, property_name, &error);
     if (error)
     {
-        icWarn("Error getting property: %s", error->message);
+        icWarn("Error getting property '%s': %s", stringCoalesce(property_name), error->message);
         return default_value;
     }
 
@@ -333,7 +333,7 @@ guint64 b_device_service_property_provider_get_property_as_uint64(BDeviceService
     g_autofree gchar *property_value = b_device_service_property_provider_get_property(self, property_name, &error);
     if (error)
     {
-        icWarn("Error getting property: %s", error->message);
+        icWarn("Error getting property '%s': %s", stringCoalesce(property_name), error->message);
         return default_value;
     }
 
