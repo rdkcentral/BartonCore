@@ -1528,19 +1528,22 @@ static void test_b_device_service_client_read_metadata(void **state)
     BDeviceServiceClient *client = *state;
     const char *uri = "testUri";
     char *expectedValue = "testMetadataValue";
-    g_autoptr(GError) err = NULL;
+    GError *err = NULL;
 
     // NULL client, NULL uri
     g_autofree gchar *result = b_device_service_client_read_metadata(NULL, NULL, &err);
     assert_null(result);
+    assert_null(err);
 
     // NULL client, valid uri
     g_autofree gchar *result1 = b_device_service_client_read_metadata(NULL, uri, &err);
     assert_null(result1);
+    assert_null(err);
 
     // valid client, NULL uri
     g_autofree gchar *result2 = b_device_service_client_read_metadata(client, NULL, &err);
     assert_null(result2);
+    assert_null(err);
 
     // valid client, inaccessible uri
     GetMetadataReturnVal getMetadataReturnVal = {NULL, false};
@@ -1553,7 +1556,7 @@ static void test_b_device_service_client_read_metadata(void **state)
     assert_int_equal(err->code, METADATA_NOT_ACCESSIBLE);
 
     // valid client, valid uri
-    free(err);
+    g_error_free(err);
     err = NULL;
     expect_function_call(__wrap_deviceServiceGetMetadata);
     expect_string(__wrap_deviceServiceGetMetadata, uri, uri);
@@ -1564,6 +1567,7 @@ static void test_b_device_service_client_read_metadata(void **state)
     g_autofree gchar *result4 = b_device_service_client_read_metadata(client, uri, &err);
     assert_non_null(result4);
     assert_string_equal(result4, expectedValue);
+    assert_null(err);
 }
 
 static void test_b_device_service_client_query_resources_by_uri(void **state)
