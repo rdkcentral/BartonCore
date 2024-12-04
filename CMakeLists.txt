@@ -26,6 +26,22 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/config/cmake/modules"
 include("${PROJECT_SOURCE_DIR}/config/cmake/options.cmake")
 include("${PROJECT_SOURCE_DIR}/config/cmake/DependencyVersions.cmake")
 
+# Before building our stuff, build matter if we need to
+if (BDS_MATTER)
+    # Only search default locations. Mostly this is for clients who build matter out of band
+    # already. The script will check our usual matter build location.
+    find_library(MATTER NAMES ${BDS_MATTER_LIB})
+
+    if (${MATTER} STREQUAL "MATTER-NOTFOUND")
+        execute_process(
+            COMMAND ./build-matter.sh
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        )
+    else()
+        message(STATUS "Matter found at ${MATTER}")
+    endif()
+endif()
+
 if (NOT BDS_PROVIDE_LIBS)
     add_subdirectory(libs)
 endif()
