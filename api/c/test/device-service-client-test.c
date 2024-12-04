@@ -1857,7 +1857,7 @@ static void test_b_device_service_client_zigbee_energy_scan(void **state)
         linkedListDeepClone(energyScanResults, zhalEnergyScanResultsLinkedListCloneFunction, NULL);
 
     // Create the GList to pass to the function under test
-    GList *channelsToScan = NULL;
+    g_autoptr(GList) channelsToScan = NULL;
     channelsToScan = g_list_append(channelsToScan, GUINT_TO_POINTER(expectedChannel));
 
     ArrayCompareParams *arrayCompareParams = calloc(1, sizeof(ArrayCompareParams));
@@ -3771,8 +3771,8 @@ static bool checkBDeviceServiceStatusContents(BDeviceServiceStatus *inputStatus,
 
 static int checkBDeviceServiceStatusEventContents(BDeviceServiceStatusEvent *input, BDeviceServiceStatusEvent *expected)
 {
-    BDeviceServiceStatus *inputStatus = NULL;
-    BDeviceServiceStatus *expectedStatus = NULL;
+    g_autoptr(BDeviceServiceStatus) inputStatus = NULL;
+    g_autoptr(BDeviceServiceStatus) expectedStatus = NULL;
     BDeviceServiceStatusChangedReason inputReason = 0;
     BDeviceServiceStatusChangedReason expectedReason = 0;
 

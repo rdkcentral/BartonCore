@@ -68,7 +68,7 @@ static void test_property_access(BDeviceServiceResourceUpdatedEventTest *test, g
 
     g_assert_cmpstr(metadata_test, ==, metadata);
 
-    BDeviceServiceResource *resource = b_device_service_resource_new();
+    g_autoptr(BDeviceServiceResource) resource = b_device_service_resource_new();
     gchar *id = "myId";
     g_object_set(resource, B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_ID], id, NULL);
     g_object_set(
@@ -77,7 +77,7 @@ static void test_property_access(BDeviceServiceResourceUpdatedEventTest *test, g
         resource,
         NULL);
 
-    BDeviceServiceResource *resource_test = NULL;
+    g_autoptr(BDeviceServiceResource) resource_test = NULL;
     g_object_get(
         test->event,
         B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROP_RESOURCE],

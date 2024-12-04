@@ -54,7 +54,7 @@ static void test_event_creation(BDeviceServiceEndpointAddedEventTest *test, gcon
 static void test_property_access(BDeviceServiceEndpointAddedEventTest *test, gconstpointer user_data)
 {
     const gchar *id = "myEndpointId";
-    BDeviceServiceEndpoint *endpoint = b_device_service_endpoint_new();
+    g_autoptr(BDeviceServiceEndpoint) endpoint = b_device_service_endpoint_new();
     g_object_set(endpoint, B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID], id, NULL);
 
     g_object_set(

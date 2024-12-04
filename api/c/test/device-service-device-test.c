@@ -107,7 +107,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_assert_cmpstr(managingDeviceDriver, ==, "test-driver");
     g_free(managingDeviceDriver);
 
-    g_autoptr(GList) endpoints = NULL;
+    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
     g_autoptr(BDeviceServiceEndpoint) endpoint1 = b_device_service_endpoint_new();
     const gchar *endpoint1_id = "endpoint1";
     g_object_set(
@@ -117,7 +117,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_object_set(
         test->device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS], endpoints, NULL);
 
-    g_autoptr(GList) endpoints_test = NULL;
+    g_autolist(BDeviceServiceEndpoint) endpoints_test = NULL;
     g_object_get(test->device,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS],
                  &endpoints_test,
@@ -134,7 +134,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_assert_cmpstr(endpoint1_test_id, ==, endpoint1_id);
     g_free(endpoint1_test_id);
 
-    g_autoptr(GList) resources = NULL;
+    g_autolist(BDeviceServiceResource) resources = NULL;
     g_autoptr(BDeviceServiceResource) resource1 = b_device_service_resource_new();
     const gchar *resource1_id = "resource1";
     g_object_set(
@@ -144,7 +144,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_object_set(
         test->device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_RESOURCES], resources, NULL);
 
-    g_autoptr(GList) resources_test = NULL;
+    g_autolist(BDeviceServiceResource) resources_test = NULL;
     g_object_get(test->device,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_RESOURCES],
                  &resources_test,
@@ -161,7 +161,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_assert_cmpstr(resource1_test_id, ==, resource1_id);
     g_free(resource1_test_id);
 
-    g_autoptr(GList) metadata = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata = NULL;
     g_autoptr(BDeviceServiceMetadata) metadata1 = b_device_service_metadata_new();
     const gchar *metadata1_id = "metadata1";
     g_object_set(
@@ -171,7 +171,7 @@ static void test_property_access(BDeviceServiceDeviceTest *test, gconstpointer u
     g_object_set(
         test->device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_METADATA], metadata, NULL);
 
-    g_autoptr(GList) metadata_test = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata_test = NULL;
     g_object_get(test->device,
                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_METADATA],
                  &metadata_test,

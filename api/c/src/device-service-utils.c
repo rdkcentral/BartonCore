@@ -42,8 +42,8 @@ BDeviceServiceEndpoint *convertIcDeviceEndpointToGObject(const icDeviceEndpoint 
     {
         retVal = b_device_service_endpoint_new();
 
-        GList *resources = convertIcDeviceResourceListToGList(endpoint->resources);
-        GList *metadata = convertIcDeviceMetadataListToGList(endpoint->metadata);
+        g_autolist(BDeviceServiceResource) resources = convertIcDeviceResourceListToGList(endpoint->resources);
+        g_autolist(BDeviceServiceMetadata) metadata = convertIcDeviceMetadataListToGList(endpoint->metadata);
 
         guint profileVersion = endpoint->profileVersion;
         g_object_set(retVal,
@@ -146,9 +146,9 @@ BDeviceServiceDevice *convertIcDeviceToGObject(const icDevice *device)
     {
         retVal = b_device_service_device_new();
 
-        GList *endpoints = convertIcDeviceEndpointListToGList(device->endpoints);
-        GList *resources = convertIcDeviceResourceListToGList(device->resources);
-        GList *metadata = convertIcDeviceMetadataListToGList(device->metadata);
+        g_autolist(BDeviceServiceEndpoint) endpoints = convertIcDeviceEndpointListToGList(device->endpoints);
+        g_autolist(BDeviceServiceResource) resources = convertIcDeviceResourceListToGList(device->resources);
+        g_autolist(BDeviceServiceMetadata) metadata = convertIcDeviceMetadataListToGList(device->metadata);
 
         guint deviceClassVersion = device->deviceClassVersion;
         g_object_set(retVal,

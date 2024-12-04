@@ -118,7 +118,7 @@ static void test_property_access(BDeviceServiceEndpointTest *test, gconstpointer
                  NULL);
     g_assert_true(enabled);
 
-    g_autoptr(GList) resources = NULL;
+    g_autolist(BDeviceServiceResource) resources = NULL;
     g_autoptr(BDeviceServiceResource) resource1 = b_device_service_resource_new();
     const gchar *resource1_id = "resource1";
     g_object_set(
@@ -130,7 +130,7 @@ static void test_property_access(BDeviceServiceEndpointTest *test, gconstpointer
                  resources,
                  NULL);
 
-    g_autoptr(GList) resources_test = NULL;
+    g_autolist(BDeviceServiceResource) resources_test = NULL;
     g_object_get(test->endpoint,
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
                  &resources_test,
@@ -147,7 +147,7 @@ static void test_property_access(BDeviceServiceEndpointTest *test, gconstpointer
     g_assert_cmpstr(resource1_test_id, ==, resource1_id);
     g_free(resource1_test_id);
 
-    g_autoptr(GList) metadata = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata = NULL;
     g_autoptr(BDeviceServiceMetadata) metadata1 = b_device_service_metadata_new();
     const gchar *metadata1_id = "metadata1";
     g_object_set(
@@ -159,7 +159,7 @@ static void test_property_access(BDeviceServiceEndpointTest *test, gconstpointer
                  metadata,
                  NULL);
 
-    g_autoptr(GList) metadata_test = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata_test = NULL;
     g_object_get(test->endpoint,
                  B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_METADATA],
                  &metadata_test,
