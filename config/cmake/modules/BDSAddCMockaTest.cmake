@@ -36,64 +36,65 @@ include(BDSConfigureGLib)
 #     LINK_LIBRARIES_WHOLE myWholeLibrary                      # list of libraries that you need to link against (with --whole-archive)
 # )
 function(bds_add_cmocka_test)
+    if(BUILD_TESTING)
+        set(options NONE)
+        set(oneValueArgs NAME WORKING_DIRECTORY)
+        set(multiValueArgs TEST_SOURCES TEST_ARGS INCLUDES WRAPPED_FUNCTIONS LINK_LIBRARIES LINK_LIBRARIES_WHOLE)
+        cmake_parse_arguments(BDS_ADD_CMOCKA_TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(options NONE)
-    set(oneValueArgs NAME WORKING_DIRECTORY)
-    set(multiValueArgs TEST_SOURCES TEST_ARGS INCLUDES WRAPPED_FUNCTIONS LINK_LIBRARIES LINK_LIBRARIES_WHOLE)
-    cmake_parse_arguments(BDS_ADD_CMOCKA_TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+        # Check required args
+        if (NOT DEFINED BDS_ADD_CMOCKA_TEST_NAME)
+            message(FATAL_ERROR "Missing required argument NAME")
+        elseif (NOT DEFINED BDS_ADD_CMOCKA_TEST_TEST_SOURCES)
+            message(FATAL_ERROR "Missing required argument TEST_SOURCES")
+        endif()
 
-    # Check required args
-    if (NOT DEFINED BDS_ADD_CMOCKA_TEST_NAME)
-        message(FATAL_ERROR "Missing required argument NAME")
-    elseif (NOT DEFINED BDS_ADD_CMOCKA_TEST_TEST_SOURCES)
-        message(FATAL_ERROR "Missing required argument TEST_SOURCES")
+        message(STATUS "Adding unit test ${BDS_ADD_CMOCKA_TEST_NAME}")
+
+        # default optional args
+        if (NOT DEFINED BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY)
+            set(BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        endif()
+
+        include(FindPkgConfig)
+
+        pkg_check_modules(GIO REQUIRED glib-2.0>=${GLIB_MIN_VERSION} gio-2.0>=${GLIB_MIN_VERSION} gio-unix-2.0>=${GLIB_MIN_VERSION})
+        list(APPEND XTRA_LIBS ${GIO_LINK_LIBRARIES})
+        list(APPEND XTRA_INCLUDES ${GIO_INCLUDE_DIRS})
+
+        add_executable(${BDS_ADD_CMOCKA_TEST_NAME}
+                       ${BDS_ADD_CMOCKA_TEST_TEST_SOURCES})
+
+
+        target_include_directories(${BDS_ADD_CMOCKA_TEST_NAME} PRIVATE ${BDS_ADD_CMOCKA_TEST_INCLUDES})
+
+        #loop through and add wrap args
+        if (DEFINED BDS_ADD_CMOCKA_TEST_WRAPPED_FUNCTIONS)
+            set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl")
+
+            foreach(WRAPPED_FUNCTION ${BDS_ADD_CMOCKA_TEST_WRAPPED_FUNCTIONS})
+                set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${BDS_ADD_CMOCKA_TEST_LINK_FLAGS},--wrap=${WRAPPED_FUNCTION}")
+            endforeach()
+        else()
+            set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+        endif()
+
+        set_target_properties(${BDS_ADD_CMOCKA_TEST_NAME} PROPERTIES LINK_FLAGS "${BDS_ADD_CMOCKA_TEST_LINK_FLAGS}")
+
+        # add library dependencies for this test-binary
+        target_link_libraries(${BDS_ADD_CMOCKA_TEST_NAME}
+                                ${BDS_ADD_CMOCKA_TEST_LINK_LIBRARIES}
+                                cmocka
+                                ${XTRA_LIBS}
+                                -Wl,--whole-archive ${BDS_ADD_CMOCKA_TEST_LINK_LIBRARIES_WHOLE} -Wl,--no-whole-archive)
+
+        set_target_properties(${BDS_ADD_CMOCKA_TEST_NAME} PROPERTIES
+                              SKIP_BUILD_RPATH false
+                              BUILD_RPATH_USE_ORIGIN true
+                              BUILD_RPATH ${CMAKE_PREFIX_PATH}/lib)
+
+        add_test(NAME ${BDS_ADD_CMOCKA_TEST_NAME}
+                 COMMAND ${BDS_ADD_CMOCKA_TEST_NAME} ${BDS_ADD_CMOCKA_TEST_TEST_ARGS}
+                 WORKING_DIRECTORY ${BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY})
     endif()
-
-    message(STATUS "Adding unit test ${BDS_ADD_CMOCKA_TEST_NAME}")
-
-    # default optional args
-    if (NOT DEFINED BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY)
-        set(BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-    endif()
-
-    include(FindPkgConfig)
-
-    pkg_check_modules(GIO REQUIRED glib-2.0>=${GLIB_MIN_VERSION} gio-2.0>=${GLIB_MIN_VERSION} gio-unix-2.0>=${GLIB_MIN_VERSION})
-    list(APPEND XTRA_LIBS ${GIO_LINK_LIBRARIES})
-    list(APPEND XTRA_INCLUDES ${GIO_INCLUDE_DIRS})
-
-    add_executable(${BDS_ADD_CMOCKA_TEST_NAME}
-                   ${BDS_ADD_CMOCKA_TEST_TEST_SOURCES})
-
-
-    target_include_directories(${BDS_ADD_CMOCKA_TEST_NAME} PRIVATE ${BDS_ADD_CMOCKA_TEST_INCLUDES})
-
-    #loop through and add wrap args
-    if (DEFINED BDS_ADD_CMOCKA_TEST_WRAPPED_FUNCTIONS)
-        set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl")
-
-        foreach(WRAPPED_FUNCTION ${BDS_ADD_CMOCKA_TEST_WRAPPED_FUNCTIONS})
-            set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${BDS_ADD_CMOCKA_TEST_LINK_FLAGS},--wrap=${WRAPPED_FUNCTION}")
-        endforeach()
-    else()
-        set(BDS_ADD_CMOCKA_TEST_LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
-    endif()
-
-    set_target_properties(${BDS_ADD_CMOCKA_TEST_NAME} PROPERTIES LINK_FLAGS "${BDS_ADD_CMOCKA_TEST_LINK_FLAGS}")
-
-    # add library dependencies for this test-binary
-    target_link_libraries(${BDS_ADD_CMOCKA_TEST_NAME}
-                            ${BDS_ADD_CMOCKA_TEST_LINK_LIBRARIES}
-                            cmocka
-                            ${XTRA_LIBS}
-                            -Wl,--whole-archive ${BDS_ADD_CMOCKA_TEST_LINK_LIBRARIES_WHOLE} -Wl,--no-whole-archive)
-
-    set_target_properties(${BDS_ADD_CMOCKA_TEST_NAME} PROPERTIES
-                          SKIP_BUILD_RPATH false
-                          BUILD_RPATH_USE_ORIGIN true
-                          BUILD_RPATH ${CMAKE_PREFIX_PATH}/lib)
-
-    add_test(NAME ${BDS_ADD_CMOCKA_TEST_NAME}
-             COMMAND ${BDS_ADD_CMOCKA_TEST_NAME} ${BDS_ADD_CMOCKA_TEST_TEST_ARGS}
-             WORKING_DIRECTORY ${BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY})
 endfunction() # SETUP_TARGET_FOR_COVERAGE

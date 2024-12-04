@@ -335,10 +335,14 @@ if (BDS_ZIGBEE)
             INCLUDES ${PRIVATE_API_INCLUDES}
     )
 
-    set(JSONDB_FIXTURES "${CMAKE_CURRENT_LIST_DIR}/test/etc")
-    target_compile_definitions(testJsonDatabase PRIVATE -DFIXTURES_DIR="${JSONDB_FIXTURES}")
+    if(TARGET testJsonDatabase)
+        set(JSONDB_FIXTURES "${CMAKE_CURRENT_LIST_DIR}/test/etc")
+        target_compile_definitions(testJsonDatabase PRIVATE -DFIXTURES_DIR="${JSONDB_FIXTURES}")
+    endif()
 
-    target_compile_definitions(testDeviceDescriptorsAvailability PRIVATE -DTEST_DIR="${CMAKE_CURRENT_LIST_DIR}/test/")
+    if(TARGET testDeviceDescriptorsAvailability)
+        target_compile_definitions(testDeviceDescriptorsAvailability PRIVATE -DTEST_DIR="${CMAKE_CURRENT_LIST_DIR}/test/")
+    endif()
 endif()
 
 bds_add_cmocka_test(
@@ -593,7 +597,9 @@ bds_add_cmocka_test(
     LINK_LIBRARIES brtnDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
 )
-target_compile_definitions(device-service-client-test PRIVATE G_LOG_DOMAIN="BDeviceServiceClientTest")
+if(TARGET device-service-client-test)
+    target_compile_definitions(device-service-client-test PRIVATE G_LOG_DOMAIN="BDeviceServiceClientTest")
+endif()
 
 bds_add_cmocka_test(
     NAME device-service-property-provider-test
@@ -604,6 +610,8 @@ bds_add_cmocka_test(
     LINK_LIBRARIES brtnDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_compile_definitions(device-service-property-provider-test PRIVATE G_LOG_DOMAIN="BDeviceServicePropertyProviderTest")
+if(TARGET device-service-property-provider-test)
+    target_compile_definitions(device-service-property-provider-test PRIVATE G_LOG_DOMAIN="BDeviceServicePropertyProviderTest")
+endif()
 
 bds_configure_glib()

@@ -7,8 +7,9 @@ bds_add_cmocka_test(
         LINK_LIBRARIES $<TARGET_PROPERTY:xhCrypto,LINK_LIBRARIES>
 )
 
-set_property(
-        TARGET testCryptoLib
-        PROPERTY COMPILE_DEFINITIONS "RES_DIR=\"${CMAKE_CURRENT_LIST_DIR}/resources\""
-)
-
+if(BUILD_TESTING)
+    set_property(
+            TARGET testCryptoLib
+            PROPERTY COMPILE_DEFINITIONS "RES_DIR=\"${CMAKE_CURRENT_LIST_DIR}/resources\""
+    )
+endif()
