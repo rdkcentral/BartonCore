@@ -148,6 +148,12 @@ bds_option(NAME BDS_BUILD_REFERENCE
            DEFINITION BARTON_CONFIG_BUILD_REFERENCE
            DESCRIPTION "Build the reference application"
            ENABLE)
+bds_option(NAME BDS_BUILD_WITH_SSP
+           DEFINITION BARTON_CONFIG_BUILD_WITH_SSP
+           DESCRIPTION "Build Barton with stack smash protection")
+bds_option(NAME BDS_BUILD_WITH_ASAN
+           DEFINITION BARTON_CONFIG_BUILD_WITH_ASAN
+           DESCRIPTION "Build Barton with Address Sanitizer")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

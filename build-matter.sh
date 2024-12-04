@@ -35,6 +35,13 @@ else
     git reset --hard
 fi
 
+# Any compiler flags were for the matter sdk library, no longer necessary for
+# the example apps (and we wouldn't want to wrestle with loader order for asan
+# anyway)
+unset LDFLAGS
+unset CFLAGS
+unset CXXFLAGS
+
 # Build and install the Matter example apps for use as test targets
 LIGHTING_APP_NAME=chip-lighting-app
 LOCK_APP_NAME=chip-lock-app
