@@ -40,6 +40,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #define HISTORY_FILE          ".barton-ds-reference-history"
@@ -178,7 +179,7 @@ static void configureSubsystems(BDeviceServiceInitializeParamsContainer *params)
         b_device_service_initialize_params_container_get_property_provider(params);
     if (propProvider != NULL)
     {
-        g_autofree gchar *disableSubsystems = g_strdup("");
+        g_autofree gchar *disableSubsystems = NULL;
         if (NO_ZIGBEE)
         {
             disableSubsystems = g_strdup("zigbee");
@@ -187,7 +188,8 @@ static void configureSubsystems(BDeviceServiceInitializeParamsContainer *params)
         {
             if (disableSubsystems != NULL)
             {
-                disableSubsystems = g_strdup_printf("%s,thread", disableSubsystems);
+                g_autofree gchar *old = disableSubsystems;
+                disableSubsystems = g_strdup_printf("%s,thread", old);
             }
             else
             {
@@ -198,7 +200,8 @@ static void configureSubsystems(BDeviceServiceInitializeParamsContainer *params)
         {
             if (disableSubsystems != NULL)
             {
-                disableSubsystems = g_strdup_printf("%s,matter", disableSubsystems);
+                g_autofree gchar *old = disableSubsystems;
+                disableSubsystems = g_strdup_printf("%s,matter", old);
             }
             else
             {
@@ -278,14 +281,13 @@ int main(int argc, char **argv)
 
     setIcLogPriorityFilter(IC_LOG_DEBUG);
 
-    GError *cmdLineError = NULL;
-    GOptionContext *context;
+    g_autoptr(GError) cmdLineError = NULL;
+    g_autoptr(GOptionContext) context = NULL;
     context = g_option_context_new("- reference app for running barton device service");
     g_option_context_add_main_entries(context, entries, NULL);
     if (!g_option_context_parse(context, &argc, &argv, &cmdLineError))
     {
         fprintf(stderr, "Error parsing command line: %s\n", cmdLineError->message);
-        g_error_free(cmdLineError);
         return EXIT_FAILURE;
     }
 
@@ -323,6 +325,16 @@ int main(int argc, char **argv)
 
     registerEventHandlers(client);
 
+    /*
+        TODO: There are three issues with logging at this time:
+            1. Logging prior to this call to device_service_reference_io_process is not shown if anything prior blocks
+       (ex: b_device_service_client_start blocks on subsystem ready wait)
+            2. Logging after this call to device_service_reference_io_process (in main()) is not shown
+            3. Logging after main is shown but is broken if VT100 mode is enabled.
+                - Additionally, if the reference app is run in a terminal the terminal will be left in a broken state.
+
+        For now, to see output like ASAN leaks sensibly, use the -1 argument to turn off VT100 mode.
+     */
     device_service_reference_io_process(!NO_VT100_MODE, (processLineCallback) handleLine, client);
 
     unregisterEventHandlers();
