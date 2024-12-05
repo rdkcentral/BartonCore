@@ -35,7 +35,7 @@
 #include "provider/device-service-property-provider.h"
 #include <glib-object.h>
 
-#ifdef BDS_ZIGBEE
+#ifdef BARTON_CONFIG_ZIGBEE
 #include "subsystems/zigbee/zigbeeEventTracker.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
 #endif
@@ -136,7 +136,7 @@ propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyV
 
         icDebug("Comm fail timeout set to %s minutes", newPropertyValue);
     }
-#ifdef BDS_ZIGBEE
+#ifdef BARTON_CONFIG_ZIGBEE
     else if (g_str_has_prefix(propertyName, ZIGBEE_PROPS_PREFIX) ||
              g_str_has_prefix(propertyName, TELEMETRY_PROPS_PREFIX))
     {
@@ -155,7 +155,7 @@ propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyV
     else if (g_strcmp0(propertyName, FAST_COMM_FAIL_PROP) == 0)
     {
         bool inFastCommfail = stringToBool(newPropertyValue);
-#ifdef BDS_ZIGBEE
+#ifdef BARTON_CONFIG_ZIGBEE
         zigbeeSubsystemHandlePropertyChange(propertyName, newPropertyValue);
 #endif
         deviceCommunicationWatchdogSetFastCommfail(inFastCommfail);
