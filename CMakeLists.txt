@@ -32,7 +32,7 @@ message(STATUS "Using C++ toolchain - ${CMAKE_CXX_COMPILER}")
 if (BDS_MATTER)
     # Only search default locations. Mostly this is for clients who build matter out of band
     # already. The script will check our usual matter build location.
-    find_library(MATTER NAMES ${BDS_MATTER_LIB})
+    find_library(MATTER NAMES ${BDS_MATTER_LIB} NO_CMAKE_FIND_ROOT_PATH)
 
     if (${MATTER} STREQUAL "MATTER-NOTFOUND")
         # Forward SSP args to building matter
