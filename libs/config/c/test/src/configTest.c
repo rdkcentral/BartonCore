@@ -63,7 +63,6 @@ static void printUsage()
     fprintf(stderr, "  configTest <-a|-t>\n");
     fprintf(stderr, "    -a : run all tests\n");
     fprintf(stderr, "    -c : run config test\n");
-    fprintf(stderr, "    -l : run legacy-config test\n");
     fprintf(stderr, "    -s : run storage test\n");
     fprintf(stderr, "\n");
 }
@@ -75,7 +74,6 @@ int main(int argc, char *argv[])
 {
     int c;
     bool doConfig = false;
-    bool doLegacy = false;
     bool doStorage = false;
 
     while ((c = getopt(argc, argv, "aclsh")) != -1)
@@ -84,16 +82,11 @@ int main(int argc, char *argv[])
         {
             case 'a':
                 doConfig = true;
-                doLegacy = true;
                 doStorage = true;
                 break;
 
             case 'c':
                 doConfig = true;
-                break;
-
-            case 'l':
-                doLegacy = true;
                 break;
 
             case 's':
@@ -130,17 +123,6 @@ int main(int argc, char *argv[])
             return 1;
         }
         printf("  Config Test SUCCESS!\n");
-        didSomething = true;
-    }
-    if (doLegacy == true)
-    {
-        printf("\n\nRunning Legacy Config Test:\n");
-        if (testLegacyProtectConfig() == false)
-        {
-            printf("  Legacy Config Test FAILED\n");
-            return 1;
-        }
-        printf("  Legacy Config Test SUCCESS!\n");
         didSomething = true;
     }
     if (doStorage == true)

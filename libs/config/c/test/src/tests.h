@@ -37,8 +37,6 @@ bool testProtectConfig();
 
 bool obfuscateTest();
 
-bool testLegacyProtectConfig();
-
 int runStorageTest();
 
 #endif // FLEXCORE_TESTS_H
