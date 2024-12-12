@@ -31,7 +31,6 @@
  * Author: jelderton - 4/18/16
  *-----------------------------------------------*/
 
-#include "../../../../config/c/public/icConfig/obfuscation.h"
 #include <icUtil/base64.h>
 #include <icUtil/md5.h>
 #include <stdio.h>
