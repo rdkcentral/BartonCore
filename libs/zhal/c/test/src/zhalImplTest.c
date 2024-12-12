@@ -1,22 +1,23 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
-// Copyright (C) 2015 iControl Networks, Inc.
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
 //
-// All rights reserved.
+// Copyright 2024 Comcast Cable Communications Management, LLC
 //
-// This software is protected by copyright laws of the United States
-// and of foreign countries. This material may also be protected by
-// patent laws of the United States and of foreign countries.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// This software is furnished under a license agreement and/or a
-// nondisclosure agreement and may only be used or copied in accordance
-// with the terms of those agreements.
+// http://www.apache.org/licenses/LICENSE-2.0
 //
-// The mere transfer of this software does not imply any licenses of trade
-// secrets, proprietary technology, copyrights, patents, trademarks, or
-// any other form of intellectual property whatsoever.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
-// iControl Networks retains all ownership rights.
+// SPDX-License-Identifier: Apache-2.0
 //
 //------------------------------ tabstop = 4 ----------------------------------
 #include <icLog/logging.h>
