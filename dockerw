@@ -54,6 +54,15 @@ shift "$(($OPTIND - 1))"
 
 IMAGE="barton_builder_$USER"
 
+if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE}:latest$"; then
+    echo "Using existing ${IMAGE}"
+else
+    echo "Image ${IMAGE} not found, building..."
+    pushd docker
+    ./build.sh
+    popd
+fi
+
 DIR=$(pwd)
 
 EXTRA_VOLUMES="${DEV_VOL}"
