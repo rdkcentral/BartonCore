@@ -23,11 +23,7 @@
 /*-----------------------------------------------
  * obfuscation.h
  *
- * attempt to hide data into a larger buffer.  uses
- * masking and random generation to keep subsequent
- * obfuscations as dis-similar as possible.
- * designed internally, so please holler if you have
- * suggestions on making this better...
+ * attempt to hide data into a larger buffer.
  *
  * NOTE: this is NOT encryption, so use at your own risk!
  *
@@ -39,16 +35,32 @@
 
 #include <stdint.h>
 
+
 /*
- * obfuscate some data into a buffer that can be saved or used
+ * allow custom mechanism to perform the obfuscate and unobfuscate operations.
+ */
+typedef char *(
+    *obfDelegate)(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen);
+
+/*
+ * provide custom solution for the obfuscation logic.
+ */
+void setObfuscateCustomImpl(obfDelegate implementation);
+void setUnobfuscateCustomImpl(obfDelegate implementation);
+
+/*
+ * facade to obfuscate some data into a buffer that can be saved or used
  * for other purposes (note: may want to base64 or uuencode the
  * result as the output will be binary).
- * the algorithm requires a 'passphrase' to serve as a key - which
- * is combined with the input data and then sprinkled across a
- * buffer of random bytes.
+ * requires a 'passphrase' to serve as a key - which is combined with
+ * the input data to produce an obfuscated result.
  *
- * caller must free the returned buffer, and take note of the in/out
- * parameter 'outputLen' - describing the length of the returned buffer.
+ * caller must free the returned buffer
+ *
+ * NOTE: Will utilize a default implementation of obfDelegate unless
+ *       pre-provided with a different function via setObfuscateCustomImpl().
+ *       The default impl is not very secure, so consumers are encouraged to
+ *       provide their own implementation!
  *
  * @param passphrase - well-known password to use while encoding 'input'
  * @param passLen - length of the password string
@@ -59,11 +71,15 @@
 char *obfuscate(const char *passphrase, uint32_t passLen, const char *input, uint32_t inputLen, uint32_t *outputLen);
 
 /*
- * given an obfuscated buffer, extract and return the original value.
+ * facade to decode an obfuscated buffer; returning the original value.
  * requires the same 'passphrase' used when encoding the buffer.
  *
- * caller must free the returned buffer, and take note of the in/out
- * parameter - describing the length of the returned buffer.
+ * caller must free the returned buffer
+ *
+ * NOTE: Will utilize a default implementation of obfDelegate unless
+ *       pre-provided with a different function via setUnobfuscateCustomImpl().
+ *       The default impl is not very secure, so consumers are encouraged to
+ *       provide their own implementation!
  *
  * @param passphrase - well-known password used during obfuscation
  * @param passLen - length of the password string

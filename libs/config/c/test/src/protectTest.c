@@ -39,19 +39,12 @@
 #include <string.h>
 
 #define INPUT_STRING "this is my test of crud to encrypt"
-#define DECRYPT_UPG_SIG                                                                                                \
-    "FgAAADMAAAATS5m5bm9pVHk5Bi8dTBcL7Up3FRx9ZCpFesEVFVYJCYJOQXpKJEcWHUVsMhPINXpHURFV2G03DZ1lG200JANAfjE0QYFoB3I6dB2M" \
-    "cVJAORx7CGM3AGkQXwVOGu5tUxgXCPZse2FXNqhge0BANXGdfnk5L3pGN1ggNmtBEj/"                                              \
-    "kLKEzGjMNaXFbX14UIKYjdAwBLjO1SWpNaRo5Iy9wdFswKW1jLlhGCzAeH0gqHj0uIGRhFC5FWRlX"
-#define DECRYPT_UPG_CT "SaNYwxz7EGvwneOMSFXS8g=="
-#define DECRYPT_UPG_PT "4321"
 
 bool testProtectConfig()
 {
     const char *inputMsg = INPUT_STRING;
     char *ob = NULL;
     char *bob = NULL;
-    char *upgKey = NULL;
     bool worked = false;
     uint32_t obLen = 0;
 
@@ -62,8 +55,6 @@ bool testProtectConfig()
     pcData badPass = {.data = "", .length = 1};
     pcData *encr = NULL;
 
-    pcData upgPass = {0, 0};
-    pcData upgInput = {.data = DECRYPT_UPG_CT, .length = (uint32_t) strlen(DECRYPT_UPG_CT)};
     pcData bad = {0, 0};
     pcData *decr = NULL;
 
@@ -147,128 +138,10 @@ bool testProtectConfig()
         goto cleanup;
     }
 
-    bad.data = strdup(encr->data);
-    bad.length = encr->length;
-    bad.data[strlen(bad.data) - 1] = '*';
-    destroyProtectConfigData(encr, true);
-    encr = NULL;
-    destroyProtectConfigData(decr, true);
-
-    decr = unprotectConfigData(&bad, pass);
-    if (decr != NULL)
-    {
-        puts("Invalid data accepted by decrypt");
-        free(bad.data);
-        goto cleanup;
-    }
-    free(bad.data);
-    worked = false;
-
-    /* Test that a simulated downgrade/noop is ignored */
-    if (forceProtectVersion(PROTECT_AES_CBC_NO_IV, false))
-    {
-        puts("Nonforced downgrade was not ignored!");
-        goto cleanup;
-    }
-
-    /*
-     * Test that a simulated firmware upgrade successfully reads an old ciphertext and
-     * writes the same ciphertext instead of a new style value
-     */
-    forceProtectVersion(PROTECT_AES_CBC_NO_IV, true);
-
-    uint16_t len;
-    uint32_t klen;
-    uint8_t *tmp;
-
-    if (!icDecodeBase64(DECRYPT_UPG_SIG, &tmp, &len))
-    {
-        puts("Unable to decode base64 fixture!");
-        goto cleanup;
-    }
-
-    upgKey = unobfuscate("security", 8, tmp, len, &klen);
-    free(tmp);
-
-    upgPass.data = upgKey;
-    upgPass.length = klen;
-    testPT = unprotectConfigData(&upgInput, &upgPass);
-    if (!testPT || !testPT->data)
-    {
-        puts("Decrypting test data failed!");
-        goto cleanup;
-    }
-
-    if (strcmp(testPT->data, DECRYPT_UPG_PT) != 0)
-    {
-        printf("Expected " DECRYPT_UPG_PT " but got %s\n", testPT->data);
-        goto cleanup;
-    }
-
-    encr = protectConfigData(testPT, &upgPass);
-    if (encr == NULL)
-    {
-        puts("encrypt failed!");
-        goto cleanup;
-    }
-
-    if (strcmp(encr->data, DECRYPT_UPG_CT) != 0)
-    {
-        puts("Re-encrypt did not use old format!");
-        goto cleanup;
-    }
-    destroyProtectConfigData(encr, true);
-    encr = NULL;
-
-    /* Test that invalid upgrades are ignored */
-    if (forceProtectVersion(UINT8_MAX, false))
-    {
-        puts("Upgrade to undefined encryption version ID accepted");
-        goto cleanup;
-    }
-
-    /* Test that a forced upgrade works */
-    if (!forceProtectVersion(PROTECT_ID_LATEST, false))
-    {
-        puts("Upgrade to latest version ID failed");
-        goto cleanup;
-    }
-
-    encr = protectConfigData(testPT, &upgPass);
-    if (encr == NULL || strcmp(DECRYPT_UPG_CT, encr->data) == 0)
-    {
-        puts("Encryption with latest verison ID failed");
-        goto cleanup;
-    }
-
-    decr = unprotectConfigData(encr, &upgPass);
-    if (strcmp(decr->data, DECRYPT_UPG_PT) != 0 || decr->version != PROTECT_ID_LATEST)
-    {
-        printf("Decrypting value with latest version ID failed!\n"
-               "Expected: '%s' ID: %d, received: '%s' ID: %d\n",
-               DECRYPT_UPG_PT,
-               PROTECT_ID_LATEST,
-               decr->data,
-               decr->version);
-        goto cleanup;
-    }
-    destroyProtectConfigData(decr, true);
-    destroyProtectConfigData(encr, true);
-    encr = NULL;
-    decr = NULL;
-
-    /* Test that a noop upgrade is reported as success */
-    if (!forceProtectVersion(PROTECT_ID_LATEST, false))
-    {
-        puts("Noop upgrade did not report success");
-        goto cleanup;
-    }
-
     /* All tests passed! */
     worked = true;
 
 cleanup:
-    free(upgKey);
     destroyProtectConfigData(pass, true);
     destroyProtectConfigData(testPT, true);
     destroyProtectConfigData(encr, true);

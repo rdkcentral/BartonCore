@@ -50,12 +50,16 @@ bool obfuscateTest()
     //
     uint32_t outLen = 0;
     char *out = unobfuscate(pass, passLen, buff, buffLen, &outLen);
-    printf("unobfuscated string = '%s'\n", out);
+    printf("%s: unobfuscated string = '%s'\n", __func__, out);
 
     if (strcmp(input, out) != 0)
     {
-        printf("FAILED to decode properly\n");
+        printf("%s: FAILED to decode properly\n", __func__);
         retVal = false;
+    }
+    else
+    {
+        printf("%s: SUCCESS!\n", __func__);
     }
 
     // cleanup
