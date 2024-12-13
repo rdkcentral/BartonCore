@@ -23,8 +23,10 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
+script_dir="$(dirname "$(realpath "$0")")"
+
 docker build \
     --build-arg BUILDER_USER=$(id -u -n) \
     --build-arg BUILDER_GID=$(id -g) \
     --build-arg BUILDER_UID=$(id -u) \
-    -t barton_builder_$USER .
+    -t barton_builder_$USER ${script_dir}

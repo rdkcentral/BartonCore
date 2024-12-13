@@ -142,7 +142,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libavahi-client-dev \
     libreadline-dev \
     checkinstall \
-    zlib1g-dev
+    zlib1g-dev \
+    socat
 
 # 'gn' (generate ninja)
 RUN cd /tmp && \
@@ -164,6 +165,15 @@ RUN cd /tmp && \
     cd ../build/otbr/ && \
     ninja install && \
     rm -rf /tmp/ot-br-posix
+COPY otbr-agent.conf /etc/dbus-1/system.d/
+
+# Simulated RCP for OpenThread
+RUN cd /tmp && \
+    git clone --depth 1 --recursive https://github.com/openthread/openthread.git && \
+    cd openthread && \
+    ./script/cmake-build simulation && \
+    cp build/simulation/examples/apps/ncp/ot-rcp /usr/local/sbin && \
+    rm -rf /tmp/openthread
 
 # linenoise
 # Dependencies: none
