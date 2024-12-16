@@ -28,14 +28,16 @@ ZHAL, which is the Zigbee Hardware Abstraction Layer.  This HAL is an atypical H
 due to the high level application capabilities it is required to provide.  The intent
 of ZHAL is to enable portability to different Zigbee stack and silicon vendors.  These
 stacks typically provide high level features such as OTA software updating, however if
-a stack does not provide these features, the ZHAL implementor must.
+a stack does not provide these features, the ZHAL implementor must. See
+[ZIGBEE_SUPPORT.md](ZIGBEE_SUPPORT.md) for more information.
 ## Thread
 If Device Service is built with Thread support it will backup and restore configuration
 for a local OpenThread Border Router instance.  Additionally it will retrieve and use
 the associated Thread network credentials when commissioning Matter over Thread devices.
 Additional capabilities such as detailed Thread network health monitoring, Thread 1.4
 ephemeral code commissioning and others are anticipated enhanceents.  Device Service
-expects an OpenThread API over dbus.
+expects an OpenThread API over dbus. See [THREAD_SUPPORT.md](THREAD_SUPPORT.md) for
+more information.
 ## Bluetooth/BLE
 If Device Service is built with BLE support, Matter devices may be commissioned directly
 by Device Service for Thread or Wi-Fi Operational Network access.  Device Service, the
@@ -44,18 +46,18 @@ Matter stack actually, expects a Bluez API over dbus.
 Matter has no hardware requirements for basic functionality since it is an IPv6 based
 specification.  It can make use of Thread and BLE for commissioning of new devices,
 but after a device has been commissioned for the first time (by any admin/Fabric),
-subsequent commissioning is performed only over IPv6.
+subsequent commissioning is performed only over IPv6. See
+[MATTER_SUPPORT.md](MATTER_SUPPORT.md) for more information.
 
 
 # Key Concepts
 ## Device Descriptor List (aka Whitelist / Allowlist)
-Devices that are allowed in our ecosystem are vetted by our Ecosystem team
-which works with vendors to ensure their device is well behaved and tested.
-Once a device passes our certification a Device Descriptor is created for it
-and it is added to an 'allow list' (also known as the Whitelist).  This list is
-published to a content server and downloaded by Zilker when it changes.
+Zigbee devices that are allowed to be commissioned can be controlled through
+an 'allow list' which consists of Device Descriptors for each allowed device.
+This list is published to a content server and provided to Barton when it
+changes.
 
-When a Zigbee device joins our network as part of the pairing process Zilker
+When a Zigbee device joins the network as part of the pairing process Barton
 reads its manufacturer name, model, hardware version, and firmware version.
 These 4 attributes are used to locate the appropriate Device Descriptor.  If no
 Descriptor is found, the device is rejected and told to leave the network.  An
@@ -133,24 +135,16 @@ always 1:1.
 
 ## Device Drivers
 Device Drivers are bits of code responsible for the mapping of resources to
-functionality on a device.  The current set of drivers available in Zilker are:
+functionality on a device.  The current set of drivers available in Barton are:
 
-* integratedPiezo
-* m1Lte
-* openHomeCamera
+* MatterDoorLock
+* MatterLight
+* MatterWindowCovering
 * philipsHue
-* pim
-* prm
-* xbb
 * zigbeeDoorLock
-* zigbeeLegacyLight
-* zigbeeLegacySecurityController
-* zigbeeLegacySensor
-* zigbeeLegacySirenRepeater
 * zigbeeLight
 * zigbeeLightController
 * zigbeePresence
-* zigbeeSecurityController
 * zigbeeSensor
 * zigbeeThermostat
 * zigbeeWindowCovering
@@ -161,14 +155,13 @@ and to its resources.
 
 ## Subsystems
 Subsystems in Device Service provide access to lower level parts of the stack
-in a manner safe for concurrent use by device drivers.  Currently Zilker has a
+in a manner safe for concurrent use by device drivers.  Currently Barton has a
 subsystem for Zigbee, Matter, and Thread.  Future subsystems for BLE and others are
 possible.
 
 ## Database
-Device Service stores all of its configuration in /opt/etc/storage/devicedb (on
-RDK devices it is /nvram/icontrol/etc/storage/devicedb).  An example directory
-listing is:
+Device Service stores all of its configuration in individual files. An example
+directory listing is:
 
 ~~~
 000d6f000f2081e7  000d6f000f4839e3  000d6f000f4877bc  000d6f0010abe463  systemProperties
@@ -606,18 +599,17 @@ failure with the devices it manages.  Once the Device Communication Watchdog
 determines that a device is in communication failure, the device's
 communicationFailure resource (/000d6f000f486af8/r/communicationFailure from
 the example device earlier) is set to "true".  This triggers a resource changed
-event that is handled by Security Service which creates a trouble that gets
-reported to the server through Comm Service.
+event that can be handled by project specific business logic.
 
 For Zigbee devices, the watchdog tracks the amount of time since the last
 successful message to or from the device.  By default the watchdog will report
 communication failure after 1 hour without any successful communication.  This
 allows for two missed checkin intervals, which are configured for 27 minutes.
-Some devices use different failure detection intervals such as the M1 LTE
-module which will detect communication failure in 200 seconds per requirements.
 
 # Zigbee Support
-These components are in the xhfw/zigbee git repository.
+Zigbee stack implementations are external to this repository and follow this
+general architecture:
+
 ![zigbee-arch](zigbee-arch.png)
 
 ## ZigbeeSubsystem
@@ -627,51 +619,25 @@ drivers.
 
 ## ZHAL
 ZHAL is the Zigbee Hardware Abstraction Layer.  It is a C library
-(source/libs/zhal) that converts function calls and events into IPC to the
+(libs/zhal) that converts function calls and events into IPC to the
 Zigbee implementation.
 
-## ZigbeeCore
-ZigbeeCore is an implementation of the ZHAL API and is the lowest level process
-that runs on the main CPE processor for Zigbee support.  It has the following
-responsibilities:
-
-* Provide access and functionality of a Zigbee Coordinator and Trust Center
-* Receive requests from Device Service's Zigbee Subsystem
-* Sends events to Zigbee Subsystem
-* Serves firmware images to devices
-* Manages firmware on the Zigbee processor
-
-ZigbeeCore's log can be found at /tmp/logs/ZigbeeCore.log on non gateway
-devices.  For gateways this log data is sent to standard output and therefore
-does not appear in the standard log files.  It can be accessed with journalctl
-(specify the 'zilker' unit).
-
-## xNCP
-The firmware that runs on the Zigbee processor is the lowest level of Zilker
-related to Zigbee.  It is built upon Silicon Laboratories NCP framework that
-handles the lower level radio and Zigbee Trust center among other things.
-Comcast modifications include support for low power mode, RMA, and some Zigbee
-3 security features.
-
-# Firmware Management
+# Zigbee Firmware Management
 Most Zigbee devices are compliant with the Over the Air Upgrade cluster's
 firmware management mechanisms that were introduced with the Home Automation
-profile version 1.2.  There are some device's in our ecosystem that were
-created before this standard was available.  These devices we call 'legacy' and
-their firmware is managed differently as discussed below.
+profile version 1.2.
 
 As mentioned in the Device Descriptor section, when a new firmware image is
 available for a device, the Device Descriptor List (aka whitelist/allowlist) is
 updated with the new firmware version number and filename.  When this updated
-list is published and downloaded by Zilker it is scanned for descriptors
+list is published and provided to Barton it is scanned for descriptors
 matching paired devices.  If a paired device needs an upgrade its file is
-downloaded from the content server and placed in /opt/zigbeeFirmware/ota (or
-/nvram/icontrol/zigbeeFirmware/ota on gateways).  This upgrade mechanism is
-"pulled" from the device through image block requests made to ZigbeeCore.  The
-process starts when the device sends a "query next image" request which
+downloaded from the content server.  This upgrade mechanism is
+"pulled" from the device through image block requests made to the Zigbee stack.
+The process starts when the device sends a "query next image" request which
 contains its current firmware version.  The response will indicate if
-ZigbeeCore has a newer image for it and the device will start pulling blocks
-until it finishes.
+the Zigbee stack has a newer image for it and the device will start pulling
+blocks until it finishes.
 
 This upgrade mechanism can take a while, especially on battery powered devices.
 While the device is downloading the firmware image it remains fully functional
@@ -681,197 +647,6 @@ the new image.  Reboots typically take less than a second.
 Note that once a firmware image for a device is downloaded an "image notify"
 command is sent to the device in an attempt to start the upgrade immediately,
 however many of our devices are "sleepy" so they will not receive this message.
-Devices are required to check once a day, minimum, to see if ZigbeeCore has a
-new firmware image available.
-
-## Legacy (pre HA 1.2)
-Devices that do not support the Over the Air Upgrade cluster include older
-security sensors, the PIM, some older Centralite lighting modules, and the
-older RTCoA thermostat.  This upgrade mechanism is risky due to the way the
-packets are routed and because the device is non-functional for the duration of
-the upgrade.  For these reasons we only upgrade these devices if there are
-critical issues.
-
-Similar to the above process, these firmware files are downloaded to
-/opt/zigbeeFirmware/legacy (or /nvram/icontrol/zigbeeFirmware/legacy on
-gateways).  This upgrade mechanism is a "push" model where ZigbeeCore requests
-the device boot into its bootloader then starts pushing packets at it until
-complete.  Once this process starts the device will not be functional until it
-completes successfully since it overwrites its flash as packets are received.
-If the process fails or is interrupted, the device will change to channel 13
-and await rescue.
-
-# xhDeviceUtil
-Device Service has a utility called xhDeviceUtil which provides access to
-devices and can control certain aspects of Device Service.  The utility can be
-run either interactively (when no options are specified) or can be fed command
-line arguments for non-interactive operation.  It has detailed help and offers
-history with command callback and tab key initiated command completion when in
-interactive mode.  The help output as of the time of this writing is:
-
-~~~
-deviceUtil> help
-Core:
-    history  : print the history of commands run interactively
-    listDevices|list [device class] : list all devices, or all devices in a class
-    getDeviceCountBySubsystem <subsystem> : Get the number of devices by subsystem
-    Examples:
-        getDeviceCountBySubsystem zigbee
-
-    printDevice|pd <uuid> : print information for a device
-    printAllDevices|pa [device class] : print information for all devices, or all devices in a class
-    readResource|rr <uri> : read the value of a resource
-    Examples:
-        readResource /000d6f000aae8410/r/communicationFailure
-
-    writeResource|wr <uri> [value] : write the value of a resource
-    Examples:
-        writeResource /000d6f000aae8410/ep/1/r/label "Front Door"
-
-    execResource|er <uri> [value] : execute a resource
-    queryResources|qr <uri pattern> : query resources with a pattern
-    Examples:
-        qr */lowBatt
-
-    readMetadata|rm <uri> : read metadata
-    Examples:
-        rm /000d6f000aae8410/m/lpmPolicy
-
-    writeMetadata|wm <uri> : write metadata
-    Examples:
-        wm /000d6f000aae8410/m/lpmPolicy never
-
-    queryMetadata|qm <uri pattern> : query metadata through a uri pattern
-    Examples:
-        qm */rejoins
-
-    discoverStart|dstart <device class> : Start discovery for a device class
-    discoverRepairStart|drstart <device class> : Start discovery for orphaned devices in a device class
-    discoverStop|dstop  : Stop device discovery
-    removeDevice|rd <uuid> : Remove a device by uuid
-    removeEndpoint|re <uri> : Remove an endpoint by uri
-    dumpDevice|dd <uuid> : Dump all details about a device
-    dumpAllDevices|dump  : Dump all details about all devices
-    readSystemProperty <key> : Read a device service system property
-    writeSystemProperty <key> [value] : Write a device service system property
-    ddl override <path> | clearoverride | process | bypass | clearbypass : Configure and control device descriptor processing
-    Examples:
-        ddl override /opt/etc/AllowList.xml.override
-        ddl clearoverride
-        ddl process
-        ddl bypass
-        ddl clearbypass
-
-    getStatus|gs  : Get the status of device service
-Zigbee:
-    zigbeeStatus|zs  : get the status of the zigbee subsystem
-    zigbeeDumpCounters  : dump the current zigbee counters
-    zigbeeNetworkMap  : Print the Zigbee network map
-    zigbeeSetChannel <channel number or 0 to pick best> [dryrun] : Change the Zigbee channel
-    Examples:
-        zigbeeSetChannel 25
-        zigbeeSetChannel 0 dryrun
-
-    zigbeeEnergyScan [<duration mS> <number of scans> <channels to scan...>] : Scan for background noise on Zigbee channels
-    Examples:
-        zigbeeEnergyScan
-        zigbeeEnergyScan 30 16 11 20 25
-~~~
-
-To see what devices are paired we use the "list" command:
-
-~~~
-deviceUtil> list
-7894b4ef0ca1: Class: camera
-    Endpoint camera: Profile: camera, Label: Front Door
-    Endpoint sensor: Profile: sensor, Label: (null)
-000d6f0004ae46af: Class: light
-    Endpoint 1: Profile: light, Label: Garage Door Indicator
-000d6f0012c529a0: Class: sensor
-    Endpoint 1: Profile: sensor, Label: Back Door
-d187bc81-927a-4ad6-8634-a74b38bf7c0c: Class: integratedPiezo
-    Endpoint 1: Profile: warningDevice, Label: Integrated Piezo
-e0606614be56: Class: camera
-    Endpoint camera: Profile: camera, Label: Back Door
-    Endpoint sensor: Profile: sensor, Label: (null)
-0022a3000004e039: Class: light
-    Endpoint 1: Profile: light, Label: Upstairs Nightlight
-000d6f0012c47ebf: Class: sensor
-    Endpoint 1: Profile: sensor, Label: Front Door
-000d6f0012c6087b: Class: sensor
-    Endpoint 1: Profile: sensor, Label: Garage Door
-0022a300002f164c: Class: light
-    Endpoint 1: Profile: light, Label: Garge Door Indicator Up
-    Endpoint 3: Profile: lightSwitch, Label: (null)
-~~~
-
-To display the resources for a device in a user-friendly way we use
-"printDevice" (or "pd" for short):
-
-~~~
-deviceUtil> printDevice 000d6f0004ae46af
-000d6f0004ae46af: Garage Door Indicator, Class: light
-    /000d6f0004ae46af/r/communicationFailure = true
-    /000d6f0004ae46af/r/dateAdded = 1578949352641
-    /000d6f0004ae46af/r/dateLastContacted = 1595336347583
-    /000d6f0004ae46af/r/feLqi = 255
-    /000d6f0004ae46af/r/feRssi = -13
-    /000d6f0004ae46af/r/firmwareUpdateStatus = upToDate
-    /000d6f0004ae46af/r/firmwareVersion = 0x10015110
-    /000d6f0004ae46af/r/hardwareVersion = 1
-    /000d6f0004ae46af/r/manufacturer = CentraLite
-    /000d6f0004ae46af/r/model = 3420
-    /000d6f0004ae46af/r/neLqi = 255
-    /000d6f0004ae46af/r/neRssi = -35
-    /000d6f0004ae46af/r/resetToFactoryDefaults = (null)
-    Endpoint 1: Profile: light
-        /000d6f0004ae46af/ep/1/r/currentLevel = 100
-        /000d6f0004ae46af/ep/1/r/isDimmableMode = true
-        /000d6f0004ae46af/ep/1/r/isOn = true
-        /000d6f0004ae46af/ep/1/r/label = Garage Door Indicator
-~~~
-
-To perform an action on a device we write to a resource (or in rare cases,
-execute a resource).  For example, to turn on a light:
-
-~~~
-deviceUtil> writeResource /0022a300002f164c/ep/1/r/isOn true
-
-resourceUpdated: id=isOn, uri=/0022a300002f164c/ep/1/r/isOn, ownerId=1, ownerClass=light, value=true, type=com.icontrol.boolean, mode=0x7b (rw-del-)
-deviceUtil>
-resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=0, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
-
-resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=35, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
-
-resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=69, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
-
-resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=99, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
-
-resourceUpdated: id=currentLevel, uri=/0022a300002f164c/ep/1/r/currentLevel, ownerId=1, ownerClass=light, value=100, type=com.icontrol.lightLevel, mode=0x7b (rw-del-)
-~~~
-
-Note how in the above example writing "true" to the light's "isOn" resource
-triggered several resource updated events that are printed when running device
-util in interactive mode.  The first event shown is the "isOn" resource
-changing to true which happens as a result of the light device sending an
-attribute report for the ON_OFF attribute.  The remaining events are similarly
-triggered by attribute reports as the light slowly transitions from 0% dim
-level to 100%.
-
-Wildcards can be used when querying resources which can be useful to see the
-same resource across multiple devices.  For example:
-
-~~~
-deviceUtil> queryResources */communicationFailure
-resources:
-    /000d6f0004ae46af/r/communicationFailure = true
-    /000d6f0012c47ebf/r/communicationFailure = false
-    /000d6f0012c529a0/r/communicationFailure = false
-    /000d6f0012c6087b/r/communicationFailure = false
-    /0022a3000004e039/r/communicationFailure = false
-    /0022a300002f164c/r/communicationFailure = false
-    /7894b4ef0ca1/r/communicationFailure = false
-    /d187bc81-927a-4ad6-8634-a74b38bf7c0c/r/communicationFailure = false
-    /e0606614be56/r/communicationFailure = false
-~~~
+Devices are required to check once a day, minimum, to see if the Zigbee stack
+has a new firmware image available.
 
