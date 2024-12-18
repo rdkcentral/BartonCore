@@ -262,3 +262,9 @@ USER $BUILDER_USER
 
 RUN pipx install stack-pr && \
     pipx ensurepath
+
+# Add bashrc_term_mods. We're looking to inject this before
+# key variables are unset
+COPY bashrc_term_mods /tmp/bashrc_term_mods
+RUN boundary=$(($(sed -n '/unset color_prompt/=' ~/.bashrc)-1)) && \
+    sed -i "${boundary}r/tmp/bashrc_term_mods" ~/.bashrc
