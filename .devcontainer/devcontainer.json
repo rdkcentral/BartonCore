@@ -104,7 +104,9 @@
                 "foxundermoon.shell-format",             // Shell script formatting
 
                 // Build and Project Management
-                "npclaudiu.vscode-gn"                    // Ninja build system support
+                "npclaudiu.vscode-gn",                   // Ninja build system support
+
+                "doi.fileheadercomment"                  // File header comment generator
             ],
 
             "settings":
