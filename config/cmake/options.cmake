@@ -150,6 +150,9 @@ bds_option(NAME BDS_BUILD_WITH_SSP
 bds_option(NAME BDS_BUILD_WITH_ASAN
            DEFINITION BARTON_CONFIG_BUILD_WITH_ASAN
            DESCRIPTION "Build Barton with Address Sanitizer")
+bds_option(NAME BDS_MATTER_SKIP_SDK
+           DEFINITION BARTON_CONFIG_MATTER_SKIP_SDK
+           DESCRIPTION "When building Matter, skip building the SDK (as a client may be building it separately already)")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
@@ -189,7 +192,8 @@ message(STATUS "Barton Device Service String Configs.")
 
 bds_string_option(NAME BDS_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
-                  DESCRIPTION "soname of the provided Matter library.")
+                  DESCRIPTION "Name of the provided Matter library."
+                  VALUE "BartonMatter")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

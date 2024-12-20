@@ -56,7 +56,7 @@ extern "C" {
 #include <subsystems/thread/threadSubsystem.hpp>
 #endif
 
-#include <BartonProjectConfig.h>
+#include CHIP_PROJECT_CONFIG_INCLUDE
 #include <app/clusters/ota-provider/ota-provider.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>

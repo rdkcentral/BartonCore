@@ -113,28 +113,27 @@
         }
     ],
     "cmake.configureArgs": [
-        "-DBDS_MATTER_LIB=BartonMatter",
         "-DBDS_MATTER_SELF_SIGNED_OP_CREDS_ISSUER=ON",
         "-DBDS_MATTER_USE_RANDOM_PORT=ON",
         "-DBDS_BUILD_WITH_SSP=ON",
         "-DBDS_BUILD_WITH_ASAN=ON"
     ],
 
-    "fileHeaderComment.parameter":{
-		"*":{
+    "fileHeaderComment.parameter": {
+        "*": {
             "commentprefix_slashes": "//",
             "commentprefix_hash": "#",
             "commentprefix": "${commentprefix_slashes}",
-			"copyrightbegin": " ------------------------------ tabstop = 4 ----------------------------------",
-			"copyrightend": " ------------------------------ tabstop = 4 ----------------------------------",
+            "copyrightbegin": " ------------------------------ tabstop = 4 ----------------------------------",
+            "copyrightend": " ------------------------------ tabstop = 4 ----------------------------------",
             "author": "Christian Leithner",
-			"company": "Comcast Cable Communications Management, LLC",
-            "creation_suffix":[
+            "company": "Comcast Cable Communications Management, LLC",
+            "creation_suffix": [
                 "${commentprefix}",
                 " Created by ${author} on ${month}/${day}/${year}.",
                 ""
             ],
-            "apache_license":[
+            "apache_license": [
                 "${commentprefix}${copyrightbegin}",
                 "",
                 " If not stated otherwise in this file or this component's LICENSE file the",
@@ -158,7 +157,7 @@
                 "",
                 "${copyrightend}"
             ]
-		},
+        },
         "python": {
             "commentprefix": "${commentprefix_hash}"
         },
@@ -173,13 +172,9 @@
         },
         "gn": {
             "commentprefix": "${commentprefix_hash}"
-        },
-	},
-	"fileHeaderComment.template":{
-        "Apache": [
-            "${apache_license}",
-            "",
-            "${creation_suffix}"
-        ]
+        }
     },
+    "fileHeaderComment.template": {
+        "Apache": ["${apache_license}", "", "${creation_suffix}"]
+    }
 }
