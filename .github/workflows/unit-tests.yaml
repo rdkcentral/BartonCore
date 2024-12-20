@@ -34,9 +34,6 @@ on:
     pull_request:
     workflow_dispatch:
 
-env:
-    GERRIT_HOST: rdkgerrithub.stb.r53.xcal.tv
-
 jobs:
 
     build_image_and_bartoncore_and_run_tests:
@@ -50,19 +47,6 @@ jobs:
                 with:
                     repository: ${{ github.repository }}
                     token: ${{ secrets.RDKCM_BARTON }}
-            -
-                name: Create ssh credentials
-                run: |
-                    mkdir -p -m 0700 $HOME/.ssh
-                    ssh-keyscan -p 29418 ${{ env.GERRIT_HOST }} >> $HOME/.ssh/known_hosts
-                    echo "${{ secrets.BARTON_SVC_PRIVATE_KEY }}" > $HOME/.ssh/id_ed25519
-                    chmod 600 $HOME/.ssh/id_ed25519
-                    cat <<EOF > $HOME/.ssh/config
-                    Host ${{ env.GERRIT_HOST }}
-                        User svc_barton
-                        IdentityFile $HOME/.ssh/id_ed25519
-                    EOF
-                    chmod 600 $HOME/.ssh/config
             -
                 name: Set up Docker Buildx
                 uses: docker/setup-buildx-action@v3
