@@ -60,22 +60,19 @@ if (BDS_MATTER)
     if (${MATTER} STREQUAL "MATTER-NOTFOUND")
         # Forward SSP args to building matter
         if (BDS_BUILD_WITH_SSP)
-            set(MATTER_C_FLAGS "${MATTER_C_FLAGS} -fstack-protector-strong")
-            set(MATTER_CXX_FLAGS "${MATTER_CXX_FLAGS} -fstack-protector-strong")
+            set(MATTER_SSP_ARG "-s")
         endif()
 
         # Forward ASAN args to building matter
         if (BDS_BUILD_WITH_ASAN)
-            set(MATTER_C_FLAGS "${MATTER_C_FLAGS} -fsanitize=address")
-            set(MATTER_CXX_FLAGS "${MATTER_CXX_FLAGS} -fsanitize=address")
-
-            set(MATTER_LINK_FLAGS "${MATTER_LINK_FLAGS} -fsanitize=address")
+            set(MATTER_ASAN_ARG "-a")
         endif()
 
-        set(MATTER_BUILD_COMMAND "./build-matter.sh")
+        # TODO: This should be the same as what is available at runtime via providers. Perhaps this should be a public build option
+        set(MATTER_BUILD_COMMAND ./build-matter.sh -c $ENV{HOME}/.brtn-ds/matter ${MATTER_SSP_ARG} ${MATTER_ASAN_ARG})
 
         execute_process(
-            COMMAND ${CMAKE_COMMAND} -E env CFLAGS=${MATTER_C_FLAGS} CXXFLAGS=${MATTER_CXX_FLAGS} LDFLAGS=${MATTER_LINK_FLAGS} ${MATTER_BUILD_COMMAND}
+            COMMAND ${MATTER_BUILD_COMMAND}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMAND_ECHO STDOUT
             COMMAND_ERROR_IS_FATAL ANY

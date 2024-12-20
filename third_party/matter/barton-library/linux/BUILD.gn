@@ -1,0 +1,64 @@
+#------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2024 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+#------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Christian Leithner on 12/16/2024.
+#
+
+# Format with `gn format BUILD.gn`
+
+import("//build_overrides/build.gni")
+import("//build_overrides/chip.gni")
+
+import("//build/chip/tools.gni")
+import("//src/app/chip_data_model.gni")
+
+project_dir = "./.."
+
+static_library("barton") {
+  public_deps = [
+    "${project_dir}/barton-common",
+    "${project_dir}/barton-common:credentials-issuer",
+    "${project_dir}/barton-common:tbrm",
+    "//src/app/server",
+    "//src/controller",
+    "//src/credentials:default_attestation_verifier",
+    "//src/credentials:file_attestation_trust_store",
+    "//src/lib",
+    "//src/platform/logging:default",
+    "//src/protocols",
+    "//src/setup_payload",
+  ]
+
+  output_name = "libBartonMatter"
+  complete_static_lib = true
+  output_dir = "${root_out_dir}/lib"
+}
+
+group("linux") {
+  deps = [ ":barton" ]
+}
+
+group("default") {
+  deps = [ ":linux" ]
+}

@@ -25,11 +25,41 @@
 
 set -e
 
+help() {
+    echo "Usage: $0 [-h] [-c <dir>] [-s] [-a]"
+    echo "  -h  Display help"
+    echo "  -c  Matter configuration directory"
+    echo "  -s  Build with stack smash protection"
+    echo "  -a  Build with address sanitizer"
+}
+
 MY_DIR=$(realpath $(dirname $0))
 BUILD_DIR=${MY_DIR}/build
 MATTER_BUILD_DIR=${BUILD_DIR}/matter
 MATTER_INSTALL_DIR=${BUILD_DIR}/matter-install
 MATTER_INSTALL_BIN_DIR=${MATTER_INSTALL_DIR}/bin
+
+BUILD_WITH_STACK_SMASH_PROTECTION=""
+BUILD_WITH_SANITIZER=""
+MATTER_CONF_DIR=""
+
+while getopts ":hc:sa" option; do
+    case $option in
+    h)
+        help
+        exit
+        ;;
+    c)
+        MATTER_CONF_DIR="$OPTARG"
+        ;;
+    s)
+        BUILD_WITH_STACK_SMASH_PROTECTION="-s"
+        ;;
+    a)
+        BUILD_WITH_SANITIZER="-a"
+        ;;
+    esac
+done
 
 if [ -e ${MATTER_BUILD_DIR} ]; then
     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
@@ -38,32 +68,23 @@ else
     mkdir -p ${BUILD_DIR}
     cd ${BUILD_DIR}
     git clone \
-        --branch main \
+        --branch v1.4.0.0 \
         --depth 1 \
-        ssh://rdkgerrithub.stb.r53.xcal.tv:29418/comcast-matter/sdk \
+        https://github.com/project-chip/connectedhomeip.git \
         matter
 
     cd ${MATTER_BUILD_DIR}
+
     ./scripts/checkout_submodules.py --shallow --platform linux
 
     # Ensure that the older OpenSSL version is used for the build
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
 
-    cd third_party/comcast/config/zilker
-    cmake -B cmake-build-debug -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=${MATTER_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Debug -DMATTER_CONF_DIR:PATH=~/.brtn-ds/matter
-    cmake --build cmake-build-debug
-    cd cmake-build-debug
-    make install
+    ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
+
     cd ${MATTER_BUILD_DIR}
     git reset --hard
 fi
-
-# Any compiler flags were for the matter sdk library, no longer necessary for
-# the example apps (and we wouldn't want to wrestle with loader order for asan
-# anyway)
-unset LDFLAGS
-unset CFLAGS
-unset CXXFLAGS
 
 # Build and install the Matter example apps for use as test targets
 LIGHTING_APP_NAME=chip-lighting-app

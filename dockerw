@@ -75,7 +75,7 @@ else
 
     VOLUMES_ARGS="-v $DIR:$DIR
                  -v $HOME:$HOME
-                 --mount type=tmpfs,destination=/tmp
+                 --tmpfs /tmp:exec
                  $EXTRA_VOLUMES"
 fi
 

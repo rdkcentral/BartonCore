@@ -70,7 +70,7 @@ jobs:
                                 echo "$file" >> $bad_files
                                 missing_header=true
                             fi
-                        elif [[ "$file" == *.sh || "$file" == *.yaml || "$file" == *.cmake || "$file" == *.py || "$file" == *CMakeLists.txt ]]; then
+                        elif [[ "$file" == *.sh || "$file" == *.yaml || "$file" == *.cmake || "$file" == *.py || "$file" == *CMakeLists.txt || "$file" == *.gn ]]; then
                             if ! awk -v pattern="$COPYRIGHT_HEADER_HASH" 'BEGIN { found=0 } { content = content $0 "\n" } END { if (match(content, pattern) != 0) found=1 } END { exit !found }' "$file"; then
                                 echo "Missing or incorrect copyright header in $file"
                                 echo "$file" >> $bad_files

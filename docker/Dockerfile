@@ -234,7 +234,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     gh \
     fish \
     strace \
-    tcpdump
+    tcpdump \
+    rsync
 
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.

@@ -56,7 +56,7 @@ extern "C" {
 #include <subsystems/thread/threadSubsystem.hpp>
 #endif
 
-#include <ZilkerProjectConfig.h>
+#include <BartonProjectConfig.h>
 #include <app/clusters/ota-provider/ota-provider.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
@@ -91,8 +91,6 @@ extern "C" {
 #include <CertifierOperationalCredentialsIssuer.hpp>
 
 #include "AccessControlDelegate.h"
-#include "rdkb-cluster-server.hpp"
-#include "RdkbClusterServer.h"
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 // Only used in development environments
@@ -158,7 +156,6 @@ namespace
         0xad, 0xcd, 0x91, 0xb9, 0x43, 0xd8, 0x58, 0x1e, 0x03, 0x63, 0xa1, 0xba, 0x18, 0xa6, 0x1d, 0xe7, 0xc7,
         0x6a, 0xbb, 0x2a, 0x0b, 0xdc, 0xef, 0x39, 0xfb, 0xb7, 0x37, 0x1f, 0x83, 0xca, 0x65};
 
-    RdkbClusterServer rdkbClusterServer;
 } // namespace
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
@@ -200,7 +197,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 
     icDebug();
 
-    mkdir_p(CHIP_ZILKER_CONF_DIR, 0700);
+    mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
 
     myFabricId = accountId;
 
@@ -251,8 +248,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
     chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
-
-    MatterRDKBGatewayPluginServerSetDelegate(&rdkbClusterServer);
 
     return result;
 }

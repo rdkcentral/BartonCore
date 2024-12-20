@@ -1160,11 +1160,6 @@ namespace
                          const RequestPath &requestPath,
                          Privilege requestPrivilege) override
         {
-            if (requestPath.cluster == chip::app::Clusters::RDKBGateway::Id && requestPrivilege == Privilege::kView)
-            {
-                return CHIP_NO_ERROR;
-            }
-
             return CHIP_ERROR_NOT_IMPLEMENTED;
         }
     };

@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # ------------------------------ tabstop = 4 ----------------------------------
 #
 # If not stated otherwise in this file or this component's LICENSE file the
@@ -23,12 +21,35 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-set -e
+#
+# Created by Christian Leithner on 12/16/2024.
+#
 
-MY_DIR=$(realpath $(dirname $0))
-pushd ${MY_DIR}
+import sys
+import os
 
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBDS_MATTER_LIB=BartonMatter $@
-cmake --build build --parallel $(($(nproc) - 1))
+def main(template_path, output_path, replacement_values):
+    with open(template_path, "r") as template_file:
+        content = template_file.read()
 
-popd
+    for key, value in replacement_values.items():
+        replacement_key = "$({key})".format(key=key)
+        if not value.isnumeric():
+            value = '"{value}"'.format(value=value)
+        content = content.replace(replacement_key, value)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, "w") as output_file:
+        output_file.write(content)
+
+
+if __name__ == "__main__":
+    template_path = sys.argv[1]
+    output_path = sys.argv[2]
+    replacements = dict()
+    for i in range(3, len(sys.argv)):
+        split = sys.argv[i].split("=")
+        replacements[split[0]] = split[1]
+
+    main(template_path, output_path, replacements)

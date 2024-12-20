@@ -36,16 +36,15 @@ extern "C" {
 #include "CertifierOperationalCredentialsIssuer.hpp"
 #endif
 
+#include "AccessRestrictionProvider.h"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
 #include "PersistentStorageDelegate.h"
-#include "AccessRestrictionProvider.h"
 #include "SessionMessageHandler.hpp"
 #include "credentials/attestation_verifier/FileAttestationTrustStore.h"
 #include "crypto/CHIPCryptoPAL.h"
 #include <app/server/Server.h>
-#include <app/util/ember-compatibility-functions.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/ExampleOperationalCredentialsIssuer.h>
 #include <credentials/GroupDataProviderImpl.h>
