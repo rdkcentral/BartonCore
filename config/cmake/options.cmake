@@ -150,6 +150,9 @@ bds_option(NAME BDS_BUILD_WITH_SSP
 bds_option(NAME BDS_BUILD_WITH_ASAN
            DEFINITION BARTON_CONFIG_BUILD_WITH_ASAN
            DESCRIPTION "Build Barton with Address Sanitizer")
+bds_option(NAME BDS_TEST_COVERAGE
+           DEFINITION BARTON_CONFIG_TEST_COVERAGE
+           DESCRIPTION "Enable test coverage")
 bds_option(NAME BDS_MATTER_SKIP_SDK
            DEFINITION BARTON_CONFIG_MATTER_SKIP_SDK
            DESCRIPTION "When building Matter, skip building the SDK (as a client may be building it separately already)")

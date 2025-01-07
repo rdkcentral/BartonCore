@@ -53,8 +53,10 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 # Set the default gcc and g++ versions to 11 because our current checkout of matter can't handle 13
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 30 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 30 && \
+    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-11 30 && \
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 20 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20 && \
+    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-13 20
 
 ###############################################################################
 # expands the base stage to allow for building of packages with common tools
@@ -235,6 +237,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     fish \
     strace \
     tcpdump \
+    lcov \
     rsync
 
 # Make some /usr/ stuff open permissions. These are individual containers,

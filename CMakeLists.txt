@@ -51,6 +51,25 @@ message(STATUS "Targetting system - ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Using C toolchain - ${CMAKE_C_COMPILER}")
 message(STATUS "Using C++ toolchain - ${CMAKE_CXX_COMPILER}")
 
+# Add custom target for running tests. This will allow us to easily invoke
+# all tests, as well as wrap them with code coverage if enabled
+add_custom_target(runTests
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+if (BDS_TEST_COVERAGE)
+    include(CodeCoverage)
+    APPEND_COVERAGE_COMPILER_FLAGS()
+    # Exclude system includes, and tests
+    set(COVERAGE_EXCLUDES "'/usr/*'" "'/*/test/*'" "'/*/matter-install/*'")
+    # We are using LCOV 2+ which has a lot of validation checks compared to 1+.
+    # For some reason, GTest causes it to get confused so we'll just treat it
+    # as a warning.
+    set(COVERAGE_LCOV_ARGS "--ignore-errors" "mismatch")
+    wrap_target_with_coverage(NAME runTestsWithCoverage WRAPPED_TARGET runTests)
+endif()
+
 # Before building our stuff, build matter if we need to
 if (BDS_MATTER AND NOT BDS_MATTER_SKIP_SDK)
     # Only search default locations. Mostly this is for clients who build matter out of band
