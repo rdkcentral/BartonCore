@@ -29,8 +29,7 @@
     "name": "Barton Ubuntu Development Environment",
     "initializeCommand": "docker/setupUserEnv.sh",
     "dockerComposeFile": [
-        "../docker/compose.yaml",
-        "./compose.devcontainer.yaml"
+        "../docker/compose.devcontainer.yaml"
     ],
     "service": "devcontainer",
 

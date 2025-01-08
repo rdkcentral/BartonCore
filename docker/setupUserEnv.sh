@@ -32,7 +32,6 @@
 # needed for the Docker build process.
 #
 # used in:
-#  - docker/dockerw
 #  - .devcontainer/devcontainer.json
 
 # set -x
@@ -42,9 +41,9 @@ OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
 
 # Save off user information for Docker build process
-echo "BUILDER_USER=$USER" >$OUTFILE
-echo "BUILDER_UID=$(id -u)" >>$OUTFILE
-echo "BUILDER_GID=$(id -g)" >>$OUTFILE
+echo "BUILDER_USER=$USER" > $OUTFILE
+echo "BUILDER_UID=$(id -u)" >> $OUTFILE
+echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 
 # Save off the path to the Barton directory so we can mount it in the same path in the container
-echo "BARTON_TOP=$BARTON_TOP" >>$OUTFILE
+echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE

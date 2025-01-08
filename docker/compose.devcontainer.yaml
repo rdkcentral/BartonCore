@@ -25,6 +25,9 @@
 # Created by Kevin Funderburg on 09/20/2024
 #
 
+# This compose file is used to create the VSC devcontainer by extending the barton
+# service from the base compose.yaml file. It is not meant to be run directly.
+
 # Setting the name element to the user helps keep the container name easy to identify
 # by namespacing it with the user's name. Example: $USER-barton-devcontainer-1
 name: $BUILDER_USER-barton
@@ -32,17 +35,8 @@ name: $BUILDER_USER-barton
 services:
     devcontainer:
         extends:
-            file: ../docker/compose.yaml
+            file: ./compose.yaml
             service: barton
-
-        build:
-            # This compose file's build target will handle the non-root user creation
-            # for the devcontainer to login to.
-            target: user_builder
-            args:
-                - BUILDER_USER=$BUILDER_USER
-                - BUILDER_GID=$BUILDER_GID
-                - BUILDER_UID=$BUILDER_UID
 
         # Keep the container running indefinitely
         command: sleep infinity

@@ -32,22 +32,19 @@ name: $BUILDER_USER
 services:
     barton:
         image: barton_builder_$BUILDER_USER
-        network_mode: bridge
 
         # If the the image must be built, a few environment variables must be set. The devcontainer
-        # will take care of this for you, but if you want to build from the CLI, leverage dockerw
-        # to handle setting these variables and the compose commands.
+        # will take care of this for you, but if you want to build from the CLI, run the setupUserEnv.sh
+        # first.
         build:
             context: .
             dockerfile: Dockerfile
+            args:
+                - BUILDER_USER=$BUILDER_USER
+                - BUILDER_GID=$BUILDER_GID
+                - BUILDER_UID=$BUILDER_UID
 
-            # This top level compose build target will set up the barton environment, but specifically exludes
-            # non-root user creation. Non-root user creation is handled in the extended compose.devcontainer.yaml.
-            # The primary reason to separate the two is to allow for a Barton image to be built
-            # on the CLI without hardcoding a specific user into the image. Useful when operating
-            # on a shared machine.
-            target: third_party_builder
-
+        network_mode: bridge
         cap_add:
             - SYS_PTRACE
             - PERFMON
