@@ -364,7 +364,12 @@ void Matter::StackThreadProc()
     chip::DeviceLayer::PlatformMgr().RunEventLoop();
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+    auto &server = chip::Server::GetInstance();
+    server.Shutdown();
+
     commissionerController->Shutdown();
+
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
     icInfo("Shut down");
