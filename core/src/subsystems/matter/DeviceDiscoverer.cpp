@@ -70,12 +70,24 @@ namespace zilker
         {
             chip::DeviceLayer::PlatformMgr().ScheduleWork(CleanupReader, reinterpret_cast<intptr_t>(readClient.release()));
         }
+
+        if (device)
+        {
+            chip::DeviceLayer::PlatformMgr().ScheduleWork(CleanupDevice, reinterpret_cast<intptr_t>(device));
+            device = nullptr;
+        }
     }
 
     void DeviceDiscoverer::CleanupReader(intptr_t arg)
     {
         auto *readClient = reinterpret_cast<chip::app::ReadClient *>(arg);
         delete readClient;
+    }
+
+    void DeviceDiscoverer::CleanupDevice(intptr_t arg)
+    {
+        auto *device = reinterpret_cast<chip::OperationalDeviceProxy *>(arg);
+        delete device;
     }
 
     std::future<bool> DeviceDiscoverer::Start()
@@ -317,6 +329,12 @@ namespace zilker
         icDebug();
 
         auto *self = reinterpret_cast<DeviceDiscoverer *>(context);
+
+        if (self->device)
+        {
+            chip::DeviceLayer::PlatformMgr().ScheduleWork(CleanupDevice, reinterpret_cast<intptr_t>(self->device));
+        }
+
         self->device = new chip::OperationalDeviceProxy(&exchangeMgr, sessionHandle);
 
         constexpr EndpointId endpoint = chip::kRootEndpointId;
@@ -388,8 +406,7 @@ namespace zilker
 
             chip::Controller::ClusterBase cluster(exchangeMgr, device->GetSecureSession().Value(), endpointId);
 
-            // TODO use smart pointer instead since we are hading off...
-            auto context = new EndpointDiscoveryContext;
+            auto context = std::make_unique<EndpointDiscoveryContext>();
             context->exchangeMgr = &exchangeMgr;
             context->discoverer = this;
             context->endpointId = endpointId;
@@ -397,7 +414,7 @@ namespace zilker
             context->data = std::make_unique<DescriptorClusterData>(endpointId);
 
             error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::DeviceTypeList::TypeInfo>(
-                context, OnDTLReadResponse, OnAttrReadFailureResponse);
+                context.get(), OnDTLReadResponse, OnAttrReadFailureResponse);
             if (error != CHIP_NO_ERROR)
             {
                 icError("VendorName ReadAttribute failed with error: %s", error.AsString());
@@ -406,7 +423,7 @@ namespace zilker
             if (error == CHIP_NO_ERROR)
             {
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::ServerList::TypeInfo>(
-                    context, OnSLReadResponse, OnAttrReadFailureResponse);
+                    context.get(), OnSLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
@@ -416,7 +433,7 @@ namespace zilker
             if (error == CHIP_NO_ERROR)
             {
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::ClientList::TypeInfo>(
-                    context, OnCLReadResponse, OnAttrReadFailureResponse);
+                    context.get(), OnCLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
@@ -426,7 +443,7 @@ namespace zilker
             if (error == CHIP_NO_ERROR)
             {
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::PartsList::TypeInfo>(
-                    context, OnPLReadResponse, OnAttrReadFailureResponse);
+                    context.get(), OnPLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
@@ -436,11 +453,6 @@ namespace zilker
             if (error == CHIP_NO_ERROR)
             {
                 discoveringEndpoints.emplace(endpointId);
-            }
-            else
-            {
-                // clean up.  if this crashes, you were warned to use smart pointers!
-                delete context;
             }
         }
 

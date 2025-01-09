@@ -82,6 +82,7 @@ namespace zilker
         chip::OperationalDeviceProxy *device;
 
         static void CleanupReader(intptr_t arg);
+        static void CleanupDevice(intptr_t arg);
         static void DiscoverWorkFuncCb(intptr_t arg);
         static void OnDeviceConnectedFn(void *context,
                                         chip::Messaging::ExchangeManager &exchangeMgr,
