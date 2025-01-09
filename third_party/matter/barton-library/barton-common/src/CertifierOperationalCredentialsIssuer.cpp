@@ -170,8 +170,8 @@ CertifierOperationalCredentialsIssuer::GenerateNOCChain(const ByteSpan & csrElem
     ScopedMemoryBufferWithSize<uint8_t> csrClone;
     ScopedMemoryBufferWithSize<uint8_t> nonceClone;
 
-    VerifyOrReturnError(!csrClone.Alloc(csrFromElements.size()), CHIP_ERROR_NO_MEMORY);
-    VerifyOrReturnError(!nonceClone.Alloc(nonceFromElements.size()), CHIP_ERROR_NO_MEMORY);
+    VerifyOrReturnError(csrClone.Alloc(csrFromElements.size()), CHIP_ERROR_NO_MEMORY);
+    VerifyOrReturnError(nonceClone.Alloc(nonceFromElements.size()), CHIP_ERROR_NO_MEMORY);
 
     memcpy(csrClone.Get(), csrFromElements.data(), csrFromElements.size());
     memcpy(nonceClone.Get(), nonceFromElements.data(), nonceFromElements.size());
@@ -180,15 +180,15 @@ CertifierOperationalCredentialsIssuer::GenerateNOCChain(const ByteSpan & csrElem
         [this, csrBuf = std::move(csrClone), nonceBuf = std::move(nonceClone), onCompletion](NodeId nodeId, FabricId fabricId) {
             // FIXME: forward errors to the callback
             Platform::ScopedMemoryBuffer<uint8_t> noc;
-            VerifyOrReturnError(!noc.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+            VerifyOrReturnError(noc.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
             MutableByteSpan nocSpan(noc.Get(), kMaxCHIPDERCertLength);
 
             Platform::ScopedMemoryBuffer<uint8_t> icac;
-            VerifyOrReturnError(!icac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+            VerifyOrReturnError(icac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
             MutableByteSpan icacSpan(icac.Get(), kMaxCHIPDERCertLength);
 
             Platform::ScopedMemoryBuffer<uint8_t> rcac;
-            VerifyOrReturnError(!rcac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
+            VerifyOrReturnError(rcac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
             MutableByteSpan rcacSpan(rcac.Get(), kMaxCHIPDERCertLength);
 
             ByteSpan csr(csrBuf.Get(), csrBuf.AllocatedSize());
