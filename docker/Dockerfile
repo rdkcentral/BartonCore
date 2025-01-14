@@ -238,7 +238,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     strace \
     tcpdump \
     lcov \
-    rsync
+    rsync \
+    bash-completion
 
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.
