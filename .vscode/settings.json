@@ -184,5 +184,5 @@
     "python.testing.pytestArgs": ["testing"],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "/usr/local/bin/pytest",
+    "python.testing.pytestPath": "/usr/local/bin/pytest"
 }

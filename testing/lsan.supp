@@ -37,11 +37,9 @@
 # This file instructs address sanitizer to ignore leaks from certain third party libraries so
 # test discovery will complete successfully.
 
-# Suppressions for libglib-2.0.so
 leak:libglib-2.0.so
-
-# Suppressions for libgirepository-1.0.so
 leak:libgirepository-1.0.so
+leak:libcrypto.so
 
 # Suppressions for Python 3.x
 # ignore leaks starting with `Py` - these cover the corresponding C types - e.g. PyObject_Malloc

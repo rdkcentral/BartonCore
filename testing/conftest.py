@@ -1,0 +1,43 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2025 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 1/9/2025.
+#
+
+"""
+This conftest.py file is used to define fixtures and other configurations
+for the pytest testing environment. Fixtures defined in this file are
+automatically available to all test modules within the same directory
+and subdirectories. This allows for reusable setup and teardown code,
+ensuring consistency and reducing redundancy across tests. The conftest.py
+file is a central place to manage test dependencies and configurations,
+making it easier to maintain and scale the test suite.
+"""
+
+# The following list of plugins are automatically loaded by pytest when running tests.
+# Any fixtures defined within these modules are automatically available to all test modules.
+pytest_plugins = [
+    "testing.environment.default_environment_orchestrator",
+    "testing.devices.matter.matter_light"
+]
