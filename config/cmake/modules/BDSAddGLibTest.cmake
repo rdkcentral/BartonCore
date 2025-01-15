@@ -36,7 +36,6 @@ function(bds_add_glib_test)
         target_include_directories(${BDS_ADD_GLIB_TEST_NAME} PRIVATE ${BDS_ADD_GLIB_TEST_INCLUDE_DIRECTORIES})
 
         add_test(NAME ${BDS_ADD_GLIB_TEST_NAME} COMMAND ${BDS_ADD_GLIB_TEST_NAME})
-        # TODO: Remove the "/usr/local/openssl/lib" path once we're no longer relying on older versions of OpenSSL for our build (e.g. 1.1.1)
-        set_property(TEST ${BDS_ADD_GLIB_TEST_NAME} PROPERTY ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_PREFIX_PATH}/lib:${CMAKE_INSTALL_PREFIX}/lib:/usr/local/openssl/lib:$ENV{LD_LIBRARY_PATH}")
+        set_property(TEST ${BDS_ADD_GLIB_TEST_NAME} PROPERTY ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_PREFIX_PATH}/lib:${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}")
     endif()
 endfunction()

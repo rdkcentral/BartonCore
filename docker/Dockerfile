@@ -212,7 +212,7 @@ RUN cd /tmp && \
     rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
 
 # Ensure the system uses OpenSSL 3 by default
-ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
 
 ###############################################################################
 # User creation stage
