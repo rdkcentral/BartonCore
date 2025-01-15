@@ -567,6 +567,29 @@ static bool queryMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return true;
 }
 
+static bool getStatusFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    (void) argc; // unused
+    (void) argv; // unused
+    bool result = false;
+
+    g_autoptr(BDeviceServiceStatus) status = b_device_service_client_get_status(client);
+    g_autofree gchar *statusJson = NULL;
+    g_object_get(status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON], &statusJson, NULL);
+
+    if (!statusJson)
+    {
+        emitOutput("Failed to get status.\n");
+    }
+    else
+    {
+        emitOutput("Device Service Status:\n%s\n", statusJson);
+        result = true;
+    }
+
+    return result;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -644,6 +667,10 @@ Category *buildCoreCategory(void)
     command = commandCreate(
         "queryMetadata", "qm", "<uri pattern>", "query metadata through a uri pattern", 1, 1, queryMetadataFunc);
     commandAddExample(command, "qm */rejoins");
+    categoryAddCommand(cat, command);
+
+    // get the status of device service
+    command = commandCreate("getStatus", "gs", NULL, "Get the status of device service", 0, 0, getStatusFunc);
     categoryAddCommand(cat, command);
 
     return cat;
