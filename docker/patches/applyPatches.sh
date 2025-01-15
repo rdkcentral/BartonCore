@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # ------------------------------ tabstop = 4 ----------------------------------
 #
 # If not stated otherwise in this file or this component's LICENSE file the
@@ -24,8 +26,6 @@
 #
 # Created by Kevin Funderburg on 09/11/2024
 #
-
-#!/usr/bin/env bash
 
 # Apply a set of patches in a directory.
 #

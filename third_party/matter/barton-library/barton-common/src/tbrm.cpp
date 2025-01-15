@@ -23,7 +23,7 @@
 
 // Copyright (c) 2024, Project CHIP Authors.
 // All rights reserved.
-// Licensed under the Apache-2.0.
+// Licensed under the Apache-2.0 license.
 
 #include <app/clusters/thread-border-router-management-server/thread-border-router-management-server.h>
 #include <app/server/Server.h>
