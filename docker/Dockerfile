@@ -93,7 +93,8 @@ RUN pip3 install --upgrade --break-system-packages \
     pygobject \
     pygobject-stubs \
     setuptools==73.0.0 \
-    python_stdnum
+    python_stdnum \
+    pytest
 
 # pygobject-stubs distributed the stub (pyi) files for standard distribution girs, but we also want its tools so we can make
 # out own stubs. Those don't come with the pip package.
@@ -104,6 +105,13 @@ RUN cd /tmp && \
     cp generate.py /usr/bin/pygobject-stubs && \
     cp parse.py /usr/bin/pygobject-stubs && \
     rm -rf /tmp/pygobject-stubs
+
+# Create a symlink for the versioned dist-packages directory so the container can determine
+# the correct PYTHONPATH at runtime
+RUN bash -c "set -o pipefail && \
+    PYTHON_VERSION=$(python3 --version | awk '{print $2}' | awk -F. '{print $1"."$2}') && \
+    mkdir -p /usr/local/lib/python3.x && \
+    ln -s /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python3.x/dist-packages"
 
 ###############################################################################
 # Third party build stage
@@ -262,6 +270,12 @@ RUN groupadd pcap && usermod -a -G pcap $BUILDER_USER \
     && chgrp pcap /usr/bin/tcpdump \
     && chmod 750 /usr/bin/tcpdump \
     && setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+
+# Setup our entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]
 
 USER $BUILDER_USER
 

@@ -84,4 +84,18 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker run -u $USER --rm --name $CONTAINER_NAME $INTERACTIVE_FLAGS --privileged --cap-add SYS_PTRACE $VOLUMES_ARGS -w "$DIR" $EXTRA_ENV $IMAGE $*
+# generate docker/.env file containing necesary environment variables for the container
+$DIR/docker/setupDockerEnv.sh
+
+docker run -u $USER \
+    --rm \
+    --name $CONTAINER_NAME \
+    $INTERACTIVE_FLAGS \
+    --privileged \
+    --cap-add SYS_PTRACE \
+    $VOLUMES_ARGS \
+    -w "$DIR" \
+    --env-file $DIR/docker/.env \
+    $EXTRA_ENV \
+    $IMAGE \
+    $*

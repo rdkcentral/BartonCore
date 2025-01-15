@@ -176,5 +176,13 @@
     },
     "fileHeaderComment.template": {
         "Apache": ["${apache_license}", "", "${creation_suffix}"]
-    }
+    },
+
+    "python.envFile": "${workspaceFolder}/.devcontainer/vsc-python.env",
+
+    // pytest configuration
+    "python.testing.pytestArgs": ["testing"],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestPath": "/usr/local/bin/pytest",
 }

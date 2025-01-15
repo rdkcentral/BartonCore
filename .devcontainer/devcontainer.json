@@ -27,7 +27,7 @@
 
 {
     "name": "Barton Ubuntu Development Environment",
-    "initializeCommand": "docker/setupUserEnv.sh",
+    "initializeCommand": "docker/setupDockerEnv.sh",
     "dockerComposeFile": [
         "../docker/compose.devcontainer.yaml"
     ],
@@ -59,7 +59,13 @@
         "GIT_PS1_SHOWDIRTYSTATE": "1",
         "GIT_PS1_SHOWSTASHSTATE": "1",
         "GIT_PS1_SHOWCOLORHINTS": "true",
-        "PROMPT_COMMAND": "${localEnv:PROMPT_COMMAND}"
+        "PROMPT_COMMAND": "${localEnv:PROMPT_COMMAND}",
+
+        // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
+        // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
+        "PATH": "${containerEnv:PATH}:${containerEnv:MATTER_SAMPLE_APPS_PATH}",
+        "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
+        "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}"
     },
 
     // specify the non-root user to use in the container
@@ -113,5 +119,8 @@
                 "terminal.integrated.defaultProfile.linux": "bash"
             }
         }
-    }
+    },
+
+    // script for further VSC customization after the container is created
+    "postCreateCommand": ".devcontainer/setup.sh"
 }

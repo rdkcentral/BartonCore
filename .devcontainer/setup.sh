@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # ------------------------------ tabstop = 4 ----------------------------------
 #
 # If not stated otherwise in this file or this component's LICENSE file the
@@ -24,26 +23,30 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 #
-# Created by Kevin Funderburg on 09/17/2024
+# Created by Kevin Funderburg on 12/17/2024
 #
 
-#
-# This script is used to as a 'pre-step' to set up the various environment variables
-# needed for the Docker build process.
-#
-# used in:
-#  - .devcontainer/devcontainer.json
+# This script is used to setup VSC related settings for the project after the container
+# has been created.
 
 # set -x
+set -e
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-OUTFILE=$DIR/.env
-BARTON_TOP=$DIR/..
+# This environment file is specifically to set up the Python environment for VSC.
+# https://code.visualstudio.com/docs/python/environments#_environment-variable-definitions-file
+PYTHON_ENV_FILE=".devcontainer/vsc-python.env"
 
-# Save off user information for Docker build process
-echo "BUILDER_USER=$USER" > $OUTFILE
-echo "BUILDER_UID=$(id -u)" >> $OUTFILE
-echo "BUILDER_GID=$(id -g)" >> $OUTFILE
+# Add the ASAN library to the LD_PRELOAD environment variable within the vsc-python.env file
+# so pytest invocations will run with the AddressSanitizer preloaded. Without this, pytest
+# discovery will fail in VSC.
+LD_PRELOAD_LINE="LD_PRELOAD=$(gcc -print-file-name=libasan.so)"
 
-# Save off the path to the Barton directory so we can mount it in the same path in the container
-echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
+if [ -f "$PYTHON_ENV_FILE" ]; then
+    if grep -q "^LD_PRELOAD=" "$PYTHON_ENV_FILE"; then
+        sed -i "s|^LD_PRELOAD=.*|$LD_PRELOAD_LINE|" "$PYTHON_ENV_FILE"
+    else
+        echo "$LD_PRELOAD_LINE" >> "$PYTHON_ENV_FILE"
+    fi
+else
+    echo "$LD_PRELOAD_LINE" > "$PYTHON_ENV_FILE"
+fi
