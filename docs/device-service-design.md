@@ -581,13 +581,13 @@ details.  For example:
 {
     "ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT":   "false",
     "zigbeeTelemetryStartDate": "1588944626812",
-    "currentDeviceDescriptorUrl":   "https://pod-bundle.beta.xhsyndication.com/bundle/lists/ConvergeDevicesAllowed20200624-Beta.xml",
+    "currentDeviceDescriptorUrl":   "https://example-server.com/DevicesAllowed.xml",
     "currentDenylistMd5":  "e4999307cad3e2df24e46a0e4245a725",
     "ZIGBEE_NETWORK_CONFIG_DATA":   "oxMAAAQQAAAULkZFblsJTyShkzLZS/SvAAAAAAAAAAAAAAAAAAAAAAAAKUQDGQIBAABZsmTDjXOEauQQwl8Pn4utGwCaC297bXQGPhLSmvl/jF0KAPj/BwAAAAA=",
     "ZIGBEE_LOCAL_EUI64":   "001bad8b9f0f5fc2",
     "schemaVersion":    "1",
     "ZIGBEE_REJECT_UNKNOWN_DEVICES":    "true",
-    "currentBlacklistUrl":  "http://pod-bundle.beta.xhsyndication.com/bundle/lists/blacklist-nothing.xml",
+    "currentBlacklistUrl":  "https://example-server.com/blacklist-nothing.xml",
     "deviceDescriptorBypass":   "false",
     "currentDeviceDescriptorMd5":   "95c55b67c9cfe93318be19c7a6eab752"
 }
