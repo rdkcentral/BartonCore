@@ -258,7 +258,11 @@ gboolean b_device_service_client_recover_stop(BDeviceServiceClient *self, GList 
 {
     g_return_val_if_fail(self != NULL, FALSE);
 
-    scoped_icLinkedListNofree *deviceClassesList = convertGListToLinkedListGeneric(deviceClasses);
+    scoped_icLinkedListNofree *deviceClassesList = NULL;
+    if (deviceClasses != NULL)
+    {
+        deviceClassesList = convertGListToLinkedListGeneric(deviceClasses);
+    }
 
     return deviceServiceDiscoverStop(deviceClassesList) ? TRUE : FALSE;
 }

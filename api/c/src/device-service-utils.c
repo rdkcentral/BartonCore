@@ -406,7 +406,11 @@ BDeviceServiceDeviceFoundDetails *convertDeviceFoundDetailsToGobject(const Devic
 
     BDeviceServiceDeviceFoundDetails *retVal = b_device_service_device_found_details_new();
 
-    g_autoptr(GHashTable) metadata = convertHashMapToStringGHashTable((icHashMap *) details->metadata);
+    g_autoptr(GHashTable) metadata = NULL;
+    if (details->metadata != NULL)
+    {
+        metadata = convertHashMapToStringGHashTable((icHashMap *) details->metadata);
+    }
     g_autoptr(GHashTable) endpointProfiles =
         convertHashMapToStringGHashTable((icHashMap *) details->endpointProfileMap);
 
