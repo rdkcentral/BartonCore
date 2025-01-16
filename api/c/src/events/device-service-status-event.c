@@ -139,6 +139,7 @@ GType b_device_service_status_changed_reason_get_type(void)
     static gsize g_define_type_id__volatile = 0;
 
     // Initializes the BDeviceServiceStatusChangedReason enum GType only once.
+    // Note: Some tools might match the code below with public code, but this just the standard use of this glib API.
     if (g_once_init_enter(&g_define_type_id__volatile))
     {
         static const GEnumValue values[] = {

@@ -63,6 +63,7 @@ GType b_device_service_token_type_get_type(void)
     static gsize g_define_type_id__volatile = 0;
 
     // Initializes the BDeviceServiceTokenType enum GType only once.
+    // Note: Some tools might match the code below with public code, but this just the standard use of this glib API.
     if (g_once_init_enter(&g_define_type_id__volatile))
     {
         static const GEnumValue values[] = {
