@@ -200,10 +200,10 @@ static void test_urlHelperExtractHost(void **state)
 
     // now see if we correctly fail urls with IPv4 and IPv6 addresses in the path
     //
-    assert_false(urlHelperCanVerifyHost("https://72.13.22.5"));
-    assert_false(urlHelperCanVerifyHost("https://72.13.22.5:443/test123/a/b/c"));
-    assert_false(urlHelperCanVerifyHost("https://[fe80::a38c:fc6c:6e0d:87dd]/another/path"));
-    assert_false(urlHelperCanVerifyHost("https://[fe80::a38c:fc6c:6e0d:87dd]:443/go/here?a=b"));
+    assert_false(urlHelperCanVerifyHost("https://0.0.0.0"));
+    assert_false(urlHelperCanVerifyHost("https://0.0.0.0:443/test123/a/b/c"));
+    assert_false(urlHelperCanVerifyHost("https://[fc00::1]/another/path"));
+    assert_false(urlHelperCanVerifyHost("https://[fc00::1]:443/go/here?a=b"));
 
     // now some edge case urls
     //
