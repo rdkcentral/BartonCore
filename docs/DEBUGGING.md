@@ -57,8 +57,8 @@ LD_PRELOAD=$(gcc -print-file-name=libasan.so) pytest #pytest args
 LD_PRELOAD=$(clang -print-file-name=libasan.so) pytest #pytest args
 ```
 
-Or you can execute the `testing/run_tests.sh` script to handle setting up the environment for you. Simply pass
-the desired pytest args to the `run_tests.sh` script and they will be forwarded to pytest.
+Or you can execute the `testing/py_test.sh` script to handle setting up the environment for you. Simply pass
+the desired pytest args to the `py_test.sh` script and they will be forwarded to pytest.
 
 ### Using VSC for Integration Tests
 If this is a fresh devcontainer and the first time you have tried running the python tests,
