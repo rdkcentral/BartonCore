@@ -272,7 +272,7 @@ namespace zilker
         chip::Optional<std::string> serialNumber;
         chip::Optional<std::string> macAddress;
         chip::Optional<std::string> networkType;
-        std::map<chip::EndpointId, std::unique_ptr<DescriptorClusterData>> endpointDescriptorData;
+        std::map<chip::EndpointId, std::shared_ptr<DescriptorClusterData>> endpointDescriptorData;
     };
 } // namespace zilker
 

@@ -44,14 +44,26 @@ extern "C" {
 
 namespace zilker
 {
-    struct EndpointDiscoveryContext
+    class EndpointDiscoveryContext
     {
-        // must be first since this could end up in OnAttrReadFailureResponse and cast directly to DeviceDiscoverer
+    public:
+        EndpointDiscoveryContext(DeviceDiscoverer *discoverer,
+                                 chip::Messaging::ExchangeManager *exchangeMgr,
+                                 chip::EndpointId endpointId,
+                                 chip::OperationalDeviceProxy *device,
+                                 std::shared_ptr<DescriptorClusterData> data) :
+            discoverer(discoverer), exchangeMgr(exchangeMgr), endpointId(endpointId), device(device), data(data)
+        {
+        }
+
+        // discoverer is not owned by this context
         DeviceDiscoverer *discoverer;
+        // exchangeMgr is not owned by this context
         chip::Messaging::ExchangeManager *exchangeMgr;
         chip::EndpointId endpointId;
+        // device is not owned by this context
         chip::OperationalDeviceProxy *device;
-        std::unique_ptr<DescriptorClusterData> data;
+        std::shared_ptr<DescriptorClusterData> data;
     };
 
     static void OnAttrReadFailureResponse(void *context, CHIP_ERROR error);
@@ -406,47 +418,58 @@ namespace zilker
 
             chip::Controller::ClusterBase cluster(exchangeMgr, device->GetSecureSession().Value(), endpointId);
 
-            auto context = std::make_unique<EndpointDiscoveryContext>();
-            context->exchangeMgr = &exchangeMgr;
-            context->discoverer = this;
-            context->endpointId = endpointId;
-            context->device = device;
-            context->data = std::make_unique<DescriptorClusterData>(endpointId);
+            // We track only one cluster data per endpoint id, despite one context for each attribute read.
+            // Share the data across contexts.
+            auto descriptorClusterData = std::make_shared<DescriptorClusterData>(endpointId);
+
+            // Give a copy of the context to each async call. This greatly simplified the concept of memory ownership
+            // at the expense of memory efficiency.
+            auto context = new EndpointDiscoveryContext(this, &exchangeMgr, endpointId, device, descriptorClusterData);
 
             error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::DeviceTypeList::TypeInfo>(
-                context.get(), OnDTLReadResponse, OnAttrReadFailureResponse);
+                context, OnDTLReadResponse, OnAttrReadFailureResponse);
             if (error != CHIP_NO_ERROR)
             {
                 icError("VendorName ReadAttribute failed with error: %s", error.AsString());
+                delete context;
             }
 
             if (error == CHIP_NO_ERROR)
             {
+                context = new EndpointDiscoveryContext(this, &exchangeMgr, endpointId, device, descriptorClusterData);
+
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::ServerList::TypeInfo>(
-                    context.get(), OnSLReadResponse, OnAttrReadFailureResponse);
+                    context, OnSLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
+                    delete context;
                 }
             }
 
             if (error == CHIP_NO_ERROR)
             {
+                context = new EndpointDiscoveryContext(this, &exchangeMgr, endpointId, device, descriptorClusterData);
+
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::ClientList::TypeInfo>(
-                    context.get(), OnCLReadResponse, OnAttrReadFailureResponse);
+                    context, OnCLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
+                    delete context;
                 }
             }
 
             if (error == CHIP_NO_ERROR)
             {
+                context = new EndpointDiscoveryContext(this, &exchangeMgr, endpointId, device, descriptorClusterData);
+
                 error = cluster.ReadAttribute<app::Clusters::Descriptor::Attributes::PartsList::TypeInfo>(
-                    context.get(), OnPLReadResponse, OnAttrReadFailureResponse);
+                    context, OnPLReadResponse, OnAttrReadFailureResponse);
                 if (error != CHIP_NO_ERROR)
                 {
                     icError("VendorName ReadAttribute failed with error: %s", error.AsString());
+                    delete context;
                 }
             }
 
@@ -474,15 +497,17 @@ namespace zilker
     static void OnAttrReadFailureResponse(void *context, CHIP_ERROR error)
     {
         icError("Failed to read basic attribute for the device. error %" CHIP_ERROR_FORMAT, error.Format());
-        auto *deviceDiscoverer = reinterpret_cast<DeviceDiscoverer *>(context);
-        deviceDiscoverer->SetCompleted(false);
+        auto discoveryContext =
+            std::unique_ptr<EndpointDiscoveryContext>(reinterpret_cast<EndpointDiscoveryContext *>(context));
+        discoveryContext->discoverer->SetCompleted(false);
     }
 
     static void OnDTLReadResponse(void *context,
                                   const chip::app::DataModel::DecodableList<
                                       chip::app::Clusters::Descriptor::Structs::DeviceTypeStruct::DecodableType> &value)
     {
-        auto *endpointDiscoveryContext = static_cast<EndpointDiscoveryContext *>(context);
+        auto endpointDiscoveryContext =
+            std::unique_ptr<EndpointDiscoveryContext>(reinterpret_cast<EndpointDiscoveryContext *>(context));
         auto *deviceDiscoverer = endpointDiscoveryContext->discoverer;
         chip::EndpointId endpointId = endpointDiscoveryContext->endpointId;
 
@@ -493,12 +518,13 @@ namespace zilker
             endpointDiscoveryContext->data->deviceTypes->emplace_back(iter.GetValue().deviceType);
         }
 
-        AddEndpointDataToResultIfComplete(endpointDiscoveryContext);
+        AddEndpointDataToResultIfComplete(endpointDiscoveryContext.get());
     }
 
     static void OnSLReadResponse(void *context, const app::DataModel::DecodableList<ClusterId> &responseList)
     {
-        auto *endpointDiscoveryContext = static_cast<EndpointDiscoveryContext *>(context);
+        auto endpointDiscoveryContext =
+            std::unique_ptr<EndpointDiscoveryContext>(reinterpret_cast<EndpointDiscoveryContext *>(context));
         auto *deviceDiscoverer = endpointDiscoveryContext->discoverer;
         chip::EndpointId endpointId = endpointDiscoveryContext->endpointId;
 
@@ -509,12 +535,13 @@ namespace zilker
             endpointDiscoveryContext->data->serverList->emplace_back(iter.GetValue());
         }
 
-        AddEndpointDataToResultIfComplete(endpointDiscoveryContext);
+        AddEndpointDataToResultIfComplete(endpointDiscoveryContext.get());
     }
 
     static void OnCLReadResponse(void *context, const app::DataModel::DecodableList<ClusterId> &responseList)
     {
-        auto *endpointDiscoveryContext = static_cast<EndpointDiscoveryContext *>(context);
+        auto endpointDiscoveryContext =
+            std::unique_ptr<EndpointDiscoveryContext>(reinterpret_cast<EndpointDiscoveryContext *>(context));
         auto *deviceDiscoverer = endpointDiscoveryContext->discoverer;
         chip::EndpointId endpointId = endpointDiscoveryContext->endpointId;
 
@@ -525,12 +552,13 @@ namespace zilker
             endpointDiscoveryContext->data->clientList->emplace_back(iter.GetValue());
         }
 
-        AddEndpointDataToResultIfComplete(endpointDiscoveryContext);
+        AddEndpointDataToResultIfComplete(endpointDiscoveryContext.get());
     }
 
     static void OnPLReadResponse(void *context, const app::DataModel::DecodableList<EndpointId> &responseList)
     {
-        auto *endpointDiscoveryContext = static_cast<EndpointDiscoveryContext *>(context);
+        auto endpointDiscoveryContext =
+            std::unique_ptr<EndpointDiscoveryContext>(reinterpret_cast<EndpointDiscoveryContext *>(context));
         auto *deviceDiscoverer = endpointDiscoveryContext->discoverer;
         chip::EndpointId endpointId = endpointDiscoveryContext->endpointId;
 
@@ -545,14 +573,15 @@ namespace zilker
                 *endpointDiscoveryContext->exchangeMgr, endpointDiscoveryContext->device, iter.GetValue());
         }
 
-        AddEndpointDataToResultIfComplete(endpointDiscoveryContext);
+        AddEndpointDataToResultIfComplete(endpointDiscoveryContext.get());
     }
 
     static void AddEndpointDataToResultIfComplete(EndpointDiscoveryContext *ctx)
     {
         if (ctx->data->deviceTypes && ctx->data->serverList && ctx->data->clientList && ctx->data->partsList)
         {
-            ctx->discoverer->GetDetails()->endpointDescriptorData[ctx->endpointId] = std::move(ctx->data);
+            // Replacement is fine since ctx->data is a shared pointer
+            ctx->discoverer->GetDetails()->endpointDescriptorData[ctx->endpointId] = ctx->data;
             ctx->discoverer->ResultsUpdated();
         }
     }
