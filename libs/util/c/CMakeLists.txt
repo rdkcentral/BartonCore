@@ -53,6 +53,8 @@ target_include_directories(xhUtil PUBLIC public)
 
 add_compile_definitions(PRIVATE RESOURCES_DIR="${CMAKE_CURRENT_LIST_DIR}/test/etc")
 
+bds_configure_glib()
+
 bds_add_cmocka_test(
         NAME testFileUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/fileTest.c

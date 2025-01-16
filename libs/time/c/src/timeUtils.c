@@ -341,36 +341,3 @@ bool isSystemTimeValid()
     getCurrentTime(&now, false);
     return now.tv_sec > BEGINNING_OF_2019_SECS;
 }
-
-/*
- * Provide compatibilty for gingerbread which doesn't have timegm or timelocal only timegm64 and timelocal64
- */
-#ifdef CONFIG_PRODUCT_TCA203
-
-time_t timegm(struct tm const *t)
-{
-    // check to make sure we don't overflow time_t
-    static const time_t kTimeMax = ~(1L << (sizeof(time_t) * CHAR_BIT - 1));
-    static const time_t kTimeMin = (1L << (sizeof(time_t) * CHAR_BIT - 1));
-    time64_t result = timegm64(t);
-    if (result < kTimeMin || result > kTimeMax)
-    {
-        return -1;
-    }
-    return result;
-}
-
-time_t timelocal(struct tm const *t)
-{
-    // check to make sure we don't overflow time_t
-    static const time_t kTimeMax = ~(1L << (sizeof(time_t) * CHAR_BIT - 1));
-    static const time_t kTimeMin = (1L << (sizeof(time_t) * CHAR_BIT - 1));
-    time64_t result = timelocal64(t);
-    if (result < kTimeMin || result > kTimeMax)
-    {
-        return -1;
-    }
-    return result;
-}
-
-#endif

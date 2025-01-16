@@ -120,12 +120,12 @@ void *cancelDelayTask(uint32_t task);
  */
 bool exceuteDelayTask(uint32_t task);
 
-#if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
+#if defined(CONFIG_DEBUG_SINGLE_PROCESS)
 /*
  * Force and wait for all delayed tasks to complete
  */
 void finalizeAllDelayTasks();
-#endif // CONFIG_DEBUG_SINGLE_PROCESS || CONFIG_PRODUCT_ANGELSENVY
+#endif // CONFIG_DEBUG_SINGLE_PROCESS
 
 
 #endif // IC_DELAYTASK_H

@@ -31,6 +31,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <glib.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -730,36 +731,8 @@ char *stringToCamelCase(const char *inputStr)
 char *stringBuilder(const char *format, ...)
 {
     va_list arglist;
-
-    // preprocess the format & args
-    //
     va_start(arglist, format);
-
-    char *retVal = NULL;
-
-    // vasprintf gives truncated stack frames in address sanitizer when we leak the return
-    // so for angelsenvy just use our vsnprintf implementation
-#if defined _GNU_SOURCE && !defined CONFIG_PRODUCT_ANGELSENVY
-    vasprintf(&retVal, format, arglist);
-#else
-    // send to snprintf once to get the length needed
-    //
-    int strLen = vsnprintf(NULL, 0, format, arglist);
-    if (strLen > 0)
-    {
-        // reset the var args
-        va_end(arglist);
-        va_start(arglist, format);
-
-        // create the string, then populate it
-        //
-        retVal = (char *) malloc(sizeof(char) * (strLen + 1));
-        vsnprintf(retVal, (size_t) strLen + 1, format, arglist);
-    }
-#endif // defined _GNU_SOURCE && !defined CONFIG_PRODUCT_ANGELSENVY
-
-    // cleanup and return
-    //
+    char *retVal = g_strdup_vprintf(format, arglist);
     va_end(arglist);
     return retVal;
 }

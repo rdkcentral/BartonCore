@@ -89,13 +89,13 @@ typedef enum
 static icLinkedList *tasks = NULL; // list of delayedTask objects
 static pthread_mutex_t TASK_MTX = PTHREAD_MUTEX_INITIALIZER;
 
-#if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
+#if defined(CONFIG_DEBUG_SINGLE_PROCESS)
 // Keep a state tracking if we are told to finalize tasks. This is so we can short-circuit
 // scheduleDelayedTask calls when we are trying to finalize the existing ones. This prevents
 // deadlock scenarios around the TASK_MTX;
 static pthread_mutex_t STATE_MTX = PTHREAD_MUTEX_INITIALIZER;
 static tasksState state = TASKS_STATE_AVAILABLE;
-#endif // CONFIG_DEBUG_SINGLE_PROCESS || CONFIG_PRODUCT_ANGELSENVY
+#endif // CONFIG_DEBUG_SINGLE_PROCESS
 
 /*
  * private internal functions
@@ -161,7 +161,7 @@ uint32_t scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCallbackF
     def->arg = arg;
     def->joinable = true;
 
-#if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
+#if defined(CONFIG_DEBUG_SINGLE_PROCESS)
     // Verify our state to make sure we can actually queue up the task.
     pthread_mutex_lock(&STATE_MTX);
 
@@ -177,7 +177,7 @@ uint32_t scheduleDelayTask(uint64_t delayAmount, delayUnits units, taskCallbackF
     pthread_mutex_unlock(&STATE_MTX);
 #else
     pthread_mutex_lock(&TASK_MTX);
-#endif // CONFIG_DEBUG_SINGLE_PROCESS || CONFIG_PRODUCT_ANGELSENVY
+#endif // CONFIG_DEBUG_SINGLE_PROCESS
 
     // assign a handle and add to our list
     //
@@ -369,7 +369,7 @@ bool exceuteDelayTask(uint32_t task)
     return retVal;
 }
 
-#if defined(CONFIG_DEBUG_SINGLE_PROCESS) || defined(CONFIG_PRODUCT_ANGELSENVY)
+#if defined(CONFIG_DEBUG_SINGLE_PROCESS)
 
 // FIXME: This api is has concurrency problems due to delayed tasks rescheduling themselves (software trouble
 //  generation). It is currently only practically used to cleanly shutdown single process for CI, so I've added
@@ -418,7 +418,7 @@ void finalizeAllDelayTasks()
     pthread_mutex_unlock(&STATE_MTX);
 }
 
-#endif // CONFIG_DEBUG_SINGLE_PROCESS || CONFIG_PRODUCT_ANGELSENVY
+#endif // CONFIG_DEBUG_SINGLE_PROCESS
 
 /**
  * Force a task to start running if its not already running

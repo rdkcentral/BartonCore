@@ -138,14 +138,4 @@ bool convertLocalISO8601ToMillis(const char *inputString, uint64_t *outputMillis
  */
 bool isSystemTimeValid();
 
-/*
- * Provide compatibilty for gingerbread which doesn't have timegm or timelocal only timegm64 and timelocal64
- */
-#ifdef CONFIG_PRODUCT_TCA203
-time_t timegm(struct tm const *t);
-
-time_t timelocal(struct tm const *t);
-
-#endif
-
 #endif // IC_TIMEUTILS_H

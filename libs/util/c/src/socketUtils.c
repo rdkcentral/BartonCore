@@ -245,7 +245,6 @@ bool canWriteToSocket(int32_t sockFD, time_t timeoutSecs)
 
 bool setTCPUserTimeout(int socket, unsigned int timeoutMillis)
 {
-#ifndef CONFIG_PRODUCT_FLEX
     int status = setsockopt(socket, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeoutMillis, sizeof(timeoutMillis));
     if (status != 0)
     {
@@ -255,8 +254,4 @@ bool setTCPUserTimeout(int socket, unsigned int timeoutMillis)
     }
 
     return status == 0;
-#else
-    // uClibc doesn't support TCP_USER_TIMEOUT
-    return false;
-#endif
 }

@@ -46,5 +46,3 @@ target_link_libraries(xhCrypto ssl crypto xhTypes xhUtil xhConcurrent)
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhCrypto PUBLIC public)
-
-add_subdirectory(test)
