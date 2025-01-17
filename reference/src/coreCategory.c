@@ -280,7 +280,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
     emitOutput("%s: %s, Class: %s\n", deviceId, label == NULL ? "(no label)" : label, deviceClass);
 
     // gather device level resources
-    g_autolist(BDeviceServiceResource) sortedResources = NULL;
+    g_autoptr(GList) sortedResources = NULL;
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
         BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
@@ -303,7 +303,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
     }
 
     // loop through each endpoint
-    g_autolist(BDeviceServiceResource) sortedEndpoints = NULL;
+    g_autoptr(GList) sortedEndpoints = NULL;
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
         BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
@@ -314,7 +314,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
                      NULL);
 
         // print endpoint resources
-        g_autolist(BDeviceServiceResource) sortedEndpointResources = NULL;
+        g_autoptr(GList) sortedEndpointResources = NULL;
         for (GList *endpointResourcesIter = endpointResources; endpointResourcesIter != NULL;
              endpointResourcesIter = endpointResourcesIter->next)
         {

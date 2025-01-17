@@ -201,6 +201,7 @@ static gboolean linenoiseInputReady(GObject *pollableStream, ioAsyncContext *dat
                 // We are done, so this will force everything to stop so we stop blocking and return
                 g_main_loop_quit((GMainLoop *) data->mainLoop);
             }
+            free(line);
         }
     }
 
