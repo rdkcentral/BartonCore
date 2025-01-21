@@ -22,7 +22,9 @@ conditions of these licenses. The LICENSE file contains the text of all the lice
 within this component..
 
 Code adapted from: https://github.com/project-chip/connectedhomeip
-Copyright 2023 Project CHIP Authors
+Copyright (c) 2020-2024 Project CHIP Authors
+Copyright (c) 2013-2024 Nest Labs, Inc.
+Copyright (c) 2019-2024 Google LLC.
 All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License")
 
@@ -31,6 +33,18 @@ Copyright (c) 2019, The OpenThread Authors.
 All rights reserved.
 Licensed under the BSD-3 License
 
+Files in hooks/clang-format-hooks directory
 Code borrowed from: https://github.com/barisione/clang-format-hooks
+Copyright 2017-2018 Marco Barisione <marco@barisione.org>
 Copyright 2018 Undo Ltd.
 Licensed under the MIT License
+
+config/cmake/modules/lcov_cobertura.py
+Copyright 2011-2022 Eric Wendelin
+All rights reserved.
+Licensed under Apache License, Version 2.0
+
+config/cmake/modules/CodeCoverage.cmake
+Copyright (c) 2012-2017, Lars Bilke
+All rights reserved.
+Licensed under the BSD-3 License

@@ -23,7 +23,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-# Copyright 2011-2012 Eric Wendelin
+# Copyright 2011-2022 Eric Wendelin
 # All rights reserved.
 # Licensed under Apache License, Version 2.0
 

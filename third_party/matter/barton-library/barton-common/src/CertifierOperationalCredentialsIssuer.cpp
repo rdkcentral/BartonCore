@@ -21,6 +21,10 @@
 //
 // ------------------------------ tabstop = 4 ----------------------------------
 
+// Copyright 2021-2023 Project CHIP Authors
+// All rights reserved.
+// Licensed under the Apache License, Version 2.0 (the "License")
+
 #include <CertifierOperationalCredentialsIssuer.hpp>
 
 #include <stddef.h>
