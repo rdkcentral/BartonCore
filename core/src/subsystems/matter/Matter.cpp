@@ -27,9 +27,7 @@
 
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/server/CommissioningWindowManager.h"
-#include "icTypes/icLinkedList.h"
 #include "lib/core/Optional.h"
-#include "protocols/secure_channel/Constants.h"
 #include "system/SystemClock.h"
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -39,6 +37,7 @@
 
 extern "C" {
 #include "deviceServiceConfiguration.h"
+#include "deviceServiceProperties.h"
 #include "icUtil/fileUtils.h"
 #include "provider/device-service-property-provider.h"
 #include "provider/device-service-token-provider.h"
@@ -47,10 +46,6 @@ extern "C" {
 #include <icTypes/sbrm.h>
 #include <icUtil/base64.h>
 }
-
-#include <condition_variable>
-#include <filesystem>
-#include <mutex>
 
 #ifdef BARTON_CONFIG_THREAD
 #include <subsystems/thread/threadSubsystem.hpp>
@@ -85,7 +80,6 @@ extern "C" {
 #include <matter/MatterDriverFactory.h>
 
 #include "Matter.h"
-#include "PersistentStorageDelegate.h"
 #include "credentials/attestation_verifier/DeviceAttestationVerifier.h"
 
 #include <CertifierOperationalCredentialsIssuer.hpp>
@@ -200,6 +194,12 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
 
     myFabricId = accountId;
+
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+    this->vendorId = (chip::VendorId) b_device_service_property_provider_get_property_as_uint16(
+        propertyProvider, MATTER_VID_PROP_KEY, this->vendorId);
+    icDebug("Using vendor ID: 0x%04x", this->vendorId);
 
     paaTrustStorePath = std::string(std::move(attestationTrustStorePath));
 

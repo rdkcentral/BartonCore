@@ -27,9 +27,6 @@
 
 #pragma once
 
-extern "C" {
-}
-
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 #include "SelfSignedCertifierOperationalCredentialsIssuer.hpp"
 #else
@@ -50,6 +47,7 @@ extern "C" {
 #include <credentials/GroupDataProviderImpl.h>
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
 #include <platform/Linux/CHIPLinuxStorage.h>
+#include "lib/core/CHIPVendorIdentifiers.hpp"
 #include <thread>
 
 #include <lib/support/PersistedCounter.h>
@@ -346,5 +344,8 @@ namespace zilker
 
         SessionMessageHandler sessionMessageHandler;
         AccessRestrictionProvider accessRestrictionProvider;
+
+        // This should be supplied by a real client, but default to test value for development
+        chip::VendorId vendorId = chip::VendorId::TestVendor1;
     };
 } // namespace zilker

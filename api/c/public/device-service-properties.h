@@ -33,10 +33,24 @@ G_BEGIN_DECLS
 
 /*
  * A collection of public property keys
+ *
+ * Property values are always stores as strings, regardles of
+ * the actual type of the property data.
+ *
+ * Properties whose keys are defined here will document the
+ * expected type of the property value. If a type is not
+ * specified, the property value is expected to be a string.
+ *
+ * For properties that stores numerical values, the base
+ * of the value can be flexible and auto-detected. However, correct
+ * base prefixes should be used when setting the property
+ * (e.g. "0x" for hexidecimal)
  */
 
 // Prefix for all barton properties
 #define B_DEVICE_SERVICE_BARTON_PREFIX             "barton."
+// Prefix for matter properties
+#define B_DEVICE_SERVICE_MATTER_PREFIX             "matter."
 // Prefix for 802.15.4 related properties
 #define B_DEVICE_SERVICE_FIFTEEN_FOUR_PREFIX       "fifteenfour."
 
@@ -44,7 +58,16 @@ G_BEGIN_DECLS
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")
  *
  * The local 802.15.4 eui64 address of this installation.
+ * Type: uint64
  */
 #define B_DEVICE_SERVICE_BARTON_FIFTEEN_FOUR_EUI64 B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_FIFTEEN_FOUR_PREFIX "eui64"
+
+/**
+ * MATTER_VID: (value "barton.matter.vid")
+ *
+ * The Vendor ID of the Matter device.
+ * Type: uint16
+ */
+#define B_DEVICE_SERVICE_BARTON_MATTER_VID B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "vid"
 
 G_END_DECLS
