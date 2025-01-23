@@ -512,6 +512,12 @@ bds_add_glib_test(
 )
 
 bds_add_glib_test(
+    NAME device-service-metadata-updated-event-test
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-metadata-updated-event-test.c
+    GLOG_DOMAIN BDeviceServiceMetadataUpdatedEventTest
+)
+
+bds_add_glib_test(
     NAME device-service-recovery-stopped-event-test
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-recovery-stopped-event-test.c
     GLOG_DOMAIN BDeviceServiceRecoveryStoppedEventTest

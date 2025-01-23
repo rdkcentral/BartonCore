@@ -2684,6 +2684,7 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
     if (doSave)
     {
         jsonDatabaseSaveMetadata(metadata);
+        sendMetadataUpdatedEvent(metadata);
     }
 
     metadataDestroy(metadata);
@@ -3987,73 +3988,15 @@ bool deviceServiceSetMetadata(const char *uri, const char *value)
         return false;
     }
 
-    icLogDebug(LOG_TAG, "%s: setting metadata %s %s", __FUNCTION__, uri, value);
+    g_autofree char *deviceId = (char *) calloc(strlen(uri), 1);   // allocate worst case
+    g_autofree char *name = (char *) calloc(strlen(uri), 1);       // allocate worst case
+    g_autofree char *endpointId = (char *) calloc(strlen(uri), 1); // allocate worst case
 
-    icDeviceMetadata *metadata = jsonDatabaseGetMetadataByUri(uri);
-    if (metadata == NULL)
+    if (parseMetadataUri(uri, endpointId, deviceId, name) == true)
     {
-        // new item
-        metadata = (icDeviceMetadata *) calloc(1, sizeof(icDeviceMetadata));
-        saveDb = true;
-
-        char *deviceId = (char *) calloc(strlen(uri), 1);   // allocate worst case
-        char *name = (char *) calloc(strlen(uri), 1);       // allocate worst case
-        char *endpointId = (char *) calloc(strlen(uri), 1); // allocate worst case
-
-        if (parseMetadataUri(uri, endpointId, deviceId, name) == true)
-        {
-            if (strstr(uri, JSON_DATABASE_ENDPOINT_MARKER) == NULL)
-            {
-                // metadata is on device
-                //
-                free(endpointId);
-                endpointId = NULL;
-            }
-            metadata->id = name;
-            metadata->deviceUuid = deviceId;
-            metadata->endpointId = endpointId;
-            metadata->uri = strdup(uri);
-        }
-        else
-        {
-            icLogError(LOG_TAG, "Invalid URI %s", uri);
-            free(deviceId);
-            free(name);
-            free(metadata);
-            free(endpointId);
-            return false;
-        }
-    }
-    else
-    {
-        if (strcmp(uri, metadata->uri) != 0 || strcmp(value, metadata->value) != 0)
-        {
-            saveDb = true;
-        }
-
-        if (metadata->value != NULL)
-        {
-            free(metadata->value);
-            metadata->value = NULL;
-        }
-    }
-
-    if (saveDb)
-    {
-        if (value != NULL)
-        {
-            metadata->value = strdup(value);
-        }
-
-        result = jsonDatabaseSaveMetadata(metadata);
-    }
-    else
-    {
-        // there was no change, so just return success
+        setMetadata(deviceId, endpointId, name, value);
         result = true;
     }
-
-    metadataDestroy(metadata);
 
     return result;
 }

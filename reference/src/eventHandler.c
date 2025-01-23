@@ -28,6 +28,7 @@
 #include "eventHandler.h"
 #include "device-service-client.h"
 #include "device-service-device-found-details.h"
+#include "device-service-metadata.h"
 #include "device-service-reference-io.h"
 #include "events/device-service-device-added-event.h"
 #include "events/device-service-device-discovered-event.h"
@@ -37,6 +38,7 @@
 #include "events/device-service-discovery-started-event.h"
 #include "events/device-service-discovery-stopped-event.h"
 #include "events/device-service-endpoint-added-event.h"
+#include "events/device-service-metadata-updated-event.h"
 #include <stdio.h>
 
 static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStartedEvent *event);
@@ -48,6 +50,7 @@ static void endpointAddedHandler(BDeviceServiceClient *source, BDeviceServiceEnd
 static void deviceDiscoveryCompletedHandler(BDeviceServiceClient *source,
                                             BDeviceServiceDeviceDiscoveryCompletedEvent *event);
 static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveryFailedEvent *event);
+static void metadataUpdated(BDeviceServiceClient *source, BDeviceServiceMetadataUpdatedEvent *event);
 
 
 void registerEventHandlers(BDeviceServiceClient *client)
@@ -71,6 +74,7 @@ void registerEventHandlers(BDeviceServiceClient *client)
                      B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED,
                      G_CALLBACK(deviceDiscoveryFailedHandler),
                      NULL);
+    g_signal_connect(client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_METADATA_UPDATED, G_CALLBACK(metadataUpdated), NULL);
 }
 
 void unregisterEventHandlers(void)
@@ -267,4 +271,28 @@ static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceSe
     g_return_if_fail(deviceFoundDetails != NULL);
 
     printDeviceFoundDetails("device discovery failed!", deviceFoundDetails);
+}
+
+static void metadataUpdated(BDeviceServiceClient *source, BDeviceServiceMetadataUpdatedEvent *event)
+{
+    g_autoptr(BDeviceServiceMetadata) metadata = NULL;
+    g_object_get(
+        G_OBJECT(event),
+        B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_PROP_METADATA],
+        &metadata,
+        NULL);
+
+    g_return_if_fail(metadata != NULL);
+
+    g_autofree gchar *uri = NULL;
+    g_autofree gchar *value = NULL;
+
+    g_object_get(metadata,
+                 B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_URI],
+                 &uri,
+                 B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE],
+                 &value,
+                 NULL);
+
+    emitOutput("metadata updated: uri=%s, value=%s\n", uri, value);
 }

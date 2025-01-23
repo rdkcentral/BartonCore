@@ -126,6 +126,8 @@ GQuark b_device_service_client_error_quark(void);
 // signal handler args: BDeviceServiceZigbeePanIdAttackChangedEvent *event
 #define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DATABASE_FAILURE        "device-database-failure"
 // signal handler args: BDeviceServiceDeviceDatabaseFailureEvent *event
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_METADATA_UPDATED               "metadata-updated"
+// signal handler args: BDeviceServiceMetadataUpdatedEvent *event
 
 // TODO - implement these
 #define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_SUBSYSTEM_STATUS_CHANGED

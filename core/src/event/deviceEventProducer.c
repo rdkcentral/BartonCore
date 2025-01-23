@@ -53,6 +53,7 @@
 #include "events/device-service-discovery-stopped-event.h"
 #include "events/device-service-endpoint-added-event.h"
 #include "events/device-service-endpoint-removed-event.h"
+#include "events/device-service-metadata-updated-event.h"
 #include "events/device-service-recovery-started-event.h"
 #include "events/device-service-recovery-stopped-event.h"
 #include "events/device-service-resource-updated-event.h"
@@ -107,6 +108,7 @@ enum DEVICE_SERVICE_SIGNALS
     SIGNAL_ZIGBEE_INTERFERENCE,
     SIGNAL_PAN_ID_ATTACK_CHANGED,
     SIGNAL_DEVICE_DATABASE_FAILURE,
+    SIGNAL_METADATA_UPDATED,
 
     SIGNAL_MAX
 };
@@ -372,6 +374,17 @@ void deviceEventProducerClassInit(BDeviceServiceClientClass *deviceServiceClass)
                                                            G_TYPE_NONE,
                                                            1,
                                                            B_DEVICE_SERVICE_DEVICE_DATABASE_FAILURE_EVENT_TYPE);
+
+    signals[SIGNAL_METADATA_UPDATED] = g_signal_new(B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_METADATA_UPDATED,
+                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_SIGNAL_RUN_LAST,
+                                                    0,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL,
+                                                    G_TYPE_NONE,
+                                                    1,
+                                                    B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_TYPE);
 }
 
 void deviceEventProducerStartup(BDeviceServiceClient *_service)
@@ -838,4 +851,18 @@ void sendDeviceDatabaseFailureEvent(BDeviceServiceDeviceDatabaseFailureType fail
                  NULL);
 
     g_signal_emit(service, signals[SIGNAL_DEVICE_DATABASE_FAILURE], 0, event);
+}
+
+void sendMetadataUpdatedEvent(icDeviceMetadata *metadata)
+{
+    g_autoptr(BDeviceServiceMetadata) metadataGObject = convertIcDeviceMetadataToGObject(metadata);
+
+    g_autoptr(BDeviceServiceMetadataUpdatedEvent) event = b_device_service_metadata_updated_event_new();
+    g_object_set(
+        event,
+        B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_PROP_METADATA],
+        metadataGObject,
+        NULL);
+
+    g_signal_emit(service, signals[SIGNAL_METADATA_UPDATED], 0, event);
 }

@@ -31,6 +31,7 @@
 
 #pragma once
 
+#include "device/icDeviceMetadata.h"
 #include "device-service-client.h"
 #include "events/device-service-device-database-failure-event.h"
 #include "events/device-service-storage-changed-event.h"
@@ -217,3 +218,9 @@ void sendStorageChangedEvent(GFileMonitorEvent whatChanged);
  * @param deviceId - the id of the device that failed, if relevant (may be NULL)
  */
 void sendDeviceDatabaseFailureEvent(BDeviceServiceDeviceDatabaseFailureType failureType, const char *deviceId);
+
+/*
+ * broadcast a metadata updated event
+ * @param metadata - the metadata that changed
+ */
+void sendMetadataUpdatedEvent(icDeviceMetadata *metadata);
