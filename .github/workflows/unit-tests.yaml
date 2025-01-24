@@ -36,8 +36,8 @@ on:
 
 jobs:
 
-    build_image_and_bartoncore_and_run_tests:
-        name: Build Barton Image/BartonCore and Run Unit Tests
+    build_bartoncore_and_run_tests:
+        name: Build BartonCore and Run Unit Tests
         runs-on: ubuntu-latest
 
         steps:
@@ -48,28 +48,16 @@ jobs:
                     repository: ${{ github.repository }}
                     token: ${{ secrets.RDKCM_BARTON }}
             -
-                name: Set up Docker Buildx
-                uses: docker/setup-buildx-action@v3
-            -
-                name: Set environment variables
-                run: |
-                    echo "USER=$USER" >> $GITHUB_ENV
-                    echo "GID=$(id -g)" >> $GITHUB_ENV
-                    echo "UID=$(id -u)" >> $GITHUB_ENV
-            -
-                name: Build Docker image
-                uses: docker/build-push-action@v6
+                name: Log in to GitHub Container Registry
+                uses: docker/login-action@v2
                 with:
-                    context: ./docker
-                    file: ./docker/Dockerfile
-                    tags: barton_builder_${{ env.USER }}:latest
-                    cache-from: type=gha
-                    cache-to: type=gha,mode=max
-                    load: true
-                    build-args: |
-                        BUILDER_USER=${{ env.USER }}
-                        BUILDER_GID=${{ env.GID }}
-                        BUILDER_UID=${{ env.UID }}
+                    registry: ghcr.io
+                    username: ${{ github.actor }}
+                    password: ${{ secrets.GITHUB_TOKEN }}
+            -
+                name: Pull barton_builder Docker image
+                run: |
+                     docker pull ghcr.io/rdkcentral/barton_builder:latest
             -
                 name: Build BartonCore
                 run: |
