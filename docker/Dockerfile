@@ -25,12 +25,22 @@
 # Created by Kevin Funderburg on 09/11/2024
 #
 
-# Example build command:
-#    docker build \
-#    --build-arg BUILDER_USER=$(id -u -n) \
-#    --build-arg BUILDER_GID=$(id -g) \
-#    --build-arg BUILDER_UID=$(id -u) \
-#    -t barton_builder_$USER .
+###############################################################################
+# Example workflow for building the image and pushing it to the GitHub Container
+# Registry
+#
+# 1. Build the image:
+#    `docker build -t ghcr.io/rdkcentral/barton_builder .`
+#
+# 2. Authenticate with the GitHub Container Registry:
+#    `echo $GITHUB_PAT | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin`
+#
+#    where $GITHUB_PAT is your GitHub Personal Access Token and $GITHUB_ACTOR is
+#    your GitHub username
+#
+# 3. Push the image to the GitHub Container Registry:
+#    `docker push ghcr.io/rdkcentral/barton_builder`
+###############################################################################
 
 ###############################################################################
 # base stage which provides a base image which has packages to support basic
@@ -223,13 +233,12 @@ RUN cd /tmp && \
 ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
 
 ###############################################################################
-# User creation stage
+# Development build stage
 #
-# This stage is responsible for creating a non-root user within the image and
-# installing packages useful for development. This stage is primarily intended
-# for development purposes, i.e. a devcontainer in VSCode.
+# This stage is responsible for installing packages and other tasks useful for
+# development.
 ###############################################################################
-FROM third_party_builder AS user_builder
+FROM third_party_builder AS dev_builder
 
 # Install packages useful for development
 RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
@@ -249,41 +258,32 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     rsync \
     bash-completion
 
+RUN pip3 install --upgrade --break-system-packages \
+    stack-pr
+
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.
 RUN chmod -R +777 /usr/local && \
     chmod +777 /usr/lib && \
     chmod -R +777 /usr/share/gir-1.0
 
-ARG BUILDER_USER=""
-ARG BUILDER_GID=""
-ARG BUILDER_UID=""
+# Set up pcap permissions group
+RUN groupadd pcap && \
+    chgrp pcap /usr/bin/tcpdump && \
+    chmod 750 /usr/bin/tcpdump && \
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
 
-# Create the non-root user
-RUN groupadd --gid $BUILDER_GID $BUILDER_USER && \
-    useradd --uid $BUILDER_UID --gid $BUILDER_GID -m $BUILDER_USER && \
-    echo $BUILDER_USER ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$BUILDER_USER && \
-    chmod 0440 /etc/sudoers.d/$BUILDER_USER
+# Add bashrc_term_mods. We're looking to inject this before user creation/customization
+COPY bashrc_term_mods /tmp/bashrc_term_mods
 
-# Set up pcap permissions
-RUN groupadd pcap && usermod -a -G pcap $BUILDER_USER \
-    && chgrp pcap /usr/bin/tcpdump \
-    && chmod 750 /usr/bin/tcpdump \
-    && setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+# This script will set up the user specific environment. It is purposefully not run yet,
+# in favor of user creation at run time in the entrypoint script on the CLI, or in the extended
+# Dockerfile.devcontainer to bake the user into the image for the devcontainer.
+COPY setupUser.sh /setupUser.sh
+RUN chmod +x /setupUser.sh
 
 # Setup our entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
-
-USER $BUILDER_USER
-
-RUN pipx install stack-pr && \
-    pipx ensurepath
-
-# Add bashrc_term_mods. We're looking to inject this before
-# key variables are unset
-COPY bashrc_term_mods /tmp/bashrc_term_mods
-RUN boundary=$(($(sed -n '/unset color_prompt/=' ~/.bashrc)-1)) && \
-    sed -i "${boundary}r/tmp/bashrc_term_mods" ~/.bashrc

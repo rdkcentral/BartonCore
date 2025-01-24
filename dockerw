@@ -31,6 +31,7 @@ set -e
 INTERACTIVE_FLAGS="-it"
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
+TAG="latest"
 
 while getopts ":npe:t:d" opt; do
     case ${opt} in
@@ -53,9 +54,9 @@ while getopts ":npe:t:d" opt; do
 done
 shift "$(($OPTIND - 1))"
 
-IMAGE="barton_builder_$USER"
+IMAGE="ghcr.io/rdkcentral/barton_builder:${TAG}"
 
-if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE}:latest$"; then
+if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE}$"; then
     echo "Using existing ${IMAGE}"
 else
     echo "Image ${IMAGE} not found, building..."
@@ -87,7 +88,7 @@ CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 # generate docker/.env file containing necesary environment variables for the container
 $DIR/docker/setupDockerEnv.sh
 
-docker run -u $USER \
+docker run \
     --rm \
     --name $CONTAINER_NAME \
     $INTERACTIVE_FLAGS \

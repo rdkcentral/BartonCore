@@ -38,5 +38,14 @@ services:
             file: ./compose.yaml
             service: barton
 
-        # Keep the container running indefinitely
-        command: sleep infinity
+        # devcontainers do not support creating a user at runtime like we do with the
+        # `entrypoint.sh` script, so we need to override the base image with
+        # Dockerfile.devcontainer file that bakes the user into the image.
+        image: barton-devcontainer-$BUILDER_USER
+        build:
+            context: .
+            dockerfile: Dockerfile.devcontainer
+            args:
+                - BUILDER_USER=$BUILDER_USER
+                - BUILDER_GID=$BUILDER_GID
+                - BUILDER_UID=$BUILDER_UID

@@ -1,17 +1,15 @@
-#!/bin/bash
-
 # ------------------------------ tabstop = 4 ----------------------------------
 #
 # If not stated otherwise in this file or this component's LICENSE file the
 # following copyright and licenses apply:
 #
-# Copyright 2024 Comcast Cable Communications Management, LLC
+# Copyright 2025 Comcast Cable Communications Management, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# http:#www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,6 +21,19 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-script_dir="$(dirname "$(realpath "$0")")"
+#
+# Created by Kevin Funderburg on 1/21/2025.
+#
 
-docker build -t ghcr.io/rdkcentral/barton_builder ${script_dir}
+# This Dockerfile is used specifically for the devcontainer in VSCode and is leveraged
+# in `compose.devcontainer.yaml`. The reasoning behind this file's existence is to get
+# around the limitation within VSC that the remote user must be baked into the image
+# before run time, unlike the CLI environment.
+
+FROM ghcr.io/rdkcentral/barton_builder:latest
+
+ARG BUILDER_USER=""
+ARG BUILDER_GID=""
+ARG BUILDER_UID=""
+
+RUN /setupUser.sh $BUILDER_UID $BUILDER_GID $BUILDER_USER

@@ -47,6 +47,11 @@
         "target=/tmp,type=tmpfs"
     ],
 
+    // By setting this value to true, VSC will not run the entrypoint/CMD in the Dockerfile
+    // and instead will start the devcontainer and keep it running indefinitely. Without this,
+    // the container will start and stop immediately after the entrypoint/CMD is executed.
+    "overrideCommand": true,
+
     // leave the container running when VS Code closes
     "shutdownAction": "none",
 
