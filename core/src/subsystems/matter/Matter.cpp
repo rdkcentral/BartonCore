@@ -111,8 +111,6 @@ extern "C" {
 #define OPARTIONAL_ENVIRONMENT_STRING_STAGE     "stage"
 #define DEFAULT_OPERATIONAL_ENVIRONMENT         OPARTIONAL_ENVIRONMENT_STRING_PROD
 
-#define MATTER_COMCAST_VID                      ((chip::VendorId) 0x111D)
-
 /*
  * The SDK's example apps arbitrarily use +12 as a way to differentiate the commissioner port from the server one.
  * That should be good enough for us at the moment.
@@ -426,7 +424,7 @@ CHIP_ERROR Matter::InitCommissioner()
     factoryParams.opCertStore = opCertStore.get();
 
     params.operationalCredentialsDelegate = &operationalCredentialsIssuer;
-    params.controllerVendorId = MATTER_COMCAST_VID;
+    params.controllerVendorId = this->vendorId;
     params.permitMultiControllerFabrics = false;
 
     const chip::Credentials::AttestationTrustStore *paaRootStore;
@@ -1304,7 +1302,7 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
                                                                                  iterations,
                                                                                  pbkdfSalt,
                                                                                  myFabricIndex,
-                                                                                 MATTER_COMCAST_VID);
+                                                                                 this->vendorId);
         }
     }
 
