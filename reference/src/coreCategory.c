@@ -37,6 +37,7 @@
 #include "icUtil/stringUtils.h"
 #include <linenoise.h>
 #include <private/resourceTypes.h>
+#include <private/deviceService/resourceModes.h>
 #include <stdio.h>
 
 #define DISCOVERY_SECONDS 60
@@ -590,6 +591,222 @@ static bool getStatusFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
     return result;
 }
 
+const gchar *stringifyMode(guint mode)
+{
+    gchar buf[8];
+
+    buf[0] = (mode & RESOURCE_MODE_READABLE) ? ('r') : ('-');
+    buf[1] = (mode & RESOURCE_MODE_WRITEABLE) ? ('w') : ('-');
+    buf[2] = (mode & RESOURCE_MODE_EXECUTABLE) ? ('x') : ('-');
+    buf[3] = (mode & RESOURCE_MODE_DYNAMIC) || (mode & RESOURCE_MODE_DYNAMIC_CAPABLE) ? ('d') : ('-');
+    buf[4] = (mode & RESOURCE_MODE_EMIT_EVENTS) ? ('e') : ('-');
+    buf[5] = (mode & RESOURCE_MODE_LAZY_SAVE_NEXT) ? ('l') : ('-');
+    buf[6] = (mode & RESOURCE_MODE_SENSITIVE) ? ('s') : ('-');
+    buf[7] = '\0';
+
+    return g_strdup(buf);
+}
+
+static void dumpResource(BDeviceServiceResource *resource,
+                         gchar *prefix)
+{
+    if (resource == NULL)
+    {
+        return;
+    }
+
+    guint resourceMode;
+    g_autofree gchar *uri = NULL;
+    g_autofree gchar *value = NULL;
+    g_autofree gchar *ownerId = NULL;
+    g_autofree gchar *type = NULL;
+
+    g_object_get(resource,
+                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_MODE],
+                 &resourceMode,
+                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                 &uri,
+                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                 &value,
+                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_DEVICE_UUID],
+                 &ownerId,
+                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
+                 &type,
+                 NULL);
+
+
+    g_autofree const gchar *modeStr = stringifyMode(resourceMode);
+
+    emitOutput("%s%s\n", prefix, uri);
+    emitOutput("%s\tvalue=%s\n", prefix, value);
+    emitOutput("%s\townerId=%s\n", prefix, ownerId);
+    emitOutput("%s\ttype=%s\n", prefix, type);
+    emitOutput("%s\tmode=0x%x (%s)\n", prefix, resourceMode, modeStr);
+}
+
+static void dumpMetadata(GList *metadata, gchar *prefix)
+{
+    if (metadata == NULL)
+    {
+        return;
+    }
+
+    for (GList *metadatIter = metadata; metadatIter != NULL; metadatIter = metadatIter->next)
+    {
+        g_autofree gchar *value = NULL;
+        BDeviceServiceMetadata *metadata = B_DEVICE_SERVICE_METADATA(metadatIter->data);
+        g_object_get(metadata,
+             B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE],
+             &value,
+             NULL);
+        emitOutput("%s\t%s\n", prefix, value);
+    }
+}
+
+static void dumpEndpoint(BDeviceServiceEndpoint *endpoint,
+                         gchar *prefix)
+{
+    if (endpoint == NULL)
+    {
+        return;
+    }
+
+    g_autofree gchar *uri = NULL;
+    g_autofree gchar *profile = NULL;
+    guint profileVersion;
+    g_autofree gchar *ownerId = NULL;
+    g_autolist(BDeviceServiceResource) resources = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata = NULL;
+
+    g_object_get(endpoint,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_URI],
+                 &uri,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
+                 &profile,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
+                 &profileVersion,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
+                 &ownerId,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
+                 &resources,
+                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_METADATA],
+                 &metadata,
+                 NULL);
+
+    emitOutput("%s%s\n", prefix, uri);
+    emitOutput("%s\tprofile=%s\n", prefix, profile);
+    emitOutput("%s\tprofileVersion=%d\n", prefix, profileVersion);
+    emitOutput("%s\townerId=%s\n", prefix, ownerId);
+
+    //resources
+    emitOutput("%s\tresources:\n", prefix);
+    for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
+    {
+        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        dumpResource(resource, "\t\t\t\t");
+    }
+
+    //metadata
+    if (g_list_length(metadata) > 0)
+    {
+        emitOutput("\t\t\tmetadata:\n");
+        dumpMetadata(metadata, prefix);
+    }
+}
+
+static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
+                           char **argv)
+{
+    (void) argc; //unused
+    bool rc = false;
+
+    g_autoptr(BDeviceServiceDevice) device = b_device_service_client_get_device_by_id(client, argv[0]);
+
+    g_autofree gchar *deviceUri = NULL;
+    g_autofree gchar *deviceId = NULL;
+    g_autofree gchar *deviceClass = NULL;
+    g_autofree gchar *managingDeviceDriver = NULL;
+    guint deviceClassVersion;
+    g_autolist(BDeviceServiceResource) resources = NULL;
+    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
+    g_autolist(BDeviceServiceMetadata) metadata = NULL;
+
+
+    g_object_get(device,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
+                 &deviceUri,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
+                 &deviceClass,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
+                 &deviceClassVersion,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER],
+                 &managingDeviceDriver,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_RESOURCES],
+                 &resources,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS],
+                 &endpoints,
+                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_METADATA],
+                 &metadata,
+                 NULL);
+
+    emitOutput("%s\n", deviceUri);
+    emitOutput("\tdeviceClass=%s\n", deviceClass);
+    emitOutput("\tdeviceClassVersion=%d\n", deviceClassVersion);
+    emitOutput("\tmanagingDeviceDriver=%s\n", managingDeviceDriver);
+
+    //device resources
+    emitOutput("\tresources:\n");
+    for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
+    {
+        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        dumpResource(resource, "\t\t");
+    }
+
+    //endpoints
+    emitOutput("\tendpoints:\n");
+    for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
+    {
+        BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
+        dumpEndpoint(endpoint, "\t\t");
+    }
+
+    //metadata
+    if (g_list_length(metadata) > 0)
+    {
+        emitOutput("\tmetadata:\n");
+        dumpMetadata(metadata, "\t\t");
+    }
+
+    return true;
+}
+
+static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc,
+                            char **argv)
+{
+    (void) argc; //unused
+    (void) argv; //unused
+
+    bool rc = false;
+
+    g_autolist(BDeviceServiceDevice) devices = b_device_service_client_get_devices(client);
+
+    if (devices)
+    {
+        for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
+        {
+            g_autofree gchar *deviceId = NULL;
+            BDeviceServiceDevice *device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            g_object_get(device,
+                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                  &deviceId,
+                  NULL);
+            dumpDeviceFunc(client, 1, &deviceId);
+        }
+    }
+
+    return rc;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -672,6 +889,15 @@ Category *buildCoreCategory(void)
     // get the status of device service
     command = commandCreate("getStatus", "gs", NULL, "Get the status of device service", 0, 0, getStatusFunc);
     categoryAddCommand(cat, command);
+
+    //dump device
+    command = commandCreate("dumpDevice", "dd", "<uuid>", "Dump all details about a device", 1, 1, dumpDeviceFunc);
+    categoryAddCommand(cat, command);
+
+    //dump devices
+    command = commandCreate("dumpAllDevices", "dump", NULL, "Dump all details about all devices", 0, 0, dumpDevicesFunc);
+    categoryAddCommand(cat, command);
+
 
     return cat;
 }
