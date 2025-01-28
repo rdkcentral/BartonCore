@@ -33,8 +33,7 @@
  * Author: jelderton -  6/7/19.
  *-----------------------------------------------*/
 
-#ifndef ZILKER_SIMPLEPROTECTCONFIG_H
-#define ZILKER_SIMPLEPROTECTCONFIG_H
+#pragma once
 
 #include <stdbool.h>
 #include <string.h>
@@ -122,5 +121,3 @@ void simpleProtectDestroySecret__auto(ProtectSecret **secret);
  * @see simpleProtectDestroySecret to free key material
  */
 ProtectSecret *simpleProtectGetSecretFromKeyring(char *keyring, char *name, char *magic);
-
-#endif // ZILKER_SIMPLEPROTECTCONFIG_H

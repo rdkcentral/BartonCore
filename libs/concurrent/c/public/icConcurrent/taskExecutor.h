@@ -31,8 +31,7 @@
  * Author: jelderton -  11/13/18.
  *-----------------------------------------------*/
 
-#ifndef ZILKER_TASKEXECUTOR_H
-#define ZILKER_TASKEXECUTOR_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -94,5 +93,3 @@ bool appendTaskToExecutor(icTaskExecutor *executor,
  * returns the number of items in the backlog to execute
  */
 uint16_t getTaskExecutorQueueCount(icTaskExecutor *executor);
-
-#endif // ZILKER_TASKEXECUTOR_H

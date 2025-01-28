@@ -31,7 +31,7 @@
 #include <memory>
 #include <vector>
 
-namespace zilker
+namespace barton
 {
     class ScopedReadPrepareParams final
     {
@@ -82,4 +82,4 @@ namespace zilker
     private:
         chip::app::ReadPrepareParams params;
     };
-} // namespace zilker
+} // namespace barton

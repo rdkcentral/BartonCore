@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 11/17/21.
  */
 
-#ifndef ZILKER_DISCOVEREDDEVICEDETAILS_H
-#define ZILKER_DISCOVEREDDEVICEDETAILS_H
+#pragma once
 
 
 #include "lib/core/Optional.h"
@@ -44,7 +43,7 @@ extern "C" {
 #include "jsonHelper/jsonHelper.h"
 }
 
-namespace zilker
+namespace barton
 {
     class DescriptorClusterData
     {
@@ -274,6 +273,4 @@ namespace zilker
         chip::Optional<std::string> networkType;
         std::map<chip::EndpointId, std::shared_ptr<DescriptorClusterData>> endpointDescriptorData;
     };
-} // namespace zilker
-
-#endif // ZILKER_DISCOVEREDDEVICEDETAILS_H
+} // namespace barton

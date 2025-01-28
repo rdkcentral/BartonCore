@@ -37,7 +37,6 @@
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${ZILKER_INCLUDE_DIR}
         ${CROSS_OUTPUT}/include         # 3rd Party
 )
 
@@ -48,4 +47,4 @@ file(GLOB SOURCES "src/*.c")
 add_executable(testZhalLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
-target_link_libraries(testZhalLib zhal pthread ${ZILKER_EXE_LIBS})
+target_link_libraries(testZhalLib zhal pthread)

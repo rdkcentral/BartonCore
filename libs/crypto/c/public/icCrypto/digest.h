@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_DIGEST_H
-#define ZILKER_DIGEST_H
+#pragma once
 
 #include <icTypes/sbrm.h>
 #include <icUtil/stringUtils.h>
@@ -59,5 +58,3 @@ inline char *digestFileHex(const char *filename, CryptoDigest algorithm)
 
     return stringBin2hex(digest, len);
 }
-
-#endif /* ZILKER_DIGEST_H */

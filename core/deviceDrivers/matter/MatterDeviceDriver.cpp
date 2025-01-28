@@ -93,7 +93,7 @@ extern "C" {
 #include <versionUtils.h>
 }
 
-using namespace zilker;
+using namespace barton;
 
 // the DeviceDriver interface callbacks
 static void startup(void *ctx);
@@ -527,7 +527,7 @@ void MatterDeviceDriver::PopulateInitialResourceValues(std::forward_list<std::pr
 bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValues *initialResourceValues)
 {
 
-    auto *basicInfoServer = static_cast<zilker::BasicInformation *>(
+    auto *basicInfoServer = static_cast<barton::BasicInformation *>(
         GetAnyServerById(device->uuid, chip::app::Clusters::BasicInformation::Id));
 
     if (basicInfoServer == nullptr)
@@ -558,7 +558,7 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
                          CACHING_POLICY_ALWAYS);
 
-    auto *generalDiagnosticsServer = static_cast<zilker::GeneralDiagnostics *>(
+    auto *generalDiagnosticsServer = static_cast<barton::GeneralDiagnostics *>(
         GetAnyServerById(device->uuid, chip::app::Clusters::GeneralDiagnostics::Id));
 
     if (generalDiagnosticsServer == nullptr)

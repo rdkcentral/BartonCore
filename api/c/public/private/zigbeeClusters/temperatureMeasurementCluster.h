@@ -25,8 +25,7 @@
 // Created by tlea on 2/18/19.
 //
 
-#ifndef ZILKER_TEMPERATUREMEASUREMENTCLUSTER_H
-#define ZILKER_TEMPERATUREMEASUREMENTCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -61,5 +60,3 @@ inline bool temperatureMeasurementClusterIsTemperatureValid(uint16_t value)
 {
     return (value != TEMPERATURE_MEASUREMENT_CLUSTER_INVALID_TEMPERATURE_VALUE);
 }
-
-#endif // ZILKER_TEMPERATUREMEASUREMENTCLUSTER_H

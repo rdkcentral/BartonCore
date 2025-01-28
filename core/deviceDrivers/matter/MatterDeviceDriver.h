@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 11/15/21.
  */
 
-#ifndef ZILKER_MATTERDEVICEDRIVER_H
-#define ZILKER_MATTERDEVICEDRIVER_H
+#pragma once
 
 #include "app/AttributePathParams.h"
 #include "app/ClusterStateCache.h"
@@ -80,7 +79,7 @@ extern "C" {
 #include <icTypes/icStringHashMap.h>
 };
 
-namespace zilker
+namespace barton
 {
     using namespace chip::app::Clusters;
     using namespace chip::app::DataModel;
@@ -560,7 +559,7 @@ namespace zilker
 
         } otaRequestorEventHandler;
 
-        class BasicInfoEventHandler : public zilker::BasicInformation::EventHandler
+        class BasicInfoEventHandler : public barton::BasicInformation::EventHandler
         {
             void OnSoftwareVersionChanged(BasicInformation &source, uint32_t softwareVersion) override
             {
@@ -613,7 +612,7 @@ namespace zilker
             }
         } basicInfoEventHandler;
 
-        class generalDiagnosticsEventHandler : public zilker::GeneralDiagnostics::EventHandler
+        class generalDiagnosticsEventHandler : public barton::GeneralDiagnostics::EventHandler
         {
             void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
                                             NetworkUtils::NetworkInterfaceInfo info) override
@@ -744,6 +743,4 @@ namespace zilker
                                     chip::Messaging::ExchangeManager &exchangeMgr,
                                     const chip::SessionHandle &sessionHandle);
     };
-} // namespace zilker
-
-#endif // ZILKER_MATTERDEVICEDRIVER_H
+} // namespace barton

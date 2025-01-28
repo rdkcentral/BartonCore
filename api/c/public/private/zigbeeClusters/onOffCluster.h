@@ -25,8 +25,7 @@
 // Created by tlea on 2/13/19.
 //
 
-#ifndef ZILKER_ONOFFCLUSTER_H
-#define ZILKER_ONOFFCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -52,5 +51,3 @@ bool onOffClusterIsOn(uint64_t eui64, uint8_t endpointId, bool *isOn);
 bool onOffClusterSetOn(uint64_t eui64, uint8_t endpointId, bool isOn);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_ONOFFCLUSTER_H

@@ -38,7 +38,7 @@
 using namespace chip::app::Clusters;
 using namespace chip::app::DataModel;
 
-namespace zilker
+namespace barton
 {
     class OTARequestor : public MatterCluster
     {
@@ -121,4 +121,4 @@ namespace zilker
             const chip::Messaging::ExchangeManager &exchangeMgr,
             const chip::SessionHandle &sessionHandle);
     };
-} // namespace zilker
+} // namespace barton

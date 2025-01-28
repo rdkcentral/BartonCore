@@ -21,7 +21,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-# This is just to satisfy zilker. Barton device service will not use this library.
+# This is just to satisfy existing clients of barton, for now. Barton device service will not use this library.
 cmake_minimum_required(VERSION 3.18)
 project(brtn-ds-private)
 

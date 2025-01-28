@@ -36,28 +36,32 @@
 #include <app-common/zap-generated/cluster-objects.h>
 #include <app/EventLogging.h>
 
-namespace zilker {
-
-class AccessRestrictionProvider : public chip::Access::AccessRestrictionProvider
+namespace barton
 {
-public:
-    AccessRestrictionProvider() : chip::Access::AccessRestrictionProvider() {}
 
-    ~AccessRestrictionProvider() {}
-
-protected:
-    CHIP_ERROR DoRequestFabricRestrictionReview(const chip::FabricIndex fabricIndex, uint64_t token, const std::vector<Entry> & arl)
+    class AccessRestrictionProvider : public chip::Access::AccessRestrictionProvider
     {
-        // this example simply removes all restrictions and will generate AccessRestrictionEntryChanged events
-        chip::Access::GetAccessControl().GetAccessRestrictionProvider()->SetEntries(fabricIndex, std::vector<Entry>{});
+    public:
+        AccessRestrictionProvider() : chip::Access::AccessRestrictionProvider() {}
 
-        chip::app::Clusters::AccessControl::Events::FabricRestrictionReviewUpdate::Type event{ .token       = token,
-                                                                                               .fabricIndex = fabricIndex };
-        chip::EventNumber eventNumber;
-        ReturnErrorOnFailure(chip::app::LogEvent(event, chip::kRootEndpointId, eventNumber));
+        ~AccessRestrictionProvider() {}
 
-        return CHIP_NO_ERROR;
-    }
-};
+    protected:
+        CHIP_ERROR DoRequestFabricRestrictionReview(const chip::FabricIndex fabricIndex,
+                                                    uint64_t token,
+                                                    const std::vector<Entry> &arl)
+        {
+            // this example simply removes all restrictions and will generate AccessRestrictionEntryChanged events
+            chip::Access::GetAccessControl().GetAccessRestrictionProvider()->SetEntries(fabricIndex,
+                                                                                        std::vector<Entry> {});
 
-} // namespace zilker
+            chip::app::Clusters::AccessControl::Events::FabricRestrictionReviewUpdate::Type event {
+                .token = token, .fabricIndex = fabricIndex};
+            chip::EventNumber eventNumber;
+            ReturnErrorOnFailure(chip::app::LogEvent(event, chip::kRootEndpointId, eventNumber));
+
+            return CHIP_NO_ERROR;
+        }
+    };
+
+} // namespace barton

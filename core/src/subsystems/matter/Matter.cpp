@@ -88,7 +88,7 @@ extern "C" {
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 // Only used in development environments
-#define SELF_SIGNED_CA_COMMON_NAME "My Zilker Test ECC Class I"
+#define SELF_SIGNED_CA_COMMON_NAME "My Barton Test ECC Class I"
 #endif
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
@@ -118,7 +118,7 @@ extern "C" {
 #define COMMISSIONER_CHIP_PORT CHIP_PORT + 12
 
 using namespace std;
-using namespace ::zilker;
+using namespace ::barton;
 using namespace std::chrono_literals;
 using namespace chip;
 using namespace chip::Crypto;
@@ -430,7 +430,7 @@ CHIP_ERROR Matter::InitCommissioner()
     const chip::Credentials::AttestationTrustStore *paaRootStore;
 
     // The attestation trust store is file backed and populated with appropriate per-product roots.
-    // angelsenvy contains test+prod certificates and all others only trust production certs.
+    // dev build contains test+prod certificates and all others only trust production certs.
     chip::Credentials::DeviceAttestationVerifier *dacVerifier = GetDefaultDACVerifier(&GetAttestationTrustStore());
     dacVerifier->EnableCdTestKeySupport(IsDevelopmentMode());
 
@@ -1177,91 +1177,10 @@ CHIP_ERROR Matter::ConfigureOTAProviderNode()
 }
 
 CHIP_ERROR Matter::AccessControlDump(const chip::Access::AccessControl::Entry &entry)
-#if defined(CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED) && CHIP_ZILKER_ACCESS_CONTROL_DUMP_ENABLED == 1
 {
-    CHIP_ERROR err;
-
-    ChipLogDetail(DataManagement, "----- BEGIN ENTRY -----");
-
-    {
-        chip::FabricIndex fabricIndex;
-        SuccessOrExit(err = entry.GetFabricIndex(fabricIndex));
-        ChipLogDetail(DataManagement, "fabricIndex: %u", fabricIndex);
-    }
-
-    {
-        chip::Access::Privilege privilege;
-        SuccessOrExit(err = entry.GetPrivilege(privilege));
-        ChipLogDetail(DataManagement, "privilege: %d", to_underlying(privilege));
-    }
-
-    {
-        chip::Access::AuthMode authMode;
-        SuccessOrExit(err = entry.GetAuthMode(authMode));
-        ChipLogDetail(DataManagement, "authMode: %d", to_underlying(authMode));
-    }
-
-    {
-        size_t count;
-        SuccessOrExit(err = entry.GetSubjectCount(count));
-        if (count)
-        {
-            ChipLogDetail(DataManagement, "subjects: %u", static_cast<unsigned>(count));
-            for (size_t i = 0; i < count; ++i)
-            {
-                chip::NodeId subject;
-                SuccessOrExit(err = entry.GetSubject(i, subject));
-                ChipLogDetail(
-                    DataManagement, "  %u: 0x" ChipLogFormatX64, static_cast<unsigned>(i), ChipLogValueX64(subject));
-            }
-        }
-    }
-
-    {
-        size_t count;
-        SuccessOrExit(err = entry.GetTargetCount(count));
-        if (count)
-        {
-            ChipLogDetail(DataManagement, "targets: %u", static_cast<unsigned>(count));
-            for (size_t i = 0; i < count; ++i)
-            {
-                chip::Access::AccessControl::Entry::Target target;
-                SuccessOrExit(err = entry.GetTarget(i, target));
-                if (target.flags & chip::Access::AccessControl::Entry::Target::kCluster)
-                {
-                    ChipLogDetail(DataManagement,
-                                  "  %u: cluster: 0x" ChipLogFormatMEI,
-                                  static_cast<unsigned>(i),
-                                  ChipLogValueMEI(target.cluster));
-                }
-                if (target.flags & chip::Access::AccessControl::Entry::Target::kEndpoint)
-                {
-                    ChipLogDetail(DataManagement, "  %u: endpoint: %u", static_cast<unsigned>(i), target.endpoint);
-                }
-                if (target.flags & chip::Access::AccessControl::Entry::Target::kDeviceType)
-                {
-                    ChipLogDetail(DataManagement,
-                                  "  %u: deviceType: 0x" ChipLogFormatMEI,
-                                  static_cast<unsigned>(i),
-                                  ChipLogValueMEI(target.deviceType));
-                }
-            }
-        }
-    }
-
-    ChipLogDetail(DataManagement, "----- END ENTRY -----");
-
-    return CHIP_NO_ERROR;
-
-exit:
-    ChipLogError(DataManagement, "AccessControl: dump failed %" CHIP_ERROR_FORMAT, err.Format());
-    return err;
-}
-#else
-{
+    // TODO: Write a proper implementation when there is value in doing so
     return CHIP_NO_ERROR;
 }
-#endif
 
 bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeoutSecs, SetupPayload &setupPayload)
 {

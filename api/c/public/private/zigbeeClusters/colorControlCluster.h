@@ -25,8 +25,7 @@
 // Created by tlea on 2/19/19.
 //
 
-#ifndef ZILKER_COLORCONTROLCLUSTER_H
-#define ZILKER_COLORCONTROLCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -49,5 +48,3 @@ bool colorControlClusterGetY(uint64_t eui64, uint8_t endpointId, double *y);
 bool colorControlClusterMoveToColor(uint64_t eui64, uint8_t endpointId, double x, double y);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_COLORCONTROLCLUSTER_H

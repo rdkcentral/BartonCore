@@ -30,8 +30,7 @@
  * data to prevent the need to query the device after receiving some commands.
  */
 
-#ifndef ZILKER_COMCASTBATTERYSAVING_H
-#define ZILKER_COMCASTBATTERYSAVING_H
+#pragma once
 
 #include <inttypes.h>
 
@@ -56,5 +55,3 @@ typedef struct
     uint32_t retries;
     uint32_t rejoins;
 } ComcastBatterySavingData;
-
-#endif // ZILKER_COMCASTBATTERYSAVING_H

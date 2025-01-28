@@ -25,8 +25,7 @@
 // Created by tlea on 3/18/19
 //
 
-#ifndef ZILKER_ZONECHANGED_H
-#define ZILKER_ZONECHANGED_H
+#pragma once
 
 #include "securityState.h"
 #include <icUtil/array.h>
@@ -134,5 +133,3 @@ char *zoneChangedToJSON(ZoneChanged *zoneChanged);
  * @return NULL when parsing fails
  */
 ZoneChanged *zoneChangedFromJSON(const char *json);
-
-#endif // ZILKER_ZONECHANGED_H

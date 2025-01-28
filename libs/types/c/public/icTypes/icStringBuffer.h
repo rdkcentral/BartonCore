@@ -24,8 +24,7 @@
 // Created by mkoch201 on 5/15/18.
 //
 
-#ifndef ZILKER_ICSTRINGBUFFER_H
-#define ZILKER_ICSTRINGBUFFER_H
+#pragma once
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -126,5 +125,3 @@ void stringBufferClear(icStringBuffer *stringBuffer);
  */
 __attribute__((format(__printf__, 2, 3))) void
 stringBufferAppendFormat(icStringBuffer *stringBuffer, const char *format, ...);
-
-#endif // ZILKER_ICSTRINGBUFFER_H

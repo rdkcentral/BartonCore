@@ -24,8 +24,7 @@
 // Created by mkoch201 on 12/5/18.
 //
 
-#ifndef ZILKER_SUBSYSTEMMANAGERCALLBACKS_H
-#define ZILKER_SUBSYSTEMMANAGERCALLBACKS_H
+#pragma once
 
 /**
  * Callback for notifying subsystem manager that the subsystem
@@ -38,5 +37,3 @@ typedef void (*subsystemInitializedFunc)(const char *subsystemName);
  * is no longer ready.
  */
 typedef void (*subsystemDeInitializedFunc)(const char *subsystemName);
-
-#endif // ZILKER_SUBSYSTEMMANAGERCALLBACKS_H

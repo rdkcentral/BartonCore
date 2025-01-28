@@ -28,11 +28,9 @@
  *
  * Author: mkoch201 - 5/16/18
  *-----------------------------------------------*/
-#ifndef ZILKER_STRINGBUFFERTEST_H
-#define ZILKER_STRINGBUFFERTEST_H
+
+#pragma once
 
 #include <stdbool.h>
 
 bool runStringBufferTests();
-
-#endif // ZILKER_STRINGBUFFERTEST_H

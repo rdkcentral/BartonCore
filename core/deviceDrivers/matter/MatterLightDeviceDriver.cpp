@@ -45,7 +45,7 @@ extern "C" {
 #include <subsystems/matter/DiscoveredDeviceDetailsStore.h>
 #include <subsystems/matter/Matter.h>
 
-using namespace zilker;
+using namespace barton;
 using chip::Callback::Callback;
 using namespace std::chrono_literals;
 

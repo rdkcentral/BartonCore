@@ -34,7 +34,7 @@
 #include <otbr/dbus/client/thread_api_dbus.hpp>
 #include <stdbool.h>
 
-namespace zilker
+namespace barton
 {
     class OpenThreadClient
     {
@@ -132,4 +132,4 @@ namespace zilker
         static void ReleaseDBusConnection(DBusConnection *connection);
         static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);
     };
-} // namespace zilker
+} // namespace barton

@@ -28,7 +28,7 @@
 #include "MatterCommon.h"
 #include <iostream>
 
-namespace zilker
+namespace barton
 {
     namespace NetworkUtils
     {
@@ -82,7 +82,7 @@ namespace zilker
                     hexStream << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
                 }
 
-                zilker::NetworkUtils::NetworkInterfaceInfo info;
+                barton::NetworkUtils::NetworkInterfaceInfo info;
                 info.macAddress = hexStream.str();
                 info.networkType = [&]() -> std::string {
                     switch (interface.type)
@@ -107,4 +107,4 @@ namespace zilker
             return chip::NullOptional; // No matching interface found
         }
     } // namespace NetworkUtils
-} // namespace zilker
+} // namespace barton

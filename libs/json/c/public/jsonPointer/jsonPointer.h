@@ -24,8 +24,7 @@
 // Created by mkoch201 on 7/31/20.
 //
 
-#ifndef ZILKER_JSONPOINTER_H
-#define ZILKER_JSONPOINTER_H
+#pragma once
 
 #include <cjson/cJSON.h>
 #include <stdbool.h>
@@ -275,6 +274,3 @@ cJSON *jsonPointerCreateBoolean(cJSON *baseObject, const JSONPointer *pointer, c
  * @return the base object
  */
 cJSON *jsonPointerCreateString(cJSON *baseObject, const JSONPointer *pointer, const char *value);
-
-
-#endif // ZILKER_JSONPOINTER_H

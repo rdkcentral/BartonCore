@@ -29,8 +29,7 @@
  * Author: eInfochips
  *-----------------------------------------------*/
 
-#ifndef ZILKER_SYSTEMCOMMANDUTILS_H
-#define ZILKER_SYSTEMCOMMANDUTILS_H
+#pragma once
 
 #define executeSystemCommand(a, ...) execSystemCommand(a, ##__VA_ARGS__, NULL)
 
@@ -58,5 +57,3 @@ int execSystemCommand(const char *program, ...);
  * @return program exit status code, or -1 on pre-invocation error
  */
 int __executeSystemCommand(const char *path, char *const argv[]);
-
-#endif // ZILKER_SYSTEMCOMMANDUTILS_H

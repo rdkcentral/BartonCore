@@ -555,20 +555,6 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
         return false;
     }
 
-#ifdef PRE_ZILKER_MIGRATION_SUPPORTED
-    migrateDevices = zigbeePreZilkerMigrationRequired();
-
-    if (migrateDevices == true)
-    {
-        /*
-         * There's no point in migrating devices if this fails.
-         * The software trouble created by a failure here will
-         * alert someone to investigate and try again
-         */
-        migrateDevices = zigbeePreZilkerMigrationEarlyExecute();
-    }
-#endif
-
     memset(&callbacks, 0, sizeof(callbacks));
     zigbeeEventHandlerInit(&callbacks);
 
@@ -600,9 +586,6 @@ static void zigbeeSubsystemAllDriversStarted(void)
 {
     if (migrateDevices == true)
     {
-#ifdef PRE_ZILKER_MIGRATION_SUPPORTED
-        zigbeePreZilkerMigrationExecute();
-#endif
         migrateDevices = false;
     }
 }
@@ -3864,9 +3847,6 @@ char *zigbeeSubsystemGetFirmwareVersion(void)
 static bool zigbeeSubsystemRestoreConfig(const char *tempRestoreDir, const char *dynamicConfigPath)
 {
     bool result = true;
-#ifdef PRE_ZILKER_MIGRATION_SUPPORTED
-    result = zigbeePreZilkerRestoreConfig(tempRestoreDir, dynamicConfigPath);
-#endif
 
     // Set property to increment counters on next init
     deviceServiceSetSystemProperty(ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT, "true");

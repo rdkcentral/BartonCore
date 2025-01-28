@@ -31,7 +31,7 @@
 #include "clusters/OnOff.h"
 #include "matter/clusters/MatterCluster.h"
 
-namespace zilker
+namespace barton
 {
     class MatterLightDeviceDriver : public MatterDeviceDriver,
                                     OnOff::EventHandler
@@ -83,4 +83,4 @@ namespace zilker
         std::unique_ptr<MatterCluster>
         MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
     };
-} // namespace zilker
+} // namespace barton

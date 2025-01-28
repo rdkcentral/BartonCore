@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_VERIFYSIGNATURE_H
-#define ZILKER_VERIFYSIGNATURE_H
+#pragma once
 
 /*
  * validate the signature of a file.  used during upgrade situations to
@@ -33,5 +32,3 @@
  * @param signatureFilename - the .sig file (to accompany the baseFilename)
  */
 bool verifySignature(char *keyFilename, char *baseFilename, char *signatureFilename);
-
-#endif // ZILKER_VERIFYSIGNATURE_H

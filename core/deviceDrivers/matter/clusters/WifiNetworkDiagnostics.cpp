@@ -43,7 +43,7 @@ extern "C" {
 #include "app/BufferedReadCallback.h"
 #include "app/InteractionModelEngine.h"
 
-namespace zilker
+namespace barton
 {
     SubscriptionIntervalSecs WifiNetworkDiagnostics::GetDesiredSubscriptionIntervalSecs()
     {
@@ -125,4 +125,4 @@ namespace zilker
 
         return result;
     };
-} // namespace zilker
+} // namespace barton

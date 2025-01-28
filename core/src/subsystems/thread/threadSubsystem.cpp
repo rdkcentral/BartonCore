@@ -53,13 +53,13 @@ extern "C" {
 
 #define THREAD_OPERATIONAL_DATASET_FALLBACK_PROPERTY "threadOpDataSet"
 
-using namespace zilker;
+using namespace barton;
 
 namespace
 {
     // MUST BE 16 chars OR LESS
     // TODO: brandify this
-    constexpr char ZILKER_THREAD_NETWORK_NAME[] = "Xfinity";
+    constexpr char BARTON_THREAD_NETWORK_NAME[] = "BartonThread";
     constexpr uint16_t THREAD_SUBSYSTEM_VERSION = 1;
     // TODO: Make this a compile time option when both zigbee and thread can be controlled by it.
     constexpr uint8_t THREAD_RADIO_CHANNEL = 25;
@@ -260,7 +260,7 @@ static bool initializeThreadStack(void)
     {
         icWarn("No network configuration loaded; a new network will be created");
 
-        std::vector<uint8_t> networkTlvs = otClient->CreateNetwork(ZILKER_THREAD_NETWORK_NAME, THREAD_RADIO_CHANNEL);
+        std::vector<uint8_t> networkTlvs = otClient->CreateNetwork(BARTON_THREAD_NETWORK_NAME, THREAD_RADIO_CHANNEL);
         if (networkTlvs.size() > 0)
         {
             const uint8_t *networkData = networkTlvs.data();

@@ -33,7 +33,6 @@ include(BDSConfigureGLib)
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${ZILKER_INCLUDE_DIR}
         ${CROSS_OUTPUT}/include/libxml2     # 3rd Party
 )
 

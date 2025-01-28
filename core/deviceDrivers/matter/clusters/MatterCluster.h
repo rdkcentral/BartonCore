@@ -38,7 +38,7 @@
 #include <string>
 #include <utility>
 
-namespace zilker
+namespace barton
 {
     class MatterCluster : public chip::app::CommandSender::Callback,
                           public chip::app::WriteClient::Callback
@@ -142,4 +142,4 @@ namespace zilker
 
     private:
     };
-} // namespace zilker
+} // namespace barton

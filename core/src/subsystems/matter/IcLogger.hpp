@@ -37,7 +37,7 @@ extern "C" {
 #include "icTypes/sbrm.h"
 }
 
-namespace zilker
+namespace barton
 {
     class IcLogger
     {
@@ -98,4 +98,4 @@ namespace zilker
 
         static void OnLogMessage(const char *module, uint8_t category, const char *msg, va_list args);
     };
-} // namespace zilker
+} // namespace barton

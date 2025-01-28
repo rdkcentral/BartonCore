@@ -37,7 +37,6 @@
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${ZILKER_INCLUDE_DIR}
         ${CROSS_OUTPUT}/include         # 3rd Party
 )
 
@@ -49,7 +48,7 @@ list(FILTER SOURCES EXCLUDE REGEX ".*urlHelperTest.c$")
 add_executable(testUrlHelperLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
-target_link_libraries(testUrlHelperLib xhUrlHelper curl cmocka ${ZILKER_EXE_LIBS})
+target_link_libraries(testUrlHelperLib xhUrlHelper curl cmocka)
 
 # run as a 'test', however need to force the LD_LIBRARY_PATH since
 # the RPATH will not be set (as this was not 'installed' via make)

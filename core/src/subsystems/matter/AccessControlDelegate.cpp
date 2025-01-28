@@ -23,7 +23,7 @@
 
 /*
  * Code adapted from: https://github.com/project-chip/connectedhomeip
- * Modified by Comcast to replace Example identifiers with 'zilker' for production use.
+ * Modified by Comcast to replace Example identifiers with 'barton' for production use.
  * Copyright 2023 Project CHIP Authors
  * All rights reserved.
  * Licensed under the Apache License, Version 2.0 (the "License")
@@ -974,7 +974,7 @@ namespace
     public:
         CHIP_ERROR Init() override
         {
-            ChipLogProgress(DataManagement, "zilker::AccessControlDelegate::Init");
+            ChipLogProgress(DataManagement, "barton::AccessControlDelegate::Init");
             for (auto &storage : EntryStorage::acl)
             {
                 storage.Clear();
@@ -982,7 +982,7 @@ namespace
             return CHIP_NO_ERROR;
         }
 
-        void Finish() override { ChipLogProgress(DataManagement, "zilker::AccessControlDelegate::Finish"); }
+        void Finish() override { ChipLogProgress(DataManagement, "barton::AccessControlDelegate::Finish"); }
 
         CHIP_ERROR GetMaxEntriesPerFabric(size_t &value) const override
         {
@@ -1175,7 +1175,7 @@ namespace
 
 } // namespace
 
-namespace zilker
+namespace barton
 {
 
     chip::Access::AccessControl::Delegate *GetAccessControlDelegate()
@@ -1184,4 +1184,4 @@ namespace zilker
         return &accessControlDelegate;
     }
 
-} // namespace zilker
+} // namespace barton

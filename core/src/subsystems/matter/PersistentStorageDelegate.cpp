@@ -48,7 +48,7 @@ using namespace chip::DeviceLayer::PersistedStorage;
 #define PASS_THROUGH
 #define STORAGE_NAMESPACE "devicedb/matter"
 
-namespace zilker
+namespace barton
 {
     // synchronous: get a byte buffer value
     CHIP_ERROR PersistentStorageDelegate::SyncGetKeyValue(const char *key, void *buffer, uint16_t &size)
@@ -178,4 +178,4 @@ namespace zilker
 
         return result;
     }
-} // namespace zilker
+} // namespace barton

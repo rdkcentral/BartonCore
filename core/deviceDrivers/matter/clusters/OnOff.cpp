@@ -38,7 +38,7 @@ extern "C" {
 #include "app/BufferedReadCallback.h"
 #include "app/InteractionModelEngine.h"
 
-namespace zilker
+namespace barton
 {
     void OnOff::OnAttributeChanged(chip::app::ClusterStateCache *cache, const chip::app::ConcreteAttributePath &path)
     {
@@ -134,4 +134,4 @@ namespace zilker
         // hand off the commandSender to the base class
         return SendCommand(commandSender, sessionHandle, context);
     };
-} // namespace zilker
+} // namespace barton

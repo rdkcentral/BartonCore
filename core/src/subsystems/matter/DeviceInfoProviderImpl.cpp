@@ -41,7 +41,7 @@
 
 #include <cstring>
 
-namespace zilker
+namespace barton
 {
 
     namespace
@@ -384,4 +384,4 @@ namespace zilker
         return retval;
     }
 
-} // namespace zilker
+} // namespace barton

@@ -23,8 +23,7 @@
 //
 
 
-#ifndef ZILKER_THREADUTILS_H
-#define ZILKER_THREADUTILS_H
+#pragma once
 
 #include <icTypes/sbrm.h>
 #include <pthread.h>
@@ -186,6 +185,3 @@ inline void pthread_rwlock_unlock__auto(pthread_rwlock_t **lock)
 {
     rwUnlock(*lock);
 }
-
-
-#endif // ZILKER_THREADUTILS_H

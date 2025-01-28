@@ -25,8 +25,7 @@
 // Created by tlea on 5/1/19.
 //
 
-#ifndef ZILKER_COMCASTBATTERYSAVINGHELPER_H
-#define ZILKER_COMCASTBATTERYSAVINGHELPER_H
+#pragma once
 
 #include "zigbeeClusters/comcastBatterySaving.h"
 #include <deviceDrivers/zigbeeDriverCommon.h>
@@ -39,5 +38,3 @@
  * @return a pointer to the parsed data on success or NULL on failure
  */
 ComcastBatterySavingData *comcastBatterySavingDataParse(uint8_t *buffer, uint16_t bufferLen);
-
-#endif // ZILKER_COMCASTBATTERYSAVINGHELPER_H

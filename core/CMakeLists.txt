@@ -74,26 +74,7 @@ if (BDS_MATTER)
     file(GLOB matterSubSrc "src/subsystems/matter/*.cpp")
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
-    #TODO: Sort through what in this is zilker matter specific and what will need
-    # to be fixed for any matter SDK.
-
-    #TODO: Most of the time, this should FetchContent and include
-    #<sdk>third_party/comcast/config/zilker/zilker.cmake. This'll put appropriate
-    # INTERFACE_COMPILE_DEFINITIONS, INTERFACE_LINK_OPTIONS, INTERFACE_INCLUDE_DIRECTORIES
-    # in the ${ZILKER_MATTER_TARGET}. Current build layout clobbers everything when
-    # building zilker, so buildling in 3rdParty is currently a kludge to avoid
-    # unnecessary expensive re-fetching and recompiling the whole matter stack
-    # for every zilker rebuild. Everything else that normally builds from scratch
-    # should just integrate directly by including zilker.cmake here to keep
-    # distribution recipes simple - matter is an internal detail.
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
-
-    # gcc, when using a gnu++ standard, will #define linux 1, which will
-    # make the preprocessor replace all mentions of 'linux' in text with '1',
-    # like cmake-linux -> cmake-1. Matter does not rely on this macro, and
-    # code is discouraged from using system macros at all in favor of
-    # configuration time feature detection (with cmake, autoconf, gn, etc).
-    add_compile_options(-Ulinux)
 
     list(APPEND SOURCES
         ${matterSubSrc}
@@ -102,7 +83,7 @@ if (BDS_MATTER)
         ${certifierCredsProvider}
     )
 
-    # ZilkerMatter depends on openSSL and glib.
+    # BartonMatter depends on openSSL and glib.
     # configure_glib will take care of setting up glib-2.0,
     # but be sure to explicitly set up openSSL linkage here
     # to avoid relying on magic dependencies to take care of this.
@@ -314,7 +295,6 @@ if (BDS_ZIGBEE)
             WRAPPED_FUNCTIONS
                 jsonDatabaseRestore
                 subsystemManagerRestoreConfig
-                openHomeCameraPreZilkerRestoreConfig
             LINK_LIBRARIES brtnDeviceServiceStatic
             INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
@@ -391,6 +371,15 @@ if (BDS_MATTER)
         LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
         INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
+    )
+
+    bds_add_cpp_test(NAME testMatterSubscribeInteraction
+        # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
+        # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
+        # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
+        LIBS brtnDeviceServiceStatic gtest gmock gmock_main
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterSubscribeInteractionTest.cpp
     )
 
     add_subdirectory("src/subsystems/matter/test")

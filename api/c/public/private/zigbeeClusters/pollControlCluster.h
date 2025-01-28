@@ -25,8 +25,7 @@
 // Created by tlea on 2/15/19.
 //
 
-#ifndef ZILKER_POLLCONTROLCLUSTER_H
-#define ZILKER_POLLCONTROLCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -90,5 +89,3 @@ bool pollControlClusterStopFastPoll(uint64_t eui64, uint8_t endpointId);
 bool pollControlClusterSetLongPollInterval(uint64_t eui64, uint8_t endpointId, uint32_t newIntervalQs);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_POLLCONTROLCLUSTER_H

@@ -34,14 +34,13 @@ include(BDSAddCMockaTest)
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${ZILKER_INCLUDE_DIR}
 )
 
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.[ch]" "public/icConcurrent/*.h")
 
 add_library(xhConcurrent STATIC ${SOURCES})
-target_link_libraries(xhConcurrent xhLog xhTypes xhTime ${ZILKER_EXE_LIBS})
+target_link_libraries(xhConcurrent xhLog xhTypes xhTime)
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhConcurrent PUBLIC public)

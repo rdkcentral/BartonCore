@@ -24,8 +24,7 @@
 // Created by mkoch201 on 11/2/18.
 //
 
-#ifndef ZILKER_ICHASHMAPFUNCS_H
-#define ZILKER_ICHASHMAPFUNCS_H
+#pragma once
 
 /*
  * function prototype for freeing 'keys' and 'values'
@@ -44,5 +43,3 @@ typedef void (*hashMapCloneFunc)(void *key, void *value, void **clonedKey, void 
  * used in situations where the 'key' and 'value' are not freed at all.
  */
 void standardDoNotFreeHashMapFunc(void *key, void *value);
-
-#endif // ZILKER_ICHASHMAPFUNCS_H

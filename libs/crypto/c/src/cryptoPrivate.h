@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_CRYPTOPRIVATE_H
-#define ZILKER_CRYPTOPRIVATE_H
+#pragma once
 
 /**
  * This is a private header for crypto modules that need to share
@@ -35,5 +34,3 @@ struct X509Cert
 {
     X509 *cert;
 };
-
-#endif // ZILKER_CRYPTOPRIVATE_H

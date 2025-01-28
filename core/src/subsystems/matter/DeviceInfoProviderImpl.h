@@ -36,7 +36,7 @@
 using namespace chip;
 using namespace chip::DeviceLayer;
 
-namespace zilker
+namespace barton
 {
 
     class DeviceInfoProviderImpl : public DeviceInfoProvider
@@ -123,4 +123,4 @@ namespace zilker
         }
     };
 
-} // namespace zilker
+} // namespace barton

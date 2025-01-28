@@ -25,8 +25,7 @@
 // Created by wboyd747 on 5/30/18.
 //
 
-#ifndef ZILKER_ICBLOCKINGQUEUE_H
-#define ZILKER_ICBLOCKINGQUEUE_H
+#pragma once
 
 #include <limits.h>
 #include <stdbool.h>
@@ -236,5 +235,3 @@ void blockingQueueDisable(icBlockingQueue *queue);
  * returns if the queue is disabled or not
  */
 bool blockingQueueIsDisabled(icBlockingQueue *queue);
-
-#endif // ZILKER_ICBLOCKINGQUEUE_H

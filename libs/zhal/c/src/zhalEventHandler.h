@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 3/25/21.
  */
 
-#ifndef ZILKER_ZHALEVENTHANDLER_H
-#define ZILKER_ZHALEVENTHANDLER_H
+#pragma once
 
 #include <cjson/cJSON.h>
 
@@ -46,5 +45,3 @@ void zhalEventHandlerTerm(void);
  * @return
  */
 int zhalHandleEvent(cJSON *event);
-
-#endif // ZILKER_ZHALEVENTHANDLER_H

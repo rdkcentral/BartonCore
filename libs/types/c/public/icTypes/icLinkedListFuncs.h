@@ -24,8 +24,7 @@
 // Created by mkoch201 on 11/2/18.
 //
 
-#ifndef ZILKER_ICLISTFUNCS_H
-#define ZILKER_ICLISTFUNCS_H
+#pragma once
 
 #include "icHashMap.h"
 
@@ -105,5 +104,3 @@ void *linkedListCloneStringItemFunc(void *item, void *context);
  * generally used when the list contains pointers to functions
  */
 void standardDoNotFreeFunc(void *item);
-
-#endif // ZILKER_ICLISTFUNCS_H

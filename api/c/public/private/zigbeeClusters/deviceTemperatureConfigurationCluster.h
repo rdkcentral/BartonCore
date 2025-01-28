@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_DEVICETEMPERATURECONFIGURATIONCLUSTER_H
-#define ZILKER_DEVICETEMPERATURECONFIGURATIONCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -54,5 +53,3 @@ deviceTemperatureConfigurationClusterCreate(const DeviceTemperatureConfiguration
 void deviceTemperatureConfigurationClusterSetConfigureTemperatureAlarmMask(
     const DeviceConfigurationContext *deviceConfigurationContext,
     bool configure);
-
-#endif // ZILKER_DEVICETEMPERATURECONFIGURATIONCLUSTER_H

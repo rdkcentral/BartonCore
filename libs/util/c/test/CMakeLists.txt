@@ -25,7 +25,7 @@ include(BDSAddCMockaTest)
 
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
-#Remove tests that use add_zilker_test from the parent
+#Remove these tests from the parent
 list(FILTER SOURCES EXCLUDE REGEX ".*fileTest.c$")
 list(FILTER SOURCES EXCLUDE REGEX ".*stringTest.c$")
 list(FILTER SOURCES EXCLUDE REGEX ".*pingTest.c$")

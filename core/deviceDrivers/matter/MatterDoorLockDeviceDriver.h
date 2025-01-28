@@ -30,7 +30,7 @@
 #include "MatterDeviceDriver.h"
 #include "clusters/DoorLock.h"
 
-namespace zilker
+namespace barton
 {
     class MatterDoorLockDeviceDriver : public MatterDeviceDriver,
                                        DoorLock::EventHandler
@@ -86,4 +86,4 @@ namespace zilker
         std::unique_ptr<MatterCluster>
         MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
     };
-} // namespace zilker
+} // namespace barton

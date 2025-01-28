@@ -25,8 +25,7 @@
 // Created by tlea on 9/11/19.
 //
 
-#ifndef ZILKER_ZIGBEETELEMETRY_H
-#define ZILKER_ZIGBEETELEMETRY_H
+#pragma once
 
 #ifdef BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
 
@@ -48,5 +47,3 @@ void zigbeeTelemetryShutdown(void);
 void zigbeeTelemetrySetProperty(const char *key, const char *value);
 
 #endif // BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
-
-#endif // ZILKER_ZIGBEETELEMETRY_H

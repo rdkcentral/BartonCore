@@ -27,7 +27,7 @@
 
 #pragma once
 
-// FIXME: tech debt, these are old zilker properties
+// FIXME: tech debt, these are old properties
 
 #define DEVICE_DESCRIPTOR_LIST                                "deviceDescriptorList"
 #define DEVICE_DESC_ALLOWLIST_URL_OVERRIDE                    "deviceDescriptor.whitelist.url.override"

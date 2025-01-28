@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_BASICCLUSTER_H
-#define ZILKER_BASICCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -90,5 +89,3 @@ void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *devi
  * @return 0 if success, failure otherwise
  */
 int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId);
-
-#endif // ZILKER_BASICCLUSTER_H

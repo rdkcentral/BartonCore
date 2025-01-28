@@ -33,7 +33,7 @@ extern "C" {
 #define LOG_TAG     "MatterSDK"
 #define logFmt(fmt) fmt
 
-using namespace zilker;
+using namespace barton;
 
 void IcLogger::OnLogMessage(const char *module, uint8_t category, const char *msg, va_list args)
 {

@@ -24,8 +24,7 @@
 // Created by mkoch201 on 3/25/19.
 //
 
-#ifndef ZILKER_IASWDCLUSTER_H
-#define ZILKER_IASWDCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -77,5 +76,3 @@ bool iasWDClusterStartWarning(uint64_t eui64,
 
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_IASWDCLUSTER_H

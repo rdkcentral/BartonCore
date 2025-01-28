@@ -50,8 +50,7 @@
  * Author: jelderton - 10/19/22
  *-----------------------------------------------*/
 
-#ifndef ZILKER_STATE_MACHINE_H
-#define ZILKER_STATE_MACHINE_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -180,5 +179,3 @@ fsmSetStateResult stateMachineSetCurrentState(icStateMachine *machine, int newSt
  * @param userArg - optional object passed to the exit/entry action callbacks
  **/
 fsmSetStateResult stateMachineTravelToState(icStateMachine *machine, int targetStateValue, void *userArg);
-
-#endif // ZILKER_STATE_MACHINE_H

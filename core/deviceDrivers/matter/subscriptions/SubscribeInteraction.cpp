@@ -28,7 +28,7 @@
 #include "SubscribeInteraction.h"
 #include <lib/support/FibonacciUtils.h>
 
-using namespace zilker;
+using namespace barton;
 
 void SubscribeInteraction::OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId)
 {

@@ -29,8 +29,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License")
  */
 
-#ifndef ZILKER_OTAPROVIDERIMPL_H
-#define ZILKER_OTAPROVIDERIMPL_H
+#pragma once
 
 #include <app-common/zap-generated/cluster-objects.h>
 #include <app/CommandHandler.h>
@@ -51,7 +50,7 @@ constexpr uint8_t kUpdateTokenLen = 32;
 
 using namespace chip::app::Clusters;
 
-namespace zilker
+namespace barton
 {
     /**
      * Implementation of OTA Provider with Device Descriptor Support. This integrates directly with the
@@ -144,6 +143,4 @@ namespace zilker
         void SendImageNotAvailable(chip::app::CommandHandler *commandObj,
                                    const chip::app::ConcreteCommandPath &commandPath);
     };
-} // namespace zilker
-
-#endif // ZILKER_OTAPROVIDERIMPL_H
+} // namespace barton

@@ -90,11 +90,6 @@ __attribute__((constructor)) static void initIcLogger(void)
         fprintf(stderr, "zlog file missing - %s\n", confPath);
     }
 
-#ifdef CONFIG_TELEMETRY2
-    // initializing telemtry2 logging with zilker component
-    t2_init("Zilker");
-#endif
-
     free(confPath);
 }
 

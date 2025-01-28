@@ -32,7 +32,7 @@
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
 
-namespace zilker
+namespace barton
 {
     using namespace chip::app::Clusters::BasicInformation;
     class BasicInformation : public MatterCluster
@@ -62,4 +62,4 @@ namespace zilker
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
     };
-} // namespace zilker
+} // namespace barton

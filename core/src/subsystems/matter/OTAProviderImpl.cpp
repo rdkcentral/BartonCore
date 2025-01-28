@@ -74,7 +74,7 @@ extern "C" {
 
 using namespace chip::app::Clusters;
 
-namespace zilker
+namespace barton
 {
     bool OTAProviderImpl::SelectOTACandidate(const chip::NodeId requestorNodeId,
                                              const uint16_t requestorVendorID,
@@ -261,4 +261,4 @@ namespace zilker
 
         commandObj->AddStatus(commandPath, chip::Protocols::InteractionModel::Status::Success);
     }
-} // namespace zilker
+} // namespace barton

@@ -23,13 +23,9 @@
 // Created by dcalde202 on 2/12/19.
 //
 
-#ifndef ZILKER_LOGGINGCOMMON_H
-#define ZILKER_LOGGINGCOMMON_H
+#pragma once
 
 #include <icLog/logging.h>
 #include <stdbool.h>
 
 bool shouldLogMessage(logPriority priority);
-
-
-#endif // ZILKER_LOGGINGCOMMON_H

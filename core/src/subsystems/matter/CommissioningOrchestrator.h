@@ -36,7 +36,7 @@
 #include <cstdint>
 #include <mutex>
 
-namespace zilker
+namespace barton
 {
     // keep this in sync with the ostream operator
     enum CommissioningStatus
@@ -60,7 +60,7 @@ namespace zilker
         CommissioningCompleteFailed,
     };
 
-    std::ostream &operator<<(std::ostream &strm, zilker::CommissioningStatus status);
+    std::ostream &operator<<(std::ostream &strm, barton::CommissioningStatus status);
 
     /**
      * Callback invoked when the status of the commissioning process changes
@@ -176,4 +176,4 @@ namespace zilker
         void CommissionWorkFunc();
         static void CommissionWorkFuncCb(intptr_t arg);
     };
-} // namespace zilker
+} // namespace barton

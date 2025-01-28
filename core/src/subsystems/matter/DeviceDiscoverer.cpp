@@ -42,7 +42,7 @@ extern "C" {
 #include "protocols/interaction_model/StatusCode.h"
 #include <assert.h>
 
-namespace zilker
+namespace barton
 {
     class EndpointDiscoveryContext
     {
@@ -586,4 +586,4 @@ namespace zilker
         }
     }
 
-} // namespace zilker
+} // namespace barton

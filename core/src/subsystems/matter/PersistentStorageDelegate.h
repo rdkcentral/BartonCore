@@ -25,18 +25,17 @@
  * Created by Thomas Lea on 3/9/21.
  */
 
-#ifndef ZILKER_PERSISTENTSTORAGEDELEGATE_H
-#define ZILKER_PERSISTENTSTORAGEDELEGATE_H
+#pragma once
 
 #define CHIP_HAVE_CONFIG_H 1
 
 #include <lib/core/CHIPPersistentStorageDelegate.h>
 
-namespace zilker
+namespace barton
 {
 
     /**
-     * Zilker's implementation of CHIP's persistent storage.  Storing stuff in our dynamic config dir.
+     * Barton's implementation of CHIP's persistent storage.  Storing stuff in our dynamic config dir.
      */
     class PersistentStorageDelegate : public chip::PersistentStorageDelegate
     {
@@ -52,6 +51,4 @@ namespace zilker
     private:
         static char *scrubKey(const char *key); // caller must free
     };
-} // namespace zilker
-
-#endif // ZILKER_PERSISTENTSTORAGEDELEGATE_H
+} // namespace barton

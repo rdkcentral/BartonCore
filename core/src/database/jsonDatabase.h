@@ -24,8 +24,7 @@
 // Created by mkoch201 on 5/4/18.
 //
 
-#ifndef ZILKER_JSONDATABASE_H
-#define ZILKER_JSONDATABASE_H
+#pragma once
 
 
 #include <device/icDevice.h>
@@ -350,5 +349,3 @@ bool parseMetadataUri(const char *uri, char *endpointId, char *deviceId, char *n
  * @return true if metadata is removed
  */
 bool jsonDatabaseRemoveMetadataByUri(const char *uri);
-
-#endif // ZILKER_JSONDATABASE_H

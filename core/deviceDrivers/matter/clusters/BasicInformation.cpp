@@ -39,7 +39,7 @@ extern "C" {
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
 
-namespace zilker
+namespace barton
 {
     std::string BasicInformation::GetFirmwareVersionString()
     {
@@ -145,4 +145,4 @@ namespace zilker
                 break;
         }
     }
-} // namespace zilker
+} // namespace barton

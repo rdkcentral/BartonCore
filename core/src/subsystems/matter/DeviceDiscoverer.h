@@ -39,7 +39,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace zilker
+namespace barton
 {
     class DeviceDiscoverer : public chip::app::ReadClient::Callback
     {
@@ -92,4 +92,4 @@ namespace zilker
         chip::Callback::Callback<chip::OnDeviceConnected> onDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> onDeviceConnectionFailureCallback;
     };
-} // namespace zilker
+} // namespace barton

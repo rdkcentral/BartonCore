@@ -51,7 +51,7 @@
 #define CUSTOM_RESUBSCRIBE_MAX_FIBONACCI_STEP_INDEX   10
 #define CUSTOM_RESUBSCRIBE_MAX_RETRY_WAIT_INTERVAL_MS 624000
 
-namespace zilker
+namespace barton
 {
 
     class SubscribeInteraction : public chip::app::ClusterStateCache::Callback
@@ -171,4 +171,4 @@ namespace zilker
         uint16_t minIntervalFloorSecs;
         uint16_t maxIntervalCeilingSecs;
     };
-} // namespace zilker
+} // namespace barton

@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 4/2/21.
  */
 
-#ifndef ZILKER_XBBCLUSTER_H
-#define ZILKER_XBBCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -80,5 +79,3 @@ void xbbClusterSetBatteryType(const ZigbeeCluster *cluster, XbbBatteryType batte
  * @return true on succcess
  */
 bool xbbClusterGetStatus(const ZigbeeCluster *cluster, uint64_t eui64, uint8_t endpointId, uint16_t *status);
-
-#endif // ZILKER_XBBCLUSTER_H

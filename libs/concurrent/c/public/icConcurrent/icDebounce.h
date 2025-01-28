@@ -25,8 +25,7 @@
 // Created by Christian Leithner on 12/9/20
 //
 
-#ifndef ZILKER_ICDEBOUNCE_H
-#define ZILKER_ICDEBOUNCE_H
+#pragma once
 
 #include <icTypes/sbrm.h>
 #include <stdbool.h>
@@ -84,5 +83,3 @@ inline void debounceDestroy__auto(icDebounce **debounce)
 }
 
 #define scoped_icDebounce AUTO_CLEAN(debounceDestroy__auto) icDebounce
-
-#endif // ZILKER_ICDEBOUNCE_H

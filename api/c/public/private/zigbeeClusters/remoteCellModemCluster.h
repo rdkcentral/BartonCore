@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_REMOTECELLMODEMCLUSTER_H
-#define ZILKER_REMOTECELLMODEMCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -75,4 +74,3 @@ bool remoteCellModemClusterPowerOff(ZigbeeCluster *ctx, uint64_t eui64, uint8_t 
 bool remoteCellModemClusterEmergencyReset(ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId);
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif // ZILKER_REMOTECELLMODEMCLUSTER_H

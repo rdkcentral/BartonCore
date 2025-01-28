@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_IASZONECLUSTER_H
-#define ZILKER_IASZONECLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -138,4 +137,3 @@ ZigbeeCluster *iasZoneClusterCreate(const IASZoneClusterCallbacks *callbacks, co
 bool iasZoneClusterExtract(IASZoneStatusChangedNotification *payload, const ReceivedClusterCommand *command);
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif // ZILKER_IASZONECLUSTER_H

@@ -34,7 +34,7 @@
 #include <mutex>
 #include <string>
 
-namespace zilker
+namespace barton
 {
     class DoorLock : public MatterCluster
     {
@@ -76,4 +76,4 @@ namespace zilker
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
     };
-} // namespace zilker
+} // namespace barton

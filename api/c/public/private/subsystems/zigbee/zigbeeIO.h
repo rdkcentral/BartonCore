@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_ZIGBEE_IO_H
-#define ZILKER_ZIGBEE_IO_H
+#pragma once
 
 /* TODO: create unit tests for this */
 
@@ -173,5 +172,3 @@ void zigbeeIOPutInt32(ZigbeeIOContext *ctx, int32_t val);
  * @return
  */
 size_t zigbeeIOGetRemainingSize(ZigbeeIOContext *ctx);
-
-#endif // ZILKER_ZIGBEE_IO_H

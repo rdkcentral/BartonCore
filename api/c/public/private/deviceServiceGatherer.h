@@ -25,8 +25,7 @@
 //
 
 
-#ifndef ZILKER_DEVICESERVICEGATHERER_H
-#define ZILKER_DEVICESERVICEGATHERER_H
+#pragma once
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -159,5 +158,3 @@ void collectPairedDevicesInformation(GHashTable *output);
 void collectPairedCamerasInformation(GHashTable *output);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_DEVICESERVICEGATHERER_H

@@ -29,8 +29,7 @@
  * i.e., (cleanup_func(&thing)).
  */
 
-#ifndef ZILKER_SBRM_H
-#define ZILKER_SBRM_H
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,4 +98,3 @@ void fclose__auto(FILE **fp);
 #else
 #error "GCC is required for SBRM"
 #endif //__GNUC__
-#endif // ZILKER_SBRM_H

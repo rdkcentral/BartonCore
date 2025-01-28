@@ -24,8 +24,7 @@
 // Created by mkoch201 on 10/7/21.
 //
 
-#ifndef ZILKER_SOCKETUTILS_H
-#define ZILKER_SOCKETUTILS_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -86,5 +85,3 @@ bool canWriteToSocket(int32_t sockFD, time_t timeoutSecs);
  * @return true if successful, false otherwise
  */
 bool setTCPUserTimeout(int socket, unsigned int timeoutMillis);
-
-#endif // ZILKER_SOCKETUTILS_H

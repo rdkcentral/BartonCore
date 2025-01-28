@@ -362,7 +362,6 @@ static bool registerResources(icDevice *device,
         resourceType = RESOURCE_TYPE_SECURITY_CONTROLLER_TYPE;
 
         // need to set the LPM flag for Keypads and Keyfobs
-        // ZILKER-700
         //
         if (createDeviceMetadata(device, LPM_POLICY_METADATA, lpmPolicyPriorityLabels[LPM_POLICY_ALWAYS]) == NULL)
         {

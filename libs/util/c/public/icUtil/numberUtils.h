@@ -28,8 +28,8 @@
  *
  * Author: eInfochips
  *-----------------------------------------------*/
-#ifndef ZILKER_NUMBERUTILS_H
-#define ZILKER_NUMBERUTILS_H
+
+#pragma once
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -39,5 +39,3 @@
  * NOTE: caller is responsible for passing first arg value lower than second arg.
  */
 bool generateRandomNumberInRange(uint32_t lowerRange, uint32_t higherRange, uint64_t *randomNumber);
-
-#endif // ZILKER_NUMBERUTILS_H

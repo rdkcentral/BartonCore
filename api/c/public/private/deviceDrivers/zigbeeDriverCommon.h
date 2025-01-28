@@ -25,8 +25,7 @@
 // Created by tlea on 2/13/19.
 //
 
-#ifndef ZILKER_ZIGBEEDRIVERCOMMON_H
-#define ZILKER_ZIGBEEDRIVERCOMMON_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -346,5 +345,3 @@ void zigbeeDriverCommonComcastBatterySavingUpdateResources(uint64_t eui64,
                                                            const void *ctx);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_ZIGBEEDRIVERCOMMON_H

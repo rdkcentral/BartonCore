@@ -25,8 +25,7 @@
 // Created by tlea on 2/18/19.
 //
 
-#ifndef ZILKER_POWERCONFIGURATIONCLUSTER_H
-#define ZILKER_POWERCONFIGURATIONCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -187,5 +186,3 @@ PowerConfigurationClusterBatteryThresholds *powerConfigurationClusterGetBatteryT
  * destroy struct returned from powerConfigurationClusterGetBatteryThresholds function.
  */
 void powerConfigurationClusterBatteryThresholdsDestroy(PowerConfigurationClusterBatteryThresholds *thresholds);
-
-#endif // ZILKER_POWERCONFIGURATIONCLUSTER_H

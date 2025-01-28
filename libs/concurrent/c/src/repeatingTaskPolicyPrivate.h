@@ -29,8 +29,7 @@
  * Author: jelderton - 6/16/22
  *-----------------------------------------------*/
 
-#ifndef ZILKER_REPEATINGTASKPOLICYPRIVATE_H
-#define ZILKER_REPEATINGTASKPOLICYPRIVATE_H
+#pragma once
 
 #include <icConcurrent/repeatingTask.h>
 
@@ -41,5 +40,3 @@
  */
 RepeatingTaskPolicy *
 cloneAndChangeIncrementalRepeatingTaskPolicy(RepeatingTaskPolicy *orig, uint32_t delayAmount, delayUnits units);
-
-#endif // ZILKER_REPEATINGTASKPOLICYPRIVATE_H

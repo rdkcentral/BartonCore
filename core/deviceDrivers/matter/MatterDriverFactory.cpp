@@ -33,7 +33,7 @@
 #include <iostream>
 #include <sstream>
 
-using namespace zilker;
+using namespace barton;
 
 extern "C" {
 #include <device-driver/device-driver-manager.h>
@@ -54,7 +54,7 @@ bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
     return result;
 }
 
-MatterDeviceDriver *zilker::MatterDriverFactory::GetDriver(DiscoveredDeviceDetails *details)
+MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(DiscoveredDeviceDetails *details)
 {
     MatterDeviceDriver *result = nullptr;
 

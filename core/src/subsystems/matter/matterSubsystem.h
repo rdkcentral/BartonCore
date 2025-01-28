@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 3/11/21.
  */
 
-#ifndef ZILKER_MATTERSUBSYSTEM_H
-#define ZILKER_MATTERSUBSYSTEM_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -93,5 +92,3 @@ MatterDeviceInfo *matterSubsystemGetDeviceInfo(const char *uuid);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // ZILKER_MATTERSUBSYSTEM_H

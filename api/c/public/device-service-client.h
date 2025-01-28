@@ -194,7 +194,8 @@ void b_device_service_client_stop(BDeviceServiceClient *self);
  *
  * @brief Notify the BDeviceServiceClient that all dependent services are ready.
  *
- * TODO: This function should be removed as it doesn't make sense universally, but is needed for zilker.
+ * TODO: This function should be removed as it doesn't make sense universally, but is needed for existing barton
+ * clients for now.
  */
 void b_device_service_client_dependencies_ready(BDeviceServiceClient *self);
 

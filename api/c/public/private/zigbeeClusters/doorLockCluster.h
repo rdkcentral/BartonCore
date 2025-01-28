@@ -25,8 +25,7 @@
 // Created by tlea on 2/20/19.
 //
 
-#ifndef ZILKER_DOORLOCKCLUSTER_H
-#define ZILKER_DOORLOCKCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -125,5 +124,3 @@ bool doorLockClusterClearPinCode(uint64_t eui64, uint8_t endpointId, uint16_t us
 bool doorLockClusterSetPinCode(uint64_t eui64, uint8_t endpointId, const DoorLockClusterUser *user);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_DOORLOCKCLUSTER_H

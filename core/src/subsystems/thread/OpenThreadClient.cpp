@@ -59,7 +59,7 @@ namespace
     constexpr int ATTACH_WAIT_SECONDS = 25;
 } // namespace
 
-namespace zilker
+namespace barton
 {
 
     std::vector<uint8_t> OpenThreadClient::CreateNetwork(const std::string &networkName, uint8_t desiredChannel)
@@ -419,4 +419,4 @@ namespace zilker
         return retVal;
     }
 
-} // namespace zilker
+} // namespace barton

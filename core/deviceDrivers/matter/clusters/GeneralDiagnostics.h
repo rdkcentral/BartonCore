@@ -37,7 +37,7 @@
 #include "lib/core/DataModelTypes.h"
 #include "subsystems/matter/MatterCommon.h"
 
-namespace zilker
+namespace barton
 {
     using namespace chip::app::Clusters::GeneralDiagnostics;
 
@@ -69,4 +69,4 @@ namespace zilker
     private:
         chip::Optional<NetworkUtils::NetworkInterfaceInfo> GetInterfaceInfo(chip::app::ClusterStateCache *cache);
     };
-} // namespace zilker
+} // namespace barton

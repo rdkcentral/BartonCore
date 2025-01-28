@@ -25,8 +25,7 @@
 // Created by tlea on 2/19/19.
 //
 
-#ifndef ZILKER_METERINGCLUSTER_H
-#define ZILKER_METERINGCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -46,5 +45,3 @@ bool meteringClusterGetDivisor(uint64_t eui64, uint8_t endpointId, uint32_t *div
 bool meteringClusterGetMultiplier(uint64_t eui64, uint8_t endpointId, uint32_t *multiplier);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_METERINGCLUSTER_H

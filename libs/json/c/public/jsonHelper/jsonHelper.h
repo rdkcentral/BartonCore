@@ -24,8 +24,7 @@
 // Created by mkoch201 on 5/14/18.
 //
 
-#ifndef ZILKER_JSONHELPER_H
-#define ZILKER_JSONHELPER_H
+#pragma once
 
 #include <cjson/cJSON.h>
 #include <icTypes/sbrm.h>
@@ -196,5 +195,3 @@ cJSON *addCJSONBoolean(cJSON *parent, const char *name, const bool *value);
  * @return the parent object or NULL if invalid values are passed
  */
 cJSON *addCJSONString(cJSON *parent, const char *name, const char *value);
-
-#endif // ZILKER_JSONHELPER_H

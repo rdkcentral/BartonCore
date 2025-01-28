@@ -39,7 +39,7 @@
 
 #define TEST_DEVICE_ID "0x1111"
 
-namespace zilker
+namespace barton
 {
     class MockCluster : public MatterCluster
     {
@@ -237,4 +237,4 @@ namespace zilker
         intervalParams = CalculateFinalSubscriptionIntervalSecs();
         ASSERT_LE(intervalParams.minIntervalFloorSecs, intervalParams.maxIntervalCeilingSecs);
     }
-} // namespace zilker
+} // namespace barton

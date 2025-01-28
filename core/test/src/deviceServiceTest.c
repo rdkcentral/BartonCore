@@ -329,11 +329,6 @@ bool __wrap_subsystemManagerRestoreConfig(const char *tempRestoreDir, const char
     return mock_type(bool);
 }
 
-bool __wrap_openHomeCameraPreZilkerRestoreConfig(const char *tempRestoreDir, const char *dynamicConfigPath)
-{
-    return mock_type(bool);
-}
-
 static void test_restore(void **state)
 {
     /* Drivers don't autoload, but openhomeCameraDeviceDriver must be loaded */
@@ -349,19 +344,6 @@ static void test_restore(void **state)
     will_return(__wrap_jsonDatabaseRestore, true);
     will_return(__wrap_subsystemManagerRestoreConfig, false);
     assert_false(deviceServiceRestoreConfig("fake"));
-
-    /*
-        Pre zilker migration is deprecated
-        will_return(__wrap_jsonDatabaseRestore, true);
-        will_return(__wrap_subsystemManagerRestoreConfig, true);
-        will_return(__wrap_openHomeCameraPreZilkerRestoreConfig, false);
-        assert_false(deviceServiceRestoreConfig("fake"));
-
-        will_return(__wrap_jsonDatabaseRestore, true);
-        will_return(__wrap_subsystemManagerRestoreConfig, true);
-        will_return(__wrap_openHomeCameraPreZilkerRestoreConfig, true);
-        assert_true(deviceServiceRestoreConfig("fake"));
-    */
 }
 
 int main(int argc, const char **argv)

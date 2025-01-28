@@ -25,13 +25,12 @@
 // Created by tlea200 on 11/4/21.
 //
 
-#ifndef ZILKER_MATTERDRIVERFACTORY_H
-#define ZILKER_MATTERDRIVERFACTORY_H
+#pragma once
 
 #include "matter/MatterDeviceDriver.h"
 #include <map>
 
-namespace zilker
+namespace barton
 {
     class MatterDriverFactory
     {
@@ -51,6 +50,4 @@ namespace zilker
         std::map<const char *, MatterDeviceDriver *> drivers;
     };
 
-} // namespace zilker
-
-#endif // ZILKER_MATTERDRIVERFACTORY_H
+} // namespace barton

@@ -22,8 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#ifndef ZILKER_IASACECLUSTER_H
-#define ZILKER_IASACECLUSTER_H
+#pragma once
 
 #include <deviceService/zoneChanged.h>
 
@@ -99,4 +98,3 @@ void iasACEClusterSendZoneStatus(uint64_t eui64, uint8_t destEndpoint, const Zon
 
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif // ZILKER_IASACECLUSTER_H

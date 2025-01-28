@@ -36,7 +36,7 @@ using namespace chip::app::DataModel;
 using namespace chip::TLV;
 using namespace chip::app::Clusters::GeneralDiagnostics::Structs;
 using namespace chip::app::Clusters::GeneralDiagnostics;
-using namespace zilker::NetworkUtils;
+using namespace barton::NetworkUtils;
 using namespace chip::app::Clusters::GeneralDiagnostics::Structs::NetworkInterface;
 
 namespace

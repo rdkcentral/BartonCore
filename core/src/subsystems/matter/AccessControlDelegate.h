@@ -23,7 +23,7 @@
 
 /*
  * Code adapted from: https://github.com/project-chip/connectedhomeip
- * Modified by Comcast for matter SDK integration with zilker for Access Control support (taken from the SDK's
+ * Modified by Comcast for matter SDK integration with barton for Access Control support (taken from the SDK's
  * ExampleAccessControlDelegate).
  * Copyright 2023 Project CHIP Authors
  * All rights reserved.
@@ -35,7 +35,7 @@
 #include "access/AccessControl.h"
 #include <lib/core/CHIPPersistentStorageDelegate.h>
 
-namespace zilker
+namespace barton
 {
 
     /**
@@ -48,4 +48,4 @@ namespace zilker
      */
     chip::Access::AccessControl::Delegate *GetAccessControlDelegate();
 
-} // namespace zilker
+} // namespace barton

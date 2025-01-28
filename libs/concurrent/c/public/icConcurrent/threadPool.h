@@ -35,8 +35,7 @@
  * Author: jelderton - 2/12/16
  *-----------------------------------------------*/
 
-#ifndef ZILKER_THREADPOOL_H
-#define ZILKER_THREADPOOL_H
+#pragma once
 
 #include <icTypes/icQueue.h>
 #include <stdbool.h>
@@ -153,5 +152,3 @@ void threadPoolClearStatistics(icThreadPool *pool);
  * threadPoolTaskArgFreeFunc that does not free the argument
  */
 void threadPoolTaskArgDoNotFreeFunc(void *arg);
-
-#endif // ZILKER_THREADPOOL_H

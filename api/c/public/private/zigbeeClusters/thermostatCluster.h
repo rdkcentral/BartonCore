@@ -25,8 +25,7 @@
 // Created by tlea on 3/1/19
 //
 
-#ifndef ZILKER_THERMOSTATCLUSTER_H
-#define ZILKER_THERMOSTATCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -183,5 +182,3 @@ uint8_t thermostatClusterGetCtrlSeqOpFromString(const char *ctrlSeqOp);
 uint8_t thermostatClusterGetFanModeFromString(const char *fanMode);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_THERMOSTATCLUSTER_H

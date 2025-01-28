@@ -25,8 +25,7 @@
 // Created by tlea on 12/7/21.
 //
 
-#ifndef ZILKER_THREADSUBSYSTEM_H
-#define ZILKER_THREADSUBSYSTEM_H
+#pragma once
 
 extern "C" {
 #include "subsystems/thread/threadNetworkInfo.h"
@@ -44,5 +43,3 @@ extern "C" {
  * @return true on success
  */
 bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info);
-
-#endif // ZILKER_THREADSUBSYSTEM_H

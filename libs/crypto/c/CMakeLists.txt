@@ -23,7 +23,7 @@
 
 #--------------------------------------------------------------------------------------
 #
-# CMake definition for the Zilker 'crypto library'
+# CMake definition for the 'crypto library'
 # Should not be used directly, but imported from our parent
 # file via the 'add_subdirectory()' routine.
 #
@@ -33,7 +33,6 @@
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${ZILKER_INCLUDE_DIR}
         ${CROSS_OUTPUT}/include     # 3rd Party
 )
 

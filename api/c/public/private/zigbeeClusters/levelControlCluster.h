@@ -25,8 +25,7 @@
 // Created by tlea on 2/19/19.
 //
 
-#ifndef ZILKER_LEVELCONTROLCLUSTER_H
-#define ZILKER_LEVELCONTROLCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -55,5 +54,3 @@ char *levelControlClusterGetLevelString(uint8_t level);
 uint8_t levelControlClusterGetLevelFromString(const char *level);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_LEVELCONTROLCLUSTER_H

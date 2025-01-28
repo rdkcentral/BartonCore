@@ -52,7 +52,7 @@ extern "C" {
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS 15
 
-namespace zilker
+namespace barton
 {
     // This is synchronous up to timeoutSeconds
     bool CommissioningOrchestrator::Commission(const char *setupPayloadStr, uint16_t timeoutSeconds)
@@ -182,7 +182,7 @@ namespace zilker
                 scoped_icStringHashMap *endpointProfileMap = driver->GetEndpointToProfileMap(matterDetails.get());
 
                 scoped_generic char *uuid = stringBuilder("%016" PRIx64, finalNodeId);
-                // these are zilker details (technology neutral)
+                // these are device service details (technology neutral)
                 DeviceFoundDetails details {
                     .deviceDriver = driver->GetDriver(),
                     .subsystem = MATTER_SUBSYSTEM_NAME,
@@ -406,7 +406,7 @@ namespace zilker
     }
 
     // KEEP THIS IN SYNC WITH THE ENUM!
-    std::ostream &operator<<(std::ostream &strm, zilker::CommissioningStatus status)
+    std::ostream &operator<<(std::ostream &strm, barton::CommissioningStatus status)
     {
         const std::string name[] = {"Pending",
                                     "InvalidSetupPayload",
@@ -427,4 +427,4 @@ namespace zilker
         return strm << name[status];
     }
 
-} // namespace zilker
+} // namespace barton

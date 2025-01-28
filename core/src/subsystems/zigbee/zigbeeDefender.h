@@ -25,8 +25,7 @@
 // Created by tlea on 8/5/19.
 //
 
-#ifndef ZILKER_ZIGBEEDEFENDER_H
-#define ZILKER_ZIGBEEDEFENDER_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -42,5 +41,3 @@ void zigbeeDefenderConfigure();
  * @param attackDetected
  */
 void zigbeeDefenderSetPanIdAttack(bool attackDetected);
-
-#endif // ZILKER_ZIGBEEDEFENDER_H

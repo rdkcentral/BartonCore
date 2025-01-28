@@ -30,11 +30,8 @@
  * Author: John Elderton  -  1/18/17
  *-----------------------------------------------*/
 
-#ifndef ZILKER_MACADDRTEST_H
-#define ZILKER_MACADDRTEST_H
+#pragma once
 
 #include <stdbool.h>
 
 bool runMacAddrTests();
-
-#endif // ZILKER_MACADDRTEST_H

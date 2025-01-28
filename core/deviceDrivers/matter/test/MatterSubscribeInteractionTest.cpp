@@ -32,7 +32,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-namespace zilker
+namespace barton
 {
     class MatterBackoffAlgorithmTest : public ::testing::Test
     {
@@ -74,4 +74,4 @@ namespace zilker
             ASSERT_LE(timeTilNextResub, CUSTOM_RESUBSCRIBE_MAX_RETRY_WAIT_INTERVAL_MS);
         }
     }
-} // namespace zilker
+} // namespace barton

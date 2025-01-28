@@ -26,8 +26,7 @@
 // Created by Christian Leithner on 4/16/20.
 //
 
-#ifndef ZILKER_SOCKETHELPER_H
-#define ZILKER_SOCKETHELPER_H
+#pragma once
 
 typedef enum
 {
@@ -95,5 +94,3 @@ socketHelperError socketHelperTryConnectAddr(int socketFd, const struct sockaddr
  * Attempts a simple connect to the provided address.
  */
 bool performSimpleConnect(bool useCell, const char *interface, const char *hostname, uint16_t port);
-
-#endif // ZILKER_SOCKETHELPER_H

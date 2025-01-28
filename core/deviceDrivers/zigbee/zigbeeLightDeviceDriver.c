@@ -888,8 +888,8 @@ preConfigureCluster(ZigbeeDriverCommon *ctx, ZigbeeCluster *cluster, DeviceConfi
     bool configureCluster = true;
     uint16_t deviceId = 0;
 
-    // check if the current endpoint is a switch device, if it is a switch device, then
-    // do not configure its clusters as this would bind the switch endpoint to us, (zilker)
+    // check if the current endpoint is a switch device, if it is a switch device, then do not
+    // configure its clusters as this would bind the switch endpoint to us (device service),
     // breaking the default binding between the switch and light endpoint on the device.
     if (icDiscoveredDeviceDetailsEndpointGetDeviceId(
             deviceConfigContext->discoveredDeviceDetails, deviceConfigContext->endpointId, &deviceId) &&

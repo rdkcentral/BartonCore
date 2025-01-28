@@ -25,8 +25,7 @@
 // Created by tlea on 7/9/19.
 //
 
-#ifndef ZILKER_ZIGBEEHEALTHCHECK_H
-#define ZILKER_ZIGBEEHEALTHCHECK_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -47,5 +46,3 @@ void zigbeeHealthCheckStop();
  * @param problemExists
  */
 void zigbeeHealthCheckSetProblem(bool problemExists);
-
-#endif // ZILKER_ZIGBEEHEALTHCHECK_H

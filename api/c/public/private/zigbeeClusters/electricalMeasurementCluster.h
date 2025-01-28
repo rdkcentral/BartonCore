@@ -25,8 +25,7 @@
 // Created by tlea on 2/19/19.
 //
 
-#ifndef ZILKER_ELECTRICALMEASUREMENTCLUSTER_H
-#define ZILKER_ELECTRICALMEASUREMENTCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -47,5 +46,3 @@ bool electricalMeasurementClusterGetAcPowerDivisor(uint64_t eui64, uint8_t endpo
 bool electricalMeasurementClusterGetAcPowerMultiplier(uint64_t eui64, uint8_t endpointId, uint16_t *multiplier);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_ELECTRICALMEASUREMENTCLUSTER_H

@@ -38,7 +38,8 @@
 #include <deviceServiceProps.h>
 #include <icTypes/icLinkedList.h>
 
-// TODO: These three shouldn't be public, just moving them here now for compiling deviceServiceMain on the zilker side
+// TODO: These shouldn't be public, just moving them here now for compiling a component of existing
+// barton clients for now.
 bool deviceServiceInitialize(BDeviceServiceClient *service);
 bool deviceServiceStart(void);
 void deviceServiceShutdown();

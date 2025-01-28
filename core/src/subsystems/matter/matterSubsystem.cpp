@@ -57,7 +57,7 @@ extern "C" {
 #include "matter/MatterDriverFactory.h"
 #include "matterSubsystem.h"
 
-using namespace zilker;
+using namespace barton;
 using namespace std;
 
 #define MATTER_CHIP_PREFIX                   "chip_"
@@ -441,9 +441,9 @@ static bool matterSubsystemMigrate(uint16_t oldVersion, uint16_t newVersion)
     /*
         For now, move anything pre matter subsystem version 1 to backup files as it may be unusable (but don't
         outright delete in case we need to recover something)
-        FIXME: We really shouldn't know the filesystem path to matterkv here, it's a build option for our matter sdk
-        fork which isn't currently set by the zilker src build, just by 3rdParty and in a separate recipe in RDKB.
-        In the future, we should centralize this as a macro baked in by the build.
+        FIXME: We really shouldn't know the filesystem path to matterkv here, it's a build option for the matter
+        sdk which isn't currently set by the barton src build. In the future, we should centralize this as a macro
+        baked in by the build.
         TODO: Refactor for multiple versions if the need arises.
     */
     scoped_generic char *dynamicConfigDir = deviceServiceConfigurationGetStorageDir();

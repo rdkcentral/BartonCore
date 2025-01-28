@@ -25,9 +25,7 @@
 // Created by tlea on 11/8/2021
 //
 
-#ifndef ZILKER_REMOTECLICLUSTER_H
-#define ZILKER_REMOTECLICLUSTER_H
-
+#pragma once
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -45,5 +43,3 @@ bool remoteCliClusterEnable(uint64_t eui64, uint8_t endpointId, uint8_t enable, 
 bool remoteCliClusterSendCommand(uint64_t eui64, uint8_t endpointId, const char *command);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_REMOTECLICLUSTER_H

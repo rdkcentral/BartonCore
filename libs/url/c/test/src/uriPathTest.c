@@ -95,7 +95,7 @@ static bool stripPremiseDirective(char *input, char **valueStr, void *context)
 }
 
 /*
- * This test is meant to be done with an instance of zilker running already (as it makes IPC requests). It is largely
+ * This test is meant to be done with a barton client instance running already. It is largely
  * meant to be a means for testing by inspection, not necessarily pass or fail.
  */
 static void test_urlDispatcher(void **state)
@@ -182,7 +182,7 @@ static void test_urlDispatcher(void **state)
 }
 
 /*
- * This test is meant to be done with an instance of zilker running already (as it makes IPC requests). It is largely
+ * This test is meant to be done with a barton client instance running already. It is largely
  * meant to be a means for testing by inspection, not necessarily pass or fail.
  */
 static void test_urlHelperExtractHost(void **state)

@@ -31,8 +31,7 @@
  * and its value might be the JSON representation of the device and all of its settings.
  */
 
-#ifndef ZILKER_STORAGE_H
-#define ZILKER_STORAGE_H
+#pragma once
 
 #include <cjson/cJSON.h>
 #include <icConfig/backupUtils.h>
@@ -201,5 +200,3 @@ const char *getStorageDir(void);
  * @return true when the item's modification date is avaialable.
  */
 bool storageGetMtime(const char *ns, const char *key, struct timespec *mtime);
-
-#endif // ZILKER_STORAGE_H

@@ -24,8 +24,7 @@
 // Created by mkoch201 on 3/18/19.
 //
 
-#ifndef ZILKER_BRIDGECLUSTER_H
-#define ZILKER_BRIDGECLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -53,5 +52,3 @@ bool bridgeClusterReset(uint64_t eui64, uint8_t endpointId);
 bool bridgeClusterGetTamperStatus(const ZigbeeCluster *ctx, uint64_t eui64, uint8_t endpointId, bool *result);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_BRIDGECLUSTER_H

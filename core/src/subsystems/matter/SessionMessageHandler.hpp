@@ -89,7 +89,7 @@ private:
 
         if (session->GetPeer().IsOperational() && !session->IsUnauthenticatedSession())
         {
-            auto deviceId = zilker::Subsystem::Matter::NodeIdToUuid(session->GetPeer().GetNodeId());
+            auto deviceId = barton::Subsystem::Matter::NodeIdToUuid(session->GetPeer().GetNodeId());
 
             if (queue == nullptr)
             {

@@ -24,8 +24,7 @@
 // Created by mkoch201 on 7/26/19.
 //
 
-#ifndef ZILKER_ICTHREADSAFEWRAPPER_H
-#define ZILKER_ICTHREADSAFEWRAPPER_H
+#pragma once
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -257,5 +256,3 @@ bool threadSafeWrapperFutureIsComplete(icThreadSafeWrapperFuture *future);
  * @return true if applied, false otherwise
  */
 bool threadSafeWrapperFutureIsApplied(icThreadSafeWrapperFuture *future);
-
-#endif // ZILKER_ICTHREADSAFEWRAPPER_H

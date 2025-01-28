@@ -33,7 +33,7 @@
 #include <mutex>
 #include <string>
 
-namespace zilker
+namespace barton
 {
     class LevelControl : public MatterCluster
     {
@@ -73,4 +73,4 @@ namespace zilker
 
     private:
     };
-} // namespace zilker
+} // namespace barton

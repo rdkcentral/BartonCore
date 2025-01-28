@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_UTIL_H
-#define ZILKER_UTIL_H
+#pragma once
 
 #include <openssl/bio.h>
 
@@ -32,5 +31,3 @@
  * @return
  */
 char *getMemBIOString(BIO *bp);
-
-#endif // ZILKER_UTIL_H

@@ -25,9 +25,7 @@
 // Created by tlea on 3/1/19
 //
 
-#ifndef ZILKER_FANCONTROLCLUSTER_H
-#define ZILKER_FANCONTROLCLUSTER_H
-
+#pragma once
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -55,5 +53,3 @@ bool fanControlClusterSetFanMode(const ZigbeeCluster *cluster, uint64_t eui64, u
 const char *fanControlClusterGetFanModeString(uint8_t fanMode);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_FANCONTROLCLUSTER_H

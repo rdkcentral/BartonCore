@@ -22,8 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#ifndef ZILKER_REGEXUTILS_H
-#define ZILKER_REGEXUTILS_H
+#pragma once
 
 #include "array.h"
 #include <icTypes/icLinkedList.h>
@@ -141,6 +140,3 @@ char *regexReplace(const char *text, RegexReplacer **replacers);
  * @return A pointer to a heap allocated string
  */
 char *regexReplaceForListOfReplacers(const char *data, icLinkedList *replacersList);
-
-
-#endif // ZILKER_REGEXUTILS_H

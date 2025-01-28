@@ -25,14 +25,13 @@
  * Created by Thomas Lea on 11/17/21.
  */
 
-#ifndef ZILKER_DISCOVEREDDEVICEDETAILSSTORE_H
-#define ZILKER_DISCOVEREDDEVICEDETAILSSTORE_H
+#pragma once
 
 #include "DiscoveredDeviceDetails.h"
 #include <memory>
 #include <mutex>
 
-namespace zilker
+namespace barton
 {
     class DiscoveredDeviceDetailsStore
     {
@@ -73,6 +72,4 @@ namespace zilker
         std::mutex temporaryDeviceDetailsMtx;
         std::map<std::string, std::shared_ptr<DiscoveredDeviceDetails>> temporaryDeviceDetails;
     };
-} // namespace zilker
-
-#endif // ZILKER_DISCOVEREDDEVICEDETAILSSTORE_H
+} // namespace barton

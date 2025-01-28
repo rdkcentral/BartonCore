@@ -33,7 +33,6 @@
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${ZILKER_INCLUDE_DIR}
 )
 
 # define source files (using wildcard)

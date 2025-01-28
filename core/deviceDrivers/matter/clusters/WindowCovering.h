@@ -33,7 +33,7 @@
 #include <mutex>
 #include <string>
 
-namespace zilker
+namespace barton
 {
     class WindowCovering : public MatterCluster
     {
@@ -76,4 +76,4 @@ namespace zilker
     private:
         chip::app::ReadPrepareParams readPrepareParams;
     };
-} // namespace zilker
+} // namespace barton

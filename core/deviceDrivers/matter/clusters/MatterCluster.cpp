@@ -36,7 +36,7 @@ extern "C" {
 #include "MatterCluster.h"
 #include "app/InteractionModelEngine.h"
 
-namespace zilker
+namespace barton
 {
     bool MatterCluster::SendCommand(chip::app::CommandSender *commandSender,
                                     const chip::SessionHandle &sessionHandle,
@@ -152,4 +152,4 @@ namespace zilker
     {
         clusterStateCacheRef = clusterStateCache;
     }
-} // namespace zilker
+} // namespace barton

@@ -22,8 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 //
 
-#ifndef ZILKER_IASZONEHELPER_H
-#define ZILKER_IASZONEHELPER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -100,4 +99,3 @@ const char *iasZoneHelperGetTroubleResource(const char *deviceClass, const char 
 void iasZoneHelperSyncZoneStatus(const char *uuid, const uint8_t endpointId, ZigbeeDriverCommon *ctx);
 
 #endif // BARTON_CONFIG_ZIGBEE
-#endif // ZILKER_IASZONEHELPER_H

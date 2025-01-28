@@ -25,8 +25,7 @@
 // Created by tlea200 on 11/16/21.
 //
 
-#ifndef ZILKER_MATTERCOMMON_H
-#define ZILKER_MATTERCOMMON_H
+#pragma once
 
 #ifndef LOG_TAG
 #define LOG_TAG "Matter"
@@ -49,7 +48,7 @@ extern "C" {
 #include <icUtil/stringUtils.h>
 }
 
-namespace zilker
+namespace barton
 {
     namespace Subsystem
     {
@@ -120,6 +119,4 @@ namespace zilker
         chip::Optional<NetworkInterfaceInfo> ExtractOperationalInterfaceInfo(const TypeInfo::DecodableType &value,
                                                                              const char *nodeIpv6Addr);
     } // namespace NetworkUtils
-} // namespace zilker
-
-#endif // ZILKER_MATTERCOMMON_H
+} // namespace barton

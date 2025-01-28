@@ -23,8 +23,7 @@
 // Created by dcalde202 on 6/18/20.
 //
 
-#ifndef ZILKER_TELEMETRYMARKERS_H
-#define ZILKER_TELEMETRYMARKERS_H
+#pragma once
 
 // Marker Prefixes
 
@@ -69,5 +68,3 @@
 // AS2 markers
 #define TELEMETRY_MARKER_AS2_SUCCESS "as2DeliverySuccess"
 #define TELEMETRY_MARKER_AS2_FAIL    "as2DeliveryFail"
-
-#endif // ZILKER_TELEMETRYMARKERS_H

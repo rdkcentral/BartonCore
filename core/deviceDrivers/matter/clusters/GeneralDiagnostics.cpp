@@ -35,7 +35,7 @@ extern "C" {
 
 #include "GeneralDiagnostics.h"
 
-namespace zilker
+namespace barton
 {
     std::string GeneralDiagnostics::GetMacAddress()
     {
@@ -145,4 +145,4 @@ namespace zilker
 
         return chip::NullOptional;
     }
-} // namespace zilker
+} // namespace barton

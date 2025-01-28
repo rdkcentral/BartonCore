@@ -25,8 +25,7 @@
  * Created by Thomas Lea on 12/7/21.
  */
 
-#ifndef ZILKER_THREADNETWORKINFO_H
-#define ZILKER_THREADNETWORKINFO_H
+#pragma once
 
 #include "cjson/cJSON.h"
 #include <glib.h>
@@ -81,5 +80,3 @@ cJSON *threadNetworkInfoToJson(ThreadNetworkInfo *threadInfo);
 // TODO fromJson
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(ThreadNetworkInfo, threadNetworkInfoDestroy);
-
-#endif // ZILKER_THREADNETWORKINFO_H

@@ -24,13 +24,10 @@
 // Created by mkoch201 on 8/6/20.
 //
 
-#ifndef ZILKER_UUIDHELPER_H
-#define ZILKER_UUIDHELPER_H
+#pragma once
 
 /**
  * Generate a new 128 bit uuid and return it in string form (xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx)
  * @return the uuid string, caller must free
  */
 char *generateUUIDString(void);
-
-#endif // ZILKER_UUIDHELPER_H

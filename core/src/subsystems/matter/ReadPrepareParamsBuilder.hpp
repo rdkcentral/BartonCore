@@ -33,7 +33,7 @@
 #include "lib/core/DataModelTypes.h"
 #include "transport/Session.h"
 
-namespace zilker
+namespace barton
 {
     class ReadPrepareParamsBuilder
     {
@@ -130,4 +130,4 @@ namespace zilker
         uint16_t reportFloorSecs = UINT8_MAX;
         uint16_t reportCeilSecs = 0;
     };
-} // namespace zilker
+} // namespace barton

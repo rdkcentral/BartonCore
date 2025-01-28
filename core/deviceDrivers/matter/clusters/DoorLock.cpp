@@ -41,7 +41,7 @@ extern "C" {
 // TODO we have a smattering of timeouts that need to be coordinated
 #define INTERACTION_TIMEOUT_SECONDS 15
 
-namespace zilker
+namespace barton
 {
     void DoorLock::OnAttributeChanged(chip::app::ClusterStateCache *cache, const chip::app::ConcreteAttributePath &path)
     {
@@ -140,4 +140,4 @@ namespace zilker
         // hand off the commandSender to the base class
         return SendCommand(commandSender, sessionHandle, context);
     };
-} // namespace zilker
+} // namespace barton

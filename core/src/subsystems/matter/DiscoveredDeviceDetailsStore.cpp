@@ -41,7 +41,7 @@ extern "C" {
 #include <jsonHelper/jsonHelper.h>
 }
 
-using namespace zilker;
+using namespace barton;
 
 #define DETAILS_METADATA "matterDetails"
 

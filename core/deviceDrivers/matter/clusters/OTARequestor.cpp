@@ -45,7 +45,7 @@ extern "C" {
 
 using namespace chip::app::Clusters::OtaSoftwareUpdateRequestor;
 
-namespace zilker
+namespace barton
 {
     void OTARequestor::OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                           const chip::app::ConcreteAttributePath &path)
@@ -210,4 +210,4 @@ namespace zilker
 
         return SendWriteRequest(writeClient, sessionHandle, context);
     }
-} // namespace zilker
+} // namespace barton

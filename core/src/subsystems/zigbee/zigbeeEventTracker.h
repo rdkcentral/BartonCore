@@ -40,8 +40,7 @@
  * Author: jelder380 - 2/21/19.
  *-----------------------------------------------*/
 
-#ifndef ZILKER_ZIGBEEEVENTTRACKER_H
-#define ZILKER_ZIGBEEEVENTTRACKER_H
+#pragma once
 
 #include <icTypes/icLinkedList.h>
 #include <time.h>
@@ -290,5 +289,3 @@ void initEventTracker();
  * Used to clean up all of the collections
  */
 void shutDownEventTracker();
-
-#endif // ZILKER_ZIGBEEEVENTTRACKER_H

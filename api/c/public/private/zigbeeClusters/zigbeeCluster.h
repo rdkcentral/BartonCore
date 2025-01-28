@@ -25,8 +25,7 @@
 // Created by tlea on 2/13/19.
 //
 
-#ifndef ZILKER_ZIGBEECLUSTER_H
-#define ZILKER_ZIGBEECLUSTER_H
+#pragma once
 
 #include <device-driver/device-driver.h>
 #include <stdbool.h>
@@ -163,5 +162,3 @@ void addNumberConfigurationMetadata(icStringHashMap *configurationMetadata, cons
 uint64_t getNumberConfigurationMetadata(icStringHashMap *configurationMetadata, const char *key, uint64_t defaultValue);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_ZIGBEECLUSTER_H

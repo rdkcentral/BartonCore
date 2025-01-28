@@ -25,8 +25,7 @@
 // Created by tlea on 2/18/19.
 //
 
-#ifndef ZILKER_DIAGNOSTICSCLUSTER_H
-#define ZILKER_DIAGNOSTICSCLUSTER_H
+#pragma once
 
 #include "zigbeeCluster.h"
 
@@ -39,5 +38,3 @@ ZigbeeCluster *diagnosticsClusterCreate(const DiagnosticsClusterCallbacks *callb
 
 bool diagnosticsClusterGetLastMessageLqi(uint64_t eui64, uint8_t endpointId, uint8_t *lqi);
 bool diagnosticsClusterGetLastMessageRssi(uint64_t eui64, uint8_t endpointId, int8_t *rssi);
-
-#endif // ZILKER_DIAGNOSTICSCLUSTER_H

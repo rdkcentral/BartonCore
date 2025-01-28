@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_SECURITYSTATE_H
-#define ZILKER_SECURITYSTATE_H
+#pragma once
 
 #include <icUtil/array.h>
 #include <stdbool.h>
@@ -150,5 +149,3 @@ const char *securityStateToJSON(SecurityState *state);
  * @return NULL when parsing fails
  */
 SecurityState *securityStateFromJSON(const char *json);
-
-#endif // ZILKER_SECURITYSTATE_H

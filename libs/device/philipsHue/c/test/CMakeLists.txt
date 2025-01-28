@@ -37,7 +37,6 @@
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${ZILKER_INCLUDE_DIR}
         ${CROSS_OUTPUT}/include         # 3rd Party
 )
 
@@ -48,7 +47,7 @@ file(GLOB SOURCES "src/*.c")
 add_executable(testDevicePhilipsHueLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
-target_link_libraries(testDevicePhilipsHueLib xhPhilipsHue pthread ${ZILKER_EXE_LIBS})
+target_link_libraries(testDevicePhilipsHueLib xhPhilipsHue pthread)
 
 # NOTE: commented out the 'add_test' since this is really more of an interactive
 #       program should be executed manually

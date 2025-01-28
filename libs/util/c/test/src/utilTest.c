@@ -37,7 +37,6 @@
 #include "encodeTest.h"
 #include "macAddrTest.h"
 #include "parsePropTest.h"
-#include "versionTest.h"
 #include <icLog/logging.h>
 
 /*
@@ -51,7 +50,6 @@ static void printUsage()
     fprintf(stderr, "    -p : run propFile test\n");
     fprintf(stderr, "    -e : run encode/decode tests\n");
     fprintf(stderr, "    -m : run mac address tests\n");
-    fprintf(stderr, "    -v : run version tests\n");
     fprintf(stderr, "\n");
 }
 
@@ -64,9 +62,8 @@ int main(int argc, char *argv[])
     bool doPropFile = false;
     bool doEncode = false;
     bool doMacAddr = false;
-    bool doVersion = false;
 
-    while ((c = getopt(argc, argv, "aehpmiv")) != -1)
+    while ((c = getopt(argc, argv, "aehpmi")) != -1)
     {
         switch (c)
         {
@@ -74,7 +71,6 @@ int main(int argc, char *argv[])
                 doPropFile = true;
                 doEncode = true;
                 doMacAddr = true;
-                doVersion = true;
                 break;
 
             case 'p':
@@ -87,10 +83,6 @@ int main(int argc, char *argv[])
 
             case 'm':
                 doMacAddr = true;
-                break;
-
-            case 'v':
-                doVersion = true;
                 break;
 
             case 'h':
@@ -134,17 +126,6 @@ int main(int argc, char *argv[])
             return 1;
         }
         printf("MAC Address Test SUCCESS!\n");
-        didSomething = true;
-    }
-    if (doVersion == true)
-    {
-        printf("\n\nRunning Version Compare Test:\n");
-        if (runVersionTests() == false)
-        {
-            printf("Version Compare Test FAILED!\n");
-            return 1;
-        }
-        printf("Version Compare Test SUCCESS!\n");
         didSomething = true;
     }
 

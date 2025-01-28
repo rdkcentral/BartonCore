@@ -25,8 +25,7 @@
 // Created by tlea on 2/15/19.
 //
 
-#ifndef ZILKER_ALARMSCLUSTER_H
-#define ZILKER_ALARMSCLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -61,5 +60,3 @@ icLinkedList *alarmsClusterGetAlarms(const ZigbeeCluster *cluster, uint64_t eui6
 void alarmsClusterSetBindingEnabled(const DeviceConfigurationContext *deviceConfigurationContext, bool bind);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_ALARMSCLUSTER_H

@@ -24,8 +24,7 @@
 // Created by mkoch201 on 4/18/19.
 //
 
-#ifndef ZILKER_RESOURCEMODES_H
-#define ZILKER_RESOURCEMODES_H
+#pragma once
 
 // Resource can be read
 #define RESOURCE_MODE_READABLE        (1u << 0u)
@@ -54,5 +53,3 @@
 
 // Convenience mask combinations
 #define RESOURCE_MODE_READWRITEABLE   (RESOURCE_MODE_READABLE | RESOURCE_MODE_WRITEABLE)
-
-#endif // ZILKER_RESOURCEMODES_H

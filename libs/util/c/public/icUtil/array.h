@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_ARRAY_H
-#define ZILKER_ARRAY_H
+#pragma once
 
 /**
  * Get the length of an array, in elements
@@ -34,5 +33,3 @@
  * @endcode
  */
 #define ARRAY_LENGTH(a) sizeof((a)) / sizeof(*(a))
-
-#endif // ZILKER_ARRAY_H

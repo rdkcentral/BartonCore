@@ -25,8 +25,7 @@
 // Created by tlea on 9/23/19.
 //
 
-#ifndef ZILKER_OTAUPGRADECLUSTER_H
-#define ZILKER_OTAUPGRADECLUSTER_H
+#pragma once
 
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -45,5 +44,3 @@ ZigbeeCluster *otaUpgradeClusterCreate(void);
 bool otaUpgradeClusterImageNotify(uint64_t eui64, uint8_t endpointId);
 
 #endif // BARTON_CONFIG_ZIGBEE
-
-#endif // ZILKER_OTAUPGRADECLUSTER_H

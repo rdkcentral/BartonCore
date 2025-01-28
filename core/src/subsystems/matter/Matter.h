@@ -54,7 +54,7 @@
 
 #define CHIP_NUM_EVENT_LOGGING_BUFFERS 3
 
-namespace zilker
+namespace barton
 {
     /**
      * The Matter class is a purely asynchronous interface to the Matter stack.  None of the calls should block for
@@ -300,7 +300,7 @@ namespace zilker
         chip::NodeId myNodeId = kUndefinedNodeId;
         chip::FabricId myFabricId {};
         chip::FabricIndex myFabricIndex = kUndefinedFabricIndex;
-        // defined by zilker.zap.
+        // defined by barton-library.zap.
         static constexpr chip::EndpointId localEndpointId = 0;
         std::unique_ptr<std::vector<uint8_t>> threadOperationalDataset;
         std::unique_ptr<chip::Controller::DeviceCommissioner> commissionerController;
@@ -348,4 +348,4 @@ namespace zilker
         // This should be supplied by a real client, but default to test value for development
         chip::VendorId vendorId = chip::VendorId::TestVendor1;
     };
-} // namespace zilker
+} // namespace barton

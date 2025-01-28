@@ -24,8 +24,7 @@
 // Created by mdeleo739 on 6/10/19.
 //
 
-#ifndef ZILKER_ICSERDESCONTEXT_H
-#define ZILKER_ICSERDESCONTEXT_H
+#pragma once
 
 #include <icTypes/icStringHashMap.h>
 #include <stdbool.h>
@@ -44,5 +43,3 @@ bool serDesSetContextValue(icSerDesContext *context, const char *key, const char
 bool serDesHasContextValue(const icSerDesContext *context, const char *key);
 
 const char *serDesGetContextValue(const icSerDesContext *context, const char *key);
-
-#endif // ZILKER_ICSERDESCONTEXT_H

@@ -21,8 +21,7 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef ZILKER_PROPERTIES_H
-#define ZILKER_PROPERTIES_H
+#pragma once
 
 #define URL_HELPER_PROP_NAMESPACE                "cpe.url"
 #define URL_HELPER_PROP_REUSE_NAMESPACE          URL_HELPER_PROP_NAMESPACE ".reuse"
@@ -60,6 +59,3 @@
  * When disabled, requests will not attempt to use the cache.
  */
 #define URL_HELPER_PROP_REUSE_ENABLE             URL_HELPER_PROP_REUSE_NAMESPACE ".enable"
-
-
-#endif // ZILKER_PROPERTIES_H

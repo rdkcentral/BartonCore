@@ -34,7 +34,7 @@ extern "C" {
 #define logFmt(fmt) "(%s):" fmt, __func__
 }
 
-using namespace zilker;
+using namespace barton;
 
 std::unique_ptr<ScopedReadPrepareParams> ReadPrepareParamsBuilder::Build(const chip::SessionHandle &sessionHandle)
 {
