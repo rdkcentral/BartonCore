@@ -114,17 +114,6 @@
 #define RESOURCE_TYPE_PIM_FIRMWARE_UPGRADE              "com.icontrol.upgradePimFirmware"
 #define RESOURCE_TYPE_PIM_INSTALLER_CODE_CONTROL        "com.icontrol.installerCodeControl"
 
-#define RESOURCE_TYPE_XBB_SIRENSTART                    "com.comcast.xbb.sirenStart"
-#define RESOURCE_TYPE_XBB_SIRENSTOP                     "com.comcast.xbb.sirenStop"
-#define RESOURCE_TYPE_XBB_SIRENMUTE                     "com.comcast.xbb.sirenMute"
-#define RESOURCE_TYPE_XBB_STATUS                        "com.comcast.xbb.batteryStatus"
-#define RESOURCE_TYPE_XBB_CONFIG                        "com.comcast.xbb.batteryConfig"
-#define RESOURCE_TYPE_XBB_ALARMS                        "com.comcast.xbb.batteryAlarms"
-#define RESOURCE_TYPE_XBBL_LID_STATUS                   "com.comcast.xbbl.lidStatus"
-#define RESOURCE_TYPE_XBBL_AC_POWER_LOST                "com.comcast.xbbl.acPowerLost"
-#define RESOURCE_TYPE_XBBL_BANK_STATUS                  "com.comcast.xbbl.bankStatus"
-#define RESOURCE_TYPE_XBBL_TEMP_STATUS                  "com.comcast.xbbl.tempStatus"
-
 #define RESOURCE_TYPE_MODEM_POWER_ON                    "com.icontrol.remoteCellModemPowerOn"
 #define RESOURCE_TYPE_MODEM_POWER_OFF                   "com.icontrol.remoteCellModemPowerOff"
 #define RESOURCE_TYPE_MODEM_EMERGENCY_RESET             "com.icontrol.remoteCellModemEmergencyReset"

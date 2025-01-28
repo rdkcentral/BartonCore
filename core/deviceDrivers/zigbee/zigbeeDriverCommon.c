@@ -3452,8 +3452,7 @@ static void handlePollControlCheckin(uint64_t eui64,
     }
     else
     {
-        // TODO: allow each cluster to perform some action on poll control check-in...even on a Comcast Custom check-in.
-        //  For now, if it's a Comcast Custom Message, skip fast poll and don't allow clusters to handle the checkin.
+        // TODO: allow each cluster to perform some action on poll control check-in.
         if (batterySavingData != NULL)
         {
             zigbeeDriverCommonComcastBatterySavingUpdateResources(eui64, batterySavingData, commonDriver);

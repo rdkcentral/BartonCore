@@ -39,14 +39,6 @@
  */
 #define DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT DEVICE_PROP_MATTER_NS "environment"
 
-// ComcastChimeCluster
-
-/**
- * @brief Uri that tells the device to play a siren
- * @see MatterChimeDeviceDriver.cpp's DEFAULT_SIREN_URI for an example of what this might look like
- */
-#define DEVICE_PROP_MATTER_SIREN_URI               DEVICE_PROP_MATTER_NS "comcastChime.playUrl.sirenUri"
-
 // WifiNetworkDiagnosticsCluster
 
 /**
