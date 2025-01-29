@@ -30,14 +30,14 @@
 #include "device-service-device.h"
 #include "device-service-endpoint.h"
 #include "device-service-metadata.h"
+#include "device-service-reference-io.h"
 #include "device-service-resource.h"
 #include "glib-object.h"
 #include "glib.h"
-#include "device-service-reference-io.h"
 #include "icUtil/stringUtils.h"
 #include <linenoise.h>
-#include <private/resourceTypes.h>
 #include <private/deviceService/resourceModes.h>
+#include <private/resourceTypes.h>
 #include <stdio.h>
 
 #define DISCOVERY_SECONDS 60
@@ -607,8 +607,7 @@ const gchar *stringifyMode(guint mode)
     return g_strdup(buf);
 }
 
-static void dumpResource(BDeviceServiceResource *resource,
-                         gchar *prefix)
+static void dumpResource(BDeviceServiceResource *resource, gchar *prefix)
 {
     if (resource == NULL)
     {
@@ -655,16 +654,13 @@ static void dumpMetadata(GList *metadata, gchar *prefix)
     {
         g_autofree gchar *value = NULL;
         BDeviceServiceMetadata *metadata = B_DEVICE_SERVICE_METADATA(metadatIter->data);
-        g_object_get(metadata,
-             B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE],
-             &value,
-             NULL);
+        g_object_get(
+            metadata, B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE], &value, NULL);
         emitOutput("%s\t%s\n", prefix, value);
     }
 }
 
-static void dumpEndpoint(BDeviceServiceEndpoint *endpoint,
-                         gchar *prefix)
+static void dumpEndpoint(BDeviceServiceEndpoint *endpoint, gchar *prefix)
 {
     if (endpoint == NULL)
     {
@@ -698,7 +694,7 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint,
     emitOutput("%s\tprofileVersion=%d\n", prefix, profileVersion);
     emitOutput("%s\townerId=%s\n", prefix, ownerId);
 
-    //resources
+    // resources
     emitOutput("%s\tresources:\n", prefix);
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
@@ -706,7 +702,7 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint,
         dumpResource(resource, "\t\t\t\t");
     }
 
-    //metadata
+    // metadata
     if (g_list_length(metadata) > 0)
     {
         emitOutput("\t\t\tmetadata:\n");
@@ -714,10 +710,9 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint,
     }
 }
 
-static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
-                           char **argv)
+static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc, char **argv)
 {
-    (void) argc; //unused
+    (void) argc; // unused
     bool rc = false;
 
     g_autoptr(BDeviceServiceDevice) device = b_device_service_client_get_device_by_id(client, argv[0]);
@@ -754,7 +749,7 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
     emitOutput("\tdeviceClassVersion=%d\n", deviceClassVersion);
     emitOutput("\tmanagingDeviceDriver=%s\n", managingDeviceDriver);
 
-    //device resources
+    // device resources
     emitOutput("\tresources:\n");
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
@@ -762,7 +757,7 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
         dumpResource(resource, "\t\t");
     }
 
-    //endpoints
+    // endpoints
     emitOutput("\tendpoints:\n");
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
@@ -770,7 +765,7 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
         dumpEndpoint(endpoint, "\t\t");
     }
 
-    //metadata
+    // metadata
     if (g_list_length(metadata) > 0)
     {
         emitOutput("\tmetadata:\n");
@@ -780,11 +775,10 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc,
     return true;
 }
 
-static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc,
-                            char **argv)
+static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc, char **argv)
 {
-    (void) argc; //unused
-    (void) argv; //unused
+    (void) argc; // unused
+    (void) argv; // unused
 
     bool rc = false;
 
@@ -796,14 +790,104 @@ static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc,
         {
             g_autofree gchar *deviceId = NULL;
             BDeviceServiceDevice *device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
-            g_object_get(device,
-                  B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
-                  &deviceId,
-                  NULL);
+            g_object_get(
+                device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID], &deviceId, NULL);
             dumpDeviceFunc(client, 1, &deviceId);
         }
     }
 
+    return rc;
+}
+
+static bool removeDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+    bool result = b_device_service_client_remove_device(client, argv[0]);
+
+    if (!result)
+    {
+        emitOutput("Failed to remove device.\n");
+    }
+    return result;
+}
+
+static bool removeEndpointFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1, false);
+    bool result = true;
+    g_autoptr(BDeviceServiceEndpoint) endpoint = b_device_service_client_get_endpoint_by_uri(client, argv[0]);
+    if (endpoint)
+    {
+        g_autofree gchar *deviceUuid = NULL;
+        g_autofree gchar *endpointId = NULL;
+        g_object_get(endpoint,
+                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
+                     &deviceUuid,
+                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
+                     &endpointId,
+                     NULL);
+
+        result = b_device_service_client_remove_endpoint_by_id(client, deviceUuid, endpointId);
+
+        if (!result)
+        {
+            emitOutput("Failed to remove endpoint.\n");
+        }
+    }
+    return result;
+}
+
+static bool removeDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    bool rc = true;
+
+    if (argc == 0)
+    {
+        emitOutput("This will remove ALL devices!  Are you sure? (y/n) \n");
+    }
+    else
+    {
+        emitOutput("This will remove ALL %s devices!  Are you sure? (y/n) \n", argv[0]);
+    }
+
+    int yn = getchar();
+    if (yn != 'y')
+    {
+        emitOutput("Not removing devices\n");
+        return true;
+    }
+    g_autolist(BDeviceServiceDevice) devices = NULL;
+    if (argc == 0)
+    {
+        devices = b_device_service_client_get_devices(client);
+    }
+    else
+    {
+        devices = b_device_service_client_get_devices_by_device_class(client, argv[0]);
+    }
+
+    if (devices)
+    {
+        for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
+        {
+            g_autoptr(BDeviceServiceDevice) device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            g_autofree gchar *uuid = NULL;
+            g_object_get(G_OBJECT(device),
+                         B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                         &uuid,
+                         NULL);
+            bool result = b_device_service_client_remove_device(client, uuid);
+            if (!result)
+            {
+                emitOutput("Failed to remove device: %s", uuid);
+            }
+            rc &= result;
+        }
+    }
+    else
+    {
+        emitOutput("Failed to get devices\n");
+    }
     return rc;
 }
 
@@ -890,14 +974,28 @@ Category *buildCoreCategory(void)
     command = commandCreate("getStatus", "gs", NULL, "Get the status of device service", 0, 0, getStatusFunc);
     categoryAddCommand(cat, command);
 
-    //dump device
+    // dump device
     command = commandCreate("dumpDevice", "dd", "<uuid>", "Dump all details about a device", 1, 1, dumpDeviceFunc);
     categoryAddCommand(cat, command);
 
-    //dump devices
-    command = commandCreate("dumpAllDevices", "dump", NULL, "Dump all details about all devices", 0, 0, dumpDevicesFunc);
+    // dump devices
+    command =
+        commandCreate("dumpAllDevices", "dump", NULL, "Dump all details about all devices", 0, 0, dumpDevicesFunc);
     categoryAddCommand(cat, command);
 
+    // remove device
+    command = commandCreate("removeDevice", "rd", "<uuid>", "Remove a device by uuid", 1, 1, removeDeviceFunc);
+    categoryAddCommand(cat, command);
+
+    // remove endpoint
+    command = commandCreate("removeEndpoint", "re", "<uri>", "Remove an endpoint by uri", 1, 1, removeEndpointFunc);
+    categoryAddCommand(cat, command);
+
+    // remove devices (advanced)
+    command = commandCreate(
+        "removeDevices", NULL, "[device class]", "Remove devices (all or by class)", 0, 1, removeDevicesFunc);
+    commandSetAdvanced(command);
+    categoryAddCommand(cat, command);
 
     return cat;
 }
