@@ -29,6 +29,7 @@
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
 #include <memory.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
@@ -67,6 +68,7 @@ typedef struct
 
     const PowerConfigurationClusterCallbacks *callbacks;
     void *callbackContext;
+    uint16_t mfgSpecificBatteryRechargeCycleAttributeId;
 } PowerConfigurationCluster;
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
@@ -284,10 +286,10 @@ void powerConfigurationClusterSetConfigureBatteryPercentage(
 
 void powerConfigurationClusterSetConfigureBatteryRechargeCycles(
     const DeviceConfigurationContext *deviceConfigurationContext,
-    bool configure)
+    uint16_t attributeId)
 {
-    addBoolConfigurationMetadata(
-        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, configure);
+    addNumberConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, attributeId);
 }
 
 void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(
@@ -451,17 +453,22 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
         }
     }
 
+    uint64_t attributeId = getNumberConfigurationMetadata(
+        configContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, UINT64_MAX);
+
     // Check whether to configure battery recharge cycles reporting, default to false
-    if (getBoolConfigurationMetadata(
-            configContext->configurationMetadata, CONFIGURE_BATTERY_RECHARGE_CYCLES_KEY, false))
+    if (attributeId != UINT64_MAX)
     {
+        // This attr id needs to be stored somewhere so that we can handle attribute reports later
+        PowerConfigurationCluster *cluster = (PowerConfigurationCluster *) ctx;
+        cluster->mfgSpecificBatteryRechargeCycleAttributeId = (uint16_t) attributeId;
+
         zhalAttributeReportingConfig batteryRechargeCycleConfigs[1];
         uint8_t numConfigs = 1;
 
         memset(&batteryRechargeCycleConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
 
-        batteryRechargeCycleConfigs[0].attributeInfo.id =
-            COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID;
+        batteryRechargeCycleConfigs[0].attributeInfo.id = (uint16_t) attributeId;
         batteryRechargeCycleConfigs[0].attributeInfo.type = ZCL_INT16U_ATTRIBUTE_TYPE;
         batteryRechargeCycleConfigs[0].minInterval = 1;
         batteryRechargeCycleConfigs[0].maxInterval = REPORTING_INTERVAL_MAX;
@@ -691,8 +698,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
                 cluster->callbackContext, report->eui64, report->sourceEndpoint, halfIntPercent);
         }
     }
-    else if (report->mfgId == COMCAST_MFG_ID &&
-             attributeId == COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID)
+    else if (report->mfgId == COMCAST_MFG_ID && attributeId == cluster->mfgSpecificBatteryRechargeCycleAttributeId)
     {
         if (cluster->callbacks->batteryRechargeCyclesChanged != NULL)
         {
@@ -704,16 +710,13 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     return true;
 }
 
-int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64, uint8_t endpointId, uint64_t *value)
+int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64,
+                                                                   uint8_t endpointId,
+                                                                   uint64_t *value,
+                                                                   uint16_t attributeId)
 {
     return zigbeeSubsystemReadNumberMfgSpecific(
-        eui64,
-        endpointId,
-        POWER_CONFIGURATION_CLUSTER_ID,
-        COMCAST_MFG_ID,
-        true,
-        COMCAST_POWER_CONFIGURATION_CLUSTER_MFG_SPECIFIC_BATTERY_RECHARGE_CYCLE_ATTRIBUTE_ID,
-        value);
+        eui64, endpointId, POWER_CONFIGURATION_CLUSTER_ID, COMCAST_MFG_ID, true, attributeId, value);
 }
 
 #endif // BARTON_CONFIG_ZIGBEE

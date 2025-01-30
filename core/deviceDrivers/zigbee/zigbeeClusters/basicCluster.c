@@ -26,6 +26,7 @@
 #include <icTime/timeUtils.h>
 #include <icUtil/stringUtils.h>
 #include <memory.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <subsystems/zigbee/zigbeeAttributeTypes.h>
 #include <subsystems/zigbee/zigbeeIO.h>
@@ -44,6 +45,7 @@ typedef struct
     ZigbeeCluster cluster;
     const BasicClusterCallbacks *callbacks;
     void *callbackContext;
+    uint16_t mfgSpecificRebootReasonAttributeId;
 } BasicCluster;
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext);
@@ -64,10 +66,11 @@ ZigbeeCluster *basicClusterCreate(const BasicClusterCallbacks *callbacks, void *
     return (ZigbeeCluster *) result;
 }
 
-void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *deviceConfigurationContext, bool configure)
+void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *deviceConfigurationContext,
+                                          uint16_t attributeId)
 {
-    addBoolConfigurationMetadata(
-        deviceConfigurationContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, configure);
+    addNumberConfigurationMetadata(
+        deviceConfigurationContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, attributeId);
 }
 
 bool basicClusterRebootDevice(uint64_t eui64, uint8_t endpointId, uint16_t mfgId)
@@ -85,15 +88,21 @@ static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContex
     bool result = true;
     bool configuredReporting = false;
 
-    // Check whether to configure reboot reason, default to false
-    if (getBoolConfigurationMetadata(
-            configContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, false))
+    uint64_t attributeId = getNumberConfigurationMetadata(
+        configContext->configurationMetadata, BASIC_CLUSTER_CONFIGURE_REBOOT_REASON_KEY, UINT64_MAX);
+
+    // Check whether to configure reboot reason reporting
+    if (attributeId != UINT64_MAX)
     {
+        // This attr id needs to be stored somewhere so that we can handle attribute reports later
+        BasicCluster *cluster = (BasicCluster *) ctx;
+        cluster->mfgSpecificRebootReasonAttributeId = (uint16_t) attributeId;
+
         // configure attribute reporting on reboot reason
         zhalAttributeReportingConfig rebootReasonConfigs[1];
         uint8_t numConfigs = 1;
         memset(&rebootReasonConfigs[0], 0, sizeof(zhalAttributeReportingConfig));
-        rebootReasonConfigs[0].attributeInfo.id = COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID;
+        rebootReasonConfigs[0].attributeInfo.id = (uint16_t) attributeId;
         rebootReasonConfigs[0].attributeInfo.type = ZCL_ENUM8_ATTRIBUTE_TYPE;
         rebootReasonConfigs[0].minInterval = 1;
         rebootReasonConfigs[0].maxInterval = 3600;
@@ -150,8 +159,7 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
                attributeType,
                attributeValue);
 
-    if (report->mfgId == COMCAST_MFG_ID &&
-        attributeId == COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID)
+    if (report->mfgId == COMCAST_MFG_ID && attributeId == cluster->mfgSpecificRebootReasonAttributeId)
     {
         if (cluster->callbacks->rebootReasonChanged != NULL)
         {
@@ -171,14 +179,14 @@ static bool handleAttributeReport(ZigbeeCluster *ctx, ReceivedAttributeReport *r
     return true;
 }
 
-int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId)
+int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId, uint16_t attributeId)
 {
     return zigbeeSubsystemWriteNumberMfgSpecific(eui64,
                                                  endPointId,
                                                  BASIC_CLUSTER_ID,
                                                  COMCAST_MFG_ID,
                                                  true,
-                                                 COMCAST_BASIC_CLUSTER_MFG_SPECIFIC_MODEM_REBOOT_REASON_ATTRIBUTE_ID,
+                                                 attributeId,
                                                  ZCL_ENUM8_ATTRIBUTE_TYPE,
                                                  REBOOT_REASON_DEFAULT,
                                                  1);

@@ -137,13 +137,13 @@ void powerConfigurationClusterSetConfigureBatteryPercentage(
     bool configure);
 
 /**
- * Set whether or not to configure battery recharge cycle reports. By default, reports are disabled.
+ * Configure battery recharge cycle reports.
  * @param deviceConfigurationContext the configuration context
- * @param configure true to configure, false otherwise
+ * @param attributeId the battery recharge cycle attribute id
  */
 void powerConfigurationClusterSetConfigureBatteryRechargeCycles(
     const DeviceConfigurationContext *deviceConfigurationContext,
-    bool configure);
+    uint16_t attributeId);
 
 /**
  * Set the max interval for the battery voltage configuration. By default, it's 27 minutes.
@@ -160,13 +160,15 @@ void powerConfigurationClusterSetConfigureBatteryVoltageMaxInterval(
  * @param eui64
  * @param endpointId
  * @param rechargeCycles
+ * @param attributeId
  *
  * @return 0 if read was successful, -1 otherwise
  */
 
 int powerConfigurationClusterReadBatteryRechargeCyclesInitialValue(uint64_t eui64,
                                                                    uint8_t endpointId,
-                                                                   uint64_t *rechargeCycles);
+                                                                   uint64_t *rechargeCycles,
+                                                                   uint16_t attributeId);
 
 /**
  * Read battery alarm thresholds

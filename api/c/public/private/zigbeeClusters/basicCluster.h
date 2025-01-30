@@ -74,18 +74,20 @@ ZigbeeCluster *basicClusterCreate(const BasicClusterCallbacks *callbacks, void *
 bool basicClusterRebootDevice(uint64_t eui64, uint8_t endpointId, uint16_t mfgId);
 
 /**
- * Set whether or not to configure reboot reason reports. By default, reports are disabled.
+ * Configure reboot reason reports
  * @param deviceConfigurationContext the configuration context
- * @param configure true to configure, false otherwise
+ * @param attributeId the reboot reason attribute id
  */
-void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *deviceConfigurationContext, bool configure);
+void basicClusterSetConfigureRebootReason(const DeviceConfigurationContext *deviceConfigurationContext,
+                                          uint16_t attributeId);
 
 /**
  * Defaults the reboot reason
  *
  * @param eui64
  * @param endpointId
+ * @param attributeId
  *
  * @return 0 if success, failure otherwise
  */
-int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId);
+int basicClusterResetRebootReason(uint64_t eui64, uint8_t endPointId, uint16_t attributeId);
