@@ -267,8 +267,8 @@ RUN chmod -R +777 /usr/local && \
     chmod +777 /usr/lib && \
     chmod -R +777 /usr/share/gir-1.0
 
-# Set up pcap permissions group
-RUN groupadd pcap && \
+# Set up pcap permissions group with a GID that is unlikely to conflict with any existing groups
+RUN groupadd -g 10000 pcap && \
     chgrp pcap /usr/bin/tcpdump && \
     chmod 750 /usr/bin/tcpdump && \
     setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
