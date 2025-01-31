@@ -115,6 +115,15 @@ if (BDS_THREAD)
         otbr-dbus-client
         otbr-dbus-common
         ${DBUS_LIBRARIES})
+
+    if (NOT BDS_THREAD_NETWORK_NAME)
+        message(FATAL_ERROR "BDS_THREAD_NETWORK_NAME must be set when BDS_THREAD is enabled")
+    else()
+        string(LENGTH "${BDS_THREAD_NETWORK_NAME}" BDS_THREAD_NETWORK_NAME_LENGTH)
+        if(BDS_THREAD_NETWORK_NAME_LENGTH GREATER 16)
+            message(FATAL_ERROR "BDS_THREAD_NETWORK_NAME must be 16 characters or fewer. Current length: ${BDS_THREAD_NETWORK_NAME_LENGTH}")
+        endif()
+    endif()
 endif()
 
 list(APPEND SOURCES

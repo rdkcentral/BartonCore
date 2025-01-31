@@ -57,9 +57,7 @@ using namespace barton;
 
 namespace
 {
-    // MUST BE 16 chars OR LESS
-    // TODO: brandify this
-    constexpr char BARTON_THREAD_NETWORK_NAME[] = "BartonThread";
+    constexpr char BARTON_THREAD_NETWORK_NAME[] = BARTON_CONFIG_THREAD_NETWORK_NAME;
     constexpr uint16_t THREAD_SUBSYSTEM_VERSION = 1;
     // TODO: Make this a compile time option when both zigbee and thread can be controlled by it.
     constexpr uint8_t THREAD_RADIO_CHANNEL = 25;
