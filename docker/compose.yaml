@@ -41,7 +41,8 @@ services:
             dockerfile: Dockerfile
         env_file:
             - .env
-        network_mode: bridge
+        networks:
+            - barton-ip6net
         cap_add:
             - SYS_PTRACE
             - PERFMON
@@ -55,3 +56,9 @@ services:
         volumes:
             # Mount the barton source code on the host into the same path within container.
             - ..:/$BARTON_TOP:cached
+
+networks:
+    barton-ip6net:
+        name: $BUILDER_USER-barton-ip6net
+        # Indicate that the network is defined outside of this compose file
+        external: true

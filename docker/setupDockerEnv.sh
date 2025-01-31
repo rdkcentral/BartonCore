@@ -27,11 +27,14 @@
 # Created by Kevin Funderburg on 09/17/2024
 #
 
-# This script is used as a 'pre-step' to set up the various environment variables
-# needed for the both the Docker build process, and the runtime environment within
-# a container.
+# This script is used as a 'pre-step' to set up the Docker environment before any Docker
+# build/compose/run invocations occur. The goal of this script is to:
 #
-# The result of this script is a .env file containing several variables. These variables
+# - Set the various environment variables needed for the both the Docker build process,
+#   and the runtime environment within a container.
+# - Ensure the container network exists before run time.
+#
+# One result of this script is a .env file containing several variables. These variables
 # are needed for two goals:
 #
 # 1. The compose process:
@@ -92,3 +95,12 @@ echo "MATTER_SAMPLE_APPS_PATH=$BARTON_TOP/build/matter-install/bin" >> $OUTFILE
 # path to libbrtnDeviceServiceShared.so
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
+
+# Ensure the container network exists
+NETWORK_NAME="$USER-barton-ip6net"
+IPV6_SUBNET="fd00:$(echo $USER | sha256sum | cut -c1-4)::/64"
+
+if ! docker network ls | grep -q "$NETWORK_NAME"; then
+    echo "Network $NETWORK_NAME does not exist. Creating it..."
+    docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
+fi

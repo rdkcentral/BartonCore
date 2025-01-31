@@ -85,7 +85,7 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-# generate docker/.env file containing necesary environment variables for the container
+# generate the `docker/.env` file and ensure the network is created
 $DIR/docker/setupDockerEnv.sh
 
 docker run \
@@ -93,6 +93,7 @@ docker run \
     --name $CONTAINER_NAME \
     $INTERACTIVE_FLAGS \
     --privileged \
+    --network $USER-barton-ip6net \
     --cap-add SYS_PTRACE \
     $VOLUMES_ARGS \
     -w "$DIR" \

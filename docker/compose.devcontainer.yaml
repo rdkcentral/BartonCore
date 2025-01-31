@@ -37,6 +37,8 @@ services:
         extends:
             file: ./compose.yaml
             service: barton
+        networks:
+            - barton-ip6net
 
         # devcontainers do not support creating a user at runtime like we do with the
         # `entrypoint.sh` script, so we need to override the base image with
@@ -49,3 +51,9 @@ services:
                 - BUILDER_USER=$BUILDER_USER
                 - BUILDER_GID=$BUILDER_GID
                 - BUILDER_UID=$BUILDER_UID
+
+networks:
+    barton-ip6net:
+        name: $BUILDER_USER-barton-ip6net
+        # Indicate that the network is defined outside of this compose file
+        external: true
