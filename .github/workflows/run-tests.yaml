@@ -25,7 +25,7 @@
 # Created by Kevin Funderburg on 10/08/2024
 #
 
-name: Build Barton and Run Unit Tests
+name: Build Barton and Run Tests
 
 on:
     push:
@@ -37,7 +37,7 @@ on:
 jobs:
 
     build_bartoncore_and_run_tests:
-        name: Build BartonCore and Run Unit Tests
+        name: Build BartonCore and Run Unit/Integration Tests
         runs-on: ubuntu-latest
 
         steps:
@@ -65,3 +65,6 @@ jobs:
             -
                 name: Run unit tests
                 run: ./dockerw -n ctest --output-on-failure --test-dir build
+            -
+                name: Run integration tests
+                run: ./dockerw -n ./scripts/ci/run_integration_tests.sh
