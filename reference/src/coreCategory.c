@@ -891,6 +891,74 @@ static bool removeDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return rc;
 }
 
+static BDeviceServicePropertyProvider *getPropertyProvider(BDeviceServiceClient *self)
+{
+    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(self), NULL);
+
+    BDeviceServiceInitializeParamsContainer *paramsContainer = b_device_service_client_get_initialize_params(self);
+
+    g_return_val_if_fail(B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER(paramsContainer), NULL);
+
+    BDeviceServicePropertyProvider *propertyProvider = b_device_service_initialize_params_container_get_property_provider(paramsContainer);
+
+    return propertyProvider;
+}
+
+static bool getPropertyFunc(BDeviceServiceClient *client, gint argc,
+                                   gchar **argv)
+{
+    (void) argc; //unused
+    bool result = true;
+
+    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(client) != NULL, FALSE);
+    g_return_val_if_fail(argv[0] != NULL, FALSE);
+
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+
+    g_return_val_if_fail(B_DEVICE_SERVICE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
+
+    g_autoptr(GError) error = NULL;
+
+    g_autofree gchar *value = b_device_service_property_provider_get_property(propertyProvider, argv[0], &error);
+
+    if (error)
+    {
+        emitError("Failed to get the property '%s': %s\n", argv[0], error->message);
+        result = false;
+    }
+    else
+    {
+        emitOutput("%s\n", value);
+    }
+
+    return result;
+}
+
+static bool setPropertyFunc(BDeviceServiceClient *client, gint argc,
+                                    gchar **argv)
+{
+    (void) argc; //unused
+
+    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(client) != NULL, FALSE);
+    g_return_val_if_fail(argv[0] != NULL, FALSE);
+    g_return_val_if_fail(argv[1] != NULL, FALSE);
+
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+
+    g_return_val_if_fail(B_DEVICE_SERVICE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
+
+    g_autoptr(GError) error = NULL;
+
+    bool result = b_device_service_property_provider_set_property(propertyProvider, argv[0], argv[1], &error);
+
+    if (error)
+    {
+        emitError("Failed to set the property");
+    }
+
+    return result;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -979,8 +1047,7 @@ Category *buildCoreCategory(void)
     categoryAddCommand(cat, command);
 
     // dump devices
-    command =
-        commandCreate("dumpAllDevices", "dump", NULL, "Dump all details about all devices", 0, 0, dumpDevicesFunc);
+    command = commandCreate("dumpAllDevices", "dump", NULL, "Dump all details about all devices", 0, 0, dumpDevicesFunc);
     categoryAddCommand(cat, command);
 
     // remove device
@@ -995,6 +1062,26 @@ Category *buildCoreCategory(void)
     command = commandCreate(
         "removeDevices", NULL, "[device class]", "Remove devices (all or by class)", 0, 1, removeDevicesFunc);
     commandSetAdvanced(command);
+    categoryAddCommand(cat, command);
+
+    //system prop read
+    command = commandCreate("getProperty",
+                            "gp",
+                            "<key>",
+                            "Get a property value",
+                            1,
+                            1,
+                            getPropertyFunc);
+    categoryAddCommand(cat, command);
+
+    //system prop write
+    command = commandCreate("setProperty",
+                            "sp",
+                            "<key> [value]",
+                            "Set a property value",
+                            1,
+                            2,
+                            setPropertyFunc);
     categoryAddCommand(cat, command);
 
     return cat;
