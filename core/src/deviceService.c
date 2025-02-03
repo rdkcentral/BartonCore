@@ -3994,6 +3994,13 @@ bool deviceServiceSetMetadata(const char *uri, const char *value)
 
     if (parseMetadataUri(uri, endpointId, deviceId, name) == true)
     {
+        if (stringIsEmpty(endpointId))
+        {
+            // metadata is on device
+            //
+            free(endpointId);
+            endpointId = NULL;
+        }
         setMetadata(deviceId, endpointId, name, value);
         result = true;
     }
