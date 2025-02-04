@@ -41,6 +41,8 @@
 #include "events/device-service-endpoint-added-event.h"
 #include "events/device-service-endpoint-removed-event.h"
 #include "events/device-service-metadata-updated-event.h"
+#include "events/device-service-resource-updated-event.h"
+#include "utils.h"
 #include <stdio.h>
 
 static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStartedEvent *event);
@@ -55,6 +57,8 @@ static void deviceDiscoveryFailedHandler(BDeviceServiceClient *source, BDeviceSe
 static void metadataUpdated(BDeviceServiceClient *source, BDeviceServiceMetadataUpdatedEvent *event);
 static void deviceRemovedEventHandler(BDeviceServiceClient *source, BDeviceServiceDeviceRemovedEvent *event);
 static void endpointRemovedEventHandler(BDeviceServiceClient *source, BDeviceServiceEndpointRemovedEvent *event);
+static void resourceUpdatedHandler(BDeviceServiceClient *source, BDeviceServiceResourceUpdatedEvent *event);
+
 
 void registerEventHandlers(BDeviceServiceClient *client)
 {
@@ -82,6 +86,8 @@ void registerEventHandlers(BDeviceServiceClient *client)
         client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REMOVED, G_CALLBACK(deviceRemovedEventHandler), NULL);
     g_signal_connect(
         client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_REMOVED, G_CALLBACK(endpointRemovedEventHandler), NULL);
+    g_signal_connect(
+        client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, G_CALLBACK(resourceUpdatedHandler), NULL);
 }
 
 void unregisterEventHandlers(void)
@@ -116,38 +122,6 @@ static void discoveryStartedHandler(BDeviceServiceClient *source, BDeviceService
 static void discoveryStoppedHandler(BDeviceServiceClient *source, BDeviceServiceDiscoveryStoppedEvent *event)
 {
     emitOutput("discoveryStopped\n");
-}
-
-static void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundDetails *deviceFoundDetails)
-{
-    g_autofree gchar *deviceId = NULL;
-    g_autofree gchar *manufacturer = NULL;
-    g_autofree gchar *model = NULL;
-    g_autofree gchar *hardwareVersion = NULL;
-    g_autofree gchar *firmwareVersion = NULL;
-    g_object_get(
-        G_OBJECT(deviceFoundDetails),
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_UUID],
-        &deviceId,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MANUFACTURER],
-        &manufacturer,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MODEL],
-        &model,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
-            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_HARDWARE_VERSION],
-        &hardwareVersion,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
-            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_FIRMWARE_VERSION],
-        &firmwareVersion,
-        NULL);
-
-    emitOutput("%s uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, firmwareVersion=%s\n",
-               printPrefix,
-               deviceId,
-               manufacturer,
-               model,
-               hardwareVersion,
-               firmwareVersion);
 }
 
 static void deviceDiscoveredHandler(BDeviceServiceClient *source, BDeviceServiceDeviceDiscoveredEvent *event)
@@ -308,7 +282,7 @@ static void deviceRemovedEventHandler(BDeviceServiceClient *source, BDeviceServi
 {
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *deviceClass = NULL;
-    
+
     g_object_get(
         G_OBJECT(event),
         B_DEVICE_SERVICE_DEVICE_REMOVED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_REMOVED_EVENT_PROP_DEVICE_UUID],
@@ -340,4 +314,31 @@ static void endpointRemovedEventHandler(BDeviceServiceClient *source, BDeviceSer
                  &profile,
                  NULL);
     emitOutput("endpointRemoved: endpointId=%s, profile=%s\n", id, profile);
+}
+
+static void resourceUpdatedHandler(BDeviceServiceClient *source, BDeviceServiceResourceUpdatedEvent *event)
+{
+    g_autoptr(BDeviceServiceResource) resource = NULL;
+    g_autofree gchar *metadata = NULL;
+
+    g_object_get(
+        G_OBJECT(event),
+        B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROP_RESOURCE],
+        &resource,
+        B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_UPDATED_EVENT_PROP_METADATA],
+        &metadata,
+        NULL);
+
+    g_return_if_fail(resource != NULL);
+
+    g_autofree gchar *resourceDump = getResourceDump(resource);
+
+    if (metadata)
+    {
+        emitOutput("\r\nresourceUpdated: %s (metadata=%s)\n", resourceDump, metadata);
+    }
+    else
+    {
+        emitOutput("\r\nresourceUpdated: %s\n", resourceDump);
+    }
 }

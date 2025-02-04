@@ -35,6 +35,7 @@
 #include "glib-object.h"
 #include "glib.h"
 #include "icUtil/stringUtils.h"
+#include "utils.h"
 #include <linenoise.h>
 #include <private/deviceService/resourceModes.h>
 #include <private/resourceTypes.h>
@@ -589,22 +590,6 @@ static bool getStatusFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
     }
 
     return result;
-}
-
-const gchar *stringifyMode(guint mode)
-{
-    gchar buf[8];
-
-    buf[0] = (mode & RESOURCE_MODE_READABLE) ? ('r') : ('-');
-    buf[1] = (mode & RESOURCE_MODE_WRITEABLE) ? ('w') : ('-');
-    buf[2] = (mode & RESOURCE_MODE_EXECUTABLE) ? ('x') : ('-');
-    buf[3] = (mode & RESOURCE_MODE_DYNAMIC) || (mode & RESOURCE_MODE_DYNAMIC_CAPABLE) ? ('d') : ('-');
-    buf[4] = (mode & RESOURCE_MODE_EMIT_EVENTS) ? ('e') : ('-');
-    buf[5] = (mode & RESOURCE_MODE_LAZY_SAVE_NEXT) ? ('l') : ('-');
-    buf[6] = (mode & RESOURCE_MODE_SENSITIVE) ? ('s') : ('-');
-    buf[7] = '\0';
-
-    return g_strdup(buf);
 }
 
 static void dumpResource(BDeviceServiceResource *resource, gchar *prefix)
