@@ -109,7 +109,7 @@ static void deviceCommunicationFailed(void *ctx, uint64_t eui64)
 
 static void networkConfigChanged(void *ctx, char *networkConfigData)
 {
-    icLogDebug(LOG_TAG, "networkConfigChanged callback: networkConfigData=%s", networkConfigData);
+    icLogDebug(LOG_TAG, "networkConfigChanged callback");
 }
 
 static void networkHealthProblem(void *ctx)

@@ -25,6 +25,7 @@
  */
 
 #include "zhalEventHandler.h"
+#include "jsonHelper/jsonHelper.h"
 #include "zhalPrivate.h"
 #include <cjson/cJSON.h>
 #include <icConcurrent/threadUtils.h>
@@ -532,16 +533,34 @@ int zhalHandleEvent(cJSON *event)
 {
     void *callbackContext = getCallbackContext();
     char *eventString = cJSON_PrintUnformatted(event);
-    icLogDebug(LOG_TAG, "got event: %s", eventString);
-    free(eventString);
 
     cJSON *eventType = cJSON_GetObjectItem(event, "eventType");
     if (eventType == NULL)
     {
-        icLogError(LOG_TAG, "Invalid event received (missing eventType)");
+        icLogError(LOG_TAG, "Invalid event received (missing eventType): %s", eventString);
         return 0;
     }
 
+    // Logging
+    if (strcmp(eventType->valuestring, "networkConfigChanged") == 0)
+    {
+        // This JSON contains sensitive information that we don't want to log, so we're logging a modified copy instead
+        scoped_cJSON *eventCopy = cJSON_Parse(eventString);
+        cJSON *networkConfigData = cJSON_GetObjectItem(eventCopy, "networkConfigData");
+        if (networkConfigData != NULL)
+        {
+            cJSON_SetValuestring(networkConfigData, "<REDACTED>");
+        }
+        scoped_generic char *filteredEventString = cJSON_PrintUnformatted(eventCopy);
+        icLogDebug(LOG_TAG, "got event: %s", filteredEventString);
+    }
+    else
+    {
+        icLogDebug(LOG_TAG, "got event: %s", eventString);
+    }
+    free(eventString);
+
+    // Handling
     if (strcmp(eventType->valuestring, "zhalStartup") == 0 && getCallbacks()->startup != NULL)
     {
         getCallbacks()->startup(callbackContext);
