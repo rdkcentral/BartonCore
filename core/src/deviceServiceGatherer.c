@@ -643,17 +643,6 @@ static inline char *getFormattedSubsystemString(const char *subsystem)
     return formattedSubsystem;
 }
 
-static char *getDeviceCountKey(const char *deviceClass)
-{
-    if (deviceClass == NULL)
-    {
-        return NULL;
-    }
-
-    scoped_generic char *formattedDeviceClass = getFormattedDeviceClassString(deviceClass);
-
-    return stringBuilder("Total%sCount", formattedDeviceClass);
-}
 
 static char *getDeviceTypeKey(const char *deviceClass, const char *subsystem)
 {
@@ -691,7 +680,7 @@ static uint16_t getCameraCount(void)
  *
  * @param output - the runtimeStatistics hashMap containing connected device split markers by subsytem, model and count
  * e.g.
- * {"TotalSensorCount_split" "subsystem,14"; }
+ * {"TotalZigbeeSensorCount_split" "14" }
  *
  */
 void collectPairedDevicesInformation(GHashTable *output)
@@ -726,7 +715,7 @@ void collectPairedDevicesInformation(GHashTable *output)
 
         hashMapIteratorGetNext(deviceClassMapIter, (void **) &deviceClass, &deviceClassLen, (void **) &subsystemMap);
 
-        scoped_generic char *deviceCountKey = getDeviceCountKey(deviceClass);
+        scoped_generic char *deviceCountKey = NULL;
         GString *deviceCountValue = g_string_new(NULL);
 
         scoped_icHashMapIterator *subsystemMapIter = hashMapIteratorCreate(subsystemMap);
@@ -742,6 +731,8 @@ void collectPairedDevicesInformation(GHashTable *output)
             scoped_generic char *deviceTypeKey = getDeviceTypeKey(deviceClass, subsystem);
             GString *deviceTypeValue = g_string_new(NULL);
 
+            deviceCountKey = stringBuilder("%sCount", deviceTypeKey);
+
             uint16_t deviceCount = 0;
             scoped_icLinkedListIterator *modelListIter = linkedListIteratorCreate(modelList);
 
@@ -755,7 +746,7 @@ void collectPairedDevicesInformation(GHashTable *output)
             scoped_generic char *value = g_string_free(g_steal_pointer(&deviceTypeValue), FALSE);
             g_hash_table_insert(output, g_steal_pointer(&deviceTypeKey), g_steal_pointer(&value));
 
-            g_string_append_printf(deviceCountValue, "%s,%d;", subsystem, deviceCount);
+            g_string_append_printf(deviceCountValue, "%d", deviceCount);
         }
 
         scoped_generic char *value = g_string_free(g_steal_pointer(&deviceCountValue), FALSE);
