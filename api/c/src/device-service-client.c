@@ -44,6 +44,10 @@
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"
 #endif
 
+#ifdef BARTON_CONFIG_THREAD
+#include "subsystems/thread/threadSubsystem.h"
+#endif
+
 G_DEFINE_QUARK(b - device - service - client - error - quark, b_device_service_client_error)
 
 struct _BDeviceServiceClient
@@ -641,6 +645,17 @@ GList *b_device_service_client_zigbee_energy_scan(BDeviceServiceClient *self,
     return retVal;
 }
 #endif
+
+gboolean b_device_service_client_thread_set_nat64_enabled(BDeviceServiceClient *self, gboolean enabled)
+{
+    g_return_val_if_fail(self != NULL, FALSE);
+
+#ifdef BARTON_CONFIG_THREAD
+    return threadSubsystemSetNat64Enabled(enabled) ? TRUE : FALSE;
+#else
+    return FALSE;
+#endif
+}
 
 gboolean b_device_service_client_config_restore(BDeviceServiceClient *self, const gchar *tempRestoreDir)
 {

@@ -69,6 +69,7 @@ cJSON *threadNetworkInfoToJson(ThreadNetworkInfo *threadInfo)
     cJSON_AddNumberToObject(retVal, THREAD_NETWORK_INFO_CHANNEL_KEY, threadInfo->channel);
     cJSON_AddStringToObject(retVal, THREAD_NETWORK_INFO_PAN_ID_KEY, panIdStr->str);
     cJSON_AddStringToObject(retVal, THREAD_NETWORK_INFO_EXT_PAN_ID_KEY, extPanIdStr->str);
+    cJSON_AddBoolToObject(retVal, THREAD_NETWORK_INFO_NAT64_ENABLED_KEY, threadInfo->nat64Enabled);
 
     return retVal;
 }

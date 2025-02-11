@@ -45,11 +45,11 @@ extern "C" {
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
 #include <icUtil/base64.h>
-}
 
 #ifdef BARTON_CONFIG_THREAD
-#include <subsystems/thread/threadSubsystem.hpp>
+#include <subsystems/thread/threadSubsystem.h>
 #endif
+}
 
 #include CHIP_PROJECT_CONFIG_INCLUDE
 #include <app/clusters/ota-provider/ota-provider.h>

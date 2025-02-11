@@ -27,9 +27,7 @@
 
 #pragma once
 
-extern "C" {
 #include "subsystems/thread/threadNetworkInfo.h"
-}
 
 #include <stdbool.h>
 
@@ -43,3 +41,12 @@ extern "C" {
  * @return true on success
  */
 bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info);
+
+/**
+ * Enable or disable NAT64 in the border router.
+ *
+ * @param enable true to enable NAT64, false to disable
+ *
+ * @return true on success
+ */
+bool threadSubsystemSetNat64Enabled(bool enable);

@@ -121,6 +121,22 @@ namespace barton
          */
         DeviceRole GetDeviceRole();
 
+        /**
+         * @brief Check if NAT64 is enabled in the active network
+         *
+         * @return true - NAT64 is enabled
+         * @return false - NAT64 is disabled
+         */
+        bool IsNat64Enabled();
+
+        /**
+         * @brief Enable or disable NAT64 in the active network
+         *
+         * @param enable - true to enable NAT64, false to disable
+         * @return true - On success
+         * @return false - On error
+         */
+        bool SetNat64Enabled(bool enable);
 
     private:
         std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> dbusConnection;

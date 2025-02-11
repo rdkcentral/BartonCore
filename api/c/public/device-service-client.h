@@ -628,6 +628,17 @@ GList *b_device_service_client_zigbee_energy_scan(BDeviceServiceClient *self,
                                                   guint32 scanCount);
 
 /**
+ * b_device_service_client_thread_set_nat64_enabled
+ * @self: the BDeviceServiceClient instance.
+ * @enabled: true to enable NAT64 in the Thread Border Router, false to disable
+ *
+ * @brief Enable or disable NAT64 functionality in the Thread Border Router
+ *
+ * Returns: gboolean - TRUE if NAT64 was enabled or disabled successfully, otherwise FALSE.
+ */
+gboolean b_device_service_client_thread_set_nat64_enabled(BDeviceServiceClient *self, gboolean enabled);
+
+/**
  * b_device_service_client_config_restore
  * @self: the BDeviceServiceClient instance.
  * @tempRestoreDir: the path to a temporary device storage directory containing the configuration

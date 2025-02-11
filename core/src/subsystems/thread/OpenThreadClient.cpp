@@ -25,6 +25,7 @@
  * Created by Christian Leithner on 2/8/24
  */
 
+#include "dbus/common/types.hpp"
 #include "otbr/dbus/client/thread_api_dbus.hpp"
 #include "otbr/dbus/common/error.hpp"
 #include <chrono>
@@ -337,6 +338,51 @@ namespace barton
         else
         {
             icError("Failed to get device role. Error = %d", (int) error);
+        }
+
+        return retVal;
+    }
+
+    bool OpenThreadClient::IsNat64Enabled()
+    {
+        icDebug();
+
+        bool retVal = false;
+
+        g_return_val_if_fail(ready, retVal);
+
+        ClientError error = ClientError::ERROR_NONE;
+        Nat64ComponentState state;
+        if ((error = threadApiBus->GetNat64State(state)) == ClientError::ERROR_NONE)
+        {
+            retVal = (state.mTranslatorState.compare("active") == 0);
+            icDebug("Successfully fetched NAT64 enabled: %s", retVal ? "true" : "false");
+        }
+        else
+        {
+            icError("Failed to get NAT64 enabled. Error = %d", (int) error);
+        }
+
+        return retVal;
+    }
+
+    bool OpenThreadClient::SetNat64Enabled(bool enable)
+    {
+        icDebug();
+
+        bool retVal = false;
+
+        g_return_val_if_fail(ready, retVal);
+
+        ClientError error = ClientError::ERROR_NONE;
+        if ((error = threadApiBus->SetNat64Enabled(enable)) == ClientError::ERROR_NONE)
+        {
+            icDebug("Successfully set NAT64 enabled: %s", enable ? "true" : "false");
+            retVal = true;
+        }
+        else
+        {
+            icError("Failed to set NAT64 enabled. Error = %d", (int) error);
         }
 
         return retVal;

@@ -34,12 +34,13 @@
 #define THREAD_OPERATIONAL_DATASET_MAX_LEN   254
 #define THREAD_NETWORK_KEY_MAX_LEN           32
 
-#define THREAD_NETWORK_INFO_CHANNEL_KEY      "channel"
-#define THREAD_NETWORK_INFO_PAN_ID_KEY       "panId"
-#define THREAD_NETWORK_INFO_EXT_PAN_ID_KEY   "extendedPanId"
-#define THREAD_NETWORK_INFO_NETWORK_KEY_KEY  "networkKey"
-#define THREAD_NETWORK_INFO_DATASET_KEY      "dataset"
-#define THREAD_NETWORK_INFO_NETWORK_NAME_KEY "networkName"
+#define THREAD_NETWORK_INFO_CHANNEL_KEY       "channel"
+#define THREAD_NETWORK_INFO_PAN_ID_KEY        "panId"
+#define THREAD_NETWORK_INFO_EXT_PAN_ID_KEY    "extendedPanId"
+#define THREAD_NETWORK_INFO_NETWORK_KEY_KEY   "networkKey"
+#define THREAD_NETWORK_INFO_DATASET_KEY       "dataset"
+#define THREAD_NETWORK_INFO_NETWORK_NAME_KEY  "networkName"
+#define THREAD_NETWORK_INFO_NAT64_ENABLED_KEY "nat64Enabled"
 
 typedef struct
 {
@@ -51,6 +52,7 @@ typedef struct
     unsigned char dataset[THREAD_OPERATIONAL_DATASET_MAX_LEN + 1];
     uint8_t datasetLen;
     char *networkName;
+    gboolean nat64Enabled;
 } ThreadNetworkInfo;
 
 /**

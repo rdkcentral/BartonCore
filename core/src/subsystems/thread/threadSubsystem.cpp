@@ -39,10 +39,10 @@ extern "C" {
 #include "icConcurrent/repeatingTask.h"
 #include "icLog/logging.h"
 #include "subsystemManager.h"
+#include "threadSubsystem.h"
 }
 
 #include "OpenThreadClient.hpp"
-#include "threadSubsystem.hpp"
 #include <glib.h>
 
 #define logFmt(fmt)                                  "%s: " fmt, __func__
@@ -208,6 +208,7 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
         std::memcpy(info->networkKey, networkKey.data(), networkKey.size());
         info->networkKeyLen = networkKey.size();
         info->networkName = strdup(networkName.c_str());
+        info->nat64Enabled = otClient->IsNat64Enabled();
         retVal = true;
     }
     else
@@ -231,6 +232,22 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
     }
 
     return retVal;
+}
+
+bool threadSubsystemSetNat64Enabled(bool enable)
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    if (localInitialized)
+    {
+        return otClient->SetNat64Enabled(enable);
+    }
+
+    return false;
 }
 
 /**

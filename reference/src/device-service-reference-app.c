@@ -31,6 +31,7 @@
 #include "device-service-reference-io.h"
 #include "eventHandler.h"
 #include "matterCategory.h"
+#include "threadCategory.h"
 #include "provider/device-service-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
@@ -69,6 +70,7 @@ static void buildCategories()
 {
     categories = g_list_append(categories, buildCoreCategory());
     categories = g_list_append(categories, buildMatterCategory());
+    categories = g_list_append(categories, buildThreadCategory());
 }
 
 static void destroyCategories()
