@@ -59,6 +59,10 @@ else
         for p in ${patchesDir}/*.patch; do
             echo "Applying patch ${p}"
             patch -p1 -d ${directoryToPatch} <"${p}"
+            if [ $? -ne 0 ]; then
+                echo "Failed to apply patch ${p}"
+                exit 1
+            fi
         done
     fi
 fi

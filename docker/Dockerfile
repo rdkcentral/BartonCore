@@ -134,7 +134,7 @@ RUN bash -c "set -o pipefail && \
 FROM base_builder AS third_party_builder
 
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
-ARG OTBR_GIT_TAG="790dc775144e33995cd1cb2c15b348849cacf737"
+ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -180,10 +180,43 @@ RUN cd /tmp && \
     git checkout ${OTBR_GIT_TAG} && \
     ${APPLY_PATCHES_PATH} /tmp/patches/otbr . && \
     cd script && \
-    ./bootstrap && \
-    ./cmake-build -DOTBR_DBUS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
+    OTBR_MDNS=avahi ./bootstrap && \
+    ./cmake-build \
+    -DOTBR_DUA_ROUTING=ON \
+    -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
+    -DOTBR_SRP_ADVERTISING_PROXY=ON \
+    -DOTBR_BORDER_ROUTING=ON \
+    -DOTBR_TREL=ON \
+    -DOTBR_NAT64=ON \
+    -DOT_TREL=ON \
+    -DOT_DNS_CLIENT=ON \
+    -DOT_DNSSD_SERVER=ON \
+    -DOT_SRP_CLIENT=ON \
+    -DOT_SRP_SERVER=ON \
+    -DOT_THREAD_VERSION=1.4 \
+    -DCMAKE_BUILD_TYPE=Release  \
+    -DOT_DHCP6_CLIENT=ON \
+    -DOT_DHCP6_SERVER=ON \
+    -DOTBR_DHCP6_PD=OFF \
+    -DOTBR_DNS_UPSTREAM_QUERY=ON \
+    -DBUILD_TESTING=OFF \
+    -DOTBR_COVERAGE=OFF \
+    -DOT_MLR=ON   \
+    -DOTBR_DBUS=ON \
+    -DOT_PLATFORM=posix \
+    -DOT_ECDSA=ON   \
+    -DOT_FIREWALL=OFF \
+    -DOT_CHANNEL_MANAGER=OFF \
+    -DOT_CHANNEL_MONITOR=OFF \
+    -DOTBR_BACKBONE_ROUTER=ON \
+    -DOT_BACKBONE_ROUTER_DUA_NDPROXYING=ON \
+    -DOT_BACKBONE_ROUTER_MULTICAST_ROUTING=ON \
+    -DOTBR_MDNS=avahi \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    && \
     cd ../build/otbr/ && \
     ninja install && \
+    cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
     rm -rf /tmp/ot-br-posix
 COPY otbr-agent.conf /etc/dbus-1/system.d/
 
@@ -218,6 +251,8 @@ RUN cd /tmp && \
     make && \
     make install && \
     rm -rf /tmp/openssl-1.1.1v.tar.gz /tmp/openssl-1.1.1v
+COPY openssl.conf /etc/ld.so.conf.d/
+RUN ldconfig
 
 # Download, build, and install libcurl, but link against OpenSSL 1.1.1v specifically
 RUN cd /tmp && \

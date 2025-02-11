@@ -1,40 +1,36 @@
-#
-# Created by Kevin Funderburg on 09/11/2024
-#
-
-From 0b8d966a12415e949209bc579274bece50bf5244 Mon Sep 17 00:00:00 2001
-From: Christian Leithner <christian_leithner@comcast.com>
-Date: Thu, 25 Jan 2024 22:48:48 -0600
-Subject: [PATCH] Add install cmake command for dbus client library
+From 53532bfd2cfd6af983fc98146ea85c5371e7fe17 Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Thu, 6 Feb 2025 20:46:39 +0000
+Subject: [PATCH 1/2] Add install cmake command for dbus client library
 
 ---
  CMakeLists.txt                 |  3 +++
  src/agent/CMakeLists.txt       |  6 +++---
  src/common/CMakeLists.txt      | 15 ++++++---------
  src/dbus/client/CMakeLists.txt |  7 +++++--
- src/dbus/common/CMakeLists.txt |  6 ++++++
- 5 files changed, 23 insertions(+), 14 deletions(-)
+ src/dbus/common/CMakeLists.txt |  5 +++++
+ 5 files changed, 22 insertions(+), 14 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 4fefd2798b..7f49dff5c5 100644
+index 26cccb4..6411773 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -102,6 +102,9 @@ endif()
-
+ 
  include(GNUInstallDirs)
-
+ 
 +install(FILES ${PROJECT_SOURCE_DIR}/include/openthread-br/config.h
 +        DESTINATION include/otbr/openthread-br)
 +
  pkg_check_modules(SYSTEMD systemd)
-
- if(SYSTEMD_FOUND)
+ 
+ if(SYSTEMD_FOUND AND (NOT DEFINED INSTALL_SYSTEMD_UNIT OR INSTALL_SYSTEMD_UNIT))
 diff --git a/src/agent/CMakeLists.txt b/src/agent/CMakeLists.txt
-index 9a8b710238..cce2b34176 100644
+index a1e91f0..5e00af3 100644
 --- a/src/agent/CMakeLists.txt
 +++ b/src/agent/CMakeLists.txt
-@@ -85,9 +85,9 @@ endif()
-
+@@ -86,9 +86,9 @@ endif()
+ 
  if(OTBR_SYSTEMD_UNIT_DIR)
      configure_file(otbr-agent.service.in otbr-agent.service)
 -    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.service
@@ -47,18 +43,19 @@ index 9a8b710238..cce2b34176 100644
      configure_file(otbr-agent.init.in otbr-agent.init)
      install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.init
 diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
-index d5bc1d31c5..6e6a5a5312 100644
+index 01ba2f5..d904fdd 100644
 --- a/src/common/CMakeLists.txt
 +++ b/src/common/CMakeLists.txt
-@@ -26,23 +26,17 @@
+@@ -26,24 +26,18 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
-
+ 
 +file(GLOB otbr-common-headers "*.hpp")
 +
  add_library(otbr-common
      api_strings.cpp
 -    byteswap.hpp
+     code_utils.cpp
 -    code_utils.hpp
      dns_utils.cpp
      logging.cpp
@@ -75,23 +72,23 @@ index d5bc1d31c5..6e6a5a5312 100644
 -    types.hpp
 +    ${otbr-common-headers}
  )
-
+ 
  target_link_libraries(otbr-common
-@@ -50,3 +44,6 @@ target_link_libraries(otbr-common
-     openthread-ftd
-     openthread-posix
+@@ -58,3 +52,6 @@ target_include_directories(otbr-common
+         ${OPENTHREAD_PROJECT_DIRECTORY}/src/posix/platform/include
+         ${OPENTHREAD_PROJECT_DIRECTORY}/src
  )
 +
 +install(TARGETS otbr-common)
 +install(FILES ${otbr-common-headers} DESTINATION include/otbr/common)
 diff --git a/src/dbus/client/CMakeLists.txt b/src/dbus/client/CMakeLists.txt
-index ae0ae50441..01dd015ced 100644
+index ae0ae50..01dd015 100644
 --- a/src/dbus/client/CMakeLists.txt
 +++ b/src/dbus/client/CMakeLists.txt
 @@ -26,14 +26,17 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
-
+ 
 +file(GLOB otbr-dbus-client-headers "*.hpp")
 +
  add_library(otbr-dbus-client
@@ -101,22 +98,21 @@ index ae0ae50441..01dd015ced 100644
 -    thread_api_dbus.hpp
 +    ${otbr-dbus-client-headers}
  )
-
+ 
  target_link_libraries(otbr-dbus-client PUBLIC
      otbr-dbus-common
  )
-
+ 
 +install(TARGETS otbr-dbus-client)
 +install(FILES ${otbr-dbus-client-headers} DESTINATION include/otbr/dbus/client)
 diff --git a/src/dbus/common/CMakeLists.txt b/src/dbus/common/CMakeLists.txt
-index d4339270f0..005c85abea 100644
+index d433927..1af52ec 100644
 --- a/src/dbus/common/CMakeLists.txt
 +++ b/src/dbus/common/CMakeLists.txt
-@@ -26,11 +26,15 @@
+@@ -26,11 +26,14 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
-
-+
+ 
 +file(GLOB otbr-dbus-common-headers "*.hpp")
 +
  add_library(otbr-dbus-common
@@ -128,11 +124,12 @@ index d4339270f0..005c85abea 100644
  )
  target_include_directories(otbr-dbus-common PUBLIC
      ${DBUS_INCLUDE_DIRS}
-@@ -43,3 +47,5 @@ target_link_libraries(otbr-dbus-common PUBLIC
+@@ -43,3 +46,5 @@ target_link_libraries(otbr-dbus-common PUBLIC
      ${DBUS_LIBRARIES}
  )
-
+ 
 +install(TARGETS otbr-dbus-common)
 +install(FILES ${otbr-dbus-common-headers} DESTINATION include/otbr/dbus/common)
---
-2.34.1
+-- 
+2.43.0
+

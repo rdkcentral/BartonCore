@@ -1,0 +1,13 @@
+diff --git a/script/bootstrap b/script/bootstrap
+index 7c5ce223e96..f67fa0440de 100755
+--- a/script/bootstrap
++++ b/script/bootstrap
+@@ -69,7 +69,7 @@ install_packages_apt()
+     fi
+ 
+     (MDNS_RESPONDER_SOURCE_NAME=mDNSResponder-1790.80.10 \
+-        && MDNS_RESPONDER_PATCH_PATH=$(realpath "$(dirname "$0")"/../third_party/mDNSResponder) \
++        && MDNS_RESPONDER_PATCH_PATH=$(realpath "$(dirname "$0")"/third_party/mDNSResponder) \
+         && cd /tmp \
+         && wget --no-check-certificate https://github.com/apple-oss-distributions/mDNSResponder/archive/refs/tags/$MDNS_RESPONDER_SOURCE_NAME.tar.gz \
+         && mkdir -p $MDNS_RESPONDER_SOURCE_NAME \
