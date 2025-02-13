@@ -138,6 +138,14 @@ namespace barton
          */
         bool SetNat64Enabled(bool enable);
 
+        /**
+         * @brief Activate ephemeral key mode.
+         *
+         * @param[out] ephemeralKey - The generated ephemeral key.
+         * @return true on success, false on failure.
+         */
+        bool ActivateEphemeralKeyMode(std::string &ephemeralKey);
+
     private:
         std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> dbusConnection;
         std::unique_ptr<otbr::DBus::ThreadApiDBus> threadApiBus;

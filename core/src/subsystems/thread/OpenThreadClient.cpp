@@ -26,6 +26,7 @@
  */
 
 #include "dbus/common/types.hpp"
+#include "dbus/dbus.h"
 #include "otbr/dbus/client/thread_api_dbus.hpp"
 #include "otbr/dbus/common/error.hpp"
 #include <chrono>
@@ -388,6 +389,71 @@ namespace barton
         return retVal;
     }
 
+    bool barton::OpenThreadClient::ActivateEphemeralKeyMode(std::string &ephemeralKey)
+    {
+        uint32_t lifetime = 0; // 0 means use the default lifetime
+        DBusMessage *message;
+        DBusMessage *reply;
+        DBusError error;
+        bool result = false;
+
+        icDebug();
+
+        g_return_val_if_fail(ready, false);
+
+        // NOTE: the current dbus client api does not have a definition for this method, so we have
+        //  to call it manually.  We should ditch this once the client api is updated.
+
+        dbus_error_init(&error);
+
+        message = dbus_message_new_method_call((OTBR_DBUS_SERVER_PREFIX + threadApiBus->GetInterfaceName()).c_str(),
+                                               (OTBR_DBUS_OBJECT_PREFIX + threadApiBus->GetInterfaceName()).c_str(),
+                                               OTBR_DBUS_THREAD_INTERFACE,
+                                               "ActivateEphemeralKeyMode");
+
+        if (!message)
+        {
+            icError("Failed to create DBus message");
+            return false;
+        }
+
+        dbus_message_append_args(message, DBUS_TYPE_UINT32, &lifetime, DBUS_TYPE_INVALID);
+
+        reply =
+            dbus_connection_send_with_reply_and_block(dbusConnection.get(), message, DBUS_TIMEOUT_USE_DEFAULT, &error);
+
+        dbus_message_unref(message);
+
+        if (dbus_error_is_set(&error))
+        {
+            icError("DBus error: %s", error.message);
+            dbus_error_free(&error);
+            return false;
+        }
+
+        if (!reply)
+        {
+            icError("No reply received");
+            return false;
+        }
+
+        const char *epskc;
+        if (!dbus_message_get_args(reply, &error, DBUS_TYPE_STRING, &epskc, DBUS_TYPE_INVALID))
+        {
+            icError("Failed to get reply arguments: %s", error.message);
+            dbus_error_free(&error);
+        }
+        else
+        {
+            ephemeralKey = epskc;
+            result = true;
+        }
+
+        dbus_message_unref(reply);
+
+        return result;
+    }
+
     void OpenThreadClient::Connect()
     {
         icDebug();
@@ -418,7 +484,7 @@ namespace barton
         {
             ready = true;
         }
-    }
+}
 
     void OpenThreadClient::ReleaseDBusConnection(DBusConnection *connection)
     {

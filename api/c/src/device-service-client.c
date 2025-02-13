@@ -657,6 +657,17 @@ gboolean b_device_service_client_thread_set_nat64_enabled(BDeviceServiceClient *
 #endif
 }
 
+gchar *b_device_service_client_thread_activate_ephemeral_key_mode(BDeviceServiceClient *self)
+{
+    g_return_val_if_fail(self != NULL, NULL);
+
+#ifdef BARTON_CONFIG_THREAD
+    return threadSubsystemActivateEphemeralKeyMode();
+#else
+    return NULL;
+#endif
+}
+
 gboolean b_device_service_client_config_restore(BDeviceServiceClient *self, const gchar *tempRestoreDir)
 {
     g_return_val_if_fail(self != NULL, FALSE);

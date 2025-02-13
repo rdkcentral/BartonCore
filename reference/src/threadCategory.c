@@ -49,6 +49,24 @@ static bool setNat64Enabled(BDeviceServiceClient *client, gint argc, gchar **arg
     return rc;
 }
 
+static bool activateEphemeralKeyMode(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    bool rc = false;
+    gchar *key = b_device_service_client_thread_activate_ephemeral_key_mode(client);
+
+    if (key)
+    {
+        emitOutput("Success: ePSKc = %s\n", key);
+        rc = true;
+    }
+    else
+    {
+        emitError("Failed\n");
+    }
+
+    return rc;
+}
+
 Category *buildThreadCategory(void)
 {
     Category *cat = categoryCreate("Thread", "Thread related commands");
@@ -60,6 +78,15 @@ Category *buildThreadCategory(void)
                                      1,
                                      1,
                                      setNat64Enabled);
+    categoryAddCommand(cat, command);
+
+    command = commandCreate("activateEphemeralKeyMode",
+                            "aekm",
+                            NULL,
+                            "Activate ephemeral key mode and print the ePSKc",
+                            0,
+                            0,
+                            activateEphemeralKeyMode);
     categoryAddCommand(cat, command);
 
     return cat;

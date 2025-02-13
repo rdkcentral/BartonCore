@@ -250,6 +250,24 @@ bool threadSubsystemSetNat64Enabled(bool enable)
     return false;
 }
 
+char *threadSubsystemActivateEphemeralKeyMode(void)
+{
+    std::string key;
+
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    if (localInitialized && otClient->ActivateEphemeralKeyMode(key))
+    {
+        return strdup(key.c_str());
+    }
+
+    return nullptr;
+}
+
 /**
  * Either create a new network or restore the existing one.
  */

@@ -50,3 +50,10 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info);
  * @return true on success
  */
 bool threadSubsystemSetNat64Enabled(bool enable);
+
+/**
+ * Activate ephemeral key mode and return the generated key.
+ *
+ * @return the generated ephemeral key or NULL on failure. Caller frees.
+ */
+char *threadSubsystemActivateEphemeralKeyMode(void);

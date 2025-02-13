@@ -639,6 +639,19 @@ GList *b_device_service_client_zigbee_energy_scan(BDeviceServiceClient *self,
 gboolean b_device_service_client_thread_set_nat64_enabled(BDeviceServiceClient *self, gboolean enabled);
 
 /**
+ * b_device_service_client_thread_activate_ephemeral_key_mode
+ * @self: the BDeviceServiceClient instance.
+ *
+ * @brief Activate ephemeral key mode and return the generated key (ePSKc). The
+ *        mode will be active for the default duration of the border router, then
+ *        automatically deactivate.
+ *
+ * Returns: gchar* - the generated ephemeral key (ePSKc, which is a 9 digit decimal value
+ *          represented as an ASCII string) or NULL on failure.
+ */
+gchar *b_device_service_client_thread_activate_ephemeral_key_mode(BDeviceServiceClient *self);
+
+/**
  * b_device_service_client_config_restore
  * @self: the BDeviceServiceClient instance.
  * @tempRestoreDir: the path to a temporary device storage directory containing the configuration
