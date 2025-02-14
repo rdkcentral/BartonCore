@@ -198,10 +198,6 @@ bds_string_option(NAME BDS_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
 
-bds_string_option(NAME BDS_THREAD_NETWORK_NAME
-                  DEFINITION BARTON_CONFIG_THREAD_NETWORK_NAME
-                  DESCRIPTION "Name of the Thread network -- MUST BE 16 CHARS OR LESS")
-
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")

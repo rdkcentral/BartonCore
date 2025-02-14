@@ -51,6 +51,8 @@ G_BEGIN_DECLS
 #define B_DEVICE_SERVICE_BARTON_PREFIX             "barton."
 // Prefix for matter properties
 #define B_DEVICE_SERVICE_MATTER_PREFIX             "matter."
+// Prefix for thread properties
+#define B_DEVICE_SERVICE_THREAD_PREFIX             "thread."
 // Prefix for 802.15.4 related properties
 #define B_DEVICE_SERVICE_FIFTEEN_FOUR_PREFIX       "fifteenfour."
 
@@ -69,5 +71,16 @@ G_BEGIN_DECLS
  * Type: uint16
  */
 #define B_DEVICE_SERVICE_BARTON_MATTER_VID B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "vid"
+
+/**
+ * DEFAULT_THREAD_NETWORK_NAME: (value "barton.thread.defaultNetworkName")
+ *
+ * The default name of the thread network, provided by the client. This is the name
+ * that will be used if we (Barton) create the Thread network ourselves. The end user
+ * can still change this later.
+ * Type: string
+ */
+#define B_DEVICE_SERVICE_BARTON_DEFAULT_THREAD_NETWORK_NAME                                                            \
+    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_THREAD_PREFIX "defaultNetworkName"
 
 G_END_DECLS

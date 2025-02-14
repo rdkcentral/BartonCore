@@ -36,6 +36,8 @@
 
 extern "C" {
 #include "deviceService.h"
+#include "deviceServiceConfiguration.h"
+#include "deviceServiceProperties.h"
 #include "icConcurrent/repeatingTask.h"
 #include "icLog/logging.h"
 #include "subsystemManager.h"
@@ -57,7 +59,6 @@ using namespace barton;
 
 namespace
 {
-    constexpr char BARTON_THREAD_NETWORK_NAME[] = BARTON_CONFIG_THREAD_NETWORK_NAME;
     constexpr uint16_t THREAD_SUBSYSTEM_VERSION = 1;
     // TODO: Make this a compile time option when both zigbee and thread can be controlled by it.
     constexpr uint8_t THREAD_RADIO_CHANNEL = 25;
@@ -69,6 +70,9 @@ static subsystemDeInitializedFunc notifySubsystemDeInitialized;
 static uint32_t monitorTask = 0;
 static OpenThreadClient *otClient = nullptr;
 static bool initialized = false;
+// The Thread network name must be 16 chars or less
+// Test value for development only; this value must be provided by the client otherwise
+static std::string bartonThreadNetworkName = "TestNetwork";
 
 static bool monitorTaskFunc(void *arg);
 static bool initialize(subsystemInitializedFunc initializedCallback, subsystemDeInitializedFunc deInitializedCallback);
@@ -104,6 +108,12 @@ static bool initialize(subsystemInitializedFunc initializedCallback, subsystemDe
 
     // Retry initialization until success
     monitorTask = createPolicyRepeatingTask(monitorTaskFunc, nullptr, policy, nullptr);
+
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *defaultNetworkName = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEFAULT_THREAD_NETWORK_NAME_PROP_KEY, bartonThreadNetworkName.c_str());
+    bartonThreadNetworkName = defaultNetworkName;
+    icDebug("Using Thread network name: %s", bartonThreadNetworkName.c_str());
 
     return true;
 }
@@ -293,7 +303,7 @@ static bool initializeThreadStack(void)
     {
         icWarn("No network configuration loaded; a new network will be created");
 
-        std::vector<uint8_t> networkTlvs = otClient->CreateNetwork(BARTON_THREAD_NETWORK_NAME, THREAD_RADIO_CHANNEL);
+        std::vector<uint8_t> networkTlvs = otClient->CreateNetwork(bartonThreadNetworkName, THREAD_RADIO_CHANNEL);
         if (networkTlvs.size() > 0)
         {
             const uint8_t *networkData = networkTlvs.data();
