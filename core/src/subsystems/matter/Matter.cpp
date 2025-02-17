@@ -1171,7 +1171,8 @@ CHIP_ERROR Matter::ConfigureOTAProviderNode()
         ReturnErrorOnFailure(AppendOTARequestorsACLEntry(myFabricId, myFabricIndex));
     }
 
-    chip::app::Clusters::OTAProvider::SetDelegate(otaProviderEndpointId, &otaProvider);
+    // This functionality will be added back when we support being a Controller
+    // chip::app::Clusters::OTAProvider::SetDelegate(otaProviderEndpointId, &otaProvider);
 
     return CHIP_NO_ERROR;
 }
