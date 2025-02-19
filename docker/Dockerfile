@@ -30,7 +30,7 @@
 # Registry
 #
 # 1. Build the image:
-#    `docker build -t ghcr.io/rdkcentral/barton_builder .`
+#    `docker build -t ghcr.io/rdkcentral/barton_builder:some-tag .`
 #
 # 2. Authenticate with the GitHub Container Registry:
 #    `echo $GITHUB_PAT | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin`
@@ -39,7 +39,7 @@
 #    your GitHub username
 #
 # 3. Push the image to the GitHub Container Registry:
-#    `docker push ghcr.io/rdkcentral/barton_builder`
+#    `docker push ghcr.io/rdkcentral/barton_builder:some-tag`
 ###############################################################################
 
 ###############################################################################

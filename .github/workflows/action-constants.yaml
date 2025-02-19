@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # ------------------------------ tabstop = 4 ----------------------------------
 #
 # If not stated otherwise in this file or this component's LICENSE file the
@@ -23,17 +21,30 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-script_dir="$(dirname "$(realpath "$0")")"
+#
+# Created by Kevin Funderburg on 02/18/2025
+#
 
-docker_env_path=$script_dir/.env
+# The goal of this workflow is to have one source of truth for various constants
+# that are used across multiple workflows. This workflow will be called by other
+# workflows and will return all the constants defined.
 
-if [ ! -f $docker_env_path ]; then
-    $script_dir/setupDockerEnv.sh
-fi
+name: Get Action Constants
 
-# The image tag is stored in the .env file and is generated when running `setupDockerEnv.sh`.
-# The default tag is 'latest', so if you want to build a specific tag, edit the value of
-# `IMAGE_TAG` within `docker/.env`.
-source $docker_env_path
+on:
+  workflow_call:
+    outputs:
+        image_tag:
+            description: 'The Docker image tag'
+            value: ${{ jobs.generate-constants.outputs.image_tag_output }}
 
-docker build -t ghcr.io/rdkcentral/barton_builder:$IMAGE_TAG ${script_dir}
+jobs:
+    generate-constants:
+        runs-on: ubuntu-latest
+        outputs:
+            image_tag_output: ${{ steps.set-image-tag-output.outputs.image_tag }}
+
+        steps:
+            -
+                id: set-image-tag-output
+                run: echo "image_tag=1.0" >> $GITHUB_OUTPUT

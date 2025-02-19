@@ -35,10 +35,14 @@ on:
     workflow_dispatch:
 
 jobs:
+    get-action-constants:
+        name: Get Action Constants
+        uses: ./.github/workflows/action-constants.yaml
 
     build_bartoncore_and_run_tests:
         name: Build BartonCore and Run Unit/Integration Tests
         runs-on: ubuntu-latest
+        needs: get-action-constants
 
         steps:
             -
@@ -57,7 +61,7 @@ jobs:
             -
                 name: Pull barton_builder Docker image
                 run: |
-                     docker pull ghcr.io/rdkcentral/barton_builder:latest
+                     docker pull ghcr.io/rdkcentral/barton_builder:${{ needs.get-action-constants.outputs.image_tag }}
             -
                 name: Build BartonCore
                 run: |

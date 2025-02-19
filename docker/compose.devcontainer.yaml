@@ -51,6 +51,7 @@ services:
                 - BUILDER_USER=$BUILDER_USER
                 - BUILDER_GID=$BUILDER_GID
                 - BUILDER_UID=$BUILDER_UID
+                - IMAGE_TAG=$IMAGE_TAG
 
 networks:
     barton-ip6net:

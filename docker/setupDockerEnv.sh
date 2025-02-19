@@ -50,9 +50,20 @@
 #      to see how these variables are used to define the custom PATHs within the the CLI container
 #      and devcontainer respectively.
 
+set -e
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
+IMAGE_TAG="1.0" 
+
+# Check if there is an image tag already defined in the .env file. If so, this could
+# imply the user has has defined a custom tag to use for the build process.
+if [ -f "$OUTFILE" ]; then
+    if grep -q "IMAGE_TAG" "$OUTFILE"; then
+        IMAGE_TAG=$(grep "IMAGE_TAG" "$OUTFILE" | sed 's/IMAGE_TAG=//')
+    fi
+fi
 
 ##############################################################################
 # Variables needed to facilitate the Docker compose process. See docker/compose.yaml
@@ -65,6 +76,8 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
+# Save off the image tag into the .env file so it can be used in the compose process
+echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
 ##############################################################################
 
 ##############################################################################

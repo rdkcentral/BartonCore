@@ -31,7 +31,6 @@ set -e
 INTERACTIVE_FLAGS="-it"
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
-TAG="latest"
 
 while getopts ":npe:t:d" opt; do
     case ${opt} in
@@ -44,9 +43,6 @@ while getopts ":npe:t:d" opt; do
     e) # extra environment variables
         EXTRA_ENV="${EXTRA_ENV} -e ${OPTARG}"
         ;;
-    t) # Specific tag to use, otherwise 'latest'
-        TAG="${OPTARG}"
-        ;;
     d) # add /dev volume mapping
         DEV_VOL="-v /dev:/dev"
         ;;
@@ -54,7 +50,18 @@ while getopts ":npe:t:d" opt; do
 done
 shift "$(($OPTIND - 1))"
 
-IMAGE="ghcr.io/rdkcentral/barton_builder:${TAG}"
+DIR=$(pwd)
+
+# generate the `docker/.env` file and ensure the network is created
+$DIR/docker/setupDockerEnv.sh
+
+DOCKER_ENV_PATH="$DIR/docker/.env"
+
+# to build/use an image with a custom tag, the tag must be stored in the
+# `docker/.env` file as `IMAGE_TAG=some-tag`
+IMAGE_TAG=$(grep "IMAGE_TAG" "$DOCKER_ENV_PATH" | sed 's/IMAGE_TAG=//')
+
+IMAGE="ghcr.io/rdkcentral/barton_builder:${IMAGE_TAG}"
 
 if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE}$"; then
     echo "Using existing ${IMAGE}"
@@ -64,8 +71,6 @@ else
     ./build.sh
     popd
 fi
-
-DIR=$(pwd)
 
 EXTRA_VOLUMES="${DEV_VOL}"
 
@@ -85,9 +90,6 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-# generate the `docker/.env` file and ensure the network is created
-$DIR/docker/setupDockerEnv.sh
-
 docker run \
     --rm \
     --name $CONTAINER_NAME \
@@ -97,7 +99,7 @@ docker run \
     --cap-add SYS_PTRACE \
     $VOLUMES_ARGS \
     -w "$DIR" \
-    --env-file $DIR/docker/.env \
+    --env-file $DOCKER_ENV_PATH \
     $EXTRA_ENV \
     $IMAGE \
     $*
