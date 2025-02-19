@@ -36,6 +36,7 @@
 #include "glib.h"
 #include "icUtil/stringUtils.h"
 #include "utils.h"
+#include <glib/gstdio.h>
 #include <linenoise.h>
 #include <private/deviceService/resourceModes.h>
 #include <private/resourceTypes.h>
@@ -944,6 +945,122 @@ static bool setPropertyFunc(BDeviceServiceClient *client, gint argc,
     return result;
 }
 
+static bool setDDlOverride(gchar *input, BDeviceServicePropertyProvider *provider)
+{
+    if (input == NULL)
+    {
+        emitError("Invalid url for ddl override\n");
+        return false;
+    }
+
+
+    bool result = b_device_service_property_provider_set_property_string(
+        provider, "deviceDescriptor.whitelist.url.override", input);
+
+    if (result)
+    {
+        emitError("ddl override set to %s\n", input);
+        return true;
+    }
+    else
+    {
+        emitError("Failed to set ddl override.\n");
+        return false;
+    }
+}
+
+static bool ddlFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 1 || argc == 2, false);
+
+    bool result = false;
+
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+
+    if (g_ascii_strcasecmp(argv[0], "override") == 0)
+    {
+        if (argc == 2)
+        {
+            // see if this is a file
+            //
+            GStatBuf buf;
+            if (g_stat(argv[1], &buf))
+            {
+                // check to see if the file is not empty
+                //
+                if (buf.st_size > 0)
+                {
+                    // need to add "file://" to the front
+                    // of the file path to be a valid url request
+                    //
+                    g_autofree gchar *filePath = g_strdup_printf("file://%s", argv[1]);
+                    result = setDDlOverride(filePath, propertyProvider);
+                }
+                else
+                {
+                    emitError("File %s is empty\n", argv[1]);
+                }
+            }
+            else if (g_str_has_prefix(argv[1], "http") || g_str_has_prefix(argv[1], "file:///"))
+            {
+                // since this is a url just set prop
+                //
+                result = setDDlOverride(argv[1], propertyProvider);
+            }
+            else
+            {
+                emitError("Input %s is not a valid url or file request\n", argv[1]);
+            }
+        }
+        else
+        {
+            emitError("Invalid input for ddl override\n");
+        }
+    }
+    else if (g_ascii_strcasecmp(argv[0], "clearoverride") == 0)
+    {
+        result = b_device_service_property_provider_set_property_string(
+            propertyProvider, "deviceDescriptor.whitelist.url.override", NULL);
+
+        if (result)
+        {
+            emitOutput("Cleared ddl override (if one was set)\n");
+        }
+        else
+        {
+            emitError("Failed to clear any previous ddl override\n");
+        }
+    }
+    else if (g_ascii_strcasecmp(argv[0], "process") == 0)
+    {
+        b_device_service_process_device_descriptors(client);
+        result = true;
+    }
+    else if (g_ascii_strcasecmp(argv[0], "bypass") == 0 ||
+             g_ascii_strcasecmp(argv[0], "clearbypass") == 0)
+    {
+        bool bypass = g_ascii_strcasecmp(argv[0], "bypass") == 0;
+
+        result =
+            b_device_service_property_provider_set_property_bool(propertyProvider, "deviceDescriptorBypass", bypass);
+        if (result)
+        {
+            emitOutput("ddl %s\n", bypass ? "bypassed" : "no longer bypassed");
+        }
+        else
+        {
+            result = false;
+            emitError("Failed to ddl %s\n", bypass ? "bypass" : "clear ddl bypass");
+        }
+    }
+    else
+    {
+        emitError("invalid ddl subcommand\n");
+    }
+
+    return result;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -1067,6 +1184,21 @@ Category *buildCoreCategory(void)
                             1,
                             2,
                             setPropertyFunc);
+    categoryAddCommand(cat, command);
+
+    // device descriptor control
+    command = commandCreate("ddl",
+                            NULL,
+                            "override <path> | clearoverride | process | bypass | clearbypass",
+                            "Configure and control device descriptor processing",
+                            1,
+                            2,
+                            ddlFunc);
+    commandAddExample(command, "ddl override /opt/etc/AllowList.xml.override");
+    commandAddExample(command, "ddl clearoverride");
+    commandAddExample(command, "ddl process");
+    commandAddExample(command, "ddl bypass");
+    commandAddExample(command, "ddl clearbypass");
     categoryAddCommand(cat, command);
 
     return cat;
