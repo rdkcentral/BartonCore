@@ -27,7 +27,7 @@
 
 import pytest
 
-from testing.devices.matter.matter_device import MatterDevice
+from testing.mocks.devices.matter.matter_device import MatterDevice
 
 
 class MatterLight(MatterDevice):

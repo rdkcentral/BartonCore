@@ -30,7 +30,7 @@ import subprocess
 import logging
 import json
 
-from testing.devices.base_device import BaseDevice
+from testing.mocks.devices.base_device import BaseDevice
 from testing.helpers.matter import code_generators
 from testing.utils import io_utils
 from testing.utils import process_utils as putils
@@ -137,11 +137,16 @@ class MatterDevice(BaseDevice):
             self._process = subprocess.Popen(
                 [
                     self._app_name,
-                    "--passcode", str(self._passcode),
-                    "--discriminator", str(self._discriminator),
-                    "--vendor-id", str(self._vendor_id),
-                    "--product-id", str(self._product_id),
-                    "--secured-device-port", str(self._mdns_port)
+                    "--passcode",
+                    str(self._passcode),
+                    "--discriminator",
+                    str(self._discriminator),
+                    "--vendor-id",
+                    str(self._vendor_id),
+                    "--product-id",
+                    str(self._product_id),
+                    "--secured-device-port",
+                    str(self._mdns_port),
                 ],
                 shell=False,
             )

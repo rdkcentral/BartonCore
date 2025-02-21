@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = [
+    "testing",
+]
+log_cli = true
+log_cli_level = "DEBUG"
+log_cli_format = "%(asctime)s %(name)s [%(levelname)s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"

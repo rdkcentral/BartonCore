@@ -38,6 +38,20 @@ making it easier to maintain and scale the test suite.
 # The following list of plugins are automatically loaded by pytest when running tests.
 # Any fixtures defined within these modules are automatically available to all test modules.
 pytest_plugins = [
+    # Environments
     "testing.environment.default_environment_orchestrator",
-    "testing.devices.matter.matter_light"
+    # Devices
+    "testing.mocks.devices.matter.matter_light",
+    # ZHAL
+    "testing.mocks.zhal.mock_zhal_implementation",
+    ## events
+    "testing.mocks.zhal.events.zhal_event",
+    "testing.mocks.zhal.events.zhal_startup_event",
+    "testing.mocks.zhal.events.responses.response",
+    "testing.mocks.zhal.events.responses.heartbeat_response",
+    ## requests
+    "testing.mocks.zhal.requests.heartbeat_request",
+    "testing.mocks.zhal.requests.request_deserializer",
+    "testing.mocks.zhal.requests.request_receiver",
+    "testing.mocks.zhal.requests.network_initialize_request",
 ]
