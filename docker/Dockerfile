@@ -169,8 +169,9 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 RUN cd /tmp && \
     wget -O gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest" && \
     unzip gn.zip && \
-    cp gn /usr/bin && \
-    chmod 755 /usr/bin/gn
+    mv gn /usr/bin && \
+    chmod 755 /usr/bin/gn && \
+    rm gn.zip
 
 # OTBR
 RUN cd /tmp && \
@@ -213,6 +214,7 @@ RUN cd /tmp && \
     -DOT_BACKBONE_ROUTER_MULTICAST_ROUTING=ON \
     -DOTBR_MDNS=avahi \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DOTBR_TELEMETRY_DATA_API=ON \
     && \
     cd ../build/otbr/ && \
     ninja install && \
@@ -240,7 +242,7 @@ RUN cd /tmp && \
     cd build && \
     cmake .. && \
     make install && \
-    rm -rf /tmp/linenoise
+    rm -rf /tmp/linenoise /tmp/patches
 
 # Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
 RUN cd /tmp && \
