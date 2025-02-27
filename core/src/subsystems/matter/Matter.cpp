@@ -53,6 +53,7 @@ extern "C" {
 
 #include CHIP_PROJECT_CONFIG_INCLUDE
 #include <app/clusters/ota-provider/ota-provider.h>
+#include <app/clusters/thread-border-router-management-server/thread-border-router-management-server.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
 #include <app/server/Dnssd.h>
@@ -68,6 +69,7 @@ extern "C" {
 #include <messaging/ExchangeMgr.h>
 #include <platform/Linux/ConfigurationManagerImpl.h>
 #include <platform/TestOnlyCommissionableDataProvider.h>
+#include <platform/OpenThread/GenericThreadBorderRouterDelegate.h>
 #include <protocols/secure_channel/RendezvousParameters.h>
 #include <setup_payload/ManualSetupPayloadGenerator.h>
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
@@ -85,6 +87,7 @@ extern "C" {
 #include <CertifierOperationalCredentialsIssuer.hpp>
 
 #include "AccessControlDelegate.h"
+#include "ThreadBorderRouterManagementDelegate.h"
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 // Only used in development environments
@@ -122,7 +125,7 @@ using namespace ::barton;
 using namespace std::chrono_literals;
 using namespace chip;
 using namespace chip::Crypto;
-using chip::Callback::Callback;
+using namespace chip::app::Clusters;
 
 #include <credentials/attestation_verifier/FileAttestationTrustStore.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
@@ -138,6 +141,9 @@ namespace
     EndpointId threadNetworkDirectoryServerEndpointId = UINT16_MAX;
     std::optional<WiFiNetworkManagementServer> wifiNetworkManagementServer;
     EndpointId wifiNetworkManagementServerEndpointId = UINT16_MAX;
+    std::unique_ptr<ThreadBorderRouterManagementDelegate> otbrDelegate;
+    std::optional<ThreadBorderRouterManagement::ServerInstance> threadBorderRouterManagementServer;
+    EndpointId threadBorderRouterManagementServerEndpointId = UINT16_MAX;
 
     constexpr uint8_t BARTON_TEST_CD_KID[20] = {0x9C, 0x60, 0x2C, 0x46, 0x48, 0xE8, 0x7D, 0xD8, 0x26, 0x47,
                                                 0xF4, 0x5E, 0x94, 0x39, 0xB3, 0x85, 0x16, 0xC2, 0xF2, 0x4F};
@@ -246,6 +252,16 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
     chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
+
+#if CHIP_ENABLE_OPENTHREAD
+    if ((err = DeviceLayer::ThreadStackMgrImpl().InitThreadStack()) != CHIP_NO_ERROR)
+    {
+        icError("InitThreadStack failed: %s", err.AsString());
+        return false;
+    }
+
+    otbrDelegate = std::make_unique<ThreadBorderRouterManagementDelegate>();
+#endif // CHIP_ENABLE_OPENTHREAD
 
     return result;
 }
@@ -1499,5 +1515,20 @@ void emberAfWiFiNetworkManagementClusterInitCallback(EndpointId endpoint)
     {
         wifiNetworkManagementServer.emplace(endpoint).Init();
         wifiNetworkManagementServerEndpointId = endpoint;
+    }
+}
+
+void emberAfThreadBorderRouterManagementClusterInitCallback(EndpointId endpoint)
+{
+    if (threadBorderRouterManagementServer)
+    {
+        VerifyOrDie(endpoint == threadBorderRouterManagementServerEndpointId);
+    }
+    else
+    {
+        threadBorderRouterManagementServer.emplace(endpoint,
+                                                   otbrDelegate.get(),
+                                                   Server::GetInstance().GetFailSafeContext()).Init();
+        threadBorderRouterManagementServerEndpointId = endpoint;
     }
 }
