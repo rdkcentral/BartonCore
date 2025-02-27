@@ -715,9 +715,6 @@ void collectPairedDevicesInformation(GHashTable *output)
 
         hashMapIteratorGetNext(deviceClassMapIter, (void **) &deviceClass, &deviceClassLen, (void **) &subsystemMap);
 
-        scoped_generic char *deviceCountKey = NULL;
-        GString *deviceCountValue = g_string_new(NULL);
-
         scoped_icHashMapIterator *subsystemMapIter = hashMapIteratorCreate(subsystemMap);
 
         while (hashMapIteratorHasNext(subsystemMapIter))
@@ -731,7 +728,8 @@ void collectPairedDevicesInformation(GHashTable *output)
             scoped_generic char *deviceTypeKey = getDeviceTypeKey(deviceClass, subsystem);
             GString *deviceTypeValue = g_string_new(NULL);
 
-            deviceCountKey = stringBuilder("%sCount", deviceTypeKey);
+            scoped_generic char *deviceCountKey = stringBuilder("%sCount", deviceTypeKey);
+            GString *deviceCountValue = g_string_new(NULL);
 
             uint16_t deviceCount = 0;
             scoped_icLinkedListIterator *modelListIter = linkedListIteratorCreate(modelList);
@@ -747,10 +745,10 @@ void collectPairedDevicesInformation(GHashTable *output)
             g_hash_table_insert(output, g_steal_pointer(&deviceTypeKey), g_steal_pointer(&value));
 
             g_string_append_printf(deviceCountValue, "%d", deviceCount);
-        }
 
-        scoped_generic char *value = g_string_free(g_steal_pointer(&deviceCountValue), FALSE);
-        g_hash_table_insert(output, g_steal_pointer(&deviceCountKey), g_steal_pointer(&value));
+            scoped_generic char *deviceCountVal = g_string_free(g_steal_pointer(&deviceCountValue), FALSE);
+            g_hash_table_insert(output, g_steal_pointer(&deviceCountKey), g_steal_pointer(&deviceCountVal));
+        }
     }
 }
 
