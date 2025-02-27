@@ -749,12 +749,12 @@ CHIP_ERROR Matter::GetCommissioningParams(chip::Controller::CommissioningParamet
     if (threadOperationalDataset == nullptr)
     {
         g_autoptr(ThreadNetworkInfo) info = threadNetworkInfoCreate();
-        if (threadSubsystemGetNetworkInfo(info) && info->datasetLen > 0)
+        if (threadSubsystemGetNetworkInfo(info) && info->activeDatasetLen > 0)
         {
             threadOperationalDataset = std::make_unique<std::vector<uint8_t>>();
-            for (size_t i = 0; i < info->datasetLen; i++)
+            for (size_t i = 0; i < info->activeDatasetLen; i++)
             {
-                threadOperationalDataset->push_back(info->dataset[i]);
+                threadOperationalDataset->push_back(info->activeDataset[i]);
             }
         }
         else

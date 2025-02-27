@@ -27,6 +27,9 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "subsystems/thread/threadNetworkInfo.h"
 
 #include <stdbool.h>
@@ -52,8 +55,53 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info);
 bool threadSubsystemSetNat64Enabled(bool enable);
 
 /**
+ * Retrieve the border agent id.
+ *
+ * @param[out] borderAgentId receives the border agent id as an array of uint8_t
+ *
+ * @return true on success
+ */
+bool threadSubsystemGetBorderAgentId(GArray **borderAgentId);
+
+/**
+ * Retrieve the thread stack protocol version.
+ *
+ * @return the thread stack protocol version or 0 on error
+ */
+uint16_t threadSubsystemGetThreadVersion();
+
+/**
+ * Get the Thread network interface up/down status.
+ *
+ * @return true if the interface is up, false otherwise
+ */
+bool threadSubsystemIsThreadInterfaceUp();
+
+/**
+ * Get the active dataset TLVs.
+ *
+ * @param[out] datasetTlvs receives the active dataset TLVs as a GArray of uint8_t
+ *
+ * @return true on success
+ */
+bool threadSubsystemGetActiveDatasetTlvs(GArray **datasetTlvs);
+
+/**
+ * Get the pending dataset TLVs.
+ *
+ * @param[out] datasetTlvs receives the pending dataset TLVs as a GArray of uint8_t
+ *
+ * @return true on success
+ */
+bool threadSubsystemGetPendingDatasetTlvs(GArray **datasetTlvs);
+
+/**
  * Activate ephemeral key mode and return the generated key.
  *
  * @return the generated ephemeral key or NULL on failure. Caller frees.
  */
 char *threadSubsystemActivateEphemeralKeyMode(void);
+
+#ifdef __cplusplus
+}
+#endif

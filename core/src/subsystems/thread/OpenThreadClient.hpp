@@ -31,6 +31,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <otbr/dbus/client/thread_api_dbus.hpp>
 #include <stdbool.h>
 
@@ -39,7 +40,8 @@ namespace barton
     class OpenThreadClient
     {
     public:
-        OpenThreadClient() : ready(false) { Connect(); }
+        OpenThreadClient(const std::function<void(void)> &configChangedCallback) :
+            ready(false), configChangedCallback(configChangedCallback) { Connect(); }
 
         enum DeviceRole
         {
@@ -78,6 +80,13 @@ namespace barton
          * @return The active network dataset tlvs or empty on error
          */
         std::vector<uint8_t> GetActiveDatasetTlvs();
+
+        /**
+         * @brief Get the pending dataset tlvs.
+         *
+         * @return The pending network dataset tlvs or empty on error
+         */
+        std::vector<uint8_t> GetPendingDatasetTlvs();
 
         /**
          * @brief Get the current channel
@@ -122,6 +131,27 @@ namespace barton
         DeviceRole GetDeviceRole();
 
         /**
+         * @brief Get the border router's agent id.
+         *
+         * @return The border router agent id or empty on error
+         */
+        std::vector<uint8_t> GetBorderAgentId();
+
+        /**
+         * @brief Get the thread stack protocol version.
+         *
+         * @return The thread stack protocol version or 0 on error
+         */
+        uint16_t GetThreadVersion();
+
+        /**
+         * Get the Thread network interface up/down status.
+         *
+         * @return true if the interface is up, false otherwise
+         */
+        bool IsThreadInterfaceUp();
+
+        /**
          * @brief Check if NAT64 is enabled in the active network
          *
          * @return true - NAT64 is enabled
@@ -147,13 +177,18 @@ namespace barton
         bool ActivateEphemeralKeyMode(std::string &ephemeralKey);
 
     private:
+        std::mutex dbusConnectionGuard;
         std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>> dbusConnection;
         std::unique_ptr<otbr::DBus::ThreadApiDBus> threadApiBus;
         std::atomic_bool ready;
+        std::function<void(void)>  configChangedCallback;
 
         void Connect();
 
         static void ReleaseDBusConnection(DBusConnection *connection);
         static DeviceRole TranslateOTBRDeviceRole(otbr::DBus::DeviceRole role);
+        static DBusHandlerResult
+        DBusMessageFilterRedirector(DBusConnection *aConnection, DBusMessage *aMessage, void *aData);
+        DBusHandlerResult DBusMessageFilter(DBusMessage *aMessage);
     };
 } // namespace barton

@@ -31,28 +31,39 @@
 #include <glib.h>
 #include <stdint.h>
 
-#define THREAD_OPERATIONAL_DATASET_MAX_LEN   254
-#define THREAD_NETWORK_KEY_MAX_LEN           32
+#define THREAD_NETWORK_KEY_LEN                  16
+#define THREAD_BORDER_AGENT_ID_LEN              16
 
-#define THREAD_NETWORK_INFO_CHANNEL_KEY       "channel"
-#define THREAD_NETWORK_INFO_PAN_ID_KEY        "panId"
-#define THREAD_NETWORK_INFO_EXT_PAN_ID_KEY    "extendedPanId"
-#define THREAD_NETWORK_INFO_NETWORK_KEY_KEY   "networkKey"
-#define THREAD_NETWORK_INFO_DATASET_KEY       "dataset"
-#define THREAD_NETWORK_INFO_NETWORK_NAME_KEY  "networkName"
-#define THREAD_NETWORK_INFO_NAT64_ENABLED_KEY "nat64Enabled"
+// JSON key names
+#define THREAD_NETWORK_INFO_CHANNEL_KEY         "channel"
+#define THREAD_NETWORK_INFO_PAN_ID_KEY          "panId"
+#define THREAD_NETWORK_INFO_EXT_PAN_ID_KEY      "extendedPanId"
+#define THREAD_NETWORK_INFO_NETWORK_KEY_KEY     "networkKey"
+#define THREAD_NETWORK_INFO_ROLE_KEY            "role"
+#define THREAD_NETWORK_INFO_ACTIVE_DATASET_KEY  "activeDataset"
+#define THREAD_NETWORK_INFO_PENDING_DATASET_KEY "pendingDataset"
+#define THREAD_NETWORK_INFO_NETWORK_NAME_KEY    "networkName"
+#define THREAD_NETWORK_INFO_NAT64_ENABLED_KEY   "nat64Enabled"
+#define THREAD_BORDER_AGENT_ID_KEY              "borderAgentId"
+#define THREAD_VERSION_KEY                      "threadVersion"
+#define THREAD_INTERFACE_UP_KEY                 "interfaceUp"
 
 typedef struct
 {
     uint16_t channel;
     uint16_t panId;
     uint64_t extendedPanId;
-    unsigned char networkKey[THREAD_NETWORK_KEY_MAX_LEN + 1]; // 16 hex digits plus \0
-    uint8_t networkKeyLen;
-    unsigned char dataset[THREAD_OPERATIONAL_DATASET_MAX_LEN + 1];
-    uint8_t datasetLen;
+    uint8_t networkKey[THREAD_NETWORK_KEY_LEN];
+    uint8_t *activeDataset;
+    uint8_t activeDatasetLen;
+    uint8_t *pendingDataset;
+    uint8_t pendingDatasetLen;
     char *networkName;
+    char *role;
     gboolean nat64Enabled;
+    uint8_t borderAgentId[THREAD_BORDER_AGENT_ID_LEN];
+    uint16_t threadVersion;
+    gboolean interfaceUp;
 } ThreadNetworkInfo;
 
 /**
@@ -78,7 +89,5 @@ void threadNetworkInfoDestroy(ThreadNetworkInfo *threadInfo);
  * @return cJSON*
  */
 cJSON *threadNetworkInfoToJson(ThreadNetworkInfo *threadInfo);
-
-// TODO fromJson
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(ThreadNetworkInfo, threadNetworkInfoDestroy);

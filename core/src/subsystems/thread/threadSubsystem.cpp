@@ -38,6 +38,7 @@ extern "C" {
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProperties.h"
+#include "event/deviceEventProducer.h"
 #include "icConcurrent/repeatingTask.h"
 #include "icLog/logging.h"
 #include "subsystemManager.h"
@@ -52,8 +53,6 @@ extern "C" {
 
 #define NETWORK_BLOB_PROPERTY_NAME                   "threadNetworkConfig"
 #define MONITOR_TASK_INTERVAL_SECS                   60
-
-#define THREAD_OPERATIONAL_DATASET_FALLBACK_PROPERTY "threadOpDataSet"
 
 using namespace barton;
 
@@ -74,7 +73,7 @@ static bool initialized = false;
 // Test value for development only; this value must be provided by the client otherwise
 static std::string bartonThreadNetworkName = "TestNetwork";
 
-static bool monitorTaskFunc(void *arg);
+static bool initTaskFunc(void *arg);
 static bool initialize(subsystemInitializedFunc initializedCallback, subsystemDeInitializedFunc deInitializedCallback);
 static void shutdown();
 static cJSON *getStatusJson();
@@ -107,7 +106,7 @@ static bool initialize(subsystemInitializedFunc initializedCallback, subsystemDe
     RepeatingTaskPolicy *policy = createFixedRepeatingTaskPolicy(MONITOR_TASK_INTERVAL_SECS, DELAY_SECS);
 
     // Retry initialization until success
-    monitorTask = createPolicyRepeatingTask(monitorTaskFunc, nullptr, policy, nullptr);
+    monitorTask = createPolicyRepeatingTask(initTaskFunc, nullptr, policy, nullptr);
 
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     scoped_generic char *defaultNetworkName = b_device_service_property_provider_get_property_as_string(
@@ -187,56 +186,179 @@ bool threadSubsystemGetNetworkInfo(ThreadNetworkInfo *info)
 
     bool retVal = false;
 
-    /*
-        Two methods we can supply a valid dataset:
-            1. Normal happy path of having a valid connection to a running OTBR with an
-                active network we created and lead (i.e. subsystem initialized).
-            2. A fallback mechanism of having a string of hex digits available in device
-               service system properties (output of ot-ctl dataset active -x) representing
-               a valid thread network we don't directly manage.
-    */
+    if (localInitialized)
+    {
+        // get all the data
+        uint16_t channel = otClient->GetChannel();
+        uint16_t panId = otClient->GetPanId();
+        uint64_t extendedPanId = otClient->GetExtPanId();
+        std::vector<uint8_t> networkKey = otClient->GetNetworkKey();
+        std::vector<uint8_t> activeTlvs = otClient->GetActiveDatasetTlvs();
+        std::vector<uint8_t> pendingTlvs = otClient->GetPendingDatasetTlvs();
+        std::string networkName = otClient->GetNetworkName();
+        OpenThreadClient::DeviceRole role = otClient->GetDeviceRole();
+        bool nat64Enabled = otClient->IsNat64Enabled();
+        std::vector<uint8_t> borderAgentId = otClient->GetBorderAgentId();
+        uint16_t threadVersion = otClient->GetThreadVersion();
+        bool interfaceUp = otClient->IsThreadInterfaceUp();
+
+        // validate what we can
+        g_return_val_if_fail(channel != UINT16_MAX, false);
+        g_return_val_if_fail(panId != UINT16_MAX, false);
+        g_return_val_if_fail(extendedPanId != UINT64_MAX, false);
+        g_return_val_if_fail(networkKey.size() == THREAD_NETWORK_KEY_LEN, false);
+        g_return_val_if_fail(!activeTlvs.empty(), false);
+        //pendingTlvs can be empty
+        g_return_val_if_fail(borderAgentId.size() == THREAD_BORDER_AGENT_ID_LEN, false);
+        g_return_val_if_fail(threadVersion != 0, false);
+
+        // validation succeeded, so fill it in
+        info->channel = channel;
+        info->panId = panId;
+        info->extendedPanId = extendedPanId;
+        std::memcpy(info->networkKey, networkKey.data(), THREAD_NETWORK_KEY_LEN);
+
+        info->activeDataset = (uint8_t *) malloc(activeTlvs.size());
+        std::memcpy(info->activeDataset, activeTlvs.data(), activeTlvs.size());
+        info->activeDatasetLen = activeTlvs.size();
+
+        info->pendingDataset = (uint8_t *) malloc(pendingTlvs.size());
+        std::memcpy(info->pendingDataset, pendingTlvs.data(), pendingTlvs.size());
+        info->pendingDatasetLen = pendingTlvs.size();
+
+        info->networkName = strdup(networkName.c_str());
+
+        switch (role)
+        {
+            case OpenThreadClient::DeviceRole::DEVICE_ROLE_DISABLED:
+                info->role = strdup("disabled");
+                break;
+            case OpenThreadClient::DeviceRole::DEVICE_ROLE_CHILD:
+                info->role = strdup("child");
+                break;
+            case OpenThreadClient::DeviceRole::DEVICE_ROLE_ROUTER:
+                info->role = strdup("router");
+                break;
+            case OpenThreadClient::DeviceRole::DEVICE_ROLE_LEADER:
+                info->role = strdup("leader");
+                break;
+            default:
+                info->role = strdup("unknown");
+                break;
+        }
+
+        info->nat64Enabled = nat64Enabled;
+        std::memcpy(info->borderAgentId, borderAgentId.data(), THREAD_BORDER_AGENT_ID_LEN);
+        info->threadVersion = threadVersion;
+        info->interfaceUp = interfaceUp;
+
+        retVal = true;
+    }
+
+    return retVal;
+}
+
+bool threadSubsystemGetBorderAgentId(GArray **borderAgentId)
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    bool retVal = false;
 
     if (localInitialized)
     {
-        std::vector<uint8_t> networkDataTlvs = otClient->GetActiveDatasetTlvs();
-        std::vector<uint8_t> networkKey = otClient->GetNetworkKey();
-        std::string networkName = otClient->GetNetworkName();
-        info->channel = otClient->GetChannel();
-        info->panId = otClient->GetPanId();
-        info->extendedPanId = otClient->GetExtPanId();
-
-        g_return_val_if_fail(info->channel != UINT16_MAX, false);
-        g_return_val_if_fail(info->panId != UINT16_MAX, false);
-        g_return_val_if_fail(info->extendedPanId != UINT64_MAX, false);
-
-        g_return_val_if_fail(!networkDataTlvs.empty() && networkDataTlvs.size() <= THREAD_OPERATIONAL_DATASET_MAX_LEN &&
-                                 !networkKey.empty() && networkKey.size() <= THREAD_NETWORK_KEY_MAX_LEN,
-                             false);
-
-        std::memcpy(info->dataset, networkDataTlvs.data(), networkDataTlvs.size());
-        info->datasetLen = networkDataTlvs.size();
-        std::memcpy(info->networkKey, networkKey.data(), networkKey.size());
-        info->networkKeyLen = networkKey.size();
-        info->networkName = strdup(networkName.c_str());
-        info->nat64Enabled = otClient->IsNat64Enabled();
-        retVal = true;
-    }
-    else
-    {
-        // Check system properties for an override (legacy dev feature)
-        scoped_generic char *tmpThreadDatasetChars = nullptr;
-        if (deviceServiceGetSystemProperty(THREAD_OPERATIONAL_DATASET_FALLBACK_PROPERTY, &tmpThreadDatasetChars))
+        auto id = otClient->GetBorderAgentId();
+        if (!id.empty())
         {
-            icLogInfo(LOG_TAG, "%s: using thread operational dataset from system properties", __func__);
-            size_t dataSetLen = strlen(tmpThreadDatasetChars);
-            for (size_t i = 0, k = 0; i < dataSetLen; i += 2, k++)
-            {
-                gint byte1 = g_ascii_xdigit_value(tmpThreadDatasetChars[i]);
-                gint byte2 = g_ascii_xdigit_value(tmpThreadDatasetChars[i + 1]);
-                info->dataset[k] = byte1 << 4 | byte2;
-            }
-            info->datasetLen = dataSetLen / 2;
+            *borderAgentId = g_array_new(FALSE, FALSE, sizeof(uint8_t));
+            g_array_append_vals(*borderAgentId, id.data(), id.size());
+            retVal = true;
+        }
+    }
 
+    return retVal;
+}
+
+uint16_t threadSubsystemGetThreadVersion()
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    uint16_t retVal = 0;
+
+    if (localInitialized)
+    {
+        retVal = otClient->GetThreadVersion();
+    }
+
+    return retVal;
+}
+
+bool threadSubsystemIsThreadInterfaceUp()
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    bool retVal = false;
+
+    if (localInitialized)
+    {
+        retVal = otClient->IsThreadInterfaceUp();
+    }
+
+    return retVal;
+}
+
+bool threadSubsystemGetActiveDatasetTlvs(GArray **datasetTlvs)
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    bool retVal = false;
+
+    if (localInitialized)
+    {
+        auto tlvs = otClient->GetActiveDatasetTlvs();
+        if (!tlvs.empty())
+        {
+            *datasetTlvs = g_array_new(FALSE, FALSE, sizeof(uint8_t));
+            g_array_append_vals(*datasetTlvs, tlvs.data(), tlvs.size());
+            retVal = true;
+        }
+    }
+
+    return retVal;
+}
+
+bool threadSubsystemGetPendingDatasetTlvs(GArray **datasetTlvs)
+{
+    icDebug();
+
+    lifecycleDataGuard.lock();
+    bool localInitialized = initialized;
+    lifecycleDataGuard.unlock();
+
+    bool retVal = false;
+
+    if (localInitialized)
+    {
+        auto tlvs = otClient->GetPendingDatasetTlvs();
+        if (!tlvs.empty())
+        {
+            *datasetTlvs = g_array_new(FALSE, FALSE, sizeof(uint8_t));
+            g_array_append_vals(*datasetTlvs, tlvs.data(), tlvs.size());
             retVal = true;
         }
     }
@@ -290,7 +412,11 @@ static bool initializeThreadStack(void)
 
         if (!otClient)
         {
-            otClient = new OpenThreadClient();
+            otClient = new OpenThreadClient(
+                []()
+                {
+                        sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonSubsystemStatus);
+                });
         }
     }
 
@@ -355,7 +481,7 @@ static bool initializeThreadStack(void)
     return result;
 }
 
-static bool monitorTaskFunc(void *arg)
+static bool initTaskFunc(void *arg)
 {
     icDebug();
 

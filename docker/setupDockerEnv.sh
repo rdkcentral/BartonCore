@@ -55,7 +55,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
-IMAGE_TAG="1.0" 
+IMAGE_TAG="1.1" 
 
 # Check if there is an image tag already defined in the .env file. If so, this could
 # imply the user has has defined a custom tag to use for the build process.

@@ -47,4 +47,4 @@ jobs:
         steps:
             -
                 id: set-image-tag-output
-                run: echo "image_tag=1.0" >> $GITHUB_OUTPUT
+                run: echo "image_tag=1.1" >> $GITHUB_OUTPUT
