@@ -38,6 +38,7 @@ jobs:
     get-action-constants:
         name: Get Action Constants
         uses: ./.github/workflows/action-constants.yaml
+        secrets: inherit
 
     build_bartoncore_and_run_tests:
         name: Build BartonCore and Run Unit/Integration Tests
@@ -51,6 +52,8 @@ jobs:
                 with:
                     repository: ${{ github.repository }}
                     token: ${{ secrets.RDKCM_BARTON }}
+                    fetch-depth: 0
+                    fetch-tags: true
             -
                 name: Log in to GitHub Container Registry
                 uses: docker/login-action@v2

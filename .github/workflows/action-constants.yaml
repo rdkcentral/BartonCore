@@ -46,5 +46,17 @@ jobs:
 
         steps:
             -
+                name: Checkout code
+                uses: actions/checkout@v4
+                with:
+                    repository: ${{ github.repository }}
+                    token: ${{ secrets.RDKCM_BARTON }}
+                    fetch-depth: 0
+                    fetch-tags: true
+            -
                 id: set-image-tag-output
-                run: echo "image_tag=1.1" >> $GITHUB_OUTPUT
+                run: |
+                    latest_tag_reachable=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+                    # print to console for debugging
+                    echo "latest_tag_reachable=$latest_tag_reachable"
+                    echo "image_tag=$latest_tag_reachable" >> $GITHUB_OUTPUT

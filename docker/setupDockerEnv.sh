@@ -55,7 +55,9 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
-IMAGE_TAG="1.1" 
+
+# Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
+IMAGE_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
 
 # Check if there is an image tag already defined in the .env file. If so, this could
 # imply the user has has defined a custom tag to use for the build process.
