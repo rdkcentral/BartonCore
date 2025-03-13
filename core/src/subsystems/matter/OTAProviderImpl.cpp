@@ -74,6 +74,9 @@ extern "C" {
 
 using namespace chip::app::Clusters;
 
+// This can be used to log the update token for debugging OTA issues, but should be disabled in production
+// #define OTA_PROVIDER_LOG_TOKEN
+
 namespace barton
 {
     bool OTAProviderImpl::SelectOTACandidate(const chip::NodeId requestorNodeId,
@@ -166,8 +169,11 @@ namespace barton
 
         uint8_t updateToken[kUpdateTokenLen];
         chip::Crypto::DRBG_get_bytes(updateToken, kUpdateTokenLen);
+
+#ifdef OTA_PROVIDER_LOG_TOKEN
         scoped_generic char *token = stringBin2hex(updateToken, kUpdateTokenLen);
         ChipLogDetail(SoftwareUpdate, "Generated updateToken: %s", token);
+#endif
 
         response.status = OtaSoftwareUpdateProvider::OTAQueryStatus::kUpdateAvailable;
         response.updateToken.Emplace(chip::ByteSpan(updateToken));
@@ -238,8 +244,10 @@ namespace barton
     {
         icDebug();
 
+#ifdef OTA_PROVIDER_LOG_TOKEN
         scoped_generic char *token = stringBin2hex(commandData.updateToken.data(), commandData.updateToken.size());
         ChipLogDetail(SoftwareUpdate, "%s: token: %s, version: %#" PRIx32, __func__, token, commandData.newVersion);
+#endif
 
         OtaSoftwareUpdateProvider::Commands::ApplyUpdateResponse::Type response;
         response.action = OtaSoftwareUpdateProvider::OTAApplyUpdateAction::kProceed;
@@ -255,9 +263,11 @@ namespace barton
     {
         icDebug();
 
+#ifdef OTA_PROVIDER_LOG_TOKEN
         scoped_generic char *token = stringBin2hex(commandData.updateToken.data(), commandData.updateToken.size());
         ChipLogDetail(
             SoftwareUpdate, "%s: token: %s, version: %#" PRIx32, __func__, token, commandData.softwareVersion);
+#endif
 
         commandObj->AddStatus(commandPath, chip::Protocols::InteractionModel::Status::Success);
     }
