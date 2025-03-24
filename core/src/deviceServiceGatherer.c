@@ -830,6 +830,40 @@ void collectPairedCamerasInformation(GHashTable *output)
 }
 
 /**
+ * Add total connected device that are not in comm fail count
+ *
+ * @param output - the runtimeStatistics hashMap containing total connected device count.
+ * e.g.
+ * {"TotalConnectedDeviceCount": "5"}
+ */
+void collectTotalConnectedDeviceCount(GHashTable *output)
+{
+    g_return_if_fail(output != NULL);
+    uint16_t deviceCount = 0;
+
+    scoped_icDeviceList *deviceList = deviceServiceGetAllDevices();
+    scoped_icLinkedListIterator *deviceIter = linkedListIteratorCreate(deviceList);
+
+    while (linkedListIteratorHasNext(deviceIter))
+    {
+        const icDevice *device = linkedListIteratorGetNext(deviceIter);
+
+        if (device->uuid == NULL)
+        {
+            continue;
+        }
+
+        if (deviceServiceIsDeviceInCommFail(device->uuid) == false)
+        {
+            deviceCount++;
+        }
+    }
+
+    g_autofree char *valueString = stringBuilder("%" PRIu16, deviceCount);
+    g_hash_table_insert(output, g_strdup("TotalConnectedDeviceCount"), g_steal_pointer(&valueString));
+}
+
+/**
  * Collect all of the Zigbee counters from Zigbee core
  *
  * @param output - the runtimeStatistics hashMap
