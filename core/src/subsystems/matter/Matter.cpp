@@ -163,8 +163,6 @@ Matter::Matter() :
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 #endif
 {
-    myNodeId = LoadOrGenerateLocalNodeId();
-
     MatterDriverFactory::Instance();
 
     commissionerController = std::make_unique<chip::Controller::DeviceCommissioner>();
@@ -189,11 +187,19 @@ void EventHandler(const DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
 
 bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 {
+    icDebug();
+
     bool result = true;
 
     CHIP_ERROR err = CHIP_NO_ERROR;
 
-    icDebug();
+    myNodeId = LoadOrGenerateLocalNodeId();
+    if (!IsOperationalNodeId(myNodeId))
+    {
+        icError("Failed to load or generate local node ID");
+        return false;
+    }
+    icDebug("Local node ID: 0x%" PRIx64, myNodeId);
 
     mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
 
@@ -417,11 +423,6 @@ CHIP_ERROR Matter::InitCommissioner()
     Controller::FactoryInitParams factoryParams;
     chip::Controller::SetupParams params;
     FabricTable *fabricTable = &Server::GetInstance().GetFabricTable();
-
-    if (myNodeId == kUndefinedNodeId)
-    {
-        myNodeId = LoadOrGenerateLocalNodeId();
-    }
 
     factoryParams.fabricIndependentStorage = &storageDelegate;
     factoryParams.fabricTable = fabricTable;
@@ -881,8 +882,16 @@ chip::NodeId Matter::GetRandomOperationalNodeId()
             result = kUndefinedNodeId;
             break;
         }
+
+        if (IsOperationalNodeId(result))
+        {
+            break;
+        }
     }
 
+    // If we don't have a valid node id after 10 tries, then we are extremely unlucky (the chances of this happening are
+    // roughly 1 in 2^280, as per a comment in the ExampleOperationalCredentialsIssuer::GetRandomOperationalNodeId code
+    // that this logic was taken from)
     return result;
 }
 
@@ -903,6 +912,10 @@ chip::NodeId Matter::LoadOrGenerateLocalNodeId()
             free(localNodeIdStr);
             localNodeIdStr = stringBuilder("%" PRIx64, result);
             deviceServiceSetSystemProperty(LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME, localNodeIdStr);
+        }
+        else
+        {
+            icError("Failed to generate a valid node ID");
         }
     }
 
