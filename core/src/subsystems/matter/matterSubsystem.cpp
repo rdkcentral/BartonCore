@@ -102,6 +102,8 @@ static gboolean maybeInitMatter(void *context);
 
 static cJSON *getStatusJson();
 
+static void accountIdChanged(const gchar *accountId);
+
 __attribute__((constructor)) static void registerSubsystem()
 {
     static struct Subsystem matterSubsystem = {.migrate = matterSubsystemMigrate,
@@ -330,6 +332,11 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
 
     monitorMatterConfig();
 
+    if (!deviceServiceConfigurationRegisterAccountIdListener(accountIdChanged))
+    {
+        icWarn("Failed to register account id listener");
+    }
+
     // Attempt to init matter in a different thread. This may need to make use of an event queue for retries,
     // so giving it its own thread to not hold this one up.
     std::thread matterInitThread = std::thread(matterInitLoopThreadFunc);
@@ -362,6 +369,11 @@ static void matterSubsystemShutdown()
     g_object_unref(g_steal_pointer(&matterMon));
     free(g_steal_pointer(&matterKVPath));
     free(g_steal_pointer(&matterConfigRoot));
+
+    if (!deviceServiceConfigurationUnregisterAccountIdListener(accountIdChanged))
+    {
+        icWarn("Failed to unregister account id listener");
+    }
 
     subsystemDeinitializedCallback(MATTER_SUBSYSTEM_NAME);
 }
@@ -576,4 +588,10 @@ static cJSON *getStatusJson()
     }
 
     return result;
+}
+
+static void accountIdChanged(const gchar *accountId)
+{
+    std::thread matterInitThread = std::thread(maybeInitMatter, nullptr);
+    matterInitThread.detach();
 }

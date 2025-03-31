@@ -129,5 +129,31 @@ gchar *deviceServiceConfigurationGetAccountId(void);
  * @brief This sets the account ID.
  *
  * @param accountId - the account ID
+ * @return true if successful, otherwise false
  */
-void deviceServiceConfigurationSetAccountId(const gchar *accountId);
+bool deviceServiceConfigurationSetAccountId(const gchar *accountId);
+
+/**
+ * Callback type for account id changes
+ */
+typedef void (*deviceServiceConfigurationAccountIdListener)(const gchar *accountId);
+
+/**
+ * deviceServiceConfigurationRegisterAccountIdListener
+ *
+ * @brief Add listener for account id changes
+ *
+ * @param listener - the callback to be invoked
+ * @return true if successful, otherwise false
+ */
+bool deviceServiceConfigurationRegisterAccountIdListener(deviceServiceConfigurationAccountIdListener listener);
+
+/**
+ * deviceServiceConfigurationUnregisterAccountIdListener
+ *
+ * @brief Remove listener for account id changes
+ *
+ * @param listener - the callback to be removed
+ * @return true if successful, otherwise false
+ */
+bool deviceServiceConfigurationUnregisterAccountIdListener(deviceServiceConfigurationAccountIdListener listener);

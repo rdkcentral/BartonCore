@@ -632,4 +632,12 @@ if(TARGET device-service-property-provider-test)
     target_compile_definitions(device-service-property-provider-test PRIVATE G_LOG_DOMAIN="BDeviceServicePropertyProviderTest")
 endif()
 
+bds_add_cmocka_test(
+    NAME deviceServiceConfigurationTest
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceConfigurationTest.c
+    WRAPPED_FUNCTIONS
+    LINK_LIBRARIES brtnDeviceServiceStatic
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 bds_configure_glib()

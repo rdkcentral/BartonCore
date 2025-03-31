@@ -27,6 +27,8 @@
 
 #include "deviceServiceConfiguration.h"
 #include "device-service-initialize-params-container.h"
+#include "glib-object.h"
+#include "glib.h"
 #include "icConcurrent/threadUtils.h"
 #include "icLog/logging.h"
 #include <pthread.h>
@@ -37,6 +39,8 @@
 #define DEFAULT_DS_DIR            "/tmp/barton/device_service"
 #define DEFAULT_STORAGE_DIR       DEFAULT_DS_DIR "/storage"
 #define DEFAULT_FIRMWARE_FILE_DIR DEFAULT_DS_DIR "/firmware"
+
+static void accountIdChangeCallback(GObject *object, GParamSpec *pspec, gpointer userData);
 
 static pthread_mutex_t deviceServiceConfigurationMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static BDeviceServiceInitializeParamsContainer *initializeParams = NULL;
@@ -241,14 +245,14 @@ gchar *deviceServiceConfigurationGetAccountId(void)
     return retVal;
 }
 
-void deviceServiceConfigurationSetAccountId(const gchar *accountId)
+bool deviceServiceConfigurationSetAccountId(const gchar *accountId)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);
 
     if (initializeParams == NULL)
     {
         icError("device service configuration not started");
-        return;
+        return false;
     }
 
     g_object_set(initializeParams,
@@ -256,4 +260,63 @@ void deviceServiceConfigurationSetAccountId(const gchar *accountId)
                      [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
                  accountId,
                  NULL);
+
+    return true;
+}
+
+bool deviceServiceConfigurationRegisterAccountIdListener(deviceServiceConfigurationAccountIdListener listener)
+{
+    g_return_val_if_fail(listener != NULL, false);
+
+    LOCK_SCOPE(deviceServiceConfigurationMutex);
+
+    if (initializeParams == NULL)
+    {
+        icError("device service configuration not started");
+        return false;
+    }
+
+    g_autofree gchar *signalName = g_strdup_printf("notify::%s",
+                                                   B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                                                       [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID]);
+
+    g_signal_connect(initializeParams, signalName, G_CALLBACK(accountIdChangeCallback), listener);
+
+    return true;
+}
+
+bool deviceServiceConfigurationUnregisterAccountIdListener(deviceServiceConfigurationAccountIdListener listener)
+{
+    g_return_val_if_fail(listener != NULL, false);
+
+    LOCK_SCOPE(deviceServiceConfigurationMutex);
+
+    if (initializeParams == NULL)
+    {
+        icError("device service configuration not started");
+        return false;
+    }
+
+    g_signal_handlers_disconnect_by_func(initializeParams, G_CALLBACK(accountIdChangeCallback), listener);
+
+    return true;
+}
+
+static void accountIdChangeCallback(GObject *object, GParamSpec *pspec, gpointer userData)
+{
+    g_return_if_fail(object != NULL);
+    g_return_if_fail(userData != NULL);
+
+    const gchar *accountId = NULL;
+    g_object_get(object,
+                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
+                 &accountId,
+                 NULL);
+
+    deviceServiceConfigurationAccountIdListener listener = (deviceServiceConfigurationAccountIdListener) userData;
+    if (listener != NULL)
+    {
+        listener(accountId);
+    }
 }
