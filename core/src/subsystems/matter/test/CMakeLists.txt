@@ -28,27 +28,18 @@ include(BDSAddCppTest)
 # can be useful for discovering unintended tight coupling.
 
 file(GLOB TEST_SRC *.cpp)
-list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp
-                     ../MatterCommon.cpp
-                     ../CustomCommissionableDataProvider.cpp
-                     device-service-mock-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-property-provider.c)
+list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp ../MatterCommon.cpp)
 
 pkg_check_modules(OPENSSL REQUIRED openssl)
-
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--wrap=deviceServiceGetSystemProperty")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--wrap=deviceServiceSetSystemProperty")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--wrap=deviceServiceGetAllSystemProperties")
 
 # This executable should contain a collection of mini integration (mostly unit)
 # tests that validate classes meant to make some deficient SDK classes more usable.
 # Add more executables for truly isolated units that don't link to other libraries.
 bds_add_cpp_test(NAME testMatterSDKTooling
-                LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
+                LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil
                 INCLUDES ${CMAKE_SOURCE_DIR}/src
                          ${CMAKE_CURRENT_SOURCE_DIR}/..
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                         ${CMAKE_SOURCE_DIR}/api/c/public
                          ${PRIVATE_API_INCLUDES}
                 SOURCES ${TEST_SRC}
 )

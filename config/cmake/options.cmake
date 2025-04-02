@@ -156,9 +156,6 @@ bds_option(NAME BDS_TEST_COVERAGE
 bds_option(NAME BDS_MATTER_SKIP_SDK
            DEFINITION BARTON_CONFIG_MATTER_SKIP_SDK
            DESCRIPTION "When building Matter, skip building the SDK (as a client may be building it separately already)")
-bds_option(NAME BDS_DEV_BUILD
-           DEFINITION BARTON_CONFIG_DEV_BUILD
-           DESCRIPTION "Indicate that Barton is being built in a development environment")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

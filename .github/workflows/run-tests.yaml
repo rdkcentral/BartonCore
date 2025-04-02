@@ -68,7 +68,7 @@ jobs:
             -
                 name: Build BartonCore
                 run: |
-                    ./dockerw -n ./build.sh -DBDS_MATTER_SELF_SIGNED_OP_CREDS_ISSUER=ON -DBDS_MATTER_USE_RANDOM_PORT=ON -DBDS_BUILD_WITH_SSP=ON -DBDS_BUILD_WITH_ASAN=ON -DBDS_DEV_BUILD=ON
+                    ./dockerw -n ./build.sh -DBDS_MATTER_SELF_SIGNED_OP_CREDS_ISSUER=ON -DBDS_MATTER_USE_RANDOM_PORT=ON -DBDS_BUILD_WITH_SSP=ON -DBDS_BUILD_WITH_ASAN=ON
             -
                 name: Run unit tests
                 run: ./dockerw -n ctest --output-on-failure --test-dir build

@@ -133,7 +133,7 @@ using namespace chip::app::Clusters;
 static constexpr uint16_t kMaxGroupsPerFabric = 5;
 static constexpr uint16_t kMaxGroupKeysPerFabric = 8;
 static constexpr uint16_t kMaxDiscriminator = 4096;
-static constexpr uint16_t kDefaultPAKEIterationCount = chip::Crypto::kSpake2p_Min_PBKDF_Iterations;
+static constexpr uint16_t kDefaultPAKEIterationCount = 1000;
 
 namespace
 {
@@ -154,7 +154,6 @@ namespace
         0xad, 0xcd, 0x91, 0xb9, 0x43, 0xd8, 0x58, 0x1e, 0x03, 0x63, 0xa1, 0xba, 0x18, 0xa6, 0x1d, 0xe7, 0xc7,
         0x6a, 0xbb, 0x2a, 0x0b, 0xdc, 0xef, 0x39, 0xfb, 0xb7, 0x37, 0x1f, 0x83, 0xca, 0x65};
 
-    constexpr uint16_t DEVELOPMENT_DISCRIMINATOR = 3840;
 } // namespace
 
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
@@ -245,26 +244,8 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         return false;
     }
 
-    static CustomCommissionableDataProvider customCommissionableDataProvider(propertyProvider);
-#ifdef BARTON_CONFIG_DEV_BUILD
-    // This default discriminator should only be used in development environments.
-    // As per Matter spec 5.1.1.5., manufacturers SHALL NOT use a common discriminator for all devices,
-    // to allow a commissioner to distinguish between multiple advertising devices. As such, when Barton is
-    // being consumed by clients in production builds, different devices will need to have different discriminators,
-    // and that value must be stored as a property prior to Matter initialization.
-    Optional<uint16_t> discriminator(DEVELOPMENT_DISCRIMINATOR);
-#else
-    // No value indicates that the discriminator value should already be set in the property provider. If it's not,
-    // then Matter initialization will fail.
-    Optional<uint16_t> discriminator(NullOptional);
-#endif
-    err = customCommissionableDataProvider.Init(discriminator, kDefaultPAKEIterationCount);
-    if (err != CHIP_NO_ERROR)
-    {
-        icError("Failed to initialize custom commissionable data provider: %s", err.AsString());
-        return false;
-    }
-    chip::DeviceLayer::SetCommissionableDataProvider(&customCommissionableDataProvider);
+    static chip::DeviceLayer::TestOnlyCommissionableDataProvider TestOnlyCommissionableDataProvider;
+    chip::DeviceLayer::SetCommissionableDataProvider(&TestOnlyCommissionableDataProvider);
 
     chip::DeviceLayer::ConfigurationMgr().LogDeviceConfig();
 

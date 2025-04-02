@@ -75,57 +75,12 @@ G_BEGIN_DECLS
 /**
  * DEFAULT_THREAD_NETWORK_NAME: (value "barton.thread.defaultNetworkName")
  *
- * The default name of the Thread network, provided by the client. This is the name
+ * The default name of the thread network, provided by the client. This is the name
  * that will be used if we (Barton) create the Thread network ourselves. The end user
  * can still change this later.
  * Type: string
  */
 #define B_DEVICE_SERVICE_BARTON_DEFAULT_THREAD_NETWORK_NAME                                                            \
     B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_THREAD_PREFIX "defaultNetworkName"
-
-/**
- * MATTER_SETUP_DISCRIMINATOR: (value "barton.matter.setupDiscriminator")
- *
- * The setup discriminator for the Matter device.
- * Type: uint16
- */
-#define B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR                                                             \
-    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "setupDiscriminator"
-
-/**
- * MATTER_SPAKE2P_ITERATION_COUNT: (value "barton.matter.spake2pIterationCount")
- *
- * The iteration count for the Matter device's spake2p verifier.
- * Type: uint32
- */
-#define B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT                                                         \
-    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "spake2pIterationCount"
-
-/**
- * MATTER_SPAKE2P_SALT: (value "barton.matter.spake2pSalt")
- *
- * The base64-encoded salt for the Matter device's spake2p verifier.
- * Type: string
- */
-#define B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT                                                                    \
-    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "spake2pSalt"
-
-/**
- * MATTER_SPAKE2P_VERIFIER: (value "barton.matter.spake2pVerifier")
- *
- * The Matter device's base64-encoded spake2p verifier.
- * Type: string
- */
-#define B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER                                                                \
-    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "spake2pVerifier"
-
-/**
- * MATTER_SETUP_PASSCODE: (value "barton.matter.setupPasscode")
- *
- * The setup passcode for the Matter device.
- * Type: uint32
- */
-#define B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE                                                                  \
-    B_DEVICE_SERVICE_BARTON_PREFIX B_DEVICE_SERVICE_MATTER_PREFIX "setupPasscode"
 
 G_END_DECLS

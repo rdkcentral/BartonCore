@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include "provider/device-service-property-provider.h"
 #ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
 #include "SelfSignedCertifierOperationalCredentialsIssuer.hpp"
 #else
@@ -35,7 +34,6 @@
 #endif
 
 #include "AccessRestrictionProvider.h"
-#include "CustomCommissionableDataProvider.hpp"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
@@ -43,13 +41,13 @@
 #include "SessionMessageHandler.hpp"
 #include "credentials/attestation_verifier/FileAttestationTrustStore.h"
 #include "crypto/CHIPCryptoPAL.h"
-#include "lib/core/CHIPVendorIdentifiers.hpp"
 #include <app/server/Server.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/ExampleOperationalCredentialsIssuer.h>
 #include <credentials/GroupDataProviderImpl.h>
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
 #include <platform/Linux/CHIPLinuxStorage.h>
+#include "lib/core/CHIPVendorIdentifiers.hpp"
 #include <thread>
 
 #include <lib/support/PersistedCounter.h>
