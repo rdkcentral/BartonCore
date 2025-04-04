@@ -1223,36 +1223,33 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
 
     if (commissioningWindowManager.IsCommissioningWindowOpen())
     {
-        icWarn("Commissioning window already open");
+        icWarn("Commissioning window was already open.  Closing it and opening a new one.");
+        commissioningWindowManager.CloseCommissioningWindow();
+    }
+
+    uint8_t pbkdfSaltBuffer[Crypto::kSpake2p_Max_PBKDF_Salt_Length];
+    ByteSpan pbkdfSalt;
+    Crypto::Spake2pVerifierSerialized pakePasscodeVerifierBuffer;
+
+    Crypto::DRBG_get_bytes(pbkdfSaltBuffer, sizeof(pbkdfSaltBuffer));
+    pbkdfSalt = ByteSpan(pbkdfSaltBuffer);
+
+    Spake2pVerifier verifier;
+    if (CHIP_NO_ERROR != verifier.Generate(iterations, pbkdfSalt, setupPayload.setUpPINCode))
+    {
+        icError("Failed to generate verifier");
         success = false;
     }
     else
     {
-
-        uint8_t pbkdfSaltBuffer[Crypto::kSpake2p_Max_PBKDF_Salt_Length];
-        ByteSpan pbkdfSalt;
-        Crypto::Spake2pVerifierSerialized pakePasscodeVerifierBuffer;
-
-        Crypto::DRBG_get_bytes(pbkdfSaltBuffer, sizeof(pbkdfSaltBuffer));
-        pbkdfSalt = ByteSpan(pbkdfSaltBuffer);
-
-        Spake2pVerifier verifier;
-        if (CHIP_NO_ERROR != verifier.Generate(iterations, pbkdfSalt, setupPayload.setUpPINCode))
-        {
-            icError("Failed to generate verifier");
-            success = false;
-        }
-        else
-        {
-            success = CHIP_NO_ERROR ==
-                      commissioningWindowManager.OpenEnhancedCommissioningWindow(System::Clock::Seconds16(timeoutSecs),
-                                                                                 discriminator,
-                                                                                 verifier,
-                                                                                 iterations,
-                                                                                 pbkdfSalt,
-                                                                                 myFabricIndex,
-                                                                                 this->vendorId);
-        }
+        success = CHIP_NO_ERROR ==
+                  commissioningWindowManager.OpenEnhancedCommissioningWindow(System::Clock::Seconds16(timeoutSecs),
+                                                                             discriminator,
+                                                                             verifier,
+                                                                             iterations,
+                                                                             pbkdfSalt,
+                                                                             myFabricIndex,
+                                                                             this->vendorId);
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
