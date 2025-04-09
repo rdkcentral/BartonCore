@@ -161,7 +161,7 @@ static gboolean maybeInitMatter(void *context)
         uint64_t accountId = 0;
         if (!stringToUint64(accountIdStr, &accountId) || accountId == 0)
         {
-            icError("failed to retrieve XBO account ID");
+            icError("failed to retrieve account ID");
             initSuccessful = false;
         }
         else

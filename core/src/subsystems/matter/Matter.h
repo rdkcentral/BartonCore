@@ -71,8 +71,10 @@ namespace barton
 
         /**
          * Initialize the Matter stack interface.  Must be called before other APIs.
+         * Note: the account ID must be unique under the related CA as it is used as
+         *       the fabric ID.
          *
-         * @param accountId the active XBO account ID
+         * @param accountId the active account ID
          * @return true upon success
          */
         bool Init(uint64_t accountId, std::string &&attestationTrustStorePath);
