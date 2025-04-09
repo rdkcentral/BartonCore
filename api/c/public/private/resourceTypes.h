@@ -109,17 +109,6 @@
 #define RESOURCE_TYPE_BRIDGE_RESET                      "com.icontrol.bridgeReset"
 #define RESOURCE_TYPE_BRIDGE_RESET_SMOKE_SENSORS        "com.icontrol.bridgeResetSmokeSensors"
 
-#define RESOURCE_TYPE_BRAINSUCK_CONTROL                 "com.icontrol.brainsuckControl"
-#define RESOURCE_TYPE_BRAINSUCK_STATUS                  "com.icontrol.brainsuckStatus"
-#define RESOURCE_TYPE_PIM_FIRMWARE_UPGRADE              "com.icontrol.upgradePimFirmware"
-#define RESOURCE_TYPE_PIM_INSTALLER_CODE_CONTROL        "com.icontrol.installerCodeControl"
-
-#define RESOURCE_TYPE_MODEM_POWER_ON                    "com.icontrol.remoteCellModemPowerOn"
-#define RESOURCE_TYPE_MODEM_POWER_OFF                   "com.icontrol.remoteCellModemPowerOff"
-#define RESOURCE_TYPE_MODEM_EMERGENCY_RESET             "com.icontrol.remoteCellModemEmergencyReset"
-#define RESOURCE_TYPE_MODEM_REBOOT_REASON               "com.icontrol.remoteCellModemRebootReason"
-#define RESOURCE_TYPE_MODEM_RESYNC_UART                 "com.icontrol.remoteCellModemResyncUart"
-
 #define RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH           "com.icontrol.magneticFieldStrength"
 
 #endif // FLEXCORE_RESOUCETYPES_H

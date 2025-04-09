@@ -118,63 +118,6 @@
 #define CAMERA_PROFILE_FUNCTION_GET_PICTURE                          "getPicture"
 #define CAMERA_PROFILE_FUNCTION_UPLOAD_VIDEO_CLIP                    "uploadVideoClip"
 
-// PIM Stuff
-#define PIM_DC                                                       "pim"
-#define PIM_PROFILE                                                  "pim"
-#define PIM_PROFILE_RESOURCE_SECURITY_STATE                          "securityState"
-#define PIM_PROFILE_RESOURCE_ZONE_CHANGED                            "zoneChanged"
-#define PIM_PROFILE_RESOURCE_INITIATE_BRAINSUCK                      "initiateBrainsuck"
-#define PIM_PROFILE_RESOURCE_INITIATE_UPGRADE                        "initiateUpgrade"
-#define PIM_PROFILE_RESOURCE_BRAINSUCK_STATUS                        "brainsuckStatus"
-#define PIM_PROFILE_RESOURCE_FIND_INSTALLER_CODE                     "findInstallerCode"
-#define PIM_PROFILE_BRAINSUCK_STATUS_NOT_STARTED                     "notStarted"
-#define PIM_PROFILE_BRAINSUCK_STATUS_STARTED                         "started"
-#define PIM_PROFILE_BRAINSUCK_STATUS_COMPLETED                       "completed"
-#define PIM_PROFILE_BRAINSUCK_STATUS_FAILED                          "failed"
-#define PIM_PROFILE_ZONE_TYPE_METADATA                               "pimZoneType"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_DOOR                          "door"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_WINDOW                        "window"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_MOTION                        "motion"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_PANIC                         "panic"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_WATER                         "water"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_ENVIRONMENTAL                 "environmental"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_SMOKE                         "smoke"
-#define PIM_PROFILE_ZONE_TYPE_METADATA_CO                            "co"
-#define PIM_PROFILE_ZONE_FUNC_METADATA                               "pimZoneFunc"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_ENTRY_EXIT                    "entryExit"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_PERIMETER                     "perimeter"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_TRBL_DAY_ALRM_NGHT            "troubleDayAlarmNight"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_SILENT_24HR                   "silent24Hour"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_AUDIBLE_24HR                  "audible24Hour"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_FIRE_24HR                     "fire24Hour"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_MONITOR_24HR                  "monitor24Hour"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_NO_ALARM_RESPONSE             "noAlarmResponse"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_SILENT_BURG                   "silentBurglary"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_INT_FOLLOWER                  "interiorFollower"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_INT_WITH_DELAY                "interiorWithDelay"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_INT_ARM_NIGHT                 "interiorArmNight"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_INT_ARM_NIGHT_DELAY           "interiorArmNightDelay"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_ARM_STAY                      "armStay"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_ARM_AWAY                      "armAway"
-#define PIM_PROFILE_ZONE_FUNC_METADATA_DISARM                        "disarm"
-#define PIM_CHIMES_ENABLED_METADATA                                  "pimChimesEnabled"
-#define PIM_PROFILE_RESOURCE_GENERAL_TROUBLE                         "generalTrouble"
-
-// PRM Stuff
-#define PRM_DC                                                       "prm"
-#define BRIDGE_PROFILE                                               "bridge"
-#define BRIDGE_PROFILE_RESOURCE_REFRESH                              "refresh"
-#define BRIDGE_PROFILE_RESOURCE_REFRESH_STATUS                       "refreshStatus"
-#define BRIDGE_RESOURCE_REFRESH_STATUS_REQUESTED                     "Requested"
-#define BRIDGE_RESOURCE_REFRESH_STATUS_COMPLETED                     "Completed"
-#define BRIDGE_RESOURCE_REFRESH_STATUS_FAILED                        "Failed"
-#define BRIDGE_PROFILE_RESOURCE_TAMPERED                             COMMON_ENDPOINT_RESOURCE_TAMPERED
-#define BRIDGE_PROFILE_RESOURCE_CONFIGURATION_MODE                   "configurationMode"
-#define BRIDGE_PROFILE_CONFIGURATION_MODE_START                      "start"
-#define BRIDGE_PROFILE_CONFIGURATION_MODE_STOP                       "stop"
-#define BRIDGE_PROFILE_RESOURCE_RESET                                "reset"
-#define BRIDGE_PROFILE_RESOURCE_RESET_SMOKE_SENSORS                  "resetSmokeSensors"
-
 // Sensor Stuff
 #define SENSOR_DC                                                    "sensor"
 #define SENSOR_PROFILE                                               "sensor"
@@ -325,10 +268,6 @@
 #define SECURITY_CONTROLLER_PROFILE_RESOURCE_SECURITY_STATE          "securityState"
 #define SECURITY_CONTROLLER_PROFILE_RESOURCE_ZONE_CHANGED            "zoneChanged"
 
-// TODO: remove (used by legacy)
-#define SENSOR_PROFILE_KEYFOB                                        "keyfob"
-#define SENSOR_PROFILE_KEYPAD                                        "keypad"
-
 // Keyfob is an instance of keypad
 #define KEYFOB_DC                                                    "keyfob"
 
@@ -351,9 +290,6 @@
 #define LIGHTCONTROLLER_PROFILE                                      "lightController"
 #define LIGHTCONTROLLER_PROFILE_RESOURCE_BOUND_ENDPOINT_URI          "boundEndpointUri"
 
-// Integrated piezo has its own device class
-#define INTEGRATED_PIEZO_DC                                          "integratedPiezo"
-
 // Presence device has its own device class
 #define PRESENCE_DC                                                  "presence"
 #define PRESENCE_PROFILE                                             PRESENCE_DC
@@ -373,17 +309,6 @@
 #define DOORBELL_BUTTON_DC                                           "doorbellButton"
 #define DOORBELL_BUTTON_RESOURCE_PRESSED                             "pressed"
 
-// Wifi Motion stuff
-#define WIFI_MOTION_DEVICE_METADATA_IS_WIFI_MOTION                   "isWifiMotion"
-#define WIFI_MOTION_EVENT_METADATA_MOTION_STARTED_MAC                "motionStartedMacAddr"
-#define WIFI_MOTION_EVENT_METADATA_MOTION_STARTED_LABEL              "motionStartedLabel"
-#define WIFI_MOTION_EVENT_METADATA_MOTION_STARTED_TIME               "motionStartedTime"
-#define WIFI_MOTION_EVENT_METADATA_MOTION_STOPPED_TIME               "motionStoppedTime"
-
-// Cloud device stuff
-#define CLOUD_MANAGED_OBJ_ID_METADATA                                "cloudObjectId"
-#define CLOUD_MANAGED_ALERT_PREFS_RESOURCE                           "alertPreferences"
-
 typedef enum
 {
     LPM_POLICY_NONE = 0,
@@ -393,29 +318,6 @@ typedef enum
 } lpmPolicyPriority;
 
 static const char *lpmPolicyPriorityLabels[] = {"none", "armedNight", "armedAway", "always"};
-
-// XBB stuff
-#define XBB_DC                            "xbb"
-#define XBB_RESOURCE_STATUS               "status"
-#define XBB_RESOURCE_CONFIG               "config"
-#define XBB_RESOURCE_ALARMS               "alarms"
-#define XBB_RESOURCE_SIREN_MAX_DURATION   "sirenMaxDuration"
-#define XBB_RESOURCE_SIREN_START          "sirenStart"
-#define XBB_RESOURCE_SIREN_STOP           "sirenStop"
-#define XBB_RESOURCE_SIREN_MUTE           "sirenMute"
-#define XBB_RESOURCE_LID_OPEN             "lidOpen"
-#define XBB_RESOURCE_AC_POWER_LOST        "acPowerLost"
-#define XBB_RESOURCE_LOW_VOLTAGE          "lowVoltage"
-#define XBB_RESOURCE_TEMPERATURE_STATUS   "tempStatus"
-#define XBB_RESOURCE_BANK_STATUS          "bankStatus"
-#define XBB_RESOURCE_BANK_STATUS_1        "bank1"
-#define XBB_RESOURCE_BANK_STATUS_2        "bank2"
-#define XBB_RESOURCE_BANK_STATUS_3        "bank3"
-#define XBB_BATTERY_BANK_STATUS_LOW       "lowVoltage"
-#define XBB_BATTERY_BANK_STATUS_PRESENT   "present"
-#define XBB_TEMPERATURE_STATUS_LOW        "low"
-#define XBB_TEMPERATURE_STATUS_HIGH       "high"
-#define XBB_TEMPERATURE_STATUS_NORMAL     "normal"
 
 // Metadata for migrated devices
 #define MIGRATED_DEVICE_METADATA          "migratedDevice"
@@ -429,5 +331,8 @@ static const char *lpmPolicyPriorityLabels[] = {"none", "armedNight", "armedAway
 #define NETWORK_TYPE_WIFI                 "wifi"
 #define NETWORK_TYPE_ETHERNET             "ethernet"
 #define NETWORK_TYPE_CELLULAR             "cellular"
+
+#define PIM_DC      "pim"
+#define PRM_DC      "prm"
 
 #endif // FLEXCORE_COMMONDEVICEDEFS_H
