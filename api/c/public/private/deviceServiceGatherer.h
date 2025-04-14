@@ -158,12 +158,14 @@ void collectPairedDevicesInformation(GHashTable *output);
 void collectPairedCamerasInformation(GHashTable *output);
 
 /**
- * Add total connected device that are not in comm fail count
+ * Add count of total devices and total connected devices that are not in comm fail
+ * Excludes camera and doorbell button devices from the count.
  *
  * @param output - the runtimeStatistics hashMap containing total connected device count.
  * e.g.
+ * {"TotalDeviceCount": "6"}
  * {"TotalConnectedDeviceCount": "5"}
  */
-void collectTotalConnectedDeviceCount(GHashTable *output);
+void collectTotalDeviceCount(GHashTable *output);
 
 #endif // BARTON_CONFIG_ZIGBEE

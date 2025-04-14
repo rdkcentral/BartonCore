@@ -830,16 +830,19 @@ void collectPairedCamerasInformation(GHashTable *output)
 }
 
 /**
- * Add total connected device that are not in comm fail count
+ * Add count of total devices and total connected devices that are not in comm fail
+ * Excludes camera and doorbell button devices from the count.
  *
  * @param output - the runtimeStatistics hashMap containing total connected device count.
  * e.g.
+ * {"TotalDeviceCount": "6"}
  * {"TotalConnectedDeviceCount": "5"}
  */
-void collectTotalConnectedDeviceCount(GHashTable *output)
+void collectTotalDeviceCount(GHashTable *output)
 {
     g_return_if_fail(output != NULL);
-    uint16_t deviceCount = 0;
+    int32_t  totalDeviceCount = 0;
+    int32_t  connectedDeviceCount = 0;
 
     scoped_icDeviceList *deviceList = deviceServiceGetAllDevices();
     scoped_icLinkedListIterator *deviceIter = linkedListIteratorCreate(deviceList);
@@ -848,19 +851,30 @@ void collectTotalConnectedDeviceCount(GHashTable *output)
     {
         const icDevice *device = linkedListIteratorGetNext(deviceIter);
 
-        if (device->uuid == NULL)
+        //ignore camera devices.
+        if (device->uuid == NULL || device->deviceClass == NULL || stringCompare(device->deviceClass, CAMERA_DC, false) == 0 ||
+            stringCompare(device->deviceClass, DOORBELL_BUTTON_DC, false) == 0)
         {
+            icLogInfo(LOG_TAG,
+                      "%s: skipping device %s of deviceClass %s for total device count",
+                      __FUNCTION__,
+                      stringCoalesce(device->uuid),
+                      stringCoalesce(device->deviceClass));
             continue;
         }
-
+        totalDeviceCount++;
         if (deviceServiceIsDeviceInCommFail(device->uuid) == false)
         {
-            deviceCount++;
+            connectedDeviceCount++;
         }
     }
+    int32_t *totalCount = malloc(sizeof(int32_t));
+    *totalCount = totalDeviceCount;
+    g_hash_table_insert(output, g_strdup("TotalDeviceCount"), g_steal_pointer(&totalCount));
 
-    g_autofree char *valueString = stringBuilder("%" PRIu16, deviceCount);
-    g_hash_table_insert(output, g_strdup("TotalConnectedDeviceCount"), g_steal_pointer(&valueString));
+    int32_t *connectedDeviceValue = malloc(sizeof(int32_t));
+    *connectedDeviceValue = connectedDeviceCount;
+    g_hash_table_insert(output, g_strdup("TotalConnectedDeviceCount"), g_steal_pointer(&connectedDeviceValue));
 }
 
 /**
