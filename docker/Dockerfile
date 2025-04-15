@@ -100,7 +100,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 
 # Fix setuptools on v73. v74+ removed some distutils modules that breaks gobject introspection (among a lot of other projects)
 RUN pip3 install --upgrade --break-system-packages \
-    pygobject \
+    pygobject===3.50.0 \
     pygobject-stubs \
     setuptools==73.0.0 \
     python_stdnum \
