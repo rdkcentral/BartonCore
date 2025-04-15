@@ -23,7 +23,7 @@
         <description>Bosch PIR Motion Sensor</description>
         <category>zigbee</category>
         <manufacturer>Bosch</manufacturer>
-        <model>ISW-ZPR1-WP13</model>
+        <model>ISW-ZTEST-WP13</model>
         <hardwareVersions>*</hardwareVersions>
         <firmwareVersions>
             0x02020201,0x02030201,0x02040201,0x02050202,0x02080202,0x02090202
@@ -402,12 +402,12 @@
             <type>ota</type>
         </latestFirmware>
     </DeviceDescriptor>
-    <!-- Sercomm Sensors Begin -->
+    <!-- TestVendor Sensors Begin -->
     <DeviceDescriptor>
         <uuid>652CEC88-09F0-4E24-918F-2D6114E4D753</uuid>
         <description>Door/Window Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-DWS04</model>
         <hardwareVersions>0x11</hardwareVersions>
         <firmwareVersions>
@@ -423,7 +423,7 @@
         <uuid>FD7D2B00-9803-11E4-BD06-0800200C9A66</uuid>
         <description>Door/Window Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-DWS04</model>
         <hardwareVersions>0x12</hardwareVersions>
         <firmwareVersions>
@@ -439,7 +439,7 @@
         <uuid>4455DB60-FFAD-11E4-B939-0800200C9A66</uuid>
         <description>Door/Window Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-DWS06</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x13005420,0x14005420,0x16015420,0x18005420</firmwareVersions>
@@ -453,7 +453,7 @@
         <uuid>A79BF810-520C-11E5-B970-0800200C9A66</uuid>
         <description>Door/Window Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>XHS2-SE</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x14005420,0x16005420,0x16015420,0x18005420</firmwareVersions>
@@ -467,7 +467,7 @@
         <uuid>91987BD0-9CD7-11E6-BDF4-0800200C9A66</uuid>
         <description>Door/Window Sensor(EFR32MG)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-DWS08</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x12005720,0x13025720</firmwareVersions>
@@ -481,7 +481,7 @@
         <uuid>C69106C0-4257-11E6-BDF4-0800200C9A66</uuid>
         <description>Motion Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-PIR04</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x17025720</firmwareVersions>
@@ -495,7 +495,7 @@
         <uuid>f87596a8-bb9b-4b69-8b09-a2d79815185d</uuid>
         <description>Water Sensor(EFR32)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-WTD03</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x12005720,0x13005720,0x14005720</firmwareVersions>
@@ -1233,12 +1233,12 @@
             <type>ota</type>
         </latestFirmware>
     </DeviceDescriptor>
-    <!--  Sercomm Devices  -->
+    <!--  TestVendor Devices  -->
     <DeviceDescriptor>
         <uuid>07e83493-8621-4d45-a26b-62f1fddd5f7f</uuid>
         <description>Smart Plug(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-ESW01</model>
         <hardwareVersions>16</hardwareVersions>
         <firmwareVersions>0x150032BC,0x170032BC</firmwareVersions>
@@ -1252,7 +1252,7 @@
         <uuid>0B419940-6C9A-11E5-A837-0800200C9A66</uuid>
         <description>Smart Plug(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-ESW01-AU</model>
         <hardwareVersions>0x11</hardwareVersions>
         <firmwareVersions>0x12005010</firmwareVersions>
@@ -1266,7 +1266,7 @@
         <uuid>ED2ED3F0-A573-11E6-9598-0800200C9A66</uuid>
         <description>Smart Plug(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-ESW02</model>
         <hardwareVersions>0x10</hardwareVersions>
         <firmwareVersions>0x19005720</firmwareVersions>
@@ -1539,7 +1539,7 @@
         <uuid>7560472C-679C-4701-9284-85E80539DC5C</uuid>
         <description>ZigBee Remote Cell Radio</description>
         <category>zigbee</category>
-        <manufacturer>Technicolor</manufacturer>
+        <manufacturer>TestVendor 2</manufacturer>
         <model>TCHU1AL0</model>
         <hardwareVersions>*</hardwareVersions>
         <firmwareVersions>0x60077076-</firmwareVersions>
@@ -1769,7 +1769,7 @@
             <type>ota</type>
         </latestFirmware>
     </DeviceDescriptor>
-    <!--  SamsungSDS  -->
+    <!--  TestVendorSDS  -->
     <DeviceDescriptor>
         <uuid>30A8EB92-0640-4D8D-A967-16F728B161F9</uuid>
         <description>SAMSUNG SDS Doorlock(EM357)</description>
@@ -1780,7 +1780,7 @@
         <firmwareVersions>0x00000001,0x00000002,0x00000004,0x00000005</firmwareVersions>
         <latestFirmware>
             <version>0x00000005</version>
-            <filename>20150223_SamsungSDS_5_3_0_doorlock_v.1.2.5.ota</filename>
+            <filename>20150223_TestVendorSDS_5_3_0_doorlock_v.1.2.5.ota</filename>
             <type>ota</type>
         </latestFirmware>
     </DeviceDescriptor>
@@ -1794,7 +1794,7 @@
         <firmwareVersions>0x00000004,0x00000005,0x00000006</firmwareVersions>
         <latestFirmware>
             <version>0x00000006</version>
-            <filename>SamsungSDS_5_4_0_365plus_doorlock_v1_4_6.ota</filename>
+            <filename>TestVendorSDS_5_4_0_365plus_doorlock_v1_4_6.ota</filename>
             <type>ota</type>
         </latestFirmware>
     </DeviceDescriptor>

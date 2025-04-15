@@ -1,6 +1,8 @@
 From 51008cad7c38a29dbc6a721602507053ba1d932b Mon Sep 17 00:00:00 2001
 From: Thomas Lea <thomas_lea@comcast.com>
+Source: Comcast
 Date: Fri, 14 Feb 2025 11:09:25 -0600
+
 Subject: [PATCH] Extend d-bus properties and signals
 
 This change adds the following new properties:
@@ -32,7 +34,7 @@ index 51f8828e6a8..bd3ed715255 100644
 @@ -718,6 +718,21 @@ ClientError ThreadApiDBus::GetCapabilities(std::vector<uint8_t> &aCapabilities)
      return GetProperty(OTBR_DBUS_PROPERTY_CAPABILITIES, aCapabilities);
  }
- 
+
 +ClientError ThreadApiDBus::GetBorderAgentId(std::vector<uint8_t> &aId)
 +{
 +    return GetProperty(OTBR_DBUS_PROPERTY_BORDER_AGENT_ID, aId);
@@ -58,7 +60,7 @@ index e817e525355..4ab4e1542eb 100644
 @@ -864,6 +864,41 @@ public:
       */
      ClientError GetCapabilities(std::vector<uint8_t> &aCapabilities);
- 
+
 +    /**
 +     * This method gets the border agent identifier.
 +     *
@@ -107,7 +109,7 @@ index 6f8a6e6545a..ed5236c5170 100644
  #define OTBR_DBUS_PROPERTY_CAPABILITIES "Capabilities"
 +#define OTBR_DBUS_PROPERTY_BORDER_AGENT_ID "BorderAgentId"
 +#define OTBR_DBUS_PROPERTY_THREAD_NETIF_UP "ThreadNetIfUp"
- 
+
  #define OTBR_NAT64_STATE_NAME_DISABLED "disabled"
  #define OTBR_NAT64_STATE_NAME_NOT_RUNNING "not_running"
 diff --git a/src/dbus/server/dbus_thread_object_rcp.cpp b/src/dbus/server/dbus_thread_object_rcp.cpp
@@ -124,7 +126,7 @@ index a6a3aa3f823..0e5c54d344e 100644
 +    threadHelper->AddNat64StateChangeHandler(std::bind(&DBusThreadObjectRcp::Nat64StateChangeHandler, this, _1, _2));
 +#endif
      mHost.RegisterResetHandler(std::bind(&DBusThreadObjectRcp::NcpResetHandler, this));
- 
+
      RegisterMethod(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_SCAN_METHOD,
 @@ -307,6 +312,12 @@ otbrError DBusThreadObjectRcp::Init(void)
                                 std::bind(&DBusThreadObjectRcp::GetTelemetryDataHandler, this, _1));
@@ -136,9 +138,9 @@ index a6a3aa3f823..0e5c54d344e 100644
 +#endif
 +    RegisterGetPropertyHandler(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_THREAD_NETIF_UP,
 +                               std::bind(&DBusThreadObjectRcp::GetThreadNetIfUpHandler, this, _1));
- 
+
      SuccessOrExit(error = Signal(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_SIGNAL_READY, std::make_tuple()));
- 
+
 @@ -332,6 +343,11 @@ void DBusThreadObjectRcp::NcpResetHandler(void)
      mHost.GetThreadHelper()->AddDeviceRoleHandler(std::bind(&DBusThreadObjectRcp::DeviceRoleHandler, this, _1));
      mHost.GetThreadHelper()->AddActiveDatasetChangeHandler(
@@ -154,7 +156,7 @@ index a6a3aa3f823..0e5c54d344e 100644
 @@ -1524,6 +1540,36 @@ exit:
      return error;
  }
- 
+
 +#if OTBR_ENABLE_BORDER_AGENT
 +otError DBusThreadObjectRcp::GetBorderAgentIdHandler(DBusMessageIter &aIter)
 +{
@@ -191,7 +193,7 @@ index a6a3aa3f823..0e5c54d344e 100644
 @@ -1809,6 +1855,31 @@ exit:
      }
  }
- 
+
 +void DBusThreadObjectRcp::PendingDatasetChangeHandler(const otOperationalDatasetTlvs &aDatasetTlvs)
 +{
 +    std::vector<uint8_t> value(aDatasetTlvs.mLength);
@@ -232,7 +234,7 @@ index 67891bc2743..1b129a1985a 100644
 +    void ThreadNetIfUpChangeHandler(bool aIsUp);
 +    void Nat64StateChangeHandler(otNat64State prefixManagerState, otNat64State translatorState);
      void NcpResetHandler(void);
- 
+
      void ScanHandler(DBusRequest &aRequest);
 @@ -179,6 +182,10 @@ private:
      otError GetDnsUpstreamQueryState(DBusMessageIter &aIter);
@@ -242,7 +244,7 @@ index 67891bc2743..1b129a1985a 100644
 +    otError GetBorderAgentIdHandler(DBusMessageIter &aIter);
 +#endif
 +    otError GetThreadNetIfUpHandler(DBusMessageIter &aIter);
- 
+
      void ReplyScanResult(DBusRequest &aRequest, otError aError, const std::vector<otActiveScanResult> &aResult);
      void ReplyEnergyScanResult(DBusRequest &aRequest, otError aError, const std::vector<otEnergyScanResult> &aResult);
 diff --git a/src/dbus/server/introspect.xml b/src/dbus/server/introspect.xml
@@ -250,19 +252,19 @@ index 449dee38bef..173485fbb0f 100644
 --- a/src/dbus/server/introspect.xml
 +++ b/src/dbus/server/introspect.xml
 @@ -561,12 +561,12 @@
- 
+
      <!-- ActiveDatasetTlvs: The Thread active dataset tlv in binary form. -->
      <property name="ActiveDatasetTlvs" type="ay" access="readwrite">
 -      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
 +      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
      </property>
- 
+
      <!-- PendingDatasetTlvs: The Thread pending dataset tlv in binary form. -->
      <property name="PendingDatasetTlvs" type="ay" access="read">
 -      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
 +      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
      </property>
- 
+
       <!-- FeatureFlagListData: The Thread feature flags (defined as proto/feature_flag.proto)
 @@ -787,7 +787,7 @@
      </literallayout>
@@ -271,12 +273,12 @@ index 449dee38bef..173485fbb0f 100644
 -      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
 +      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
      </property>
- 
+
      <!-- Nat64Mappings: The state of NAT64
 @@ -978,6 +978,16 @@
        <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
      </property>
- 
+
 +    <!-- BorderAgentId: The unique identifier of this border router agent. -->
 +    <property name="BorderAgentId" type="ay" access="read">
 +      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
@@ -297,7 +299,7 @@ index 9866225ae0a..0e874dd4990 100644
 @@ -306,6 +306,23 @@ void ThreadHelper::StateChangedCallback(otChangedFlags aFlags)
          ActiveDatasetChangedCallback();
      }
- 
+
 +    if (aFlags & OT_CHANGED_PENDING_DATASET)
 +    {
 +        PendingDatasetChangedCallback();
@@ -321,7 +323,7 @@ index 9866225ae0a..0e874dd4990 100644
 @@ -329,6 +346,43 @@ exit:
      }
  }
- 
+
 +void ThreadHelper::PendingDatasetChangedCallback()
 +{
 +    otError                  error;
@@ -365,7 +367,7 @@ index 9866225ae0a..0e874dd4990 100644
 @@ -888,6 +942,23 @@ void ThreadHelper::AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler)
      mActiveDatasetChangeHandlers.push_back(std::move(aHandler));
  }
- 
+
 +void ThreadHelper::AddPendingDatasetChangeHandler(DatasetChangeHandler aHandler)
 +{
 +    mPendingDatasetChangeHandlers.push_back(std::move(aHandler));
@@ -413,7 +415,7 @@ index 2e2de91e586..c557e26ebf2 100644
 @@ -112,6 +116,29 @@ public:
       */
      void AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler);
- 
+
 +    /**
 +     * This method adds a callback for pending dataset change.
 +     *
@@ -442,7 +444,7 @@ index 2e2de91e586..c557e26ebf2 100644
       *
 @@ -318,6 +345,12 @@ private:
      uint8_t RandomChannelFromChannelMask(uint32_t aChannelMask);
- 
+
      void ActiveDatasetChangedCallback(void);
 +    void PendingDatasetChangedCallback(void);
 +    void ThreadNetIfUpChangedCallback(bool isUp);
@@ -450,11 +452,11 @@ index 2e2de91e586..c557e26ebf2 100644
 +    void Nat64StateChangedCallback(otNat64State prefixManagerState, otNat64State translatorState);
 +#endif
 +
- 
+
  #if OTBR_ENABLE_DHCP6_PD
      static void BorderRoutingDhcp6PdCallback(otBorderRoutingDhcp6PdState aState, void *aThreadHelper);
 @@ -349,7 +382,11 @@ private:
- 
+
      std::vector<DeviceRoleHandler>    mDeviceRoleHandlers;
      std::vector<DatasetChangeHandler> mActiveDatasetChangeHandlers;
 -
@@ -464,8 +466,8 @@ index 2e2de91e586..c557e26ebf2 100644
 +    std::vector<Nat64StateChangeHandler> mNat64StateChangeHandlers;
 +#endif
      std::map<uint16_t, size_t> mUnsecurePortRefCounter;
- 
+
      bool mWaitingMgmtSetResponse =
--- 
+--
 2.43.0
 

@@ -27,7 +27,7 @@
       <description>Bosch PIR Motion Sensor</description>
       <category>zigbee</category>              
       <manufacturer>Bosch</manufacturer>              
-      <model>ISW-ZPR1-WP13</model>              
+      <model>ISW-ZTEST-WP13</model>              
       <hardwareVersions>*</hardwareVersions>              
       <firmwareVersions>0x02020201,0x02030201,0x02040201</firmwareVersions>     
       <latestFirmware>              
@@ -160,12 +160,12 @@
        </latestFirmware>
     </DeviceDescriptor>
 
-    <!--Sercomm Sensors Begin-->
+    <!--TestVendor Sensors Begin-->
     <DeviceDescriptor>
         <uuid>652CEC88-09F0-4E24-918F-2D6114E4D753</uuid>
         <description>Door/Window Sensor(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-DWS04</model>
         <hardwareVersions>0x11</hardwareVersions>
         <firmwareVersions>0x1200335E,0x1400335E,0x1600335E,0x18005121,0x20005121</firmwareVersions>
@@ -180,7 +180,7 @@
       <uuid>FD7D2B00-9803-11E4-BD06-0800200C9A66</uuid>
       <description>Door/Window Sensor(EM358x)</description>
       <category>zigbee</category>
-      <manufacturer>Sercomm Corp.</manufacturer>
+      <manufacturer>TestVendor Corp.</manufacturer>
       <model>SZ-DWS04</model>
       <hardwareVersions>0x12</hardwareVersions>
       <firmwareVersions>0x1200335E,0x1400335E,0x1600335E,0x18005121,0x20005121</firmwareVersions>
@@ -677,12 +677,12 @@
         </latestFirmware>
     </DeviceDescriptor>
   
-    <!-- Sercomm Devices -->
+    <!-- TestVendor Devices -->
     <DeviceDescriptor>
         <uuid>07e83493-8621-4d45-a26b-62f1fddd5f7f</uuid>
         <description>Smart Plug(EM358x)</description>
         <category>zigbee</category>
-        <manufacturer>Sercomm Corp.</manufacturer>
+        <manufacturer>TestVendor Corp.</manufacturer>
         <model>SZ-ESW01</model>
         <hardwareVersions>16</hardwareVersions>
         <firmwareVersions>0x150032BC,0x170032BC</firmwareVersions>
@@ -953,7 +953,7 @@
         <uuid>7560472C-679C-4701-9284-85E80539DC5C</uuid>
         <description>ZigBee Remote Cell Radio</description>
         <category>zigbee</category>
-        <manufacturer>Technicolor</manufacturer>
+        <manufacturer>TestVendor 2</manufacturer>
         <model>TCHU1AL0</model>
         <hardwareVersions>*</hardwareVersions>
         <firmwareVersions>0x60077076-</firmwareVersions>
@@ -1104,7 +1104,7 @@
        </latestFirmware>
     </DeviceDescriptor>
 
-    <!-- SamsungSDS -->
+    <!-- TestVendorSDS -->
     <DeviceDescriptor>
        <uuid>30A8EB92-0640-4D8D-A967-16F728B161F9</uuid>
        <description>SAMSUNG SDS Doorlock(EM357)</description>
@@ -1115,7 +1115,7 @@
        <firmwareVersions>0x00000001,0x00000002,0x00000004,0x00000005</firmwareVersions>
        <latestFirmware>
           <version>0x00000005</version>
-          <filename>20150223_SamsungSDS_5_3_0_doorlock_v.1.2.5.ota</filename>
+          <filename>20150223_TestVendorSDS_5_3_0_doorlock_v.1.2.5.ota</filename>
           <type>ota</type>
        </latestFirmware>
     </DeviceDescriptor>
@@ -1136,7 +1136,7 @@
     <!-- SerComm Cameras -->
     <CameraDeviceDescriptor>
         <uuid>9f24ea08-061b-48f4-876b-54639bd58fd7</uuid>
-        <description>Sercomm OC810</description>
+        <description>TestVendor OC810</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_OC810</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1163,7 +1163,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6c1db771-322a-4262-b0a8-ec8901e8e77d</uuid>
-        <description>Sercomm RC8021</description>
+        <description>TestVendor RC8021</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_8021</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1186,7 +1186,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>5cd2073c-5d08-43e9-9fb9-3c08c12ad713</uuid>
-        <description>Sercomm iCamera 1000</description>
+        <description>TestVendor iCamera 1000</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_iCamera</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1218,7 +1218,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6AF82A05-BAB2-46FB-AA11-C2A32AD836D0</uuid>
-        <description>Sercomm 8026</description>
+        <description>TestVendor 8026</description>
         <manufacturer>iControl</manufacturer>
         <model>RC8026</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1268,7 +1268,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6B28EAE2-80E3-45A1-81C0-7F48A7B141C6</uuid>
-        <description>Sercomm 431</description>
+        <description>TestVendor 431</description>
         <manufacturer>iControl</manufacturer>
         <model>OC431</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1309,7 +1309,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>4d756c74-694d-6564-6961-000e8fd0c97b</uuid>
-        <description>Sercomm iCamera2</description>
+        <description>TestVendor iCamera2</description>
         <manufacturer>iControl</manufacturer>
         <model>iCamera2</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -1345,7 +1345,7 @@
 
     <CameraDeviceDescriptor>
        <uuid>46B1F847-3972-43BB-9C39-2D8B4BF82BB4</uuid>
-       <description>Sercomm RC4551 Pan Cam</description>
+       <description>TestVendor RC4551 Pan Cam</description>
        <manufacturer>iControl</manufacturer>
        <model>RC4551</model>
        <hardwareVersions><any/></hardwareVersions>

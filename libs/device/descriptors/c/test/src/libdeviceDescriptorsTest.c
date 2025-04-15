@@ -181,7 +181,7 @@ static void test_can_locate_zigbee_descriptor_from_version_list(void **state)
 {
     deviceDescriptorsInit("data/AllowList-ZigbeeDDs.xml", NULL);
 
-    DeviceDescriptor *dd = deviceDescriptorsGet("Bosch", "ISW-ZPR1-WP13", "1", "0x02030201");
+    DeviceDescriptor *dd = deviceDescriptorsGet("Bosch", "ISW-ZTEST-WP13", "1", "0x02030201");
 
     assert_non_null(dd);
 
@@ -190,7 +190,7 @@ static void test_can_locate_zigbee_descriptor_from_version_list(void **state)
     // zigbee descriptors can have hardware versions in decimal or hexidecimal.
     //   The library handles this by internally converting to decimal strings
     //   if required.
-    dd = deviceDescriptorsGet("Sercomm Corp.", "SZ-DWS04", "18", "0x23005121");
+    dd = deviceDescriptorsGet("TestVendor Corp.", "SZ-DWS04", "18", "0x23005121");
 
     assert_non_null(dd);
 
@@ -230,14 +230,14 @@ static void test_can_locate_zigbee_descriptor_with_only_minimum_in_range(void **
 {
     deviceDescriptorsInit("data/AllowList-ZigbeeDDs.xml", NULL);
 
-    DeviceDescriptor *dd = deviceDescriptorsGet("Technicolor", "TCHU1AL0", "1", "0x6113a31a");
+    DeviceDescriptor *dd = deviceDescriptorsGet("TestVendor 2", "TCHU1AL0", "1", "0x6113a31a");
 
     assert_non_null(dd);
 
     deviceDescriptorFree(dd);
 
 
-    dd = deviceDescriptorsGet("Technicolor", "TCHU1AL0", "1", "0x60077076");
+    dd = deviceDescriptorsGet("TestVendor 2", "TCHU1AL0", "1", "0x60077076");
 
     assert_non_null(dd);
 
@@ -258,7 +258,7 @@ static void test_cant_locate_zigbee_descriptor_with_only_minimum_in_range(void *
 {
     deviceDescriptorsInit("data/AllowList-ZigbeeDDs.xml", NULL);
 
-    DeviceDescriptor *dd = deviceDescriptorsGet("Technicolor", "TCHU1AL0", "1", "0x4c13a31a");
+    DeviceDescriptor *dd = deviceDescriptorsGet("TestVendor 2", "TCHU1AL0", "1", "0x4c13a31a");
 
     assert_null(dd);
 

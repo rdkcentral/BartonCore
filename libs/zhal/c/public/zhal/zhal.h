@@ -645,7 +645,7 @@ cJSON *zhalGetAndClearCounters(void);
 
 /*
  * Turn on or off the piezo that is integrated with the zigbee chip.  Note not all devices connect
- * the piezo up this way (TCA20x and TCA300 do).
+ * the piezo up this way.
  *
  * @return 0 in success
  */

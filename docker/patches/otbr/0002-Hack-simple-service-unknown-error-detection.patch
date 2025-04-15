@@ -1,6 +1,7 @@
 From 46faf5a77c3af88a556b1a746f9a6e3e9d8f9645 Mon Sep 17 00:00:00 2001
 From: Thomas Lea <thomas_lea@comcast.com>
 Date: Thu, 6 Feb 2025 20:48:36 +0000
+Source: Comcast
 Subject: [PATCH 2/2] Hack simple service unknown error detection
 
 ---
@@ -14,21 +15,21 @@ index 98535dd..9027838 100644
 @@ -26,6 +26,7 @@
   *    POSSIBILITY OF SUCH DAMAGE.
   */
- 
+
 +#include <regex>
  #include "client_error.hpp"
- 
+
  #include "common/code_utils.hpp"
 @@ -74,10 +75,17 @@ static const std::pair<ClientError, const char *> sErrorNames[] = {
      {ClientError::OT_ERROR_REJECTED, OTBR_OPENTHREAD_ERROR_PREFIX ".Rejected"},
  };
- 
+
 +static std::regex unknown_service("The name .* was not provided by any \\.service files", std::regex_constants::ECMAScript);
 +
  ClientError ConvertFromDBusErrorName(const std::string &aErrorName)
  {
      ClientError error = ClientError::ERROR_NONE;
- 
+
 +    if (std::regex_search(aErrorName, unknown_service))
 +    {
 +        return ClientError::ERROR_DBUS;
@@ -37,6 +38,6 @@ index 98535dd..9027838 100644
      for (const auto &p : sErrorNames)
      {
          if (p.second == aErrorName)
--- 
+--
 2.43.0
 

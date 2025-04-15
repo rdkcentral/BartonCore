@@ -1,6 +1,7 @@
 From 965f31750ed1d66482a0e3e533fd73ddbfc854f8 Mon Sep 17 00:00:00 2001
 From: Thomas Lea <thomas_lea@comcast.com>
 Date: Mon, 4 Nov 2024 16:01:34 -0600
+Source: Comcast
 Subject: [PATCH] Add history print and CMake build
 
 Add API to print history and also a CMake build file to build as library
@@ -43,7 +44,7 @@ index 574ab1f..8565fa8 100644
 @@ -1276,6 +1276,16 @@ int linenoiseHistoryAdd(const char *line) {
      return 1;
  }
- 
+
 +int linenoiseHistoryPrint(void)
 +{
 +    int i;
@@ -66,10 +67,10 @@ index 3f0270e..8d8dd21 100644
  int linenoiseHistorySave(const char *filename);
  int linenoiseHistoryLoad(const char *filename);
 +int linenoiseHistoryPrint(void);
- 
+
  /* Other utilities. */
  void linenoiseClearScreen(void);
--- 
+--
 2.43.0
 
 

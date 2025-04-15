@@ -5,7 +5,7 @@
     <!-- SerComm Cameras -->
     <CameraDeviceDescriptor>
         <uuid>9f24ea08-061b-48f4-876b-54639bd58fd7</uuid>
-        <description>Sercomm OC810</description>
+        <description>TestVendor OC810</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_OC810</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -32,7 +32,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6c1db771-322a-4262-b0a8-ec8901e8e77d</uuid>
-        <description>Sercomm RC8021</description>
+        <description>TestVendor RC8021</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_8021</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -55,7 +55,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>5cd2073c-5d08-43e9-9fb9-3c08c12ad713</uuid>
-        <description>Sercomm iCamera 1000</description>
+        <description>TestVendor iCamera 1000</description>
         <manufacturer>iControl</manufacturer>
         <model>SerComm_Camera_iCamera</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -87,7 +87,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6AF82A05-BAB2-46FB-AA11-C2A32AD836D0</uuid>
-        <description>Sercomm 8026</description>
+        <description>TestVendor 8026</description>
         <manufacturer>iControl</manufacturer>
         <model>RC8026</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -137,7 +137,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>6B28EAE2-80E3-45A1-81C0-7F48A7B141C6</uuid>
-        <description>Sercomm 431</description>
+        <description>TestVendor 431</description>
         <manufacturer>iControl</manufacturer>
         <model>OC431</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -178,7 +178,7 @@
 
     <CameraDeviceDescriptor>
         <uuid>4d756c74-694d-6564-6961-000e8fd0c97b</uuid>
-        <description>Sercomm iCamera2</description>
+        <description>TestVendor iCamera2</description>
         <manufacturer>iControl</manufacturer>
         <model>iCamera2</model>
         <hardwareVersions><any/></hardwareVersions>
@@ -214,7 +214,7 @@
 
     <CameraDeviceDescriptor>
        <uuid>46B1F847-3972-43BB-9C39-2D8B4BF82BB4</uuid>
-       <description>Sercomm RC4551 Pan Cam</description>
+       <description>TestVendor RC4551 Pan Cam</description>
        <manufacturer>iControl</manufacturer>
        <model>RC4551</model>
        <hardwareVersions><any/></hardwareVersions>

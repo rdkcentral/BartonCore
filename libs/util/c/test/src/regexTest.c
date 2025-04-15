@@ -124,58 +124,11 @@ static void test_zeroMatchReplacementIsNotInfinite(void **state)
     assert_string_equal(fixture, edited);
 }
 
-static void test_regexReplaceWithMultipleElementsInTheList(void **state)
-{
-    REGEX_REPLFLAGS_REPLACER(IPK_REPLACER, REGEX_GLOBAL, "ipk\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ipk-xxx\"");
-    REGEX_REPLFLAGS_REPLACER(SSID_REPLACER, REGEX_GLOBAL, "ssid\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-ssid-xxx\"");
-    REGEX_REPLFLAGS_REPLACER(
-        CREDENTIALS_REPLACER, REGEX_GLOBAL, "credentials\":\\s*\\(\"[^\"]*\"\\)", NULL, "\"xxx-credentials-xxx\"");
-
-    RegexReplacer *ipkReplacer[] = {&IPK_REPLACER, NULL};
-
-    RegexReplacer *credentialsReplacer[] = {&SSID_REPLACER, &CREDENTIALS_REPLACER, NULL};
-
-    scoped_icLinkedListNofree *registeredRegexReplacersList = linkedListCreate();
-
-    if (ipkReplacer != NULL)
-    {
-        regexInitReplacers(ipkReplacer);
-        linkedListAppend(registeredRegexReplacersList, ipkReplacer);
-    }
-
-    if (credentialsReplacer != NULL)
-    {
-        regexInitReplacers(credentialsReplacer);
-        linkedListAppend(registeredRegexReplacersList, credentialsReplacer);
-    }
-
-    const char *text =
-        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
-        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"Foo\",\"networkCredentials\":{"
-        "\"wifi\":[{\"ssid\":\"1A39-Five\",\"credentials\":\"Xfinity1\",\"band\":\"5\"},{\"ssid\":\"1A39-"
-        "TwoPointFour\",\"credentials\":\"Comcast@123\",\"band\":\"2.4\"}]}}},\"hdr\":{\"mid\":\"0b0addfd-a1e8-4a24-"
-        "9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":\"https://dhdm.xfinity.com/"
-        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
-        "\"max\":\"1\"}}}";
-    const char *fixture =
-        "{\"ver\":\"1.0.0\",\"dat\":{\"id\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\","
-        "\"getMatterCommissioningCredentialsResponse\":{\"success\":true,\"ipk\":\"xxx-ipk-xxx\","
-        "\"networkCredentials\":{\"wifi\":[{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":"
-        "\"5\"},{\"ssid\":\"xxx-ssid-xxx\",\"credentials\":\"xxx-credentials-xxx\",\"band\":\"2.4\"}]}}},\"hdr\":{"
-        "\"mid\":\"0b0addfd-a1e8-4a24-9535-9e5dcdb5777e\",\"cid\":\"iot:comcast_12345:adp:xhf:b1d013c2427b\",\"sid\":"
-        "\"https://dhdm.xfinity.com/"
-        "getMatterCommissioningCredentialsResponse.v1.actions.json\",\"rts\":1701248738753,\"seq\":{\"num\":\"1\","
-        "\"max\":\"1\"}}}";
-    AUTO_CLEAN(free_generic__auto) char *edited = regexReplaceForListOfReplacers(text, registeredRegexReplacersList);
-    assert_string_equal(fixture, edited);
-}
-
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {cmocka_unit_test(test_credentialsReplacer),
                                        cmocka_unit_test(test_subExpressionReplace),
-                                       cmocka_unit_test(test_zeroMatchReplacementIsNotInfinite),
-                                       cmocka_unit_test(test_regexReplaceWithMultipleElementsInTheList)};
+                                       cmocka_unit_test(test_zeroMatchReplacementIsNotInfinite)};
 
     int retval = cmocka_run_group_tests(tests, NULL, NULL);
 

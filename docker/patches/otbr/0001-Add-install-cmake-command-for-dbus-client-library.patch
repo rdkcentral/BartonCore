@@ -1,6 +1,7 @@
 From 53532bfd2cfd6af983fc98146ea85c5371e7fe17 Mon Sep 17 00:00:00 2001
 From: Thomas Lea <thomas_lea@comcast.com>
 Date: Thu, 6 Feb 2025 20:46:39 +0000
+Source: Comcast
 Subject: [PATCH 1/2] Add install cmake command for dbus client library
 
 ---
@@ -16,21 +17,21 @@ index 26cccb4..6411773 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -102,6 +102,9 @@ endif()
- 
+
  include(GNUInstallDirs)
- 
+
 +install(FILES ${PROJECT_SOURCE_DIR}/include/openthread-br/config.h
 +        DESTINATION include/otbr/openthread-br)
 +
  pkg_check_modules(SYSTEMD systemd)
- 
+
  if(SYSTEMD_FOUND AND (NOT DEFINED INSTALL_SYSTEMD_UNIT OR INSTALL_SYSTEMD_UNIT))
 diff --git a/src/agent/CMakeLists.txt b/src/agent/CMakeLists.txt
 index a1e91f0..5e00af3 100644
 --- a/src/agent/CMakeLists.txt
 +++ b/src/agent/CMakeLists.txt
 @@ -86,9 +86,9 @@ endif()
- 
+
  if(OTBR_SYSTEMD_UNIT_DIR)
      configure_file(otbr-agent.service.in otbr-agent.service)
 -    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/otbr-agent.service
@@ -49,7 +50,7 @@ index 01ba2f5..d904fdd 100644
 @@ -26,24 +26,18 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
- 
+
 +file(GLOB otbr-common-headers "*.hpp")
 +
  add_library(otbr-common
@@ -72,7 +73,7 @@ index 01ba2f5..d904fdd 100644
 -    types.hpp
 +    ${otbr-common-headers}
  )
- 
+
  target_link_libraries(otbr-common
 @@ -58,3 +52,6 @@ target_include_directories(otbr-common
          ${OPENTHREAD_PROJECT_DIRECTORY}/src/posix/platform/include
@@ -88,7 +89,7 @@ index ae0ae50..01dd015 100644
 @@ -26,14 +26,17 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
- 
+
 +file(GLOB otbr-dbus-client-headers "*.hpp")
 +
  add_library(otbr-dbus-client
@@ -98,11 +99,11 @@ index ae0ae50..01dd015 100644
 -    thread_api_dbus.hpp
 +    ${otbr-dbus-client-headers}
  )
- 
+
  target_link_libraries(otbr-dbus-client PUBLIC
      otbr-dbus-common
  )
- 
+
 +install(TARGETS otbr-dbus-client)
 +install(FILES ${otbr-dbus-client-headers} DESTINATION include/otbr/dbus/client)
 diff --git a/src/dbus/common/CMakeLists.txt b/src/dbus/common/CMakeLists.txt
@@ -112,7 +113,7 @@ index d433927..1af52ec 100644
 @@ -26,11 +26,14 @@
  #  POSSIBILITY OF SUCH DAMAGE.
  #
- 
+
 +file(GLOB otbr-dbus-common-headers "*.hpp")
 +
  add_library(otbr-dbus-common
@@ -127,9 +128,9 @@ index d433927..1af52ec 100644
 @@ -43,3 +46,5 @@ target_link_libraries(otbr-dbus-common PUBLIC
      ${DBUS_LIBRARIES}
  )
- 
+
 +install(TARGETS otbr-dbus-common)
 +install(FILES ${otbr-dbus-common-headers} DESTINATION include/otbr/dbus/common)
--- 
+--
 2.43.0
 
