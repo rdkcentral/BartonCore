@@ -1351,6 +1351,7 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
 
 bool Matter::SetAccessRestrictionList()
 {
+#if ENABLE_ARLS_FOR_TESTING
     bool success = false;
 
     //TODO make these real.  The restrictions now are just for certification testing and only block some attribute that wont cause cert issue
@@ -1378,6 +1379,9 @@ bool Matter::SetAccessRestrictionList()
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
     return success;
+#else
+    return true;
+#endif
 }
 
 bool Matter::ClearAccessRestrictionList()
