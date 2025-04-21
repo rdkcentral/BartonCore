@@ -122,12 +122,14 @@
 
     "fileHeaderComment.parameter": {
         "*": {
+            // Define the following in your User settings.json:
+            // "author": "Your Name",
+
             "commentprefix_slashes": "//",
             "commentprefix_hash": "#",
             "commentprefix": "${commentprefix_slashes}",
             "copyrightbegin": " ------------------------------ tabstop = 4 ----------------------------------",
             "copyrightend": " ------------------------------ tabstop = 4 ----------------------------------",
-            "author": "Christian Leithner",
             "company": "Comcast Cable Communications Management, LLC",
             "creation_suffix": [
                 "${commentprefix}",
