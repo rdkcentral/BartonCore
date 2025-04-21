@@ -38,7 +38,7 @@ project_dir = "./.."
 static_library("barton") {
   public_deps = [
     "${project_dir}/barton-common",
-    "${project_dir}/barton-common:credentials-issuer",
+    "${project_dir}/barton-common:barton-deps",
     "${project_dir}/barton-common:tbrm",
     "//src/app/server",
     "//src/controller",

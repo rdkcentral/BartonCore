@@ -229,6 +229,8 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
     g_mkdir_with_parents(matterConfDir, DEFAULT_CONF_DIR_MODE);
     b_device_service_initialize_params_container_set_matter_storage_dir(params, matterConfDir);
     b_device_service_initialize_params_container_set_matter_attestation_trust_store_dir(params, matterConfDir);
+    // TODO: Allow account id to be supplied
+    b_device_service_initialize_params_container_set_account_id(params, "1");
 
     g_autoptr(BReferenceNetworkCredentialsProvider) networkCredentialsProvider =
         b_reference_network_credentials_provider_new();

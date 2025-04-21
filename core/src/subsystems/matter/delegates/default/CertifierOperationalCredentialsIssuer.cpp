@@ -25,7 +25,8 @@
 // All rights reserved.
 // Licensed under the Apache License, Version 2.0 (the "License")
 
-#include <CertifierOperationalCredentialsIssuer.hpp>
+#include "CertifierOperationalCredentialsIssuer.hpp"
+#include "../BartonMatterDelegateRegistry.hpp"
 
 #include <stddef.h>
 
@@ -39,10 +40,6 @@
 #include <lib/support/CodeUtils.h>
 #include <lib/support/ScopedBuffer.h>
 
-#include <cinttypes>
-#include <future>
-#include <iomanip>
-#include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -55,22 +52,45 @@ extern "C" {
 #include <openssl/pem.h>
 #include <openssl/pkcs7.h>
 #include <openssl/x509.h>
+#include <icLog/logging.h>
+
+#include "deviceServiceConfiguration.h"
+#include "deviceServiceProps.h"
 }
 
-namespace chip {
-namespace Controller {
+extern "C" {
+    #define LOG_TAG "CertifierOperationalCredentialsIssuer"
+    #define logFmt(fmt) "%s: " fmt, __func__
+}
 
+using namespace barton;
 using namespace Credentials;
 using namespace Crypto;
 using namespace ASN1;
 using namespace TLV;
 using namespace chip::Platform;
 
+namespace {
+    const char *OPERATIONAL_ENVIRONMENT_STRING_PROD  = "prod";
+    const char *OPERATIONAL_ENVIRONMENT_STRING_STAGE = "stage";
+    const char *DEFAULT_OPERATIONAL_ENVIRONMENT = OPERATIONAL_ENVIRONMENT_STRING_PROD;
+
+    std::shared_ptr<CertifierOperationalCredentialsIssuer> operationalCredentialsIssuer =
+        std::make_shared<CertifierOperationalCredentialsIssuer>();
+    auto delegateRegistered = BartonMatterDelegateRegistry::Instance().RegisterBartonOperationalCredentialDelegate(
+        operationalCredentialsIssuer);
+} // namespace
+
 CHIP_ERROR CertifierOperationalCredentialsIssuer::GenerateNOCChainAfterValidation(NodeId nodeId, FabricId fabricId,
                                                                                   const ByteSpan & csr, const ByteSpan & nonce,
                                                                                   MutableByteSpan & rcac, MutableByteSpan & icac,
                                                                                   MutableByteSpan & noc)
 {
+    SetOperationalCredsIssuerApiEnv();
+
+    mAuthorizationToken = GetAuthToken();
+    VerifyOrReturnError(!mAuthorizationToken.empty(), CHIP_ERROR_INCORRECT_STATE);
+
     std::string pkcs7NOC;
     ReturnErrorOnFailure(FetchNOC(csr, fabricId, nodeId, pkcs7NOC));
 
@@ -103,115 +123,6 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::GenerateNOCChainAfterValidatio
     ReturnErrorOnFailure(PutX509(sk_X509_value(certs, 0), noc));
     ReturnErrorOnFailure(PutX509(sk_X509_value(certs, 1), icac));
     ReturnErrorOnFailure(PutX509(sk_X509_value(certs, 2), rcac));
-
-    return CHIP_NO_ERROR;
-}
-
-CHIP_ERROR CertifierOperationalCredentialsIssuer::PutX509(const X509 * cert, MutableByteSpan & outCert)
-{
-    CHIP_ERROR err = CHIP_NO_ERROR;
-
-    unsigned char * tmp = NULL;
-    size_t cert_len     = i2d_X509((X509 *) cert, &tmp);
-
-    if (outCert.size() >= cert_len)
-    {
-        err = CopySpanToMutableSpan(ByteSpan(tmp, cert_len), outCert);
-    }
-    else
-    {
-        err = CHIP_ERROR_BUFFER_TOO_SMALL;
-    }
-
-    OPENSSL_free(tmp);
-
-    return err;
-}
-
-CHIP_ERROR
-CertifierOperationalCredentialsIssuer::GenerateNOCChain(const ByteSpan & csrElements, const ByteSpan & csrNonce,
-                                                        const ByteSpan & attestationSignature,
-                                                        const ByteSpan & attestationChallenge, const ByteSpan & DAC,
-                                                        const ByteSpan & PAI,
-                                                        Callback::Callback<OnNOCChainGeneration> * onCompletion)
-{
-    ChipLogProgress(Controller, "Verifying Certificate Signing Request");
-
-    if (!mIPK.HasValue())
-    {
-        ChipLogError(NotSpecified, "No IPK set! SetIPKForNextNOCRequest prior to requesting a NOC");
-        return CHIP_ERROR_INCORRECT_STATE;
-    }
-
-    TLVReader reader;
-    reader.Init(csrElements);
-
-    if (reader.GetType() == kTLVType_NotSpecified)
-    {
-        ReturnErrorOnFailure(reader.Next());
-    }
-
-    VerifyOrReturnError(reader.GetType() == kTLVType_Structure, CHIP_ERROR_WRONG_TLV_TYPE);
-    VerifyOrReturnError(reader.GetTag() == AnonymousTag(), CHIP_ERROR_UNEXPECTED_TLV_ELEMENT);
-
-    TLVType containerType;
-    ReturnErrorOnFailure(reader.EnterContainer(containerType));
-    ReturnErrorOnFailure(reader.Next(kTLVType_ByteString, TLV::ContextTag(1)));
-
-    ByteSpan csrFromElements;
-    ReturnErrorOnFailure(reader.Get(csrFromElements));
-
-    ReturnErrorOnFailure(reader.Next(kTLVType_ByteString, TLV::ContextTag(2)));
-
-    ByteSpan nonceFromElements;
-    ReturnErrorOnFailure(reader.Get(nonceFromElements));
-
-    VerifyOrReturnError(nonceFromElements.size() == kCSRNonceLength, CHIP_ERROR_BUFFER_TOO_SMALL);
-    VerifyOrReturnError(memcmp(nonceFromElements.data(), csrNonce.data(), kCSRNonceLength) == 0, CHIP_ERROR_INTERNAL);
-
-    reader.ExitContainer(containerType);
-
-    ScopedMemoryBufferWithSize<uint8_t> csrClone;
-    ScopedMemoryBufferWithSize<uint8_t> nonceClone;
-
-    VerifyOrReturnError(csrClone.Alloc(csrFromElements.size()), CHIP_ERROR_NO_MEMORY);
-    VerifyOrReturnError(nonceClone.Alloc(nonceFromElements.size()), CHIP_ERROR_NO_MEMORY);
-
-    memcpy(csrClone.Get(), csrFromElements.data(), csrFromElements.size());
-    memcpy(nonceClone.Get(), nonceFromElements.data(), nonceFromElements.size());
-
-    std::thread fetcher(
-        [this, csrBuf = std::move(csrClone), nonceBuf = std::move(nonceClone), onCompletion](NodeId nodeId, FabricId fabricId) {
-            // FIXME: forward errors to the callback
-            Platform::ScopedMemoryBuffer<uint8_t> noc;
-            VerifyOrReturnError(noc.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
-            MutableByteSpan nocSpan(noc.Get(), kMaxCHIPDERCertLength);
-
-            Platform::ScopedMemoryBuffer<uint8_t> icac;
-            VerifyOrReturnError(icac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
-            MutableByteSpan icacSpan(icac.Get(), kMaxCHIPDERCertLength);
-
-            Platform::ScopedMemoryBuffer<uint8_t> rcac;
-            VerifyOrReturnError(rcac.Alloc(kMaxCHIPDERCertLength), CHIP_ERROR_NO_MEMORY);
-            MutableByteSpan rcacSpan(rcac.Get(), kMaxCHIPDERCertLength);
-
-            ByteSpan csr(csrBuf.Get(), csrBuf.AllocatedSize());
-            ByteSpan nonce(nonceBuf.Get(), csrBuf.AllocatedSize());
-
-            CHIP_ERROR fetchErr = GenerateNOCChainAfterValidation(nodeId, fabricId, csr, nonce, rcacSpan, icacSpan, nocSpan);
-
-            {
-                DeviceLayer::StackLock lock;
-
-                onCompletion->mCall(onCompletion->mContext, fetchErr, nocSpan, icacSpan, rcacSpan,
-                                    MakeOptional(mIPK.Value().Span()), Optional<NodeId>());
-            }
-
-            return CHIP_NO_ERROR;
-        },
-        mNodeId, mFabricId);
-
-    fetcher.detach();
 
     return CHIP_NO_ERROR;
 }
@@ -383,5 +294,52 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
     return CHIP_NO_ERROR;
 }
 
-} // namespace Controller
-} // namespace chip
+std::string CertifierOperationalCredentialsIssuer::GetAuthToken()
+{
+    g_autoptr(BDeviceServiceTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
+
+    std::string retVal = "";
+    if (tokenProvider)
+    {
+        g_autoptr(GError) error = nullptr;
+        g_autofree gchar *token =
+            b_device_service_token_provider_get_token(tokenProvider, B_DEVICE_SERVICE_TOKEN_TYPE_XPKI_MATTER, &error);
+
+        if (error)
+        {
+            icError("Failed to get auth token: [%d] - %s", error->code, error->message);
+        }
+        else if (token)
+        {
+            retVal = token;
+        }
+    }
+
+    return retVal;
+}
+
+CertifierOperationalCredentialsIssuer::ApiEnv
+CertifierOperationalCredentialsIssuer::GetIssuerApiEnvFromString(std::string operationalEnv)
+{
+    CertifierOperationalCredentialsIssuer::ApiEnv apiEnv = CertifierOperationalCredentialsIssuer::ApiEnv::prod;
+
+    if (operationalEnv == OPERATIONAL_ENVIRONMENT_STRING_PROD)
+    {
+        apiEnv = CertifierOperationalCredentialsIssuer::ApiEnv::prod;
+    }
+    else if (operationalEnv == OPERATIONAL_ENVIRONMENT_STRING_STAGE)
+    {
+        apiEnv = CertifierOperationalCredentialsIssuer::ApiEnv::stage;
+    }
+
+    return apiEnv;
+}
+
+void CertifierOperationalCredentialsIssuer::SetOperationalCredsIssuerApiEnv()
+{
+    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *propValue = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT, DEFAULT_OPERATIONAL_ENVIRONMENT);
+    std::string envString(propValue);
+    mApiEnv = GetIssuerApiEnvFromString(envString);
+}

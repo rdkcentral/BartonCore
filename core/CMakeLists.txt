@@ -72,15 +72,19 @@ endif() #BARTON_CONFIG_ZIGBEE
 
 if (BDS_MATTER)
     file(GLOB matterSubSrc "src/subsystems/matter/*.cpp")
+    file(GLOB matterSubProviderCommonSrc "src/subsystems/matter/delegates/*.cpp" "src/subsystems/matter/providers/*cpp")
+
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
     list(APPEND SOURCES
         ${matterSubSrc}
+        ${matterSubProviderCommonSrc}
+        ${BDS_MATTER_PROVIDER_IMPLEMENTATIONS}
+        ${BDS_MATTER_DELEGATE_IMPLEMENTATIONS}
         ${matterDriversSrc}
         ${matterSrc}
-        ${certifierCredsProvider}
     )
 
     # BartonMatter depends on openSSL and glib.
@@ -96,7 +100,12 @@ if (BDS_MATTER)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
-    list(APPEND XTRA_INCLUDES ${CMAKE_BINARY_DIR}/matter-install/include/matter ${OPENSSL_INCLUDE_DIRS})
+    list(APPEND XTRA_INCLUDES
+        ${CMAKE_BINARY_DIR}/matter-install/include/matter
+        ${OPENSSL_INCLUDE_DIRS}
+        ${BDS_MATTER_PROVIDER_HEADER_PATHS}
+        ${BDS_MATTER_DELEGATE_HEADER_PATHS})
+
     list(APPEND XTRA_LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES})
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
@@ -369,7 +378,7 @@ if (BDS_MATTER)
     bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
         # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
         LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
-        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
     )
 
@@ -378,7 +387,7 @@ if (BDS_MATTER)
         # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
         # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
         LIBS brtnDeviceServiceStatic gtest gmock gmock_main
-        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterSubscribeInteractionTest.cpp
     )
 

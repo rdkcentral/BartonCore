@@ -81,18 +81,12 @@ extern "C" {
 #include <lib/core/NodeId.h>
 #include <matter/MatterDriverFactory.h>
 
+#include "BartonMatterDelegateRegistry.hpp"
 #include "Matter.h"
 #include "credentials/attestation_verifier/DeviceAttestationVerifier.h"
 
-#include <CertifierOperationalCredentialsIssuer.hpp>
-
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
-
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-// Only used in development environments
-#define SELF_SIGNED_CA_COMMON_NAME "My Barton Test ECC Class I"
-#endif
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
@@ -107,12 +101,6 @@ extern "C" {
 
 #define KV_STORAGE_NAMESPACE                    "matterkv"
 #define MATTER_CONFIG_DIR                       "matter"
-
-#define MATTER_TOKEN_COMM_TOKEN_ID              "xpki"
-
-#define OPARTIONAL_ENVIRONMENT_STRING_PROD      "prod"
-#define OPARTIONAL_ENVIRONMENT_STRING_STAGE     "stage"
-#define DEFAULT_OPERATIONAL_ENVIRONMENT         OPARTIONAL_ENVIRONMENT_STRING_PROD
 
 /*
  * The SDK's example apps arbitrarily use +12 as a way to differentiate the commissioner port from the server one.
@@ -156,21 +144,12 @@ namespace
 
 } // namespace
 
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-Matter::Matter() :
-    operationalCredentialsIssuer(storageDelegate), groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
-#else
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
-#endif
 {
     MatterDriverFactory::Instance();
 
     commissionerController = std::make_unique<chip::Controller::DeviceCommissioner>();
-
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-    operationalCredentialsIssuer.SetRootCommonName(SELF_SIGNED_CA_COMMON_NAME);
-    operationalCredentialsIssuer.SetClientCommonName(SELF_SIGNED_CA_COMMON_NAME);
-#endif
+    operationalCredentialsIssuer = BartonMatterDelegateRegistry::Instance().GetBartonOperationalCredentialDelegate();
 }
 
 Matter::~Matter()
@@ -440,7 +419,7 @@ CHIP_ERROR Matter::InitCommissioner()
 
     factoryParams.opCertStore = opCertStore.get();
 
-    params.operationalCredentialsDelegate = &operationalCredentialsIssuer;
+    params.operationalCredentialsDelegate = operationalCredentialsIssuer.get();
     params.controllerVendorId = this->vendorId;
     params.permitMultiControllerFabrics = false;
 
@@ -500,18 +479,6 @@ CHIP_ERROR Matter::InitCommissioner()
         ChipLogProgress(Support,
                         "No Commissioner NOC chain or no fabric, requesting a new NOC and creating new fabric");
 
-#ifndef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-        std::string token = GetAuthToken();
-        if (token.empty())
-        {
-            ChipLogError(Controller, "Failed to get authorization token for operational credentials issuer.");
-            return CHIP_ERROR_INCORRECT_STATE;
-        }
-        operationalCredentialsIssuer.SetAuthToken(token);
-#endif
-        operationalCredentialsIssuer.SetCAProfile("XFN_Matter_OP_ICA");
-        SetOperationalCredsIssuerApiEnv();
-
         chip::Platform::ScopedMemoryBuffer<uint8_t> csr;
         VerifyOrReturnError(csr.Alloc(kMIN_CSR_Buffer_Size), CHIP_ERROR_NO_MEMORY);
 
@@ -530,16 +497,16 @@ CHIP_ERROR Matter::InitCommissioner()
 
         if (myFabricId != chip::kUndefinedFabricId)
         {
-            operationalCredentialsIssuer.SetFabricIdForNextNOCRequest(myFabricId);
+            operationalCredentialsIssuer->SetFabricIdForNextNOCRequest(myFabricId);
         }
 
-        operationalCredentialsIssuer.ObtainCsrNonce(nonceSpan);
+        operationalCredentialsIssuer->ObtainCsrNonce(nonceSpan);
 
         nocSpan = MutableByteSpan(noc.Get(), chip::Controller::kMaxCHIPDERCertLength);
         icacSpan = MutableByteSpan(icac.Get(), chip::Controller::kMaxCHIPDERCertLength);
         rcacSpan = MutableByteSpan(rcac.Get(), chip::Controller::kMaxCHIPDERCertLength);
 
-        ReturnErrorOnFailure(operationalCredentialsIssuer.GenerateNOCChainAfterValidation(
+        ReturnErrorOnFailure(operationalCredentialsIssuer->GenerateNOCChainAfterValidation(
             myNodeId, myFabricId, csrSpan, nonceSpan, rcacSpan, icacSpan, nocSpan));
 
         ReturnErrorOnFailure(SaveNOCChain(rcacSpan, icacSpan, nocSpan));
@@ -552,7 +519,7 @@ CHIP_ERROR Matter::InitCommissioner()
     params.controllerRCAC = rcacSpan;
     params.controllerICAC = icacSpan;
     params.controllerNOC = nocSpan;
-    params.operationalCredentialsDelegate = &operationalCredentialsIssuer;
+    params.operationalCredentialsDelegate = operationalCredentialsIssuer.get();
     params.deviceAttestationVerifier = dacVerifier;
     params.enableServerInteractions = true;
 
@@ -573,7 +540,7 @@ CHIP_ERROR Matter::InitCommissioner()
 
     if (ipk != nullptr)
     {
-        ReturnLogErrorOnFailure(operationalCredentialsIssuer.SetIPKForNextNOCRequest(ipk.get()->Span()));
+        ReturnLogErrorOnFailure(operationalCredentialsIssuer->SetIPKForNextNOCRequest(ipk.get()->Span()));
     }
 
     /*
@@ -1405,100 +1372,6 @@ bool Matter::ClearAccessRestrictionList()
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
     return success;
-}
-
-std::string Matter::GetAuthToken()
-{
-    g_autoptr(BDeviceServiceTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
-
-    std::string retVal = "";
-    if (tokenProvider)
-    {
-        g_autoptr(GError) error = nullptr;
-        g_autofree gchar *token =
-            b_device_service_token_provider_get_token(tokenProvider, B_DEVICE_SERVICE_TOKEN_TYPE_XPKI_MATTER, &error);
-
-        if (error)
-        {
-            icError("Failed to get auth token: [%d] - %s", error->code, error->message);
-        }
-        else if (token)
-        {
-            retVal = token;
-        }
-    }
-
-    return retVal;
-}
-
-bool Matter::PrimeNewAuthorizationToken()
-{
-    bool retVal = false;
-    std::string token = GetAuthToken();
-    if (!token.empty())
-    {
-        operationalCredentialsIssuer.SetAuthToken(token);
-        // Additionally, update our Issuer API env in case that changed.
-        SetOperationalCredsIssuerApiEnv();
-        retVal = true;
-    }
-
-    return retVal;
-}
-
-Matter::OperationalEnvironment Matter::GetOperationalEnvironment(std::string env)
-{
-    OperationalEnvironment retVal = OPERATIONAL_ENV_UNKNOWN;
-
-    if (env == OPARTIONAL_ENVIRONMENT_STRING_PROD)
-    {
-        retVal = OPERATIONAL_ENV_PROD;
-    }
-    else if (env == OPARTIONAL_ENVIRONMENT_STRING_STAGE)
-    {
-        retVal = OPERATIONAL_ENV_STAGE;
-    }
-
-    return retVal;
-}
-
-Controller::CertifierOperationalCredentialsIssuer::ApiEnv
-Matter::GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv)
-{
-    Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv;
-    switch (operationalEnv)
-    {
-        case OPERATIONAL_ENV_PROD:
-        {
-            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::prod;
-            break;
-        }
-        case OPERATIONAL_ENV_STAGE:
-        {
-            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::stage;
-            break;
-        }
-        // TODO: qa, dev
-        case OPERATIONAL_ENV_UNKNOWN:
-        default:
-        {
-            apiEnv = Controller::CertifierOperationalCredentialsIssuer::ApiEnv::prod;
-            break;
-        }
-    }
-
-    return apiEnv;
-}
-
-void Matter::SetOperationalCredsIssuerApiEnv()
-{
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    scoped_generic char *propValue = b_device_service_property_provider_get_property_as_string(
-        propertyProvider, DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT, DEFAULT_OPERATIONAL_ENVIRONMENT);
-    std::string envString(propValue);
-    Matter::OperationalEnvironment env = GetOperationalEnvironment(envString);
-    Controller::CertifierOperationalCredentialsIssuer::ApiEnv apiEnv = GetIssuerApiEnv(env);
-    operationalCredentialsIssuer.SetApiEnv(apiEnv);
 }
 
 // Note: Because we have initialized two parts of the stack (commissioner and commissionee), the callback functions

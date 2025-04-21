@@ -27,13 +27,8 @@
 
 #pragma once
 
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-#include "SelfSignedCertifierOperationalCredentialsIssuer.hpp"
-#else
-#include "CertifierOperationalCredentialsIssuer.hpp"
-#endif
-
 #include "AccessRestrictionProvider.h"
+#include "BartonOperationalCredentialsDelegate.hpp"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
@@ -41,13 +36,13 @@
 #include "SessionMessageHandler.hpp"
 #include "credentials/attestation_verifier/FileAttestationTrustStore.h"
 #include "crypto/CHIPCryptoPAL.h"
+#include "lib/core/CHIPVendorIdentifiers.hpp"
 #include <app/server/Server.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/ExampleOperationalCredentialsIssuer.h>
 #include <credentials/GroupDataProviderImpl.h>
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
 #include <platform/Linux/CHIPLinuxStorage.h>
-#include "lib/core/CHIPVendorIdentifiers.hpp"
 #include <thread>
 
 #include <lib/support/PersistedCounter.h>
@@ -201,25 +196,12 @@ namespace barton
         CHIP_ERROR ConfigureOTAProviderNode();
         bool IsAccessibleByOTARequestors();
         CHIP_ERROR AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex);
-        std::string GetAuthToken();
 
         bool IsDevelopmentMode()
         {
             // TODO: fill in with something like a call to deviceService
             return true;
         }
-
-        enum OperationalEnvironment
-        {
-            OPERATIONAL_ENV_UNKNOWN,
-            OPERATIONAL_ENV_PROD,
-            OPERATIONAL_ENV_STAGE
-        };
-
-        Matter::OperationalEnvironment GetOperationalEnvironment(std::string env);
-
-        Controller::CertifierOperationalCredentialsIssuer::ApiEnv
-        GetIssuerApiEnv(Matter::OperationalEnvironment operationalEnv);
 
         const chip::Credentials::AttestationTrustStore &GetAttestationTrustStore()
         {
@@ -282,8 +264,6 @@ namespace barton
          */
         CHIP_ERROR SetIPKOnce();
 
-        void SetOperationalCredsIssuerApiEnv();
-
         /**
          * Configure our access restrictions.  This includes setting the CommissioningARL attribute as
          * well as setting the current ARL entries for each fabric.
@@ -309,11 +289,7 @@ namespace barton
 
         PersistentStorageDelegate storageDelegate;
 
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-        chip::Controller::SelfSignedCertifierOperationalCredentialsIssuer operationalCredentialsIssuer;
-#else
-        chip::Controller::CertifierOperationalCredentialsIssuer operationalCredentialsIssuer;
-#endif
+        std::shared_ptr<BartonOperationalCredentialsDelegate> operationalCredentialsIssuer;
 
         std::unique_ptr<chip::PersistentStorageOperationalKeystore> operationalKeystore;
         std::unique_ptr<chip::Credentials::PersistentStorageOpCertStore> opCertStore;

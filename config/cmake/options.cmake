@@ -76,8 +76,13 @@ macro(bds_string_option)
     endif()
 
     if (${BDS_OPTION_NAME})
-        message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=\"${${BDS_OPTION_NAME}}\"")
-        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=\"${${BDS_OPTION_NAME}}\"")
+        # If the value of ${${BDS_OPTION_NAME}} is a list, join it with escaped semi-colons to ensure
+        # COMPILER_DEFINITIONS (https://cmake.org/cmake/help/latest/prop_tgt/COMPILE_DEFINITIONS.html)
+        # property does not improperly malform the definition. Single strings (non-lists) will be
+        # unaffected by this call.
+        string(JOIN "\;" JOINED_OPTION ${${BDS_OPTION_NAME}})
+        message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
+        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
     else()
         message(STATUS "${BDS_OPTION_NAME} unset --> ${BDS_OPTION_DEFINITION} not defined")
     endif()
@@ -168,9 +173,6 @@ bds_option(NAME BDS_PROVIDE_LIBS
 bds_option(NAME BDS_SUPPORT_ALARMS
            DEFINITION BARTON_CONFIG_SUPPORT_ALARMS
            DESCRIPTION "Whether alarms are supported by the client.")
-bds_option(NAME BDS_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-           DEFINITION BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-           DESCRIPTION "Use a self-signed CA for the Matter operational credentials issuer.")
 bds_option(NAME BDS_M1LTE
            DEFINITION BARTON_CONFIG_M1LTE
            DESCRIPTION "Indicates to Barton M1LTE is included.")
@@ -197,6 +199,32 @@ bds_string_option(NAME BDS_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
+
+set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
+set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
+set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
+
+bds_string_option(NAME BDS_MATTER_PROVIDER_IMPLEMENTATIONS
+                  DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
+                  DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
+                  VALUE "") #TODO
+
+bds_string_option(NAME BDS_MATTER_DELEGATE_IMPLEMENTATIONS
+                  DEFINITION BARTON_CONFIG_MATTER_DELEGATE_IMPLEMENTATIONS
+                  DESCRIPTION "List of paths to source files that implement Matter delegate interfaces."
+                  VALUE "${MATTER_DELEGATE_DEFAULT_DIR}/CertifierOperationalCredentialsIssuer.cpp;")
+
+bds_string_option(NAME BDS_MATTER_PROVIDER_HEADER_PATHS
+                  DEFINITION BARTON_CONFIG_MATTER_PROVIDER_HEADER_PATHS
+                  DESCRIPTION "List of paths to directories containing matter provider header files."
+                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers;
+                         ${MATTER_PROVIDER_DEFAULT_DIR};")
+
+bds_string_option(NAME BDS_MATTER_DELEGATE_HEADER_PATHS
+                  DEFINITION BARTON_CONFIG_MATTER_DELEGATE_HEADER_PATHS
+                  DESCRIPTION "List of paths to directories containing matter delegate header files"
+                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates;
+                         ${MATTER_DELEGATE_DEFAULT_DIR};")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

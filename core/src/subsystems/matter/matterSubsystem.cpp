@@ -27,7 +27,9 @@
 
 #define G_LOG_DOMAIN "MatterSubsystem"
 #define logFmt(fmt)  "MatterSubsystem (%s): " fmt, __func__
+
 #include "MatterCommon.h"
+#include "glib.h"
 #include <cassert>
 #include <iomanip>
 
@@ -121,13 +123,7 @@ __attribute__((constructor)) static void registerSubsystem()
 
 static char *getAccountId()
 {
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-    // If we're using a self-signed CA, we don't care about the actual value of the account id.
-    // This just gets us to a usable matter state in developer environments without activation.
-    return strdup("1");
-#else
     return deviceServiceConfigurationGetAccountId();
-#endif
 }
 
 /**

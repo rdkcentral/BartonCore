@@ -69,22 +69,7 @@ namespace barton
         Matter::GetInstance().GetCommissioner().RegisterDeviceDiscoveryDelegate(this);
         Matter::GetInstance().GetCommissioner().RegisterPairingDelegate(this);
 
-#ifdef BARTON_CONFIG_MATTER_SELF_SIGNED_OP_CREDS_ISSUER
-        // We don't need to get an auth token for the self-signed ca operational credentials issuer, so don't bother.
-        bool worked = true;
-#else
-        bool worked = Matter::GetInstance().PrimeNewAuthorizationToken();
-#endif
-        if (worked)
-        {
-            chip::DeviceLayer::PlatformMgr().ScheduleWork(CommissionWorkFuncCb, reinterpret_cast<intptr_t>(this));
-        }
-        else
-        {
-            icError("Failed to prime Matter with a new token. Cannot continue commissioning");
-            SetCommissioningStatus(CommissioningFailed);
-            return false;
-        }
+        chip::DeviceLayer::PlatformMgr().ScheduleWork(CommissionWorkFuncCb, reinterpret_cast<intptr_t>(this));
 
         std::chrono::duration<uint16_t> duration(timeoutSeconds);
         auto waitingUntil =

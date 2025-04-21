@@ -22,33 +22,42 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 #include <SelfSignedCertifierOperationalCredentialsIssuer.hpp>
+#include "BartonMatterDelegateRegistry.hpp"
+#include <app/server/Server.h>
+#include <memory>
+
 extern "C"
 {
 #include <openssl/asn1.h>
 #include <openssl/x509v3.h>
 }
 
-#define ISSUER_COUNTRY_CODE_US "US"
-#define ISSUER_ORGNAIZATION     "Test Issuer"
-#define ISSUER_ROOT_ID_DN "0000000000000001"
+using namespace barton;
+namespace {
+    const long CERT_EXPIRATION_TIME_SECONDS = (60 * 60 * 24 * 365 * 20); // 20 years...ish
+    const char * const SELF_SIGNED_CA_COMMON_NAME = "My Barton Test ECC Class I";
 
-#define ROOT "Root"
+    const char * const ISSUER_COUNTRY_CODE_US = "US";
+    const char * const ISSUER_ORGNAIZATION = "Test Issuer";
+    const char * const ISSUER_ROOT_ID_DN = "0000000000000001";
 
-#define STORAGE_KEY_PREFIX      "selfSignedRootCA_"
-#define STORAGE_KEY_PRIVATE_KEY STORAGE_KEY_PREFIX "privateKey"
-#define STORAGE_KEY_CERTIFICATE STORAGE_KEY_PREFIX "certificate"
+    const char * const ROOT = "Root";
 
-// Must fit within uint16_t
-#define STORAGE_BUFFER_SIZE UINT16_MAX
+    const char * const STORAGE_KEY_PREFIX = "selfSignedRootCA_";
+    const char * const STORAGE_KEY_PRIVATE_KEY = "selfSignedRootCA_privateKey";
+    const char * const STORAGE_KEY_CERTIFICATE = "selfSignedRootCA_certificate";
 
-// Keep it simple
-#define ROOT_CA_SERIAL_NUMBER 1
-#define CLIENT_SERIAL_NUMBER 2
+    size_t STORAGE_BUFFER_SIZE = UINT16_MAX;
 
-namespace chip
-{
-namespace Controller
-{
+    // Keep it simple
+    const int ROOT_CA_SERIAL_NUMBER = 1;
+    const int CLIENT_SERIAL_NUMBER = 2;
+
+    std::shared_ptr<SelfSignedCertifierOperationalCredentialsIssuer> operationalCredentialsIssuer =
+        std::make_shared<SelfSignedCertifierOperationalCredentialsIssuer>();
+    auto delegateRegistered = BartonMatterDelegateRegistry::Instance().RegisterBartonOperationalCredentialDelegate(
+        operationalCredentialsIssuer);
+};
 
 CHIP_ERROR
 SelfSignedCertifierOperationalCredentialsIssuer::AddExtensionToX509(X509 *cert,
@@ -66,7 +75,7 @@ SelfSignedCertifierOperationalCredentialsIssuer::AddExtensionToX509(X509 *cert,
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateKeyPair()
+CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateKeyPair(PersistentStorageDelegate &storageDelegate)
 {
     if (!mKeyPair)
     {
@@ -89,13 +98,13 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateKeyPair()
 
         mKeyPair = std::move(localKeyPair);
 
-        SavePrivateKey();
+        SavePrivateKey(storageDelegate);
     }
 
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenKeyPair()
+CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenKeyPair(PersistentStorageDelegate &storageDelegate)
 {
     if (!mKeyPair)
     {
@@ -106,7 +115,7 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenKeyPair()
         uint16_t bufferSize = STORAGE_BUFFER_SIZE;
 
         CHIP_ERROR err =
-            mStorageDelegate.SyncGetKeyValue(STORAGE_KEY_PRIVATE_KEY, static_cast<void *>(buffer), bufferSize);
+        storageDelegate.SyncGetKeyValue(STORAGE_KEY_PRIVATE_KEY, static_cast<void *>(buffer), bufferSize);
 
         if (err == CHIP_NO_ERROR)
         {
@@ -123,13 +132,13 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenKeyPair()
     if (!mKeyPair)
     {
         // Didn't find the key, generate a new key pair.
-        ReturnErrorOnFailure(GenerateKeyPair());
+        ReturnErrorOnFailure(GenerateKeyPair(storageDelegate));
     }
 
     return CHIP_NO_ERROR;
 }
 
-void SelfSignedCertifierOperationalCredentialsIssuer::SavePrivateKey()
+void SelfSignedCertifierOperationalCredentialsIssuer::SavePrivateKey(PersistentStorageDelegate &storageDelegate)
 {
     if (mKeyPair)
     {
@@ -140,7 +149,7 @@ void SelfSignedCertifierOperationalCredentialsIssuer::SavePrivateKey()
 
         if (bufferSize >= 0 && bufferSize <= UINT16_MAX)
         {
-            mStorageDelegate.SyncSetKeyValue(STORAGE_KEY_PRIVATE_KEY,
+            storageDelegate.SyncSetKeyValue(STORAGE_KEY_PRIVATE_KEY,
                                              static_cast<void *>(buffer),
                                              static_cast<uint16_t>(bufferSize));
         }
@@ -149,7 +158,7 @@ void SelfSignedCertifierOperationalCredentialsIssuer::SavePrivateKey()
     }
 }
 
-CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateRootCACert()
+CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateRootCACert(PersistentStorageDelegate &storageDelegate)
 {
     if (!mRootCACert)
     {
@@ -175,8 +184,7 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateRootCACert()
         X509_NAME *subjectName = X509_get_subject_name(localRootCertificate.get());
         VerifyOrReturnError(subjectName != nullptr, CHIP_ERROR_INTERNAL);
 
-        std::string commonName = mRootCommonName.empty() ? COMMON_NAME_DEFAULT : mRootCommonName;
-        commonName = commonName + " " ROOT;
+        std::string commonName = SELF_SIGNED_CA_COMMON_NAME;
 
         VerifyOrReturnError(
             X509_NAME_add_entry_by_txt(subjectName,
@@ -250,15 +258,15 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateRootCACert()
 
         mRootCACert = std::move(localRootCertificate);
 
-        SaveRootCACert();
+        SaveRootCACert(storageDelegate);
     }
 
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenRootCACert()
+CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenRootCACert(PersistentStorageDelegate &storageDelegate)
 {
-    ReturnErrorOnFailure(LoadOrGenKeyPair());
+    ReturnErrorOnFailure(LoadOrGenKeyPair(storageDelegate));
 
     if (!mRootCACert)
     {
@@ -269,7 +277,7 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenRootCACert(
         uint16_t bufferSize = STORAGE_BUFFER_SIZE;
 
         CHIP_ERROR err =
-            mStorageDelegate.SyncGetKeyValue(STORAGE_KEY_CERTIFICATE, static_cast<void *>(buffer), bufferSize);
+        storageDelegate.SyncGetKeyValue(STORAGE_KEY_CERTIFICATE, static_cast<void *>(buffer), bufferSize);
         if (err == CHIP_NO_ERROR)
         {
             X509 *localCert = nullptr;
@@ -285,13 +293,13 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::LoadOrGenRootCACert(
     if (!mRootCACert)
     {
         // Failed to load it or didn't find one, generate a new certificate.
-        ReturnErrorOnFailure(GenerateRootCACert());
+        ReturnErrorOnFailure(GenerateRootCACert(storageDelegate));
     }
 
     return CHIP_NO_ERROR;
 }
 
-void SelfSignedCertifierOperationalCredentialsIssuer::SaveRootCACert()
+void SelfSignedCertifierOperationalCredentialsIssuer::SaveRootCACert(PersistentStorageDelegate &storageDelegate)
 {
     if (mRootCACert)
     {
@@ -302,7 +310,7 @@ void SelfSignedCertifierOperationalCredentialsIssuer::SaveRootCACert()
 
         if (bufferSize >= 0 && bufferSize <= UINT16_MAX)
         {
-            mStorageDelegate.SyncSetKeyValue(STORAGE_KEY_CERTIFICATE,
+            storageDelegate.SyncSetKeyValue(STORAGE_KEY_CERTIFICATE,
                                              static_cast<void *>(buffer),
                                              static_cast<uint16_t>(bufferSize));
         }
@@ -334,7 +342,7 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::CreateX509FromReques
     X509_NAME *subjectName = X509_get_subject_name(const_cast<const X509 *>(localCertificate.get()));
     VerifyOrReturnError(subjectName != nullptr, CHIP_ERROR_INTERNAL);
 
-    std::string commonName = mClientCommonName.empty() ? COMMON_NAME_DEFAULT : mClientCommonName;
+    std::string commonName = SELF_SIGNED_CA_COMMON_NAME;
     std::string nodeIdStr = ToHexString(nodeId);
     std::string fabricIdStr = ToHexString(fabricId);
 
@@ -424,7 +432,9 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateNOCChainAfte
                                                                                             MutableByteSpan &icac,
                                                                                             MutableByteSpan &noc)
 {
-    ReturnErrorOnFailure(LoadOrGenRootCACert());
+    PersistentStorageDelegate &storageDelegate = chip::Server::GetInstance().GetPersistentStorage();
+
+    ReturnErrorOnFailure(LoadOrGenRootCACert(storageDelegate));
 
     const unsigned char *csrBytes = csr.data();
     SmartX509Req req = SmartX509Req(d2i_X509_REQ(nullptr, &csrBytes, static_cast<long>(csr.size())), X509_REQ_free);
@@ -445,6 +455,3 @@ CHIP_ERROR SelfSignedCertifierOperationalCredentialsIssuer::GenerateNOCChainAfte
 
     return CHIP_NO_ERROR;
 }
-
-} // namespace Controller
-} // namespace chip

@@ -45,22 +45,14 @@ chip_data_model("barton-common") {
   is_server = true
 }
 
-source_set("credentials-issuer") {
+source_set("barton-deps") {
   public_configs = [ ":config" ]
-
-  sources = [
-    "include/CertifierOperationalCredentialsIssuer.hpp",
-    "include/SelfSignedCertifierOperationalCredentialsIssuer.hpp",
-    "src/CertifierOperationalCredentialsIssuer.cpp",
-    "src/SelfSignedCertifierOperationalCredentialsIssuer.cpp",
-  ]
 
   public_deps = [
     "${chip_root}/src/crypto",
     "${chip_root}/src/lib",
+    "${chip_root}/third_party/jsoncpp"
   ]
-
-  deps = [ "${chip_root}/third_party/jsoncpp" ]
 }
 
 # this offers up a fake implementation suitable for certification testing.

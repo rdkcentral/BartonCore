@@ -127,7 +127,6 @@ mkdir -p $INCLUDE_DIR
 cp -r $GEN_DIR/include/* $INCLUDE_DIR
 
 # The project headers (which don't get exported by gn for some reason)
-cp -r $MY_DIR/../barton-common/include/* $INCLUDE_DIR
 cp -r $MY_DIR/include/* $INCLUDE_DIR
 cp $PROJECT_CONFIG_DIR/BartonProjectConfig.h $INCLUDE_DIR
 
@@ -138,6 +137,7 @@ rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/nlio/repo/include/ $INCLUDE_DIR
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/nlfaultinjection/include/ $INCLUDE_DIR
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/inipp/repo/inipp/ $INCLUDE_DIR
+rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/jsoncpp/repo/include/ $INCLUDE_DIR
 
 # zap generated includes
 cp -r $CHIP_ROOT/zzz_generated/app-common/app-common $INCLUDE_DIR

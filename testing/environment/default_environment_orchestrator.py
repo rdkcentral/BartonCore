@@ -50,6 +50,9 @@ class DefaultEnvironmentOrchestrator(BaseEnvironmentOrchestrator):
             "device.subsystem.disable", "zigbee,thread"
         )
 
+        # FIXME: This should be configurable per test
+        self._barton_client_params.set_account_id("1")
+
 
 @pytest.fixture
 def default_environment():
