@@ -135,6 +135,7 @@ FROM base_builder AS third_party_builder
 
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
+ARG LIBCERTIFIER_GIT_TAG="v2.2.2"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -265,6 +266,24 @@ RUN cd /tmp && \
     make && \
     make install && \
     rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
+
+RUN ls /tmp/
+
+# Download, build, and install libcertifier
+RUN cd /tmp && \
+    git clone \
+    --depth 1 \
+    --branch ${LIBCERTIFIER_GIT_TAG} \
+    https://github.com/Comcast/libcertifier.git && \
+    cd libcertifier && \
+    mkdir -p build && \
+    cd build && \
+    cmake .. -DENABLE_CMOCKA=OFF -DENABLE_MBEDTLS=OFF -DENABLE_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug && \
+    cmake --build . && \
+    make install && \
+    # FIXME: Necessary for CertifierDACProvider but incompatible with project's intended interface
+    cp -r ../internal_headers/certifier /usr/local/include && \
+    rm -rf /tmp/libcertifier
 
 # Ensure the system uses OpenSSL 3 by default
 ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
