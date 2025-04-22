@@ -39,7 +39,6 @@ static_library("barton") {
   public_deps = [
     "${project_dir}/barton-common",
     "${project_dir}/barton-common:barton-deps",
-    "${project_dir}/barton-common:tbrm",
     "//src/app/server",
     "//src/controller",
     "//src/credentials:default_attestation_verifier",

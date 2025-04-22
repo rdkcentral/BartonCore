@@ -54,11 +54,3 @@ source_set("barton-deps") {
     "${chip_root}/third_party/jsoncpp"
   ]
 }
-
-# this offers up a fake implementation suitable for certification testing.
-# we need to provide a real implementation that talks to otbr over dbus.
-source_set("tbrm") {
-  deps = [ ":barton-common" ]
-
-  sources = [ "src/tbrm.cpp" ]
-}
