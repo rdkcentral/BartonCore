@@ -111,4 +111,6 @@
 
 #define RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH           "com.icontrol.magneticFieldStrength"
 
+#define RESOURCE_TYPE_ILLUMINANCE                       "barton.illuminance"
+
 #endif // FLEXCORE_RESOUCETYPES_H

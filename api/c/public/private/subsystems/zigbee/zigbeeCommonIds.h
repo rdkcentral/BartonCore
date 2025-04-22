@@ -181,6 +181,10 @@
 #define TEMPERATURE_MEASUREMENT_CLUSTER_ID                                                   0x0402
 #define TEMP_MEASURED_VALUE_ATTRIBUTE_ID                                                     0x0000
 
+// Illuminance Measurement
+#define ILLUMINANCE_MEASUREMENT_CLUSTER_ID                                                   0x0400
+#define ILLUMINANCE_MEASURED_VALUE_ATTRIBUTE_ID                                              0x0000
+
 // Electrical Measurement
 #define ELECTRICAL_MEASUREMENT_CLUSTER_ID                                                    0x0b04
 #define ELECTRICAL_MEASUREMENT_ACTIVE_POWER_ATTRIBUTE_ID                                     0x050b

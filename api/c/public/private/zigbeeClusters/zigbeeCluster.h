@@ -35,6 +35,9 @@
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
+// For historical reasons, we use 27 minutes for the max interval on most reporting configurations
+#define TWENTY_SEVEN_MINUTES_IN_SECS (1620U)
+
 typedef enum
 {
     CLUSTER_PRIORITY_DEFAULT = 0,
