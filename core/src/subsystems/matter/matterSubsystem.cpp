@@ -79,6 +79,19 @@ static guint sourceId = 0;
 static char *matterConfigRoot;
 static char *matterKVPath;
 
+#define RETURN_FALSE_IF_NOT_INITIALIZED()                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        subsystemMtx.lock();                                                                                           \
+        bool localInitialized = initialized;                                                                           \
+        subsystemMtx.unlock();                                                                                         \
+        if (!localInitialized)                                                                                         \
+        {                                                                                                              \
+            icError("subsystem not initialized");                                                                      \
+            return false;                                                                                              \
+        }                                                                                                              \
+    } while (0)
+
 static subsystemInitializedFunc subsystemInitializedCallback = nullptr;
 static subsystemDeInitializedFunc subsystemDeinitializedCallback = nullptr;
 
@@ -383,6 +396,9 @@ bool matterSubsystemCommissionDevice(const char *setupPayload, uint16_t timeoutS
 {
     icDebug();
 
+    // NOTE: this locks and unlocks the subsystemMtx
+    RETURN_FALSE_IF_NOT_INITIALIZED();
+
     CommissioningOrchestrator orchestrator(onDeviceCommissioningStatusChanged, nullptr);
     return orchestrator.Commission(setupPayload, timeoutSeconds);
 }
@@ -390,6 +406,9 @@ bool matterSubsystemCommissionDevice(const char *setupPayload, uint16_t timeoutS
 bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds)
 {
     icDebug();
+
+    // NOTE: this locks and unlocks the subsystemMtx
+    RETURN_FALSE_IF_NOT_INITIALIZED();
 
     CommissioningOrchestrator orchestrator(onDeviceCommissioningStatusChanged, nullptr);
     return orchestrator.Pair(nodeId, timeoutSeconds);
@@ -402,6 +421,9 @@ bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeout
     chip::NodeId _nodeId = 0;
     std::string _setupCode;
     std::string _qrCode;
+
+    // NOTE: this locks and unlocks the subsystemMtx
+    RETURN_FALSE_IF_NOT_INITIALIZED();
 
     if (setupCode == nullptr || qrCode == nullptr)
     {
@@ -431,6 +453,9 @@ bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeout
 
 bool matterSubsystemClearAccessRestrictionList(void)
 {
+    // NOTE: this locks and unlocks the subsystemMtx
+    RETURN_FALSE_IF_NOT_INITIALIZED();
+
     return Matter::GetInstance().ClearAccessRestrictionList();
 }
 

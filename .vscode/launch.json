@@ -95,11 +95,11 @@
             ]
         },
         {
-            "name": "(gdb) Reference App No Matter",
+            "name": "(gdb) Reference App No Matter, No Thread",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/reference/brtn-ds-reference",
-            "args": ["-m"],
+            "args": ["-m", "-t"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "externalConsole": false,
