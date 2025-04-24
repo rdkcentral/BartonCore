@@ -82,6 +82,7 @@ extern "C" {
 #include <matter/MatterDriverFactory.h>
 
 #include "BartonMatterDelegateRegistry.hpp"
+#include "BartonMatterProviderRegistry.hpp"
 #include "Matter.h"
 #include "credentials/attestation_verifier/DeviceAttestationVerifier.h"
 
@@ -300,7 +301,8 @@ bool Matter::Start()
     ConfigurationMgr().LogDeviceConfig();
 
     // Initialize device attestation config
-    SetDeviceAttestationCredentialsProvider(chip::Credentials::Examples::GetExampleDACProvider());
+    auto dacProvider = BartonMatterProviderRegistry::Instance().GetBartonDACProvider();
+    SetDeviceAttestationCredentialsProvider(dacProvider.get());
 
     if ((err = InitCommissioner()) != CHIP_NO_ERROR)
     {

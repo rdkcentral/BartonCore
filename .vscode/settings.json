@@ -116,6 +116,8 @@
         "-DBDS_MATTER_USE_RANDOM_PORT=ON",
         "-DBDS_BUILD_WITH_SSP=ON",
         "-DBDS_BUILD_WITH_ASAN=ON",
+        "-DBDS_MATTER_PROVIDER_IMPLEMENTATIONS=${workspaceFolder}/core/src/subsystems/matter/providers/dev/BartonTestDACProvider.cpp",
+        "-DBDS_MATTER_PROVIDER_HEADER_PATHS=${workspaceFolder}/core/src/subsystems/matter/providers;${workspaceFolder}/core/src/subsystems/matter/providers/dev",
         "-DBDS_MATTER_DELEGATE_IMPLEMENTATIONS=${workspaceFolder}/core/src/subsystems/matter/delegates/dev/SelfSignedCertifierOperationalCredentialsIssuer.cpp",
         "-DBDS_MATTER_DELEGATE_HEADER_PATHS=${workspaceFolder}/core/src/subsystems/matter/delegates;${workspaceFolder}/core/src/subsystems/matter/delegates/dev"
     ],
