@@ -307,7 +307,7 @@ static void accountIdChangeCallback(GObject *object, GParamSpec *pspec, gpointer
     g_return_if_fail(object != NULL);
     g_return_if_fail(userData != NULL);
 
-    const gchar *accountId = NULL;
+    g_autofree gchar *accountId = NULL;
     g_object_get(object,
                  B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
                      [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
