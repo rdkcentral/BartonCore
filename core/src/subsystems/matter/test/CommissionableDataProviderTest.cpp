@@ -150,7 +150,7 @@ public:
     void SetUp() override
     {
         commissionableDataProvider = new DefaultCommissionableDataProvider();
-        properties = g_hash_table_new(g_str_hash, g_str_equal);
+        properties = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     }
 
     void TearDown() override
