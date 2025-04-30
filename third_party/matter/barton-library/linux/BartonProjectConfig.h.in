@@ -1,0 +1,55 @@
+/*
+ *
+ *    Copyright (c) 2020-2021 Project CHIP Authors
+ *    Copyright (c) 2016-2017 Nest Labs, Inc.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
+
+/**
+ *    @file
+ *      CHIP project configuration for BARTON integration
+ *
+ */
+#ifndef CHIPPROJECTCONFIG_H
+#define CHIPPROJECTCONFIG_H
+
+// Use a default pairing code if one hasn't been provisioned in flash.
+#define CHIP_DEVICE_CONFIG_USE_TEST_SPAKE2P_VERIFIER
+#define CHIP_DEVICE_CONFIG_USE_TEST_SETUP_PIN_CODE 12345678
+#define CHIP_DEVICE_CONFIG_USE_TEST_SETUP_DISCRIMINATOR 0xF00
+
+#define CHIP_SYSTEM_CONFIG_PACKETBUFFER_POOL_SIZE 0
+
+#ifndef CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER
+#define CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER <lib/address_resolve/AddressResolve_DefaultImpl.h>
+#endif
+
+#define CHIP_DEVICE_CONFIG_ENABLE_BOTH_COMMISSIONER_AND_COMMISSIONEE 1
+#define CHIP_DEVICE_CONFIG_ENABLE_COMMISSIONER_DISCOVERY 1
+#define CHIP_CONFIG_UNSAFE_SUBSCRIPTION_EXCHANGE_MANAGER_USE 1
+
+#define CHIP_DEVICE_CONFIG_ENABLE_PAIRING_AUTOSTART 0
+
+#define CHIP_DEVICE_CONFIG_CHIPOBLE_ENABLE_ADVERTISING_AUTOSTART 0
+
+#define CHIP_BARTON_CONF_DIR $(CHIP_BARTON_CONF_DIR)
+
+#define FATCONFDIR           CHIP_BARTON_CONF_DIR // CHIP Factory Config
+#define SYSCONFDIR           CHIP_BARTON_CONF_DIR // CHIP Sys Config
+#define LOCALSTATEDIR        CHIP_BARTON_CONF_DIR // CHIP Counters Config
+#define CHIP_CONFIG_KVS_PATH CHIP_BARTON_CONF_DIR "/matterkv"
+
+// ------------------------------------
+
+#endif /* CHIPPROJECTCONFIG_H */

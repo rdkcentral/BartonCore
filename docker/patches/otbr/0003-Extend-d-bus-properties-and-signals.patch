@@ -1,0 +1,473 @@
+From 51008cad7c38a29dbc6a721602507053ba1d932b Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Source: Comcast
+Date: Fri, 14 Feb 2025 11:09:25 -0600
+
+Subject: [PATCH] Extend d-bus properties and signals
+
+This change adds the following new properties:
+    - BorderAgentId
+    - ThreadNetIfUp (emits signal on change)
+    - ThreadVersion (was missing from d-bus client)
+
+The following existing properties now emit signals on change:
+    - ActiveDatasetTlvs (this already did, but introspect.xml didnt
+      match)
+    - PendingDatasetTlv
+    - Nat64State
+    - ThreadNetIfUp
+---
+ src/dbus/client/thread_api_dbus.cpp        | 15 +++++
+ src/dbus/client/thread_api_dbus.hpp        | 35 +++++++++++
+ src/dbus/common/constants.hpp              |  2 +
+ src/dbus/server/dbus_thread_object_rcp.cpp | 71 ++++++++++++++++++++++
+ src/dbus/server/dbus_thread_object_rcp.hpp |  7 +++
+ src/dbus/server/introspect.xml             | 16 ++++-
+ src/utils/thread_helper.cpp                | 71 ++++++++++++++++++++++
+ src/utils/thread_helper.hpp                | 41 ++++++++++++-
+ 8 files changed, 253 insertions(+), 5 deletions(-)
+
+diff --git a/src/dbus/client/thread_api_dbus.cpp b/src/dbus/client/thread_api_dbus.cpp
+index 51f8828e6a8..bd3ed715255 100644
+--- a/src/dbus/client/thread_api_dbus.cpp
++++ b/src/dbus/client/thread_api_dbus.cpp
+@@ -718,6 +718,21 @@ ClientError ThreadApiDBus::GetCapabilities(std::vector<uint8_t> &aCapabilities)
+     return GetProperty(OTBR_DBUS_PROPERTY_CAPABILITIES, aCapabilities);
+ }
+
++ClientError ThreadApiDBus::GetBorderAgentId(std::vector<uint8_t> &aId)
++{
++    return GetProperty(OTBR_DBUS_PROPERTY_BORDER_AGENT_ID, aId);
++}
++
++ClientError ThreadApiDBus::GetThreadNetIfUp(bool &aIsUp)
++{
++    return GetProperty(OTBR_DBUS_PROPERTY_THREAD_NETIF_UP, aIsUp);
++}
++
++ClientError ThreadApiDBus::GetThreadVersion(uint16_t &aVersion)
++{
++    return GetProperty(OTBR_DBUS_PROPERTY_THREAD_VERSION, aVersion);
++}
++
+ std::string ThreadApiDBus::GetInterfaceName(void)
+ {
+     return mInterfaceName;
+diff --git a/src/dbus/client/thread_api_dbus.hpp b/src/dbus/client/thread_api_dbus.hpp
+index e817e525355..4ab4e1542eb 100644
+--- a/src/dbus/client/thread_api_dbus.hpp
++++ b/src/dbus/client/thread_api_dbus.hpp
+@@ -864,6 +864,41 @@ public:
+      */
+     ClientError GetCapabilities(std::vector<uint8_t> &aCapabilities);
+
++    /**
++     * This method gets the border agent identifier.
++     *
++     * @param[out] aId The border agent identifier.
++     *
++     * @retval ERROR_NONE  Successfully performed the dbus function call
++     * @retval ERROR_DBUS  dbus encode/decode error
++     * @retval ...         OpenThread defined error value otherwise
++     *
++     */
++    ClientError GetBorderAgentId(std::vector<uint8_t> &aId);
++
++    /**
++     * This method gets the up/down state of the thread network interface.
++     *
++     * @param[out] aIsUp True if the interface is up, false otherwise.
++     *
++     * @retval ERROR_NONE  Successfully performed the dbus function call
++     * @retval ERROR_DBUS  dbus encode/decode error
++     * @retval ...         OpenThread defined error value otherwise
++     *
++     */
++    ClientError GetThreadNetIfUp(bool &aIsUp);
++
++    /**
++     * This method gets the Thread version supported by this device.
++     *
++     * @param[out] aVersion The Thread version supported by this device.
++     *
++     * @retval ERROR_NONE  Successfully performed the dbus function call
++     * @retval ERROR_DBUS  dbus encode/decode error
++     * @retval ...         OpenThread defined error value otherwise
++     */
++    ClientError GetThreadVersion(uint16_t &aVersion);
++
+ private:
+     ClientError CallDBusMethodSync(const std::string &aMethodName);
+     ClientError CallDBusMethodAsync(const std::string &aMethodName, DBusPendingCallNotifyFunction aFunction);
+diff --git a/src/dbus/common/constants.hpp b/src/dbus/common/constants.hpp
+index 6f8a6e6545a..ed5236c5170 100644
+--- a/src/dbus/common/constants.hpp
++++ b/src/dbus/common/constants.hpp
+@@ -126,6 +126,8 @@
+ #define OTBR_DBUS_PROPERTY_DHCP6_PD_STATE "Dhcp6PdState"
+ #define OTBR_DBUS_PROPERTY_TELEMETRY_DATA "TelemetryData"
+ #define OTBR_DBUS_PROPERTY_CAPABILITIES "Capabilities"
++#define OTBR_DBUS_PROPERTY_BORDER_AGENT_ID "BorderAgentId"
++#define OTBR_DBUS_PROPERTY_THREAD_NETIF_UP "ThreadNetIfUp"
+
+ #define OTBR_NAT64_STATE_NAME_DISABLED "disabled"
+ #define OTBR_NAT64_STATE_NAME_NOT_RUNNING "not_running"
+diff --git a/src/dbus/server/dbus_thread_object_rcp.cpp b/src/dbus/server/dbus_thread_object_rcp.cpp
+index a6a3aa3f823..0e5c54d344e 100644
+--- a/src/dbus/server/dbus_thread_object_rcp.cpp
++++ b/src/dbus/server/dbus_thread_object_rcp.cpp
+@@ -125,6 +125,11 @@ otbrError DBusThreadObjectRcp::Init(void)
+     threadHelper->SetDhcp6PdStateCallback(std::bind(&DBusThreadObjectRcp::Dhcp6PdStateHandler, this, _1));
+ #endif
+     threadHelper->AddActiveDatasetChangeHandler(std::bind(&DBusThreadObjectRcp::ActiveDatasetChangeHandler, this, _1));
++    threadHelper->AddPendingDatasetChangeHandler(std::bind(&DBusThreadObjectRcp::PendingDatasetChangeHandler, this, _1));
++    threadHelper->AddThreadNetIfUpChangeHandler(std::bind(&DBusThreadObjectRcp::ThreadNetIfUpChangeHandler, this, _1));
++#if OTBR_ENABLE_NAT64
++    threadHelper->AddNat64StateChangeHandler(std::bind(&DBusThreadObjectRcp::Nat64StateChangeHandler, this, _1, _2));
++#endif
+     mHost.RegisterResetHandler(std::bind(&DBusThreadObjectRcp::NcpResetHandler, this));
+
+     RegisterMethod(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_SCAN_METHOD,
+@@ -307,6 +312,12 @@ otbrError DBusThreadObjectRcp::Init(void)
+                                std::bind(&DBusThreadObjectRcp::GetTelemetryDataHandler, this, _1));
+     RegisterGetPropertyHandler(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_CAPABILITIES,
+                                std::bind(&DBusThreadObjectRcp::GetCapabilitiesHandler, this, _1));
++#if OTBR_ENABLE_BORDER_AGENT
++    RegisterGetPropertyHandler(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_BORDER_AGENT_ID,
++                               std::bind(&DBusThreadObjectRcp::GetBorderAgentIdHandler, this, _1));
++#endif
++    RegisterGetPropertyHandler(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_THREAD_NETIF_UP,
++                               std::bind(&DBusThreadObjectRcp::GetThreadNetIfUpHandler, this, _1));
+
+     SuccessOrExit(error = Signal(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_SIGNAL_READY, std::make_tuple()));
+
+@@ -332,6 +343,11 @@ void DBusThreadObjectRcp::NcpResetHandler(void)
+     mHost.GetThreadHelper()->AddDeviceRoleHandler(std::bind(&DBusThreadObjectRcp::DeviceRoleHandler, this, _1));
+     mHost.GetThreadHelper()->AddActiveDatasetChangeHandler(
+         std::bind(&DBusThreadObjectRcp::ActiveDatasetChangeHandler, this, _1));
++    mHost.GetThreadHelper()->AddPendingDatasetChangeHandler(std::bind(&DBusThreadObjectRcp::PendingDatasetChangeHandler, this, _1));
++    mHost.GetThreadHelper()->AddThreadNetIfUpChangeHandler(std::bind(&DBusThreadObjectRcp::ThreadNetIfUpChangeHandler, this, _1));
++#if OTBR_ENABLE_NAT64
++    mHost.GetThreadHelper()->AddNat64StateChangeHandler(std::bind(&DBusThreadObjectRcp::Nat64StateChangeHandler, this, _1, _2));
++#endif
+     SignalPropertyChanged(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_DEVICE_ROLE,
+                           GetDeviceRoleName(OT_DEVICE_ROLE_DISABLED));
+ }
+@@ -1524,6 +1540,36 @@ exit:
+     return error;
+ }
+
++#if OTBR_ENABLE_BORDER_AGENT
++otError DBusThreadObjectRcp::GetBorderAgentIdHandler(DBusMessageIter &aIter)
++{
++    otBorderAgentId         aId;
++    auto                    threadHelper        = mHost.GetThreadHelper();
++    otError                 error               = OT_ERROR_NONE;
++    std::vector<uint8_t>    data;
++
++    SuccessOrExit(error = otBorderAgentGetId(threadHelper->GetInstance(), &aId));
++    data = std::vector<uint8_t>(&aId.mId[0], &aId.mId[OT_BORDER_AGENT_ID_LENGTH]);
++    VerifyOrExit(DBusMessageEncodeToVariant(&aIter, data) == OTBR_ERROR_NONE, error = OT_ERROR_INVALID_ARGS);
++
++exit:
++    return error;
++}
++#endif
++
++otError DBusThreadObjectRcp::GetThreadNetIfUpHandler(DBusMessageIter &aIter)
++{
++    bool                    isUp                = false;
++    auto                    threadHelper        = mHost.GetThreadHelper();
++    otError                 error               = OT_ERROR_NONE;
++
++    isUp = otIp6IsEnabled(threadHelper->GetInstance());
++    VerifyOrExit(DBusMessageEncodeToVariant(&aIter, isUp) == OTBR_ERROR_NONE, error = OT_ERROR_INVALID_ARGS);
++
++exit:
++    return error;
++}
++
+ void DBusThreadObjectRcp::GetPropertiesHandler(DBusRequest &aRequest)
+ {
+     UniqueDBusMessage        reply(dbus_message_new_method_return(aRequest.GetMessage()));
+@@ -1809,6 +1855,31 @@ exit:
+     }
+ }
+
++void DBusThreadObjectRcp::PendingDatasetChangeHandler(const otOperationalDatasetTlvs &aDatasetTlvs)
++{
++    std::vector<uint8_t> value(aDatasetTlvs.mLength);
++    std::copy(aDatasetTlvs.mTlvs, aDatasetTlvs.mTlvs + aDatasetTlvs.mLength, value.begin());
++    SignalPropertyChanged(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_PENDING_DATASET_TLVS, value);
++}
++
++void DBusThreadObjectRcp::ThreadNetIfUpChangeHandler(bool aIsUp)
++{
++    SignalPropertyChanged(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_THREAD_NETIF_UP, aIsUp);
++}
++
++void DBusThreadObjectRcp::Nat64StateChangeHandler(otNat64State prefixManagerState, otNat64State translatorState)
++{
++#if OTBR_ENABLE_NAT64
++    Nat64ComponentState state;
++    state.mPrefixManagerState = GetNat64StateName(prefixManagerState);
++    state.mTranslatorState    = GetNat64StateName(translatorState);
++    SignalPropertyChanged(OTBR_DBUS_THREAD_INTERFACE, OTBR_DBUS_PROPERTY_NAT64_STATE, state);
++#else
++    OTBR_UNUSED_VARIABLE(prefixManagerState);
++    OTBR_UNUSED_VARIABLE(translatorState);
++#endif
++}
++
+ void DBusThreadObjectRcp::LeaveNetworkHandler(DBusRequest &aRequest)
+ {
+     constexpr int kExitCodeShouldRestart = 7;
+diff --git a/src/dbus/server/dbus_thread_object_rcp.hpp b/src/dbus/server/dbus_thread_object_rcp.hpp
+index 67891bc2743..1b129a1985a 100644
+--- a/src/dbus/server/dbus_thread_object_rcp.hpp
++++ b/src/dbus/server/dbus_thread_object_rcp.hpp
+@@ -85,6 +85,9 @@ private:
+     void DeviceRoleHandler(otDeviceRole aDeviceRole);
+     void Dhcp6PdStateHandler(otBorderRoutingDhcp6PdState aDhcp6PdState);
+     void ActiveDatasetChangeHandler(const otOperationalDatasetTlvs &aDatasetTlvs);
++    void PendingDatasetChangeHandler(const otOperationalDatasetTlvs &aDatasetTlvs);
++    void ThreadNetIfUpChangeHandler(bool aIsUp);
++    void Nat64StateChangeHandler(otNat64State prefixManagerState, otNat64State translatorState);
+     void NcpResetHandler(void);
+
+     void ScanHandler(DBusRequest &aRequest);
+@@ -179,6 +182,10 @@ private:
+     otError GetDnsUpstreamQueryState(DBusMessageIter &aIter);
+     otError GetTelemetryDataHandler(DBusMessageIter &aIter);
+     otError GetCapabilitiesHandler(DBusMessageIter &aIter);
++#if OTBR_ENABLE_BORDER_AGENT
++    otError GetBorderAgentIdHandler(DBusMessageIter &aIter);
++#endif
++    otError GetThreadNetIfUpHandler(DBusMessageIter &aIter);
+
+     void ReplyScanResult(DBusRequest &aRequest, otError aError, const std::vector<otActiveScanResult> &aResult);
+     void ReplyEnergyScanResult(DBusRequest &aRequest, otError aError, const std::vector<otEnergyScanResult> &aResult);
+diff --git a/src/dbus/server/introspect.xml b/src/dbus/server/introspect.xml
+index 449dee38bef..173485fbb0f 100644
+--- a/src/dbus/server/introspect.xml
++++ b/src/dbus/server/introspect.xml
+@@ -561,12 +561,12 @@
+
+     <!-- ActiveDatasetTlvs: The Thread active dataset tlv in binary form. -->
+     <property name="ActiveDatasetTlvs" type="ay" access="readwrite">
+-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
++      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+     </property>
+
+     <!-- PendingDatasetTlvs: The Thread pending dataset tlv in binary form. -->
+     <property name="PendingDatasetTlvs" type="ay" access="read">
+-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
++      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+     </property>
+
+      <!-- FeatureFlagListData: The Thread feature flags (defined as proto/feature_flag.proto)
+@@ -787,7 +787,7 @@
+     </literallayout>
+     -->
+     <property name="Nat64State" type="(ss)" access="read">
+-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
++      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+     </property>
+
+     <!-- Nat64Mappings: The state of NAT64
+@@ -978,6 +978,16 @@
+       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+     </property>
+
++    <!-- BorderAgentId: The unique identifier of this border router agent. -->
++    <property name="BorderAgentId" type="ay" access="read">
++      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
++    </property>
++
++    <!-- ThreadNetIfUp: Thread network interface up state. -->
++    <property name="ThreadNetIfUp" type="b" access="read">
++      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
++    </property>
++
+     <!-- The Ready signal is sent on start -->
+     <signal name="Ready">
+     </signal>
+diff --git a/src/utils/thread_helper.cpp b/src/utils/thread_helper.cpp
+index 9866225ae0a..0e874dd4990 100644
+--- a/src/utils/thread_helper.cpp
++++ b/src/utils/thread_helper.cpp
+@@ -306,6 +306,23 @@ void ThreadHelper::StateChangedCallback(otChangedFlags aFlags)
+         ActiveDatasetChangedCallback();
+     }
+
++    if (aFlags & OT_CHANGED_PENDING_DATASET)
++    {
++        PendingDatasetChangedCallback();
++    }
++
++    if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
++    {
++        ThreadNetIfUpChangedCallback(otIp6IsEnabled(mInstance));
++    }
++
++#if OTBR_ENABLE_NAT64
++    if (aFlags & OT_CHANGED_NAT64_TRANSLATOR_STATE)
++    {
++        Nat64StateChangedCallback(otNat64GetPrefixManagerState(mInstance), otNat64GetTranslatorState(mInstance));
++    }
++#endif
++
+ exit:
+     return;
+ }
+@@ -329,6 +346,43 @@ exit:
+     }
+ }
+
++void ThreadHelper::PendingDatasetChangedCallback()
++{
++    otError                  error;
++    otOperationalDatasetTlvs datasetTlvs;
++
++    SuccessOrExit(error = otDatasetGetPendingTlvs(mInstance, &datasetTlvs));
++
++    for (const auto &handler : mPendingDatasetChangeHandlers)
++    {
++        handler(datasetTlvs);
++    }
++
++exit:
++    if (error != OT_ERROR_NONE)
++    {
++        otbrLogWarning("Error handling pending dataset change: %s", otThreadErrorToString(error));
++    }
++}
++
++void ThreadHelper::ThreadNetIfUpChangedCallback(bool isUp)
++{
++    for (const auto &handler : mThreadNetIfUpChangeHandlers)
++    {
++        handler(isUp);
++    }
++}
++
++#if OTBR_ENABLE_NAT64
++void ThreadHelper::Nat64StateChangedCallback(otNat64State prefixManagerState, otNat64State translatorState)
++{
++    for (const auto &handler : mNat64StateChangeHandlers)
++    {
++        handler(prefixManagerState, translatorState);
++    }
++}
++#endif
++
+ #if OTBR_ENABLE_DBUS_SERVER
+ void ThreadHelper::OnUpdateMeshCopTxt(std::map<std::string, std::vector<uint8_t>> aUpdate)
+ {
+@@ -888,6 +942,23 @@ void ThreadHelper::AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler)
+     mActiveDatasetChangeHandlers.push_back(std::move(aHandler));
+ }
+
++void ThreadHelper::AddPendingDatasetChangeHandler(DatasetChangeHandler aHandler)
++{
++    mPendingDatasetChangeHandlers.push_back(std::move(aHandler));
++}
++
++void ThreadHelper::AddThreadNetIfUpChangeHandler(ThreadNetIfUpChangeHandler aHandler)
++{
++    mThreadNetIfUpChangeHandlers.push_back(std::move(aHandler));
++}
++
++#if OTBR_ENABLE_NAT64
++void ThreadHelper::AddNat64StateChangeHandler(Nat64StateChangeHandler aHandler)
++{
++    mNat64StateChangeHandlers.push_back(std::move(aHandler));
++}
++#endif
++
+ void ThreadHelper::DetachGracefully(ResultHandler aHandler)
+ {
+     otError error = OT_ERROR_NONE;
+diff --git a/src/utils/thread_helper.hpp b/src/utils/thread_helper.hpp
+index 2e2de91e586..c557e26ebf2 100644
+--- a/src/utils/thread_helper.hpp
++++ b/src/utils/thread_helper.hpp
+@@ -50,6 +50,7 @@
+ #include <openthread/joiner.h>
+ #include <openthread/netdata.h>
+ #include <openthread/thread.h>
++#include <openthread/nat64.h>
+ #include "mdns/mdns.hpp"
+ #if OTBR_ENABLE_TELEMETRY_DATA_API
+ #include "proto/thread_telemetry.pb.h"
+@@ -80,7 +81,10 @@ public:
+ #if OTBR_ENABLE_DHCP6_PD
+     using Dhcp6PdStateCallback = std::function<void(otBorderRoutingDhcp6PdState)>;
+ #endif
+-
++    using ThreadNetIfUpChangeHandler = std::function<void(bool)>;
++#if OTBR_ENABLE_NAT64
++    using Nat64StateChangeHandler = std::function<void(otNat64State, otNat64State)>; /* prefix manager state, translator state */
++#endif
+     /**
+      * The constructor of a Thread helper.
+      *
+@@ -112,6 +116,29 @@ public:
+      */
+     void AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler);
+
++    /**
++     * This method adds a callback for pending dataset change.
++     *
++     * @param[in]  aHandler   The pending dataset change handler.
++     */
++    void AddPendingDatasetChangeHandler(DatasetChangeHandler aHandler);
++
++    /**
++     * This method adds a callback for thread network interface state changes.
++     *
++     * @param[in]  aHandler   The handler for thread network interface state changes.
++     */
++    void AddThreadNetIfUpChangeHandler(ThreadNetIfUpChangeHandler aHandler);
++
++#if OTBR_ENABLE_NAT64
++    /**
++     * This method adds a callback for nat64 translator state changes.
++     *
++     * @param[in]  aHandler   The handler for nat64 translator state changes.
++     */
++    void AddNat64StateChangeHandler(Nat64StateChangeHandler aHandler);
++#endif
++
+     /**
+      * This method permits unsecure join on port.
+      *
+@@ -318,6 +345,12 @@ private:
+     uint8_t RandomChannelFromChannelMask(uint32_t aChannelMask);
+
+     void ActiveDatasetChangedCallback(void);
++    void PendingDatasetChangedCallback(void);
++    void ThreadNetIfUpChangedCallback(bool isUp);
++#if OTBR_ENABLE_NAT64
++    void Nat64StateChangedCallback(otNat64State prefixManagerState, otNat64State translatorState);
++#endif
++
+
+ #if OTBR_ENABLE_DHCP6_PD
+     static void BorderRoutingDhcp6PdCallback(otBorderRoutingDhcp6PdState aState, void *aThreadHelper);
+@@ -349,7 +382,11 @@ private:
+
+     std::vector<DeviceRoleHandler>    mDeviceRoleHandlers;
+     std::vector<DatasetChangeHandler> mActiveDatasetChangeHandlers;
+-
++    std::vector<DatasetChangeHandler> mPendingDatasetChangeHandlers;
++    std::vector<ThreadNetIfUpChangeHandler> mThreadNetIfUpChangeHandlers;
++#if OTBR_ENABLE_NAT64
++    std::vector<Nat64StateChangeHandler> mNat64StateChangeHandlers;
++#endif
+     std::map<uint16_t, size_t> mUnsecurePortRefCounter;
+
+     bool mWaitingMgmtSetResponse =
+--
+2.43.0
+

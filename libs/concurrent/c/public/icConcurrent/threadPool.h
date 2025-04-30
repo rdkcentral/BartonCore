@@ -1,0 +1,154 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
+//
+// Copyright 2024 Comcast Cable Communications Management, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*-----------------------------------------------
+ * threadPool.h
+ *
+ * Simple implementation of a "dynamic thread pool" with a
+ * "bounded queue" of tasks to run.  Uses POSIX threads
+ * (pthread) to process incoming tasks with minimal
+ * re-creation of the threads when needed.
+ *
+ * Threads that are created past the 'min' will eventually
+ * expire when there is nothing to process for several seconds.
+ *
+ * Author: jelderton - 2/12/16
+ *-----------------------------------------------*/
+
+#pragma once
+
+#include <icTypes/icQueue.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#define MAX_NUM_THREADS 64
+#define MAX_QUEUE_SIZE  128
+
+/*
+ * object to contain the statistics
+ */
+typedef struct _threadPoolStats
+{
+    uint32_t totalTasksQueued;   // total number of tasks added to the queue
+    uint32_t totalTasksRan;      // total number of tasks executed
+    uint32_t maxTasksQueued;     // largest size the task queue got to (backlog of tasks)
+    uint32_t maxConcurrentTasks; // largest number of tasks running at the same time
+    //    uint32_t avgConcurrentTasks;    // average number of tasks running at the same time
+} threadPoolStats;
+
+/*
+ * the thread-pool object representation.
+ */
+typedef struct _icThreadPool icThreadPool;
+
+/*
+ * function prototype for the 'task' to execute via the pool.
+ * this task is responsible for releasing the optional 'arg'
+ * when the operation is complete.
+ *
+ * @param arg - the 'arg' supplied to the "threadPoolAddTask" function call
+ */
+typedef void (*threadPoolTask)(void *arg);
+
+/*
+ * function prototype for cleanup function for arguments to a task
+ * @param arg the argument to the task function
+ */
+typedef void (*threadPoolTaskArgFreeFunc)(void *arg);
+
+/*
+ * create a new thread pool.  will pre-create 'minThreads' workers
+ * and a fixed queue capable of holding 'maxQueueSize' tasks.
+ * will return NULL if:
+ *   there is a problem creating the threads,
+ *   minThreads > maxThreads ,
+ *   maxThreads > MAX_NUM_THREADS, or
+ *   maxQueueSize > MAX_QUEUE_SIZE
+ *
+ * @param name - label for this pool.  only used for debugging and statistics collection
+ * @param minThreads - lower bounds of the pool
+ * @param maxThreads - upper bounds of the pool (max size it can grow to)
+ * @param maxQueueSize - max number of 'tasks' to queue while waiting for worker thread availability
+ * @see threadPoolDestroy()
+ */
+icThreadPool *threadPoolCreate(const char *name, uint16_t minThreads, uint16_t maxThreads, uint32_t maxQueueSize);
+
+/*
+ * destroys a thread pool.  will wait for all threads to complete before returning.
+ */
+void threadPoolDestroy(icThreadPool *pool);
+
+/*
+ * adds a task to the thread pool queue.  once resources are
+ * available, it will execute 'task' and supply it with the
+ * optional 'arg'.  the 'task' should release 'arg' at the end
+ * of the execution.
+ *
+ * returns false if the queue is full
+ *
+ * @param pool - the thread pool to use for the 'task'
+ * @param task - the task to execute
+ * @param arg - optional argument to pass to 'task' when it executes
+ * @param argFreeFunc - function to cleanup the task argument
+ */
+bool threadPoolAddTask(icThreadPool *pool, threadPoolTask task, void *arg, threadPoolTaskArgFreeFunc argFreeFunc);
+
+/*
+ * returns the number of tasks currently running
+ */
+uint32_t threadPoolGetActiveCount(icThreadPool *pool);
+
+/*
+ * returns the number of threads currently running in the pool
+ */
+uint16_t threadPoolGetThreadCount(icThreadPool *pool);
+
+/*
+ * returns the number of tasks waiting in the queue
+ */
+uint32_t threadPoolGetBacklogCount(icThreadPool *pool);
+
+/*
+ * uses the icQueue's 'queueIterate' function to iterate through the
+ * backlog so we can debug the items waiting for execution.  helpful
+ * for debugging.
+ *
+ * @see queueIterate()
+ */
+void threadPoolShowBacklog(icThreadPool *pool, queueIterateFunc printFunc, void *printArg);
+
+/*
+ * return a copy of the current statistics collected.  caller must free the returned object.
+ * if 'thenClear' is true, stats will be cleared after the copy.
+ */
+threadPoolStats *threadPoolGetStatistics(icThreadPool *pool, bool thenClear);
+
+/*
+ * clear current statistics collected thus far
+ */
+void threadPoolClearStatistics(icThreadPool *pool);
+
+/*
+ * threadPoolTaskArgFreeFunc that does not free the argument
+ */
+void threadPoolTaskArgDoNotFreeFunc(void *arg);

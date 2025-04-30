@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DeviceDescriptorList version="7.1.0-071715" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="AllowList.xsd">
+    <!-- Touchstone DDL -->
+    <!-- Cameras -->
+    <!-- SerComm Cameras -->
+    <CameraDeviceDescriptor>
+        <uuid>9f24ea08-061b-48f4-876b-54639bd58fd7</uuid>
+        <description>TestVendor OC810</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_OC810</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.02R09  </version>
+                <version>1.0.02R10</version>
+                <version>1.0.02R11</version>
+                <version>1.0.02R12</version>
+                <version>1.0.02R13</version>
+                <version>1.0.02R14</version>
+                <version>1.0.02R16</version>
+                <version>1.0.02R17</version>
+                <version>1.0.02R19</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.02R14</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.02R19</version>
+            <filename>DYU6HZ-704-1002R19.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6c1db771-322a-4262-b0a8-ec8901e8e77d</uuid>
+        <description>TestVendor RC8021</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_8021</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.19</version>
+                <version>1.0.20</version>
+                <version>1.0.21</version>
+                <version>1.0.22</version>
+                <version>1.0.24</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.19</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.24</version>
+            <filename>DYL5HZ-811-1024.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>5cd2073c-5d08-43e9-9fb9-3c08c12ad713</uuid>
+        <description>TestVendor iCamera 1000</description>
+        <manufacturer>iControl</manufacturer>
+        <model>SerComm_Camera_iCamera</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions format="legacyCamera">
+            <list>
+                <version>1.0.02</version>
+                <version>1.0.02R08</version>
+                <version>1.0.02R09</version>
+                <version>1.0.02R10</version>
+                <version>1.0.02R11</version>
+                <version>1.0.02R12</version>
+                <version>1.0.02R13</version>
+                <version>1.0.02R14</version>
+                <version>1.0.02R15</version>
+                <version>1.0.02R16</version>
+                <version>1.0.02R17</version>
+                <version>1.0.02R18</version>
+                <version>1.0.02R19</version>
+                <version>1.0.02R22</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>1.0.02R08</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>1.0.02R22</version>
+            <filename>DYW9HZ-308-1002R22.bin</filename>
+        </latestFirmware>
+        <protocol>legacy</protocol>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6AF82A05-BAB2-46FB-AA11-C2A32AD836D0</uuid>
+        <description>TestVendor 8026</description>
+        <manufacturer>iControl</manufacturer>
+        <model>RC8026</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions>
+            <list>
+                <version>3.0.01.18</version>
+                <version>3.0.01.23</version>
+                <version>3.0.01.24</version>
+                <version>3.0.01.28</version>
+                <version>3.0.01.29</version>
+                <version>3.0.01.30</version>
+                <version>3.0.01.31</version>
+            </list>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>3.0.01.28</minSupportedFirmwareVersion>
+        <metadataList>
+            <metadata name="metaName1" value="metaValue1"/>
+            <metadata name="metaName2" value="metaValue2"/>
+        </metadataList>
+        <latestFirmware>
+            <version>3.0.01.31</version>
+            <filename>DACMHZ-408-300131.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>25</low>
+                <med>50</med>
+                <high>75</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>40</low>
+                <med>8</med>
+                <high>6</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>6B28EAE2-80E3-45A1-81C0-7F48A7B141C6</uuid>
+        <description>TestVendor 431</description>
+        <manufacturer>iControl</manufacturer>
+        <model>OC431</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions>
+            <range>
+                <from>3 </from>
+                <to>8</to>
+            </range>
+        </firmwareVersions>
+        <minSupportedFirmwareVersion>3.0.01.12</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>3.0.01.19</version>
+            <filename>DAMUHZ-103-300119.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>25</low>
+                <med>50</med>
+                <high>75</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>10</low>
+                <med>8</med>
+                <high>6</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+        <uuid>4d756c74-694d-6564-6961-000e8fd0c97b</uuid>
+        <description>TestVendor iCamera2</description>
+        <manufacturer>iControl</manufacturer>
+        <model>iCamera2</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions><any/></firmwareVersions>
+            <minSupportedFirmwareVersion>3.0.01.14</minSupportedFirmwareVersion>
+        <latestFirmware>
+            <version>3.0.01.32</version>
+            <filename>DAXNHZ-108-300132.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+            <enabled>true</enabled>
+            <sensitivityLevel>
+                <low>60</low>
+                <med>70</med>
+                <high>70</high>
+            </sensitivityLevel>
+            <detectionThreshold>
+                <low>27</low>
+                <med>22</med>
+                <high>8</high>
+            </detectionThreshold>
+            <regionOfInterest>
+                <width>16</width>
+                <height>16</height>
+                <bottomCoord>240</bottomCoord>
+                <topCoord>479</topCoord>
+                <leftCoord>96</leftCoord>
+                <rightCoord>543</rightCoord>
+            </regionOfInterest>
+        </motion>
+    </CameraDeviceDescriptor>
+
+    <CameraDeviceDescriptor>
+       <uuid>46B1F847-3972-43BB-9C39-2D8B4BF82BB4</uuid>
+       <description>TestVendor RC4551 Pan Cam</description>
+       <manufacturer>iControl</manufacturer>
+       <model>RC4551</model>
+       <hardwareVersions><any/></hardwareVersions>
+       <firmwareVersions><any/></firmwareVersions>
+       <minSupportedFirmwareVersion>3.0.01.09</minSupportedFirmwareVersion>
+       <latestFirmware>
+         <version>3.0.01.09</version>
+         <filename>DARPHZ-102-300109.bin</filename>
+       </latestFirmware>
+       <protocol>openHome</protocol>
+       <motion>
+         <enabled>true</enabled>
+         <sensitivityLevel>
+            <low>25</low>
+            <med>50</med>
+            <high>75</high>
+         </sensitivityLevel>
+         <detectionThreshold>
+            <low>10</low>
+            <med>8</med>
+            <high>6</high>
+         </detectionThreshold>
+         <regionOfInterest>
+            <width>16</width>
+            <height>16</height>
+            <bottomCoord>96</bottomCoord>
+            <topCoord>623</topCoord>
+            <leftCoord>96</leftCoord>
+            <rightCoord>1823</rightCoord>
+         </regionOfInterest>
+       </motion>
+    </CameraDeviceDescriptor>
+
+    <!-- Alpha Networks -->
+    <CameraDeviceDescriptor>
+        <uuid>bc329e00-1dd8-11b2-8601-d8eb97d26c7b</uuid>
+        <description>CS-3152</description>
+        <manufacturer>Alphanetworks</manufacturer>
+        <model>CS-3152</model>
+        <hardwareVersions><any/></hardwareVersions>
+        <firmwareVersions><any/></firmwareVersions>
+        <minSupportedFirmwareVersion>1.1.0.5030</minSupportedFirmwareVersion>
+        <latestFirmware>
+                <version>1.1.0.5030</version>
+                <filename>update_CS-3152_1.1.0_5030_Alphanetworks.bin</filename>
+        </latestFirmware>
+        <protocol>openHome</protocol>
+        <motion>
+                <enabled>true</enabled>
+                <sensitivityLevel>
+                        <low>88</low>
+                        <med>98</med>
+                        <high>100</high>
+                </sensitivityLevel>
+                <detectionThreshold>
+                        <low>6</low>
+                        <med>6</med>
+                        <high>6</high>
+                </detectionThreshold>
+                <regionOfInterest>
+                        <width>16</width>
+                        <height>16</height>
+                        <bottomCoord>1</bottomCoord>
+                        <topCoord>720</topCoord>
+                        <leftCoord>1</leftCoord>
+                        <rightCoord>1280</rightCoord>
+                </regionOfInterest>
+        </motion>
+     </CameraDeviceDescriptor>
+
+    <!-- LG Innotek -->
+    <CameraDeviceDescriptor>
+       <uuid>372AA591-D281-45B5-AAEE-04BCB021C176</uuid>
+       <description>LG Innotek Camera</description>
+       <manufacturer>LGInnotek</manufacturer>
+       <model>Titan</model>
+       <hardwareVersions> <any/> </hardwareVersions>
+       <firmwareVersions><any/></firmwareVersions>
+       <minSupportedFirmwareVersion>0.9.2.1411051</minSupportedFirmwareVersion>
+       <latestFirmware>
+          <version>0.9.2.1507141</version>
+          <filename>LGIT_Titan_0.9.2.1507141PoE.dat</filename>
+       </latestFirmware>
+       <protocol>openHome</protocol>
+       <motion>
+          <enabled>true</enabled>
+          <sensitivityLevel>
+             <low>50</low>
+             <med>75</med>
+             <high>100</high>
+          </sensitivityLevel>
+          <detectionThreshold>
+             <low>10</low>
+             <med>8</med>
+             <high>6</high>
+          </detectionThreshold>
+          <regionOfInterest>
+             <width>16</width>
+             <height>16</height>
+             <bottomCoord>240</bottomCoord>
+             <topCoord>479</topCoord>
+             <leftCoord>96</leftCoord>
+             <rightCoord>1183</rightCoord>
+          </regionOfInterest>
+       </motion>
+    </CameraDeviceDescriptor>
+<!-- Cameras --> 
+    
+</DeviceDescriptorList>

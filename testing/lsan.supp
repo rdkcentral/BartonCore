@@ -1,0 +1,46 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2024 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 12/16/2024
+#
+
+# In order for pytest to successfully discover tests with libbrtnDeviceServiceShared.so
+# compiled with address santizer, the libasan.so must be pre-loaded before invoking
+# `pytest --collect-only`. However, preloading libasan.so enables AddressSanitizer for the
+# entire process, not just for the specific library compiled with AddressSanitizer.
+# This means that all memory allocations and deallocations in the process, including those
+# from third-party libraries and Python itself, are tracked by AddressSanitizer. So even
+# if tests are found during test discovery, address santizer will report leaks in third
+# party libraries and the test process will be considered a failure.
+#
+# This file instructs address sanitizer to ignore leaks from certain third party libraries so
+# test discovery will complete successfully.
+
+leak:libglib-2.0.so
+leak:libgirepository-1.0.so
+leak:libcrypto.so
+
+# Suppressions for Python 3.x
+# ignore leaks starting with `Py` - these cover the corresponding C types - e.g. PyObject_Malloc
+leak:^Py

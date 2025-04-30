@@ -1,0 +1,60 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2024 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 09/20/2024
+#
+
+# This compose file is used to create the VSC devcontainer by extending the barton
+# service from the base compose.yaml file. It is not meant to be run directly.
+
+# Setting the name element to the user helps keep the container name easy to identify
+# by namespacing it with the user's name. Example: $USER-barton-devcontainer-1
+name: $BUILDER_USER-barton
+
+services:
+    devcontainer:
+        extends:
+            file: ./compose.yaml
+            service: barton
+        networks:
+            - barton-ip6net
+
+        # devcontainers do not support creating a user at runtime like we do with the
+        # `entrypoint.sh` script, so we need to override the base image with
+        # Dockerfile.devcontainer file that bakes the user into the image.
+        image: barton-devcontainer-$BUILDER_USER
+        build:
+            context: .
+            dockerfile: Dockerfile.devcontainer
+            args:
+                - BUILDER_USER=$BUILDER_USER
+                - BUILDER_GID=$BUILDER_GID
+                - BUILDER_UID=$BUILDER_UID
+                - IMAGE_TAG=$IMAGE_TAG
+
+networks:
+    barton-ip6net:
+        name: $BUILDER_USER-barton-ip6net
+        # Indicate that the network is defined outside of this compose file
+        external: true
