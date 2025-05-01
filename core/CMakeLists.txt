@@ -136,7 +136,7 @@ link_directories(${CURL_LIBRARY_DIRS})
 list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 
 # add library dependencies for this binary
-set(btnDSLinkLibraries brtnDeviceServiceConfig xhLog xhTypes xhTime xhUtil
+set(btnDSLinkLibraries bDeviceServiceConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
         xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m)
@@ -148,9 +148,9 @@ endif()
 #FIXME: Reduce copy-paste.
 # Object library type compiles once, then can re-use those object files for
 # statice/shared libraries.
-add_library(brtnDeviceServiceObject OBJECT ${SOURCES} ${BRTN_DS_API_SOURCES})
-target_link_libraries(brtnDeviceServiceObject ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceObject PRIVATE
+add_library(bDeviceServiceObject OBJECT ${SOURCES} ${BRTN_DS_API_SOURCES})
+target_link_libraries(bDeviceServiceObject ${btnDSLinkLibraries})
+target_include_directories(bDeviceServiceObject PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
                             ${XTRA_INCLUDES}
@@ -161,9 +161,9 @@ target_include_directories(brtnDeviceServiceObject PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
                             )
 
-add_library(brtnDeviceServiceStatic STATIC $<TARGET_OBJECTS:brtnDeviceServiceObject>)
-target_link_libraries(brtnDeviceServiceStatic ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceStatic PRIVATE
+add_library(bDeviceServiceStatic STATIC $<TARGET_OBJECTS:bDeviceServiceObject>)
+target_link_libraries(bDeviceServiceStatic ${btnDSLinkLibraries})
+target_include_directories(bDeviceServiceStatic PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
                             ${XTRA_INCLUDES}
@@ -172,11 +172,10 @@ target_include_directories(brtnDeviceServiceStatic PRIVATE
                             PUBLIC
                             ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
                             )
-install(TARGETS brtnDeviceServiceStatic DESTINATION lib)
 
-add_library(brtnDeviceServiceShared SHARED $<TARGET_OBJECTS:brtnDeviceServiceObject>)
-target_link_libraries(brtnDeviceServiceShared ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceShared PRIVATE
+add_library(bDeviceService SHARED $<TARGET_OBJECTS:bDeviceServiceObject>)
+target_link_libraries(bDeviceService ${btnDSLinkLibraries})
+target_include_directories(bDeviceService PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
                             ${XTRA_INCLUDES}
@@ -185,11 +184,11 @@ target_include_directories(brtnDeviceServiceShared PRIVATE
                             PUBLIC
                             ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
                             )
-install(TARGETS brtnDeviceServiceShared DESTINATION lib)
+install(TARGETS bDeviceService DESTINATION lib)
 
 # If specified, generate GIR and typelib. Clients need to ensure that the GIR and/or typelib
-# file is installed, as well is libbrtnDeviceServiceShared.so. Additionally,
-# if libbrtnDeviceServiceShared.so is compiled with sanitizer, clients need to set
+# file is installed, as well is libbDeviceService.so. Additionally,
+# if libbDeviceService.so is compiled with sanitizer, clients need to set
 # LD_PRELOAD ex:
 # LD_PRELOAD=$(gcc -print-file-name=libasan.so) python3 my_app.py
 # LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so) python3 my_app.py
@@ -214,7 +213,7 @@ if (BDS_GEN_GIR)
     # The list of --libraries should be only the minimal amount necessary
     # to resolve at run time (and the loader should be able to find everything
     # else through RUNPATH in a client program). However, the scanner needs
-    # paths to dependent libraries even if RUNPATH is set in libbrtnDeviceServiceShared.so.
+    # paths to dependent libraries even if RUNPATH is set in libbDeviceService.so.
     # I don't know why.
 
     set(SCANNER_ARGS
@@ -226,10 +225,10 @@ if (BDS_GEN_GIR)
     --output=${GIR_OUTPUT}
     --include=GObject-2.0
     --include=Gio-2.0
-    --library=brtnDeviceServiceShared
+    --library=bDeviceService
     --library=stdc++
     --library-path=${CMAKE_PREFIX_PATH}/lib
-    -I$<JOIN:$<TARGET_PROPERTY:brtnDeviceServiceShared,INCLUDE_DIRECTORIES>, -I>)
+    -I$<JOIN:$<TARGET_PROPERTY:bDeviceService,INCLUDE_DIRECTORIES>, -I>)
 
     file(GLOB API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/*.h
                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/events/*.h
@@ -253,7 +252,7 @@ if (BDS_GEN_GIR)
     file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir INPUT ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir.in)
 
     add_custom_command(
-        TARGET brtnDeviceServiceShared POST_BUILD
+        TARGET bDeviceService POST_BUILD
         COMMAND env LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
@@ -283,7 +282,7 @@ bds_add_cmocka_test(
     NAME testSubsystemManager
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/subsystems/subsystemManagerTest.c
     WRAPPED_FUNCTIONS deviceServiceGetSystemProperty deviceServiceSetSystemProperty
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES bDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
 )
 
@@ -294,7 +293,7 @@ if (BDS_ZIGBEE)
             NAME testZigbeeSubsystem
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/subsystems/zigbee/zigbeeSubsystemTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem deviceServiceGetDeviceDescriptorForDevice deviceServiceConfigurationGetFirmwareFileDir
-            LINK_LIBRARIES brtnDeviceServiceStatic
+            LINK_LIBRARIES bDeviceServiceStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
@@ -304,7 +303,7 @@ if (BDS_ZIGBEE)
             WRAPPED_FUNCTIONS
                 jsonDatabaseRestore
                 subsystemManagerRestoreConfig
-            LINK_LIBRARIES brtnDeviceServiceStatic
+            LINK_LIBRARIES bDeviceServiceStatic
             INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
 
@@ -312,7 +311,7 @@ if (BDS_ZIGBEE)
             NAME testZigbeeDriverCommon
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/deviceDrivers/zigbeeDriverCommonTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem
-            LINK_LIBRARIES brtnDeviceServiceStatic
+            LINK_LIBRARIES bDeviceServiceStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
@@ -330,7 +329,7 @@ if (BDS_ZIGBEE)
                 storageRestoreNamespace
                 simpleProtectConfigData
                 simpleUnprotectConfigData
-            LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceHelper
+            LINK_LIBRARIES bDeviceServiceStatic xhDeviceHelper
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
@@ -343,7 +342,7 @@ if (BDS_ZIGBEE)
                               deviceServiceSetSystemProperty digestFile
                               deviceServiceGetSystemProperty urlHelperDownloadFile
 
-            LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceDescriptors
+            LINK_LIBRARIES bDeviceServiceStatic xhDeviceDescriptors
             INCLUDES ${PRIVATE_API_INCLUDES}
     )
 
@@ -377,7 +376,7 @@ bds_add_cmocka_test(
 if (BDS_MATTER)
     bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
         # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
-        LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
+        LIBS ${OPENSSL_LINK_LIBRARIES} bDeviceServiceStatic
         INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
     )
@@ -386,7 +385,7 @@ if (BDS_MATTER)
         # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
         # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
         # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
-        LIBS brtnDeviceServiceStatic gtest gmock gmock_main
+        LIBS bDeviceServiceStatic gtest gmock gmock_main
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterSubscribeInteractionTest.cpp
     )
@@ -621,7 +620,7 @@ bds_add_cmocka_test(
         zhalTest
         zigbeeSubsystemPerformEnergyScan
         deviceServiceRestoreConfig
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES bDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
 )
 if(TARGET device-service-client-test)
@@ -634,7 +633,7 @@ bds_add_cmocka_test(
     WRAPPED_FUNCTIONS
         deviceServiceGetSystemProperty
         deviceServiceSetSystemProperty
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES bDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 if(TARGET device-service-property-provider-test)
@@ -645,7 +644,7 @@ bds_add_cmocka_test(
     NAME deviceServiceConfigurationTest
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceConfigurationTest.c
     WRAPPED_FUNCTIONS
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES bDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 

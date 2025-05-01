@@ -27,7 +27,7 @@
 # Licensed under the BSD-3 License
 
 # Define an interface library, which will not contain source code but instead provide compile definitions
-add_library(brtnDeviceServiceConfig INTERFACE)
+add_library(bDeviceServiceConfig INTERFACE)
 
 macro(bds_option)
     # Declare an (ON/OFF) Barton cmake config with `NAME`
@@ -52,7 +52,7 @@ macro(bds_option)
 
     if (${BDS_OPTION_NAME})
         message(STATUS "${BDS_OPTION_NAME}=ON --> ${BDS_OPTION_DEFINITION}=1")
-        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=1")
+        target_compile_definitions(bDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=1")
     else()
         message(STATUS "${BDS_OPTION_NAME}=OFF --> ${BDS_OPTION_DEFINITION} not defined")
     endif()
@@ -82,7 +82,7 @@ macro(bds_string_option)
         # unaffected by this call.
         string(JOIN "\;" JOINED_OPTION ${${BDS_OPTION_NAME}})
         message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
-        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
+        target_compile_definitions(bDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
     else()
         message(STATUS "${BDS_OPTION_NAME} unset --> ${BDS_OPTION_DEFINITION} not defined")
     endif()
@@ -108,7 +108,7 @@ macro(bds_int_option)
     if (${BDS_OPTION_NAME})
         if ("${${BDS_OPTION_NAME}}" MATCHES "^[0-9]+$")
             message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=${${BDS_OPTION_NAME}}")
-            target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=${${BDS_OPTION_NAME}}")
+            target_compile_definitions(bDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=${${BDS_OPTION_NAME}}")
         else()
             message(FATAL_ERROR "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} - invalid value, must be integer")
         endif()
