@@ -272,6 +272,15 @@ if (BDS_GEN_GIR)
     # We install this in our Dockerfile
     set(GENERATE_DIR /usr/bin/pygobject-stubs)
     set(OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/pygobject-stubs-generate-output.txt)
+
+    if (BDS_BUILD_WITH_ASAN)
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            set(ASAN_LD_PRELOAD "LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so)")
+        elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(ASAN_LD_PRELOAD "LD_PRELOAD=$(gcc -print-file-name=libasan.so)")
+        endif()
+    endif()
+
     configure_file(gen_pygobject_stubs.in gen_pygobject_stubs @ONLY)
 
     # We need to run gen_pygobject_stubs after install for it to work.
