@@ -33,7 +33,7 @@
 #include "deviceServicePrivate.h"
 #include "icLog/logging.h"
 #include "icUtil/stringUtils.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <glib-object.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
@@ -49,12 +49,12 @@ propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyV
 
 void deviceEventHandlerStartup(void)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     if (propertyProvider)
     {
         g_signal_connect(propertyProvider,
-                         B_DEVICE_SERVICE_PROPERTY_PROVIDER_SIGNAL_PROPERTY_CHANGED,
+                         B_CORE_PROPERTY_PROVIDER_SIGNAL_PROPERTY_CHANGED,
                          G_CALLBACK(propertyChangedHandler),
                          NULL);
     }
@@ -68,11 +68,11 @@ void deviceEventHandlerShutdown(void)
 static void
 propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyValue, gchar *newPropertyValue)
 {
-    BDeviceServicePropertyProvider *propertyProvider = B_DEVICE_SERVICE_PROPERTY_PROVIDER(source);
+    BCorePropertyProvider *propertyProvider = B_CORE_PROPERTY_PROVIDER(source);
 
     if (g_strcmp0(propertyName, DEVICE_DESCRIPTOR_LIST) == 0)
     {
-        if (!b_device_service_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
+        if (!b_core_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
         {
             deviceDescriptorsUpdateAllowlist(newPropertyValue);
         }
@@ -91,7 +91,7 @@ propertyChangedHandler(GObject *source, gchar *propertyName, gchar *oldPropertyV
         else
         {
             // Restore the regular allowlist
-            char *allowlistUrl = b_device_service_property_provider_get_property_as_string(
+            char *allowlistUrl = b_core_property_provider_get_property_as_string(
                 propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
             if (allowlistUrl != NULL)
             {

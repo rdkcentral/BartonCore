@@ -28,7 +28,7 @@
 #include "zigbeeHealthCheck.h"
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <event/deviceEventProducer.h>
 #include <icLog/logging.h>
 #include <pthread.h>
@@ -55,9 +55,9 @@ static bool interferenceDetected = false;
 
 void zigbeeHealthCheckStart()
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    uint32_t intervalMillis = b_device_service_property_provider_get_property_as_uint32(
+    uint32_t intervalMillis = b_core_property_provider_get_property_as_uint32(
         propertyProvider, ZIGBEE_HEALTH_CHECK_INTERVAL_MILLIS, NETWORK_HEALTH_CHECK_INTERVAL_MILLIS_DEFAULT);
     if (intervalMillis == 0)
     {
@@ -88,15 +88,15 @@ void zigbeeHealthCheckStart()
             intervalMillis = MIN_NETWORK_HEALTH_CHECK_INTERVAL_MILLIS;
         }
 
-        int32_t ccaThreshold = b_device_service_property_provider_get_property_as_int32(
+        int32_t ccaThreshold = b_core_property_provider_get_property_as_int32(
             propertyProvider, ZIGBEE_HEALTH_CHECK_CCA_THRESHOLD, NETWORK_HEALTH_CHECK_CCA_THRESHOLD_DEFAULT);
-        uint32_t ccaFailureThreshold = b_device_service_property_provider_get_property_as_uint32(
+        uint32_t ccaFailureThreshold = b_core_property_provider_get_property_as_uint32(
             propertyProvider,
             ZIGBEE_HEALTH_CHECK_CCA_FAILURE_THRESHOLD,
             NETWORK_HEALTH_CHECK_CCA_FAILURE_THRESHOLD_DEFAULT);
-        uint32_t restoreThreshold = b_device_service_property_provider_get_property_as_uint32(
+        uint32_t restoreThreshold = b_core_property_provider_get_property_as_uint32(
             propertyProvider, ZIGBEE_HEALTH_CHECK_RESTORE_THRESHOLD, NETWORK_HEALTH_CHECK_RESTORE_THRESHOLD_DEFAULT);
-        uint32_t delayBetweenRetriesMillis = b_device_service_property_provider_get_property_as_uint32(
+        uint32_t delayBetweenRetriesMillis = b_core_property_provider_get_property_as_uint32(
             propertyProvider,
             ZIGBEE_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS,
             NETWORK_HEALTH_CHECK_DELAY_BETWEEN_THRESHOLD_RETRIES_MILLIS_DEFAULT);

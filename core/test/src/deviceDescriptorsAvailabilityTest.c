@@ -31,7 +31,7 @@
 
 #include "../../src/deviceDescriptorHandler.h"
 #include "icUtil/stringUtils.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "urlHelper/urlHelper.h"
 #include <asm/errno.h>
 #include <cmocka.h>
@@ -67,13 +67,13 @@ static void descriptorsUpdatedCb(void)
     return;
 }
 
-gboolean __wrap_b_device_service_property_provider_has_property(BDeviceServicePropertyProvider *provider,
+gboolean __wrap_b_core_property_provider_has_property(BCorePropertyProvider *provider,
                                                                 const char *propName)
 {
     return mock_type(gboolean);
 }
 
-gchar *__wrap_b_device_service_property_provider_get_property_as_string(BDeviceServicePropertyProvider *provider,
+gchar *__wrap_b_core_property_provider_get_property_as_string(BCorePropertyProvider *provider,
                                                                         const char *propName,
                                                                         const char *defValue)
 {
@@ -164,14 +164,14 @@ static void test_remote_device_descriptors_availability(void **state)
 
     deviceDescriptorsInit(localWhiteListPath, NULL);
 
-    will_return(__wrap_b_device_service_property_provider_has_property,
+    will_return(__wrap_b_core_property_provider_has_property,
                 false); // deviceDescriptor.whitelist.url.override
-    will_return(__wrap_b_device_service_property_provider_has_property,
+    will_return(__wrap_b_core_property_provider_has_property,
                 true); // deviceDescriptorList
-    will_return(__wrap_b_device_service_property_provider_get_property_as_string,
+    will_return(__wrap_b_core_property_provider_get_property_as_string,
                 remoteWhiteListPath); // deviceDescriptorList
     // set it to NULL to set isBlacklistValid flag
-    will_return(__wrap_b_device_service_property_provider_get_property_as_string, NULL); // deviceDescriptor.blacklist
+    will_return(__wrap_b_core_property_provider_get_property_as_string, NULL); // deviceDescriptor.blacklist
 
     pthread_mutex_lock(&mutex);
 
@@ -194,11 +194,11 @@ static void test_local_device_descriptors_availability(void **state)
 
     deviceDescriptorsInit(localWhiteListPath, NULL);
 
-    will_return(__wrap_b_device_service_property_provider_has_property,
+    will_return(__wrap_b_core_property_provider_has_property,
                 false); // deviceDescriptor.whitelist.url.override
-    will_return(__wrap_b_device_service_property_provider_has_property, false); // deviceDescriptorList
+    will_return(__wrap_b_core_property_provider_has_property, false); // deviceDescriptorList
     // set it to NULL to set isBlacklistValid flag
-    will_return(__wrap_b_device_service_property_provider_get_property_as_string, NULL); // deviceDescriptor.blacklist
+    will_return(__wrap_b_core_property_provider_get_property_as_string, NULL); // deviceDescriptor.blacklist
 
     expect_function_call(localDeviceDescriptorsReadyForPairingCb);
     deviceServiceDeviceDescriptorsInit(localDeviceDescriptorsReadyForPairingCb, descriptorsUpdatedCb);

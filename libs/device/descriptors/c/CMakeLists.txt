@@ -28,7 +28,7 @@
 # file via the 'add_subdirectory()' routine.
 #
 #--------------------------------------------------------------------------------------
-include(BDSConfigureGLib)
+include(BCoreConfigureGLib)
 
 # setup include paths
 include_directories(

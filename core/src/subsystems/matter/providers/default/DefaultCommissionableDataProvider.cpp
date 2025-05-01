@@ -46,8 +46,8 @@
 #include <vector>
 
 extern "C" {
-#include <device-service-properties.h>
-#include <provider/device-service-property-provider.h>
+#include <barton-core-properties.h>
+#include <provider/barton-core-property-provider.h>
 #include <deviceServiceConfiguration.h>
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
@@ -70,12 +70,12 @@ namespace
 
 CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSetupDiscriminator(uint16_t &setupDiscriminator)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     VerifyOrReturnError(propertyProvider != nullptr, CHIP_ERROR_INTERNAL, icError("Property provider is null"));
 
-    guint16 discriminator = b_device_service_property_provider_get_property_as_uint16(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, UINT16_MAX);
+    guint16 discriminator = b_core_property_provider_get_property_as_uint16(
+        propertyProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, UINT16_MAX);
 
     VerifyOrReturnError(
         discriminator != UINT16_MAX, CHIP_ERROR_INTERNAL, icError("Failed to read setup discriminator property"));
@@ -86,12 +86,12 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSetupDiscriminator(uint16_
 
 CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pIterationCount(uint32_t &iterationCount)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     VerifyOrReturnError(propertyProvider != nullptr, CHIP_ERROR_INTERNAL, icError("Property provider is null"));
 
-    guint32 iteration = b_device_service_property_provider_get_property_as_uint32(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, UINT32_MAX);
+    guint32 iteration = b_core_property_provider_get_property_as_uint32(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, UINT32_MAX);
 
     VerifyOrReturnError(
         iteration != UINT32_MAX, CHIP_ERROR_INTERNAL, icError("Failed to read spake2p iteration count property"));
@@ -104,12 +104,12 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pSalt(MutableByteSpa
 {
     VerifyOrReturnError(saltBuf.size() >= Crypto::kSpake2p_Max_PBKDF_Salt_Length, CHIP_ERROR_BUFFER_TOO_SMALL);
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     VerifyOrReturnError(propertyProvider != nullptr, CHIP_ERROR_INTERNAL, icError("Property provider is null"));
 
-    g_autofree gchar *base64Salt = b_device_service_property_provider_get_property_as_string(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, nullptr);
+    g_autofree gchar *base64Salt = b_core_property_provider_get_property_as_string(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, nullptr);
 
     VerifyOrReturnError(base64Salt != nullptr, CHIP_ERROR_INTERNAL, icError("Failed to read spake2p salt property"));
 
@@ -121,14 +121,14 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pSalt(MutableByteSpa
 CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pVerifier(MutableByteSpan &verifierBuf,
                                                                       size_t &outVerifierLen)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     VerifyOrReturnError(propertyProvider != nullptr, CHIP_ERROR_INTERNAL, icError("Property provider is null"));
 
     VerifyOrReturnError(verifierBuf.size() >= Crypto::kSpake2p_VerifierSerialized_Length, CHIP_ERROR_BUFFER_TOO_SMALL);
 
-    g_autofree gchar *base64Verifier = b_device_service_property_provider_get_property_as_string(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, nullptr);
+    g_autofree gchar *base64Verifier = b_core_property_provider_get_property_as_string(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, nullptr);
 
     VerifyOrReturnError(
         base64Verifier != nullptr, CHIP_ERROR_INTERNAL, icError("Failed to read spake2p verifier property"));
@@ -141,12 +141,12 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pVerifier(MutableByt
 
 CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSetupPasscode(uint32_t &setupPasscode)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     VerifyOrReturnError(propertyProvider != nullptr, CHIP_ERROR_INTERNAL, icError("Property provider is null"));
 
-    guint32 passcode = b_device_service_property_provider_get_property_as_uint32(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, UINT32_MAX);
+    guint32 passcode = b_core_property_provider_get_property_as_uint32(
+        propertyProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, UINT32_MAX);
 
     VerifyOrReturnError(passcode != UINT32_MAX, CHIP_ERROR_INTERNAL, icError("Failed to read setup passcode property"));
 

@@ -27,7 +27,7 @@
 # Licensed under the BSD-3 License
 
 # Define an interface library, which will not contain source code but instead provide compile definitions
-add_library(brtnDeviceServiceConfig INTERFACE)
+add_library(bCoreConfig INTERFACE)
 
 macro(bds_option)
     # Declare an (ON/OFF) Barton cmake config with `NAME`
@@ -42,19 +42,19 @@ macro(bds_option)
 
     set(optionValueArgs ENABLE DISABLE)
     set(singleValueArgs NAME DEFINITION DESCRIPTION)
-    cmake_parse_arguments(BDS_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(BCORE_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    if (BDS_OPTION_ENABLE)
-        set(${BDS_OPTION_NAME} ON CACHE BOOL "${BDS_OPTION_DESCRIPTION}")
+    if (BCORE_OPTION_ENABLE)
+        set(${BCORE_OPTION_NAME} ON CACHE BOOL "${BCORE_OPTION_DESCRIPTION}")
     else()
-        set(${BDS_OPTION_NAME} OFF CACHE BOOL "${BDS_OPTION_DESCRIPTION}")
+        set(${BCORE_OPTION_NAME} OFF CACHE BOOL "${BCORE_OPTION_DESCRIPTION}")
     endif()
 
-    if (${BDS_OPTION_NAME})
-        message(STATUS "${BDS_OPTION_NAME}=ON --> ${BDS_OPTION_DEFINITION}=1")
-        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=1")
+    if (${BCORE_OPTION_NAME})
+        message(STATUS "${BCORE_OPTION_NAME}=ON --> ${BCORE_OPTION_DEFINITION}=1")
+        target_compile_definitions(bCoreConfig INTERFACE "${BCORE_OPTION_DEFINITION}=1")
     else()
-        message(STATUS "${BDS_OPTION_NAME}=OFF --> ${BDS_OPTION_DEFINITION} not defined")
+        message(STATUS "${BCORE_OPTION_NAME}=OFF --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
 endmacro()
 
@@ -69,22 +69,22 @@ macro(bds_string_option)
     # set, the value does not change.
 
     set(singleValueArgs NAME DEFINITION DESCRIPTION VALUE)
-    cmake_parse_arguments(BDS_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(BCORE_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    if (BDS_OPTION_VALUE)
-        set(${BDS_OPTION_NAME} ${BDS_OPTION_VALUE} CACHE STRING "${BDS_OPTION_DESCRIPTION}")
+    if (BCORE_OPTION_VALUE)
+        set(${BCORE_OPTION_NAME} ${BCORE_OPTION_VALUE} CACHE STRING "${BCORE_OPTION_DESCRIPTION}")
     endif()
 
-    if (${BDS_OPTION_NAME})
-        # If the value of ${${BDS_OPTION_NAME}} is a list, join it with escaped semi-colons to ensure
+    if (${BCORE_OPTION_NAME})
+        # If the value of ${${BCORE_OPTION_NAME}} is a list, join it with escaped semi-colons to ensure
         # COMPILER_DEFINITIONS (https://cmake.org/cmake/help/latest/prop_tgt/COMPILE_DEFINITIONS.html)
         # property does not improperly malform the definition. Single strings (non-lists) will be
         # unaffected by this call.
-        string(JOIN "\;" JOINED_OPTION ${${BDS_OPTION_NAME}})
-        message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
-        target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
+        string(JOIN "\;" JOINED_OPTION ${${BCORE_OPTION_NAME}})
+        message(STATUS "${BCORE_OPTION_NAME}=${${BCORE_OPTION_NAME}} --> ${BCORE_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
+        target_compile_definitions(bCoreConfig INTERFACE "${BCORE_OPTION_DEFINITION}=\"${JOINED_OPTION}\"")
     else()
-        message(STATUS "${BDS_OPTION_NAME} unset --> ${BDS_OPTION_DEFINITION} not defined")
+        message(STATUS "${BCORE_OPTION_NAME} unset --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
 endmacro()
 
@@ -99,69 +99,69 @@ macro(bds_int_option)
     # set, the value does not change.
 
     set(singleValueArgs NAME DEFINITION DESCRIPTION VALUE)
-    cmake_parse_arguments(BDS_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(BCORE_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    if (BDS_OPTION_VALUE)
-        set(${BDS_OPTION_NAME} ${BDS_OPTION_VALUE} CACHE STRING "${BDS_OPTION_DESCRIPTION}")
+    if (BCORE_OPTION_VALUE)
+        set(${BCORE_OPTION_NAME} ${BCORE_OPTION_VALUE} CACHE STRING "${BCORE_OPTION_DESCRIPTION}")
     endif()
 
-    if (${BDS_OPTION_NAME})
-        if ("${${BDS_OPTION_NAME}}" MATCHES "^[0-9]+$")
-            message(STATUS "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} --> ${BDS_OPTION_DEFINITION}=${${BDS_OPTION_NAME}}")
-            target_compile_definitions(brtnDeviceServiceConfig INTERFACE "${BDS_OPTION_DEFINITION}=${${BDS_OPTION_NAME}}")
+    if (${BCORE_OPTION_NAME})
+        if ("${${BCORE_OPTION_NAME}}" MATCHES "^[0-9]+$")
+            message(STATUS "${BCORE_OPTION_NAME}=${${BCORE_OPTION_NAME}} --> ${BCORE_OPTION_DEFINITION}=${${BCORE_OPTION_NAME}}")
+            target_compile_definitions(bCoreConfig INTERFACE "${BCORE_OPTION_DEFINITION}=${${BCORE_OPTION_NAME}}")
         else()
-            message(FATAL_ERROR "${BDS_OPTION_NAME}=${${BDS_OPTION_NAME}} - invalid value, must be integer")
+            message(FATAL_ERROR "${BCORE_OPTION_NAME}=${${BCORE_OPTION_NAME}} - invalid value, must be integer")
         endif()
     else()
-        message(STATUS "${BDS_OPTION_NAME} unset --> ${BDS_OPTION_DEFINITION} not defined")
+        message(STATUS "${BCORE_OPTION_NAME} unset --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
 endmacro()
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Device Service ON/OFF Configs")
 
-bds_option(NAME BDS_ZIGBEE
+bds_option(NAME BCORE_ZIGBEE
            DEFINITION BARTON_CONFIG_ZIGBEE
            DESCRIPTION "Enable Zigbee support"
            ENABLE)
-bds_option(NAME BDS_THREAD
+bds_option(NAME BCORE_THREAD
            DEFINITION BARTON_CONFIG_THREAD
            DESCRIPTION "Enable Thread support"
            ENABLE)
-bds_option(NAME BDS_MATTER
+bds_option(NAME BCORE_MATTER
            DEFINITION BARTON_CONFIG_MATTER
            DESCRIPTION "Enable Matter support"
            ENABLE)
-bds_option(NAME BDS_PHILIPS_HUE
+bds_option(NAME BCORE_PHILIPS_HUE
            DEFINITION BARTON_CONFIG_PHILIPS_HUE
            DESCRIPTION "Enable Philips Hue support")
-bds_option(NAME BDS_GEN_GIR
+bds_option(NAME BCORE_GEN_GIR
            DEFINITION BARTON_CONFIG_GEN_GIR
            DESCRIPTION "Enable generating GIR and typelib information"
            ENABLE)
-bds_option(NAME BDS_GENERATE_DEFAULT_LABELS
+bds_option(NAME BCORE_GENERATE_DEFAULT_LABELS
            DEFINITION BARTON_CONFIG_GENERATE_DEFAULT_LABELS
            DESCRIPTION "Enable generating default labels for devices that support the label resource")
-bds_option(NAME BDS_MATTER_USE_RANDOM_PORT
+bds_option(NAME BCORE_MATTER_USE_RANDOM_PORT
            DEFINITION BARTON_CONFIG_MATTER_USE_RANDOM_PORT
            DESCRIPTION "Use a random oerational communication port for Matter. If not set, 5540 will be used.")
-bds_option(NAME BDS_BUILD_REFERENCE
+bds_option(NAME BCORE_BUILD_REFERENCE
            DEFINITION BARTON_CONFIG_BUILD_REFERENCE
            DESCRIPTION "Build the reference application"
            ENABLE)
-bds_option(NAME BDS_BUILD_WITH_SSP
+bds_option(NAME BCORE_BUILD_WITH_SSP
            DEFINITION BARTON_CONFIG_BUILD_WITH_SSP
            DESCRIPTION "Build Barton with stack smash protection")
-bds_option(NAME BDS_BUILD_WITH_ASAN
+bds_option(NAME BCORE_BUILD_WITH_ASAN
            DEFINITION BARTON_CONFIG_BUILD_WITH_ASAN
            DESCRIPTION "Build Barton with Address Sanitizer")
-bds_option(NAME BDS_TEST_COVERAGE
+bds_option(NAME BCORE_TEST_COVERAGE
            DEFINITION BARTON_CONFIG_TEST_COVERAGE
            DESCRIPTION "Enable test coverage")
-bds_option(NAME BDS_MATTER_SKIP_SDK
+bds_option(NAME BCORE_MATTER_SKIP_SDK
            DEFINITION BARTON_CONFIG_MATTER_SKIP_SDK
            DESCRIPTION "When building Matter, skip building the SDK (as a client may be building it separately already)")
-bds_option(NAME BDS_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
+bds_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
            DEFINITION BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA
            DESCRIPTION "Use default commissionable data values instead of ones provided by the client")
 
@@ -170,26 +170,26 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Device Service PRIVATE ON/OFF Configs. These options should not be used by new clients.")
 
-bds_option(NAME BDS_PROVIDE_LIBS
+bds_option(NAME BCORE_PROVIDE_LIBS
            DEFINITION BARTON_CONFIG_PROVIDE_LIBS
            DESCRIPTION "Choose if private libraries are provided by the client.")
-bds_option(NAME BDS_SUPPORT_ALARMS
+bds_option(NAME BCORE_SUPPORT_ALARMS
            DEFINITION BARTON_CONFIG_SUPPORT_ALARMS
            DESCRIPTION "Whether alarms are supported by the client.")
-bds_option(NAME BDS_M1LTE
+bds_option(NAME BCORE_M1LTE
            DEFINITION BARTON_CONFIG_M1LTE
            DESCRIPTION "Indicates to Barton M1LTE is included.")
-bds_option(NAME BDS_SETUP_WIZARD
+bds_option(NAME BCORE_SETUP_WIZARD
            DEFINITION BARTON_CONFIG_SETUP_WIZARD
            DESCRIPTION "Support for behavioral changes if there is an \"activation period\"")
-bds_option(NAME BDS_SUPPORT_SOFTWARE_WATCHDOG
+bds_option(NAME BCORE_SUPPORT_SOFTWARE_WATCHDOG
            DEFINITION BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
            DESCRIPTION "Support for zigbee watchdog feature using the software watchdog library.")
-bds_int_option(NAME BDS_SOFTWARE_WATCHDOG_TROUBLE_CODE_ZIGBEE_CORE
+bds_int_option(NAME BCORE_SOFTWARE_WATCHDOG_TROUBLE_CODE_ZIGBEE_CORE
               DEFINITION BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
               DESCRIPTION "The trouble code to use when reporting a zigbee core failure to the software watchdog library."
               VALUE 11)
-bds_option(NAME BDS_SUPPORT_ZIGBEE_TELEMETRY
+bds_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")
 
@@ -198,7 +198,7 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Device Service String Configs.")
 
-bds_string_option(NAME BDS_MATTER_LIB
+bds_string_option(NAME BCORE_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
@@ -207,24 +207,24 @@ set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsyste
 set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
 set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
 
-bds_string_option(NAME BDS_MATTER_PROVIDER_IMPLEMENTATIONS
+bds_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
                   VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp;
                         ${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
 
-bds_string_option(NAME BDS_MATTER_DELEGATE_IMPLEMENTATIONS
+bds_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter delegate interfaces."
                   VALUE "${MATTER_DELEGATE_DEFAULT_DIR}/CertifierOperationalCredentialsIssuer.cpp;")
 
-bds_string_option(NAME BDS_MATTER_PROVIDER_HEADER_PATHS
+bds_string_option(NAME BCORE_MATTER_PROVIDER_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_HEADER_PATHS
                   DESCRIPTION "List of paths to directories containing matter provider header files."
                   VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers;
                          ${MATTER_PROVIDER_DEFAULT_DIR};")
 
-bds_string_option(NAME BDS_MATTER_DELEGATE_HEADER_PATHS
+bds_string_option(NAME BCORE_MATTER_DELEGATE_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_HEADER_PATHS
                   DESCRIPTION "List of paths to directories containing matter delegate header files"
                   VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates;
@@ -235,7 +235,7 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Device Service Integer Configs.")
 
-bds_int_option(NAME BDS_ZIGBEE_STARTUP_TIMEOUT_SECONDS
+bds_int_option(NAME BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS
                DEFINITION BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS
                DESCRIPTION "The amount of time to wait for Zigbee to startup."
                VALUE 120)

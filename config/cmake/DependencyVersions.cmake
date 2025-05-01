@@ -25,7 +25,7 @@
 # Created by Christian Leithner on 09/23/2024
 #
 
-include(BDSFindPackage)
+include(BCoreFindPackage)
 
 # These are intended to be set at the project level as other cmake refer to them.
 set(GLIB_MIN_VERSION 2.62.4)
@@ -60,6 +60,6 @@ bds_find_package(NAME uuid MIN_VERSION ${UUID_MIN_VERSION} REQUIRED)
 bds_find_package(NAME libxml-2.0 MIN_VERSION ${XML_MIN_VERSION} REQUIRED)
 bds_find_package(NAME mbedcrypto MIN_VERSION ${MBEDCRYPTO_MIN_VERSION} REQUIRED)
 
-if (BDS_MATTER)
+if (BCORE_MATTER)
     bds_find_package(NAME certifier MIN_VERSION ${LIBCERTIFIER_MIN_VERSION} REQUIRED)
 endif()

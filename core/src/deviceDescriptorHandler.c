@@ -39,7 +39,7 @@
 #include "deviceServiceConfiguration.h"
 #include "deviceServicePrivate.h"
 #include "glib.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <deviceDescriptors.h>
 #include <devicePrivateProperties.h>
 #include <deviceService.h>
@@ -113,21 +113,21 @@ void deviceServiceDeviceDescriptorsInit(deviceDescriptorsReadyForPairingFunc rea
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
     char *allowlistUrl = NULL;
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    if (b_device_service_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
+    if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
     {
-        allowlistUrl = b_device_service_property_provider_get_property_as_string(
+        allowlistUrl = b_core_property_provider_get_property_as_string(
             propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE, NULL);
     }
-    else if (b_device_service_property_provider_has_property(propertyProvider, DEVICE_DESCRIPTOR_LIST))
+    else if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESCRIPTOR_LIST))
     {
         allowlistUrl =
-            b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
+            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
     }
 
     char *denylistUrl =
-        b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
+        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
 
     // device service can be informed for pairing is possible or not based on
     // valid local allowlist & denyList. If url is valid, url will be used to check
@@ -262,8 +262,8 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
         bool useAggressivePolicy = false;
 
 #ifdef BARTON_CONFIG_SETUP_WIZARD
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        int32_t activationState = b_device_service_property_provider_get_property_as_int32(
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        int32_t activationState = b_core_property_provider_get_property_as_int32(
             propertyProvider, PERSIST_CPE_SETUPWIZARD_STATE, ACTIVATION_NOT_STARTED);
         if (activationState < ACTIVATION_COMPLETE)
         {
@@ -587,9 +587,9 @@ static bool downloadFile(const char *url, const char *destFile, deviceDescriptor
     AUTO_CLEAN(free_generic__auto) char *tmpfilename = stringBuilder("%s.tmp", destFile);
 
     const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     g_autofree char *propValue =
-        b_device_service_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
+        b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
 
     sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
 

@@ -58,7 +58,7 @@ add_custom_target(runTests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-if (BDS_TEST_COVERAGE)
+if (BCORE_TEST_COVERAGE)
     include(CodeCoverage)
     APPEND_COVERAGE_COMPILER_FLAGS()
     # Exclude system includes, and tests
@@ -71,19 +71,19 @@ if (BDS_TEST_COVERAGE)
 endif()
 
 # Before building our stuff, build matter if we need to
-if (BDS_MATTER AND NOT BDS_MATTER_SKIP_SDK)
+if (BCORE_MATTER AND NOT BCORE_MATTER_SKIP_SDK)
     # Only search default locations. Mostly this is for clients who build matter out of band
     # already. The script will check our usual matter build location.
-    find_library(MATTER NAMES ${BDS_MATTER_LIB})
+    find_library(MATTER NAMES ${BCORE_MATTER_LIB})
 
     if (${MATTER} STREQUAL "MATTER-NOTFOUND")
         # Forward SSP args to building matter
-        if (BDS_BUILD_WITH_SSP)
+        if (BCORE_BUILD_WITH_SSP)
             set(MATTER_SSP_ARG "-s")
         endif()
 
         # Forward ASAN args to building matter
-        if (BDS_BUILD_WITH_ASAN)
+        if (BCORE_BUILD_WITH_ASAN)
             set(MATTER_ASAN_ARG "-a")
         endif()
 
@@ -103,12 +103,12 @@ endif()
 
 # Setup optional compiler/linker global flags
 
-if (BDS_BUILD_WITH_SSP)
+if (BCORE_BUILD_WITH_SSP)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
 endif()
 
-if (BDS_BUILD_WITH_ASAN)
+if (BCORE_BUILD_WITH_ASAN)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 
@@ -116,12 +116,12 @@ if (BDS_BUILD_WITH_ASAN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 endif()
 
-if (NOT BDS_PROVIDE_LIBS)
+if (NOT BCORE_PROVIDE_LIBS)
     add_subdirectory(libs)
 endif()
 
 add_subdirectory(core)
 
-if (BDS_BUILD_REFERENCE)
+if (BCORE_BUILD_REFERENCE)
     add_subdirectory(reference)
 endif()

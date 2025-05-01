@@ -38,7 +38,7 @@
 extern "C" {
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <commonDeviceDefs.h>
 #include <device-driver/device-driver.h>
 #include <device/icDevice.h>
@@ -98,10 +98,10 @@ namespace barton
         scoped_icDevice *device = deviceServiceGetDevice(deviceUuid.c_str());
         scoped_DeviceDescriptor *dd = deviceServiceGetDeviceDescriptorForDevice(device);
 
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
         scoped_generic char *firmwareBaseUrl =
-            b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_FIRMWARE_URL_NODE, NULL);
+            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_FIRMWARE_URL_NODE, NULL);
 
         if (firmwareBaseUrl == nullptr)
         {

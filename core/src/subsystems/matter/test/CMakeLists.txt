@@ -21,7 +21,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-include(BDSAddCppTest)
+include(BCoreAddCppTest)
 
 # Avoid throwing the kitchen sink into sources and LIBS.
 # Only build units that are actually under test - this
@@ -32,8 +32,8 @@ list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp
                      ../MatterCommon.cpp
                      ../providers/BartonCommissionableDataProvider.cpp
                      ../providers/default/DefaultCommissionableDataProvider.cpp
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-default-property-provider.c
+                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
+                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
                      ${CMAKE_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
 
 pkg_check_modules(OPENSSL REQUIRED openssl)
@@ -42,7 +42,7 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 # tests that validate classes meant to make some deficient SDK classes more usable.
 # Add more executables for truly isolated units that don't link to other libraries.
 bds_add_cpp_test(NAME testMatterSDKTooling
-                LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
+                LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
                 INCLUDES ${CMAKE_SOURCE_DIR}/core/src
                          ${CMAKE_CURRENT_SOURCE_DIR}/..
                          ${CMAKE_CURRENT_SOURCE_DIR}/../providers
