@@ -37,10 +37,25 @@
 # This file instructs address sanitizer to ignore leaks from certain third party libraries so
 # test discovery will complete successfully.
 
-leak:libglib-2.0.so
-leak:libgirepository-1.0.so
+# Unclear what is causing leaks from libcrypto from backtraces. It may be relevant to using openssl 1.1.
+# We should revisit this when we rev the dependency version.
 leak:libcrypto.so
 
-# Suppressions for Python 3.x
-# ignore leaks starting with `Py` - these cover the corresponding C types - e.g. PyObject_Malloc
-leak:^Py
+#
+# Python interpreter
+#
+leak:python3
+
+#
+# Matter leaks we don't have control over.
+#
+
+# This class maintains a static duration instance of itself which results in one or more glib free functions to get scheduled on "next"
+# main loop iteration for the matter default thread context. But since it is process duration, it doesn't get scheduled until
+# after main exits (long after the thread context has been cleaned up because we shut down matter), so there is no next loop iteration.
+#
+# @see Matter Linux platform's ThreadStackManagerImpl.[hpp|cpp]
+# @see Matter Linux platform's dbus/openthread introspect.[h|c] (build-time generated file)
+# @see Glib gdbusproxy.[h|c]
+# @see Glib gdbusconnection.[h|c] (particularly g_dbus_connection_signal_subscribe)
+leak:chip::DeviceLayer::ThreadStackManagerImpl
