@@ -47,4 +47,13 @@ G_DECLARE_FINAL_TYPE(BReferenceNetworkCredentialsProvider,
  */
 BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void);
 
+/**
+ * b_reference_network_credentials_provider_set_wifi_network_credentials
+ *
+ * @brief
+ *
+ * Returns: None
+ */
+void b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password);
+
 G_END_DECLS
