@@ -149,6 +149,10 @@ bds_option(NAME BDS_BUILD_REFERENCE
            DEFINITION BARTON_CONFIG_BUILD_REFERENCE
            DESCRIPTION "Build the reference application"
            ENABLE)
+bds_option(NAME BDS_BUILD_DOCS
+           DEFINITION BARTON_CONFIG_BUILD_DOCS
+           DESCRIPTION "Build the documentation"
+           ENABLE)
 bds_option(NAME BDS_BUILD_WITH_SSP
            DEFINITION BARTON_CONFIG_BUILD_WITH_SSP
            DESCRIPTION "Build Barton with stack smash protection")

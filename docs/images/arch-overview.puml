@@ -1,0 +1,48 @@
+@startuml
+
+skinparam rectangle {
+	BackgroundColor DarkSeaGreen
+	FontStyle Bold
+	FontColor DarkGreen
+}
+
+:User: as u
+rectangle Tool as t
+rectangle "Knowledge Base" as kb
+(Robot Framework) as rf
+(DUT) as dut
+
+note as ts
+	test script
+end note
+
+note as act
+	query
+	&
+	action
+end note
+
+note as t_cmt
+	- 执行测试脚本
+	- 按照知识库响应消息
+end note
+
+note as kb_cmt
+	- 根据当前消息确定响应方法
+	- 根据上下文填充消息
+	- 保存信息到相关上下文
+end note
+
+u --> rf
+rf =right=> ts
+ts =down=> t
+
+kb <=left=> act
+act <=up=> t
+
+t = dut
+
+t_cmt -- t
+kb_cmt -left- kb
+
+@enduml

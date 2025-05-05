@@ -122,6 +122,10 @@ endif()
 
 add_subdirectory(core)
 
+if (BDS_BUILD_DOCS)
+    add_subdirectory(docs)
+endif()
+
 if (BDS_BUILD_REFERENCE)
     add_subdirectory(reference)
 endif()

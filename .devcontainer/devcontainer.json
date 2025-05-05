@@ -115,8 +115,7 @@
                 // Build and Project Management
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
-                "doi.fileheadercomment",                 // File header comment generator
-                "asciidoctor.asciidoctor-vscode"         // AsciiDoc support
+                "doi.fileheadercomment"                  // File header comment generator
             ],
 
             "settings":

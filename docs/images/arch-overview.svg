@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="412px" preserveAspectRatio="none" style="width:690px;height:412px;" version="1.1" viewBox="0 0 690 412" width="690px" zoomAndPan="magnify"><defs><filter height="300%" id="f1b8p8a8uy2x69" width="300%" x="-1" y="-1"><feGaussianBlur result="blurOut" stdDeviation="2.0"/><feColorMatrix in="blurOut" result="blurOut2" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .4 0"/><feOffset dx="4.0" dy="4.0" in="blurOut2" result="blurOut3"/><feBlend in="SourceGraphic" in2="blurOut3" mode="normal"/></filter></defs><g><!--MD5=[7d46d6cd919e02e6168a09ad91eae8b4]
+entity u--><ellipse cx="82.5" cy="17.5" fill="#FEFECE" filter="url(#f1b8p8a8uy2x69)" rx="8" ry="8" style="stroke: #A80036; stroke-width: 1.5;"/><path d="M82.5,25.5 L82.5,52.5 M69.5,33.5 L95.5,33.5 M82.5,52.5 L69.5,67.5 M82.5,52.5 L95.5,67.5 " fill="none" filter="url(#f1b8p8a8uy2x69)" style="stroke: #A80036; stroke-width: 1.5;"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacingAndGlyphs" textLength="32" x="66.5" y="85.9951">User</text><!--MD5=[4b52362e67c82d91eba5cb75921775cc]
+entity t--><rect fill="#8FBC8F" filter="url(#f1b8p8a8uy2x69)" height="36.2969" style="stroke: #000000; stroke-width: 1.5;" width="54" x="273.5" y="249"/><text fill="#006400" font-family="sans-serif" font-size="14" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="34" x="283.5" y="271.9951">Tool</text><!--MD5=[6b44c03e962b7d53e4d7c661ca4c6eaf]
+entity kb--><rect fill="#8FBC8F" filter="url(#f1b8p8a8uy2x69)" height="36.2969" style="stroke: #000000; stroke-width: 1.5;" width="152" x="365.5" y="354.5"/><text fill="#006400" font-family="sans-serif" font-size="14" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="132" x="375.5" y="377.4951">Knowledge Base</text><ellipse cx="82.3548" cy="169.171" fill="#FEFECE" filter="url(#f1b8p8a8uy2x69)" rx="76.3548" ry="17.671" style="stroke: #A80036; stroke-width: 1.5;"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacingAndGlyphs" textLength="122" x="21.3548" y="173.8194">Robot Framework</text><ellipse cx="386.7132" cy="267.0236" fill="#FEFECE" filter="url(#f1b8p8a8uy2x69)" rx="24.2132" ry="14.5236" style="stroke: #A80036; stroke-width: 1.5;"/><text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacingAndGlyphs" textLength="30" x="371.7132" y="271.6721">DUT</text><path d="M194,156.5 L194,181.6328 L279,181.6328 L279,166.5 L269,156.5 L194,156.5 " fill="#FBFB77" filter="url(#f1b8p8a8uy2x69)" style="stroke: #A80036; stroke-width: 1.0;"/><path d="M269,156.5 L269,166.5 L279,166.5 L269,156.5 " fill="#FBFB77" style="stroke: #A80036; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="64" x="200" y="173.5669">test script</text><path d="M270.5,345 L270.5,400.3984 L330.5,400.3984 L330.5,355 L320.5,345 L270.5,345 " fill="#FBFB77" filter="url(#f1b8p8a8uy2x69)" style="stroke: #A80036; stroke-width: 1.0;"/><path d="M320.5,345 L320.5,355 L330.5,355 L320.5,345 " fill="#FBFB77" style="stroke: #A80036; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="36" x="276.5" y="362.0669">query</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="11" x="276.5" y="377.1997">&amp;</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="39" x="276.5" y="392.3325">action</text><path d="M314.5,149 L314.5,189.2656 A0,0 0 0 0 314.5,189.2656 L348.35,189.2656 L312.11,248.85 L356.35,189.2656 L416.5,189.2656 A0,0 0 0 0 416.5,189.2656 L416.5,159 L406.5,149 L314.5,149 A0,0 0 0 0 314.5,149 " fill="#FBFB77" filter="url(#f1b8p8a8uy2x69)" style="stroke: #A80036; stroke-width: 1.0;"/><path d="M406.5,149 L406.5,159 L416.5,159 L406.5,149 " fill="#FBFB77" style="stroke: #A80036; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="57" x="320.5" y="166.0669">- 执行测试脚本</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="81" x="320.5" y="181.1997">- 按照知识库响应消息</text><path d="M552.5,345 L552.5,368.5 L517.62,372.5 L552.5,376.5 L552.5,400.3984 A0,0 0 0 0 552.5,400.3984 L678.5,400.3984 A0,0 0 0 0 678.5,400.3984 L678.5,355 L668.5,345 L552.5,345 A0,0 0 0 0 552.5,345 " fill="#FBFB77" filter="url(#f1b8p8a8uy2x69)" style="stroke: #A80036; stroke-width: 1.0;"/><path d="M668.5,345 L668.5,355 L678.5,355 L668.5,345 " fill="#FBFB77" style="stroke: #A80036; stroke-width: 1.0;"/><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="105" x="558.5" y="362.0669">- 根据当前消息确定响应方法</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="81" x="558.5" y="377.1997">- 根据上下文填充消息</text><text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacingAndGlyphs" textLength="89" x="558.5" y="392.3325">- 保存信息到相关上下文</text><!--MD5=[cf13e30790d4fdf33cd5cfa2e7238423]
+link u to rf--><path d="M82.5,89.29 C82.5,108.26 82.5,130.22 82.5,146.12 " fill="none" id="u-&gt;rf" style="stroke: #A80036; stroke-width: 1.0;"/><polygon fill="#A80036" points="82.5,151.26,86.5,142.26,82.5,146.26,78.5,142.26,82.5,151.26" style="stroke: #A80036; stroke-width: 1.0;"/><!--MD5=[0c2baee6c30e53140d233237fe242e80]
+link rf to ts--><path d="M159.2,169 C169.06,169 178.91,169 188.77,169 " fill="none" id="rf-&gt;ts" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="193.92,169,184.92,165,188.92,169,184.92,173,193.92,169" style="stroke: #A80036; stroke-width: 2.0;"/><!--MD5=[74ff31ea1e64032d91d076ced7553660]
+link ts to t--><path d="M244.35,181.77 C254.77,197.41 273.38,225.32 286.3,244.7 " fill="none" id="ts-&gt;t" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="289.13,248.95,287.4659,239.2427,286.3565,244.7897,280.8095,243.6803,289.13,248.95" style="stroke: #A80036; stroke-width: 2.0;"/><!--MD5=[38be97550407cd8dbbe0a48bd55f756c]
+link act to kb--><path d="M335.67,372.5 C343.82,372.5 351.97,372.5 360.12,372.5 " fill="none" id="act-kb" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="365.2,372.5,356.2,368.5,360.2,372.5,356.2,376.5,365.2,372.5" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="330.52,372.5,339.52,376.5,335.52,372.5,339.52,368.5,330.52,372.5" style="stroke: #A80036; stroke-width: 2.0;"/><!--MD5=[382702f8e43965c2183e2a7ed034d94f]
+link t to act--><path d="M300.5,290.27 C300.5,304.59 300.5,323.44 300.5,339.38 " fill="none" id="t-act" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="300.5,344.66,304.5,335.66,300.5,339.66,296.5,335.66,300.5,344.66" style="stroke: #A80036; stroke-width: 2.0;"/><polygon fill="#A80036" points="300.5,285.09,296.5,294.09,300.5,290.09,304.5,294.09,300.5,285.09" style="stroke: #A80036; stroke-width: 2.0;"/><!--MD5=[b1becb6d24cd12ed10043e2a38937883]
+link t to dut--><path d="M327.71,267 C339.19,267 350.68,267 362.16,267 " fill="none" id="t-dut" style="stroke: #A80036; stroke-width: 2.0;"/><!--MD5=[074d708075b77879ba2ed896e56d859b]
+@startuml
+
+skinparam rectangle {
+	BackgroundColor DarkSeaGreen
+	FontStyle Bold
+	FontColor DarkGreen
+}
+
+:User: as u
+rectangle Tool as t
+rectangle "Knowledge Base" as kb
+(Robot Framework) as rf
+(DUT) as dut
+
+note as ts
+	test script
+end note
+
+note as act
+	query
+	&
+	action
+end note
+
+note as t_cmt
+	- 执行测试脚本
+	- 按照知识库响应消息
+end note
+
+note as kb_cmt
+	- 根据当前消息确定响应方法
+	- 根据上下文填充消息
+	- 保存信息到相关上下文
+end note
+
+u - -> rf
+rf =right=> ts
+ts =down=> t
+
+kb <=left=> act
+act <=up=> t
+
+t = dut
+
+t_cmt - - t
+kb_cmt -left- kb
+
+@enduml
+
+PlantUML version 1.2020.02(Sun Mar 01 10:22:07 UTC 2020)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Java Version: 21.0.7+6-Ubuntu-0ubuntu124.04
+Operating System: Linux
+Default Encoding: UTF-8
+Language: en
+Country: US
+--></g></svg>
