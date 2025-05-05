@@ -61,12 +61,12 @@ typedef struct
 #define MAP_FOREACH(value, map, expr)                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \
-        scoped_icHashMapIterator *it = hashMapIteratorCreate((map));                                                   \
-        while (hashMapIteratorHasNext(it) == true)                                                                     \
+        GHashTableIter iter;                                                                                           \
+        gpointer key, _value;                                                                                          \
+        g_hash_table_iter_init(&iter, (map));                                                                          \
+        while (g_hash_table_iter_next(&iter, &key, &_value))                                                           \
         {                                                                                                              \
-            void *key = NULL;                                                                                          \
-            uint16_t keyLen = 0;                                                                                       \
-            hashMapIteratorGetNext(it, &key, &keyLen, (void **) &(value));                                             \
+            value = (SubsystemRegistration *) _value;                                                                  \
             expr                                                                                                       \
         }                                                                                                              \
     } while (0)
@@ -74,7 +74,7 @@ typedef struct
 static pthread_once_t initOnce = PTHREAD_ONCE_INIT;
 
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
-static icHashMap *subsystems;
+static GHashTable *subsystems;
 static bool allDriversStarted = false;
 static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
@@ -82,13 +82,11 @@ static void checkSubsystemForMigration(SubsystemRegistration *registration);
 static void subsystemRegistrationDestroy(SubsystemRegistration *reg)
 {
     pthread_mutex_destroy(&reg->mtx);
-    free(reg);
+    g_free(reg);
 }
 
-static void subsystemRegistrationMapDestroy(void *key, void *value)
+static void subsystemRegistrationMapDestroy(void *value)
 {
-    (void) key;
-
     subsystemRegistrationDestroy(value);
 }
 
@@ -104,7 +102,7 @@ static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
         return;
     }
 
-    SubsystemRegistration *reg = hashMapGet(subsystems, (void *) subsystem, strlen(subsystem));
+    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -163,7 +161,7 @@ static void onSubsystemDeinitialized(const char *subsystem)
  */
 static void unregisterSubsystems(void)
 {
-    hashMapDestroy(subsystems, subsystemRegistrationMapDestroy);
+    g_hash_table_destroy(subsystems);
     subsystems = NULL;
 }
 
@@ -185,11 +183,12 @@ void subsystemManagerRegister(Subsystem *subsystem)
 
         if (subsystems == NULL)
         {
-            subsystems = hashMapCreate();
+            subsystems =
+                g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify) subsystemRegistrationMapDestroy);
             atexit(unregisterSubsystems);
         }
 
-        if (hashMapPut(subsystems, (char *) subsystem->name, strlen(subsystem->name), registration) == false)
+        if (!g_hash_table_insert(subsystems, (char *) subsystem->name, registration))
         {
             subsystemRegistrationDestroy(registration);
             registration = NULL;
@@ -202,19 +201,16 @@ void subsystemManagerRegister(Subsystem *subsystem)
     }
 }
 
-icLinkedList *subsystemManagerGetRegisteredSubsystems(void)
+GList *subsystemManagerGetRegisteredSubsystems(void)
 {
     icDebug();
 
-    icLinkedList *result = linkedListCreate();
+    GList *result = NULL;
 
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration,
-                subsystems,
-
-                linkedListAppend(result, strdup(registration->subsystem->name)););
+    MAP_FOREACH(registration, subsystems, result = g_list_append(result, g_strdup(registration->subsystem->name)););
 
     return result;
 }
@@ -227,7 +223,7 @@ cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName)
 
     READ_LOCK_SCOPE(mutex);
 
-    SubsystemRegistration *reg = hashMapGet(subsystems, (char *) subsystemName, strlen(subsystemName));
+    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystemName);
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -325,7 +321,7 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
             SubsystemRegistration *registration = NULL;
             MAP_FOREACH(
                 registration, subsystems, if (strstr(disabledSubsystems, registration->subsystem->name) != NULL) {
-                    hashMapIteratorDeleteCurrent(it, subsystemRegistrationMapDestroy);
+                    g_hash_table_iter_remove(&iter);
                 });
         }
     }
@@ -484,7 +480,7 @@ bool subsystemManagerIsSubsystemReady(const char *subsystem)
 
     READ_LOCK_SCOPE(mutex);
 
-    SubsystemRegistration *reg = hashMapGet(subsystems, (char *) subsystem, strlen(subsystem));
+    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
