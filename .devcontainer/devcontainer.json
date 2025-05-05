@@ -116,7 +116,7 @@
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
                 "doi.fileheadercomment",                 // File header comment generator
-                "asciidoctor.asciidoctor-vscode"         // AsciiDoc support
+                "jebbs.plantuml"                         // Enable compiling plantuml specs to embeddable images
             ],
 
             "settings":
