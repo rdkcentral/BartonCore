@@ -1,0 +1,124 @@
+= Barton Architecture
+:kroki-server-url: https://kroki.io
+
+== Overview
+
+Barton is a sophisticated system that provides management, control, state change notifications, and configuration of any kind of device with a common API and data model. Devices can use any protocol and technology including Zigbee, Matter, and proprietary methods, without the Barton API client's awareness.
+
+The GObject based API is self-documenting and can be used to generate bindings for many languages including C, C++, Python, Java, and JavaScript. The API is designed to be easy to use and understand, making it accessible to developers of all skill levels.
+
+== Resource Model
+
+Barton provides a common resource model for all devices. Resources can be read to determine the current state, or written and executed to change the state of the device. As a device changes state, resource changed events may be emitted. The resources available for each device and their function is dictated by their defined (and discoverable) composition.
+
+Devices belong to a Device Class which defines the type of device and acts as a contract for the device's composition.  Some examples of Device Classes are Camera, Light, Door Lock, and Sensor (and many others).  Each Device Class supports one or more endpoints, each of which belongs to an Endpoint Profile which is a contract for the endpoint's composition.  An endpoint on a device can be thought of as a port number in IP networking.  An endpoint provides a logical set of functionality such as a light switch.  For example, a single physical device such as a refrigerator could have endpoints for temperature, lights, door sensors, etc. This physical device would be represented in the device model as a Refrigerator Device Class which is defined as having mandatory endpoints for Endpoint Profiles Sensor (temperature), Light, and Sensor (contact switch). The Device Class specification could also contain optional Endpoint Profiles for other features a refrigerator may have — this is just an example.
+
+More details on how devices are composed and how to interact with their resources are below.
+
+Resource model details here….
+
+== Protocol Support
+
+If a particular device technology or protocol requires some management or coordination with related Device Drivers (described later), a corresponding Subsystem is provided by Barton. Subsystems are not required if management or coordination is not needed, for example simple IP communication. Below are the currently available Subsystems.
+
+=== Matter
+
+Matter support is provided by the Matter Subsystem, which is responsible for:
+
+* Initialization of the Matter SDK
+* Operational Credentials Issuers
+** Self-signed certificates (for testing)
+** Comcast’s publicly available  xPKI service
+** Other issuers through Barton’s helper abstractions
+* Device Attestation Provider through Barton’s helper abstractions
+* Simplified commissioner interface
+* Device communication health monitoring
+* Runtime property interface for easy and flexible storage options
+* The Matter SDK’s gmain loop
+* DCL retrieval (TBD)
+* OTA firmware updates based on DCL entries (TBD)
+
+=== Zigbee
+
+The Zigbee Subsystem interacts with the Zigbee Hardware Abstraction Layer (ZHAL) and is responsible for:
+
+* Initialization of the Zigbee network
+* Backup and restore of the Zigbee network configuration (also useful for RMA scenarios)
+* Zigbee network monitoring and statistics collection
+* Interfaces for sending and receiving Zigbee messages, attribute reports, and stack events
+* Device Descriptor List (DDL) processing (see Device Descriptor List section)
+* OTA firmware updates based on DDL entries
+* Device communication health monitoring
+
+=== Thread
+
+The Thread Subsystem interacts with the OpenThread Border Router Agent in order to:
+
+* Backup and restore the Thread network (useful for RMA scenarios)
+* Border router status monitoring
+* Thread network health monitoring (TBD)
+
+=== Proprietary
+
+Barton does not currently contain implementations of proprietary Subsystems, however Barton’s Subsystem Manager interface supports them if desired.
+
+== Device Drivers
+
+Device Drivers provide the mapping between Barton resources and over-the-air (or over-the-wire) interactions with specific types of devices. They are responsible for implementing Device Classes for a particular technology.  For example, MatterLightDeviceDriver and ZigbeeLightDeviceDriver are two drivers that implement the same device class on different technology stacks. Drivers may or may not depend upon a Subsystem.
+
+Drivers are responsible for participating in the device discovery process and ‘claim’ discovered devices through a matching process triggered after details of a device are discovered. Once a driver claims the device, an entry is created, and persisted, representing the instance and associated with the driver. Subsequent interactions with the device are performed through the device driver. For example, Device Drivers supporting the Light Device Class are required to have a resource on at least one Endpoint called “isOn”.  Writing “true” to this resource would result in sending a command to the device over whatever technology/protocol is required to change the light’s state to “on”.
+
+== Device Descriptor List (DDL)
+
+Note: The DDL currently only applies to Zigbee devices.
+
+Zigbee devices that are allowed to be commissioned can be controlled through
+an 'allow list' which consists of Device Descriptors for each allowed device.
+This list is published to a content server and provided to Barton when it
+changes.
+
+When a Zigbee device joins the network as part of the pairing process Barton
+reads its manufacturer name, model, hardware version, and firmware version.
+These 4 attributes are used to locate the appropriate Device Descriptor.  If no
+Descriptor is found, the device is rejected and told to leave the network.  An
+example of a Device Descriptor is:
+
+[literal]
+<DeviceDescriptor>
+   <uuid>f7d49c2b-7324-4857-96eb-cdee9a44d996</uuid>
+   <description>ZigBee_Gen2_PIR_Std</description>
+   <category>zigbee</category>
+   <manufacturer>Bosch</manufacturer>
+   <model>RFPR-ZB-MS</model>
+   <hardwareVersions>19</hardwareVersions>
+   <firmwareVersions>0x21115401,0x22115401,0x23115401,0x23125401,0x23125402</firmwareVersions>
+   <latestFirmware>
+      <version>0x23125402</version>
+      <filename>Bosch_Motion_G2_V23125402.ota</filename>
+      <type>ota</type>
+   </latestFirmware>
+</DeviceDescriptor>
+
+As shown, the Device Descriptor also contains information about the latest
+firmware for the device.  This is downloaded and supplied to the device if it
+needs a firmware upgrade.
+
+=== Restricting Which Devices are Allowed
+
+TODO
+
+=== Firmware Management
+
+TODO
+
+=== Customized Configuration
+
+TODO
+
+== Database
+
+TODO
+
+== Device Connectivity Monitoring
+
+TODO

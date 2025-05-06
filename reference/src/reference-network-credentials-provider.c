@@ -34,7 +34,7 @@ struct _BReferenceNetworkCredentialsProvider
     GObject parent_instance;
 };
 
-static pthread_mutex_t mtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t network_creds_mtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static gchar *network_ssid = NULL;
 static gchar *network_psk = NULL;
 
@@ -62,7 +62,7 @@ b_reference_network_credentials_provider_get_wifi_network_credentials(
 
     wifiCredentials = b_device_service_wifi_network_credentials_new();
 
-    mutexLock(&mtx);
+    mutexLock(&network_creds_mtx);
     if (network_ssid != NULL && network_psk != NULL)
     {
         g_object_set(wifiCredentials,
@@ -74,7 +74,7 @@ b_reference_network_credentials_provider_get_wifi_network_credentials(
                      network_psk,
                      NULL);
     }
-    mutexUnlock(&mtx);
+    mutexUnlock(&network_creds_mtx);
 
     return g_steal_pointer(&wifiCredentials);
 }
@@ -102,13 +102,13 @@ void b_reference_network_credentials_provider_set_wifi_network_credentials(const
     g_return_if_fail(ssid != NULL);
     g_return_if_fail(password != NULL);
 
-    mutexLock(&mtx);
+    mutexLock(&network_creds_mtx);
     g_free(network_ssid);
     g_free(network_psk);
 
     network_ssid = g_strdup(ssid);
     network_psk = g_strdup(password);
-    mutexUnlock(&mtx);
+    mutexUnlock(&network_creds_mtx);
 }
 
 BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void)
