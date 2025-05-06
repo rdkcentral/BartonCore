@@ -44,7 +44,7 @@ STUB_FILE=${STUBS_DIR}/${GIR_NAME}.pyi
 
 echo "Running: LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BDS_LIBRARY_LOCATION} python3 ${GENERATE_SCRIPT} ${GIR_NAME} ${GIR_VERSION} -u ${STUB_FILE}"
 echo "Output supressed for brevity. See ${OUTPUT_FILE} for output. Note: failure cases may not be detectable if script does not call sys.exit() with error codes."
-LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BDS_LIBRARY_LOCATION} python3 ${GENERATE_SCRIPT} ${GIR_NAME} ${GIR_VERSION} -u ${STUB_FILE} >${OUTPUT_FILE} 2>&1
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${BDS_LIBRARY_LOCATION} @ASAN_LD_PRELOAD@ python3 ${GENERATE_SCRIPT} ${GIR_NAME} ${GIR_VERSION} -u ${STUB_FILE} >${OUTPUT_FILE} 2>&1
 
 if [ $? -ne 0 ]; then
     echo "Failed to generate pygobject stubs. Refer to ${OUTPUT_FILE} for more information."
