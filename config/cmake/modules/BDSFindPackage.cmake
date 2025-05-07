@@ -50,9 +50,9 @@ function(bds_find_package)
     if (NOT BDS_PACKAGE_FOUND)
         find_package(${BDS_FIND_PACKAGE_NAME} ${FIND_PACKAGE_VERSION_CHECK})
 
-	if (NOT ${BDS_FIND_PACKAGE_NAME}_FOUND)
-	    # Last ditch, try find_library
-	    find_library(BDS_LIBRARY NAMES ${BDS_FIND_PACKAGE_NAME} NO_CMAKE_FIND_ROOT_PATH ${PACKAGE_REQUIRED})
-	endif()
+        if (NOT ${BDS_FIND_PACKAGE_NAME}_FOUND)
+            # Last ditch, try find_library
+            find_library(BDS_LIBRARY NAMES ${BDS_FIND_PACKAGE_NAME} ${PACKAGE_REQUIRED})
+        endif()
     endif()
 endfunction()

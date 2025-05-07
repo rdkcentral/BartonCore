@@ -74,7 +74,7 @@ endif()
 if (BDS_MATTER AND NOT BDS_MATTER_SKIP_SDK)
     # Only search default locations. Mostly this is for clients who build matter out of band
     # already. The script will check our usual matter build location.
-    find_library(MATTER NAMES ${BDS_MATTER_LIB} NO_CMAKE_FIND_ROOT_PATH)
+    find_library(MATTER NAMES ${BDS_MATTER_LIB})
 
     if (${MATTER} STREQUAL "MATTER-NOTFOUND")
         # Forward SSP args to building matter
