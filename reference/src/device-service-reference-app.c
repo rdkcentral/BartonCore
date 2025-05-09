@@ -54,15 +54,20 @@ static gboolean NO_ZIGBEE = FALSE;
 static gboolean NO_THREAD = FALSE;
 static gboolean NO_MATTER = FALSE;
 
+static gchar *wifi_ssid = NULL;
+static gchar *wifi_password = NULL;
+
 static bool showAdvanced = false;
 
 static GList *categories = NULL;
 
 static GOptionEntry entries[] = {
-    { "novt100", '1', 0, G_OPTION_ARG_NONE, &NO_VT100_MODE, "", NULL},
-    {"noZigbee", 'z', 0, G_OPTION_ARG_NONE,     &NO_ZIGBEE, "", NULL},
-    {"noThread", 't', 0, G_OPTION_ARG_NONE,     &NO_THREAD, "", NULL},
-    {"noMatter", 'm', 0, G_OPTION_ARG_NONE,     &NO_MATTER, "", NULL},
+    {"novt100",       '1', 0, G_OPTION_ARG_NONE,   &NO_VT100_MODE, "", NULL},
+    {"noZigbee",      'z', 0, G_OPTION_ARG_NONE,   &NO_ZIGBEE, "", NULL},
+    {"noThread",      't', 0, G_OPTION_ARG_NONE,   &NO_THREAD, "", NULL},
+    {"noMatter",      'm', 0, G_OPTION_ARG_NONE,   &NO_MATTER, "", NULL},
+    {"wifi-ssid",     's', 0, G_OPTION_ARG_STRING, &wifi_ssid, "Wi-Fi SSID for commissioning", "SSID"},
+    {"wifi-password", 'p', 0, G_OPTION_ARG_STRING, &wifi_password, "Wi-Fi Password for commissioning", "PASSWORD"},
     G_OPTION_ENTRY_NULL
 };
 
@@ -294,6 +299,17 @@ int main(int argc, char **argv)
     {
         fprintf(stderr, "Error parsing command line: %s\n", cmdLineError->message);
         return EXIT_FAILURE;
+    }
+
+    // Now, set the Wi-Fi credentials if they were provided on the command line
+    if (wifi_ssid && wifi_password)
+    {
+        b_reference_network_credentials_provider_set_wifi_network_credentials(wifi_ssid, wifi_password);
+    }
+    else
+    {
+        fprintf(stdout, "Wi-Fi SSID and Password not provided via CLI. Using defaults\n");
+        b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
     }
 
     g_autofree gchar *confDir = getDefaultConfigDirectory();

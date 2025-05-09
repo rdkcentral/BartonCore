@@ -27,11 +27,16 @@
 
 #include "provider/device-service-network-credentials-provider.h"
 #include "reference-network-credentials-provider.h"
+#include <icConcurrent/threadUtils.h>
 
 struct _BReferenceNetworkCredentialsProvider
 {
     GObject parent_instance;
 };
+
+static pthread_mutex_t network_creds_mtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+static gchar *network_ssid = NULL;
+static gchar *network_psk = NULL;
 
 static void
 b_reference_network_credentials_provider_interface_init(BDeviceServiceNetworkCredentialsProviderInterface *iface);
@@ -57,14 +62,19 @@ b_reference_network_credentials_provider_get_wifi_network_credentials(
 
     wifiCredentials = b_device_service_wifi_network_credentials_new();
 
-    g_object_set(wifiCredentials,
-                 B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
-                 "MySSID",
-                 B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
-                 "MyPassword",
-                 NULL);
+    mutexLock(&network_creds_mtx);
+    if (network_ssid != NULL && network_psk != NULL)
+    {
+        g_object_set(wifiCredentials,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     network_ssid,
+                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     network_psk,
+                     NULL);
+    }
+    mutexUnlock(&network_creds_mtx);
 
     return g_steal_pointer(&wifiCredentials);
 }
@@ -85,6 +95,20 @@ static void
 b_reference_network_credentials_provider_class_init(BReferenceNetworkCredentialsProviderClass *klass)
 {
     // No class initialization needed
+}
+
+void b_reference_network_credentials_provider_set_wifi_network_credentials(const gchar *ssid, const gchar *password)
+{
+    g_return_if_fail(ssid != NULL);
+    g_return_if_fail(password != NULL);
+
+    mutexLock(&network_creds_mtx);
+    g_free(network_ssid);
+    g_free(network_psk);
+
+    network_ssid = g_strdup(ssid);
+    network_psk = g_strdup(password);
+    mutexUnlock(&network_creds_mtx);
 }
 
 BReferenceNetworkCredentialsProvider *b_reference_network_credentials_provider_new(void)
