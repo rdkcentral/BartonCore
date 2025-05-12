@@ -30,6 +30,7 @@
 
 #include "device-service-client.h"
 #include "device-service-reference-io.h"
+#include "reference-network-credentials-provider.h"
 #include <stdio.h>
 
 static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
@@ -133,6 +134,16 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
     return rc;
 }
 
+static bool setWifiCredsFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+{
+    g_return_val_if_fail(argc == 2, false);
+    g_return_val_if_fail(argv != NULL, false);
+    g_return_val_if_fail(argv[0] != NULL, false);
+    g_return_val_if_fail(argv[1] != NULL, false);
+
+    b_reference_network_credentials_provider_set_wifi_network_credentials(argv[0], argv[1]);
+}
+
 Category *buildMatterCategory(void)
 {
     Category *cat = categoryCreate("Matter", "Matter related commands");
@@ -164,6 +175,15 @@ Category *buildMatterCategory(void)
         1,
         2,
         openCommissioningWindow);
+    categoryAddCommand(cat, command);
+
+    command = commandCreate("setWifiCreds",
+                            "swc",
+                            "<ssid> <password>",
+                            "Set Wifi credentials username/password",
+                            2,
+                            2,
+                            setWifiCredsFunc);
     categoryAddCommand(cat, command);
 
     return cat;
