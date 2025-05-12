@@ -53,11 +53,13 @@ bds_add_cpp_test(NAME testMatterSDKTooling
                 SOURCES ${TEST_SRC}
 )
 
-target_link_options(testMatterSDKTooling PRIVATE
-    -Wl,--wrap=deviceServiceGetSystemProperty
-    -Wl,--wrap=deviceServiceSetSystemProperty
-    -Wl,--wrap=deviceServiceGetAllSystemProperties
-    -Wl,--wrap=deviceServiceConfigurationGetPropertyProvider
-)
+if (BUILD_TESTING)
+    target_link_options(testMatterSDKTooling PRIVATE
+        -Wl,--wrap=deviceServiceGetSystemProperty
+        -Wl,--wrap=deviceServiceSetSystemProperty
+        -Wl,--wrap=deviceServiceGetAllSystemProperties
+        -Wl,--wrap=deviceServiceConfigurationGetPropertyProvider
+    )
+endif()
 
 bds_configure_glib()
