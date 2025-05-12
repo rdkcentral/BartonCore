@@ -195,7 +195,7 @@ void subsystemManagerRegister(Subsystem *subsystem);
 /**
  * Get the names of the registered subsystems.  Caller destroys.
  */
-icLinkedList *subsystemManagerGetRegisteredSubsystems(void);
+GList *subsystemManagerGetRegisteredSubsystems(void);
 
 /**
  * Retrieve the JSON representation of the named subsystems's status
