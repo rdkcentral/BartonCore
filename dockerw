@@ -28,6 +28,8 @@ notice() {
 
 set -e
 
+# a comment
+
 INTERACTIVE_FLAGS="-it"
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
