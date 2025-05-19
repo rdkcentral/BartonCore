@@ -61,9 +61,14 @@ jobs:
                     username: ${{ github.actor }}
                     password: ${{ secrets.GITHUB_TOKEN }}
             -
-                name: Pull barton_builder Docker image
+                name: Try to pull barton_builder Docker image
+                continue-on-error: true
                 run: |
-                     docker pull ghcr.io/rdkcentral/barton_builder:${{ needs.get-action-constants.outputs.image_tag }}
+                    if docker pull ${{ needs.get-action-constants.outputs.image_repo }}:${{ needs.get-action-constants.outputs.image_tag }}; then
+                        echo "Image pulled successfully"
+                    else
+                        echo "Could not pull image, will build locally via dockerw"
+                    fi
             -
                 name: Build BartonCore
                 run: |
