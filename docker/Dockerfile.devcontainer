@@ -30,9 +30,10 @@
 # around the limitation within VSC that the remote user must be baked into the image
 # before run time, unlike the CLI environment.
 
+ARG IMAGE_REPO=""
 ARG IMAGE_TAG=""
 
-FROM ghcr.io/rdkcentral/barton_builder:$IMAGE_TAG
+FROM $IMAGE_REPO:$IMAGE_TAG
 
 ARG BUILDER_USER=""
 ARG BUILDER_GID=""
