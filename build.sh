@@ -29,7 +29,7 @@ MY_DIR=$(realpath $(dirname $0))
 BUILD_DIR=${MY_DIR}/build
 
 help() {
-    echo "Usage: $0 [options]"
+    echo "Usage: $0 [options] [CMake options]"
     echo "  -h                  Display help"
     echo "  -C <initial-cache>  CMake initial-cache to use. If not supplied (and --no-cache is not supplied), config/cmake/platforms/dev/linux.cmake will be used"
     echo "  --no-initial-cache  Do not use a CMake initial-cache. This will use default Barton public options."
@@ -40,6 +40,7 @@ CMAKE_CACHE="${MY_DIR}/config/cmake/platforms/dev/linux.cmake"
 
 NO_CMAKE_INITIAL_CACHE=0
 DELETE_CACHE=0
+CMAKE_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -61,9 +62,9 @@ while [[ $# -gt 0 ]]; do
         shift
         ;;
     *)
-        echo "Unknown option: $1"
-        help
-        exit 1
+        echo "Appending CMake args $@"
+        CMAKE_ARGS="$@"
+        break
         ;;
     esac
 done
@@ -91,7 +92,7 @@ fi
 
 pushd ${MY_DIR}
 
-cmake -B ${BUILD_DIR} ${CMAKE_CACHE_OPTION} $@
+cmake -B ${BUILD_DIR} ${CMAKE_CACHE_OPTION} "$CMAKE_ARGS"
 cmake --build ${BUILD_DIR} --parallel $(($(nproc) - 1))
 
 popd
