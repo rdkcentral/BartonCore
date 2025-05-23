@@ -27,14 +27,18 @@ include(BDSAddCppTest)
 # Only build units that are actually under test - this
 # can be useful for discovering unintended tight coupling.
 
+set(MATTER_SUBSYSTEM_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
+set(API_C_DIR ${CMAKE_CURRENT_LIST_DIR}/../../../../../api/c/src)
+set(CORE_DIR ${CMAKE_CURRENT_LIST_DIR}/../../../../../core/src)
+
 file(GLOB TEST_SRC *.cpp)
-list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp
-                     ../MatterCommon.cpp
-                     ../providers/BartonCommissionableDataProvider.cpp
-                     ../providers/default/DefaultCommissionableDataProvider.cpp
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-default-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
+list(APPEND TEST_SRC ${MATTER_SUBSYSTEM_DIR}/ReadPrepareParamsBuilder.cpp
+                     ${MATTER_SUBSYSTEM_DIR}/MatterCommon.cpp
+                     ${MATTER_SUBSYSTEM_DIR}/providers/BartonCommissionableDataProvider.cpp
+                     ${MATTER_SUBSYSTEM_DIR}/providers/default/DefaultCommissionableDataProvider.cpp
+                     ${API_C_DIR}/provider/device-service-property-provider.c
+                     ${API_C_DIR}/provider/device-service-default-property-provider.c
+                     ${CORE_DIR}/deviceServiceConfiguration.c)
 
 pkg_check_modules(OPENSSL REQUIRED openssl)
 
@@ -43,12 +47,12 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 # Add more executables for truly isolated units that don't link to other libraries.
 bds_add_cpp_test(NAME testMatterSDKTooling
                 LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
-                INCLUDES ${CMAKE_SOURCE_DIR}/core/src
-                         ${CMAKE_CURRENT_SOURCE_DIR}/..
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers/default
+                INCLUDES ${CORE_DIR}
+                         ${MATTER_SUBSYSTEM_DIR}
+                         ${MATTER_SUBSYSTEM_DIR}/providers
+                         ${MATTER_SUBSYSTEM_DIR}/providers/default
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                         ${CMAKE_SOURCE_DIR}/api/c/public
+                         ${API_C_DIR}/../public
                          ${PRIVATE_API_INCLUDES}
                 SOURCES ${TEST_SRC}
 )
