@@ -29,7 +29,7 @@ MY_DIR=$(realpath $(dirname $0))
 TOP_DIR=${MY_DIR}/..
 HOOKS_DIR=${TOP_DIR}/.git/hooks
 
-HOOKS_SUPPORTED=(pre-commit)
+HOOKS_SUPPORTED=(pre-commit post-checkout)
 
 # Copy various hooks, namespaced
 cp ${MY_DIR}/clang-format-hooks/apply-format ${HOOKS_DIR}/

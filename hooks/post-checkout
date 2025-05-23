@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Skip check for non-interactive operations
+[ -t 1 ] || exit 0
+
+# Check if we're inside a container
+if [ -f "/.dockerenv" ] && [ -n "$CURRENT_BUILDER_TAG" ]; then
+    # Get latest tag from git
+    LATEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+
+    if [ -n "$LATEST_BUILDER_TAG" ] && [ "$CURRENT_BUILDER_TAG" != "$LATEST_BUILDER_TAG" ]; then
+        echo ""
+        echo "********************************************************************"
+        echo "WARNING: Your container is based on the docker-builder version $CURRENT_BUILDER_TAG,"
+        echo "         but the latest version for this code is $LATEST_BUILDER_TAG"
+        echo ""
+        echo "         If on CLI:"
+        echo "             You should exit and rebuild your container with:"
+        echo "             $ exit"
+        echo "             $ ./dockerw"
+        echo "         If in a devcontainer:"
+        echo "             You should rebuild your devcontainer by:"
+        echo "             1. Opening the command palette (Ctrl+Shift+P)"
+        echo "             2. Search & select 'Rebuild Container'"
+        echo "********************************************************************"
+        echo ""
+    fi
+fi
