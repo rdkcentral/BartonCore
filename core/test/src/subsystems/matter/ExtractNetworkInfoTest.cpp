@@ -21,8 +21,8 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include "MatterCommon.h"
 #include "lib/core/TLVWriter.h"
+#include "subsystems/matter/MatterCommon.h"
 #include <app/data-model/Decode.h>
 #include <app/data-model/Encode.h>
 #include <gmock/gmock.h>
@@ -174,12 +174,8 @@ namespace
         uint8_t ipv6Addr1[16] = {
             0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
         std::vector<ByteSpan> ipv6Addresses = {ByteSpan(ipv6Addr1, sizeof(ipv6Addr1))};
-        Type iface = CreateInterface("eth0",
-                                     true,
-                                     (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E",
-                                     6,
-                                     InterfaceTypeEnum::kEthernet,
-                                     ipv6Addresses);
+        Type iface = CreateInterface(
+            "eth0", true, (const uint8_t *) "\x00\x1A\x2B\x3C\x4D\x5E", 6, InterfaceTypeEnum::kEthernet, ipv6Addresses);
 
         uint8_t decodableListBuffer[ARRAY_SIZE];
         DecodableType list;

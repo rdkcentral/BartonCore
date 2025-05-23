@@ -28,10 +28,10 @@ include(BDSAddCppTest)
 # can be useful for discovering unintended tight coupling.
 
 file(GLOB TEST_SRC *.cpp)
-list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp
-                     ../MatterCommon.cpp
-                     ../providers/BartonCommissionableDataProvider.cpp
-                     ../providers/default/DefaultCommissionableDataProvider.cpp
+list(APPEND TEST_SRC ${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepareParamsBuilder.cpp
+                     ${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/MatterCommon.cpp
+                     ${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
+                     ${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
                      ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-property-provider.c
                      ${CMAKE_SOURCE_DIR}/api/c/src/provider/device-service-default-property-provider.c
                      ${CMAKE_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
@@ -43,10 +43,7 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 # Add more executables for truly isolated units that don't link to other libraries.
 bds_add_cpp_test(NAME testMatterSDKTooling
                 LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
-                INCLUDES ${CMAKE_SOURCE_DIR}/core/src
-                         ${CMAKE_CURRENT_SOURCE_DIR}/..
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers/default
+                INCLUDES ${BARTON_PRIVATE_INCLUDES}
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
                          ${CMAKE_SOURCE_DIR}/api/c/public
                          ${PRIVATE_API_INCLUDES}
