@@ -210,7 +210,8 @@ set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegate
 bds_string_option(NAME BDS_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
-                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp;")
+                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp;
+                        ${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
 
 bds_string_option(NAME BDS_MATTER_DELEGATE_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_IMPLEMENTATIONS
