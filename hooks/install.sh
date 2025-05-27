@@ -40,3 +40,6 @@ for hook in "${HOOKS_SUPPORTED[@]}"; do
     echo "Installing ${hook} hook."
     cp ${MY_DIR}/${hook} ${HOOKS_DIR}/${hook}
 done
+
+# Additionally, install the .gitmessage
+git config --local commit.template .gitmessage

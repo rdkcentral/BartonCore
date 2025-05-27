@@ -21,7 +21,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
 project(brtn-ds)
 
@@ -74,7 +74,7 @@ endif()
 if (BDS_MATTER AND NOT BDS_MATTER_SKIP_SDK)
     # Only search default locations. Mostly this is for clients who build matter out of band
     # already. The script will check our usual matter build location.
-    find_library(MATTER NAMES ${BDS_MATTER_LIB} NO_CMAKE_FIND_ROOT_PATH)
+    find_library(MATTER NAMES ${BDS_MATTER_LIB})
 
     if (${MATTER} STREQUAL "MATTER-NOTFOUND")
         # Forward SSP args to building matter
@@ -94,7 +94,7 @@ if (BDS_MATTER AND NOT BDS_MATTER_SKIP_SDK)
             COMMAND ${MATTER_BUILD_COMMAND}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMAND_ECHO STDOUT
-            COMMAND_ERROR_IS_FATAL ANY
+            # COMMAND_ERROR_IS_FATAL ANY -- Re-enable with cmake 3.19+
         )
     else()
         message(STATUS "Matter found at ${MATTER}")

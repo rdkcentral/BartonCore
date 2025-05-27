@@ -34,6 +34,7 @@ include(BDSConfigureGLib)
 include(BDSAddGLibTest)
 include(BDSAddCMockaTest)
 include(BDSAddCppTest)
+include(BDSFindIncludeDir)
 
 file(GLOB_RECURSE BRTN_DS_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c)
 set(PRIVATE_API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/private)
@@ -100,8 +101,15 @@ if (BDS_MATTER)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
+    bds_find_include(
+        MATTER_INCLUDE_DIR
+        access/AccessRestrictionProvider.h
+        matter
+        "Matter include directory"
+        XTRA_INCLUDES
+    )
+
     list(APPEND XTRA_INCLUDES
-        ${CMAKE_BINARY_DIR}/matter-install/include/matter
         ${OPENSSL_INCLUDE_DIRS}
         ${BDS_MATTER_PROVIDER_HEADER_PATHS}
         ${BDS_MATTER_DELEGATE_HEADER_PATHS})
@@ -116,9 +124,15 @@ if (BDS_THREAD)
     file(GLOB_RECURSE thrSrc "src/subsystems/thread/*.cpp" "src/subsystems/thread/*.c")
     list(APPEND SOURCES ${thrSrc})
 
-    list(APPEND XTRA_INCLUDES
-        ${CMAKE_PREFIX_PATH}/include/otbr
-        ${DBUS_INCLUDE_DIRS})
+    bds_find_include(
+        OTBR_INCLUDE_DIR
+        openthread-br/config.h
+        otbr
+        "OTBR include directory"
+        XTRA_INCLUDES
+    )
+
+    list(APPEND XTRA_INCLUDES ${DBUS_INCLUDE_DIRS})
 
     list(APPEND XTRA_LIBS
         otbr-dbus-client

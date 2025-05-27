@@ -55,6 +55,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
+IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 
 # Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
 IMAGE_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
@@ -78,8 +79,9 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
-# Save off the image tag into the .env file so it can be used in the compose process
+# Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
+echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 ##############################################################################
 
 ##############################################################################
@@ -118,4 +120,14 @@ IPV6_SUBNET="fd00:$(echo $USER | sha256sum | cut -c1-4)::/64"
 if ! docker network ls | grep -q "$NETWORK_NAME"; then
     echo "Network $NETWORK_NAME does not exist. Creating it..."
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
+fi
+
+# Build the image if it doesn't exist
+IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+
+if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^$IMAGE$"; then
+    echo "Using existing $IMAGE"
+else
+    echo "Image $IMAGE not found, building..."
+    $DIR/build.sh
 fi

@@ -36,4 +36,4 @@ fi
 # `IMAGE_TAG` within `docker/.env`.
 source $docker_env_path
 
-docker build -t ghcr.io/rdkcentral/barton_builder:$IMAGE_TAG ${script_dir}
+docker build -t $IMAGE_REPO:$IMAGE_TAG ${script_dir}

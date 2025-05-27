@@ -35,7 +35,7 @@ services:
     # The devcontainer and dockerw environments will handle this for you, but if you want to run your own
     # `docker compose` commands, you must run `docker/setupDockerEnv.sh` first.
     barton:
-        image: ghcr.io/rdkcentral/barton_builder:$IMAGE_TAG
+        image: $IMAGE_REPO:$IMAGE_TAG
         build:
             context: .
             dockerfile: Dockerfile
