@@ -93,10 +93,10 @@ if [ -f "$OUTFILE" ]; then
 
     if [ "$CUSTOM_TAG" = true ] && [ "$BUILDER_TAG_OUT_OF_DATE" = true ]; then
         echo "WARNING: The custom image tag '$IMAGE_TAG' is based on an older builder image ($CURRENT_BUILDER_TAG)."
-        echo "1. Rebase your docker related changes in '$IMAGE_TAG' to the latest version ($HIGHEST_BUILDER_TAG)"
-        echo "2. Rebuild your custom image"
-        echo "3. Set the value of IMAGE_TAG in docker/.env back to '$IMAGE_TAG'."
-        echo "4. Rebuild your environment - either devcontainer or CLI container."
+        echo "To continue using your custom tag, you should:"
+        echo "1. Rebuild your custom image"
+        echo "2. Set the value of IMAGE_TAG in docker/.env back to '$IMAGE_TAG'"
+        echo "3. Rebuild your environment - either devcontainer or CLI container"
     fi
 
     if [ "$BUILDER_TAG_OUT_OF_DATE" = true ]; then

@@ -1,11 +1,38 @@
 #!/bin/bash
 
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2025 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Kevin Funderburg on 5/27/2025.
+#
+
 # Skip check for non-interactive operations
 [ -t 1 ] || exit 0
 
 # Check if we're inside a container
 if [ -f "/.dockerenv" ] && [ -n "$CURRENT_BUILDER_TAG" ]; then
-    # Get latest tag from git
+    # Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
     LATEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
 
     if [ -n "$LATEST_BUILDER_TAG" ] && [ "$CURRENT_BUILDER_TAG" != "$LATEST_BUILDER_TAG" ]; then
@@ -21,7 +48,7 @@ if [ -f "/.dockerenv" ] && [ -n "$CURRENT_BUILDER_TAG" ]; then
         echo "         If in a devcontainer:"
         echo "             You should rebuild your devcontainer by:"
         echo "             1. Opening the command palette (Ctrl+Shift+P)"
-        echo "             2. Search & select 'Rebuild Container'"
+        echo "             2. Search & select 'Dev Containers: Rebuild Container'"
         echo "********************************************************************"
         echo ""
     fi
