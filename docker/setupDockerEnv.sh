@@ -59,11 +59,11 @@ IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 
 # Docker image version management
 #
-# This system automatically updates to the latest compatible Docker builder image
-# while handling user customizations in a predictable way:
-# - Always updates when a newer builder version is available to ensure builds
+# This system automatically updates to the latest compatible Docker builder image in the
+# current lineage while handling user customizations in a predictable way:
+# - Always updates to the latest builder version in the current lineage to ensure builds
 #   use compatible toolchains and dependencies
-# - Warns when custom tags exist based on outdated builders
+# - Warns when custom tags exist based on different builder versions
 # - Allows restoring custom tags after updates if needed
 #
 # The version tags are tied to git tags (docker-builder-*) to maintain consistency
@@ -72,16 +72,16 @@ IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 # Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
 HIGHEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
-BUILDER_TAG_OUT_OF_DATE=false
+BUILDER_TAG_CHANGED=false
 
 if [ -f "$OUTFILE" ]; then
 
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
     if [ "$HIGHEST_BUILDER_TAG" != "$CURRENT_BUILDER_TAG" ]; then
-        echo "Current docker-builder tag ($CURRENT_BUILDER_TAG) is out of date. The latest tag is $HIGHEST_BUILDER_TAG."
-        echo "The value of IMAGE_TAG in docker/.env will be updated to use latest version"
-        BUILDER_TAG_OUT_OF_DATE=true
+        echo "Current docker-builder tag ($CURRENT_BUILDER_TAG) is not in sync with the latest docker-builder available in this lineage ($HIGHEST_BUILDER_TAG)."
+        echo "The value of IMAGE_TAG in docker/.env will be updated to use the latest docker-builder version in this lineage."
+        BUILDER_TAG_CHANGED=true
     fi
 
     IMAGE_TAG=$(grep "IMAGE_TAG" "$OUTFILE" | sed 's/IMAGE_TAG=//')
@@ -91,15 +91,15 @@ if [ -f "$OUTFILE" ]; then
         CUSTOM_TAG=true
     fi
 
-    if [ "$CUSTOM_TAG" = true ] && [ "$BUILDER_TAG_OUT_OF_DATE" = true ]; then
-        echo "WARNING: The custom image tag '$IMAGE_TAG' is based on an older builder image ($CURRENT_BUILDER_TAG)."
+    if [ "$CUSTOM_TAG" = true ] && [ "$BUILDER_TAG_CHANGED" = true ]; then
+        echo "WARNING: The custom image tag '$IMAGE_TAG' is based on a different docker-builder version ($CURRENT_BUILDER_TAG)."
         echo "To continue using your custom tag, you should:"
         echo "1. Rebuild your custom image"
         echo "2. Set the value of IMAGE_TAG in docker/.env back to '$IMAGE_TAG'"
         echo "3. Rebuild your environment - either devcontainer or CLI container"
     fi
 
-    if [ "$BUILDER_TAG_OUT_OF_DATE" = true ]; then
+    if [ "$BUILDER_TAG_CHANGED" = true ]; then
         IMAGE_TAG=$HIGHEST_BUILDER_TAG
     fi
 

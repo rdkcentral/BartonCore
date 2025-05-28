@@ -39,7 +39,7 @@ if [ -f "/.dockerenv" ] && [ -n "$CURRENT_BUILDER_TAG" ]; then
         echo ""
         echo "********************************************************************"
         echo "WARNING: Your container is based on the docker-builder version $CURRENT_BUILDER_TAG,"
-        echo "         but the latest version for this code is $LATEST_BUILDER_TAG"
+        echo "         but the latest version for this lineage is $LATEST_BUILDER_TAG"
         echo ""
         echo "         If on CLI:"
         echo "             You should exit and rebuild your container with:"
