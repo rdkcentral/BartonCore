@@ -25,11 +25,11 @@
  * Created by Raiyan Chowdhury on 11/27/23.
  */
 
-#include "../MatterDeviceDriver.h"
 #include "app/AttributePathParams.h"
 #include "app/ConcreteAttributePath.h"
 #include "app/ConcreteClusterPath.h"
 #include "app/ConcreteEventPath.h"
+#include "matter/MatterDeviceDriver.h"
 #include "matter/clusters/MatterCluster.h"
 #include "matter/subscriptions/SubscribeInteraction.h"
 #include <gmock/gmock.h>

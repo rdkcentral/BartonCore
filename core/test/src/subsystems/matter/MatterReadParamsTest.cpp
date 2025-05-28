@@ -21,19 +21,19 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#include "ReadPrepareParamsBuilder.hpp"
-#include "ScopedReadPrepareParams.hpp"
 #include "app-common/zap-generated/ids/Attributes.h"
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app-common/zap-generated/ids/Events.h"
 #include "app/AttributePathParams.h"
 #include "lib/core/DataModelTypes.h"
 #include "lib/core/ScopedNodeId.h"
-#include "protocols/secure_channel/CASESession.h"
-#include "transport/Session.h"
 #include "messaging/ReliableMessageProtocolConfig.h"
+#include "protocols/secure_channel/CASESession.h"
+#include "subsystems/matter/ReadPrepareParamsBuilder.hpp"
+#include "subsystems/matter/ScopedReadPrepareParams.hpp"
 #include "system/SystemClock.h"
 #include "transport/SecureSession.h"
+#include "transport/Session.h"
 #include <cassert>
 #include <gtest/gtest.h>
 #include <memory>
@@ -70,7 +70,11 @@ public:
 
     chip::System::Clock::Milliseconds32 GetAckTimeout() const override { return chip::System::Clock::kZero; }
 
-    chip::System::Clock::Milliseconds32 GetMessageReceiptTimeout(chip::System::Clock::Timestamp ourLastActivity) const override { return chip::System::Clock::kZero; }
+    chip::System::Clock::Milliseconds32
+    GetMessageReceiptTimeout(chip::System::Clock::Timestamp ourLastActivity) const override
+    {
+        return chip::System::Clock::kZero;
+    }
 
 private:
     chip::SessionParameters remoteSessionParams;
