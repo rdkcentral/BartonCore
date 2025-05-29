@@ -98,4 +98,6 @@ function(bds_add_cmocka_test)
                  COMMAND ${BDS_ADD_CMOCKA_TEST_NAME} ${BDS_ADD_CMOCKA_TEST_TEST_ARGS}
                  WORKING_DIRECTORY ${BDS_ADD_CMOCKA_TEST_WORKING_DIRECTORY})
     endif()
+
+    bds_configure_glib()
 endfunction() # SETUP_TARGET_FOR_COVERAGE
