@@ -599,6 +599,13 @@ bds_add_glib_test(
 )
 
 bds_add_glib_test(
+    NAME device-service-zigbee-remote-cli-response-received-event-test
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-remote-cli-response-received-event-test.c
+    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
+    GLOG_DOMAIN BDeviceServiceZigbeeRemoteCliResponseReceivedEventTest
+)
+
+bds_add_glib_test(
     NAME device-service-utils-test
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-utils-test.c
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src

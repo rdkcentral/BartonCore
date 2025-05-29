@@ -128,10 +128,12 @@ GQuark b_device_service_client_error_quark(void);
 // signal handler args: BDeviceServiceDeviceDatabaseFailureEvent *event
 #define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_METADATA_UPDATED               "metadata-updated"
 // signal handler args: BDeviceServiceMetadataUpdatedEvent *event
+#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED                                \
+    "zigbee-remote-cli-command-response-received"
+// signal handler args: BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *event
 
 // TODO - implement these
 #define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_SUBSYSTEM_STATUS_CHANGED
-#define B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED
 
 /****************** Signals End **********************************/
 
