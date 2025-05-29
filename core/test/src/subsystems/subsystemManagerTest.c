@@ -71,13 +71,6 @@ static bool myMigrate(uint16_t oldVersion, uint16_t newVersion)
     return mock_type(bool);
 }
 
-static cJSON *mockGetStatusJson(void)
-{
-    cJSON *subsystemStatus = cJSON_CreateObject();
-    cJSON_AddStringToObject(subsystemStatus, "status", "test-status");
-    return subsystemStatus;
-}
-
 static void mockShutdownFunc(void)
 {
     function_called();
@@ -132,6 +125,13 @@ static Subsystem *createSubsystem(const char *name)
         subsystem->migrate = myMigrate;
     }
     return subsystem;
+}
+
+static cJSON *mockGetStatusJson(void)
+{
+    function_called();
+    cJSON *fixture = mock_type(cJSON *);
+    return cJSON_Duplicate(fixture, 1);
 }
 
 void test_subsystem_migration(void **state)
@@ -348,18 +348,33 @@ void test_subsystemManagerGetSubsystemStatusJson(void **state)
     // Case 1: Subsystem with NULL getStatusJson function
     subsystem->getStatusJson = NULL;
     subsystemManagerRegister(subsystem);
-    cJSON *statusJson = subsystemManagerGetSubsystemStatusJson(subsystemName);
-    assert_null(statusJson);
+    cJSON *result = subsystemManagerGetSubsystemStatusJson(subsystemName);
+    assert_null(result);
 
-    // Case 2: Subsystem with valid getStatusJson function
+    // Case 2: Subsystem's getStatusJson function exists but returns NULL
     subsystem->getStatusJson = mockGetStatusJson;
-    unregisterSubsystems();
-    subsystemManagerRegister(subsystem);
+    expect_function_call(mockGetStatusJson);
+    will_return(mockGetStatusJson, NULL);
 
-    statusJson = subsystemManagerGetSubsystemStatusJson(subsystemName);
-    assert_non_null(statusJson);
-    assert_string_equal(cJSON_GetObjectItem(statusJson, "status")->valuestring, "test-status");
-    cJSON_Delete(statusJson);
+    result = subsystemManagerGetSubsystemStatusJson(subsystemName);
+    assert_null(result);
+
+    // Case 3: Subsystem with valid getStatusJson function returning a real object
+    cJSON *fixture = cJSON_CreateObject();
+    cJSON_AddStringToObject(fixture, "status", "test-status");
+    subsystem->getStatusJson = mockGetStatusJson;
+
+    expect_function_call(mockGetStatusJson);
+    will_return(mockGetStatusJson, fixture);
+    result = subsystemManagerGetSubsystemStatusJson(subsystemName);
+    assert_non_null(result);
+
+    cJSON *statusItem = cJSON_GetObjectItem(result, "status");
+    assert_non_null(statusItem);
+    assert_string_equal(statusItem->valuestring, "test-status");
+
+    cJSON_Delete(fixture);
+    cJSON_Delete(result);
 
     unregisterSubsystems();
 }
@@ -475,6 +490,18 @@ static void test_subsystemManagerSetOtaUpgradeDelay(void **state)
     expect_function_call(mockSetOtaUpgradeDelay);
     expect_value(mockSetOtaUpgradeDelay, delaySeconds, 10);
     subsystemManagerSetOtaUpgradeDelay(10);
+
+    // Case 3: Subsystem with valid setOtaUpgradeDelay function with 0 delay
+    mySubsystem->setOtaUpgradeDelay = mockSetOtaUpgradeDelay;
+    expect_function_call(mockSetOtaUpgradeDelay);
+    expect_value(mockSetOtaUpgradeDelay, delaySeconds, 0);
+    subsystemManagerSetOtaUpgradeDelay(0);
+
+    // Case 4: Subsystem with valid setOtaUpgradeDelay function with large delay
+    mySubsystem->setOtaUpgradeDelay = mockSetOtaUpgradeDelay;
+    expect_function_call(mockSetOtaUpgradeDelay);
+    expect_value(mockSetOtaUpgradeDelay, delaySeconds, 3600);
+    subsystemManagerSetOtaUpgradeDelay(3600);
 
     unregisterSubsystems();
 }
