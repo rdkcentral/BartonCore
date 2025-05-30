@@ -61,6 +61,7 @@
 #include "events/device-service-zigbee-channel-changed-event.h"
 #include "events/device-service-zigbee-interference-event.h"
 #include "events/device-service-zigbee-pan-id-attack-changed-event.h"
+#include "events/device-service-zigbee-remote-cli-command-response-received-event.h"
 #include "icLog/logging.h"
 #include <device-driver/device-driver.h>
 #include <device/icDeviceEndpoint.h>
@@ -109,6 +110,7 @@ enum DEVICE_SERVICE_SIGNALS
     SIGNAL_PAN_ID_ATTACK_CHANGED,
     SIGNAL_DEVICE_DATABASE_FAILURE,
     SIGNAL_METADATA_UPDATED,
+    SIGNAL_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED,
 
     SIGNAL_MAX
 };
@@ -385,6 +387,18 @@ void deviceEventProducerClassInit(BDeviceServiceClientClass *deviceServiceClass)
                                                     G_TYPE_NONE,
                                                     1,
                                                     B_DEVICE_SERVICE_METADATA_UPDATED_EVENT_TYPE);
+
+    signals[SIGNAL_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED] =
+        g_signal_new(B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED,
+                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                     G_SIGNAL_RUN_LAST,
+                     0,
+                     NULL,
+                     NULL,
+                     NULL,
+                     G_TYPE_NONE,
+                     1,
+                     B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_TYPE);
 }
 
 void deviceEventProducerStartup(BDeviceServiceClient *_service)
@@ -758,7 +772,22 @@ void sendZigbeePanIdAttackEvent(bool attackDetected)
     g_signal_emit(service, signals[SIGNAL_PAN_ID_ATTACK_CHANGED], 0, event);
 }
 
-void sendZigbeeRemoteCliCommandResponseReceivedEvent(const char *uuid, const char *commandResponse) {}
+void sendZigbeeRemoteCliCommandResponseReceivedEvent(const char *uuid, const char *commandResponse)
+{
+    g_autoptr(BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent) event =
+        b_device_service_zigbee_remote_cli_command_response_received_event_new();
+
+    g_object_set(event,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 uuid,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 commandResponse,
+                 NULL);
+
+    g_signal_emit(service, signals[SIGNAL_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED], 0, event);
+}
 
 void sendDeviceConfigureStartedEvent(const char *deviceClass, const char *uuid, bool forRecovery)
 {

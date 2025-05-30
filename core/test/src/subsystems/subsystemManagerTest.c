@@ -115,23 +115,38 @@ static void mockSetOtaUpgradeDelay(uint32_t delaySeconds)
     check_expected(delaySeconds);
 }
 
-static Subsystem *createSubsystem(const char *name)
-{
-    Subsystem *subsystem = calloc(1, sizeof(Subsystem));
-    if (subsystem != NULL)
-    {
-        subsystem->name = name;
-        subsystem->initialize = myInitialize;
-        subsystem->migrate = myMigrate;
-    }
-    return subsystem;
-}
-
 static cJSON *mockGetStatusJson(void)
 {
     function_called();
     cJSON *fixture = mock_type(cJSON *);
     return cJSON_Duplicate(fixture, 1);
+}
+
+static Subsystem *createSubsystem(const char *name)
+{
+    Subsystem *subsystem = calloc(1, sizeof(Subsystem));
+
+    subsystem->name = name;
+    subsystem->initialize = myInitialize;
+    subsystem->migrate = myMigrate;
+
+    return subsystem;
+}
+
+static void assertRegisteredSubsystemCount(int expectedCount)
+{
+    scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
+    assert_non_null(subsystems);
+    assert_int_equal(linkedListCount(subsystems), expectedCount);
+}
+
+static void assertRegisteredSubsystemName(int index, const char *expectedName)
+{
+    scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
+    assert_non_null(subsystems);
+    const char *name = linkedListGetElementAt(subsystems, index);
+    assert_non_null(name);
+    assert_string_equal(name, expectedName);
 }
 
 void test_subsystem_migration(void **state)
@@ -255,42 +270,33 @@ void test_subsystemManagerRegister(void **state)
 {
     (void) state;
 
-    // Cleanup any existing subsystems
     unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
 
     scoped_generic Subsystem *mySubsystem = createSubsystem(subsystemName);
     mySubsystem->initialize = NULL;
-    mySubsystem->migrate = myMigrate;
     mySubsystem->name = NULL;
 
     // Case 1: Passing NULL subsystem
     subsystemManagerRegister(NULL);
-    scoped_icLinkedListGeneric *subsystems1 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems1);
-    assert_int_equal(linkedListCount(subsystems1), 0);
+    assertRegisteredSubsystemCount(0);
 
     // Case 2: Subsystem with NULL initialize function
     subsystemManagerRegister(mySubsystem);
-    scoped_icLinkedListGeneric *subsystems2 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems2);
-    assert_int_equal(linkedListCount(subsystems2), 0);
+    assertRegisteredSubsystemCount(0);
 
     // Case 3: Subsystem with NULL name
     mySubsystem->initialize = myInitialize;
     mySubsystem->name = NULL;
     subsystemManagerRegister(mySubsystem);
-    scoped_icLinkedListGeneric *subsystems3 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems3);
-    assert_int_equal(linkedListCount(subsystems3), 0);
+    assertRegisteredSubsystemCount(0);
 
     // Case 4: Valid subsystem registration
     mySubsystem->name = subsystemName;
     subsystemManagerRegister(mySubsystem);
-    scoped_icLinkedListGeneric *subsystems4 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems4);
-    assert_int_equal(linkedListCount(subsystems4), 1);
+    assertRegisteredSubsystemCount(1);
+    assertRegisteredSubsystemName(0, subsystemName);
 
     unregisterSubsystems();
 }
@@ -299,40 +305,31 @@ void test_subsystemManagerGetRegisteredSubsystems(void **state)
 {
     (void) state;
 
-    // Cleanup any existing subsystems
     unregisterSubsystems();
 
     // Case 1: No subsystems registered
-    scoped_icLinkedListGeneric *subsystems1 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems1);
-    assert_int_equal(linkedListCount(subsystems1), 0);
+    assertRegisteredSubsystemCount(0);
 
     // Case 2: Single subsystem registered
     static const char *subsystemName1 = "Subsystem1";
     scoped_generic Subsystem *subsystem1 = createSubsystem(subsystemName1);
     subsystemManagerRegister(subsystem1);
 
-    scoped_icLinkedListGeneric *subsystems2 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems2);
-    assert_int_equal(linkedListCount(subsystems2), 1);
-    assert_string_equal(linkedListGetElementAt(subsystems2, 0), subsystemName1);
+    assertRegisteredSubsystemCount(1);
+    assertRegisteredSubsystemName(0, subsystemName1);
 
     // Case 3: Multiple subsystems registered
     static const char *subsystemName2 = "Subsystem2";
     scoped_generic Subsystem *subsystem2 = createSubsystem(subsystemName2);
     subsystemManagerRegister(subsystem2);
 
-    scoped_icLinkedListGeneric *subsystems3 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems);
-    assert_int_equal(linkedListCount(subsystems3), 2);
-    assert_string_equal(linkedListGetElementAt(subsystems3, 0), subsystemName1);
-    assert_string_equal(linkedListGetElementAt(subsystems3, 1), subsystemName2);
+    assertRegisteredSubsystemCount(2);
+    assertRegisteredSubsystemName(0, subsystemName1);
+    assertRegisteredSubsystemName(1, subsystemName2);
 
     // Case 4: Subsystem unregistered
     unregisterSubsystems();
-    scoped_icLinkedListGeneric *subsystems4 = subsystemManagerGetRegisteredSubsystems();
-    assert_non_null(subsystems4);
-    assert_int_equal(linkedListCount(subsystems4), 0);
+    assertRegisteredSubsystemCount(0);
 }
 
 void test_subsystemManagerGetSubsystemStatusJson(void **state)
