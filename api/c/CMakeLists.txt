@@ -27,16 +27,16 @@ project(brtn-ds-private)
 
 file(GLOB_RECURSE BRTN_DS_PRIVATE_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/private/*.c)
 
-add_library(brtnDeviceServicePrivateAPI STATIC ${BRTN_DS_PRIVATE_API_SOURCES})
+add_library(bDeviceServicePrivateAPI STATIC ${BRTN_DS_PRIVATE_API_SOURCES})
 
-target_link_libraries(brtnDeviceServicePrivateAPI
-        brtnDeviceServiceConfig
+target_link_libraries(bDeviceServicePrivateAPI
+        bDeviceServiceConfig
         xhJsonHelper
         xhDeviceDescriptors
         xhTypes
 )
 
-target_include_directories(brtnDeviceServicePrivateAPI
+target_include_directories(bDeviceServicePrivateAPI
         PRIVATE ${CROSS_OUTPUT}/include/libxml2
         PUBLIC public/private
 )
