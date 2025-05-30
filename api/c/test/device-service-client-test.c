@@ -73,6 +73,7 @@
 #include "events/device-service-zigbee-channel-changed-event.h"
 #include "events/device-service-zigbee-interference-event.h"
 #include "events/device-service-zigbee-pan-id-attack-changed-event.h"
+#include "events/device-service-zigbee-remote-cli-command-response-received-event.h"
 #include "icTypes/icHashMap.h"
 #include "icTypes/icLinkedList.h"
 #include "icTypes/icStringHashMap.h"
@@ -166,6 +167,9 @@ checkBDeviceServiceZigbeePanIdAttackChangedEventContents(BDeviceServiceZigbeePan
 static bool checkBDeviceServiceZigbeeEnergyScanResultChannelContents(uint8_t *input, ArrayCompareParams *expected);
 static int checkBDeviceServiceDeviceDatabaseFailureEventContents(BDeviceServiceDeviceDatabaseFailureEvent *input,
                                                                  BDeviceServiceDeviceDatabaseFailureEvent *expected);
+static int checkBDeviceServiceZigbeeRemoteCliCommandResponseReceivedEventContents(
+    BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *input,
+    BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *expected);
 
 #ifdef BARTON_CONFIG_ZIGBEE
 static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
@@ -247,6 +251,7 @@ DECLARE_MOCK_EVENT_HANDLER(StorageChangedEvent)
 DECLARE_MOCK_EVENT_HANDLER(ZigbeeInterferenceEvent)
 DECLARE_MOCK_EVENT_HANDLER(ZigbeePanIdAttackChangedEvent)
 DECLARE_MOCK_EVENT_HANDLER(DeviceDatabaseFailureEvent)
+DECLARE_MOCK_EVENT_HANDLER(ZigbeeRemoteCliCommandResponseReceivedEvent)
 
 static void registerSignalHandlers(BDeviceServiceClient *client)
 {
@@ -341,6 +346,11 @@ static void registerSignalHandlers(BDeviceServiceClient *client)
     g_signal_connect(client,
                      B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DATABASE_FAILURE,
                      G_CALLBACK(mockHandleDeviceDatabaseFailureEvent),
+                     NULL);
+
+    g_signal_connect(client,
+                     B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED,
+                     G_CALLBACK(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent),
                      NULL);
 }
 
@@ -3548,6 +3558,66 @@ static void test_sendDeviceDatabaseFailureEvent(void **state)
     sendDeviceDatabaseFailureEvent(failureType, deviceUuid);
 }
 
+static void test_sendZigbeeRemoteCliCommandResponseReceivedEvent(void **state)
+{
+    const gchar *uuid = "uuid";
+    const gchar *commandResponse = "commandResponse";
+
+    g_autoptr(BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent) comparisonFixture =
+        b_device_service_zigbee_remote_cli_command_response_received_event_new();
+
+    expect_function_call(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent);
+    g_object_set(comparisonFixture,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 NULL,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 commandResponse,
+                 NULL);
+    expect_check(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent,
+                 event,
+                 (CheckParameterValue) checkBDeviceServiceZigbeeRemoteCliCommandResponseReceivedEventContents,
+                 comparisonFixture);
+
+    // NULL uuid, valid command response
+    sendZigbeeRemoteCliCommandResponseReceivedEvent(NULL, commandResponse);
+
+    expect_function_call(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent);
+    g_object_set(comparisonFixture,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 uuid,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 NULL,
+                 NULL);
+    expect_check(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent,
+                 event,
+                 (CheckParameterValue) checkBDeviceServiceZigbeeRemoteCliCommandResponseReceivedEventContents,
+                 comparisonFixture);
+
+    // valid uuid, NULL command response
+    sendZigbeeRemoteCliCommandResponseReceivedEvent(uuid, NULL);
+
+    expect_function_call(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent);
+    g_object_set(comparisonFixture,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 uuid,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 commandResponse,
+                 NULL);
+    expect_check(mockHandleZigbeeRemoteCliCommandResponseReceivedEvent,
+                 event,
+                 (CheckParameterValue) checkBDeviceServiceZigbeeRemoteCliCommandResponseReceivedEventContents,
+                 comparisonFixture);
+
+    // valid uuid, valid command response
+    sendZigbeeRemoteCliCommandResponseReceivedEvent(uuid, commandResponse);
+}
+
 static bool compareStringGLists(GList *first, GList *second)
 {
     g_return_val_if_fail(g_list_length(first) == g_list_length(second), false);
@@ -4973,6 +5043,41 @@ static int checkBDeviceServiceDeviceDatabaseFailureEventContents(BDeviceServiceD
     return 1;
 }
 
+static int checkBDeviceServiceZigbeeRemoteCliCommandResponseReceivedEventContents(
+    BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *input,
+    BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *expected)
+{
+    g_return_val_if_fail(B_DEVICE_SERVICE_IS_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT(input), 0);
+
+    g_autofree gchar *inputUUID = NULL;
+    g_autofree gchar *expectedUUID = NULL;
+    g_autofree gchar *inputResponse = NULL;
+    g_autofree gchar *expectedResponse = NULL;
+
+    g_object_get(input,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 &inputUUID,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 &inputResponse,
+                 NULL);
+
+    g_object_get(expected,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_UUID],
+                 &expectedUUID,
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 &expectedResponse,
+                 NULL);
+
+    g_return_val_if_fail(g_strcmp0(inputUUID, expectedUUID) == 0, 0);
+    g_return_val_if_fail(g_strcmp0(inputResponse, expectedResponse) == 0, 0);
+
+    return 1;
+}
+
 #ifdef BARTON_CONFIG_ZIGBEE
 static void assert_change_zigbee_channel_errors(BDeviceServiceClient *client,
                                                 uint8_t channel,
@@ -5305,6 +5410,7 @@ DEFINE_MOCK_EVENT_HANDLER(StorageChangedEvent)
 DEFINE_MOCK_EVENT_HANDLER(ZigbeeInterferenceEvent)
 DEFINE_MOCK_EVENT_HANDLER(ZigbeePanIdAttackChangedEvent)
 DEFINE_MOCK_EVENT_HANDLER(DeviceDatabaseFailureEvent)
+DEFINE_MOCK_EVENT_HANDLER(ZigbeeRemoteCliCommandResponseReceivedEvent)
 
 int main(int argc, const char **argv)
 {
@@ -5362,6 +5468,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sendZigbeeInterferenceEvent),
         cmocka_unit_test(test_sendZigbeePanIdAttackChangedEvent),
         cmocka_unit_test(test_sendDeviceDatabaseFailureEvent),
+        cmocka_unit_test(test_sendZigbeeRemoteCliCommandResponseReceivedEvent),
 #ifdef BARTON_CONFIG_ZIGBEE
         cmocka_unit_test(test_b_device_service_client_zigbee_test),
         cmocka_unit_test(test_b_device_service_client_change_zigbee_channel),

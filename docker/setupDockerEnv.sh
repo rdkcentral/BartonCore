@@ -57,16 +57,55 @@ OUTFILE=$DIR/.env
 BARTON_TOP=$DIR/..
 IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 
-# Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
-IMAGE_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+# Docker image version management
+#
+# This system automatically updates to the latest compatible Docker builder image in the
+# current lineage while handling user customizations in a predictable way:
+# - Always updates to the latest builder version in the current lineage to ensure builds
+#   use compatible toolchains and dependencies
+# - Warns when custom tags exist based on different builder versions
+# - Allows restoring custom tags after updates if needed
+#
+# The version tags are tied to git tags (docker-builder-*) to maintain consistency
+# between code and build environment versions.
 
-# Check if there is an image tag already defined in the .env file. If so, this could
-# imply the user has has defined a custom tag to use for the build process.
+# Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
+HIGHEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+IMAGE_TAG=$HIGHEST_BUILDER_TAG
+BUILDER_TAG_CHANGED=false
+
 if [ -f "$OUTFILE" ]; then
-    if grep -q "IMAGE_TAG" "$OUTFILE"; then
-        IMAGE_TAG=$(grep "IMAGE_TAG" "$OUTFILE" | sed 's/IMAGE_TAG=//')
+
+    CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
+
+    if [ "$HIGHEST_BUILDER_TAG" != "$CURRENT_BUILDER_TAG" ]; then
+        echo "Current docker-builder tag ($CURRENT_BUILDER_TAG) is not in sync with the latest docker-builder available in this lineage ($HIGHEST_BUILDER_TAG)."
+        echo "The value of IMAGE_TAG in docker/.env will be updated to use the latest docker-builder version in this lineage."
+        BUILDER_TAG_CHANGED=true
     fi
+
+    IMAGE_TAG=$(grep "IMAGE_TAG" "$OUTFILE" | sed 's/IMAGE_TAG=//')
+
+    CUSTOM_TAG=false
+    if [ "$IMAGE_TAG" != "$CURRENT_BUILDER_TAG" ]; then
+        CUSTOM_TAG=true
+    fi
+
+    if [ "$CUSTOM_TAG" = true ] && [ "$BUILDER_TAG_CHANGED" = true ]; then
+        echo "WARNING: The custom image tag '$IMAGE_TAG' is based on a different docker-builder version ($CURRENT_BUILDER_TAG)."
+        echo "To continue using your custom tag, you should:"
+        echo "1. Rebuild your custom image"
+        echo "2. Set the value of IMAGE_TAG in docker/.env back to '$IMAGE_TAG'"
+        echo "3. Rebuild your environment - either devcontainer or CLI container"
+    fi
+
+    if [ "$BUILDER_TAG_CHANGED" = true ]; then
+        IMAGE_TAG=$HIGHEST_BUILDER_TAG
+    fi
+
 fi
+
+CURRENT_BUILDER_TAG=$HIGHEST_BUILDER_TAG
 
 ##############################################################################
 # Variables needed to facilitate the Docker compose process. See docker/compose.yaml
@@ -80,8 +119,10 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
-echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
+echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
+# Save off the current builder tag to keep track of the latest version
+echo "CURRENT_BUILDER_TAG=$CURRENT_BUILDER_TAG" >> $OUTFILE
 ##############################################################################
 
 ##############################################################################

@@ -599,6 +599,13 @@ bds_add_glib_test(
 )
 
 bds_add_glib_test(
+    NAME device-service-zigbee-remote-cli-response-received-event-test
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-remote-cli-response-received-event-test.c
+    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
+    GLOG_DOMAIN BDeviceServiceZigbeeRemoteCliResponseReceivedEventTest
+)
+
+bds_add_glib_test(
     NAME device-service-utils-test
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-utils-test.c
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -668,6 +675,19 @@ bds_add_cmocka_test(
     NAME deviceServiceConfigurationTest
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceConfigurationTest.c
     WRAPPED_FUNCTIONS
+    LINK_LIBRARIES brtnDeviceServiceStatic
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+bds_add_cmocka_test(
+    NAME deviceCommunicationWatchdogTest
+    INCLUDES
+    src
+    public
+    ../api/c/public
+    ${PRIVATE_API_INCLUDES}
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceCommunicationWatchdogTest.c
+    WRAPPED_FUNCTIONS createThread b_device_service_property_provider_get_property_as_bool
     LINK_LIBRARIES brtnDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

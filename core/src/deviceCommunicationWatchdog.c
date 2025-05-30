@@ -426,7 +426,7 @@ static void *commFailWatchdogThreadProc(void *arg)
 
         pthread_mutex_unlock(&controlMutex);
 
-        GList *uuidsInCommFail = NULL;
+        GPtrArray *uuidsInCommFail = g_ptr_array_new_full(0, g_free);
 
         // iterate over all monitored devices and check to see if any have hit comm fail
         pthread_mutex_lock(&monitoredDevicesMutex);
@@ -450,7 +450,7 @@ static void *commFailWatchdogThreadProc(void *arg)
                 icLogWarn(LOG_TAG, "%s: %s is in comm fail", __FUNCTION__, uuid);
                 TELEMETRY_COUNTER(TELEMETRY_MARKER_DEVICE_COMMFAIL);
                 info->inCommFail = true;
-                uuidsInCommFail = g_list_append(uuidsInCommFail, strdup(uuid));
+                g_ptr_array_add(uuidsInCommFail, g_strdup(uuid));
             }
 
             icLogTrace(LOG_TAG,
@@ -465,14 +465,14 @@ static void *commFailWatchdogThreadProc(void *arg)
         }
         pthread_mutex_unlock(&monitoredDevicesMutex);
 
-        GList *iter = uuidsInCommFail;
-        while (iter != NULL)
+        guint iter = 0;
+        while (iter < uuidsInCommFail->len)
         {
-            icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, (char*)iter->data);
-            failedCallback(iter->data);
-            iter = iter->next;
+            gchar *commFailUuid = g_ptr_array_index(uuidsInCommFail, iter);
+            icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
+            failedCallback(commFailUuid);
+            iter++;
         }
-        g_list_free_full(uuidsInCommFail, g_free);
     }
 
     return NULL;

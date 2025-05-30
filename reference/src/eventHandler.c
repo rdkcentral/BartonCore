@@ -42,6 +42,7 @@
 #include "events/device-service-endpoint-removed-event.h"
 #include "events/device-service-metadata-updated-event.h"
 #include "events/device-service-resource-updated-event.h"
+#include "events/device-service-zigbee-remote-cli-command-response-received-event.h"
 #include "utils.h"
 #include <stdio.h>
 
@@ -58,6 +59,8 @@ static void metadataUpdated(BDeviceServiceClient *source, BDeviceServiceMetadata
 static void deviceRemovedEventHandler(BDeviceServiceClient *source, BDeviceServiceDeviceRemovedEvent *event);
 static void endpointRemovedEventHandler(BDeviceServiceClient *source, BDeviceServiceEndpointRemovedEvent *event);
 static void resourceUpdatedHandler(BDeviceServiceClient *source, BDeviceServiceResourceUpdatedEvent *event);
+static void zigbeeRemoteCliResponseEventHandler(BDeviceServiceClient *source,
+                                                BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *event);
 
 
 void registerEventHandlers(BDeviceServiceClient *client)
@@ -88,6 +91,10 @@ void registerEventHandlers(BDeviceServiceClient *client)
         client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_REMOVED, G_CALLBACK(endpointRemovedEventHandler), NULL);
     g_signal_connect(
         client, B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, G_CALLBACK(resourceUpdatedHandler), NULL);
+    g_signal_connect(client,
+                     B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED,
+                     G_CALLBACK(zigbeeRemoteCliResponseEventHandler),
+                     NULL);
 }
 
 void unregisterEventHandlers(void)
@@ -341,4 +348,18 @@ static void resourceUpdatedHandler(BDeviceServiceClient *source, BDeviceServiceR
     {
         emitOutput("\r\nresourceUpdated: %s\n", resourceDump);
     }
+}
+
+static void zigbeeRemoteCliResponseEventHandler(BDeviceServiceClient *source,
+                                                BDeviceServiceZigbeeRemoteCliCommandResponseReceivedEvent *event)
+{
+    g_autofree gchar *commandResponse = NULL;
+
+    g_object_get(G_OBJECT(event),
+                 B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROPERTY_NAMES
+                     [B_DEVICE_SERVICE_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED_EVENT_PROP_COMMAND_RESPONSE],
+                 &commandResponse,
+                 NULL);
+
+    emitOutput("%s\n", commandResponse);
 }
