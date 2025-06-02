@@ -565,9 +565,13 @@ static void test_subsystemManagerIsSubsystemReady(void **state)
     will_return_always(__wrap_deviceServiceSetSystemProperty, true);
 
     // case 1: Subsystem not ready
+    // We are mocking a missing system property for the property name: "mySubsystemSubsystemVersion"
+    // This means there is no prior version recorded for this subsystem
     expect_function_call(__wrap_deviceServiceGetSystemProperty);
     will_return(__wrap_deviceServiceGetSystemProperty, NULL);
 
+    // Expect migration logic to attempt saving the version as "0"
+    // The property key is still "mySubsystemSubsystemVersion", and value is "0"
     expect_function_call(__wrap_deviceServiceSetSystemProperty);
     expect_string(__wrap_deviceServiceSetSystemProperty, value, zero);
 
@@ -577,6 +581,7 @@ static void test_subsystemManagerIsSubsystemReady(void **state)
 
 
     // case 2: Mark subsystem as ready
+    // Same mocked behavior as before (missing property), but now the subsystem will initialize and report as ready.
     mySubsystem->initialize = initializeAndMakeSubsystemReady;
     expect_function_call(__wrap_deviceServiceGetSystemProperty);
     will_return(__wrap_deviceServiceGetSystemProperty, NULL);
