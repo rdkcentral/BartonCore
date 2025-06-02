@@ -473,6 +473,9 @@ static void *commFailWatchdogThreadProc(void *arg)
             failedCallback(commFailUuid);
             iter++;
         }
+
+        g_ptr_array_free(uuidsInCommFail, true);
+
     }
 
     return NULL;
