@@ -312,7 +312,11 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     tcpdump \
     lcov \
     rsync \
-    bash-completion
+    bash-completion \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-tools \
+    libgstreamer1.0-0 \
+    libgstreamer1.0-dev
 
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
