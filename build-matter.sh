@@ -69,12 +69,12 @@ else
     cd ${BUILD_DIR}
 
     git clone \
-        --branch lab_week_camera_app \
-        --depth 1 \
-        https://github.com/comcast-matter/connectedhomeip.git \
+        https://github.com/project-chip/connectedhomeip.git \
         matter
 
     cd ${MATTER_BUILD_DIR}
+
+    git checkout 0e56f4cde846647ce69aa2b785b7d153fb3a0fa5
 
     ./scripts/checkout_submodules.py --shallow --platform linux
 
@@ -142,21 +142,6 @@ if [ "${SHOULD_BUILD_ANY}" = true ]; then
         fi
     done
 
-    if [ "${BUILD_LOCK_APP}" = true ]; then
-        ./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/${LOCK_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
-    fi
-
-    if [ "${BUILD_THERMOSTAT_APP}" = true ]; then
-        ./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/${THERMOSTAT_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
-    fi
-
-    if [ "${BUILD_CAMERA_APP}" = true ]; then
-        ./scripts/build/build_examples.py --target linux-x64-camera build && cp out/linux-x64-camera/${CAMERA_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
-    fi
-
-    if [ "${BUILD_CHIP_TOOL}" = true ]; then
-        ./scripts/build/build_examples.py --target linux-x64-chip-tool build && cp out/linux-x64-chip-tool/${CHIP_TOOL_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
-    fi
 fi
 
 # Clean up
