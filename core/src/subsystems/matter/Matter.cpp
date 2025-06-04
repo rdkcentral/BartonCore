@@ -1264,12 +1264,20 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
     // since we (or the remote device) are already commissioned, we can only support on network commissioning
     setupPayload.rendezvousInformation.SetValue(RendezvousInformationFlags(RendezvousInformationFlag::kOnNetwork));
 
+#ifdef BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA
+    setupPayload.discriminator.SetLongValue(3840);
+    setupPayload.setUpPINCode = 20202021;
+    icInfo("Using default commissioning data: Discriminator=%" PRIu16 ", Setup PIN Code=%" PRIu32,
+           setupPayload.discriminator.GetLongValue(),
+           setupPayload.setUpPINCode);
+#else
     uint16_t discriminator = Crypto::GetRandU16() % kMaxDiscriminator;
     setupPayload.discriminator.SetLongValue(discriminator);
 
     DRBG_get_bytes(reinterpret_cast<uint8_t *>(&setupPayload.setUpPINCode), sizeof(setupPayload.setUpPINCode));
     // Passcodes shall be restricted to the values 00000001 to 99999998 in decimal, see 5.1.1.6
     setupPayload.setUpPINCode = (setupPayload.setUpPINCode % kSetupPINCodeMaximumValue) + 1;
+#endif
 
     if (timeoutSecs == 0)
     {
@@ -1308,7 +1316,7 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
 
     if (nodeId == 0)
     {
-        success = OpenLocalCommissioningWindow(discriminator, timeoutSecs, setupPayload);
+        success = OpenLocalCommissioningWindow(setupPayload.discriminator.GetLongValue(), timeoutSecs, setupPayload);
     }
     else
     {
@@ -1319,7 +1327,7 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
                                        nodeId,
                                        System::Clock::Seconds16(timeoutSecs),
                                        kDefaultPAKEIterationCount,
-                                       discriminator,
+                                       setupPayload.discriminator.GetLongValue(),
                                        MakeOptional<uint32_t>(setupPayload.setUpPINCode),
                                        NullOptional,
                                        setupPayload);
