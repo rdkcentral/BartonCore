@@ -81,6 +81,12 @@
 #define RESOURCE_TYPE_GET_MEDIA_TUNNEL_STATUS_OPERATION "com.icontrol.getMediaTunnelStatusOperation"
 #define RESOURCE_TYPE_GET_PICTURE_OPERATION             "com.icontrol.getPictureOperation"
 #define RESOURCE_TYPE_UPLOAD_VIDEO_CLIP_OPERATION       "com.icontrol.uploadVideoClipOperation"
+#define RESOURCE_TYPE_SEND_PROVIDE_OFFER_OPERATION      "sendProvideOfferOperation"
+#define RESOURCE_TYPE_RECEIVE_OFFER_RESPONSE_OPERATION  "receiveProvideOfferResponse"
+#define RESOURCE_TYPE_RECEIVE_ANSWER_OPERATION          "receiveAnswerOperation"
+#define RESOURCE_TYPE_PROVIDE_ICE_CANDIDATES_OPERATION  "provideIceCandidatesOperation"
+#define RESOURCE_TYPE_RECEIVE_ICE_CANDIDATES_OPERATION  "receiveIceCandidatesOperation"
+#define RESOURCE_TYPE_SEND_END_SESSION_OPERATION        "sendEndSessionOperation"
 
 #define RESOURCE_TYPE_MOTION_SENSITIVITY                "com.icontrol.motionSensitivity"
 #define RESOURCE_TYPE_SENSOR_TYPE                       "com.icontrol.sensorType"

@@ -252,5 +252,6 @@
 #define SMART_PLUG_DEVICE_ID                                                                 0x0051
 #define LEGACY_ICONTROL_SENSOR_DEVICE_ID                                                     0xffff
 #define MATTER_SPEAKER_DEVICE_ID                                                             0x0022
+#define MATTER_CAMERA_DEVICE_ID                                                              0x0142
 
 #endif // FLEXCORE_ZIGBEECOMMONIDS_H

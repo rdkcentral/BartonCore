@@ -75,6 +75,7 @@ extern "C" {
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
 #include <setup_payload/SetupPayload.h>
 #include <transport/SessionMessageDelegate.h>
+#include <data-model-providers/codegen/Instance.h>
 
 #include <lib/support/TestGroupData.h>
 
@@ -88,6 +89,8 @@ extern "C" {
 
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
+
+#include "WebRTCTransportRequestorDelegate.hpp"
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
@@ -151,6 +154,8 @@ namespace
         0xae, 0xe3, 0x5a, 0x7c, 0xf3, 0x74, 0x8e, 0x0c, 0xfe, 0x0b, 0x6b, 0x45, 0xda, 0xc2, 0x70, 0x29, 0x0b,
         0xad, 0xcd, 0x91, 0xb9, 0x43, 0xd8, 0x58, 0x1e, 0x03, 0x63, 0xa1, 0xba, 0x18, 0xa6, 0x1d, 0xe7, 0xc7,
         0x6a, 0xbb, 0x2a, 0x0b, 0xdc, 0xef, 0x39, 0xfb, 0xb7, 0x37, 0x1f, 0x83, 0xca, 0x65};
+
+    WebRTCTransportRequestorDelegate webRtcTransportRequestorDelegate;
 } // namespace
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -274,6 +279,8 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     otbrDelegate = std::make_unique<ThreadBorderRouterManagementDelegate>();
 #endif // CHIP_ENABLE_OPENTHREAD
 
+    MatterWebRTCTransportRequestorPluginServerSetDelegate(&webRtcTransportRequestorDelegate);
+
     return result;
 }
 
@@ -311,6 +318,7 @@ bool Matter::Start()
         chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
 
         serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
+        serverInitParams.dataModelProvider = app::CodegenDataModelProviderInstance(&storageDelegate);
 
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
@@ -433,6 +441,7 @@ CHIP_ERROR Matter::InitCommissioner()
     factoryParams.fabricIndependentStorage = &storageDelegate;
     factoryParams.fabricTable = fabricTable;
     factoryParams.sessionKeystore = &sessionKeystore;
+    factoryParams.dataModelProvider = app::CodegenDataModelProviderInstance(&storageDelegate);
 
     groupDataProvider.SetStorageDelegate(&storageDelegate);
     groupDataProvider.SetSessionKeystore(&sessionKeystore);

@@ -1784,10 +1784,214 @@ provisional cluster ThreadNetworkDirectory = 1107 {
   command GetOperationalDataset(GetOperationalDatasetRequest): OperationalDatasetResponse = 2;
 }
 
+/** The WebRTC transport provider cluster provides a way for stream providers (e.g. Cameras) to stream or receive their data through WebRTC. */
+provisional cluster WebRTCTransportProvider = 1363 {
+  revision 1;
+
+  enum StreamUsageEnum : enum8 {
+    kInternal = 0;
+    kRecording = 1;
+    kAnalysis = 2;
+    kLiveView = 3;
+  }
+
+  enum WebRTCEndReasonEnum : enum8 {
+    kIceFailed = 0;
+    kIceTimeout = 1;
+    kUserHangup = 2;
+    kUserBusy = 3;
+    kReplaced = 4;
+    kNoUserMedia = 5;
+    kInviteTimeout = 6;
+    kAnsweredElsewhere = 7;
+    kOutOfResources = 8;
+    kMediaTimeout = 9;
+    kLowPower = 10;
+    kUnknownReason = 11;
+  }
+
+  bitmap WebRTCMetadataOptionsBitmap : bitmap8 {
+    kDataTLV = 0x1;
+  }
+
+  struct ICEServerStruct {
+    char_string urls[] = 1;
+    optional char_string username = 2;
+    optional char_string credential = 3;
+    optional int16u caid = 4;
+  }
+
+  struct WebRTCSessionStruct {
+    int16u id = 1;
+    node_id peerNodeID = 2;
+    fabric_idx peerFabricIndex = 3;
+    StreamUsageEnum streamUsage = 4;
+    nullable int16u videoStreamID = 5;
+    nullable int16u audioStreamID = 6;
+    WebRTCMetadataOptionsBitmap metadataOptions = 7;
+  }
+
+  readonly attribute WebRTCSessionStruct currentSessions[] = 0;
+  readonly attribute command_id generatedCommandList[] = 65528;
+  readonly attribute command_id acceptedCommandList[] = 65529;
+  readonly attribute event_id eventList[] = 65530;
+  readonly attribute attrib_id attributeList[] = 65531;
+  readonly attribute bitmap32 featureMap = 65532;
+  readonly attribute int16u clusterRevision = 65533;
+
+  request struct SolicitOfferRequest {
+    StreamUsageEnum streamUsage = 0;
+    optional nullable int16u videoStreamID = 1;
+    optional nullable int16u audioStreamID = 2;
+    optional ICEServerStruct ICEServers[] = 3;
+    optional char_string ICETransportPolicy = 4;
+    optional WebRTCMetadataOptionsBitmap metadataOptions = 5;
+  }
+
+  response struct SolicitOfferResponse = 2 {
+    int16u webRTCSessionID = 0;
+    boolean deferredOffer = 1;
+    optional nullable int16u videoStreamID = 2;
+    optional nullable int16u audioStreamID = 3;
+  }
+
+  request struct ProvideOfferRequest {
+    nullable int16u webRTCSessionID = 0;
+    char_string sdp = 1;
+    StreamUsageEnum streamUsage = 2;
+    optional nullable int16u videoStreamID = 3;
+    optional nullable int16u audioStreamID = 4;
+    optional ICEServerStruct ICEServers[] = 5;
+    optional char_string ICETransportPolicy = 6;
+    optional WebRTCMetadataOptionsBitmap metadataOptions = 7;
+  }
+
+  response struct ProvideOfferResponse = 4 {
+    int16u webRTCSessionID = 0;
+    optional nullable int16u videoStreamID = 1;
+    optional nullable int16u audioStreamID = 2;
+  }
+
+  request struct ProvideAnswerRequest {
+    int16u webRTCSessionID = 0;
+    char_string sdp = 1;
+  }
+
+  request struct ProvideICECandidatesRequest {
+    int16u webRTCSessionID = 0;
+    char_string ICECandidates[] = 1;
+  }
+
+  request struct EndSessionRequest {
+    int16u webRTCSessionID = 0;
+    WebRTCEndReasonEnum reason = 1;
+  }
+
+  /** Requests that the Provider initiates a new session with the Offer / Answer flow in a way that allows for options to be passed and work with devices needing the standby flow. */
+  command SolicitOffer(SolicitOfferRequest): SolicitOfferResponse = 1;
+  /** This command allows an SDP Offer to be set and start a new session. */
+  command ProvideOffer(ProvideOfferRequest): ProvideOfferResponse = 3;
+  /** This command SHALL be initiated from a Node in response to an Offer that was previously received from a remote peer. */
+  command ProvideAnswer(ProvideAnswerRequest): DefaultSuccess = 5;
+  /** This command allows for string based https://rfc-editor.org/rfc/rfc8839#section-5.1 generated after the initial Offer / Answer exchange, via a JSEP https://datatracker.ietf.org/doc/html/rfc9429#section-4.1.20 event, a DOM https://www.w3.org/TR/webrtc/#dom-rtcpeerconnectioniceevent event, or other WebRTC compliant implementations, to be added to a session during the gathering phase. */
+  command ProvideICECandidates(ProvideICECandidatesRequest): DefaultSuccess = 6;
+  /** This command instructs the stream provider to end the WebRTC session. */
+  command EndSession(EndSessionRequest): DefaultSuccess = 7;
+}
+
+/** The WebRTC transport requestor cluster provides a way for stream consumers (e.g. Matter Stream Viewer) to establish a WebRTC connection with a stream provider. */
+provisional cluster WebRTCTransportRequestor = 1364 {
+  revision 1;
+
+  enum StreamUsageEnum : enum8 {
+    kInternal = 0;
+    kRecording = 1;
+    kAnalysis = 2;
+    kLiveView = 3;
+  }
+
+  enum WebRTCEndReasonEnum : enum8 {
+    kIceFailed = 0;
+    kIceTimeout = 1;
+    kUserHangup = 2;
+    kUserBusy = 3;
+    kReplaced = 4;
+    kNoUserMedia = 5;
+    kInviteTimeout = 6;
+    kAnsweredElsewhere = 7;
+    kOutOfResources = 8;
+    kMediaTimeout = 9;
+    kLowPower = 10;
+    kUnknownReason = 11;
+  }
+
+  bitmap WebRTCMetadataOptionsBitmap : bitmap8 {
+    kDataTLV = 0x1;
+  }
+
+  struct ICEServerStruct {
+    char_string urls[] = 1;
+    optional char_string username = 2;
+    optional char_string credential = 3;
+    optional int16u caid = 4;
+  }
+
+  struct WebRTCSessionStruct {
+    int16u id = 1;
+    node_id peerNodeID = 2;
+    fabric_idx peerFabricIndex = 3;
+    StreamUsageEnum streamUsage = 4;
+    nullable int16u videoStreamID = 5;
+    nullable int16u audioStreamID = 6;
+    WebRTCMetadataOptionsBitmap metadataOptions = 7;
+  }
+
+  readonly attribute WebRTCSessionStruct currentSessions[] = 0;
+  readonly attribute command_id generatedCommandList[] = 65528;
+  readonly attribute command_id acceptedCommandList[] = 65529;
+  readonly attribute event_id eventList[] = 65530;
+  readonly attribute attrib_id attributeList[] = 65531;
+  readonly attribute bitmap32 featureMap = 65532;
+  readonly attribute int16u clusterRevision = 65533;
+
+  request struct OfferRequest {
+    int16u webRTCSessionID = 0;
+    char_string sdp = 1;
+    optional ICEServerStruct ICEServers[] = 2;
+    optional char_string ICETransportPolicy = 3;
+  }
+
+  request struct AnswerRequest {
+    int16u webRTCSessionID = 0;
+    char_string sdp = 1;
+  }
+
+  request struct ICECandidatesRequest {
+    int16u webRTCSessionID = 0;
+    char_string ICECandidates[] = 1;
+  }
+
+  request struct EndRequest {
+    int16u webRTCSessionID = 0;
+    WebRTCEndReasonEnum reason = 1;
+  }
+
+  /** This command provides the stream requestor with WebRTC session details. */
+  command Offer(OfferRequest): DefaultSuccess = 1;
+  /** This command provides the stream requestor with the WebRTC session details (i.e. Session ID and SDP answer), It is the next command in the Offer/Answer flow to the ProvideOffer command. */
+  command Answer(AnswerRequest): DefaultSuccess = 2;
+  /** This command allows for string based https://rfc-editor.org/rfc/rfc8839#section-5.1 generated after the initial Offer / Answer exchange, via a JSEP https://datatracker.ietf.org/doc/html/rfc9429#section-4.1.20 event, a DOM https://www.w3.org/TR/webrtc/#dom-rtcpeerconnectioniceevent event, or other WebRTC compliant implementations, to be added to a session during the gathering phase. */
+  command ICECandidates(ICECandidatesRequest): DefaultSuccess = 3;
+  /** This command notifies the stream requestor that the provider has ended the WebRTC session. */
+  command End(EndRequest): DefaultSuccess = 4;
+}
+
 endpoint 0 {
   device type ma_rootdevice = 22, version 1;
 
   binding cluster OtaSoftwareUpdateRequestor;
+
+  binding cluster WebRTCTransportProvider;
 
   server cluster Descriptor {
     callback attribute deviceTypeList;
@@ -2040,6 +2244,15 @@ endpoint 0 {
     handle command KeySetRemove;
     handle command KeySetReadAllIndices;
     handle command KeySetReadAllIndicesResponse;
+  }
+
+  server cluster WebRTCTransportRequestor {
+    callback attribute currentSessions;
+
+    handle command Offer;
+    handle command Answer;
+    handle command ICECandidates;
+    handle command End;
   }
 }
 endpoint 1 {

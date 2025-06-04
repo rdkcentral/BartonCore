@@ -38,6 +38,7 @@
 #include "credentials/attestation_verifier/FileAttestationTrustStore.h"
 #include "crypto/CHIPCryptoPAL.h"
 #include "lib/core/CHIPVendorIdentifiers.hpp"
+#include "webrtc-transport-requestor-server.hpp"
 #include <app/server/Server.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/ExampleOperationalCredentialsIssuer.h>

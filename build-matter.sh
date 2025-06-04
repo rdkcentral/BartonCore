@@ -67,10 +67,11 @@ else
     rm -rf ${MATTER_INSTALL_DIR}
     mkdir -p ${BUILD_DIR}
     cd ${BUILD_DIR}
+
     git clone \
-        --branch v1.4.0.0 \
+        --branch lab_week_camera_app \
         --depth 1 \
-        https://github.com/project-chip/connectedhomeip.git \
+        https://github.com/comcast-matter/connectedhomeip.git \
         matter
 
     cd ${MATTER_BUILD_DIR}
@@ -90,11 +91,13 @@ fi
 LIGHTING_APP_NAME=chip-lighting-app
 LOCK_APP_NAME=chip-lock-app
 THERMOSTAT_APP_NAME=thermostat-app
+CAMERA_APP_NAME=chip-camera-app
 CHIP_TOOL_NAME=chip-tool
 
 BUILD_LIGHTING_APP=true
 BUILD_LOCK_APP=true
 BUILD_THERMOSTAT_APP=true
+BUILD_CAMERA_APP=true
 BUILD_CHIP_TOOL=true
 
 if [ -e ${MATTER_INSTALL_BIN_DIR}/${LIGHTING_APP_NAME} ]; then
@@ -138,6 +141,10 @@ if [ "${BUILD_LIGHTING_APP}" = true ] ||
 
     if [ "${BUILD_THERMOSTAT_APP}" = true ]; then
         ./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/${THERMOSTAT_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
+    fi
+
+    if [ "${BUILD_CAMERA_APP}" = true ]; then
+        ./scripts/build/build_examples.py --target linux-x64-camera build && cp out/linux-x64-camera/${CAMERA_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
     fi
 
     if [ "${BUILD_CHIP_TOOL}" = true ]; then

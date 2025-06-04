@@ -98,17 +98,23 @@
 #define CAMERA_PROFILE                                               "camera"
 #define CAMERA_PROFILE_RESOURCE_PORT_NUMBER                          "portNumber"
 #define CAMERA_PROFILE_RESOURCE_SIGNAL_STRENGTH                      "signalStrength"
-#define CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID                        "adminUserId"   // endpoint
-#define CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD                       "adminPassword" // endpoint
-#define CAMERA_PROFILE_RESOURCE_USER_USER_ID                         "userUserId"    // endpoint
-#define CAMERA_PROFILE_RESOURCE_USER_PASSWORD                        "userPassword"  // endpoint
-#define CAMERA_PROFILE_RESOURCE_PIC_URL                              "pictureURL"    // endpoint
-#define CAMERA_PROFILE_RESOURCE_VIDEO_INFORMATION                    "videoInfo"     // endpoint
-#define CAMERA_PROFILE_RESOURCE_RECORDABLE                           "recordable"    // endpoint
-#define CAMERA_PROFILE_RESOURCE_MOTION_CAPABLE                       "motionCapable" // endpoint
-#define CAMERA_PROFILE_RESOURCE_API_VERSION                          "apiVersion"    // endpoint
-#define CAMERA_PROFILE_RESOURCE_RESOLUTION                           "resolution"    // endpoint
-#define CAMERA_PROFILE_RESOURCE_ASPECT_RATIO                         "aspectRatio"   // endpoint
+#define CAMERA_PROFILE_RESOURCE_ADMIN_USER_ID                        "adminUserId"          // endpoint
+#define CAMERA_PROFILE_RESOURCE_ADMIN_PASSWORD                       "adminPassword"        // endpoint
+#define CAMERA_PROFILE_RESOURCE_USER_USER_ID                         "userUserId"           // endpoint
+#define CAMERA_PROFILE_RESOURCE_USER_PASSWORD                        "userPassword"         // endpoint
+#define CAMERA_PROFILE_RESOURCE_PIC_URL                              "pictureURL"           // endpoint
+#define CAMERA_PROFILE_RESOURCE_VIDEO_INFORMATION                    "videoInfo"            // endpoint
+#define CAMERA_PROFILE_RESOURCE_RECORDABLE                           "recordable"           // endpoint
+#define CAMERA_PROFILE_RESOURCE_MOTION_CAPABLE                       "motionCapable"        // endpoint
+#define CAMERA_PROFILE_RESOURCE_API_VERSION                          "apiVersion"           // endpoint
+#define CAMERA_PROFILE_RESOURCE_RESOLUTION                           "resolution"           // endpoint
+#define CAMERA_PROFILE_RESOURCE_ASPECT_RATIO                         "aspectRatio"          // endpoint
+#define CAMERA_PROFILE_RESOURCE_PROVIDE_OFFER_RESPONSE               "provideOfferResponse" // endpoint
+#define CAMERA_PROFILE_RESOURCE_RECEIVE_ANSWER                       "receiveAnswer"        // endpoint
+#define CAMERA_PROFILE_RESOURCE_RECEIVE_ICE_CANDIDATES               "receiveIceCandidates" // endpoint
+#define CAMERA_PROFILE_FUNCTION_PROVIDE_OFFER                        "provideOffer"         // endpoint
+#define CAMERA_PROFILE_FUNCTION_PROVIDE_ICE_CANDIDATES               "provideIceCandidates" // endpoint
+#define CAMERA_PROFILE_FUNCTION_SEND_END_SESSION                     "sendEndSession"       // endpoint
 #define CAMERA_PROFILE_FUNCTION_REBOOT                               "reboot"
 #define CAMERA_PROFILE_FUNCTION_PING                                 "ping"
 #define CAMERA_PROFILE_FUNCTION_WIFI_CREDENTIALS                     "setWifiCredentials"
