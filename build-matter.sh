@@ -88,42 +88,45 @@ else
 fi
 
 # Build and install the Matter example apps for use as test targets
+#
+# Note: To add a new app, create an entry for the name as well as to
+# the MATTER_SAMPLE_APPS_TARGETS and MATTER_SAMPLE_APPS_SHOULD_BUILD dictionaries.
 LIGHTING_APP_NAME=chip-lighting-app
 LOCK_APP_NAME=chip-lock-app
 THERMOSTAT_APP_NAME=thermostat-app
 CAMERA_APP_NAME=chip-camera-app
 CHIP_TOOL_NAME=chip-tool
 
-BUILD_LIGHTING_APP=true
-BUILD_LOCK_APP=true
-BUILD_THERMOSTAT_APP=true
-BUILD_CAMERA_APP=true
-BUILD_CHIP_TOOL=true
+declare -A MATTER_SAMPLE_APPS_TARGETS
+MATTER_SAMPLE_APPS_TARGETS=(
+    ["$LIGHTING_APP_NAME"]="linux-x64-light-rpc"
+    ["$LOCK_APP_NAME"]="linux-x64-lock"
+    ["$THERMOSTAT_APP_NAME"]="linux-x64-thermostat"
+    ["$CAMERA_APP_NAME"]="linux-x64-camera"
+    ["$CHIP_TOOL_NAME"]="linux-x64-chip-tool"
+)
 
-if [ -e ${MATTER_INSTALL_BIN_DIR}/${LIGHTING_APP_NAME} ]; then
-    echo "Matter example lighting app already exists, skipping build."
-    BUILD_LIGHTING_APP=false
-fi
+declare -A MATTER_SAMPLE_APPS_SHOULD_BUILD
+MATTER_SAMPLE_APPS_SHOULD_BUILD=(
+    ["$LIGHTING_APP_NAME"]=true
+    ["$LOCK_APP_NAME"]=true
+    ["$THERMOSTAT_APP_NAME"]=true
+    ["$CAMERA_APP_NAME"]=true
+    ["$CHIP_TOOL_NAME"]=true
+)
 
-if [ -e ${MATTER_INSTALL_BIN_DIR}/${LOCK_APP_NAME} ]; then
-    echo "Matter example lock app already exists, skipping build."
-    BUILD_LOCK_APP=false
-fi
+SHOULD_BUILD_ANY=false
 
-if [ -e ${MATTER_INSTALL_BIN_DIR}/${THERMOSTAT_APP_NAME} ]; then
-    echo "Matter example thermostat app already exists, skipping build."
-    BUILD_THERMOSTAT_APP=false
-fi
+for app in "${!MATTER_SAMPLE_APPS_SHOULD_BUILD[@]}"; do
+    if [ -e ${MATTER_INSTALL_BIN_DIR}/${app} ]; then
+        echo "Matter example ${app} already exists, skipping build."
+        MATTER_SAMPLE_APPS_SHOULD_BUILD[$app]=false
+    else
+        SHOULD_BUILD_ANY=true
+    fi
+done
 
-if [ -e ${MATTER_INSTALL_BIN_DIR}/${CHIP_TOOL_NAME} ]; then
-    echo "Matter example chip tool already exists, skipping build."
-    BUILD_CHIP_TOOL=false
-fi
-
-if [ "${BUILD_LIGHTING_APP}" = true ] ||
-    [ "${BUILD_LOCK_APP}" = true ] ||
-    [ "${BUILD_THERMOSTAT_APP}" = true ] ||
-    [ "${BUILD_CHIP_TOOL}" = true ]; then
+if [ "${SHOULD_BUILD_ANY}" = true ]; then
 
     cd ${MATTER_BUILD_DIR}
     mkdir -p ${MATTER_INSTALL_BIN_DIR}
@@ -131,9 +134,13 @@ if [ "${BUILD_LIGHTING_APP}" = true ] ||
     export TERM=xterm
     . ./scripts/activate.sh
 
-    if [ "${BUILD_LIGHTING_APP}" = true ]; then
-        ./scripts/build/build_examples.py --target linux-x64-light-rpc build && cp out/linux-x64-light-rpc/${LIGHTING_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
-    fi
+    for app in "${!MATTER_SAMPLE_APPS_SHOULD_BUILD[@]}"; do
+        if [ "${MATTER_SAMPLE_APPS_SHOULD_BUILD[$app]}" = true ]; then
+            ./scripts/build/build_examples.py --target ${MATTER_SAMPLE_APPS_TARGETS[$app]} build &&
+                cp out/${MATTER_SAMPLE_APPS_TARGETS[$app]}/${app} ${MATTER_INSTALL_BIN_DIR} &&
+                rm -rf out
+        fi
+    done
 
     if [ "${BUILD_LOCK_APP}" = true ]; then
         ./scripts/build/build_examples.py --target linux-x64-lock build && cp out/linux-x64-lock/${LOCK_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
