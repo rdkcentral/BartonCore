@@ -315,8 +315,13 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     bash-completion \
     gstreamer1.0-plugins-base \
     gstreamer1.0-tools \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
     libgstreamer1.0-0 \
-    libgstreamer1.0-dev
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev
 
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
