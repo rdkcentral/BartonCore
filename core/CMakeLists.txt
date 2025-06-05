@@ -687,7 +687,7 @@ bds_add_cmocka_test(
     ../api/c/public
     ${PRIVATE_API_INCLUDES}
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceCommunicationWatchdogTest.c
-    WRAPPED_FUNCTIONS createThread b_device_service_property_provider_get_property_as_bool
+    WRAPPED_FUNCTIONS b_device_service_property_provider_get_property_as_bool
     LINK_LIBRARIES brtnDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
