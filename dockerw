@@ -52,6 +52,8 @@ shift "$(($OPTIND - 1))"
 
 DIR=$(pwd)
 
+# a comment
+
 # generate the `docker/.env` file and ensure the network/image is created
 $DIR/docker/setupDockerEnv.sh
 
