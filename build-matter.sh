@@ -61,31 +61,31 @@ while getopts ":hc:sa" option; do
     esac
 done
 
-if [ -e ${MATTER_BUILD_DIR} ]; then
-    echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
-else
-    rm -rf ${MATTER_INSTALL_DIR}
-    mkdir -p ${BUILD_DIR}
-    cd ${BUILD_DIR}
+# if [ -e ${MATTER_BUILD_DIR} ]; then
+#     echo "Matter build dir already exists at: ${MATTER_BUILD_DIR}. Delete it if you want to rebuild Matter."
+# else
+rm -rf ${MATTER_INSTALL_DIR}
+mkdir -p ${BUILD_DIR}
+cd ${BUILD_DIR}
 
-    git clone \
-        https://github.com/project-chip/connectedhomeip.git \
-        matter
+# git clone \
+#     https://github.com/project-chip/connectedhomeip.git \
+#     matter
 
-    cd ${MATTER_BUILD_DIR}
+cd ${MATTER_BUILD_DIR}
 
-    git checkout 0e56f4cde846647ce69aa2b785b7d153fb3a0fa5
+git checkout 0e56f4cde846647ce69aa2b785b7d153fb3a0fa5
 
-    ./scripts/checkout_submodules.py --shallow --platform linux
+./scripts/checkout_submodules.py --shallow --platform linux
 
-    # Ensure that the older OpenSSL version is used for the build
-    export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
+# Ensure that the older OpenSSL version is used for the build
+export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
 
-    ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
+${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
 
-    cd ${MATTER_BUILD_DIR}
-    git reset --hard
-fi
+cd ${MATTER_BUILD_DIR}
+git reset --hard
+# fi
 
 # Build and install the Matter example apps for use as test targets
 #
@@ -100,19 +100,19 @@ CHIP_TOOL_NAME=chip-tool
 declare -A MATTER_SAMPLE_APPS_TARGETS
 MATTER_SAMPLE_APPS_TARGETS=(
     ["$LIGHTING_APP_NAME"]="linux-x64-light-rpc"
-    ["$LOCK_APP_NAME"]="linux-x64-lock"
-    ["$THERMOSTAT_APP_NAME"]="linux-x64-thermostat"
-    ["$CAMERA_APP_NAME"]="linux-x64-camera"
-    ["$CHIP_TOOL_NAME"]="linux-x64-chip-tool"
+    # ["$LOCK_APP_NAME"]="linux-x64-lock"
+    # ["$THERMOSTAT_APP_NAME"]="linux-x64-thermostat"
+    # ["$CAMERA_APP_NAME"]="linux-x64-camera"
+    # ["$CHIP_TOOL_NAME"]="linux-x64-chip-tool"
 )
 
 declare -A MATTER_SAMPLE_APPS_SHOULD_BUILD
 MATTER_SAMPLE_APPS_SHOULD_BUILD=(
     ["$LIGHTING_APP_NAME"]=true
-    ["$LOCK_APP_NAME"]=true
-    ["$THERMOSTAT_APP_NAME"]=true
-    ["$CAMERA_APP_NAME"]=true
-    ["$CHIP_TOOL_NAME"]=true
+    # ["$LOCK_APP_NAME"]=true
+    # ["$THERMOSTAT_APP_NAME"]=true
+    # ["$CAMERA_APP_NAME"]=true
+    # ["$CHIP_TOOL_NAME"]=true
 )
 
 SHOULD_BUILD_ANY=false
@@ -137,8 +137,7 @@ if [ "${SHOULD_BUILD_ANY}" = true ]; then
     for app in "${!MATTER_SAMPLE_APPS_SHOULD_BUILD[@]}"; do
         if [ "${MATTER_SAMPLE_APPS_SHOULD_BUILD[$app]}" = true ]; then
             ./scripts/build/build_examples.py --target ${MATTER_SAMPLE_APPS_TARGETS[$app]} build &&
-                cp out/${MATTER_SAMPLE_APPS_TARGETS[$app]}/${app} ${MATTER_INSTALL_BIN_DIR} &&
-                rm -rf out
+                cp out/${MATTER_SAMPLE_APPS_TARGETS[$app]}/${app} ${MATTER_INSTALL_BIN_DIR}
         fi
     done
 

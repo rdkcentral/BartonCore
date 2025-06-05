@@ -59,7 +59,7 @@ namespace barton
         bool SendProvideOffer(void *context,
                               const chip::app::DataModel::Nullable<uint16_t> webRTCSessionID,
                               const std::string &sdp,
-                              chip::app::Clusters::WebRTCTransportProvider::StreamUsageEnum streamUsage,
+                              chip::app::Clusters::Globals::StreamUsageEnum streamUsage,
                               chip::Messaging::ExchangeManager &exchangeMgr,
                               const chip::SessionHandle &sessionHandle);
 
@@ -71,7 +71,7 @@ namespace barton
 
         bool SendEndSessionCommand(void *context,
                                    const uint16_t webRTCSessionID,
-                                   const chip::app::Clusters::WebRTCTransportProvider::WebRTCEndReasonEnum reason,
+                                   const chip::app::Clusters::Globals::WebRTCEndReasonEnum reason,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
                                    const chip::SessionHandle &sessionHandle);
 

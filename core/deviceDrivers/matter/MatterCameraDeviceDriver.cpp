@@ -267,7 +267,7 @@ void MatterCameraDeviceDriver::ProvideOffer(std::forward_list<std::promise<bool>
 
     using namespace chip::app;
     using namespace chip::app::DataModel;
-    using chip::app::Clusters::WebRTCTransportProvider::StreamUsageEnum;
+    using chip::app::Clusters::Globals::StreamUsageEnum;
 
     auto *server =
         static_cast<WebRTCTransportProvider *>(GetAnyServerById(deviceId, Clusters::WebRTCTransportProvider::Id));
@@ -404,13 +404,13 @@ void MatterCameraDeviceDriver::SendEndSession(std::forward_list<std::promise<boo
     }
     reason = (uint8_t) cJSON_GetNumberValue(reasonJson);
 
-    if (reason >= (uint8_t) Clusters::WebRTCTransportProvider::WebRTCEndReasonEnum::kUnknownEnumValue)
+    if (reason >= (uint8_t) Clusters::Globals::WebRTCEndReasonEnum::kUnknownEnumValue)
     {
         icError("Invalid reason %d", reason);
         FailOperation(promises);
         return;
     }
-    auto endReason = static_cast<Clusters::WebRTCTransportProvider::WebRTCEndReasonEnum>(reason);
+    auto endReason = static_cast<Clusters::Globals::WebRTCEndReasonEnum>(reason);
 
     promises.emplace_front();
     auto &sendEndSessionPromise = promises.front();

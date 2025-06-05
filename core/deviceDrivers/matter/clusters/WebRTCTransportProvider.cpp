@@ -45,6 +45,8 @@ extern "C" {
 
 using namespace chip;
 using namespace chip::app;
+using namespace chip::app::Clusters;
+using namespace chip::app::Clusters::Globals;
 using namespace chip::app::Clusters::WebRTCTransportProvider;
 
 #define PROVIDE_OFFER_TIMEOUT_SECONDS 15
@@ -89,9 +91,17 @@ namespace barton
                                       Commands::ProvideICECandidates::Id,
                                       (CommandPathFlags::kEndpointIdValid));
 
+        std::vector<Globals::Structs::ICECandidateStruct::Type> iceCandidateStructs;
+        std::transform(
+            iceCandidates.begin(),
+            iceCandidates.end(),
+            std::back_inserter(iceCandidateStructs),
+            [](const CharSpan &candidate) { return Globals::Structs::ICECandidateStruct::Type {candidate}; });
+
         Commands::ProvideICECandidates::Type data;
         data.webRTCSessionID = webRTCSessionID;
-        data.ICECandidates = DataModel::List<const CharSpan>(iceCandidates.data(), iceCandidates.size());
+        data.ICECandidates = DataModel::List<const Globals::Structs::ICECandidateStruct::Type>(
+            iceCandidateStructs.data(), iceCandidateStructs.size());
         commandSender->AddRequestData(
             commandPath, data, Optional<uint16_t>(PROVIDE_ICE_CANDIDATE_TIMEOUT_SECONDS * 1000));
 

@@ -75,7 +75,10 @@ void WebRTCTransportRequestorDelegate::OnICECandidates(
     icInfo("Handling WebRTCTransportRequestor::ICECandidates command");
 
     uint16_t webRTCSessionID = commandData.webRTCSessionID;
-    chip::app::DataModel::DecodableList<chip::CharSpan> iceCandidates = commandData.ICECandidates;
+
+    using namespace chip::app::DataModel;
+    using namespace chip::app::Clusters::Globals;
+    DecodableList<Structs::ICECandidateStruct::DecodableType> iceCandidates = commandData.ICECandidates;
 
     scoped_cJSON *dataJson = cJSON_CreateObject();
     cJSON_AddNumberToObject(dataJson, "webRTCSessionID", webRTCSessionID);
@@ -91,7 +94,7 @@ void WebRTCTransportRequestorDelegate::OnICECandidates(
     while (iter.Next())
     {
         auto &entry = iter.GetValue();
-        std::string iceCandidate(entry.data(), entry.size());
+        std::string iceCandidate(entry.candidate.data(), entry.candidate.size());
         cJSON_AddItemToArray(iceCandidatesArr, cJSON_CreateString(iceCandidate.c_str()));
     }
 

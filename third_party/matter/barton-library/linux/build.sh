@@ -141,5 +141,6 @@ rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/
 
 # zap generated includes
 cp -r $CHIP_ROOT/zzz_generated/app-common/app-common $INCLUDE_DIR
+cp -r $CHIP_ROOT/zzz_generated/app-common/clusters $INCLUDE_DIR
 mkdir -p $INCLUDE_DIR/zap-generated
 cp -r $GEN_DIR/ABS_PATH/${BARTON_COMMON}/zapgen/zap-generated/*.h* $INCLUDE_DIR/zap-generated

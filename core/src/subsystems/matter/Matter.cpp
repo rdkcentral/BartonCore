@@ -53,7 +53,7 @@ extern "C" {
 }
 
 #include CHIP_PROJECT_CONFIG_INCLUDE
-#include <app/clusters/ota-provider/ota-provider.h>
+#include <app/clusters/ota-provider/ota-provider-cluster.h>
 #include <app/clusters/thread-border-router-management-server/thread-border-router-management-server.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
@@ -65,6 +65,7 @@ extern "C" {
 #include <credentials/FabricTable.h>
 #include <credentials/attestation_verifier/DefaultDeviceAttestationVerifier.h>
 #include <crypto/CHIPCryptoPAL.h>
+#include <data-model-providers/codegen/Instance.h>
 #include <lib/core/CHIPError.h>
 #include <lib/support/CodeUtils.h>
 #include <messaging/ExchangeMgr.h>
@@ -75,7 +76,6 @@ extern "C" {
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
 #include <setup_payload/SetupPayload.h>
 #include <transport/SessionMessageDelegate.h>
-#include <data-model-providers/codegen/Instance.h>
 
 #include <lib/support/TestGroupData.h>
 

@@ -54,3 +54,6 @@ set(BDS_MATTER_PROVIDER_HEADER_PATHS
     CACHE
     STRING
     "Provider header paths")
+
+
+set(BUILD_TESTING OFF CACHE BOOL "f")
