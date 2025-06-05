@@ -53,7 +53,7 @@ extern "C" {
 }
 
 #include CHIP_PROJECT_CONFIG_INCLUDE
-#include <app/clusters/ota-provider/ota-provider-cluster.h>
+#include <app/clusters/ota-provider/CodegenIntegration.h>
 #include <app/clusters/thread-border-router-management-server/thread-border-router-management-server.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
@@ -269,6 +269,8 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
+    MatterWebRTCTransportRequestorPluginServerSetDelegate(&webRtcTransportRequestorDelegate);
+
 #if CHIP_ENABLE_OPENTHREAD
     if ((err = DeviceLayer::ThreadStackMgrImpl().InitThreadStack()) != CHIP_NO_ERROR)
     {
@@ -278,8 +280,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 
     otbrDelegate = std::make_unique<ThreadBorderRouterManagementDelegate>();
 #endif // CHIP_ENABLE_OPENTHREAD
-
-    MatterWebRTCTransportRequestorPluginServerSetDelegate(&webRtcTransportRequestorDelegate);
 
     return result;
 }
