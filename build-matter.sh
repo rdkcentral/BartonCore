@@ -95,6 +95,7 @@ LIGHTING_APP_NAME=chip-lighting-app
 LOCK_APP_NAME=chip-lock-app
 THERMOSTAT_APP_NAME=thermostat-app
 CAMERA_APP_NAME=chip-camera-app
+CAMERA_CONTROLLER_NAME=chip-camera-controller
 CHIP_TOOL_NAME=chip-tool
 
 declare -A MATTER_SAMPLE_APPS_TARGETS
@@ -103,6 +104,7 @@ MATTER_SAMPLE_APPS_TARGETS=(
     ["$LOCK_APP_NAME"]="linux-x64-lock"
     ["$THERMOSTAT_APP_NAME"]="linux-x64-thermostat"
     ["$CAMERA_APP_NAME"]="linux-x64-camera"
+    ["$CAMERA_CONTROLLER_NAME"]="linux-x64-camera-controller"
     ["$CHIP_TOOL_NAME"]="linux-x64-chip-tool"
 )
 
@@ -112,6 +114,7 @@ MATTER_SAMPLE_APPS_SHOULD_BUILD=(
     ["$LOCK_APP_NAME"]=true
     ["$THERMOSTAT_APP_NAME"]=true
     ["$CAMERA_APP_NAME"]=true
+    ["$CAMERA_CONTROLLER_NAME"]=true
     ["$CHIP_TOOL_NAME"]=true
 )
 
