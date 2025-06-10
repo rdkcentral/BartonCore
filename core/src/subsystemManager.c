@@ -231,7 +231,10 @@ cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName)
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
-        result = reg->subsystem->getStatusJson();
+        if (reg->subsystem->getStatusJson != NULL)
+        {
+            result = reg->subsystem->getStatusJson();
+        }
         mutexUnlock(&reg->mtx);
     }
 
