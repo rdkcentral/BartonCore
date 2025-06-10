@@ -163,7 +163,8 @@ CHIP_ERROR CertifierDACProvider::SignWithDeviceAttestationKey(const ByteSpan & m
 std::string CertifierDACProvider::GetDACFilepath()
 {
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *dacFilePath = b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PATH,  nullptr);
+    g_autofree char *dacFilePath = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PATH, "");
 
     return std::string(dacFilePath);
 }
@@ -171,7 +172,8 @@ std::string CertifierDACProvider::GetDACFilepath()
 std::string CertifierDACProvider::GetDACPassword()
 {
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *dacPassword = b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PASSWORD, nullptr);
+    g_autofree char *dacPassword = b_device_service_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PASSWORD, "");
 
     return std::string(dacPassword);
 }
