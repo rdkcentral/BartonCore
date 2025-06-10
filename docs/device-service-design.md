@@ -16,7 +16,7 @@ Devices are exposed to clients as a set of resources that can be read, written,
 and executed depending on their type and purpose.  More details on how devices
 are composed and how to interact with their resources are below.
 
-![arch](device-service-arch.png)
+![arch](barton-core-arch.png)
 
 # Hardware Dependencies
 Device Service can function without any hardware dependencies, however its

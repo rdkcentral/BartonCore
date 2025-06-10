@@ -28,7 +28,7 @@
 # file via the 'add_subdirectory()' routine.
 #
 #--------------------------------------------------------------------------------------
-include(BDSAddCMockaTest)
+include(BCoreAddCMockaTest)
 
 # define source files (using wildcard)
 # Don't dynamically link to xhConfig - we need to wrap its undefined getDynamicConfiPath symbol

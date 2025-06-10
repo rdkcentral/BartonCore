@@ -25,7 +25,7 @@
  * Created by Thomas Lea on 10/11/2024.
  */
 
-#include "provider/device-service-network-credentials-provider.h"
+#include "provider/barton-core-network-credentials-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icConcurrent/threadUtils.h>
 
@@ -39,38 +39,38 @@ static gchar *network_ssid = NULL;
 static gchar *network_psk = NULL;
 
 static void
-b_reference_network_credentials_provider_interface_init(BDeviceServiceNetworkCredentialsProviderInterface *iface);
+b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE(BReferenceNetworkCredentialsProvider,
                         b_reference_network_credentials_provider,
                         G_TYPE_OBJECT,
-                        G_IMPLEMENT_INTERFACE(B_DEVICE_SERVICE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
+                        G_IMPLEMENT_INTERFACE(B_CORE_NETWORK_CREDENTIALS_PROVIDER_TYPE,
                                               b_reference_network_credentials_provider_interface_init))
 
 /*
- * Implementation of BDeviceServiceNetworkCredentialsProvider get_wifi_network_credentials
+ * Implementation of BCoreNetworkCredentialsProvider get_wifi_network_credentials
  */
-static BDeviceServiceWifiNetworkCredentials *
+static BCoreWifiNetworkCredentials *
 b_reference_network_credentials_provider_get_wifi_network_credentials(
-    BDeviceServiceNetworkCredentialsProvider *self,
+    BCoreNetworkCredentialsProvider *self,
     GError **error)
 {
     g_return_val_if_fail(B_REFERENCE_IS_NETWORK_CREDENTIALS_PROVIDER(self), NULL);
     g_return_val_if_fail(error == NULL || *error == NULL, NULL);
 
-    g_autoptr(BDeviceServiceWifiNetworkCredentials) wifiCredentials = NULL;
+    g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials = NULL;
 
-    wifiCredentials = b_device_service_wifi_network_credentials_new();
+    wifiCredentials = b_core_wifi_network_credentials_new();
 
     mutexLock(&network_creds_mtx);
     if (network_ssid != NULL && network_psk != NULL)
     {
         g_object_set(wifiCredentials,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
                      network_ssid,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
                      network_psk,
                      NULL);
     }
@@ -80,7 +80,7 @@ b_reference_network_credentials_provider_get_wifi_network_credentials(
 }
 
 static void
-b_reference_network_credentials_provider_interface_init(BDeviceServiceNetworkCredentialsProviderInterface *iface)
+b_reference_network_credentials_provider_interface_init(BCoreNetworkCredentialsProviderInterface *iface)
 {
     iface->get_wifi_network_credentials =
         b_reference_network_credentials_provider_get_wifi_network_credentials;

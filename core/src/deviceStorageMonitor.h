@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "device-service-client.h"
+#include "barton-core-client.h"
 
 /**
  * @brief Start the device storage monitor

@@ -26,12 +26,12 @@
  */
 
 #include "category.h"
-#include "device-service-client.h"
-#include "device-service-device.h"
-#include "device-service-endpoint.h"
-#include "device-service-metadata.h"
-#include "device-service-reference-io.h"
-#include "device-service-resource.h"
+#include "barton-core-client.h"
+#include "barton-core-device.h"
+#include "barton-core-endpoint.h"
+#include "barton-core-metadata.h"
+#include "barton-core-reference-io.h"
+#include "barton-core-resource.h"
 #include "glib-object.h"
 #include "glib.h"
 #include "icUtil/stringUtils.h"
@@ -44,7 +44,7 @@
 
 #define DISCOVERY_SECONDS 60
 
-static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool discoverStartFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     (void) argc; // unused
     bool rc = false;
@@ -55,7 +55,7 @@ static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **a
     deviceClasses = g_list_append(deviceClasses, argv[0]);
 
     g_autoptr(GError) err = NULL;
-    if (!b_device_service_client_discover_start(client, deviceClasses, NULL, DISCOVERY_SECONDS, &err))
+    if (!b_core_client_discover_start(client, deviceClasses, NULL, DISCOVERY_SECONDS, &err))
     {
         if (err != NULL)
         {
@@ -74,14 +74,14 @@ static bool discoverStartFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return rc;
 }
 
-static bool discoverStopFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool discoverStopFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     (void) argc; // unused
     (void) argv; // unused
     bool rc = false;
 
     g_autoptr(GError) err = NULL;
-    if (!b_device_service_client_discover_stop(client, NULL))
+    if (!b_core_client_discover_stop(client, NULL))
     {
         emitError("Failed to stop discovery\n");
     }
@@ -93,20 +93,20 @@ static bool discoverStopFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return rc;
 }
 
-static void listDeviceEntry(BDeviceServiceDevice *device)
+static void listDeviceEntry(BCoreDevice *device)
 {
     g_return_if_fail(device);
 
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *deviceClass = NULL;
-    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
+    g_autolist(BCoreEndpoint) endpoints = NULL;
 
     g_object_get(device,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
                  &deviceId,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
                  &deviceClass,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_ENDPOINTS],
                  &endpoints,
                  NULL);
 
@@ -115,33 +115,33 @@ static void listDeviceEntry(BDeviceServiceDevice *device)
 
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
-        BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
+        BCoreEndpoint *endpoint = B_CORE_ENDPOINT(endpointsIter->data);
         g_autofree gchar *endpointId = NULL;
         g_autofree gchar *endpointProfile = NULL;
         g_autofree gchar *label = NULL;
-        g_autolist(BDeviceServiceResource) resources = NULL;
+        g_autolist(BCoreResource) resources = NULL;
         g_object_get(endpoint,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_ID],
                      &endpointId,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE],
                      &endpointProfile,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_RESOURCES],
                      &resources,
                      NULL);
         if (resources && endpointId && endpointProfile)
         {
             for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
             {
-                BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+                BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
                 g_autofree gchar *resourceType = NULL;
                 g_object_get(resource,
-                             B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
+                             B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_TYPE],
                              &resourceType,
                              NULL);
                 if (g_ascii_strcasecmp(resourceType, RESOURCE_TYPE_LABEL) == 0)
                 {
                     g_object_get(resource,
-                                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                                  &label,
                                  NULL);
                     break;
@@ -153,7 +153,7 @@ static void listDeviceEntry(BDeviceServiceDevice *device)
     }
 }
 
-static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool listDevicesFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     bool idOnly = false;
 
@@ -166,27 +166,27 @@ static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **arg
         argv++;
     }
 
-    g_autolist(BDeviceServiceDevice) devices = NULL;
+    g_autolist(BCoreDevice) devices = NULL;
 
     if (argc == 0)
     {
-        devices = b_device_service_client_get_devices(client);
+        devices = b_core_client_get_devices(client);
     }
     else
     {
-        devices = b_device_service_client_get_devices_by_device_class(client, argv[0]);
+        devices = b_core_client_get_devices_by_device_class(client, argv[0]);
     }
 
     if (devices)
     {
         for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
         {
-            BDeviceServiceDevice *device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
             if (idOnly)
             {
                 g_autofree gchar *deviceId = NULL;
                 g_object_get(
-                    device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID], &deviceId, NULL);
+                    device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &deviceId, NULL);
                 if (deviceId != NULL)
                 {
                     emitOutput("%s\n", deviceId);
@@ -206,36 +206,36 @@ static bool listDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **arg
     return true;
 }
 
-static gchar *getDeviceLabel(BDeviceServiceDevice *device)
+static gchar *getDeviceLabel(BCoreDevice *device)
 {
     gchar *result = NULL;
 
-    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
+    g_autolist(BCoreEndpoint) endpoints = NULL;
     g_object_get(
-        device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS], &endpoints, NULL);
+        device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_ENDPOINTS], &endpoints, NULL);
 
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
-        BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
-        g_autolist(BDeviceServiceResource) resources = NULL;
+        BCoreEndpoint *endpoint = B_CORE_ENDPOINT(endpointsIter->data);
+        g_autolist(BCoreResource) resources = NULL;
         g_object_get(endpoint,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_RESOURCES],
                      &resources,
                      NULL);
         if (resources)
         {
             for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
             {
-                BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+                BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
                 g_autofree gchar *resourceType = NULL;
                 g_object_get(resource,
-                             B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
+                             B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_TYPE],
                              &resourceType,
                              NULL);
                 if (g_ascii_strcasecmp(resourceType, RESOURCE_TYPE_LABEL) == 0)
                 {
                     g_object_get(resource,
-                                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                                  &result,
                                  NULL);
                     break;
@@ -249,34 +249,34 @@ static gchar *getDeviceLabel(BDeviceServiceDevice *device)
 
 static gint resourceSort(gpointer a, gpointer b)
 {
-    BDeviceServiceResource *left = B_DEVICE_SERVICE_RESOURCE(a);
-    BDeviceServiceResource *right = B_DEVICE_SERVICE_RESOURCE(b);
+    BCoreResource *left = B_CORE_RESOURCE(a);
+    BCoreResource *right = B_CORE_RESOURCE(b);
 
     g_autofree gchar *leftUri = NULL;
     g_autofree gchar *rightUri = NULL;
-    g_object_get(left, B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI], &leftUri, NULL);
-    g_object_get(right, B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI], &rightUri, NULL);
+    g_object_get(left, B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI], &leftUri, NULL);
+    g_object_get(right, B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI], &rightUri, NULL);
 
 
     return g_strcmp0(leftUri, rightUri);
 }
 
-static void printDeviceEntry(BDeviceServiceDevice *device)
+static void printDeviceEntry(BCoreDevice *device)
 {
     g_autofree gchar *label = getDeviceLabel(device);
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *deviceClass = NULL;
-    g_autolist(BDeviceServiceResource) resources = NULL;
-    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
+    g_autolist(BCoreResource) resources = NULL;
+    g_autolist(BCoreEndpoint) endpoints = NULL;
 
     g_object_get(device,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
                  &deviceId,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
                  &deviceClass,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_RESOURCES],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_RESOURCES],
                  &resources,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_ENDPOINTS],
                  &endpoints,
                  NULL);
 
@@ -286,20 +286,20 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
     g_autoptr(GList) sortedResources = NULL;
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
-        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
         sortedResources = g_list_insert_sorted(sortedResources, resource, (GCompareFunc) resourceSort);
     }
 
     // print device level resources
     for (GList *resourcesIter = sortedResources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
-        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
         g_autofree gchar *resourceUri = NULL;
         g_autofree gchar *resourceValue = NULL;
         g_object_get(resource,
-                     B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                     B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI],
                      &resourceUri,
-                     B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                     B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                      &resourceValue,
                      NULL);
         emitOutput("\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
@@ -309,10 +309,10 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
     g_autoptr(GList) sortedEndpoints = NULL;
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
-        BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
-        g_autolist(BDeviceServiceResource) endpointResources = NULL;
+        BCoreEndpoint *endpoint = B_CORE_ENDPOINT(endpointsIter->data);
+        g_autolist(BCoreResource) endpointResources = NULL;
         g_object_get(endpoint,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_RESOURCES],
                      &endpointResources,
                      NULL);
 
@@ -321,7 +321,7 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
         for (GList *endpointResourcesIter = endpointResources; endpointResourcesIter != NULL;
              endpointResourcesIter = endpointResourcesIter->next)
         {
-            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(endpointResourcesIter->data);
+            BCoreResource *resource = B_CORE_RESOURCE(endpointResourcesIter->data);
             sortedEndpointResources =
                 g_list_insert_sorted(sortedEndpointResources, resource, (GCompareFunc) resourceSort);
         }
@@ -329,22 +329,22 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
         g_autofree gchar *endpointId = NULL;
         g_autofree gchar *endpointProfile = NULL;
         g_object_get(endpoint,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_ID],
                      &endpointId,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE],
                      &endpointProfile,
                      NULL);
         emitOutput("\tEndpoint %s: Profile: %s\n", endpointId, endpointProfile);
 
         for (GList *resourcesIter = sortedEndpointResources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
         {
-            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+            BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
             g_autofree gchar *resourceUri = NULL;
             g_autofree gchar *resourceValue = NULL;
             g_object_get(resource,
-                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI],
                          &resourceUri,
-                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                          &resourceValue,
                          NULL);
             emitOutput("\t\t%s = %s\n", resourceUri, resourceValue == NULL ? "(null)" : resourceValue);
@@ -352,36 +352,36 @@ static void printDeviceEntry(BDeviceServiceDevice *device)
     }
 }
 
-static bool printDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool printDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autoptr(BDeviceServiceDevice) device = b_device_service_client_get_device_by_id(client, argv[0]);
+    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
 
     printDeviceEntry(device);
 
     return true;
 }
 
-static bool printAllDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool printAllDevicesFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     bool rc = false;
 
-    g_autolist(BDeviceServiceDevice) devices = NULL;
+    g_autolist(BCoreDevice) devices = NULL;
     if (argc == 0)
     {
-        devices = b_device_service_client_get_devices(client);
+        devices = b_core_client_get_devices(client);
     }
     else
     {
-        devices = b_device_service_client_get_devices_by_device_class(client, argv[0]);
+        devices = b_core_client_get_devices_by_device_class(client, argv[0]);
     }
 
     if (devices)
     {
         for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
         {
-            BDeviceServiceDevice *device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
             printDeviceEntry(device);
         }
 
@@ -395,12 +395,12 @@ static bool printAllDevicesFunc(BDeviceServiceClient *client, gint argc, gchar *
     return rc;
 }
 
-static bool readResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool readResourceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
     bool result = true;
     g_autoptr(GError) err = NULL;
-    g_autofree gchar *value = b_device_service_client_read_resource(client, argv[0], &err);
+    g_autofree gchar *value = b_core_client_read_resource(client, argv[0], &err);
 
     if (err == NULL)
     {
@@ -416,7 +416,7 @@ static bool readResourceFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return result;
 }
 
-static bool writeResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool writeResourceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1 || argc == 2, false);
     bool result = false;
@@ -427,7 +427,7 @@ static bool writeResourceFunc(BDeviceServiceClient *client, gint argc, gchar **a
         resourceValue = argv[1];
     }
 
-    result = b_device_service_client_write_resource(client, argv[0], resourceValue);
+    result = b_core_client_write_resource(client, argv[0], resourceValue);
     if (!result)
     {
         emitError("Failed to write resource\n");
@@ -436,7 +436,7 @@ static bool writeResourceFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return result;
 }
 
-static bool execResourceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool execResourceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1 || argc == 2, false);
     bool result;
@@ -448,7 +448,7 @@ static bool execResourceFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     }
 
     g_autofree gchar *response = NULL;
-    result = b_device_service_client_execute_resource(client, argv[0], payload, &response);
+    result = b_core_client_execute_resource(client, argv[0], payload, &response);
 
     if (!result)
     {
@@ -466,11 +466,11 @@ static bool execResourceFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return result;
 }
 
-static bool queryResourcesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool queryResourcesFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autolist(BDeviceServiceResource) resources = b_device_service_client_query_resources_by_uri(client, argv[0]);
+    g_autolist(BCoreResource) resources = b_core_client_query_resources_by_uri(client, argv[0]);
     if (resources)
     {
         emitOutput("resources:\n");
@@ -478,20 +478,20 @@ static bool queryResourcesFunc(BDeviceServiceClient *client, gint argc, gchar **
         GList *sortedResources = NULL;
         for (GList *iter = resources; iter != NULL; iter = g_list_next(iter))
         {
-            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(iter->data);
+            BCoreResource *resource = B_CORE_RESOURCE(iter->data);
             sortedResources = g_list_insert_sorted(sortedResources, resource, (GCompareFunc) resourceSort);
         }
 
         for (GList *iter = sortedResources; iter != NULL; iter = g_list_next(iter))
         {
-            BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(iter->data);
+            BCoreResource *resource = B_CORE_RESOURCE(iter->data);
             g_autofree gchar *uri = NULL;
             g_autofree gchar *value = NULL;
 
             g_object_get(resource,
-                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI],
                          &uri,
-                         B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                         B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                          &value,
                          NULL);
             emitOutput("\t%s = %s\n", uri, stringCoalesce(value));
@@ -507,12 +507,12 @@ static bool queryResourcesFunc(BDeviceServiceClient *client, gint argc, gchar **
     return true;
 }
 
-static bool readMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool readMetadataFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
     g_autoptr(GError) err;
-    g_autofree gchar *value = b_device_service_client_read_metadata(client, argv[0], &err);
+    g_autofree gchar *value = b_core_client_read_metadata(client, argv[0], &err);
 
     if (err == NULL)
     {
@@ -526,11 +526,11 @@ static bool readMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return true;
 }
 
-static bool writeMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool writeMetadataFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1 || argc == 2, false);
 
-    bool result = b_device_service_client_write_metadata(client, argv[0], argc == 2 ? argv[1] : NULL);
+    bool result = b_core_client_write_metadata(client, argv[0], argc == 2 ? argv[1] : NULL);
     if (!result)
     {
         emitError("Failed to write metadata\n");
@@ -539,24 +539,24 @@ static bool writeMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return result;
 }
 
-static bool queryMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool queryMetadataFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
 
-    g_autolist(BDeviceServiceMetadata) metadata = b_device_service_client_get_metadata_by_uri(client, argv[0]);
+    g_autolist(BCoreMetadata) metadata = b_core_client_get_metadata_by_uri(client, argv[0]);
 
     if (metadata)
     {
         emitOutput("metadata:\n");
         for (GList *iter = metadata; iter != NULL; iter = g_list_next(iter))
         {
-            BDeviceServiceMetadata *meta = B_DEVICE_SERVICE_METADATA(iter->data);
+            BCoreMetadata *meta = B_CORE_METADATA(iter->data);
             g_autofree gchar *uri = NULL;
             g_autofree gchar *value = NULL;
             g_object_get(meta,
-                         B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_URI],
+                         B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_URI],
                          &uri,
-                         B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE],
+                         B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_VALUE],
                          &value,
                          NULL);
             emitOutput("\t%s=%s\n", uri, stringCoalesce(value));
@@ -570,15 +570,15 @@ static bool queryMetadataFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return true;
 }
 
-static bool getStatusFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool getStatusFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     (void) argc; // unused
     (void) argv; // unused
     bool result = false;
 
-    g_autoptr(BDeviceServiceStatus) status = b_device_service_client_get_status(client);
+    g_autoptr(BCoreStatus) status = b_core_client_get_status(client);
     g_autofree gchar *statusJson = NULL;
-    g_object_get(status, B_DEVICE_SERVICE_STATUS_PROPERTY_NAMES[B_DEVICE_SERVICE_STATUS_PROP_JSON], &statusJson, NULL);
+    g_object_get(status, B_CORE_STATUS_PROPERTY_NAMES[B_CORE_STATUS_PROP_JSON], &statusJson, NULL);
 
     if (!statusJson)
     {
@@ -593,7 +593,7 @@ static bool getStatusFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
     return result;
 }
 
-static void dumpResource(BDeviceServiceResource *resource, gchar *prefix)
+static void dumpResource(BCoreResource *resource, gchar *prefix)
 {
     if (resource == NULL)
     {
@@ -607,15 +607,15 @@ static void dumpResource(BDeviceServiceResource *resource, gchar *prefix)
     g_autofree gchar *type = NULL;
 
     g_object_get(resource,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_MODE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_MODE],
                  &resourceMode,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI],
                  &uri,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                  &value,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_DEVICE_UUID],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_DEVICE_UUID],
                  &ownerId,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_TYPE],
                  &type,
                  NULL);
 
@@ -639,14 +639,14 @@ static void dumpMetadata(GList *metadata, gchar *prefix)
     for (GList *metadatIter = metadata; metadatIter != NULL; metadatIter = metadatIter->next)
     {
         g_autofree gchar *value = NULL;
-        BDeviceServiceMetadata *metadata = B_DEVICE_SERVICE_METADATA(metadatIter->data);
+        BCoreMetadata *metadata = B_CORE_METADATA(metadatIter->data);
         g_object_get(
-            metadata, B_DEVICE_SERVICE_METADATA_PROPERTY_NAMES[B_DEVICE_SERVICE_METADATA_PROP_VALUE], &value, NULL);
+            metadata, B_CORE_METADATA_PROPERTY_NAMES[B_CORE_METADATA_PROP_VALUE], &value, NULL);
         emitOutput("%s\t%s\n", prefix, value);
     }
 }
 
-static void dumpEndpoint(BDeviceServiceEndpoint *endpoint, gchar *prefix)
+static void dumpEndpoint(BCoreEndpoint *endpoint, gchar *prefix)
 {
     if (endpoint == NULL)
     {
@@ -657,21 +657,21 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint, gchar *prefix)
     g_autofree gchar *profile = NULL;
     guint profileVersion;
     g_autofree gchar *ownerId = NULL;
-    g_autolist(BDeviceServiceResource) resources = NULL;
-    g_autolist(BDeviceServiceMetadata) metadata = NULL;
+    g_autolist(BCoreResource) resources = NULL;
+    g_autolist(BCoreMetadata) metadata = NULL;
 
     g_object_get(endpoint,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_URI],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_URI],
                  &uri,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE],
                  &profile,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_PROFILE_VERSION],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_PROFILE_VERSION],
                  &profileVersion,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_DEVICE_UUID],
                  &ownerId,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_RESOURCES],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_RESOURCES],
                  &resources,
-                 B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_METADATA],
+                 B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_METADATA],
                  &metadata,
                  NULL);
 
@@ -684,7 +684,7 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint, gchar *prefix)
     emitOutput("%s\tresources:\n", prefix);
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
-        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
         dumpResource(resource, "\t\t\t\t");
     }
 
@@ -696,37 +696,37 @@ static void dumpEndpoint(BDeviceServiceEndpoint *endpoint, gchar *prefix)
     }
 }
 
-static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc, char **argv)
+static bool dumpDeviceFunc(BCoreClient *client, int argc, char **argv)
 {
     (void) argc; // unused
     bool rc = false;
 
-    g_autoptr(BDeviceServiceDevice) device = b_device_service_client_get_device_by_id(client, argv[0]);
+    g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
 
     g_autofree gchar *deviceUri = NULL;
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *deviceClass = NULL;
     g_autofree gchar *managingDeviceDriver = NULL;
     guint deviceClassVersion;
-    g_autolist(BDeviceServiceResource) resources = NULL;
-    g_autolist(BDeviceServiceEndpoint) endpoints = NULL;
-    g_autolist(BDeviceServiceMetadata) metadata = NULL;
+    g_autolist(BCoreResource) resources = NULL;
+    g_autolist(BCoreEndpoint) endpoints = NULL;
+    g_autolist(BCoreMetadata) metadata = NULL;
 
 
     g_object_get(device,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_URI],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_URI],
                  &deviceUri,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS],
                  &deviceClass,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_DEVICE_CLASS_VERSION],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_DEVICE_CLASS_VERSION],
                  &deviceClassVersion,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_MANAGING_DEVICE_DRIVER],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_MANAGING_DEVICE_DRIVER],
                  &managingDeviceDriver,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_RESOURCES],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_RESOURCES],
                  &resources,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_ENDPOINTS],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_ENDPOINTS],
                  &endpoints,
-                 B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_METADATA],
+                 B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_METADATA],
                  &metadata,
                  NULL);
 
@@ -739,7 +739,7 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc, char **argv)
     emitOutput("\tresources:\n");
     for (GList *resourcesIter = resources; resourcesIter != NULL; resourcesIter = resourcesIter->next)
     {
-        BDeviceServiceResource *resource = B_DEVICE_SERVICE_RESOURCE(resourcesIter->data);
+        BCoreResource *resource = B_CORE_RESOURCE(resourcesIter->data);
         dumpResource(resource, "\t\t");
     }
 
@@ -747,7 +747,7 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc, char **argv)
     emitOutput("\tendpoints:\n");
     for (GList *endpointsIter = endpoints; endpointsIter != NULL; endpointsIter = endpointsIter->next)
     {
-        BDeviceServiceEndpoint *endpoint = B_DEVICE_SERVICE_ENDPOINT(endpointsIter->data);
+        BCoreEndpoint *endpoint = B_CORE_ENDPOINT(endpointsIter->data);
         dumpEndpoint(endpoint, "\t\t");
     }
 
@@ -761,23 +761,23 @@ static bool dumpDeviceFunc(BDeviceServiceClient *client, int argc, char **argv)
     return true;
 }
 
-static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc, char **argv)
+static bool dumpDevicesFunc(BCoreClient *client, int argc, char **argv)
 {
     (void) argc; // unused
     (void) argv; // unused
 
     bool rc = false;
 
-    g_autolist(BDeviceServiceDevice) devices = b_device_service_client_get_devices(client);
+    g_autolist(BCoreDevice) devices = b_core_client_get_devices(client);
 
     if (devices)
     {
         for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
         {
             g_autofree gchar *deviceId = NULL;
-            BDeviceServiceDevice *device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
             g_object_get(
-                device, B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID], &deviceId, NULL);
+                device, B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID], &deviceId, NULL);
             dumpDeviceFunc(client, 1, &deviceId);
         }
     }
@@ -785,10 +785,10 @@ static bool dumpDevicesFunc(BDeviceServiceClient *client, int argc, char **argv)
     return rc;
 }
 
-static bool removeDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool removeDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
-    bool result = b_device_service_client_remove_device(client, argv[0]);
+    bool result = b_core_client_remove_device(client, argv[0]);
 
     if (!result)
     {
@@ -797,23 +797,23 @@ static bool removeDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **ar
     return result;
 }
 
-static bool removeEndpointFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool removeEndpointFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
     bool result = true;
-    g_autoptr(BDeviceServiceEndpoint) endpoint = b_device_service_client_get_endpoint_by_uri(client, argv[0]);
+    g_autoptr(BCoreEndpoint) endpoint = b_core_client_get_endpoint_by_uri(client, argv[0]);
     if (endpoint)
     {
         g_autofree gchar *deviceUuid = NULL;
         g_autofree gchar *endpointId = NULL;
         g_object_get(endpoint,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_DEVICE_UUID],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_DEVICE_UUID],
                      &deviceUuid,
-                     B_DEVICE_SERVICE_ENDPOINT_PROPERTY_NAMES[B_DEVICE_SERVICE_ENDPOINT_PROP_ID],
+                     B_CORE_ENDPOINT_PROPERTY_NAMES[B_CORE_ENDPOINT_PROP_ID],
                      &endpointId,
                      NULL);
 
-        result = b_device_service_client_remove_endpoint_by_id(client, deviceUuid, endpointId);
+        result = b_core_client_remove_endpoint_by_id(client, deviceUuid, endpointId);
 
         if (!result)
         {
@@ -823,7 +823,7 @@ static bool removeEndpointFunc(BDeviceServiceClient *client, gint argc, gchar **
     return result;
 }
 
-static bool removeDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool removeDevicesFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     bool rc = true;
 
@@ -842,27 +842,27 @@ static bool removeDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **a
         emitOutput("Not removing devices\n");
         return true;
     }
-    g_autolist(BDeviceServiceDevice) devices = NULL;
+    g_autolist(BCoreDevice) devices = NULL;
     if (argc == 0)
     {
-        devices = b_device_service_client_get_devices(client);
+        devices = b_core_client_get_devices(client);
     }
     else
     {
-        devices = b_device_service_client_get_devices_by_device_class(client, argv[0]);
+        devices = b_core_client_get_devices_by_device_class(client, argv[0]);
     }
 
     if (devices)
     {
         for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
         {
-            g_autoptr(BDeviceServiceDevice) device = B_DEVICE_SERVICE_DEVICE(devicesIter->data);
+            g_autoptr(BCoreDevice) device = B_CORE_DEVICE(devicesIter->data);
             g_autofree gchar *uuid = NULL;
             g_object_get(G_OBJECT(device),
-                         B_DEVICE_SERVICE_DEVICE_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_PROP_UUID],
+                         B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],
                          &uuid,
                          NULL);
-            bool result = b_device_service_client_remove_device(client, uuid);
+            bool result = b_core_client_remove_device(client, uuid);
             if (!result)
             {
                 emitOutput("Failed to remove device: %s", uuid);
@@ -877,35 +877,35 @@ static bool removeDevicesFunc(BDeviceServiceClient *client, gint argc, gchar **a
     return rc;
 }
 
-static BDeviceServicePropertyProvider *getPropertyProvider(BDeviceServiceClient *self)
+static BCorePropertyProvider *getPropertyProvider(BCoreClient *self)
 {
-    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(self), NULL);
+    g_return_val_if_fail(B_CORE_CLIENT(self), NULL);
 
-    BDeviceServiceInitializeParamsContainer *paramsContainer = b_device_service_client_get_initialize_params(self);
+    BCoreInitializeParamsContainer *paramsContainer = b_core_client_get_initialize_params(self);
 
-    g_return_val_if_fail(B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER(paramsContainer), NULL);
+    g_return_val_if_fail(B_CORE_INITIALIZE_PARAMS_CONTAINER(paramsContainer), NULL);
 
-    BDeviceServicePropertyProvider *propertyProvider = b_device_service_initialize_params_container_get_property_provider(paramsContainer);
+    BCorePropertyProvider *propertyProvider = b_core_initialize_params_container_get_property_provider(paramsContainer);
 
     return propertyProvider;
 }
 
-static bool getPropertyFunc(BDeviceServiceClient *client, gint argc,
+static bool getPropertyFunc(BCoreClient *client, gint argc,
                                    gchar **argv)
 {
     (void) argc; //unused
     bool result = true;
 
-    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(client) != NULL, FALSE);
+    g_return_val_if_fail(B_CORE_CLIENT(client) != NULL, FALSE);
     g_return_val_if_fail(argv[0] != NULL, FALSE);
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+    g_autoptr(BCorePropertyProvider) propertyProvider = getPropertyProvider(client);
 
-    g_return_val_if_fail(B_DEVICE_SERVICE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
+    g_return_val_if_fail(B_CORE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
 
     g_autoptr(GError) error = NULL;
 
-    g_autofree gchar *value = b_device_service_property_provider_get_property(propertyProvider, argv[0], &error);
+    g_autofree gchar *value = b_core_property_provider_get_property(propertyProvider, argv[0], &error);
 
     if (error)
     {
@@ -920,22 +920,22 @@ static bool getPropertyFunc(BDeviceServiceClient *client, gint argc,
     return result;
 }
 
-static bool setPropertyFunc(BDeviceServiceClient *client, gint argc,
+static bool setPropertyFunc(BCoreClient *client, gint argc,
                                     gchar **argv)
 {
     (void) argc; //unused
 
-    g_return_val_if_fail(B_DEVICE_SERVICE_CLIENT(client) != NULL, FALSE);
+    g_return_val_if_fail(B_CORE_CLIENT(client) != NULL, FALSE);
     g_return_val_if_fail(argv[0] != NULL, FALSE);
     g_return_val_if_fail(argv[1] != NULL, FALSE);
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+    g_autoptr(BCorePropertyProvider) propertyProvider = getPropertyProvider(client);
 
-    g_return_val_if_fail(B_DEVICE_SERVICE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
+    g_return_val_if_fail(B_CORE_PROPERTY_PROVIDER(propertyProvider) != NULL, FALSE);
 
     g_autoptr(GError) error = NULL;
 
-    bool result = b_device_service_property_provider_set_property(propertyProvider, argv[0], argv[1], &error);
+    bool result = b_core_property_provider_set_property(propertyProvider, argv[0], argv[1], &error);
 
     if (error)
     {
@@ -945,7 +945,7 @@ static bool setPropertyFunc(BDeviceServiceClient *client, gint argc,
     return result;
 }
 
-static bool setDDlOverride(gchar *input, BDeviceServicePropertyProvider *provider)
+static bool setDDlOverride(gchar *input, BCorePropertyProvider *provider)
 {
     if (input == NULL)
     {
@@ -954,7 +954,7 @@ static bool setDDlOverride(gchar *input, BDeviceServicePropertyProvider *provide
     }
 
 
-    bool result = b_device_service_property_provider_set_property_string(
+    bool result = b_core_property_provider_set_property_string(
         provider, "deviceDescriptor.whitelist.url.override", input);
 
     if (result)
@@ -969,13 +969,13 @@ static bool setDDlOverride(gchar *input, BDeviceServicePropertyProvider *provide
     }
 }
 
-static bool ddlFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool ddlFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1 || argc == 2, false);
 
     bool result = false;
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = getPropertyProvider(client);
+    g_autoptr(BCorePropertyProvider) propertyProvider = getPropertyProvider(client);
 
     if (g_ascii_strcasecmp(argv[0], "override") == 0)
     {
@@ -1019,7 +1019,7 @@ static bool ddlFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
     }
     else if (g_ascii_strcasecmp(argv[0], "clearoverride") == 0)
     {
-        result = b_device_service_property_provider_set_property_string(
+        result = b_core_property_provider_set_property_string(
             propertyProvider, "deviceDescriptor.whitelist.url.override", NULL);
 
         if (result)
@@ -1033,7 +1033,7 @@ static bool ddlFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
     }
     else if (g_ascii_strcasecmp(argv[0], "process") == 0)
     {
-        b_device_service_process_device_descriptors(client);
+        b_core_process_device_descriptors(client);
         result = true;
     }
     else if (g_ascii_strcasecmp(argv[0], "bypass") == 0 ||
@@ -1042,7 +1042,7 @@ static bool ddlFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
         bool bypass = g_ascii_strcasecmp(argv[0], "bypass") == 0;
 
         result =
-            b_device_service_property_provider_set_property_bool(propertyProvider, "deviceDescriptorBypass", bypass);
+            b_core_property_provider_set_property_bool(propertyProvider, "deviceDescriptorBypass", bypass);
         if (result)
         {
             emitOutput("ddl %s\n", bypass ? "bypassed" : "no longer bypassed");

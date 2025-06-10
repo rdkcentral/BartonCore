@@ -28,14 +28,14 @@
 
 #include "threadCategory.h"
 
-#include "device-service-client.h"
-#include "device-service-reference-io.h"
+#include "barton-core-client.h"
+#include "barton-core-reference-io.h"
 
-static bool setNat64Enabled(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool setNat64Enabled(BCoreClient *client, gint argc, gchar **argv)
 {
     gboolean enabled = g_ascii_strcasecmp(argv[0], "true") == 0;
 
-    bool rc = b_device_service_client_thread_set_nat64_enabled(client, enabled);
+    bool rc = b_core_client_thread_set_nat64_enabled(client, enabled);
 
     if (rc)
     {
@@ -49,10 +49,10 @@ static bool setNat64Enabled(BDeviceServiceClient *client, gint argc, gchar **arg
     return rc;
 }
 
-static bool activateEphemeralKeyMode(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool activateEphemeralKeyMode(BCoreClient *client, gint argc, gchar **argv)
 {
     bool rc = false;
-    gchar *key = b_device_service_client_thread_activate_ephemeral_key_mode(client);
+    gchar *key = b_core_client_thread_activate_ephemeral_key_mode(client);
 
     if (key)
     {

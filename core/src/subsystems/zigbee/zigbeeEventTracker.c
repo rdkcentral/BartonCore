@@ -60,7 +60,7 @@
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
 #include "icConcurrent/threadUtils.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "subsystems/zigbee/zigbeeCommonIds.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
 #include "zigbeeClusters/iasZoneCluster.h"
@@ -937,19 +937,19 @@ void initEventTracker()
 
     // get properties at the start
     //
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    reportEventCollectingTurnedOn = b_device_service_property_provider_get_property_as_bool(
+    reportEventCollectingTurnedOn = b_core_property_provider_get_property_as_bool(
         propertyProvider, CPE_ZIGBEE_REPORT_DEVICE_INFO_ENABLED, DEFAULT_EVENT_COLLECT_ENABLED);
-    channelEventCollectingTurnedOn = b_device_service_property_provider_get_property_as_bool(
+    channelEventCollectingTurnedOn = b_core_property_provider_get_property_as_bool(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_ENABLED, DEFAULT_CHANNEL_COLLECT_ENABLED);
-    channelScanDuration = b_device_service_property_provider_get_property_as_uint32(
+    channelScanDuration = b_core_property_provider_get_property_as_uint32(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_CHANNEL_SCAN_DURATION_MS, DEFAULT_CHANNEL_SCAN_DUR_MS);
-    numofScanPerChannel = b_device_service_property_provider_get_property_as_uint32(
+    numofScanPerChannel = b_core_property_provider_get_property_as_uint32(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_PER_CHANNEL_NUMBER_OF_SCANS, DEFAULT_NUM_SCAN_PER_CHANNEL);
-    scanDelayPerChannel = b_device_service_property_provider_get_property_as_uint32(
+    scanDelayPerChannel = b_core_property_provider_get_property_as_uint32(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_CHANNEL_SCAN_DELAY_MS, DEFAULT_SCAN_DELAY_PER_CHANNEL_MS);
-    channelCollectionDelay = b_device_service_property_provider_get_property_as_uint32(
+    channelCollectionDelay = b_core_property_provider_get_property_as_uint32(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_COLLECTION_DELAY_MIN, DEFAULT_CHANNEL_COLLECT_DELAY_MIN);
 
     // need to init the conditional for channel collecting

@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "device-service-client.h"
+#include "barton-core-client.h"
 
-void registerEventHandlers(BDeviceServiceClient *client);
+void registerEventHandlers(BCoreClient *client);
 void unregisterEventHandlers(void);

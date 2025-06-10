@@ -26,7 +26,7 @@
  */
 
 #include "utils.h"
-#include "device-service-reference-io.h"
+#include "barton-core-reference-io.h"
 #include <icUtil/stringUtils.h>
 #include <private/deviceService/resourceModes.h>
 
@@ -53,7 +53,7 @@ gchar *getResourceValue(guint resourceMode, gchar *value)
     return (resourceMode & RESOURCE_MODE_SENSITIVE) ? (SENSITIVE_RESOURCE_VALUE_STRING) : (value);
 }
 
-void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundDetails *deviceFoundDetails)
+void printDeviceFoundDetails(const char *printPrefix, BCoreDeviceFoundDetails *deviceFoundDetails)
 {
     g_autofree gchar *deviceId = NULL;
     g_autofree gchar *manufacturer = NULL;
@@ -62,17 +62,17 @@ void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundD
     g_autofree gchar *firmwareVersion = NULL;
     g_object_get(
         G_OBJECT(deviceFoundDetails),
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_UUID],
+        B_CORE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_CORE_DEVICE_FOUND_DETAILS_PROP_UUID],
         &deviceId,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MANUFACTURER],
+        B_CORE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_CORE_DEVICE_FOUND_DETAILS_PROP_MANUFACTURER],
         &manufacturer,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_MODEL],
+        B_CORE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES[B_CORE_DEVICE_FOUND_DETAILS_PROP_MODEL],
         &model,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
-            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_HARDWARE_VERSION],
+        B_CORE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
+            [B_CORE_DEVICE_FOUND_DETAILS_PROP_HARDWARE_VERSION],
         &hardwareVersion,
-        B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
-            [B_DEVICE_SERVICE_DEVICE_FOUND_DETAILS_PROP_FIRMWARE_VERSION],
+        B_CORE_DEVICE_FOUND_DETAILS_PROPERTY_NAMES
+            [B_CORE_DEVICE_FOUND_DETAILS_PROP_FIRMWARE_VERSION],
         &firmwareVersion,
         NULL);
 
@@ -85,7 +85,7 @@ void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundD
                firmwareVersion);
 }
 
-gchar *getResourceDump(BDeviceServiceResource *resource)
+gchar *getResourceDump(BCoreResource *resource)
 {
     guint resourceMode;
     g_autofree gchar *id = NULL;
@@ -95,17 +95,17 @@ gchar *getResourceDump(BDeviceServiceResource *resource)
     g_autofree gchar *type = NULL;
 
     g_object_get(resource,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_MODE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_MODE],
                  &resourceMode,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_ID],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_ID],
                  &id,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_URI],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_URI],
                  &uri,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_VALUE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_VALUE],
                  &value,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_DEVICE_UUID],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_DEVICE_UUID],
                  &ownerId,
-                 B_DEVICE_SERVICE_RESOURCE_PROPERTY_NAMES[B_DEVICE_SERVICE_RESOURCE_PROP_TYPE],
+                 B_CORE_RESOURCE_PROPERTY_NAMES[B_CORE_RESOURCE_PROP_TYPE],
                  &type,
                  NULL);
 

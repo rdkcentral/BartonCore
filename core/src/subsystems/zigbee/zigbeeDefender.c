@@ -28,7 +28,7 @@
 #include "zigbeeDefender.h"
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <event/deviceEventProducer.h>
 #include <icLog/logging.h>
 #include <pthread.h>
@@ -52,18 +52,18 @@ void zigbeeDefenderConfigure()
 
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    panIdChangeThreshold = b_device_service_property_provider_get_property_as_uint32(
+    panIdChangeThreshold = b_core_property_provider_get_property_as_uint32(
         propertyProvider, ZIGBEE_DEFENDER_PAN_ID_CHANGE_THRESHOLD_OPTION, DEFENDER_PAN_ID_CHANGE_THRESHOLD_DEFAULT);
 
     panIdChangeWindowMillis =
-        b_device_service_property_provider_get_property_as_uint32(propertyProvider,
+        b_core_property_provider_get_property_as_uint32(propertyProvider,
                                                                   ZIGBEE_DEFENDER_PAN_ID_CHANGE_WINDOW_MILLIS_OPTION,
                                                                   DEFENDER_PAN_ID_CHANGE_WINDOW_MILLIS_DEFAULT);
 
     panIdChangeRestoreMillis =
-        b_device_service_property_provider_get_property_as_uint32(propertyProvider,
+        b_core_property_provider_get_property_as_uint32(propertyProvider,
                                                                   ZIGBEE_DEFENDER_PAN_ID_CHANGE_RESTORE_MILLIS_OPTION,
                                                                   DEFENDER_PAN_ID_CHANGE_RESTORE_MILLIS_DEFAULT);
 

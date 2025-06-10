@@ -21,7 +21,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-include(BDSAddCMockaTest)
+include(BCoreAddCMockaTest)
 
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")

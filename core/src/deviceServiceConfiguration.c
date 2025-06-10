@@ -26,7 +26,7 @@
  */
 
 #include "deviceServiceConfiguration.h"
-#include "device-service-initialize-params-container.h"
+#include "barton-core-initialize-params-container.h"
 #include "glib-object.h"
 #include "glib.h"
 #include "icConcurrent/threadUtils.h"
@@ -43,9 +43,9 @@
 static void accountIdChangeCallback(GObject *object, GParamSpec *pspec, gpointer userData);
 
 static pthread_mutex_t deviceServiceConfigurationMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-static BDeviceServiceInitializeParamsContainer *initializeParams = NULL;
+static BCoreInitializeParamsContainer *initializeParams = NULL;
 
-bool deviceServiceConfigurationStartup(BDeviceServiceInitializeParamsContainer *_initializeParams)
+bool deviceServiceConfigurationStartup(BCoreInitializeParamsContainer *_initializeParams)
 {
     g_return_val_if_fail(_initializeParams != NULL, false);
 
@@ -75,7 +75,7 @@ void deviceServiceConfigurationShutdown(void)
     g_clear_object(&initializeParams);
 }
 
-BDeviceServiceTokenProvider *deviceServiceConfigurationGetTokenProvider(void)
+BCoreTokenProvider *deviceServiceConfigurationGetTokenProvider(void)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);
 
@@ -85,17 +85,17 @@ BDeviceServiceTokenProvider *deviceServiceConfigurationGetTokenProvider(void)
         return NULL;
     }
 
-    BDeviceServiceTokenProvider *retVal = NULL;
+    BCoreTokenProvider *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER],
                  &retVal,
                  NULL);
 
     return retVal;
 }
 
-BDeviceServiceNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCredentialsProvider(void)
+BCoreNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCredentialsProvider(void)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);
 
@@ -105,17 +105,17 @@ BDeviceServiceNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCr
         return NULL;
     }
 
-    BDeviceServiceNetworkCredentialsProvider *retVal = NULL;
+    BCoreNetworkCredentialsProvider *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER],
                  &retVal,
                  NULL);
 
     return retVal;
 }
 
-BDeviceServicePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void)
+BCorePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);
 
@@ -125,10 +125,10 @@ BDeviceServicePropertyProvider *deviceServiceConfigurationGetPropertyProvider(vo
         return NULL;
     }
 
-    BDeviceServicePropertyProvider *retVal = NULL;
+    BCorePropertyProvider *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER],
                  &retVal,
                  NULL);
 
@@ -147,8 +147,8 @@ gchar *deviceServiceConfigurationGetStorageDir(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR],
                  &retVal,
                  NULL);
 
@@ -172,8 +172,8 @@ gchar *deviceServiceConfigurationGetFirmwareFileDir(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR],
                  &retVal,
                  NULL);
 
@@ -197,8 +197,8 @@ gchar *deviceServiceConfigurationGetMatterStorageDir(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR],
                  &retVal,
                  NULL);
 
@@ -217,8 +217,8 @@ gchar *deviceServiceConfigurationGetMatterAttestationTrustStoreDir(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR],
                  &retVal,
                  NULL);
 
@@ -237,8 +237,8 @@ gchar *deviceServiceConfigurationGetAccountId(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
                  &retVal,
                  NULL);
 
@@ -256,8 +256,8 @@ bool deviceServiceConfigurationSetAccountId(const gchar *accountId)
     }
 
     g_object_set(initializeParams,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
                  accountId,
                  NULL);
 
@@ -277,8 +277,8 @@ bool deviceServiceConfigurationRegisterAccountIdListener(deviceServiceConfigurat
     }
 
     g_autofree gchar *signalName = g_strdup_printf("notify::%s",
-                                                   B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                                                       [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID]);
+                                                   B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                                                       [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID]);
 
     g_signal_connect(initializeParams, signalName, G_CALLBACK(accountIdChangeCallback), listener);
 
@@ -309,8 +309,8 @@ static void accountIdChangeCallback(GObject *object, GParamSpec *pspec, gpointer
 
     g_autofree gchar *accountId = NULL;
     g_object_get(object,
-                 B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
-                     [B_DEVICE_SERVICE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID],
                  &accountId,
                  NULL);
 

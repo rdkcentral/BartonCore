@@ -25,7 +25,7 @@
 # Created by Kevin Funderburg on 12/16/2024
 #
 
-# In order for pytest to successfully discover tests with libbrtnDeviceServiceShared.so
+# In order for pytest to successfully discover tests with libbCore.so
 # compiled with address santizer, the libasan.so must be pre-loaded before invoking
 # `pytest --collect-only`. However, preloading libasan.so enables AddressSanitizer for the
 # entire process, not just for the specific library compiled with AddressSanitizer.

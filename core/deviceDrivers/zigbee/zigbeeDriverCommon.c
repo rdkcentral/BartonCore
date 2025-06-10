@@ -30,7 +30,7 @@
 #include "deviceServiceCommFail.h"
 #include "deviceServiceConfiguration.h"
 #include "icTypes/icLinkedList.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "zigbeeClusters/alarmsCluster.h"
 #include "zigbeeClusters/pollControlCluster.h"
 #include <commonDeviceDefs.h>
@@ -1086,14 +1086,14 @@ static bool processDeviceDescriptor(void *ctx, icDevice *device, DeviceDescripto
                     firmwareUpgradeContext->commonDriver = commonDriver;
 
                     uint32_t delaySeconds = 1;
-                    g_autoptr(BDeviceServicePropertyProvider) propertyProvider =
+                    g_autoptr(BCorePropertyProvider) propertyProvider =
                         deviceServiceConfigurationGetPropertyProvider();
-                    bool noDelay = b_device_service_property_provider_get_property_as_bool(
+                    bool noDelay = b_core_property_provider_get_property_as_bool(
                         propertyProvider, ZIGBEE_FW_UPGRADE_NO_DELAY_BOOL_PROPERTY, false);
 
                     if (!noDelay)
                     {
-                        delaySeconds = b_device_service_property_provider_get_property_as_uint32(
+                        delaySeconds = b_core_property_provider_get_property_as_uint32(
                             propertyProvider, FIRMWARE_UPGRADE_DELAYSECS, FIRMWARE_UPGRADE_DELAYSECS_DEFAULT);
                     }
 
@@ -4034,10 +4034,10 @@ downloadFirmwareFile(const char *firmwareBaseUrl, const char *firmwareDirectory,
         {
             // set standard curl options
             const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-            g_autoptr(BDeviceServicePropertyProvider) propertyProvider =
+            g_autoptr(BCorePropertyProvider) propertyProvider =
                 deviceServiceConfigurationGetPropertyProvider();
             g_autofree char *propValue =
-                b_device_service_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
+                b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
 
             sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
             applyStandardCurlOptions(curl, url, 60, NULL, verifyFlag, false);
@@ -4126,9 +4126,9 @@ bool zigbeeDriverCommonDownloadFirmwareFiles(const DeviceDescriptor *dd)
     if (firmwareDirectory != NULL)
     {
         // This property gets straight mapped to a CPE property
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         scoped_generic char *firmwareBaseUrl =
-            b_device_service_property_provider_get_property_as_string(propertyProvider, DEVICE_FIRMWARE_URL_NODE, NULL);
+            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_FIRMWARE_URL_NODE, NULL);
 
         if (firmwareBaseUrl == NULL)
         {
@@ -4270,8 +4270,8 @@ static void doFirmwareUpgrade(void *arg)
     {
         icLogError(LOG_TAG, "%s: failed to download firmware files", __FUNCTION__);
 
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        uint32_t retrySeconds = b_device_service_property_provider_get_property_as_uint32(
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        uint32_t retrySeconds = b_core_property_provider_get_property_as_uint32(
             propertyProvider, FIRMWARE_UPGRADE_RETRYDELAYSECS, FIRMWARE_UPGRADE_RETRYDELAYSECS_DEFAULT);
 
         icLogInfo(LOG_TAG, "%s: rescheduling for %" PRIu32 " seconds", __FUNCTION__, retrySeconds);

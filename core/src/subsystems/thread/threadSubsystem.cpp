@@ -108,8 +108,8 @@ static bool initialize(subsystemInitializedFunc initializedCallback, subsystemDe
     // Retry initialization until success
     monitorTask = createPolicyRepeatingTask(initTaskFunc, nullptr, policy, nullptr);
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    scoped_generic char *defaultNetworkName = b_device_service_property_provider_get_property_as_string(
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *defaultNetworkName = b_core_property_provider_get_property_as_string(
         propertyProvider, DEFAULT_THREAD_NETWORK_NAME_PROP_KEY, bartonThreadNetworkName.c_str());
     bartonThreadNetworkName = defaultNetworkName;
     icDebug("Using Thread network name: %s", bartonThreadNetworkName.c_str());

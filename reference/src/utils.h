@@ -27,8 +27,8 @@
 
 #pragma once
 
-#include "device-service-device-found-details.h"
-#include "device-service-resource.h"
+#include "barton-core-device-found-details.h"
+#include "barton-core-resource.h"
 #include <glib.h>
 
 
@@ -70,12 +70,12 @@ gchar *getResourceValue(guint resourceMode, gchar *value);
 /**
  * printDeviceFoundDetails
  * @printPrefix: prefix value to print.
- * @deviceFoundDetails: the instance of BDeviceServiceDeviceFoundDetails.
+ * @deviceFoundDetails: the instance of BCoreDeviceFoundDetails.
  *
  * @brief Prints the device related information.
  *
  */
-void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundDetails *);
+void printDeviceFoundDetails(const char *printPrefix, BCoreDeviceFoundDetails *);
 
 /**
  * getResourceDump
@@ -86,4 +86,4 @@ void printDeviceFoundDetails(const char *printPrefix, BDeviceServiceDeviceFoundD
  *
  * Returns: (transfer full): gchar* - a string.
  */
-gchar *getResourceDump(BDeviceServiceResource *resource);
+gchar *getResourceDump(BCoreResource *resource);

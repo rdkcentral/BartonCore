@@ -28,7 +28,7 @@
 #include "deviceStorageMonitor.h"
 #include "deviceServiceConfiguration.h"
 #include "event/deviceEventProducer.h"
-#include "events/device-service-storage-changed-event.h"
+#include "events/barton-core-storage-changed-event.h"
 #include "icUtil/stringUtils.h"
 
 static GFileMonitor *monitor = NULL;

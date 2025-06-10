@@ -43,7 +43,7 @@
 #include <platform/CommissionableDataProvider.h>
 
 extern "C" {
-#include <provider/device-service-property-provider.h>
+#include <provider/barton-core-property-provider.h>
 }
 
 namespace barton

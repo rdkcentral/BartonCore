@@ -28,8 +28,8 @@
 # file via the 'add_subdirectory()' routine.
 #
 #--------------------------------------------------------------------------------------
-include(BDSConfigureGLib)
-include(BDSAddCMockaTest)
+include(BCoreConfigureGLib)
+include(BCoreAddCMockaTest)
 
 # setup include paths
 include_directories(

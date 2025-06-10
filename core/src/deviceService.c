@@ -28,12 +28,12 @@
 #define LOG_TAG      "deviceService"
 #define G_LOG_DOMAIN LOG_TAG
 
-#include "device-service-client.h"
+#include "barton-core-client.h"
 #include "deviceDescriptor.h"
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
 #include "icConfig/storage.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <curl/curl.h>
 #include <glib.h>
 #include <inttypes.h>
@@ -46,7 +46,7 @@
 #include "deviceServiceCommFail.h"
 #include "deviceStorageMonitor.h"
 #include "event/deviceEventHandler.h"
-#include "events/device-service-storage-changed-event.h"
+#include "events/barton-core-storage-changed-event.h"
 #include <cjson/cJSON.h>
 #include <commonDeviceDefs.h>
 #include <database/jsonDatabase.h>
@@ -104,7 +104,7 @@ static pthread_mutex_t lowPowerModeMutex = PTHREAD_MUTEX_INITIALIZER;
 char *deviceServiceConfigDir = NULL; // non-static with namespace friendly name so it can be altered by test code
 
 static pthread_mutex_t deviceServiceClientMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-static BDeviceServiceClient *client = NULL;
+static BCoreClient *client = NULL;
 
 /* Private functions */
 static DeviceDriver *getDeviceDriverForUri(const char *uri);
@@ -1567,7 +1567,7 @@ static void stopMainLoop(void)
     g_main_loop_unref(g_steal_pointer(&eventLoop));
 }
 
-bool deviceServiceInitialize(BDeviceServiceClient *service)
+bool deviceServiceInitialize(BCoreClient *service)
 {
     g_return_val_if_fail(service != NULL, false);
 
@@ -1577,7 +1577,7 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
     client = g_object_ref(service);
     mutexUnlock(&deviceServiceClientMutex);
 
-    g_autoptr(BDeviceServiceInitializeParamsContainer) params = b_device_service_client_get_initialize_params(service);
+    g_autoptr(BCoreInitializeParamsContainer) params = b_core_client_get_initialize_params(service);
 
     deviceServiceConfigurationStartup(params);
 
@@ -1618,7 +1618,7 @@ bool deviceServiceInitialize(BDeviceServiceClient *service)
  */
 bool deviceServiceStart(void)
 {
-    g_autoptr(BDeviceServiceClient) service = NULL;
+    g_autoptr(BCoreClient) service = NULL;
     mutexLock(&deviceServiceClientMutex);
     service = g_object_ref(client);
     mutexUnlock(&deviceServiceClientMutex);
@@ -1693,9 +1693,9 @@ bool deviceServiceStart(void)
 
     subsystemManagerAllDriversStarted();
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     deviceServiceCommFailSetTimeoutSecs(
-        b_device_service_property_provider_get_property_as_uint32(
+        b_core_property_provider_get_property_as_uint32(
             propertyProvider, TOUCHSCREEN_SENSOR_COMMFAIL_TROUBLE_DELAY, DEFAULT_COMM_FAIL_MINS) *
         60);
     return true;
@@ -2374,9 +2374,9 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
     icDeviceResource *tzResource = deviceServiceFindDeviceResourceById(device, COMMON_DEVICE_RESOURCE_TIMEZONE);
     if (tzResource != NULL)
     {
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         char *posixTZ =
-            b_device_service_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
+            b_core_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
         if (posixTZ != NULL)
         {
             deviceServiceWriteResource(tzResource->uri, posixTZ);
@@ -2897,9 +2897,9 @@ static void scheduleDeviceDescriptorsProcessingTask(void)
     {
         delayUnits delayTimeUnits = DELAY_SECS;
 
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-        if (b_device_service_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) ==
+        if (b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) ==
             true)
         {
             delayTimeUnits = DELAY_MILLIS;
@@ -3006,9 +3006,9 @@ static void denylistDevice(const char *uuid)
     }
     else
     {
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         AUTO_CLEAN(free_generic__auto)
-        char *propValue = b_device_service_property_provider_get_property_as_string(
+        char *propValue = b_core_property_provider_get_property_as_string(
             propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
         AUTO_CLEAN(cJSON_Delete__auto) cJSON *denylistedDevicesArray = cJSON_Parse(propValue);
 
@@ -3026,7 +3026,7 @@ static void denylistDevice(const char *uuid)
         cJSON_AddItemToArray(denylistedDevicesArray, cJSON_CreateString(uuid));
 
         AUTO_CLEAN(free_generic__auto) char *newPropValue = cJSON_PrintUnformatted(denylistedDevicesArray);
-        b_device_service_property_provider_set_property_string(
+        b_core_property_provider_set_property_string(
             propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, newPropValue);
 
         icLogDebug(LOG_TAG, "Device uuid=%s is now added to denylist", uuid);
@@ -3037,9 +3037,9 @@ bool deviceServiceIsDeviceDenylisted(const char *uuid)
 {
     bool retVal = false;
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     AUTO_CLEAN(free_generic__auto)
-    char *denylistedDevices = b_device_service_property_provider_get_property_as_string(
+    char *denylistedDevices = b_core_property_provider_get_property_as_string(
         propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
 
     if (stringIsEmpty(denylistedDevices) == false)

@@ -28,9 +28,9 @@
 #ifndef FLEXCORE_DEVICESERVICE_H
 #define FLEXCORE_DEVICESERVICE_H
 
-#include "device-service-client.h"
+#include "barton-core-client.h"
 #include "deviceServiceStatus.h"
-#include "events/device-service-storage-changed-event.h"
+#include "events/barton-core-storage-changed-event.h"
 #include <device/icDevice.h>
 #include <device/icDeviceEndpoint.h>
 #include <device/icDeviceResource.h>
@@ -40,7 +40,7 @@
 
 // TODO: These shouldn't be public, just moving them here now for compiling a component of existing
 // barton clients for now.
-bool deviceServiceInitialize(BDeviceServiceClient *service);
+bool deviceServiceInitialize(BCoreClient *service);
 bool deviceServiceStart(void);
 void deviceServiceShutdown();
 void allServicesAvailableNotify(void);

@@ -31,13 +31,13 @@
 #include <cmocka.h>
 
 #include "deviceServiceConfiguration.h"
-#include "device-service-initialize-params-container.h"
+#include "barton-core-initialize-params-container.h"
 
 static int setup(void **state)
 {
     (void)state;
 
-    g_autoptr(BDeviceServiceInitializeParamsContainer) initializeParams = b_device_service_initialize_params_container_new();
+    g_autoptr(BCoreInitializeParamsContainer) initializeParams = b_core_initialize_params_container_new();
 
     deviceServiceConfigurationStartup(initializeParams);
 

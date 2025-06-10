@@ -26,8 +26,8 @@
  */
 
 #include "command.h"
-#include "device-service-client.h"
-#include "device-service-reference-io.h"
+#include "barton-core-client.h"
+#include "barton-core-reference-io.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -110,7 +110,7 @@ void commandSetAdvanced(Command *command)
     }
 }
 
-bool commandExecute(BDeviceServiceClient *client, const Command *command, gint argc, gchar **argv)
+bool commandExecute(BCoreClient *client, const Command *command, gint argc, gchar **argv)
 {
     bool result = false;
 

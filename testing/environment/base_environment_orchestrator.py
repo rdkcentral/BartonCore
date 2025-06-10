@@ -32,8 +32,8 @@ from threading import Condition
 import shutil
 
 import gi
-gi.require_version("BDeviceService", "1.0")
-from gi.repository import BDeviceService
+gi.require_version("BCore", "1.0")
+from gi.repository import BCore
 
 from testing.credentials import network_credentials_provider
 
@@ -46,9 +46,9 @@ class BaseEnvironmentOrchestrator(ABC):
     classes.
 
     Attributes:
-        _barton_client (BDeviceService.Client): The client used to interact with the
+        _barton_client (BCore.Client): The client used to interact with the
             Barton device service.
-        _barton_client_params (BDeviceService.InitializeParamsContainer): The parameters
+        _barton_client_params (BCore.InitializeParamsContainer): The parameters
             used to initialize and configure Barton client.
         _ready_for_devices_condition (Condition): Condition variable to signal when
             the environment is ready for devices.
@@ -61,8 +61,8 @@ class BaseEnvironmentOrchestrator(ABC):
         _matter_storage_path (str): Path to the storage directory for Matter data.
     """
 
-    _barton_client: BDeviceService.Client
-    _barton_client_params: BDeviceService.InitializeParamsContainer
+    _barton_client: BCore.Client
+    _barton_client_params: BCore.InitializeParamsContainer
     _ready_for_devices_condition: Condition
     _ready_to_commission: bool
     _device_added_condition: Condition
@@ -89,7 +89,7 @@ class BaseEnvironmentOrchestrator(ABC):
         """
         Initialize the Barton client.
         """
-        self._barton_client_params = BDeviceService.InitializeParamsContainer()
+        self._barton_client_params = BCore.InitializeParamsContainer()
         self._barton_client_params.set_storage_dir(self._barton_storage_path)
         self._barton_client_params.set_matter_storage_dir(self._matter_storage_path)
         self._barton_client_params.set_matter_attestation_trust_store_dir(self._matter_storage_path)
@@ -100,13 +100,13 @@ class BaseEnvironmentOrchestrator(ABC):
 
         # In pygobject, gobject properties map directly to object attributes where
         # - is replaced by _
-        self._barton_client = BDeviceService.Client(initialize_params=self._barton_client_params)
+        self._barton_client = BCore.Client(initialize_params=self._barton_client_params)
 
         self._barton_client.connect(
-            BDeviceService.CLIENT_SIGNAL_NAME_STATUS_CHANGED, self._on_status_changed
+            BCore.CLIENT_SIGNAL_NAME_STATUS_CHANGED, self._on_status_changed
         )
         self._barton_client.connect(
-            BDeviceService.CLIENT_SIGNAL_NAME_DEVICE_ADDED, self._on_device_added
+            BCore.CLIENT_SIGNAL_NAME_DEVICE_ADDED, self._on_device_added
         )
 
     @abstractmethod
@@ -118,12 +118,12 @@ class BaseEnvironmentOrchestrator(ABC):
         """
         pass
 
-    def get_client(self) -> BDeviceService.Client:
+    def get_client(self) -> BCore.Client:
         """
         Returns the Barton client instance.
 
         Returns:
-            BDeviceService.Client: The Barton client instance.
+            BCore.Client: The Barton client instance.
         """
         return self._barton_client
 
@@ -133,18 +133,18 @@ class BaseEnvironmentOrchestrator(ABC):
         """
         self._barton_client.start()
 
-    def _on_status_changed(self, _object, statusEvent: BDeviceService.StatusEvent):
+    def _on_status_changed(self, _object, statusEvent: BCore.StatusEvent):
         """
         Handles the status change event for a device service when the status of the device
         service changes.
 
         Args:
             _object: The object that triggered the status change event.
-            statusEvent (BDeviceService.StatusEvent): The event containing the status change details.
+            statusEvent (BCore.StatusEvent): The event containing the status change details.
         """
         if (
             statusEvent.props.reason
-            == BDeviceService.StatusChangedReason.READY_FOR_DEVICE_OPERATION
+            == BCore.StatusChangedReason.READY_FOR_DEVICE_OPERATION
         ):
             with self._ready_for_devices_condition:
                 self._ready_to_commission = True
@@ -162,13 +162,13 @@ class BaseEnvironmentOrchestrator(ABC):
             self._ready_to_commission
         ), "Timed out waiting for Barton to be ready for commissioning"
 
-    def _on_device_added(self, _object, device: BDeviceService.DeviceAddedEvent):
+    def _on_device_added(self, _object, device: BCore.DeviceAddedEvent):
         """
         Callback function that is triggered when a device is added.
 
         Args:
             _object: The object that triggered the event.
-            device (BDeviceService.DeviceAddedEvent): The event object containing
+            device (BCore.DeviceAddedEvent): The event object containing
                 details about the added device.
         """
         with self._device_added_condition:

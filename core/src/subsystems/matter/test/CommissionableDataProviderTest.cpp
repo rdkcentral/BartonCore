@@ -34,10 +34,10 @@
 
 // C includes
 extern "C" {
-#include "device-service-properties.h"
+#include "barton-core-properties.h"
 #include "deviceServiceConfiguration.h"
-#include "provider/device-service-default-property-provider.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-default-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "icTypes/icStringHashMap.h"
 }
 
@@ -46,13 +46,13 @@ static GHashTable *properties; // hash table to simulate property storage
 // C function mocks
 extern "C" {
 
-static BDeviceServicePropertyProvider *mockPropertyProvider = nullptr;
+static BCorePropertyProvider *mockPropertyProvider = nullptr;
 
-BDeviceServicePropertyProvider *__wrap_deviceServiceConfigurationGetPropertyProvider()
+BCorePropertyProvider *__wrap_deviceServiceConfigurationGetPropertyProvider()
 {
     if (mockPropertyProvider == nullptr)
     {
-        mockPropertyProvider = (BDeviceServicePropertyProvider *) b_device_service_default_property_provider_new();
+        mockPropertyProvider = (BCorePropertyProvider *) b_core_default_property_provider_new();
         g_assert(G_IS_OBJECT(mockPropertyProvider));
     }
 
@@ -181,22 +181,22 @@ using namespace ::testing;
  */
 TEST_F(CustomCommissionableDataProviderTest, ProvideValidCommissionableDataTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     // Test that the getter APIs return the expected values.
     // The getter APIs will also return an error if the values found are invalid, so in this test, they must return
@@ -230,22 +230,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideValidCommissionableDataTest)
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidDiscriminatorTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR_INVALID);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR_INVALID);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint16_t setupDiscriminator;
     EXPECT_NE(commissionableDataProvider->GetSetupDiscriminator(setupDiscriminator), CHIP_NO_ERROR);
@@ -253,22 +253,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidDiscriminatorTest)
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pIterationCountTooSmallTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT_TOO_SMALL);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT_TOO_SMALL);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint32_t spake2pIterationCount;
     EXPECT_NE(commissionableDataProvider->GetSpake2pIterationCount(spake2pIterationCount), CHIP_NO_ERROR);
@@ -276,22 +276,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pIterationCount
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pIterationCountTooLargeTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT_TOO_LARGE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT_TOO_LARGE);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint32_t spake2pIterationCount;
     EXPECT_NE(commissionableDataProvider->GetSpake2pIterationCount(spake2pIterationCount), CHIP_NO_ERROR);
@@ -299,22 +299,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pIterationCount
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest1)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint32_t setupPasscode;
     EXPECT_NE(commissionableDataProvider->GetSetupPasscode(setupPasscode), CHIP_NO_ERROR);
@@ -322,22 +322,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest1)
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest2)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID_2);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID_2);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint32_t setupPasscode;
     EXPECT_NE(commissionableDataProvider->GetSetupPasscode(setupPasscode), CHIP_NO_ERROR);
@@ -345,22 +345,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest2)
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest3)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID_3);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE_INVALID_3);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     uint32_t setupPasscode;
     EXPECT_NE(commissionableDataProvider->GetSetupPasscode(setupPasscode), CHIP_NO_ERROR);
@@ -368,22 +368,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidPasscodeTest3)
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pSaltTooShortTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_TOO_SHORT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_TOO_SHORT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     std::vector<uint8_t> saltVector(chip::Crypto::kSpake2p_Max_PBKDF_Salt_Length);
     chip::MutableByteSpan spake2pSalt(saltVector.data(), saltVector.size());
@@ -392,22 +392,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pSaltTooShortTe
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pSaltTooLongTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_TOO_LONG);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_TOO_LONG);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     std::vector<uint8_t> saltVector(chip::Crypto::kSpake2p_Max_PBKDF_Salt_Length);
     chip::MutableByteSpan spake2pSalt(saltVector.data(), saltVector.size());
@@ -416,22 +416,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pSaltTooLongTes
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pVerifierTooShortTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER_TOO_SHORT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER_TOO_SHORT);
 
     std::vector<uint8_t> verifierVector(chip::Crypto::kSpake2p_VerifierSerialized_Length);
     chip::MutableByteSpan spake2pVerifier(verifierVector.data(), verifierVector.size());
@@ -441,22 +441,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pVerifierTooSho
 
 TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pVerifierTooLongTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER_TOO_LONG);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER_TOO_LONG);
 
     std::vector<uint8_t> verifierVector(chip::Crypto::kSpake2p_VerifierSerialized_Length);
     chip::MutableByteSpan spake2pVerifier(verifierVector.data(), verifierVector.size());
@@ -470,22 +470,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideInvalidSpake2pVerifierTooLon
  */
 TEST_F(CustomCommissionableDataProviderTest, ProvideBadSpake2pIterationCountMatchTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT2);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT2);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     // Verify that this new iteration count is indeed valid...
     uint32_t spake2pIterationCount;
@@ -505,22 +505,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideBadSpake2pIterationCountMatc
  */
 TEST_F(CustomCommissionableDataProviderTest, ProvideBadPasscodeMatchTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE + 1);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE + 1);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     // Verify that this new passcode is indeed valid...
     uint32_t setupPasscode;
@@ -540,22 +540,22 @@ TEST_F(CustomCommissionableDataProviderTest, ProvideBadPasscodeMatchTest)
  */
 TEST_F(CustomCommissionableDataProviderTest, ProvideBadSaltMatchTest)
 {
-    g_autoptr(BDeviceServicePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    b_device_service_property_provider_set_property_uint16(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, TEST_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, TEST_ITERATION_COUNT);
 
-    b_device_service_property_provider_set_property_uint32(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        mockProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, TEST_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_MISMATCH);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, TEST_SALT_MISMATCH);
 
-    b_device_service_property_provider_set_property_string(
-        mockProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
+    b_core_property_provider_set_property_string(
+        mockProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, TEST_VERIFIER);
 
     // Verify that this new salt is indeed valid...
     std::vector<uint8_t> saltVector(chip::Crypto::kSpake2p_Max_PBKDF_Salt_Length);

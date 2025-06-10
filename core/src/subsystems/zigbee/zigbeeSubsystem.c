@@ -43,7 +43,7 @@
 #include "deviceServicePrivate.h"
 #include "deviceServiceProperties.h"
 #include "icTypes/icLinkedList.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "subsystems/zigbee/zigbeeAttributeTypes.h"
 #include "subsystems/zigbee/zigbeeCommonIds.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
@@ -446,9 +446,9 @@ __attribute__((constructor)) static void registerSubsystem(void)
 
 static void waitForInitialZigbeeCoreStartup(void)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     bool waitForZigbeeCore =
-        b_device_service_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_WATCHDOG_ENABLED_PROP, true);
+        b_core_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_WATCHDOG_ENABLED_PROP, true);
     if (waitForZigbeeCore == false)
     {
         icLogDebug(LOG_TAG, "Zigbee Watchdog disabled, skipping wait for ZigbeeCore to start");
@@ -776,8 +776,8 @@ static bool initializeNetwork(void)
 {
     bool result = false;
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autoptr(GHashTable) allProps = b_device_service_property_provider_get_all_properties(propertyProvider);
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(GHashTable) allProps = b_core_property_provider_get_all_properties(propertyProvider);
     scoped_icStringHashMap *properties = stringHashMapCreate();
 
     GHashTableIter iter;
@@ -819,7 +819,7 @@ static bool initializeNetwork(void)
     }
 
     uint64_t localEui64 = loadLocalEui64();
-    scoped_generic char *region = b_device_service_property_provider_get_property_as_string(
+    scoped_generic char *region = b_core_property_provider_get_property_as_string(
         propertyProvider, CPE_REGION_CODE_PROPERTY_NAME, "US");
 
     for (int i = 0; i < MAX_NETWORK_INIT_RETRIES; ++i)
@@ -1850,9 +1850,9 @@ static uint64_t loadLocalEui64(void)
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
     uint64_t localEui64 = 0;
 
-    g_autoptr(BDeviceServicePropertyProvider) propProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propProvider = deviceServiceConfigurationGetPropertyProvider();
     g_autofree gchar *localEui64String =
-        b_device_service_property_provider_get_property_as_string(propProvider, LOCAL_EUI64_PROP_KEY, NULL);
+        b_core_property_provider_get_property_as_string(propProvider, LOCAL_EUI64_PROP_KEY, NULL);
 
     errno = 0;
     gchar *endptr = NULL;
@@ -3077,13 +3077,13 @@ cJSON *zigbeeSubsystemGetAndClearCounters(void)
 static uint8_t calculateBestChannel(void)
 {
     uint8_t result = 0; // invalid channel default
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    uint32_t scanDurationMillis = b_device_service_property_provider_get_property_as_uint32(
+    uint32_t scanDurationMillis = b_core_property_provider_get_property_as_uint32(
         propertyProvider, CPE_DIAGNOSTIC_ZIGBEEDATA_CHANNEL_SCAN_DURATION_MS, DEFAULT_ZIGBEE_CHANNEL_SCAN_DUR_MILLIS);
 
     uint32_t scanCount =
-        b_device_service_property_provider_get_property_as_uint32(propertyProvider,
+        b_core_property_provider_get_property_as_uint32(propertyProvider,
                                                                   CPE_DIAGNOSTIC_ZIGBEEDATA_PER_CHANNEL_NUMBER_OF_SCANS,
                                                                   DEFAULT_ZIGBEE_PER_CHANNEL_NUMBER_OF_SCANS);
 
@@ -3247,10 +3247,10 @@ static void startChannelChangeDeviceWatchdog(uint8_t previousChannel, uint8_t ta
     //  channels.  These devices wont prevent a channel change if they don't follow to the new
     //  channel.
     icHashMap *deviceIdsInCommFail = getDeviceIdsInCommFail();
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     uint32_t rejoinTimeoutMinutes =
-        b_device_service_property_provider_get_property_as_uint32(propertyProvider,
+        b_core_property_provider_get_property_as_uint32(propertyProvider,
                                                                   CPE_ZIGBEE_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES,
                                                                   DEFAULT_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES);
 
@@ -3262,7 +3262,7 @@ static void startChannelChangeDeviceWatchdog(uint8_t previousChannel, uint8_t ta
     arg->maxRejoinTimeoutMillis = rejoinTimeoutMinutes * 60ULL * 1000ULL;
     // read fast timers property
     bool fastTimersForTesting =
-        b_device_service_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false);
+        b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false);
     scheduleDelayTask(
         rejoinTimeoutMinutes, fastTimersForTesting ? DELAY_MILLIS : DELAY_MINS, channelChangeDeviceWatchdogTask, arg);
 }
@@ -3293,15 +3293,15 @@ static void restartChannelChangeDeviceWatchdogIfRequired(void)
 ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
 {
     ChannelChangeResponse result = {.channelNumber = 0, .responseCode = channelChangeFailed};
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     pthread_mutex_lock(&channelChangeMutex);
 
-#ifdef BRTN_DS_SUPPORT_ALARMS
+#ifdef B_CORE_SUPPORT_ALARMS
     AUTO_CLEAN(securityStateDestroy__auto) SecurityState *state = deviceServiceGetSecurityState();
 #endif
 
-    if (b_device_service_property_provider_get_property_as_bool(
+    if (b_core_property_provider_get_property_as_bool(
             propertyProvider, CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY, true) == false)
     {
         icLogWarn(LOG_TAG,
@@ -3310,7 +3310,7 @@ ChannelChangeResponse zigbeeSubsystemChangeChannel(uint8_t channel, bool dryRun)
                   CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY);
         result.responseCode = channelChangeNotAllowed;
     }
-#ifdef BRTN_DS_SUPPORT_ALARMS
+#ifdef B_CORE_SUPPORT_ALARMS
     else if (supportAlarms() == true && state->panelStatus != PANEL_STATUS_DISARMED &&
              state->panelStatus != PANEL_STATUS_UNREADY)
     {
@@ -3953,7 +3953,7 @@ static void zigbeeSubsystemEnterLPM(void)
     zigbeeHealthCheckStop();
 
     scoped_icLinkedListGeneric *lpmDevices = linkedListCreate();
-#ifdef BRTN_DS_SUPPORT_ALARMS
+#ifdef B_CORE_SUPPORT_ALARMS
     scoped_SecurityState *state = deviceServiceGetSecurityState();
 #endif
     uint32_t minCommFailTimeoutSecs = UINT32_MAX;
@@ -3981,7 +3981,7 @@ static void zigbeeSubsystemEnterLPM(void)
 
             if (isLPMMonitoredDevice(device->uuid) == true)
             {
-#ifdef BRTN_DS_SUPPORT_ALARMS
+#ifdef B_CORE_SUPPORT_ALARMS
                 zhalMessageHandlingType messageHandlingType =
                     determineLPMDeviceMessage(device->uuid, state->panelStatus);
 #else
@@ -4263,9 +4263,9 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
                 if (fastCommFailTimer)
                 {
                     fastCommFailTimer = false;
-                    g_autoptr(BDeviceServicePropertyProvider) propertyProvider =
+                    g_autoptr(BCorePropertyProvider) propertyProvider =
                         deviceServiceConfigurationGetPropertyProvider();
-                    b_device_service_property_provider_set_property_bool(
+                    b_core_property_provider_set_property_bool(
                         propertyProvider, FAST_COMM_FAIL_PROP, fastCommFailTimer);
                 }
                 mutexUnlock(&commFailControlMutex);
@@ -4455,25 +4455,25 @@ static void zigbeeSubsystemPostRestoreConfig(void)
 
 static void zigbeeLinkQualityConfigure(void)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     pthread_mutex_lock(&configMtx);
     // determine link quality value based on given rssi and lqi, once this property is set to true
-    useLqiForLinkQuality = b_device_service_property_provider_get_property_as_bool(
+    useLqiForLinkQuality = b_core_property_provider_get_property_as_bool(
         propertyProvider, ZIGBEE_LINK_QUALITY_LQI_ENABLED_PROP, false);
-    useRssiForLinkQuality = b_device_service_property_provider_get_property_as_bool(
+    useRssiForLinkQuality = b_core_property_provider_get_property_as_bool(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_ENABLED_PROP, true);
-    crossAboveDb = b_device_service_property_provider_get_property_as_uint8(
+    crossAboveDb = b_core_property_provider_get_property_as_uint8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_CROSS_ABOVE_DB_PROP, DEFAULT_RSSI_QUALITY_CROSS_ABOVE_DB);
-    crossBelowDb = b_device_service_property_provider_get_property_as_uint8(
+    crossBelowDb = b_core_property_provider_get_property_as_uint8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_CROSS_BELOW_DB_PROP, DEFAULT_RSSI_QUALITY_CROSS_BELOW_DB);
-    lqiThresholds[WARN_THRESHOLD_INDEX] = b_device_service_property_provider_get_property_as_uint8(
+    lqiThresholds[WARN_THRESHOLD_INDEX] = b_core_property_provider_get_property_as_uint8(
         propertyProvider, ZIGBEE_LINK_QUALITY_LQI_WARN_THRESHOLD_PROP, WARN_LQI_LIMIT_DEFAULT);
-    lqiThresholds[BAD_THRESHOLD_INDEX] = b_device_service_property_provider_get_property_as_uint8(
+    lqiThresholds[BAD_THRESHOLD_INDEX] = b_core_property_provider_get_property_as_uint8(
         propertyProvider, ZIGBEE_LINK_QUALITY_LQI_BAD_THRESHOLD_PROP, BAD_LQI_LIMIT_DEFAULT);
-    rssiThresholds[WARN_THRESHOLD_INDEX] = b_device_service_property_provider_get_property_as_int8(
+    rssiThresholds[WARN_THRESHOLD_INDEX] = b_core_property_provider_get_property_as_int8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_WARN_THRESHOLD_PROP, WARN_RSSI_LIMIT_DEFAULT);
-    rssiThresholds[BAD_THRESHOLD_INDEX] = b_device_service_property_provider_get_property_as_int8(
+    rssiThresholds[BAD_THRESHOLD_INDEX] = b_core_property_provider_get_property_as_int8(
         propertyProvider, ZIGBEE_LINK_QUALITY_RSSI_BAD_THRESHOLD_PROP, BAD_RSSI_LIMIT_DEFAULT);
     icLogDebug(LOG_TAG,
                "linkQuality configuration: lqiEnabled=%s, lqiWarn=%" PRIu8 ", lqiBad=%" PRIu8
@@ -4716,9 +4716,9 @@ static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
  */
 static void configureWatchdogs(void)
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    if (b_device_service_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_WATCHDOG_ENABLED_PROP, true))
+    if (b_core_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_WATCHDOG_ENABLED_PROP, true))
     {
         mutexLock(&watchdogsMtx);
 #ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
@@ -4758,7 +4758,7 @@ static void configureWatchdogs(void)
         //
         mutexLock(&commFailControlMutex);
         fastCommFailTimer =
-            b_device_service_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
+            b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
         initTimedWaitCond(&commFailControlCond);
         commfailMonitorThreadRunning =
             createThread(&commFailMonitorThreadId, checkAllDevicesInCommThreadProc, NULL, "commFailPoll");

@@ -44,7 +44,7 @@ class DefaultEnvironmentOrchestrator(BaseEnvironmentOrchestrator):
         """
         Implement the abstract method from the base class to configure the Barton client.
         """
-        # Must do after constructing a new BDeviceServiceClient
+        # Must do after constructing a new BCoreClient
         propertyProvider = self._barton_client_params.get_property_provider()
         propertyProvider.set_property_string(
             "device.subsystem.disable", "zigbee,thread"

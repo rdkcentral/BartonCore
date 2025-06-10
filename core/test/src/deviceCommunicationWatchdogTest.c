@@ -27,7 +27,7 @@
 #include <stddef.h>
 
 #include "deviceCommunicationWatchdog.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include "icUtil/stringUtils.h"
 #include "icConcurrent/threadUtils.h"
 #include <cmocka.h>
@@ -50,7 +50,7 @@ static void commRestoreCb(const char *uuid)
     restoredUuid = strdup(uuid);
 }
 
-gboolean __wrap_b_device_service_property_provider_get_property_as_bool(BDeviceServicePropertyProvider *self,
+gboolean __wrap_b_core_property_provider_get_property_as_bool(BCorePropertyProvider *self,
     const gchar *property_name,
     gboolean default_value)
 {
@@ -75,8 +75,8 @@ static int test_testSetup(void **state)
     // Initialize the watchdog
     expect_function_call(__wrap_createThread);
     will_return(__wrap_createThread, true);
-    expect_function_call(__wrap_b_device_service_property_provider_get_property_as_bool);
-    will_return(__wrap_b_device_service_property_provider_get_property_as_bool, false);
+    expect_function_call(__wrap_b_core_property_provider_get_property_as_bool);
+    will_return(__wrap_b_core_property_provider_get_property_as_bool, false);
     deviceCommunicationWatchdogInit(commFailCb, commRestoreCb);
     assert_null(failedUuid);
     assert_null(restoredUuid);

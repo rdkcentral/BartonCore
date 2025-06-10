@@ -18,24 +18,24 @@ Barton's API is based upon GObject (the GLib Object System) in native C as the p
 
 ### Interacting with Barton from your Code
 
-1. Include `device-service-client.h`
-2. Create a `BDeviceServiceInitializeParamsContainer` with `b_device_service_initialize_params_container_new` and set the main storge directory with `b_device_service_initialize_params_container_set_storage_dir`
+1. Include `barton-core-client.h`
+2. Create a `BCoreInitializeParamsContainer` with `b_core_initialize_params_container_new` and set the main storge directory with `b_core_initialize_params_container_set_storage_dir`
 3. If Matter support is included, additional related configuration should be provided by calls to
-   - `b_device_service_initialize_params_container_set_matter_storage_dir`
-   - `b_device_service_initialize_params_container_set_matter_attestation_trust_store_dir`
-   - `b_device_service_initialize_params_container_set_network_credentials_provider`
-4. Create the `BDeviceServiceClient` instance with `b_device_service_client_new`
-5. Start the client with `b_device_service_client_start`
+   - `b_core_initialize_params_container_set_matter_storage_dir`
+   - `b_core_initialize_params_container_set_matter_attestation_trust_store_dir`
+   - `b_core_initialize_params_container_set_network_credentials_provider`
+4. Create the `BCoreClient` instance with `b_core_client_new`
+5. Start the client with `b_core_client_start`
 6. Wire up any desired events using `g_signal_connect`.  Some typical top-level signals of interest include:
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_ADDED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED`
-   - `B_DEVICE_SERVICE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED`
+   - `B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED`
 
    Once devices are added, additional signals can be connected to get events from those as well.
-7. Perform some action with the client such as commissioning a new Matter device with `b_device_service_client_commission_device` or changing a resource on a device to perform some action with `b_device_service_client_write_resource`
+7. Perform some action with the client such as commissioning a new Matter device with `b_core_client_commission_device` or changing a resource on a device to perform some action with `b_core_client_write_resource`
 

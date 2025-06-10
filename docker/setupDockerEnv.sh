@@ -150,7 +150,7 @@ echo "LSAN_OPTIONS=suppressions=$BARTON_TOP/testing/lsan.supp" >> $OUTFILE
 echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/dist-packages:$BARTON_TOP" >> $OUTFILE
 # path to the matter sample apps
 echo "MATTER_SAMPLE_APPS_PATH=$BARTON_TOP/build/matter-install/bin" >> $OUTFILE
-# path to libbrtnDeviceServiceShared.so
+# path to libbCore.so
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
 

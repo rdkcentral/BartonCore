@@ -27,7 +27,7 @@
 
 #include "category.h"
 #include "command.h"
-#include "device-service-reference-io.h"
+#include "barton-core-reference-io.h"
 #include <icUtil/stringUtils.h>
 #include <stdbool.h>
 #include <string.h>

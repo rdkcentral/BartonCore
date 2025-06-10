@@ -28,12 +28,12 @@
 
 #include "matterCategory.h"
 
-#include "device-service-client.h"
-#include "device-service-reference-io.h"
+#include "barton-core-client.h"
+#include "barton-core-reference-io.h"
 #include "reference-network-credentials-provider.h"
 #include <stdio.h>
 
-static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool commissionDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
     g_return_val_if_fail(argv != NULL, false);
@@ -42,7 +42,7 @@ static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar 
     bool rc = true;
 
     g_autoptr(GError) error = NULL;
-    rc = b_device_service_client_commission_device(client, argv[0], 120, &error);
+    rc = b_core_client_commission_device(client, argv[0], 120, &error);
     if (rc)
     {
         emitOutput("Attempting to commission device\n");
@@ -62,7 +62,7 @@ static bool commissionDeviceFunc(BDeviceServiceClient *client, gint argc, gchar 
     return rc;
 }
 
-static bool addMatterDeviceFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool addMatterDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 1, false);
     g_return_val_if_fail(argv != NULL, false);
@@ -73,7 +73,7 @@ static bool addMatterDeviceFunc(BDeviceServiceClient *client, gint argc, gchar *
     bool rc = true;
 
     g_autoptr(GError) error = NULL;
-    rc = b_device_service_client_add_matter_device(client, nodeId, 120, &error);
+    rc = b_core_client_add_matter_device(client, nodeId, 120, &error);
     if (rc)
     {
         emitOutput("Attempting to add Matter device\n");
@@ -93,7 +93,7 @@ static bool addMatterDeviceFunc(BDeviceServiceClient *client, gint argc, gchar *
     return rc;
 }
 
-static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv)
 {
     (void) argc; // unused
     bool rc = false;
@@ -104,8 +104,8 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
         timeoutSeconds = (guint16) g_ascii_strtoull(argv[1], NULL, 10);
     }
 
-    BDeviceServiceCommissioningInfo *commissioningInfo =
-        b_device_service_client_open_commissioning_window(client, argv[0], timeoutSeconds);
+    BCoreCommissioningInfo *commissioningInfo =
+        b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
@@ -118,9 +118,9 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
         g_autofree gchar *qrCode = NULL;
         g_object_get(
             commissioningInfo,
-            B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_MANUAL_CODE],
+            B_CORE_COMMISSIONING_INFO_PROPERTY_NAMES[B_CORE_COMMISSIONING_INFO_PROP_MANUAL_CODE],
             &manualCode,
-            B_DEVICE_SERVICE_COMMISSIONING_INFO_PROPERTY_NAMES[B_DEVICE_SERVICE_COMMISSIONING_INFO_PROP_QR_CODE],
+            B_CORE_COMMISSIONING_INFO_PROPERTY_NAMES[B_CORE_COMMISSIONING_INFO_PROP_QR_CODE],
             &qrCode,
             NULL);
 
@@ -134,7 +134,7 @@ static bool openCommissioningWindow(BDeviceServiceClient *client, gint argc, gch
     return rc;
 }
 
-static bool setWifiCredsFunc(BDeviceServiceClient *client, gint argc, gchar **argv)
+static bool setWifiCredsFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     g_return_val_if_fail(argc == 2, false);
     g_return_val_if_fail(argv != NULL, false);
