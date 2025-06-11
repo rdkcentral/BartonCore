@@ -310,7 +310,9 @@ bool Matter::Start()
         // We need to set DeviceInfoProvider before Server::Init to setup the storage of DeviceInfoProvider properly.
         chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
 
+#if ENABLE_ARL_SUPPORT
         serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
+#endif
 
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
