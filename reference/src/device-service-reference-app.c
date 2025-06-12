@@ -29,6 +29,7 @@
 #include "device-service-client.h"
 #include "device-service-initialize-params-container.h"
 #include "device-service-reference-io.h"
+#include "device-service-properties.h"
 #include "eventHandler.h"
 #include "matterCategory.h"
 #include "threadCategory.h"
@@ -181,6 +182,34 @@ static gchar *getDefaultConfigDirectory(void)
     return confDir;
 }
 
+static void setDefaultParameters(BDeviceServiceInitializeParamsContainer *params)
+{
+    BDeviceServicePropertyProvider *propProvider =
+        b_device_service_initialize_params_container_get_property_provider(params);
+    if (propProvider != NULL)
+    {
+        // set default discriminator if not already set
+        guint16 discriminator = b_device_service_property_provider_get_property_as_uint16(
+            propProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, 0);
+        if (discriminator == 0)
+        {
+            // Use the well-known development discriminator 3840
+            b_device_service_property_provider_set_property_uint16(
+                propProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, 3840);
+        }
+
+        // set default passcode if not already set
+        guint32 passcode = b_device_service_property_provider_get_property_as_uint32(
+            propProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, 0);
+        if (passcode == 0)
+        {
+            // Use the well-known development passcode 20202021
+            b_device_service_property_provider_set_property_uint32(
+                propProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
+        }
+    }
+}
+
 static void configureSubsystems(BDeviceServiceInitializeParamsContainer *params)
 {
     BDeviceServicePropertyProvider *propProvider =
@@ -244,6 +273,7 @@ static BDeviceServiceClient *initializeClient(gchar *confDir)
 
     BDeviceServiceClient *client = b_device_service_client_new(params);
     configureSubsystems(params);
+    setDefaultParameters(params);
     return client;
 }
 
