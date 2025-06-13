@@ -35,10 +35,14 @@
 #include "BartonMatterProviderRegistry.hpp"
 
 extern "C" {
-    #include "deviceServiceConfiguration.h"
-    #include "deviceServiceProps.h"
-    #include "provider/device-service-property-provider.h"
+#include "deviceServiceConfiguration.h"
+#include "deviceServiceProps.h"
+#include "icLog/logging.h"
+#include "provider/device-service-property-provider.h"
 }
+
+#define LOG_TAG     "CertifierDACProvider"
+#define logFmt(fmt) "(%s): " fmt, __func__
 
 using namespace barton;
 
@@ -166,6 +170,11 @@ std::string CertifierDACProvider::GetDACFilepath()
     g_autofree char *dacFilePath = b_device_service_property_provider_get_property_as_string(
         propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PATH, "");
 
+    if (dacFilePath == nullptr || strlen(dacFilePath) == 0)
+    {
+        icWarn("Device Attestation Certificate file path is not set.");
+    }
+
     return std::string(dacFilePath);
 }
 
@@ -174,6 +183,11 @@ std::string CertifierDACProvider::GetDACPassword()
     g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     g_autofree char *dacPassword = b_device_service_property_provider_get_property_as_string(
         propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PASSWORD, "");
+
+    if (dacPassword == nullptr || strlen(dacPassword) == 0)
+    {
+        icWarn("Device Attestation Certificate password is not set.");
+    }
 
     return std::string(dacPassword);
 }
