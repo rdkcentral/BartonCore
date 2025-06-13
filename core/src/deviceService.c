@@ -4323,16 +4323,17 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
 
     result->subsystemsJsonStatus = hashMapCreate();
 
-    GList *subsystems = subsystemManagerGetRegisteredSubsystems();
-    for (GList *subsystemsIt = subsystems; subsystemsIt != NULL; subsystemsIt = subsystemsIt->next)
+    GPtrArray *subsystems = subsystemManagerGetRegisteredSubsystems();
+
+    for (guint i = 0; i < subsystems->len; i++)
     {
-        char *subsystemName = (char *) subsystemsIt->data;
+        gchar *subsystemName = g_ptr_array_index(subsystems, i);
         hashMapPut(result->subsystemsJsonStatus,
                    strdup(subsystemName),
                    strlen(subsystemName),
                    subsystemManagerGetSubsystemStatusJson(subsystemName));
     }
-    g_list_free_full(subsystems, g_free);
+    g_ptr_array_free(subsystems, true);
 
     return result;
 }

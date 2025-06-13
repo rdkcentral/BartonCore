@@ -195,7 +195,7 @@ void subsystemManagerRegister(Subsystem *subsystem);
 /**
  * Get the names of the registered subsystems.  Caller destroys.
  */
-GList *subsystemManagerGetRegisteredSubsystems(void);
+GPtrArray *subsystemManagerGetRegisteredSubsystems(void);
 
 /**
  * Retrieve the JSON representation of the named subsystems's status

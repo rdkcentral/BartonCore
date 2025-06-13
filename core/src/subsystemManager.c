@@ -82,7 +82,7 @@ static void checkSubsystemForMigration(SubsystemRegistration *registration);
 static void subsystemRegistrationDestroy(SubsystemRegistration *reg)
 {
     pthread_mutex_destroy(&reg->mtx);
-    g_free(reg);
+    free(reg);
 }
 
 static void subsystemRegistrationMapDestroy(void *value)
@@ -201,16 +201,16 @@ void subsystemManagerRegister(Subsystem *subsystem)
     }
 }
 
-GList *subsystemManagerGetRegisteredSubsystems(void)
+GPtrArray *subsystemManagerGetRegisteredSubsystems(void)
 {
     icDebug();
 
-    GList *result = NULL;
+    GPtrArray *result = g_ptr_array_new_full(0, g_free);
 
     READ_LOCK_SCOPE(mutex);
 
     SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, subsystems, result = g_list_append(result, g_strdup(registration->subsystem->name)););
+    MAP_FOREACH(registration, subsystems, g_ptr_array_add(result, g_strdup(registration->subsystem->name)););
 
     return result;
 }
