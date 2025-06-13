@@ -94,11 +94,31 @@ if (BDS_ZIGBEE)
 
     bds_add_cmocka_test(
             NAME testZigbeeDriverCommon
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/zigbeeDriverCommonTest.c
+            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/zigbee/zigbeeDriverCommonTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem
             LINK_LIBRARIES brtnDeviceServiceStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
+endif()
+
+if (BDS_MATTER)
+    bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
+        # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
+        LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
+        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterConfigureSubscriptionSpecsTest.cpp
+    )
+
+    bds_add_cpp_test(NAME testMatterSubscribeInteraction
+        # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
+        # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
+        # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
+        LIBS brtnDeviceServiceStatic gtest gmock gmock_main
+        INCLUDES ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterSubscribeInteractionTest.cpp
+    )
+
+    add_subdirectory("src/subsystems/matter")
 endif()
 
 bds_add_cmocka_test(
