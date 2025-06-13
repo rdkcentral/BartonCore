@@ -30,6 +30,8 @@ set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type")
 set(BDS_BUILD_WITH_SSP ON CACHE BOOL "Build with SSP")
 set(BDS_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
 
+set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
+
 # Matter settings
 set(BDS_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
 set(BDS_MATTER_DELEGATE_IMPLEMENTATIONS

@@ -34,6 +34,10 @@ name: Get Action Constants
 on:
   workflow_call:
     outputs:
+        image_repo:
+            description: 'The Docker image repo'
+            value: ${{ jobs.generate-constants.outputs.image_repo_output }}
+
         image_tag:
             description: 'The Docker image tag'
             value: ${{ jobs.generate-constants.outputs.image_tag_output }}
@@ -42,6 +46,7 @@ jobs:
     generate-constants:
         runs-on: ubuntu-latest
         outputs:
+            image_repo_output: ${{ steps.set-image-repo-output.outputs.image_repo }}
             image_tag_output: ${{ steps.set-image-tag-output.outputs.image_tag }}
 
         steps:
@@ -52,6 +57,12 @@ jobs:
                     repository: ${{ github.repository }}
                     fetch-depth: 0
                     fetch-tags: true
+            -
+                id: set-image-repo-output
+                run: |
+                    image_repo=$(grep -m 1 "^IMAGE_REPO=" docker/setupDockerEnv.sh | sed 's/^IMAGE_REPO="\(.*\)"/\1/')
+                    echo "image_repo=$image_repo"
+                    echo "image_repo=$image_repo" >> $GITHUB_OUTPUT
             -
                 id: set-image-tag-output
                 run: |

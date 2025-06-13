@@ -34,6 +34,7 @@ include(BDSConfigureGLib)
 include(BDSAddGLibTest)
 include(BDSAddCMockaTest)
 include(BDSAddCppTest)
+include(BDSFindIncludeDir)
 
 file(GLOB_RECURSE BRTN_DS_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c)
 set(PRIVATE_API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/private)
@@ -100,8 +101,15 @@ if (BDS_MATTER)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
+    bds_find_include(
+        MATTER_INCLUDE_DIR
+        access/AccessRestrictionProvider.h
+        matter
+        "Matter include directory"
+        XTRA_INCLUDES
+    )
+
     list(APPEND XTRA_INCLUDES
-        ${CMAKE_BINARY_DIR}/matter-install/include/matter
         ${OPENSSL_INCLUDE_DIRS}
         ${BDS_MATTER_PROVIDER_HEADER_PATHS}
         ${BDS_MATTER_DELEGATE_HEADER_PATHS})
@@ -116,9 +124,15 @@ if (BDS_THREAD)
     file(GLOB_RECURSE thrSrc "src/subsystems/thread/*.cpp" "src/subsystems/thread/*.c")
     list(APPEND SOURCES ${thrSrc})
 
-    list(APPEND XTRA_INCLUDES
-        ${CMAKE_PREFIX_PATH}/include/otbr
-        ${DBUS_INCLUDE_DIRS})
+    bds_find_include(
+        OTBR_INCLUDE_DIR
+        openthread-br/config.h
+        otbr
+        "OTBR include directory"
+        XTRA_INCLUDES
+    )
+
+    list(APPEND XTRA_INCLUDES ${DBUS_INCLUDE_DIRS})
 
     list(APPEND XTRA_LIBS
         otbr-dbus-client
@@ -585,6 +599,13 @@ bds_add_glib_test(
 )
 
 bds_add_glib_test(
+    NAME device-service-zigbee-remote-cli-response-received-event-test
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-remote-cli-response-received-event-test.c
+    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
+    GLOG_DOMAIN BDeviceServiceZigbeeRemoteCliResponseReceivedEventTest
+)
+
+bds_add_glib_test(
     NAME device-service-utils-test
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-utils-test.c
     INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -654,6 +675,19 @@ bds_add_cmocka_test(
     NAME deviceServiceConfigurationTest
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceConfigurationTest.c
     WRAPPED_FUNCTIONS
+    LINK_LIBRARIES brtnDeviceServiceStatic
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+bds_add_cmocka_test(
+    NAME deviceCommunicationWatchdogTest
+    INCLUDES
+    src
+    public
+    ../api/c/public
+    ${PRIVATE_API_INCLUDES}
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceCommunicationWatchdogTest.c
+    WRAPPED_FUNCTIONS b_device_service_property_provider_get_property_as_bool
     LINK_LIBRARIES brtnDeviceServiceStatic
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
