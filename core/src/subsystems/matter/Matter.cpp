@@ -1265,7 +1265,7 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
     setupPayload.rendezvousInformation.SetValue(RendezvousInformationFlags(RendezvousInformationFlag::kOnNetwork));
 
     uint16_t discriminator = 0;
-    if (commissionableDataProvider->GetSetupDiscriminator(discriminator)!= CHIP_NO_ERROR)
+    if (commissionableDataProvider->GetSetupDiscriminator(discriminator) != CHIP_NO_ERROR)
     {
         icError("Failed to get setup discriminator from CommissionableDataProvider");
         return false;
