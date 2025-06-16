@@ -26,6 +26,7 @@
 #include <stddef.h>
 
 #include "cjson/cJSON.h"
+#include "icTypes/icLinkedList.h"
 #include "icUtil/stringUtils.h"
 #include "subsystemManager.c"
 #include <cmocka.h>
@@ -140,11 +141,11 @@ static void assertRegisteredSubsystemCount(int expectedCount)
     assert_int_equal(linkedListCount(subsystems), expectedCount);
 }
 
-static void assertRegisteredSubsystemName(int index, const char *expectedName)
+static void assertRegisteredSubsystemName(const char *expectedName)
 {
     scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
     assert_non_null(subsystems);
-    const char *name = linkedListGetElementAt(subsystems, index);
+    const char *name = linkedListFind(subsystems, (char *) expectedName, linkedListStringCompareSearchFunc);
     assert_non_null(name);
     assert_string_equal(name, expectedName);
 }
@@ -296,7 +297,7 @@ void test_subsystemManagerRegister(void **state)
     mySubsystem->name = subsystemName;
     subsystemManagerRegister(mySubsystem);
     assertRegisteredSubsystemCount(1);
-    assertRegisteredSubsystemName(0, subsystemName);
+    assertRegisteredSubsystemName(subsystemName);
 
     unregisterSubsystems();
 }
@@ -316,7 +317,7 @@ void test_subsystemManagerGetRegisteredSubsystems(void **state)
     subsystemManagerRegister(subsystem1);
 
     assertRegisteredSubsystemCount(1);
-    assertRegisteredSubsystemName(0, subsystemName1);
+    assertRegisteredSubsystemName(subsystemName1);
 
     // Case 3: Multiple subsystems registered
     static const char *subsystemName2 = "Subsystem2";
@@ -324,8 +325,8 @@ void test_subsystemManagerGetRegisteredSubsystems(void **state)
     subsystemManagerRegister(subsystem2);
 
     assertRegisteredSubsystemCount(2);
-    assertRegisteredSubsystemName(0, subsystemName1);
-    assertRegisteredSubsystemName(1, subsystemName2);
+    assertRegisteredSubsystemName(subsystemName1);
+    assertRegisteredSubsystemName(subsystemName2);
 
     // Case 4: Subsystem unregistered
     unregisterSubsystems();

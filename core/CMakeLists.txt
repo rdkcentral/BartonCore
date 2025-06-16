@@ -159,45 +159,41 @@ if (BDS_SUPPORT_SOFTWARE_WATCHDOG)
     set(btnDSLinkLibraries ${btnDSLinkLibraries} xhSoftwareWatchdog)
 endif()
 
+set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+                            ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
+                            ${XTRA_INCLUDES}
+                            ${CURRENT_SOURCE_GENERATED_DIR}/src
+                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src
+                            ${PRIVATE_API_INCLUDES})
+
+set(BARTON_PUBLIC_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public)
+
 #FIXME: Reduce copy-paste.
 # Object library type compiles once, then can re-use those object files for
 # statice/shared libraries.
 add_library(brtnDeviceServiceObject OBJECT ${SOURCES} ${BRTN_DS_API_SOURCES})
 target_link_libraries(brtnDeviceServiceObject ${btnDSLinkLibraries})
 target_include_directories(brtnDeviceServiceObject PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
-                            ${XTRA_INCLUDES}
-                            ${CURRENT_SOURCE_GENERATED_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src
-                            ${PRIVATE_API_INCLUDES}
+                            ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
+                            ${BARTON_PUBLIC_INCLUDES}
                             )
 
 add_library(brtnDeviceServiceStatic STATIC $<TARGET_OBJECTS:brtnDeviceServiceObject>)
 target_link_libraries(brtnDeviceServiceStatic ${btnDSLinkLibraries})
 target_include_directories(brtnDeviceServiceStatic PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
-                            ${XTRA_INCLUDES}
-                            ${CURRENT_SOURCE_GENERATED_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src
+                            ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
+                            ${BARTON_PUBLIC_INCLUDES}
                             )
 install(TARGETS brtnDeviceServiceStatic DESTINATION lib)
 
 add_library(brtnDeviceServiceShared SHARED $<TARGET_OBJECTS:brtnDeviceServiceObject>)
 target_link_libraries(brtnDeviceServiceShared ${btnDSLinkLibraries})
 target_include_directories(brtnDeviceServiceShared PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
-                            ${XTRA_INCLUDES}
-                            ${CURRENT_SOURCE_GENERATED_DIR}/src
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src
+                            ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
-                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public
+                            ${BARTON_PUBLIC_INCLUDES}
                             )
 install(TARGETS brtnDeviceServiceShared DESTINATION lib)
 
@@ -301,395 +297,7 @@ if (BDS_GEN_GIR)
     install(CODE "execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs)")
 endif()
 
-
-bds_add_cmocka_test(
-    NAME testSubsystemManager
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/subsystems/subsystemManagerTest.c
-    WRAPPED_FUNCTIONS deviceServiceGetSystemProperty deviceServiceSetSystemProperty
-    LINK_LIBRARIES brtnDeviceServiceStatic
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
-)
-
-# add our 'unit test' to be part of the "make unitTest"
-# TODO: The generic test components should not be gated by zigbee!
-if (BDS_ZIGBEE)
-    bds_add_cmocka_test(
-            NAME testZigbeeSubsystem
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/subsystems/zigbee/zigbeeSubsystemTest.c
-            WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem deviceServiceGetDeviceDescriptorForDevice deviceServiceConfigurationGetFirmwareFileDir
-            LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
-    )
-
-    bds_add_cmocka_test(
-            NAME testDeviceService
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceTest.c
-            WRAPPED_FUNCTIONS
-                jsonDatabaseRestore
-                subsystemManagerRestoreConfig
-            LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-
-    bds_add_cmocka_test(
-            NAME testZigbeeDriverCommon
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/deviceDrivers/zigbeeDriverCommonTest.c
-            WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem
-            LINK_LIBRARIES brtnDeviceServiceStatic
-            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
-    )
-
-    bds_add_cmocka_test(
-            NAME testJsonDatabase
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/database/jsonDatabaseTest.c
-            WRAPPED_FUNCTIONS
-                storageLoad
-                storageLoadJSON
-                storageParse
-                storageParseBad
-                storageSave
-                storageGetKeys
-                storageDelete
-                storageRestoreNamespace
-                simpleProtectConfigData
-                simpleUnprotectConfigData
-            LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceHelper
-            INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
-    )
-
-    bds_add_cmocka_test(
-            NAME testDeviceDescriptorsAvailability
-            TYPE unit
-            TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceDescriptorsAvailabilityTest.c
-            WRAPPED_FUNCTIONS b_device_service_property_provider_has_property
-                              b_device_service_property_provider_get_property_as_string
-                              deviceServiceSetSystemProperty digestFile
-                              deviceServiceGetSystemProperty urlHelperDownloadFile
-
-            LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceDescriptors
-            INCLUDES ${PRIVATE_API_INCLUDES}
-    )
-
-    if(TARGET testJsonDatabase)
-        set(JSONDB_FIXTURES "${CMAKE_CURRENT_LIST_DIR}/test/etc")
-        target_compile_definitions(testJsonDatabase PRIVATE -DFIXTURES_DIR="${JSONDB_FIXTURES}")
-    endif()
-
-    if(TARGET testDeviceDescriptorsAvailability)
-        target_compile_definitions(testDeviceDescriptorsAvailability PRIVATE -DTEST_DIR="${CMAKE_CURRENT_LIST_DIR}/test/")
-    endif()
-endif()
-
-bds_add_cmocka_test(
-    NAME testCommFail
-    TYPE unit
-    INCLUDES
-        src
-        public
-        ../api/c/public
-        ${PRIVATE_API_INCLUDES}
-        $<TARGET_PROPERTY:xhDeviceDescriptors,INCLUDE_DIRECTORIES>
-    TEST_SOURCES
-        test/src/commFailTest.c
-        src/deviceServiceCommFail.c
-    LINK_LIBRARIES
-        xhTypes
-        #glib-2 applied by configure_glib
-)
-
-if (BDS_MATTER)
-    bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
-        # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
-        LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
-        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterConfigureSubscriptionSpecsTest.cpp
-    )
-
-    bds_add_cpp_test(NAME testMatterSubscribeInteraction
-        # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
-        # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
-        # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
-        LIBS brtnDeviceServiceStatic gtest gmock gmock_main
-        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES} ${XTRA_INCLUDES}
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/test/MatterSubscribeInteractionTest.cpp
-    )
-
-    add_subdirectory("src/subsystems/matter/test")
-endif()
-
-# API tests
-bds_add_glib_test(
-    NAME device-service-resource-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-resource-test.c
-    GLOG_DOMAIN BDeviceServiceResourceTest
-)
-
-bds_add_glib_test(
-    NAME device-service-metadata-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-metadata-test.c
-    GLOG_DOMAIN BDeviceServiceMetadataTest
-)
-
-bds_add_glib_test(
-    NAME device-service-endpoint-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-endpoint-test.c
-    GLOG_DOMAIN BDeviceServiceEndpointTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-device-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceTest
-)
-
-bds_add_glib_test(
-    NAME device-service-discovery-filter-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-discovery-filter-test.c
-    GLOG_DOMAIN BDeviceServiceDiscoveryFilterTest
-)
-
-bds_add_glib_test(
-    NAME device-service-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-event-test.c
-    GLOG_DOMAIN BDeviceServiceEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-status-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-status-test.c
-    GLOG_DOMAIN BDeviceServiceStatusTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-found-details-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-device-found-details-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceFoundDetailsTest
-)
-
-bds_add_glib_test(
-    NAME device-service-discovery-started-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-discovery-started-event-test.c
-    GLOG_DOMAIN BDeviceServiceDiscoveryStartedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-recovery-started-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-recovery-started-event-test.c
-    GLOG_DOMAIN BDeviceServiceRecoveryStartedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-discovery-session-info-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-discovery-session-info-event-test.c
-    GLOG_DOMAIN BDeviceServiceDiscoverySessionInfoEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-discovery-failed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-discovery-failed-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceDiscoveryFailedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-discovered-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-discovered-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceDiscoverEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-rejected-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-rejected-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceRejectedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-configuration-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-configuration-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceConfigurationEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-added-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-added-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceAddedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-recovered-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-recovered-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceRecoveredEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-discovery-completed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-discovery-completed-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceDiscoveryCompletedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-discovery-stopped-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-discovery-stopped-event-test.c
-    GLOG_DOMAIN BDeviceServiceDiscoveryStoppedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-metadata-updated-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-metadata-updated-event-test.c
-    GLOG_DOMAIN BDeviceServiceMetadataUpdatedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-recovery-stopped-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-recovery-stopped-event-test.c
-    GLOG_DOMAIN BDeviceServiceRecoveryStoppedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-resource-updated-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-resource-updated-event-test.c
-    GLOG_DOMAIN BDeviceServiceResourceUpdatedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-endpoint-removed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-endpoint-removed-event-test.c
-    GLOG_DOMAIN BDeviceServiceEndpointRemovedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-endpoint-added-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-endpoint-added-event-test.c
-    GLOG_DOMAIN BDeviceServiceEndpointAddedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-removed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-removed-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceRemovedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-zigbee-channel-changed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-channel-changed-event-test.c
-    GLOG_DOMAIN BDeviceServiceZigbeeChannelChangedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-storage-changed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-storage-changed-event-test.c
-    GLOG_DOMAIN BDeviceServiceStorageChangedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-zigbee-interference-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-interference-event-test.c
-    GLOG_DOMAIN BDeviceServiceZigbeeInterferenceEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-zigbee-pan-id-attack-changed-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-pan-id-attack-changed-event-test.c
-    GLOG_DOMAIN BDeviceServiceZigbeePanIdAttackChangedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-device-database-failure-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-device-database-failure-event-test.c
-    GLOG_DOMAIN BDeviceServiceDeviceDatabaseFailureEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-zigbee-remote-cli-response-received-event-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/events/device-service-zigbee-remote-cli-response-received-event-test.c
-    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
-    GLOG_DOMAIN BDeviceServiceZigbeeRemoteCliResponseReceivedEventTest
-)
-
-bds_add_glib_test(
-    NAME device-service-utils-test
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-utils-test.c
-    INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
-    GLOG_DOMAIN BDeviceServiceUtilsTest
-)
-
-bds_add_cmocka_test(
-    NAME device-service-client-test
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/device-service-client-test.c
-    WRAPPED_FUNCTIONS
-        deviceServiceInitialize
-        deviceServiceStart
-        allServicesAvailableNotify
-        deviceServiceShutdown
-        deviceServiceGetEndpointsByProfile
-        deviceServiceDiscoverStart
-        deviceServiceDiscoverStop
-        deviceServiceCommissionDevice
-        deviceServiceAddMatterDevice
-        deviceServiceGetStatus
-        deviceServiceGetDevice
-        deviceServiceGetEndpointById
-        deviceServiceGetEndpointByUri
-        deviceServiceGetAllDevices
-        deviceServiceGetDevicesByDeviceClass
-        deviceServiceGetResourceByUri
-        deviceServiceGetDevicesBySubsystem
-        deviceServiceGetDeviceByUri
-        deviceServiceGetResourceByUri
-        deviceServiceWriteResource
-        deviceServiceExecuteResource
-        deviceServiceRemoveDevice
-        deviceServiceGetSystemProperty
-        deviceServiceSetSystemProperty
-        deviceServiceRemoveEndpointById
-        deviceServiceSetMetadata
-        deviceServiceGetMetadata
-        deviceServiceGetResourcesByUriPattern
-        deviceServiceChangeResourceMode
-        zigbeeSubsystemChangeChannel
-        deviceServiceGetMetadataByUriPattern
-        deviceServiceProcessDeviceDescriptors
-        zhalTest
-        zigbeeSubsystemPerformEnergyScan
-        deviceServiceRestoreConfig
-    LINK_LIBRARIES brtnDeviceServiceStatic
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
-)
-if(TARGET device-service-client-test)
-    target_compile_definitions(device-service-client-test PRIVATE G_LOG_DOMAIN="BDeviceServiceClientTest")
-endif()
-
-bds_add_cmocka_test(
-    NAME device-service-property-provider-test
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/test/provider/device-service-property-provider-test.c
-    WRAPPED_FUNCTIONS
-        deviceServiceGetSystemProperty
-        deviceServiceSetSystemProperty
-    LINK_LIBRARIES brtnDeviceServiceStatic
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-if(TARGET device-service-property-provider-test)
-    target_compile_definitions(device-service-property-provider-test PRIVATE G_LOG_DOMAIN="BDeviceServicePropertyProviderTest")
-endif()
-
-bds_add_cmocka_test(
-    NAME deviceServiceConfigurationTest
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceServiceConfigurationTest.c
-    WRAPPED_FUNCTIONS
-    LINK_LIBRARIES brtnDeviceServiceStatic
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-bds_add_cmocka_test(
-    NAME deviceCommunicationWatchdogTest
-    INCLUDES
-    src
-    public
-    ../api/c/public
-    ${PRIVATE_API_INCLUDES}
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/deviceCommunicationWatchdogTest.c
-    WRAPPED_FUNCTIONS createThread b_device_service_property_provider_get_property_as_bool
-    LINK_LIBRARIES brtnDeviceServiceStatic
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+add_subdirectory(${PROJECT_SOURCE_DIR}/api/c/test ${PROJECT_BINARY_DIR}/api/c/test)
+add_subdirectory(test)
 
 bds_configure_glib()

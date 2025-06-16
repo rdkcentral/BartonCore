@@ -22,6 +22,7 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 include_guard(GLOBAL)
+include(BDSConfigureGLib)
 
 function(bds_add_glib_test)
     if(BUILD_TESTING)
@@ -35,7 +36,11 @@ function(bds_add_glib_test)
         target_compile_definitions(${BDS_ADD_GLIB_TEST_NAME} PRIVATE G_LOG_DOMAIN="${BDS_ADD_GLIB_TEST_GLOG_DOMAIN}")
         target_include_directories(${BDS_ADD_GLIB_TEST_NAME} PRIVATE ${BDS_ADD_GLIB_TEST_INCLUDE_DIRECTORIES})
 
+        message(STATUS "Adding unit test ${BDS_ADD_GLIB_TEST_NAME}")
+
         add_test(NAME ${BDS_ADD_GLIB_TEST_NAME} COMMAND ${BDS_ADD_GLIB_TEST_NAME})
         set_property(TEST ${BDS_ADD_GLIB_TEST_NAME} PROPERTY ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_PREFIX_PATH}/lib:${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}")
+
+        bds_configure_glib()
     endif()
 endfunction()
