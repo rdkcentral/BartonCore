@@ -4323,7 +4323,7 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
 
     result->subsystemsJsonStatus = hashMapCreate();
 
-    GPtrArray *subsystems = subsystemManagerGetRegisteredSubsystems();
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
 
     for (guint i = 0; i < subsystems->len; i++)
     {
@@ -4333,7 +4333,6 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
                    strlen(subsystemName),
                    subsystemManagerGetSubsystemStatusJson(subsystemName));
     }
-    g_ptr_array_free(subsystems, true);
 
     return result;
 }

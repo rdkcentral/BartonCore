@@ -141,21 +141,18 @@ static Subsystem *createSubsystem(const char *name)
 
 static void assertRegisteredSubsystemCount(int expectedCount)
 {
-    GPtrArray *subsystems = subsystemManagerGetRegisteredSubsystems();
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
     assert_non_null(subsystems);
     assert_int_equal(subsystems->len, expectedCount);
-    g_ptr_array_free(subsystems, true);
 }
 
 static void assertRegisteredSubsystemName(const char *expectedName)
 {
-    GPtrArray *subsystems = subsystemManagerGetRegisteredSubsystems();
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
     assert_non_null(subsystems);
 
     guint index = 0; // unused.
     gboolean found = g_ptr_array_find_with_equal_func(subsystems, expectedName, __wrap_stringCompare, &index);
-
-    g_ptr_array_free(subsystems, true);
     assert_true(found);
 }
 
