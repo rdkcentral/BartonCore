@@ -50,6 +50,11 @@ bool __wrap_deviceServiceSetSystemProperty(const char *name, const char *value)
     return mock_type(bool);
 }
 
+static gboolean __wrap_stringCompare(gconstpointer a, gconstpointer b)
+{
+    return g_strcmp0(a, b) == 0;
+}
+
 static bool myInitialize(subsystemInitializedFunc initializedCallback, subsystemDeInitializedFunc deInitializedCallback)
 {
     return true;
@@ -136,18 +141,19 @@ static Subsystem *createSubsystem(const char *name)
 
 static void assertRegisteredSubsystemCount(int expectedCount)
 {
-    scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
     assert_non_null(subsystems);
-    assert_int_equal(linkedListCount(subsystems), expectedCount);
+    assert_int_equal(subsystems->len, expectedCount);
 }
 
 static void assertRegisteredSubsystemName(const char *expectedName)
 {
-    scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
     assert_non_null(subsystems);
-    const char *name = linkedListFind(subsystems, (char *) expectedName, linkedListStringCompareSearchFunc);
-    assert_non_null(name);
-    assert_string_equal(name, expectedName);
+
+    guint index = 0; // unused.
+    gboolean found = g_ptr_array_find_with_equal_func(subsystems, expectedName, __wrap_stringCompare, &index);
+    assert_true(found);
 }
 
 void test_subsystem_migration(void **state)
