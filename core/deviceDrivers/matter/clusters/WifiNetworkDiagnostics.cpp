@@ -33,7 +33,7 @@
 extern "C" {
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProps.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #include <icLog/logging.h>
 }
 
@@ -47,10 +47,10 @@ namespace barton
 {
     SubscriptionIntervalSecs WifiNetworkDiagnostics::GetDesiredSubscriptionIntervalSecs()
     {
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        uint16_t minIntervalFloorSeconds = b_device_service_property_provider_get_property_as_uint16(
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        uint16_t minIntervalFloorSeconds = b_core_property_provider_get_property_as_uint16(
             propertyProvider, DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MIN_INTERVAL_SECS, 60);
-        uint16_t maxIntervalCeilingSeconds = b_device_service_property_provider_get_property_as_uint16(
+        uint16_t maxIntervalCeilingSeconds = b_core_property_provider_get_property_as_uint16(
             propertyProvider, DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MAX_INTERVAL_SECS, 60 * 5);
 
         SubscriptionIntervalSecs intervalSecs(minIntervalFloorSeconds, maxIntervalCeilingSeconds);

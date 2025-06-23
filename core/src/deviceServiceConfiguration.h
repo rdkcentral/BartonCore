@@ -27,9 +27,9 @@
 
 #pragma once
 
-#include "device-service-initialize-params-container.h"
-#include "provider/device-service-property-provider.h"
-#include "provider/device-service-token-provider.h"
+#include "barton-core-initialize-params-container.h"
+#include "provider/barton-core-property-provider.h"
+#include "provider/barton-core-token-provider.h"
 #include <stdbool.h>
 
 /**
@@ -41,7 +41,7 @@
  *
  * @return true if successful, otherwise false
  */
-bool deviceServiceConfigurationStartup(BDeviceServiceInitializeParamsContainer *initializeParams);
+bool deviceServiceConfigurationStartup(BCoreInitializeParamsContainer *initializeParams);
 
 /**
  * deviceServiceConfigurationShutdown
@@ -57,7 +57,7 @@ void deviceServiceConfigurationShutdown(void);
  *
  * @return the token provider
  */
-BDeviceServiceTokenProvider *deviceServiceConfigurationGetTokenProvider(void);
+BCoreTokenProvider *deviceServiceConfigurationGetTokenProvider(void);
 
 /**
  * deviceServiceConfigurationGetNetworkCredentialsProvider
@@ -66,7 +66,7 @@ BDeviceServiceTokenProvider *deviceServiceConfigurationGetTokenProvider(void);
  *
  * @return the network credentials provider
  */
-BDeviceServiceNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCredentialsProvider(void);
+BCoreNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCredentialsProvider(void);
 
 /**
  * deviceServiceConfigurationGetPropertyProvider
@@ -75,7 +75,7 @@ BDeviceServiceNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCr
  *
  * @return the property provider
  */
-BDeviceServicePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void);
+BCorePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void);
 
 /**
  * deviceServiceConfigurationGetStorageDir

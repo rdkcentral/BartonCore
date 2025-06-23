@@ -38,7 +38,7 @@ extern "C" {
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProps.h"
 #include "icLog/logging.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 }
 
 #define LOG_TAG     "CertifierDACProvider"
@@ -166,9 +166,8 @@ CHIP_ERROR CertifierDACProvider::SignWithDeviceAttestationKey(const ByteSpan & m
 
 std::string CertifierDACProvider::GetDACFilepath()
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *dacFilePath = b_device_service_property_provider_get_property_as_string(
-        propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PATH, "");
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *dacFilePath = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PATH,  "");
 
     if (dacFilePath == nullptr || strlen(dacFilePath) == 0)
     {
@@ -180,9 +179,8 @@ std::string CertifierDACProvider::GetDACFilepath()
 
 std::string CertifierDACProvider::GetDACPassword()
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *dacPassword = b_device_service_property_provider_get_property_as_string(
-        propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PASSWORD, "");
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *dacPassword = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_PROP_MATTER_DAC_P12_PASSWORD, "");
 
     if (dacPassword == nullptr || strlen(dacPassword) == 0)
     {

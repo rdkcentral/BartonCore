@@ -25,25 +25,25 @@
 # Created by Christian Leithner on 5/23/2025.
 #
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testSubsystemManager
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/subsystems/subsystemManagerTest.c
     WRAPPED_FUNCTIONS deviceServiceGetSystemProperty deviceServiceSetSystemProperty
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testDeviceService
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceServiceTest.c
     WRAPPED_FUNCTIONS
         jsonDatabaseRestore
         subsystemManagerRestoreConfig
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testJsonDatabase
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/database/jsonDatabaseTest.c
     WRAPPED_FUNCTIONS
@@ -57,20 +57,20 @@ bds_add_cmocka_test(
         storageRestoreNamespace
         simpleProtectConfigData
         simpleUnprotectConfigData
-    LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceHelper
+    LINK_LIBRARIES BartonCoreStatic xhDeviceHelper
     INCLUDES ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testDeviceDescriptorsAvailability
     TYPE unit
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceDescriptorsAvailabilityTest.c
-    WRAPPED_FUNCTIONS b_device_service_property_provider_has_property
-                      b_device_service_property_provider_get_property_as_string
+    WRAPPED_FUNCTIONS b_core_property_provider_has_property
+                      b_core_property_provider_get_property_as_string
                       deviceServiceSetSystemProperty digestFile
                       deviceServiceGetSystemProperty urlHelperDownloadFile
 
-    LINK_LIBRARIES brtnDeviceServiceStatic xhDeviceDescriptors
+    LINK_LIBRARIES BartonCoreStatic xhDeviceDescriptors
     INCLUDES ${PRIVATE_API_INCLUDES}
 )
 
@@ -83,37 +83,37 @@ if(TARGET testDeviceDescriptorsAvailability)
     target_compile_definitions(testDeviceDescriptorsAvailability PRIVATE -DTEST_DIR="${CMAKE_CURRENT_LIST_DIR}/")
 endif()
 
-if (BDS_ZIGBEE)
-    bds_add_cmocka_test(
+if (BCORE_ZIGBEE)
+    bcore_add_cmocka_test(
             NAME testZigbeeSubsystem
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/subsystems/zigbee/zigbeeSubsystemTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem deviceServiceGetDeviceDescriptorForDevice deviceServiceConfigurationGetFirmwareFileDir
-            LINK_LIBRARIES brtnDeviceServiceStatic
+            LINK_LIBRARIES BartonCoreStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 
-    bds_add_cmocka_test(
+    bcore_add_cmocka_test(
             NAME testZigbeeDriverCommon
             TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/zigbee/zigbeeDriverCommonTest.c
             WRAPPED_FUNCTIONS deviceServiceGetDevicesBySubsystem
-            LINK_LIBRARIES brtnDeviceServiceStatic
+            LINK_LIBRARIES BartonCoreStatic
             INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${PRIVATE_API_INCLUDES}
     )
 endif()
 
-if (BDS_MATTER)
-    bds_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
+if (BCORE_MATTER)
+    bcore_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
         # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
-        LIBS ${OPENSSL_LINK_LIBRARIES} brtnDeviceServiceStatic
+        LIBS ${OPENSSL_LINK_LIBRARIES} BartonCoreStatic
         INCLUDES ${OPENSSL_INCLUDE_DIRS} ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterConfigureSubscriptionSpecsTest.cpp
     )
 
-    bds_add_cpp_test(NAME testMatterSubscribeInteraction
+    bcore_add_cpp_test(NAME testMatterSubscribeInteraction
         # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
-        # Changing the link order within the bds_add_cpp_test function itself just caused the other targets to fail
+        # Changing the link order within the bcore_add_cpp_test function itself just caused the other targets to fail
         # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
-        LIBS brtnDeviceServiceStatic gtest gmock gmock_main
+        LIBS BartonCoreStatic gtest gmock gmock_main
         INCLUDES ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterSubscribeInteractionTest.cpp
     )
@@ -121,7 +121,7 @@ if (BDS_MATTER)
     add_subdirectory("src/subsystems/matter")
 endif()
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testCommFail
     TYPE unit
     INCLUDES
@@ -137,18 +137,18 @@ bds_add_cmocka_test(
         #glib-2 applied by configure_glib
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME deviceServiceConfigurationTest
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceServiceConfigurationTest.c
     WRAPPED_FUNCTIONS
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${BARTON_PRIVATE_INCLUDES}
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME deviceCommunicationWatchdogTest
     INCLUDES ${PRIVATE_API_INCLUDES}
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceCommunicationWatchdogTest.c
-    WRAPPED_FUNCTIONS b_device_service_property_provider_get_property_as_bool
-    LINK_LIBRARIES brtnDeviceServiceStatic
+    WRAPPED_FUNCTIONS b_core_property_provider_get_property_as_bool
+    LINK_LIBRARIES BartonCoreStatic
 )

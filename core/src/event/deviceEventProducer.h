@@ -32,9 +32,9 @@
 #pragma once
 
 #include "device/icDeviceMetadata.h"
-#include "device-service-client.h"
-#include "events/device-service-device-database-failure-event.h"
-#include "events/device-service-storage-changed-event.h"
+#include "barton-core-client.h"
+#include "events/barton-core-device-database-failure-event.h"
+#include "events/barton-core-storage-changed-event.h"
 #include <glib-object.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -45,12 +45,12 @@
 /*
  * Init the 'class' by wiring up the signals
  */
-void deviceEventProducerClassInit(BDeviceServiceClientClass *deviceServiceClass);
+void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass);
 
 /*
  * Initialize the device event producer
  */
-void deviceEventProducerStartup(BDeviceServiceClient *service);
+void deviceEventProducerStartup(BCoreClient *service);
 
 /*
  * Shut down the device event producer
@@ -217,7 +217,7 @@ void sendStorageChangedEvent(GFileMonitorEvent whatChanged);
  * @param failureType - the type of failure that occurred
  * @param deviceId - the id of the device that failed, if relevant (may be NULL)
  */
-void sendDeviceDatabaseFailureEvent(BDeviceServiceDeviceDatabaseFailureType failureType, const char *deviceId);
+void sendDeviceDatabaseFailureEvent(BCoreDeviceDatabaseFailureType failureType, const char *deviceId);
 
 /*
  * broadcast a metadata updated event

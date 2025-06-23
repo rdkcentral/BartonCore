@@ -27,29 +27,29 @@
 
 set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type")
 
-set(BDS_BUILD_WITH_SSP ON CACHE BOOL "Build with SSP")
-set(BDS_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
+set(BCORE_BUILD_WITH_SSP ON CACHE BOOL "Build with SSP")
+set(BCORE_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
 
 set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
 
 # Matter settings
-set(BDS_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
-set(BDS_MATTER_DELEGATE_IMPLEMENTATIONS
+set(BCORE_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
+set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
     "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates/dev/SelfSignedCertifierOperationalCredentialsIssuer.cpp"
     CACHE
     STRING
     "Delegate implementations")
-set(BDS_MATTER_DELEGATE_HEADER_PATHS
+set(BCORE_MATTER_DELEGATE_HEADER_PATHS
     "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates/dev"
     CACHE
     STRING
     "Delegate header paths")
-set(BDS_MATTER_PROVIDER_IMPLEMENTATIONS
+set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
     "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/dev/BartonTestDACProvider.cpp;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp"
     CACHE
     STRING
     "Provider implementations")
-set(BDS_MATTER_PROVIDER_HEADER_PATHS
+set(BCORE_MATTER_PROVIDER_HEADER_PATHS
     "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/dev;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/default"
     CACHE
     STRING

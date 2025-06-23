@@ -40,13 +40,13 @@ include_directories(
         ${CROSS_OUTPUT}/include         # 3rd Party
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testStringHashMap
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/stringHashTest.c
     LINK_LIBRARIES xhTypes xhJsonHelper
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
     NAME testTypesLib
     TEST_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bufferTest.c

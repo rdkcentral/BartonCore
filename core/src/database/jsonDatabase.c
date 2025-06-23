@@ -671,7 +671,7 @@ static bool loadDevices()
             if (storageParse(STORAGE_NAMESPACE, key, &strictDeviceCallback) == false)
             {
                 // Notify someone that a device couldn't load. It might recover, but it should always be checked out.
-                sendDeviceDatabaseFailureEvent(B_DEVICE_SERVICE_DEVICE_DATABASE_FAILURE_TYPE_DEVICE_LOAD_FAILURE, key);
+                sendDeviceDatabaseFailureEvent(B_CORE_DEVICE_DATABASE_FAILURE_TYPE_DEVICE_LOAD_FAILURE, key);
 
                 if (storageParseBad(STORAGE_NAMESPACE, key, &permissiveDeviceCallback) == true)
                 {

@@ -29,7 +29,7 @@
 #define FLEXCORE_DEVICESERVICEPRIVATE_H
 
 #include "device-driver/device-driver.h"
-#include "provider/device-service-token-provider.h"
+#include "provider/barton-core-token-provider.h"
 #include <deviceService/securityState.h>
 #include <stdbool.h>
 
@@ -245,6 +245,6 @@ bool deviceServiceIsShuttingDown(void);
  * Get the token provider for the device service. Intended for internal use only.
  * @return the token provider
  */
-BDeviceServiceTokenProvider *deviceServiceGetTokenProvider(void);
+BCoreTokenProvider *deviceServiceGetTokenProvider(void);
 
 #endif // FLEXCORE_DEVICESERVICEPRIVATE_H

@@ -27,12 +27,12 @@
 
 #pragma once
 
-#include "device-service-properties.h"
+#include "barton-core-properties.h"
 
 // TODO Refactor calls to gobject layer for properties to calls here instead.
 //  @see BARTON-136
 
 // Internal mapping to GObject property keys
-#define LOCAL_EUI64_PROP_KEY                 B_DEVICE_SERVICE_BARTON_FIFTEEN_FOUR_EUI64
-#define MATTER_VID_PROP_KEY                  B_DEVICE_SERVICE_BARTON_MATTER_VID
-#define DEFAULT_THREAD_NETWORK_NAME_PROP_KEY B_DEVICE_SERVICE_BARTON_DEFAULT_THREAD_NETWORK_NAME
+#define LOCAL_EUI64_PROP_KEY                 B_CORE_BARTON_FIFTEEN_FOUR_EUI64
+#define MATTER_VID_PROP_KEY                  B_CORE_BARTON_MATTER_VID
+#define DEFAULT_THREAD_NETWORK_NAME_PROP_KEY B_CORE_BARTON_DEFAULT_THREAD_NETWORK_NAME

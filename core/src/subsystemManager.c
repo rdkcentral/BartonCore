@@ -27,7 +27,7 @@
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
 #include "icUtil/stringUtils.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 #define LOG_TAG     "deviceService"
 #define logFmt(fmt) "subsystemManager: %s - " fmt, __func__
 
@@ -313,8 +313,8 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
     icLogDebug(LOG_TAG, "%s", __func__);
 
     {
-        g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        scoped_generic char *disabledSubsystems = b_device_service_property_provider_get_property_as_string(
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        scoped_generic char *disabledSubsystems = b_core_property_provider_get_property_as_string(
             propertyProvider, "device.subsystem.disable", NULL);
 
         WRITE_LOCK_SCOPE(mutex);

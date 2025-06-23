@@ -21,7 +21,7 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-include(BDSAddCppTest)
+include(BCoreAddCppTest)
 
 # Avoid throwing the kitchen sink into sources and LIBS.
 # Only build units that are actually under test - this
@@ -32,8 +32,8 @@ list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepar
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/MatterCommon.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
-                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/device-service-property-provider.c
-                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/device-service-default-property-provider.c
+                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
+                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
                      ${PROJECT_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
 
 pkg_check_modules(OPENSSL REQUIRED openssl)
@@ -41,8 +41,8 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 # This executable should contain a collection of mini integration (mostly unit)
 # tests that validate classes meant to make some deficient SDK classes more usable.
 # Add more executables for truly isolated units that don't link to other libraries.
-bds_add_cpp_test(NAME testMatterSDKTooling
-                LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
+bcore_add_cpp_test(NAME testMatterSDKTooling
+                LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
                 INCLUDES ${BARTON_PRIVATE_INCLUDES}
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
                          ${PROJECT_SOURCE_DIR}/api/c/public
@@ -59,4 +59,4 @@ if (BUILD_TESTING)
     )
 endif()
 
-bds_configure_glib()
+bcore_configure_glib()

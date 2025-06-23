@@ -30,13 +30,13 @@
 #--------------------------------------------------------------------------------------
 
 include(FindPkgConfig)
-include(BDSConfigureGLib)
-include(BDSAddGLibTest)
-include(BDSAddCMockaTest)
-include(BDSAddCppTest)
-include(BDSFindIncludeDir)
+include(BCoreConfigureGLib)
+include(BCoreAddGLibTest)
+include(BCoreAddCMockaTest)
+include(BCoreAddCppTest)
+include(BCoreFindIncludeDir)
 
-file(GLOB_RECURSE BRTN_DS_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c)
+file(GLOB_RECURSE B_CORE_API_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/src/*.c)
 set(PRIVATE_API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/private)
 
 # define source files
@@ -49,7 +49,7 @@ file(GLOB serialSrc "src/serial/*.c")
 set(SOURCES ${mainSrc} ${eventSrc} ${dbaseSrc} ${deviceSrc} ${serialSrc})
 
 # philips lights (if option set)
-if (BDS_PHILIPS_HUE)
+if (BCORE_PHILIPS_HUE)
     # add source files
     file(GLOB philipSrc "deviceDrivers/philipsHue*")
     set(SOURCES ${SOURCES} ${philipSrc})
@@ -59,7 +59,7 @@ if (BDS_PHILIPS_HUE)
 endif()
 
 # zigbee (if option set)
-if (BDS_ZIGBEE)
+if (BCORE_ZIGBEE)
 
     # add source files
     file(GLOB zigSubSrc "src/subsystems/zigbee/*.c")
@@ -71,7 +71,7 @@ if (BDS_ZIGBEE)
 
 endif() #BARTON_CONFIG_ZIGBEE
 
-if (BDS_MATTER)
+if (BCORE_MATTER)
     file(GLOB matterSubSrc "src/subsystems/matter/*.cpp")
     file(GLOB matterSubProviderCommonSrc "src/subsystems/matter/delegates/*.cpp" "src/subsystems/matter/providers/*.cpp")
 
@@ -82,8 +82,8 @@ if (BDS_MATTER)
     list(APPEND SOURCES
         ${matterSubSrc}
         ${matterSubProviderCommonSrc}
-        ${BDS_MATTER_PROVIDER_IMPLEMENTATIONS}
-        ${BDS_MATTER_DELEGATE_IMPLEMENTATIONS}
+        ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS}
+        ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS}
         ${matterDriversSrc}
         ${matterSrc}
     )
@@ -101,7 +101,7 @@ if (BDS_MATTER)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
-    bds_find_include(
+    bcore_find_include(
         MATTER_INCLUDE_DIR
         access/AccessRestrictionProvider.h
         matter
@@ -111,20 +111,20 @@ if (BDS_MATTER)
 
     list(APPEND XTRA_INCLUDES
         ${OPENSSL_INCLUDE_DIRS}
-        ${BDS_MATTER_PROVIDER_HEADER_PATHS}
-        ${BDS_MATTER_DELEGATE_HEADER_PATHS})
+        ${BCORE_MATTER_PROVIDER_HEADER_PATHS}
+        ${BCORE_MATTER_DELEGATE_HEADER_PATHS})
 
-    list(APPEND XTRA_LIBS ${BDS_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier)
+    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
 
-if (BDS_THREAD)
+if (BCORE_THREAD)
     pkg_check_modules(DBUS dbus-1 REQUIRED)
 
     file(GLOB_RECURSE thrSrc "src/subsystems/thread/*.cpp" "src/subsystems/thread/*.c")
     list(APPEND SOURCES ${thrSrc})
 
-    bds_find_include(
+    bcore_find_include(
         OTBR_INCLUDE_DIR
         openthread-br/config.h
         otbr
@@ -150,13 +150,13 @@ link_directories(${CURL_LIBRARY_DIRS})
 list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 
 # add library dependencies for this binary
-set(btnDSLinkLibraries brtnDeviceServiceConfig xhLog xhTypes xhTime xhUtil
+set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
         xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m)
 
-if (BDS_SUPPORT_SOFTWARE_WATCHDOG)
-    set(btnDSLinkLibraries ${btnDSLinkLibraries} xhSoftwareWatchdog)
+if (BCORE_SUPPORT_SOFTWARE_WATCHDOG)
+    set(bCoreLinkLibraries ${bCoreLinkLibraries} xhSoftwareWatchdog)
 endif()
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -171,39 +171,38 @@ set(BARTON_PUBLIC_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public)
 #FIXME: Reduce copy-paste.
 # Object library type compiles once, then can re-use those object files for
 # statice/shared libraries.
-add_library(brtnDeviceServiceObject OBJECT ${SOURCES} ${BRTN_DS_API_SOURCES})
-target_link_libraries(brtnDeviceServiceObject ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceObject PRIVATE
+add_library(bCoreObject OBJECT ${SOURCES} ${B_CORE_API_SOURCES})
+target_link_libraries(bCoreObject ${bCoreLinkLibraries})
+target_include_directories(bCoreObject PRIVATE
                             ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
 
-add_library(brtnDeviceServiceStatic STATIC $<TARGET_OBJECTS:brtnDeviceServiceObject>)
-target_link_libraries(brtnDeviceServiceStatic ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceStatic PRIVATE
+add_library(BartonCoreStatic STATIC $<TARGET_OBJECTS:bCoreObject>)
+target_link_libraries(BartonCoreStatic ${bCoreLinkLibraries})
+target_include_directories(BartonCoreStatic PRIVATE
                             ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
-install(TARGETS brtnDeviceServiceStatic DESTINATION lib)
 
-add_library(brtnDeviceServiceShared SHARED $<TARGET_OBJECTS:brtnDeviceServiceObject>)
-target_link_libraries(brtnDeviceServiceShared ${btnDSLinkLibraries})
-target_include_directories(brtnDeviceServiceShared PRIVATE
+add_library(BartonCore SHARED $<TARGET_OBJECTS:bCoreObject>)
+target_link_libraries(BartonCore ${bCoreLinkLibraries})
+target_include_directories(BartonCore PRIVATE
                             ${BARTON_PRIVATE_INCLUDES}
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
-install(TARGETS brtnDeviceServiceShared DESTINATION lib)
+install(TARGETS BartonCore DESTINATION lib)
 
 # If specified, generate GIR and typelib. Clients need to ensure that the GIR and/or typelib
-# file is installed, as well is libbrtnDeviceServiceShared.so. Additionally,
-# if libbrtnDeviceServiceShared.so is compiled with sanitizer, clients need to set
+# file is installed, as well is libBartonCore.so. Additionally,
+# if libBartonCore.so is compiled with sanitizer, clients need to set
 # LD_PRELOAD ex:
 # LD_PRELOAD=$(gcc -print-file-name=libasan.so) python3 my_app.py
 # LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so) python3 my_app.py
-if (BDS_GEN_GIR)
+if (BCORE_GEN_GIR)
     find_program(G_IR_SCANNER g-ir-scanner)
     if (NOT G_IR_SCANNER)
         message(FATAL_ERROR "g-ir-scanner not found")
@@ -214,7 +213,7 @@ if (BDS_GEN_GIR)
         message(FATAL_ERROR "g-ir-compiler not found")
     endif()
 
-    set(NAMESPACE BDeviceService)
+    set(NAMESPACE BCore)
     set(NAMESPACE_VERSION 1.0)
     set(GIR_OUTPUT_NAME ${NAMESPACE}-${NAMESPACE_VERSION}.gir)
     set(GIR_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${GIR_OUTPUT_NAME})
@@ -224,22 +223,22 @@ if (BDS_GEN_GIR)
     # The list of --libraries should be only the minimal amount necessary
     # to resolve at run time (and the loader should be able to find everything
     # else through RUNPATH in a client program). However, the scanner needs
-    # paths to dependent libraries even if RUNPATH is set in libbrtnDeviceServiceShared.so.
+    # paths to dependent libraries even if RUNPATH is set in libbCore.so.
     # I don't know why.
 
     set(SCANNER_ARGS
     --namespace=${NAMESPACE}
-    --symbol-prefix=b_device_service
+    --symbol-prefix=b_core
     --nsversion=${NAMESPACE_VERSION}
     --warn-all
     --no-libtool
     --output=${GIR_OUTPUT}
     --include=GObject-2.0
     --include=Gio-2.0
-    --library=brtnDeviceServiceShared
+    --library=BartonCore
     --library=stdc++
     --library-path=${CMAKE_PREFIX_PATH}/lib
-    -I$<JOIN:$<TARGET_PROPERTY:brtnDeviceServiceShared,INCLUDE_DIRECTORIES>, -I>)
+    -I$<JOIN:$<TARGET_PROPERTY:BartonCore,INCLUDE_DIRECTORIES>, -I>)
 
     file(GLOB API_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/*.h
                            ${CMAKE_CURRENT_SOURCE_DIR}/../api/c/public/events/*.h
@@ -263,7 +262,7 @@ if (BDS_GEN_GIR)
     file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir INPUT ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir.in)
 
     add_custom_command(
-        TARGET brtnDeviceServiceShared POST_BUILD
+        TARGET BartonCore POST_BUILD
         COMMAND env LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
@@ -276,14 +275,14 @@ if (BDS_GEN_GIR)
     install(FILES ${TYPELIB_OUTPUT} DESTINATION ${EXPECTED_XDG_DATA_DIR}/lib/girepository-1.0)
 
     # Next up is python stubs, which are good for development.
-    set(BDS_LIBRARY_LOCATION ${CMAKE_INSTALL_PREFIX}/lib)
+    set(BCORE_LIBRARY_LOCATION ${CMAKE_INSTALL_PREFIX}/lib)
     set(GIR_NAME ${NAMESPACE})
     set(GIR_VERSION ${NAMESPACE_VERSION})
     # We install this in our Dockerfile
     set(GENERATE_DIR /usr/bin/pygobject-stubs)
     set(OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/pygobject-stubs-generate-output.txt)
 
-    if (BDS_BUILD_WITH_ASAN)
+    if (BCORE_BUILD_WITH_ASAN)
         if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
             set(ASAN_LD_PRELOAD "LD_PRELOAD=$(clang -print-file-name=libclang_rt.asan-x86_64.so)")
         elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -300,4 +299,4 @@ endif()
 add_subdirectory(${PROJECT_SOURCE_DIR}/api/c/test ${PROJECT_BINARY_DIR}/api/c/test)
 add_subdirectory(test)
 
-bds_configure_glib()
+bcore_configure_glib()

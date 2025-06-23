@@ -23,16 +23,16 @@
 
 cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
-project(brtn-reference)
+project(barton-core-reference)
 
-include(BDSConfigureGLib)
+include(BCoreConfigureGLib)
 
-file(GLOB_RECURSE BRTN_DS_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+file(GLOB_RECURSE B_CORE_REFERENCE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
-add_executable(brtn-ds-reference ${BRTN_DS_REFERENCE_SOURCES})
+add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
-target_link_options(brtn-ds-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
-target_link_libraries(brtn-ds-reference brtnDeviceServiceShared linenoise)
+target_link_options(barton-core-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
+target_link_libraries(barton-core-reference BartonCore linenoise)
 
-bds_configure_glib()
+bcore_configure_glib()

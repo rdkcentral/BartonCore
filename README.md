@@ -38,7 +38,7 @@ Additional features include:
 - Telemetry (coming soon)
 - Proactive fault detection
 
-For a more detailed discussion of the architecture and design, see [docs/device-service-design.md](docs/device-service-design.md).
+For a more detailed discussion of the architecture and design, see [docs/barton-core-design.md](docs/barton-core-design.md).
 
 ## Quickstart
 

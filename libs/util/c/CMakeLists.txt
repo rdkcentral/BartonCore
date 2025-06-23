@@ -52,9 +52,9 @@ target_include_directories(xhUtil PUBLIC public)
 
 add_compile_definitions(PRIVATE RESOURCES_DIR="${CMAKE_CURRENT_LIST_DIR}/test/etc")
 
-bds_configure_glib()
+bcore_configure_glib()
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testFileUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/fileTest.c
         WRAPPED_FUNCTIONS fsync fflush fwrite fread feof fopen ferror
@@ -62,19 +62,19 @@ bds_add_cmocka_test(
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testStringUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/stringTest.c
         LINK_LIBRARIES xhUtil xhTypes
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testRegexUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/regexTest.c
         LINK_LIBRARIES xhUtil xhTypes
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testSystemCommandUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/systemCommandUtilsTest.c
         LINK_LIBRARIES xhUtil

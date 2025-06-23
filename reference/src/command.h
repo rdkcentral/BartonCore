@@ -27,10 +27,10 @@
 
 #pragma once
 
-#include "device-service-client.h"
+#include "barton-core-client.h"
 #include <stdbool.h>
 
-typedef bool (*commandExecFunc)(BDeviceServiceClient *client, gint argc, gchar *argv[]);
+typedef bool (*commandExecFunc)(BCoreClient *client, gint argc, gchar *argv[]);
 
 typedef struct _Command Command;
 
@@ -94,7 +94,7 @@ void commandSetAdvanced(Command *command);
  * @param argv
  * @return true if the command succeeded
  */
-bool commandExecute(BDeviceServiceClient *client, const Command *command, gint argc, gchar **argv);
+bool commandExecute(BCoreClient *client, const Command *command, gint argc, gchar **argv);
 
 /**
  * Add an example usage for this Command.  These help the user understand how to use it.

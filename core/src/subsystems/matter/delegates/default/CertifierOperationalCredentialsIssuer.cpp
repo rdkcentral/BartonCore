@@ -296,14 +296,14 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
 
 std::string CertifierOperationalCredentialsIssuer::GetAuthToken()
 {
-    g_autoptr(BDeviceServiceTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
+    g_autoptr(BCoreTokenProvider) tokenProvider = deviceServiceConfigurationGetTokenProvider();
 
     std::string retVal = "";
     if (tokenProvider)
     {
         g_autoptr(GError) error = nullptr;
         g_autofree gchar *token =
-            b_device_service_token_provider_get_token(tokenProvider, B_DEVICE_SERVICE_TOKEN_TYPE_XPKI_MATTER, &error);
+            b_core_token_provider_get_token(tokenProvider, B_CORE_TOKEN_TYPE_XPKI_MATTER, &error);
 
         if (error)
         {
@@ -337,8 +337,8 @@ CertifierOperationalCredentialsIssuer::GetIssuerApiEnvFromString(std::string ope
 
 void CertifierOperationalCredentialsIssuer::SetOperationalCredsIssuerApiEnv()
 {
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *propValue = b_device_service_property_provider_get_property_as_string(
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *propValue = b_core_property_provider_get_property_as_string(
         propertyProvider, DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT, DEFAULT_OPERATIONAL_ENVIRONMENT);
     std::string envString(propValue);
     mApiEnv = GetIssuerApiEnvFromString(envString);

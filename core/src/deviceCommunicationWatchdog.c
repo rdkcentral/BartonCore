@@ -28,7 +28,7 @@
 #include "devicePrivateProperties.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServicePrivate.h"
-#include "provider/device-service-property-provider.h"
+#include "provider/barton-core-property-provider.h"
 
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
@@ -104,9 +104,9 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
 
     failedCallback = failedcb;
     restoredCallback = restoredcb;
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     fastCommFailTimer =
-        b_device_service_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
+        b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
 
     pthread_mutex_unlock(&controlMutex);
 }
@@ -197,8 +197,7 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo *info =
-        (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
     if (info != NULL)
     {
         if (setMillisUntilCommFail(info, info->commFailTimeoutSeconds * 1000) >= MIN_UPDATE_INTERVAL_MILLIS)
@@ -245,8 +244,7 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo *info =
-        (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -287,8 +285,7 @@ int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char 
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info =
-        (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
     if (info != NULL)
     {
 
@@ -343,8 +340,7 @@ void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uui
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info =
-        (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -475,7 +471,6 @@ static void *commFailWatchdogThreadProc(void *arg)
         }
 
         g_ptr_array_free(uuidsInCommFail, true);
-
     }
 
     return NULL;

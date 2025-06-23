@@ -40,8 +40,8 @@ extern "C" {
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProperties.h"
 #include "icUtil/fileUtils.h"
-#include "provider/device-service-property-provider.h"
-#include "provider/device-service-token-provider.h"
+#include "provider/barton-core-property-provider.h"
+#include "provider/barton-core-token-provider.h"
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
@@ -194,9 +194,9 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 
     myFabricId = accountId;
 
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    this->vendorId = (chip::VendorId) b_device_service_property_provider_get_property_as_uint16(
+    this->vendorId = (chip::VendorId) b_core_property_provider_get_property_as_uint16(
         propertyProvider, MATTER_VID_PROP_KEY, this->vendorId);
     icDebug("Using vendor ID: 0x%04x", this->vendorId);
 
@@ -234,20 +234,20 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     }
 
 #ifdef BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA
-    b_device_service_property_provider_set_property_uint16(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_DISCRIMINATOR, DEVELOPMENT_DISCRIMINATOR);
+    b_core_property_provider_set_property_uint16(
+        propertyProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, DEVELOPMENT_DISCRIMINATOR);
 
-    b_device_service_property_provider_set_property_uint32(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, kDefaultPAKEIterationCount);
+    b_core_property_provider_set_property_uint32(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT, kDefaultPAKEIterationCount);
 
-    b_device_service_property_provider_set_property_uint32(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SETUP_PASSCODE, DEVELOPMENT_PASSCODE);
+    b_core_property_provider_set_property_uint32(
+        propertyProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, DEVELOPMENT_PASSCODE);
 
-    b_device_service_property_provider_set_property_string(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_SALT, DEVELOPMENT_SALT);
+    b_core_property_provider_set_property_string(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_SALT, DEVELOPMENT_SALT);
 
-    b_device_service_property_provider_set_property_string(
-        propertyProvider, B_DEVICE_SERVICE_BARTON_MATTER_SPAKE2P_VERIFIER, DEVELOPMENT_VERIFIER);
+    b_core_property_provider_set_property_string(
+        propertyProvider, B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER, DEVELOPMENT_VERIFIER);
 #endif
 
     chip::DeviceLayer::SetCommissionableDataProvider(commissionableDataProvider.get());
@@ -343,21 +343,21 @@ bool Matter::Start()
 
     //TODO this should also be called if/when the local wifi network is changed
     g_autoptr(GError) error = NULL;
-    g_autoptr(BDeviceServiceNetworkCredentialsProvider) provider =
+    g_autoptr(BCoreNetworkCredentialsProvider) provider =
         deviceServiceConfigurationGetNetworkCredentialsProvider();
-    g_autoptr(BDeviceServiceWifiNetworkCredentials) wifiCredentials =
-        b_device_service_network_credentials_provider_get_wifi_network_credentials(provider, &error);
+    g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials =
+        b_core_network_credentials_provider_get_wifi_network_credentials(provider, &error);
 
     if (error == NULL && wifiCredentials != NULL)
     {
         g_autofree gchar *ssid = NULL;
         g_autofree gchar *psk = NULL;
         g_object_get(wifiCredentials,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
                      &ssid,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
                      &psk,
                      NULL);
 
@@ -601,9 +601,9 @@ CHIP_ERROR Matter::SetIPKOnce()
     CHIP_ERROR ipkStatus = groupDataProvider.GetIpkKeySet(fabricIndex, ipkSet);
 
     // TODO: add and use getSensitiveProperty
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    scoped_generic char *base64Ipk = b_device_service_property_provider_get_property_as_string(
+    scoped_generic char *base64Ipk = b_core_property_provider_get_property_as_string(
         propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
     uint8_t compressedFabricId[sizeof(uint64_t)] = {0};
     chip::MutableByteSpan compressedFabricIdSpan(compressedFabricId);
@@ -700,7 +700,7 @@ CHIP_ERROR Matter::SetIPKOnce()
     VerifyOrReturnError(base64Ipk != NULL, CHIP_ERROR_INTERNAL);
 
     // TODO: add and use setSensitiveProperty
-    VerifyOrReturnError(b_device_service_property_provider_set_property_string(
+    VerifyOrReturnError(b_core_property_provider_set_property_string(
                             propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, base64Ipk),
                         CHIP_ERROR_INTERNAL);
 
@@ -710,8 +710,8 @@ CHIP_ERROR Matter::SetIPKOnce()
 std::unique_ptr<chip::Crypto::IdentityProtectionKey> Matter::GetCurrentIPK()
 {
     chip::FabricIndex fabricIndex = commissionerController->GetFabricIndex();
-    g_autoptr(BDeviceServicePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    scoped_generic char *base64Ipk = b_device_service_property_provider_get_property_as_string(
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *base64Ipk = b_core_property_provider_get_property_as_string(
         propertyProvider, DEVICE_PROP_MATTER_CURRENT_IPK, NULL);
 
     if (base64Ipk == NULL)
@@ -782,21 +782,21 @@ CHIP_ERROR Matter::GetCommissioningParams(chip::Controller::CommissioningParamet
 #endif
 
     g_autoptr(GError) error = NULL;
-    g_autoptr(BDeviceServiceNetworkCredentialsProvider) provider =
+    g_autoptr(BCoreNetworkCredentialsProvider) provider =
         deviceServiceConfigurationGetNetworkCredentialsProvider();
-    g_autoptr(BDeviceServiceWifiNetworkCredentials) wifiCredentials =
-        b_device_service_network_credentials_provider_get_wifi_network_credentials(provider, &error);
+    g_autoptr(BCoreWifiNetworkCredentials) wifiCredentials =
+        b_core_network_credentials_provider_get_wifi_network_credentials(provider, &error);
 
     if (error == NULL && wifiCredentials != NULL)
     {
         free(wifiSsid);
         free(wifiPass);
         g_object_get(wifiCredentials,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_SSID],
                      &wifiSsid,
-                     B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
-                         [B_DEVICE_SERVICE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
+                     B_CORE_WIFI_NETWORK_CREDENTIALS_PROPERTY_NAMES
+                         [B_CORE_WIFI_NETWORK_CREDENTIALS_PROP_PSK],
                      &wifiPass,
                      NULL);
 
