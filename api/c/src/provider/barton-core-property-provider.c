@@ -197,7 +197,7 @@ gboolean b_core_property_provider_get_property_as_bool(BCorePropertyProvider *se
         return default_value;
     }
 
-    return g_strcmp0(property_value, "true") == 0;
+    return g_ascii_strcasecmp(property_value, "true") == 0;
 }
 
 gint8 b_core_property_provider_get_property_as_int8(BCorePropertyProvider *self,

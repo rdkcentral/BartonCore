@@ -23,7 +23,7 @@
 
 include_guard(GLOBAL)
 
-function(bds_configure_glib)
+function(bcore_configure_glib)
     get_directory_property(MY_TARGETS BUILDSYSTEM_TARGETS)
     include(FindPkgConfig)
 

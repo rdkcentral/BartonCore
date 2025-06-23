@@ -46,13 +46,13 @@ target_link_libraries(xhTime xhLog xhUtil m ${CONFIG_LDFLAG})
 target_include_directories(xhTime PUBLIC public)
 
 # add our 'unit test' to be part of the "make unitTest"
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testTimeUtils
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/timeUtilsTest.c
         LINK_LIBRARIES xhTime
 )
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testTimeTracker
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/timeTrackerTest.c
         LINK_LIBRARIES xhTime

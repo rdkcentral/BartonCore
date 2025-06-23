@@ -46,7 +46,7 @@ target_link_libraries(xhJsonHelper cjson xhTypes xhUtil)
 target_include_directories(xhJsonHelper PUBLIC public)
 
 # test target
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testJsonPointer
         TYPE unit
         TEST_SOURCES "test/src/jsonPointerTest.c"

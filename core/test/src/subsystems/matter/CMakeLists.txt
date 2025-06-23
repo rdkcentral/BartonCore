@@ -28,27 +28,24 @@ include(BCoreAddCppTest)
 # can be useful for discovering unintended tight coupling.
 
 file(GLOB TEST_SRC *.cpp)
-list(APPEND TEST_SRC ../ReadPrepareParamsBuilder.cpp
-                     ../MatterCommon.cpp
-                     ../providers/BartonCommissionableDataProvider.cpp
-                     ../providers/default/DefaultCommissionableDataProvider.cpp
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
-                     ${CMAKE_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
+list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepareParamsBuilder.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/MatterCommon.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
+                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
+                     ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
+                     ${PROJECT_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
 
 pkg_check_modules(OPENSSL REQUIRED openssl)
 
 # This executable should contain a collection of mini integration (mostly unit)
 # tests that validate classes meant to make some deficient SDK classes more usable.
 # Add more executables for truly isolated units that don't link to other libraries.
-bds_add_cpp_test(NAME testMatterSDKTooling
+bcore_add_cpp_test(NAME testMatterSDKTooling
                 LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
-                INCLUDES ${CMAKE_SOURCE_DIR}/core/src
-                         ${CMAKE_CURRENT_SOURCE_DIR}/..
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers
-                         ${CMAKE_CURRENT_SOURCE_DIR}/../providers/default
+                INCLUDES ${BARTON_PRIVATE_INCLUDES}
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                         ${CMAKE_SOURCE_DIR}/api/c/public
+                         ${PROJECT_SOURCE_DIR}/api/c/public
                          ${PRIVATE_API_INCLUDES}
                 SOURCES ${TEST_SRC}
 )
@@ -62,4 +59,4 @@ if (BUILD_TESTING)
     )
 endif()
 
-bds_configure_glib()
+bcore_configure_glib()

@@ -47,7 +47,7 @@
 #include <icLog/logging.h>
 #include <linenoise.h>
 
-#define PROMPT "deviceService> "
+#define PROMPT "barton-core> "
 
 static pthread_once_t init = PTHREAD_ONCE_INIT;
 static pthread_mutex_t mtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
@@ -276,7 +276,7 @@ static void destroyAsyncContext(ioAsyncContext *data)
     }
 }
 
-void device_service_reference_io_process(bool useLinenoise, processLineCallback callback, void *userData)
+void barton_core_reference_io_process(bool useLinenoise, processLineCallback callback, void *userData)
 {
     pthread_once(&init, ioSetup);
 

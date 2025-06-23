@@ -30,7 +30,7 @@ include(BCoreConfigureGLib)
 # - SOURCES The sources with which to generate the test executable.
 # - LIBS Libraries to link the test executable against
 # - INCLUDES Header files to be included
-function(bds_add_cpp_test)
+function(bcore_add_cpp_test)
     if(BUILD_TESTING)
         set(singleValueArgs NAME)
         set(multiValueArgs SOURCES LIBS INCLUDES)

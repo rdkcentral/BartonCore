@@ -236,6 +236,15 @@ static void test_b_core_property_provider_get_property_as_bool(void **state)
         B_CORE_PROPERTY_PROVIDER(provider), name, defaultValue);
     assert_true(valueTest);
 
+    value = "True";
+    expect_function_call(__wrap_deviceServiceGetSystemProperty);
+    expect_string(__wrap_deviceServiceGetSystemProperty, name, name);
+    will_return(__wrap_deviceServiceGetSystemProperty, value);
+    will_return(__wrap_deviceServiceGetSystemProperty, true);
+
+    valueTest = b_core_property_provider_get_property_as_bool(B_CORE_PROPERTY_PROVIDER(provider), name, defaultValue);
+    assert_true(valueTest);
+
     value = "false";
     expect_function_call(__wrap_deviceServiceGetSystemProperty);
     expect_string(__wrap_deviceServiceGetSystemProperty, name, name);

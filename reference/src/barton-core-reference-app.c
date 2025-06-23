@@ -29,6 +29,7 @@
 #include "barton-core-client.h"
 #include "barton-core-initialize-params-container.h"
 #include "barton-core-reference-io.h"
+#include "barton-core-properties.h"
 #include "eventHandler.h"
 #include "matterCategory.h"
 #include "threadCategory.h"
@@ -181,6 +182,34 @@ static gchar *getDefaultConfigDirectory(void)
     return confDir;
 }
 
+static void setDefaultParameters(BCoreInitializeParamsContainer *params)
+{
+    BCorePropertyProvider *propProvider =
+        b_core_initialize_params_container_get_property_provider(params);
+    if (propProvider != NULL)
+    {
+        // set default discriminator if not already set
+        guint16 discriminator = b_core_property_provider_get_property_as_uint16(
+            propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 0);
+        if (discriminator == 0)
+        {
+            // Use the well-known development discriminator 3840
+            b_core_property_provider_set_property_uint16(
+                propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 3840);
+        }
+
+        // set default passcode if not already set
+        guint32 passcode = b_core_property_provider_get_property_as_uint32(
+            propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 0);
+        if (passcode == 0)
+        {
+            // Use the well-known development passcode 20202021
+            b_core_property_provider_set_property_uint32(
+                propProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, 20202021);
+        }
+    }
+}
+
 static void configureSubsystems(BCoreInitializeParamsContainer *params)
 {
     BCorePropertyProvider *propProvider =
@@ -244,6 +273,7 @@ static BCoreClient *initializeClient(gchar *confDir)
 
     BCoreClient *client = b_core_client_new(params);
     configureSubsystems(params);
+    setDefaultParameters(params);
     return client;
 }
 
@@ -348,15 +378,15 @@ int main(int argc, char **argv)
 
     /*
         TODO: There are three issues with logging at this time:
-            1. Logging prior to this call to device_service_reference_io_process is not shown if anything prior blocks
+            1. Logging prior to this call to barton_core_reference_io_process is not shown if anything prior blocks
        (ex: b_core_client_start blocks on subsystem ready wait)
-            2. Logging after this call to device_service_reference_io_process (in main()) is not shown
+            2. Logging after this call to barton_core_reference_io_process (in main()) is not shown
             3. Logging after main is shown but is broken if VT100 mode is enabled.
                 - Additionally, if the reference app is run in a terminal the terminal will be left in a broken state.
 
         For now, to see output like ASAN leaks sensibly, use the -1 argument to turn off VT100 mode.
      */
-    device_service_reference_io_process(!NO_VT100_MODE, (processLineCallback) handleLine, client);
+    barton_core_reference_io_process(!NO_VT100_MODE, (processLineCallback) handleLine, client);
 
     unregisterEventHandlers();
     rc = true;

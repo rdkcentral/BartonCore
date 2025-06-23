@@ -25,7 +25,7 @@ include_guard(GLOBAL)
 include(CMakeParseArguments)
 include(FindPkgConfig)
 
-function(bds_find_package)
+function(bcore_find_package)
     set(options REQUIRED)
     set(oneValueArgs NAME MIN_VERSION MAX_VERSION)
     set(multiValueArgs SOURCES LIBRARIES INCLUDE_DIRECTORIES)

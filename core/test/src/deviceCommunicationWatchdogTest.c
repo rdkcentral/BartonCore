@@ -29,7 +29,6 @@
 #include "deviceCommunicationWatchdog.h"
 #include "provider/barton-core-property-provider.h"
 #include "icUtil/stringUtils.h"
-#include "icConcurrent/threadUtils.h"
 #include <cmocka.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -37,8 +36,6 @@
 
 static char *failedUuid = NULL;
 static char *restoredUuid = NULL;
-static taskFunc task = NULL;
-static void *taskArg = NULL;
 
 static void commFailCb(const char *uuid)
 {
@@ -59,24 +56,13 @@ gboolean __wrap_b_core_property_provider_get_property_as_bool(BCorePropertyProvi
     return (gboolean)mock();
 }
 
-bool __wrap_createThread(pthread_t *tid, taskFunc task, void *taskArg, const char *name)
-{
-    function_called();
-    task = task;
-    taskArg = taskArg;
-
-    return (bool)mock();
-}
-
 static int test_testSetup(void **state)
 {
     (void) state;
 
     // Initialize the watchdog
-    expect_function_call(__wrap_createThread);
-    will_return(__wrap_createThread, true);
     expect_function_call(__wrap_b_core_property_provider_get_property_as_bool);
-    will_return(__wrap_b_core_property_provider_get_property_as_bool, false);
+    will_return(__wrap_b_core_property_provider_get_property_as_bool, true);
     deviceCommunicationWatchdogInit(commFailCb, commRestoreCb);
     assert_null(failedUuid);
     assert_null(restoredUuid);
@@ -109,25 +95,7 @@ static void test_deviceCommunicationWatchdogInit(void **state)
     assert_null(failedUuid);
     assert_null(restoredUuid);
 
-    // Test initialization with valid callbacks
-    if (task != NULL)
-    {
-        const char *uuid = "device1";
-        uint32_t timeout = 30;
-        deviceCommunicationWatchdogMonitorDevice(uuid, timeout, false);
-        deviceCommunicationWatchdogSetFastCommfail(true);
-        deviceCommunicationWatchdogSetMonitorInterval(10);
-
-        task(taskArg);
-        assert_string_equal(failedUuid, uuid);
-        free(failedUuid);
-        failedUuid = NULL;
-
-        deviceCommunicationWatchdogStopMonitoringDevice(uuid);
-
-    }
-
-    // Test that the watchdog is already initialized
+    // watchdog is already initialized, so this should not cause any issues
     deviceCommunicationWatchdogInit(commFailCb, commRestoreCb);
     assert_null(failedUuid);
     assert_null(restoredUuid);

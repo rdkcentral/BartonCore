@@ -51,7 +51,7 @@ set(LOG_SRC ${LOG_SRC} src/loggingCommon.c)
 
 add_library(xhLog STATIC ${LOG_SRC})
 
-bds_configure_glib()
+bcore_configure_glib()
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhLog PUBLIC public)

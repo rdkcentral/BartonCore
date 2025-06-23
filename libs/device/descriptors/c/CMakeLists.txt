@@ -45,7 +45,7 @@ target_link_libraries(xhDeviceDescriptors xhLog xhTypes xhUtil xhXmlHelper)
 # export our 'public' folder so others can include our headers
 target_include_directories(xhDeviceDescriptors PUBLIC public PRIVATE)
 
-bds_configure_glib()
+bcore_configure_glib()
 
 # add our test to be part of the "make manualTest"
 add_subdirectory(test)

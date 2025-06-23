@@ -45,7 +45,7 @@ target_link_libraries(zhal xhLog xhTypes xhUtil xhConcurrent cjson xhJsonHelper 
 # export our 'public' folder so others can include our headers
 target_include_directories(zhal PUBLIC public)
 
-bds_add_cmocka_test(
+bcore_add_cmocka_test(
         NAME testZhalImpl
         TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/zhalImplUnitTest.c
         WRAPPED_FUNCTIONS connect send recv zhalNetworkTerm
@@ -57,4 +57,4 @@ bds_add_cmocka_test(
 # add our test to be part of the "make manualTest"
 add_subdirectory(test)
 
-bds_configure_glib()
+bcore_configure_glib()

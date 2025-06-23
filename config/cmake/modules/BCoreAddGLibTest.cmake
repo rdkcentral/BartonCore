@@ -22,8 +22,9 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 include_guard(GLOBAL)
+include(BCoreConfigureGLib)
 
-function(bds_add_glib_test)
+function(bcore_add_glib_test)
     if(BUILD_TESTING)
         set(options)
         set(oneValueArgs NAME GLOG_DOMAIN)
@@ -34,6 +35,8 @@ function(bds_add_glib_test)
         target_link_libraries(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE BartonCoreStatic ${BCORE_ADD_GLIB_TEST_LIBRARIES})
         target_compile_definitions(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE G_LOG_DOMAIN="${BCORE_ADD_GLIB_TEST_GLOG_DOMAIN}")
         target_include_directories(${BCORE_ADD_GLIB_TEST_NAME} PRIVATE ${BCORE_ADD_GLIB_TEST_INCLUDE_DIRECTORIES})
+
+        message(STATUS "Adding unit test ${BCORE_ADD_GLIB_TEST_NAME}")
 
         add_test(NAME ${BCORE_ADD_GLIB_TEST_NAME} COMMAND ${BCORE_ADD_GLIB_TEST_NAME})
         set_property(TEST ${BCORE_ADD_GLIB_TEST_NAME} PROPERTY ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_PREFIX_PATH}/lib:${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}")

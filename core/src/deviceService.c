@@ -4323,11 +4323,11 @@ DeviceServiceStatus *deviceServiceGetStatus(void)
 
     result->subsystemsJsonStatus = hashMapCreate();
 
-    scoped_icLinkedListGeneric *subsystems = subsystemManagerGetRegisteredSubsystems();
-    sbIcLinkedListIterator *subsystemsIt = linkedListIteratorCreate(subsystems);
-    while (linkedListIteratorHasNext(subsystemsIt))
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
+
+    for (guint i = 0; i < subsystems->len; i++)
     {
-        char *subsystemName = linkedListIteratorGetNext(subsystemsIt);
+        gchar *subsystemName = g_ptr_array_index(subsystems, i);
         hashMapPut(result->subsystemsJsonStatus,
                    strdup(subsystemName),
                    strlen(subsystemName),

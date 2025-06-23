@@ -35,7 +35,7 @@
 #   DESCRIPTION  - Human-readable description used in error messages
 #   INCLUDE_LIST - Name of list variable to append the found path to
 #
-macro(bds_find_include VAR_NAME HEADER_FILE PATH_SUFFIX DESCRIPTION INCLUDE_LIST)
+macro(bcore_find_include VAR_NAME HEADER_FILE PATH_SUFFIX DESCRIPTION INCLUDE_LIST)
     find_path(${VAR_NAME} ${HEADER_FILE} PATH_SUFFIXES ${PATH_SUFFIX})
 
     if (${VAR_NAME} STREQUAL "${VAR_NAME}-NOTFOUND")

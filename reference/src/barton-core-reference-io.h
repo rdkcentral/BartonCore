@@ -35,7 +35,7 @@ typedef bool (*processLineCallback)(const char *line, void *userData);
  * Blocks waiting on input from the user and manages the prompt and other async output.  In order to keep the prompt
  * from getting mangled by output users should use emitOutput/emitError to print to the terminal.
  */
-void device_service_reference_io_process(bool useLinenoise, processLineCallback callback, void *userData);
+void barton_core_reference_io_process(bool useLinenoise, processLineCallback callback, void *userData);
 
 /**
  * Emit some output to the terminal.  This will be displayed in a way that doesn't mangle the prompt.

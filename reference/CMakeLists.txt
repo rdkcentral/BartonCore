@@ -23,7 +23,7 @@
 
 cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
-project(brtn-reference)
+project(barton-core-reference)
 
 include(BCoreConfigureGLib)
 
@@ -35,4 +35,4 @@ add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 target_link_options(barton-core-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
 target_link_libraries(barton-core-reference BartonCore linenoise)
 
-bds_configure_glib()
+bcore_configure_glib()

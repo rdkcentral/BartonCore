@@ -27,7 +27,7 @@ include(BCoreConfigureGLib)
 
 # Defines a target for unit tests in the standard way
 #
-# bds_add_cmocka_test(
+# bcore_add_cmocka_test(
 #     NAME myTest                                              # New target name, also executable name
 #     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test/src/test.c # The list of test source files
 #     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test       # Working directory when test is run
@@ -36,7 +36,7 @@ include(BCoreConfigureGLib)
 #     LINK_LIBRARIES myLibrary                                 # list of libraries that you need to link against
 #     LINK_LIBRARIES_WHOLE myWholeLibrary                      # list of libraries that you need to link against (with --whole-archive)
 # )
-function(bds_add_cmocka_test)
+function(bcore_add_cmocka_test)
     if(BUILD_TESTING)
         set(options NONE)
         set(oneValueArgs NAME WORKING_DIRECTORY)
@@ -98,4 +98,6 @@ function(bds_add_cmocka_test)
                  COMMAND ${BCORE_ADD_CMOCKA_TEST_NAME} ${BCORE_ADD_CMOCKA_TEST_TEST_ARGS}
                  WORKING_DIRECTORY ${BCORE_ADD_CMOCKA_TEST_WORKING_DIRECTORY})
     endif()
+
+    bcore_configure_glib()
 endfunction() # SETUP_TARGET_FOR_COVERAGE
