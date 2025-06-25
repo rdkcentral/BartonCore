@@ -33,6 +33,8 @@ add_executable(barton-core-reference ${B_CORE_REFERENCE_SOURCES})
 
 # add library dependencies for this binary
 target_link_options(barton-core-reference PRIVATE -L ${CMAKE_BINARY_DIR}/matter-install/lib)
-target_link_libraries(barton-core-reference BartonCore linenoise)
+target_link_libraries(barton-core-reference
+                        -Wl,--whole-archive BartonCoreStatic -Wl,--no-whole-archive
+                        linenoise)
 
 bcore_configure_glib()
