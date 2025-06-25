@@ -54,6 +54,7 @@ extern "C" {
 #include <openssl/x509.h>
 #include <icLog/logging.h>
 
+#include "barton-core-properties.h"
 #include "deviceServiceConfiguration.h"
 #include "deviceServiceProps.h"
 }
@@ -86,6 +87,7 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::GenerateNOCChainAfterValidatio
                                                                                   MutableByteSpan & rcac, MutableByteSpan & icac,
                                                                                   MutableByteSpan & noc)
 {
+    SetOperationalCredsIsserHost();
     SetOperationalCredsIssuerApiEnv();
 
     mAuthorizationToken = GetAuthToken();
@@ -200,15 +202,23 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
 
     std::string host;
 
-    switch (mApiEnv)
+    if (mOperationalCredsIssuerHost.empty())
     {
-    case ApiEnv::prod:
-        host = "certifier.xpki.io";
-        break;
+        // Use old api env mechanism
+        switch (mApiEnv)
+        {
+            case ApiEnv::prod:
+                host = "certifier.xpki.io";
+                break;
 
-    case ApiEnv::stage:
-        host = "certifier-stage.xpki.io";
-        break;
+            case ApiEnv::stage:
+                host = "certifier-stage.xpki.io";
+                break;
+        }
+    }
+    else
+    {
+        host = mOperationalCredsIssuerHost;
     }
 
     std::stringstream url;
@@ -342,4 +352,15 @@ void CertifierOperationalCredentialsIssuer::SetOperationalCredsIssuerApiEnv()
         propertyProvider, DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT, DEFAULT_OPERATIONAL_ENVIRONMENT);
     std::string envString(propValue);
     mApiEnv = GetIssuerApiEnvFromString(envString);
+}
+
+void CertifierOperationalCredentialsIssuer::SetOperationalCredsIsserHost()
+{
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *propValue = b_core_property_provider_get_property_as_string(
+        propertyProvider, B_CORE_BARTON_MATTER_OPERATIONAL_HOST, nullptr);
+    if (propValue && strlen(propValue) > 0)
+    {
+        mOperationalCredsIssuerHost = propValue;
+    }
 }

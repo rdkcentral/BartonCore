@@ -128,4 +128,12 @@ G_BEGIN_DECLS
 #define B_CORE_BARTON_MATTER_SETUP_PASSCODE                                                                  \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupPasscode"
 
+/**
+ * MATTER_OPERATIONAL_HOST: (value "barton.matter.operationalHost")
+ *
+ * The host of the xpki environment to use. eg. "certifier.xpki.io"
+ * Type: string
+ */
+#define B_CORE_BARTON_MATTER_OPERATIONAL_HOST B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "operationalHost"
+
 G_END_DECLS

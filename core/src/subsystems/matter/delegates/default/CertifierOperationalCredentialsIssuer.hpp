@@ -66,12 +66,24 @@ namespace barton
         using Pkcs7 = std::unique_ptr<PKCS7, decltype(&PKCS7_free)>;
 
         /**
+         * @brief The xpki endpoint to use
+         *
+         * TODO: Defaulting to empty for now to still support the api env mechanism.
+         *       When the api env mechanism is removed, set this to "certifier.xpki.io"
+         */
+        std::string mOperationalCredsIssuerHost = "";
+
+        /**
          * @brief The Matter CA to request certificates from
          */
         std::string mCertifierProfile = "XFN_Matter_OP_ICA";
 
         std::string mAuthorizationToken;
 
+        /**
+         * @brief The API environment to use for the xpki endpoint
+         * @deprecated - use mOperationalCredsIssuerHost instead
+         */
         ApiEnv mApiEnv = ApiEnv::prod;
 
         std::string CreateNOCRequest(const ByteSpan &csr, FabricId fabricId, NodeId nodeId);
@@ -80,6 +92,7 @@ namespace barton
         CHIP_ERROR FetchNOC(const ByteSpan &csr, FabricId fabricId, NodeId nodeId, std::string &pkcs7NOCOut);
         std::string GetAuthToken();
         void SetOperationalCredsIssuerApiEnv();
+        void SetOperationalCredsIsserHost();
         ApiEnv GetIssuerApiEnvFromString(std::string operationalEnv);
     };
 
