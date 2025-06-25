@@ -93,6 +93,7 @@ namespace barton
         std::string GetAuthToken();
         void SetOperationalCredsIssuerApiEnv();
         void SetOperationalCredsIsserHost();
+        void SetCertifierProfileFromProperty();
         ApiEnv GetIssuerApiEnvFromString(std::string operationalEnv);
     };
 

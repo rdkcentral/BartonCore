@@ -89,6 +89,7 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::GenerateNOCChainAfterValidatio
 {
     SetOperationalCredsIsserHost();
     SetOperationalCredsIssuerApiEnv();
+    SetCertifierProfileFromProperty();
 
     mAuthorizationToken = GetAuthToken();
     VerifyOrReturnError(!mAuthorizationToken.empty(), CHIP_ERROR_INCORRECT_STATE);
@@ -362,5 +363,16 @@ void CertifierOperationalCredentialsIssuer::SetOperationalCredsIsserHost()
     if (propValue && strlen(propValue) > 0)
     {
         mOperationalCredsIssuerHost = propValue;
+    }
+}
+
+void CertifierOperationalCredentialsIssuer::SetCertifierProfileFromProperty()
+{
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    g_autofree char *propValue = b_core_property_provider_get_property_as_string(
+        propertyProvider, B_CORE_BARTON_MATTER_OPERATIONAL_PROFILE, nullptr);
+    if (propValue && strlen(propValue) > 0)
+    {
+        mCertifierProfile = propValue;
     }
 }
