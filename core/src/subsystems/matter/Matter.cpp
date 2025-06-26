@@ -189,6 +189,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         return false;
     }
     icDebug("Local node ID: 0x%" PRIx64, myNodeId);
+
     mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
 
     myFabricId = accountId;

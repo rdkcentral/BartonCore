@@ -233,7 +233,7 @@ bcore_string_option(NAME BCORE_MATTER_DELEGATE_HEADER_PATHS
 bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DEFINITION BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DESCRIPTION "Name of the Matter BLE controller device."
-                    VALUE "BartonMatterBLEController")
+                    VALUE "Matter-Controller")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
