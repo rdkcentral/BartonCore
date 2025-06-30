@@ -531,24 +531,22 @@ bool subsystemManagerIsReadyForDevices(void)
 
     READ_LOCK_SCOPE(mutex);
 
-    if (subsystems)
-    {
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            subsystems,
+    g_return_val_if_fail(subsystems != NULL, false);
 
-            mutexLock(&registration->mtx);
-            bool ready = registration->ready;
-            mutexUnlock(&registration->mtx);
+    SubsystemRegistration *registration = NULL;
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-            if (ready == false) {
-                icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
-                allReady = false;
-                break;
-            });
-    }
+        mutexLock(&registration->mtx);
+        bool ready = registration->ready;
+        mutexUnlock(&registration->mtx);
 
+        if (ready == false) {
+            icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
+            allReady = false;
+            break;
+        });
 
     return allReady && allDriversStarted;
 }
@@ -562,22 +560,21 @@ bool subsystemManagerRestoreConfig(const char *tempRestoreDir, const char *dynam
 
     READ_LOCK_SCOPE(mutex);
 
-    if (subsystems)
-    {
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            subsystems,
+    g_return_val_if_fail(subsystems != NULL, false);
 
-            if (registration->subsystem->onRestoreConfig != NULL) {
-                result &= registration->subsystem->onRestoreConfig(tempRestoreDir, dynamicConfigPath);
+    SubsystemRegistration *registration = NULL;
+    MAP_FOREACH(
+        registration,
+        subsystems,
 
-                if (!result)
-                {
-                    icWarn("failed for %s!", registration->subsystem->name);
-                }
-            });
-    }
+        if (registration->subsystem->onRestoreConfig != NULL) {
+            result &= registration->subsystem->onRestoreConfig(tempRestoreDir, dynamicConfigPath);
+
+            if (!result)
+            {
+                icWarn("failed for %s!", registration->subsystem->name);
+            }
+        });
 
     return result;
 }
