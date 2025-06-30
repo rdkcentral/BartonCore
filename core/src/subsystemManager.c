@@ -474,15 +474,14 @@ void subsystemManagerEnterLPM(void)
 {
     READ_LOCK_SCOPE(mutex);
 
-    if (subsystems)
-    {
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            subsystems,
+    g_return_if_fail(subsystems != NULL);
 
-            if (registration->subsystem->onLPMStart != NULL) { registration->subsystem->onLPMStart(); });
-    }
+    SubsystemRegistration *registration = NULL;
+    MAP_FOREACH(
+        registration,
+        subsystems,
+
+        if (registration->subsystem->onLPMStart != NULL) { registration->subsystem->onLPMStart(); });
 }
 
 
