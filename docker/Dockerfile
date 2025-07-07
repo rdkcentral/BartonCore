@@ -136,6 +136,7 @@ FROM base_builder AS third_party_builder
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
 ARG LIBCERTIFIER_GIT_TAG="v2.2.2"
+ARG FFF_GIT_TAG="v1.1"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -168,7 +169,10 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 
 # Fake Function Framework (FFF)
 RUN cd /tmp && \
-    git clone --depth 1 https://github.com/meekrosoft/fff.git && \
+    git clone \
+    --depth 1 \
+    --branch ${FFF_GIT_TAG} \
+    https://github.com/meekrosoft/fff.git && \
     mkdir -p /usr/local/include/fff && \
     cp /tmp/fff/fff.h /usr/local/include/fff/ && \
     rm -rf /tmp/fff
