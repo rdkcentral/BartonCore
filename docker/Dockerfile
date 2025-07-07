@@ -166,6 +166,13 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     zlib1g-dev \
     socat
 
+# Fake Function Framework (FFF)
+RUN cd /tmp && \
+    git clone --depth 1 https://github.com/meekrosoft/fff.git && \
+    mkdir -p /usr/local/include/fff && \
+    cp /tmp/fff/fff.h /usr/local/include/fff/ && \
+    rm -rf /tmp/fff
+
 # 'gn' (generate ninja)
 RUN cd /tmp && \
     wget -O gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest" && \
