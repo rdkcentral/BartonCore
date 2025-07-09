@@ -51,6 +51,8 @@
 
 #define OCCUPANCY_SENSOR_DEVICE_ID 0x0107
 
+#define HUMIDITY_FORMAT_STRING     "%.2f"
+
 /* ZigbeeDriverCommonCallbacks */
 static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
                                        icDevice *device,
@@ -159,7 +161,7 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
             g_autofree char *illuminanceStr = NULL;
             if (illuminanceMeasurementClusterIsValueValid(illuminance))
             {
-                illuminanceStr = g_strdup_printf("%" PRIu16, illuminance);
+                illuminanceStr = g_strdup_printf("%" PRIu32, illuminanceMeasurementClusterConvertToLux(illuminance));
             }
             initialResourceValuesPutEndpointValue(initialResourceValues,
                                                   epName,
@@ -175,7 +177,8 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
             g_autofree char *humidityStr = NULL;
             if (relativeHumidityMeasurementClusterIsValueValid(humidity))
             {
-                humidityStr = g_strdup_printf("%" PRIu16, humidity);
+                humidityStr = g_strdup_printf(HUMIDITY_FORMAT_STRING,
+                                              relativeHumidityMeasurementClusterConvertToPercentage(humidity));
             }
             initialResourceValuesPutEndpointValue(initialResourceValues,
                                                   epName,
@@ -312,7 +315,8 @@ static void illuminanceMeasuredValueUpdated(void *ctx, uint64_t eui64, uint8_t e
     g_autofree char *illuminanceStr = NULL;
     if (illuminanceMeasurementClusterIsValueValid(value))
     {
-        illuminanceStr = g_strdup_printf("%" PRIu16, value);
+
+        illuminanceStr = g_strdup_printf("%" PRIu32, illuminanceMeasurementClusterConvertToLux(value));
     }
     updateResource(deviceId, epName, SENSOR_PROFILE_RESOURCE_ILLUMINANCE, illuminanceStr, NULL);
 }
@@ -325,7 +329,8 @@ static void relativeHumidityMeasuredValueUpdated(void *ctx, uint64_t eui64, uint
     g_autofree char *humidityStr = NULL;
     if (relativeHumidityMeasurementClusterIsValueValid(value))
     {
-        humidityStr = g_strdup_printf("%" PRIu16, value);
+        humidityStr =
+            g_strdup_printf(HUMIDITY_FORMAT_STRING, relativeHumidityMeasurementClusterConvertToPercentage(value));
     }
     updateResource(deviceId, epName, SENSOR_PROFILE_RESOURCE_HUMIDITY, humidityStr, NULL);
 }

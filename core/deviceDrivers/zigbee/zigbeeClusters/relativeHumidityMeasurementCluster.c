@@ -96,6 +96,12 @@ bool relativeHumidityMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t 
     return result;
 }
 
+double relativeHumidityMeasurementClusterConvertToPercentage(uint16_t measuredValue)
+{
+    // Zigbee encodes the relative humidity in units of .01% relative humidity, e.g. 5000 = 50.00% RH.
+    return (double)measuredValue / 100.0;
+}
+
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
 {
     bool result = true;

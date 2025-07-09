@@ -42,6 +42,8 @@ ZigbeeCluster *relativeHumidityMeasurementClusterCreate(const RelativeHumidityMe
 
 bool relativeHumidityMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpointId, uint16_t *value);
 
+double relativeHumidityMeasurementClusterConvertToPercentage(uint16_t measuredValue);
+
 /**
  * Helper to check for valid value.
  *

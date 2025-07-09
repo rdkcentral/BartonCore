@@ -43,6 +43,17 @@ ZigbeeCluster *illuminanceMeasurementClusterCreate(const IlluminanceMeasurementC
 bool illuminanceMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpointId, uint16_t *value);
 
 /**
+ * Converts the measured value from the illuminance measurement cluster to lux.  Zigbee
+ * encodes the illuminance in a logarithmic scale, so this function performs the conversion
+ * from the encoded value back to lux.
+ *
+ * @param measuredValue The measured value from the illuminance measurement cluster.
+ * @return The converted value in lux.
+ */
+uint32_t illuminanceMeasurementClusterConvertToLux(uint16_t measuredValue);
+
+
+/**
  * Helper to check for valid illuminance value.
  *
  * @param value illuminance value to check
