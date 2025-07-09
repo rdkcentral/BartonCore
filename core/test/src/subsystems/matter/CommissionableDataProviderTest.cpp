@@ -34,84 +34,12 @@
 
 // C includes
 extern "C" {
+#include "MockPropertyProvider.h"
 #include "barton-core-properties.h"
 #include "deviceServiceConfiguration.h"
 #include "provider/barton-core-default-property-provider.h"
 #include "provider/barton-core-property-provider.h"
 #include "icTypes/icStringHashMap.h"
-}
-
-static GHashTable *properties; // hash table to simulate property storage
-
-// C function mocks
-extern "C" {
-
-static BCorePropertyProvider *mockPropertyProvider = nullptr;
-
-BCorePropertyProvider *__wrap_deviceServiceConfigurationGetPropertyProvider()
-{
-    if (mockPropertyProvider == nullptr)
-    {
-        mockPropertyProvider = (BCorePropertyProvider *) b_core_default_property_provider_new();
-        g_assert(G_IS_OBJECT(mockPropertyProvider));
-    }
-
-    // Need to increment ref count because the unit under test uses g_autoptr, and we need this object to persist for
-    // the duration of the test
-    g_object_ref(mockPropertyProvider);
-    return mockPropertyProvider;
-}
-
-void resetMockPropertyProvider()
-{
-    if (mockPropertyProvider != nullptr)
-    {
-        g_clear_object(&mockPropertyProvider);
-    }
-}
-
-bool __wrap_deviceServiceGetSystemProperty(const char *name, char **value)
-{
-    if (properties == nullptr)
-    {
-        return false;
-    }
-
-    char *propertyValue = (char *) g_hash_table_lookup(properties, name);
-
-    if (propertyValue == nullptr)
-    {
-        return false;
-    }
-
-    *value = g_strdup(propertyValue);
-    return true;
-}
-
-bool __wrap_deviceServiceSetSystemProperty(const char *name, const char *value)
-{
-    if (properties == nullptr)
-    {
-        return false;
-    }
-
-    if (value == nullptr)
-    {
-        g_hash_table_remove(properties, name);
-    }
-    else
-    {
-        g_hash_table_replace(properties, g_strdup(name), g_strdup(value));
-    }
-
-    return true;
-}
-
-bool __wrap_deviceServiceGetAllSystemProperties(icStringHashMap *map)
-{
-    return false;
-}
-
 }
 
 #define TEST_PASSCODE 20252026
@@ -150,16 +78,14 @@ public:
     void SetUp() override
     {
         commissionableDataProvider = new DefaultCommissionableDataProvider();
-        properties = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        MockPropertyProviderInit();
     }
 
     void TearDown() override
     {
         delete commissionableDataProvider;
         commissionableDataProvider = nullptr;
-        g_hash_table_destroy(properties);
-        properties = nullptr;
-        resetMockPropertyProvider();
+        MockPropertyProviderReset();
     }
 
     // Caller must free the returned buffer

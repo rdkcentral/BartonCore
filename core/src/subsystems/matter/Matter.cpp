@@ -29,6 +29,7 @@
 #include "app/server/CommissioningWindowManager.h"
 #include "lib/core/Optional.h"
 #include "system/SystemClock.h"
+#include <cstdint>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -81,6 +82,7 @@ extern "C" {
 #include <lib/core/NodeId.h>
 #include <matter/MatterDriverFactory.h>
 
+#include "BartonDeviceInstanceInfoProvider.h"
 #include "BartonMatterDelegateRegistry.hpp"
 #include "BartonMatterProviderRegistry.hpp"
 #include "Matter.h"
@@ -196,10 +198,6 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
 
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    this->vendorId = (chip::VendorId) b_core_property_provider_get_property_as_uint16(
-        propertyProvider, MATTER_VID_PROP_KEY, this->vendorId);
-    icDebug("Using vendor ID: 0x%04x", this->vendorId);
-
     paaTrustStorePath = std::string(std::move(attestationTrustStorePath));
 
     if ((err = chip::Platform::MemoryInit()) != CHIP_NO_ERROR)
@@ -213,6 +211,13 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         icError("InitChipStack failed: %s", err.AsString());
         return false;
     }
+
+    if (!GetBartonDeviceInstanceInfoProvider().ValidateProperties())
+    {
+        icError("BartonDeviceInstanceInfoProvider properties validation failed");
+        return false;
+    }
+    DeviceLayer::SetDeviceInstanceInfoProvider(&GetBartonDeviceInstanceInfoProvider());
 
     // We assign new objects here just to guarantee that we're working with uninitialized objects
     opCertStore = std::make_unique<chip::Credentials::PersistentStorageOpCertStore>();
@@ -447,7 +452,11 @@ CHIP_ERROR Matter::InitCommissioner()
     factoryParams.opCertStore = opCertStore.get();
 
     params.operationalCredentialsDelegate = operationalCredentialsIssuer.get();
-    params.controllerVendorId = this->vendorId;
+    uint16_t controllerVendorId = 0;
+    if(GetBartonDeviceInstanceInfoProvider().GetVendorId(controllerVendorId) == CHIP_NO_ERROR)
+    {
+        params.controllerVendorId = (VendorId)controllerVendorId;
+    }
     params.permitMultiControllerFabrics = false;
 
     const chip::Credentials::AttestationTrustStore *paaRootStore;
@@ -1236,6 +1245,8 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
     }
     else
     {
+        uint16_t vendorId;
+        GetBartonDeviceInstanceInfoProvider().GetVendorId(vendorId);
         success = CHIP_NO_ERROR ==
                   commissioningWindowManager.OpenEnhancedCommissioningWindow(System::Clock::Seconds16(timeoutSecs),
                                                                              discriminator,
@@ -1243,7 +1254,7 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
                                                                              iterations,
                                                                              pbkdfSalt,
                                                                              myFabricIndex,
-                                                                             this->vendorId);
+                                                                             (VendorId)vendorId);
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();

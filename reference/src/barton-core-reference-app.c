@@ -188,6 +188,45 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
         b_core_initialize_params_container_get_property_provider(params);
     if (propProvider != NULL)
     {
+        // Set Matter's Device Instance Info details
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_VENDOR_NAME, "Barton");
+
+        b_core_property_provider_set_property_uint16(
+            propProvider, B_CORE_BARTON_MATTER_VENDOR_ID, 0xFFF1);
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, "Barton Device");
+
+        b_core_property_provider_set_property_uint16(
+            propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x5678);
+
+        b_core_property_provider_set_property_uint16(
+            propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION_STRING, "Barton Hardware Version 1.0");
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_PART_NUMBER, "Barton-Part-001");
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, "https://www.barton.com/device");
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_PRODUCT_LABEL, "Barton Device Label");
+
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_SERIAL_NUMBER, "SN-123456789");
+
+        // Set Manufacturing Date to "now"
+        time_t now = time(NULL);
+        struct tm *tm = localtime(&now);
+        gchar manufacturingDate[11]; // YYYY-MM-DD format
+        strftime(manufacturingDate, sizeof(manufacturingDate), "%Y-%m-%d", tm);
+        b_core_property_provider_set_property_string(
+            propProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, manufacturingDate);
+
         // set default discriminator if not already set
         guint16 discriminator = b_core_property_provider_get_property_as_uint16(
             propProvider, B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR, 0);
@@ -270,6 +309,8 @@ static BCoreClient *initializeClient(gchar *confDir)
         b_reference_network_credentials_provider_new();
     b_core_initialize_params_container_set_network_credentials_provider(
         params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
+
+
 
     BCoreClient *client = b_core_client_new(params);
     configureSubsystems(params);
