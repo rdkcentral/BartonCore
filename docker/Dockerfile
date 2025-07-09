@@ -136,6 +136,7 @@ FROM base_builder AS third_party_builder
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
 ARG LIBCERTIFIER_GIT_TAG="v2.2.2"
+ARG FFF_GIT_TAG="5111c61e1ef7848e3afd3550044a8cf4405f4199"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -165,6 +166,21 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     checkinstall \
     zlib1g-dev \
     socat
+
+# Fake Function Framework (FFF)
+#
+# NOTICE: Currently, FFF_GIT_TAG points to a specific commit SHA from master instead
+# of the v1.1 tag (from 2019) as significant development has been made since the
+# last official release.
+# This SHA represents a stable point in the master branch with all needed features.
+RUN cd /tmp && \
+    git clone --depth 1 https://github.com/meekrosoft/fff.git && \
+    cd fff && \
+    git fetch --depth 1 origin ${FFF_GIT_TAG} && \
+    git checkout ${FFF_GIT_TAG} && \
+    mkdir -p /usr/local/include/fff && \
+    cp /tmp/fff/fff.h /usr/local/include/fff/ && \
+    rm -rf /tmp/fff
 
 # 'gn' (generate ninja)
 RUN cd /tmp && \

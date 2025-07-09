@@ -47,3 +47,8 @@ config/cmake/modules/CodeCoverage.cmake
 Copyright (c) 2012-2017, Lars Bilke
 All rights reserved.
 Licensed under the BSD-3 License
+
+Code borrowed from: https://github.com/meekrosoft/fff
+Copyright (c) 2010-2022 Michael Long (@meekrosoft)
+All rights reserved.
+Licensed under the MIT License
