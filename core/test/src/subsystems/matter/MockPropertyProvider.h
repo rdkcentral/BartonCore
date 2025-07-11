@@ -1,9 +1,9 @@
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 //
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2025 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,19 +19,20 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 
-/*
- * Created by Christian Leithner on 9/26/2024.
- */
+//
+// Created by Thomas Lea on 7/10/2025.
+//
 
 #pragma once
 
-#include "barton-core-properties.h"
+/**
+ * @brief Initializes the mock property provider for testing.
+ */
+void MockPropertyProviderInit();
 
-// TODO Refactor calls to gobject layer for properties to calls here instead.
-//  @see BARTON-136
-
-// Internal mapping to GObject property keys
-#define LOCAL_EUI64_PROP_KEY                 B_CORE_BARTON_FIFTEEN_FOUR_EUI64
-#define DEFAULT_THREAD_NETWORK_NAME_PROP_KEY B_CORE_BARTON_DEFAULT_THREAD_NETWORK_NAME
+/**
+ * @brief Resets the mock property provider, clearing any set properties.
+ */
+void MockPropertyProviderReset();

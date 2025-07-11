@@ -27,11 +27,12 @@ include(BCoreAddCppTest)
 # Only build units that are actually under test - this
 # can be useful for discovering unintended tight coupling.
 
-file(GLOB TEST_SRC *.cpp)
+file(GLOB TEST_SRC *.cpp *.c)
 list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepareParamsBuilder.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/MatterCommon.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp
                      ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
                      ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
                      ${PROJECT_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)

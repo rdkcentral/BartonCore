@@ -46,9 +46,20 @@ class DefaultEnvironmentOrchestrator(BaseEnvironmentOrchestrator):
         """
         # Must do after constructing a new BCoreClient
         propertyProvider = self._barton_client_params.get_property_provider()
-        propertyProvider.set_property_string(
-            "device.subsystem.disable", "zigbee,thread"
-        )
+        propertyProvider.set_property_string("device.subsystem.disable", "zigbee,thread")
+        propertyProvider.set_property_string("barton.matter.setupPasscode", "12345678")
+        propertyProvider.set_property_string("barton.matter.setupDiscriminator", "1234")
+        propertyProvider.set_property_string("barton.matter.vendorName", "Vendor")
+        propertyProvider.set_property_string("barton.matter.vid", "0x1234")
+        propertyProvider.set_property_string("barton.matter.productName", "Product")
+        propertyProvider.set_property_string("barton.matter.pid", "0x5678")
+        propertyProvider.set_property_string("barton.matter.partNumber", "PartNumber")
+        propertyProvider.set_property_string("barton.matter.productURL", "http://example.com/product")
+        propertyProvider.set_property_string("barton.matter.productLabel", "Product Label")
+        propertyProvider.set_property_string("barton.matter.serialNumber", "SN123456789")
+        propertyProvider.set_property_string("barton.matter.manufacturingDate", "2025-01-01")
+        propertyProvider.set_property_string("barton.matter.hardwareVersion", "1")
+        propertyProvider.set_property_string("barton.matter.hardwareVersionString", "1.0")
 
         # FIXME: This should be configurable per test
         self._barton_client_params.set_account_id("1")
