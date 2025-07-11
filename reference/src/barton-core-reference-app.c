@@ -211,7 +211,7 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
             propProvider, B_CORE_BARTON_MATTER_PART_NUMBER, "Barton-Part-001");
 
         b_core_property_provider_set_property_string(
-            propProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, "https://www.barton.com/device");
+            propProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, "https://www.example.com/device");
 
         b_core_property_provider_set_property_string(
             propProvider, B_CORE_BARTON_MATTER_PRODUCT_LABEL, "Barton Device Label");
@@ -309,8 +309,6 @@ static BCoreClient *initializeClient(gchar *confDir)
         b_reference_network_credentials_provider_new();
     b_core_initialize_params_container_set_network_credentials_provider(
         params, B_CORE_NETWORK_CREDENTIALS_PROVIDER(networkCredentialsProvider));
-
-
 
     BCoreClient *client = b_core_client_new(params);
     configureSubsystems(params);

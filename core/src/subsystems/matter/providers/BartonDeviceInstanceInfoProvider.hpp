@@ -36,7 +36,7 @@
 
 namespace barton {
 
-    class BartonDeviceInstanceInfoProvider : public chip::DeviceLayer::DeviceInstanceInfoProvider
+    class BartonDeviceInstanceInfoProvider final : public chip::DeviceLayer::DeviceInstanceInfoProvider
     {
     public:
         BartonDeviceInstanceInfoProvider() = default;

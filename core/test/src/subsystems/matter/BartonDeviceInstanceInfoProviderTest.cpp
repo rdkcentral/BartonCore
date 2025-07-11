@@ -26,7 +26,7 @@
 // leveraged Raiyan Chowdhury's work on CommissionableDataProviderTest.cpp
 //
 
-#include "BartonDeviceInstanceInfoProvider.h"
+#include "BartonDeviceInstanceInfoProvider.hpp"
 #include "lib/support/Base64.h"
 #include "lib/support/Span.h"
 #include "platform/CHIPDeviceError.h"
@@ -220,16 +220,29 @@ TEST_F(BartonDeviceInstanceInfoProviderTest, MissingPropertiesTest)
 
 }
 
-TEST_F(BartonDeviceInstanceInfoProviderTest, InvalidManufacturingDateFormatTest)
+TEST_F(BartonDeviceInstanceInfoProviderTest, InvalidValuesTest)
 {
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    uint16_t tmp;
+
     g_autoptr(BCorePropertyProvider) mockProvider = deviceServiceConfigurationGetPropertyProvider();
 
-    // Set an invalid manufacturing date format
     b_core_property_provider_set_property_string(mockProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, "InvalidDate");
-
-    uint16_t year;
-    uint8_t month, day;
     EXPECT_EQ(bartonDeviceInstanceInfoProvider->GetManufacturingDate(year, month, day), CHIP_ERROR_INVALID_ARGUMENT);
+
+    b_core_property_provider_set_property_string(mockProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, "2023-13-01");
+    EXPECT_EQ(bartonDeviceInstanceInfoProvider->GetManufacturingDate(year, month, day), CHIP_ERROR_INVALID_ARGUMENT);
+
+    b_core_property_provider_set_property_string(mockProvider, B_CORE_BARTON_MATTER_VENDOR_ID, "0xFFFFF");
+    EXPECT_EQ(bartonDeviceInstanceInfoProvider->GetVendorId(tmp), CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
+
+    b_core_property_provider_set_property_string(mockProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, "0xFFFFF");
+    EXPECT_EQ(bartonDeviceInstanceInfoProvider->GetProductId(tmp), CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
+
+    b_core_property_provider_set_property_string(mockProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, "0xFFFFF");
+    EXPECT_EQ(bartonDeviceInstanceInfoProvider->GetHardwareVersion(tmp), CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
 }
 
 } // namespace barton

@@ -28,6 +28,7 @@
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/server/CommissioningWindowManager.h"
 #include "lib/core/Optional.h"
+#include "platform/DeviceInstanceInfoProvider.h"
 #include "system/SystemClock.h"
 #include <cstdint>
 #include <vector>
@@ -82,7 +83,7 @@ extern "C" {
 #include <lib/core/NodeId.h>
 #include <matter/MatterDriverFactory.h>
 
-#include "BartonDeviceInstanceInfoProvider.h"
+#include "BartonDeviceInstanceInfoProvider.hpp"
 #include "BartonMatterDelegateRegistry.hpp"
 #include "BartonMatterProviderRegistry.hpp"
 #include "Matter.h"
@@ -453,7 +454,7 @@ CHIP_ERROR Matter::InitCommissioner()
 
     params.operationalCredentialsDelegate = operationalCredentialsIssuer.get();
     uint16_t controllerVendorId = 0;
-    if(GetBartonDeviceInstanceInfoProvider().GetVendorId(controllerVendorId) == CHIP_NO_ERROR)
+    if(DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(controllerVendorId) == CHIP_NO_ERROR)
     {
         params.controllerVendorId = (VendorId)controllerVendorId;
     }
@@ -1246,7 +1247,7 @@ bool Matter::OpenLocalCommissioningWindow(uint16_t discriminator, uint16_t timeo
     else
     {
         uint16_t vendorId;
-        GetBartonDeviceInstanceInfoProvider().GetVendorId(vendorId);
+        DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(vendorId);
         success = CHIP_NO_ERROR ==
                   commissioningWindowManager.OpenEnhancedCommissioningWindow(System::Clock::Seconds16(timeoutSecs),
                                                                              discriminator,

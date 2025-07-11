@@ -30,10 +30,11 @@
  * Licensed under the Apache License, Version 2.0 (the "License")
  */
 
-#include "BartonDeviceInstanceInfoProvider.h"
+#include "BartonDeviceInstanceInfoProvider.hpp"
 #include "lib/core/CHIPError.h"
 #include "platform/CHIPDeviceError.h"
 #include "provider/barton-core-property-provider.h"
+#include <cstdint>
 #include <platform/ConfigurationManager.h>
 
 #define LOG_TAG     "MatterProps"
@@ -162,8 +163,9 @@ bool BartonDeviceInstanceInfoProvider::ValidateProperties()
         icInfo("Serial Number not available (optional property)");
     }
 
-    uint16_t year;
-    uint8_t month, day;
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
     if (GetManufacturingDate(year, month, day) == CHIP_NO_ERROR)
     {
         icInfo("Manufacturing Date: %04u-%02u-%02u", year, month, day);
@@ -300,14 +302,16 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetManufacturingDate(uint16_t &year
     ReturnErrorCodeIf(dateStr == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
     // Expecting date in "YYYY-MM-DD" format
-    int y = 0, m = 0, d = 0;
-    if (sscanf(dateStr, "%4d-%2d-%2d", &y, &m, &d) != 3)
+    g_autoptr(GDate) date = g_date_new();
+    g_date_set_parse(date, dateStr);
+    if (!g_date_valid(date))
     {
         return CHIP_ERROR_INVALID_ARGUMENT;
     }
-    year = static_cast<uint16_t>(y);
-    month = static_cast<uint8_t>(m);
-    day = static_cast<uint8_t>(d);
+
+    year = g_date_get_year(date);
+    month = g_date_get_month(date);
+    day = g_date_get_day(date);
 
     return CHIP_NO_ERROR;
 }
@@ -345,7 +349,6 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetHardwareVersionString(char *buf,
 
 CHIP_ERROR BartonDeviceInstanceInfoProvider::GetRotatingDeviceIdUniqueId(MutableByteSpan & uniqueIdSpan)
 {
-    ChipError err = CHIP_ERROR_WRONG_KEY_TYPE;
 #if CHIP_ENABLE_ROTATING_DEVICE_ID && defined(CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID)
     if (chip::DeviceLayer::ConfigurationMgr().GetRotatingDeviceIdUniqueId(uniqueIdSpan) != CHIP_NO_ERROR)
     {
@@ -361,8 +364,10 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetRotatingDeviceIdUniqueId(Mutable
         uniqueIdSpan.reduce_size(sizeof(uniqueId));
     }
     return CHIP_NO_ERROR;
+#else
+    icError("Rotating Device ID is not enabled or unique ID is not defined.");
+    return CHIP_ERROR_WRONG_KEY_TYPE;
 #endif
-    return err;
 }
 
 } // namespace barton
