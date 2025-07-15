@@ -51,7 +51,7 @@ bcore_find_package(NAME gio-2.0 MIN_VERSION ${GLIB_MIN_VERSION} REQUIRED)
 bcore_find_package(NAME gio-unix-2.0 MIN_VERSION ${GLIB_MIN_VERSION} REQUIRED)
 if(BUILD_TESTING)
     bcore_find_package(NAME cmocka MIN_VERSION ${CMOCKA_MIN_VERSION} REQUIRED)
-    bcore_find_include(FFF_INCLUDE_DIR fff.h fff "fff include directory" "")
+    #bcore_find_include(FFF_INCLUDE_DIR fff.h fff "fff include directory" "")
 endif()
 # This is the version of libcurl that's linked against the older OpenSSL version
 set(ENV{PKG_CONFIG_PATH} "/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
