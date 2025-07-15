@@ -25,6 +25,7 @@
 // Created by Thomas Lea on 4/17/25.
 //
 
+#include <math.h>
 #define LOG_TAG "illuminanceMeasurementCluster"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
@@ -94,6 +95,19 @@ bool illuminanceMeasurementClusterGetMeasuredValue(uint64_t eui64, uint8_t endpo
     }
 
     return result;
+}
+
+uint32_t illuminanceMeasurementClusterConvertToLux(uint16_t measuredValue)
+{
+    // 0 is a special case, it means "too low to measure"
+    if (measuredValue == 0)
+    {
+        return 0;
+    }
+    // From Zigbee Cluster Library Specification:
+    // MeasuredValue = 10,000 x log10 Illuminance + 1
+    // Therefore: Illuminance = 10 ^ ( (MeasuredValue - 1) / 10,000 )
+    return pow(10.0, ((double)measuredValue-1.0)/10000.0);
 }
 
 static bool configureCluster(ZigbeeCluster *ctx, const DeviceConfigurationContext *configContext)
