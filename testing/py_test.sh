@@ -26,7 +26,7 @@
 # Created by Kevin Funderburg on 12/17/2024
 #
 
-# In order for pytests to run successfully with libbrtnDeviceSericeShared.so compiled
+# In order for pytests to run successfully with libBartonCore.so compiled
 # with AddressSanitizer, libasan.so must be preloaded. This script is a wrapper around
 # pytest to handle setting the LD_PRELOAD environment variable and passing any extra args
 # to pytest. Use this script if you want to execute any pytests on the command line to ensure
