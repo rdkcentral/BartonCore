@@ -49,7 +49,7 @@ cd BartonCore
 ./dockerw ./build.sh
 
 # Run the reference app which includes interactive CLI
-./dockerw build/reference/barton-core-reference
+./dockerw build/reference/barton-core-reference -z
 ```
 
 ## Documentation
