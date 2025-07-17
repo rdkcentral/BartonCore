@@ -72,6 +72,11 @@ if (BCORE_ZIGBEE)
 endif() #BARTON_CONFIG_ZIGBEE
 
 if (BCORE_MATTER)
+    # Check for jsoncpp here rather than in DependencyVersions.cmake because the
+    # Matter build process installs jsoncpp, and might not be available during
+    # initial dependency resolution
+    set(JSONCPP_MIN_VERSION 1.9.5)
+
     file(GLOB matterSubSrc "src/subsystems/matter/*.cpp")
     file(GLOB matterSubProviderCommonSrc "src/subsystems/matter/delegates/*.cpp" "src/subsystems/matter/providers/*.cpp")
 
@@ -109,12 +114,14 @@ if (BCORE_MATTER)
         XTRA_INCLUDES
     )
 
+    bcore_find_package(NAME jsoncpp MIN_VERSION ${JSONCPP_MIN_VERSION} REQUIRED)
+
     list(APPEND XTRA_INCLUDES
         ${OPENSSL_INCLUDE_DIRS}
         ${BCORE_MATTER_PROVIDER_HEADER_PATHS}
         ${BCORE_MATTER_DELEGATE_HEADER_PATHS})
 
-    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier)
+    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
 
