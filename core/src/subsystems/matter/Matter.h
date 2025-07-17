@@ -324,6 +324,8 @@ namespace barton
         std::atomic<State> state = {State::stopped};
 
         SessionMessageHandler sessionMessageHandler;
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS
         AccessRestrictionProvider accessRestrictionProvider;
+#endif
     };
 } // namespace barton
