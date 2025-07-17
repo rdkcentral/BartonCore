@@ -316,7 +316,9 @@ bool Matter::Start()
         // We need to set DeviceInfoProvider before Server::Init to setup the storage of DeviceInfoProvider properly.
         chip::DeviceLayer::SetDeviceInfoProvider(&deviceInfoProvider);
 
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS
         serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
+#endif
 
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
@@ -1366,7 +1368,7 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
 
 bool Matter::SetAccessRestrictionList()
 {
-#if ENABLE_ARLS_FOR_TESTING
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS && ENABLE_ARLS_FOR_TESTING
     bool success = false;
 
     //TODO make these real.  The restrictions now are just for certification testing and only block some attribute that wont cause cert issue
@@ -1403,6 +1405,7 @@ bool Matter::ClearAccessRestrictionList()
 {
     bool success = true;
 
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS
     icWarn("Certification: Clearing AccessRestrictions");
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
@@ -1418,6 +1421,7 @@ bool Matter::ClearAccessRestrictionList()
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+#endif
 
     return success;
 }

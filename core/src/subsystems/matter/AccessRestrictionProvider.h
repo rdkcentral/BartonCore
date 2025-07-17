@@ -38,7 +38,7 @@
 
 namespace barton
 {
-
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS
     class AccessRestrictionProvider : public chip::Access::AccessRestrictionProvider
     {
     public:
@@ -59,9 +59,8 @@ namespace barton
                 .token = token, .fabricIndex = fabricIndex};
             chip::EventNumber eventNumber;
             ReturnErrorOnFailure(chip::app::LogEvent(event, chip::kRootEndpointId, eventNumber));
-
             return CHIP_NO_ERROR;
         }
     };
-
+#endif
 } // namespace barton
