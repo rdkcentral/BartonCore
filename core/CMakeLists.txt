@@ -72,25 +72,34 @@ if (BCORE_ZIGBEE)
 endif() #BARTON_CONFIG_ZIGBEE
 
 if (BCORE_MATTER)
+    include(BCoreMatterHelper)
+
     # Check for jsoncpp here rather than in DependencyVersions.cmake because the
     # Matter build process installs jsoncpp, and might not be available during
     # initial dependency resolution
     set(JSONCPP_MIN_VERSION 1.9.5)
 
     file(GLOB matterSubSrc "src/subsystems/matter/*.cpp")
-    file(GLOB matterSubProviderCommonSrc "src/subsystems/matter/delegates/*.cpp" "src/subsystems/matter/providers/*.cpp")
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
+    bcore_matter_helper_provider_get_implementations(
+        OUTPUT MATTER_PROVIDER_IMPLEMENTATIONS
+    )
+
+    bcore_matter_helper_delegate_get_implementations(
+        OUTPUT MATTER_DELEGATE_IMPLEMENTATIONS
+    )
+
     list(APPEND SOURCES
         ${matterSubSrc}
-        ${matterSubProviderCommonSrc}
-        ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS}
-        ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS}
+        ${MATTER_PROVIDER_IMPLEMENTATIONS}
+        ${MATTER_DELEGATE_IMPLEMENTATIONS}
         ${matterDriversSrc}
         ${matterSrc}
+        "src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp" # This provider is always required
     )
 
     # BartonMatter depends on openSSL and glib.
@@ -116,10 +125,18 @@ if (BCORE_MATTER)
 
     bcore_find_package(NAME jsoncpp MIN_VERSION ${JSONCPP_MIN_VERSION} REQUIRED)
 
+    bcore_matter_helper_provider_get_header_paths(
+        OUTPUT MATTER_PROVIDER_HEADER_PATHS
+    )
+
+    bcore_matter_helper_delegate_get_header_paths(
+        OUTPUT MATTER_DELEGATE_HEADER_PATHS
+    )
+
     list(APPEND XTRA_INCLUDES
         ${OPENSSL_INCLUDE_DIRS}
-        ${BCORE_MATTER_PROVIDER_HEADER_PATHS}
-        ${BCORE_MATTER_DELEGATE_HEADER_PATHS})
+        ${MATTER_PROVIDER_HEADER_PATHS}
+        ${MATTER_DELEGATE_HEADER_PATHS})
 
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
