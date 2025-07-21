@@ -39,14 +39,16 @@ version_gt() {
 }
 
 print_rebase_warning() {
-    local current_branch=$(git branch --show-current)
-    echo "         This appears to be an older branch. Two options to resolve:"
-    echo "         1. Rebase this branch onto a more recent commit:"
-    echo "            $ git checkout main"
-    echo "            $ git pull"
-    echo "            $ git checkout $current_branch"
-    echo "            $ git rebase main"
-    echo "         2. Continue using your current environment (no action needed)"
+    echo "         This appears to be an older branch. Options to resolve:"
+    echo "         1. Merge the latest changes from a newer branch."
+    echo "            This preserves your branch history and is generally safer."
+    echo ""
+    echo "         2. Rebase your branch onto a newer branch"
+    echo "            This creates a cleaner history but should be used with caution"
+    echo "            as it rewrites commit history."
+    echo ""
+    echo "         3. Continue using your current environment (no action needed)"
+    echo "            This is fine if you're just exploring or making temporary changes."
 }
 
 print_rebuild_warning() {
