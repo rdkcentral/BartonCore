@@ -33,13 +33,9 @@ include(CMakeParseArguments)
 # from that point on. Users may define the public options in initial cache files or passed
 # as CLI options, but should use this module at any point after that.
 
-if (PROJECT_SOURCE_DIR)
-    set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
-else()
-    # Module included from a cmake file that hasn't called `project` yet (likely an initial cache)
-    # Figure out the path relative to the current file.
-    get_filename_component(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../core/src/subsystems/matter" ABSOLUTE)
-endif()
+# Module may be included from a cmake file that hasn't called `project` yet (likely an initial cache)
+# Figure out the path relative to the current file as that works in all cases.
+get_filename_component(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../core/src/subsystems/matter" ABSOLUTE)
 
 set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
 set(MATTER_PROVIDER_DEV_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/dev")
