@@ -210,8 +210,14 @@ void subsystemManagerEnterLPM(void);
 void subsystemManagerExitLPM(void);
 
 /**
- * Register your subsystem
- * @param subsystem A Subsystem that h
+ * Register your subsystem with the subsystem manager.
+ *
+ * Subsystems can be registered at any time - the subsystem manager will handle
+ * registration appropriately regardless of its current lifecycle state. This allows
+ * subsystems to register themselves during module loading (e.g., via
+ * __attribute__((constructor)) functions) without concern for initialization order.
+ *
+ * @param subsystem A Subsystem that has been fully initialized
  */
 void subsystemManagerRegister(Subsystem *subsystem);
 
