@@ -26,13 +26,46 @@
 #include <stddef.h>
 
 #include "cjson/cJSON.h"
-#include "icTypes/icLinkedList.h"
 #include "icUtil/stringUtils.h"
 #include "subsystemManager.c"
 #include <cmocka.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#define TEST_LOG_TAG "subsystemManagerTest"
+
+static int init(void **state)
+{
+    (void) state;
+
+    int retVal = 0;
+
+    // Clear auto-registered subsystems (matter, zigbee, thread) that get created
+    // via constructor functions and would interfere with our test cases.
+    // Note: This calls a private function from subsystemManager.c, which is not ideal
+    // but provides a direct way to reset the subsystem state for testing.
+    subsystemPreRegistrationDestroy();
+    subsystemManagerInitialize(NULL);
+
+    g_autoptr(GPtrArray) subsystems = subsystemManagerGetRegisteredSubsystems();
+    if (subsystems->len > 0)
+    {
+        icLogError(TEST_LOG_TAG, "Test initialization failed. Tests require a clean subsystem state.");
+        retVal = -1;
+    }
+
+    return retVal;
+}
+
+static int tearDown(void **state)
+{
+    (void) state;
+
+    subsystemManagerShutdown();
+
+    return 0;
+}
 
 bool __wrap_deviceServiceGetSystemProperty(const char *name, char **value)
 {
@@ -159,8 +192,6 @@ static void assertRegisteredSubsystemName(const char *expectedName)
 void test_subsystem_migration(void **state)
 {
     (void) state;
-    // A little whacky but I don't want self-registering subsystems interfering with test fixtures.
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
 
@@ -274,8 +305,6 @@ void test_subsystemManagerRegister(void **state)
 {
     (void) state;
 
-    unregisterSubsystems();
-
     static const char *subsystemName = "mySubsystem";
 
     scoped_Subsystem mySubsystem = createTestSubsystem(NULL);
@@ -299,15 +328,11 @@ void test_subsystemManagerRegister(void **state)
     subsystemManagerRegister(mySubsystem);
     assertRegisteredSubsystemCount(1);
     assertRegisteredSubsystemName(subsystemName);
-
-    unregisterSubsystems();
 }
 
 void test_subsystemManagerGetRegisteredSubsystems(void **state)
 {
     (void) state;
-
-    unregisterSubsystems();
 
     // Case 1: No subsystems registered
     assertRegisteredSubsystemCount(0);
@@ -337,9 +362,6 @@ void test_subsystemManagerGetRegisteredSubsystems(void **state)
 void test_subsystemManagerGetSubsystemStatusJson(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "zigbee";
     scoped_Subsystem subsystem = createTestSubsystem(subsystemName);
@@ -374,16 +396,11 @@ void test_subsystemManagerGetSubsystemStatusJson(void **state)
 
     cJSON_Delete(fixture);
     cJSON_Delete(result);
-
-    unregisterSubsystems();
 }
 
 void test_subsystemManagerShutdown(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -391,21 +408,24 @@ void test_subsystemManagerShutdown(void **state)
     // Case 1: Subsystem with NULL shutdown function
     subsystemManagerRegister(mySubsystem);
     subsystemManagerShutdown();
+    assertRegisteredSubsystemCount(0);
+
+    subsystemManagerInitialize(NULL);
+
+    static const char *subsystemName2 = "mySubsystem2";
+    scoped_Subsystem mySubsystem2 = createTestSubsystem(subsystemName2);
+    subsystemManagerRegister(mySubsystem2);
 
     // Case 2: Subsystem with valid shutdown function
-    mySubsystem->shutdown = mockShutdownFunc;
+    mySubsystem2->shutdown = mockShutdownFunc;
     expect_function_call(mockShutdownFunc);
     subsystemManagerShutdown();
-
-    unregisterSubsystems();
+    assertRegisteredSubsystemCount(0);
 }
 
 static void test_subsystemManagerAllDriversStarted(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -419,16 +439,11 @@ static void test_subsystemManagerAllDriversStarted(void **state)
     mySubsystem->onAllDriversStarted = mockOnAllDriversStarted;
     expect_function_call(mockOnAllDriversStarted);
     subsystemManagerAllDriversStarted();
-
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerAllServicesAvailable(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -442,16 +457,11 @@ static void test_subsystemManagerAllServicesAvailable(void **state)
     mySubsystem->onAllServicesAvailable = mockOnAllServicesAvailable;
     expect_function_call(mockOnAllServicesAvailable);
     subsystemManagerAllServicesAvailable();
-
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerPostRestoreConfig(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -465,16 +475,11 @@ static void test_subsystemManagerPostRestoreConfig(void **state)
     mySubsystem->onPostRestoreConfig = mockPostRestoreConfig;
     expect_function_call(mockPostRestoreConfig);
     subsystemManagerPostRestoreConfig();
-
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerSetOtaUpgradeDelay(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -501,16 +506,11 @@ static void test_subsystemManagerSetOtaUpgradeDelay(void **state)
     expect_function_call(mockSetOtaUpgradeDelay);
     expect_value(mockSetOtaUpgradeDelay, delaySeconds, 3600);
     subsystemManagerSetOtaUpgradeDelay(3600);
-
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerExitLPM(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -524,16 +524,11 @@ static void test_subsystemManagerExitLPM(void **state)
     mySubsystem->onLPMEnd = mockOnLPMEnd;
     expect_function_call(mockOnLPMEnd);
     subsystemManagerExitLPM();
-
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerEnterLPM(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -546,17 +541,12 @@ static void test_subsystemManagerEnterLPM(void **state)
     mySubsystem->onLPMStart = mockOnLPMStart;
     expect_function_call(mockOnLPMStart);
     subsystemManagerEnterLPM();
-
-    unregisterSubsystems();
 }
 
 
 static void test_subsystemManagerIsSubsystemReady(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -593,15 +583,11 @@ static void test_subsystemManagerIsSubsystemReady(void **state)
     subsystemManagerInitialize(NULL);
     isReady = subsystemManagerIsSubsystemReady(subsystemName);
     assert_true(isReady);
-    unregisterSubsystems();
 }
 
 static void test_subsystemManagerRestoreConfig(void **state)
 {
     (void) state;
-
-    // Cleanup any existing subsystems
-    unregisterSubsystems();
 
     static const char *subsystemName = "mySubsystem";
     scoped_Subsystem mySubsystem = createTestSubsystem(subsystemName);
@@ -630,26 +616,24 @@ static void test_subsystemManagerRestoreConfig(void **state)
     will_return(mockOnRestoreConfig, true);
     result = subsystemManagerRestoreConfig("config", "restoreConfig");
     assert_true(result);
-
-    unregisterSubsystems();
 }
 
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest test[] = {
-        cmocka_unit_test(test_subsystem_migration),
-        cmocka_unit_test(test_subsystemManagerRegister),
-        cmocka_unit_test(test_subsystemManagerGetRegisteredSubsystems),
-        cmocka_unit_test(test_subsystemManagerGetSubsystemStatusJson),
-        cmocka_unit_test(test_subsystemManagerShutdown),
-        cmocka_unit_test(test_subsystemManagerAllDriversStarted),
-        cmocka_unit_test(test_subsystemManagerAllServicesAvailable),
-        cmocka_unit_test(test_subsystemManagerPostRestoreConfig),
-        cmocka_unit_test(test_subsystemManagerSetOtaUpgradeDelay),
-        cmocka_unit_test(test_subsystemManagerExitLPM),
-        cmocka_unit_test(test_subsystemManagerEnterLPM),
-        cmocka_unit_test(test_subsystemManagerIsSubsystemReady),
-        cmocka_unit_test(test_subsystemManagerRestoreConfig),
+        cmocka_unit_test_setup_teardown(test_subsystem_migration, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerRegister, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerGetRegisteredSubsystems, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerGetSubsystemStatusJson, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerShutdown, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerAllDriversStarted, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerAllServicesAvailable, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerPostRestoreConfig, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerSetOtaUpgradeDelay, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerExitLPM, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerEnterLPM, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerIsSubsystemReady, init, tearDown),
+        cmocka_unit_test_setup_teardown(test_subsystemManagerRestoreConfig, init, tearDown),
     };
 
     return cmocka_run_group_tests(test, NULL, NULL);

@@ -26,6 +26,7 @@
 
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
+#include "glib.h"
 #include "icUtil/stringUtils.h"
 #include "provider/barton-core-property-provider.h"
 #define LOG_TAG     "deviceService"
@@ -75,13 +76,17 @@ typedef struct
         }                                                                                                              \
     } while (0)
 
-static pthread_once_t initOnce = PTHREAD_ONCE_INIT;
-
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
 static GHashTable *subsystems;
 static bool allDriversStarted = false;
 static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
+static bool subsystemManagerInitialized = false;
+
+// Pre-registered subsystems are those that wish to be registered before the
+// subsystem manager is initialized. These are typically automatically registered
+// __attribute__((constructor)) functions in subsystem modules.
+static GList *preRegisteredSubsystems = NULL;
 
 Subsystem *createSubsystem(void)
 {
@@ -196,16 +201,27 @@ static void onSubsystemDeinitialized(const char *subsystem)
     icLogDebug(LOG_TAG, "%s: '%s'", __func__, subsystem);
 }
 
-/**
- * Called by atexit
- */
+static void subsystemPreRegistrationDestroy(void)
+{
+    WRITE_LOCK_SCOPE(mutex);
+    g_list_free_full(preRegisteredSubsystems, (GDestroyNotify) releaseSubsystem);
+    preRegisteredSubsystems = NULL;
+}
+
 static void unregisterSubsystems(void)
 {
+    WRITE_LOCK_SCOPE(mutex);
     g_hash_table_destroy(subsystems);
     subsystems = NULL;
 }
 
-void subsystemManagerRegister(Subsystem *subsystem)
+/**
+ * Internal helper to register a subsystem with the manager without acquiring a lock.
+ * This function assumes the caller already holds the appropriate mutex lock.
+ *
+ * @param subsystem The subsystem to register
+ */
+static void subsystemManagerRegisterInternal(Subsystem *subsystem)
 {
     if (subsystem == NULL || subsystem->initialize == NULL || subsystem->name == NULL)
     {
@@ -218,26 +234,28 @@ void subsystemManagerRegister(Subsystem *subsystem)
     mutexInitWithType(&registration->mtx, PTHREAD_MUTEX_ERRORCHECK);
     registration->ready = false;
 
+    if (!g_hash_table_insert(subsystems, (char *) subsystem->name, registration))
     {
-        WRITE_LOCK_SCOPE(mutex);
+        icLogWarn(LOG_TAG, "%s: unable to register subsystem '%s'!", __func__, subsystem->name);
+        subsystemRegistrationDestroy(registration);
+        registration = NULL;
+    }
+    else
+    {
+        icLogInfo(LOG_TAG, "subsystem '%s' registered", subsystem->name);
+    }
+}
 
-        if (subsystems == NULL)
-        {
-            subsystems =
-                g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify) subsystemRegistrationMapDestroy);
-            atexit(unregisterSubsystems);
-        }
-
-        if (!g_hash_table_insert(subsystems, (char *) subsystem->name, registration))
-        {
-            subsystemRegistrationDestroy(registration);
-            registration = NULL;
-            icLogWarn(LOG_TAG, "%s: unable to register subsystem '%s'!", __func__, subsystem->name);
-        }
-        else
-        {
-            icLogInfo(LOG_TAG, "subsystem '%s' registered", subsystem->name);
-        }
+void subsystemManagerRegister(Subsystem *subsystem)
+{
+    WRITE_LOCK_SCOPE(mutex);
+    if (!subsystemManagerInitialized)
+    {
+        preRegisteredSubsystems = g_list_append(preRegisteredSubsystems, acquireSubsystem(subsystem));
+    }
+    else
+    {
+        subsystemManagerRegisterInternal(subsystem);
     }
 }
 
@@ -358,6 +376,29 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
     icLogDebug(LOG_TAG, "%s", __func__);
 
     {
+        WRITE_LOCK_SCOPE(mutex);
+        if (!subsystemManagerInitialized)
+        {
+            // If subsystems exists but manager isn't initialized, we have an inconsistent state.
+            // Reset subsystems to ensure a clean initialization.
+            if (subsystems)
+            {
+                unregisterSubsystems();
+            }
+
+            subsystems =
+                g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify) subsystemRegistrationMapDestroy);
+
+            if (preRegisteredSubsystems)
+            {
+                g_list_foreach(preRegisteredSubsystems, (GFunc) subsystemManagerRegisterInternal, NULL);
+            }
+
+            subsystemManagerInitialized = true;
+        }
+    }
+
+    {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         scoped_generic char *disabledSubsystems = b_core_property_provider_get_property_as_string(
             propertyProvider, "device.subsystem.disable", NULL);
@@ -401,6 +442,7 @@ void subsystemManagerShutdown(void)
     {
         WRITE_LOCK_SCOPE(mutex);
         readyForDevicesCB = NULL;
+        subsystemManagerInitialized = false;
     }
 
     {
@@ -419,6 +461,9 @@ void subsystemManagerShutdown(void)
 
             if (registration->subsystem->shutdown != NULL) { registration->subsystem->shutdown(); });
     }
+
+    subsystemPreRegistrationDestroy();
+    unregisterSubsystems();
 }
 
 void subsystemManagerAllDriversStarted(void)
