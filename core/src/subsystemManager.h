@@ -123,6 +123,29 @@ typedef struct Subsystem
     uint16_t version;
 } Subsystem;
 
+/*
+ * Create a new refcounted subsystem
+ */
+Subsystem *createSubsystem(void);
+
+/**
+ * Acquires a pointer to the reference counted Subsystem, with its reference count increased.
+ *
+ * @param subsystem pointer to reference counted Subsystem
+ */
+Subsystem *acquireSubsystem(Subsystem *subsystem);
+
+/**
+ * Release a subsystem. This will decrement the refcount and destroy the subsystem if the refcount reaches zero.
+ *
+ * @param subsystem pointer to reference counted Subsystem
+ */
+void releaseSubsystem(Subsystem *subsystem);
+
+/*
+ * Convenience macro to declare a scope bound Subsystem
+ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(Subsystem, releaseSubsystem)
 
 /*
  * Callback for when all subsystems are ready for devices
