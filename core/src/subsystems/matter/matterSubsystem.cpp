@@ -121,17 +121,18 @@ static void accountIdChanged(const gchar *accountId);
 
 __attribute__((constructor)) static void registerSubsystem()
 {
-    static struct Subsystem matterSubsystem = {.migrate = matterSubsystemMigrate,
-                                               .initialize = matterSubsystemInitialize,
-                                               .shutdown = matterSubsystemShutdown,
-                                               .onAllServicesAvailable = matterSubsystemAllServicesAvailable,
-                                               .onRestoreConfig = matterSubsystemRestoreConfig,
-                                               .onPostRestoreConfig = matterSubsystemPostRestoreConfig,
-                                               .getStatusJson = getStatusJson,
-                                               .name = MATTER_SUBSYSTEM_NAME,
-                                               .version = MATTER_SUBSYSTEM_VERSION};
+    g_autoptr(Subsystem) matterSubsystem = createSubsystem();
+    matterSubsystem->migrate = matterSubsystemMigrate;
+    matterSubsystem->initialize = matterSubsystemInitialize;
+    matterSubsystem->shutdown = matterSubsystemShutdown;
+    matterSubsystem->onAllServicesAvailable = matterSubsystemAllServicesAvailable;
+    matterSubsystem->onRestoreConfig = matterSubsystemRestoreConfig;
+    matterSubsystem->onPostRestoreConfig = matterSubsystemPostRestoreConfig;
+    matterSubsystem->getStatusJson = getStatusJson;
+    matterSubsystem->name = MATTER_SUBSYSTEM_NAME;
+    matterSubsystem->version = MATTER_SUBSYSTEM_VERSION;
 
-    subsystemManagerRegister(&matterSubsystem);
+    subsystemManagerRegister(matterSubsystem);
 }
 
 static char *getAccountId()
