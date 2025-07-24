@@ -327,22 +327,30 @@ function(bcore_matter_helper_delegate_selected)
     endforeach()
 endfunction()
 
-# Add one or more provider implementations to the internal list.
+# Add one or more provider implementations the list of matter
+# providers selected.
 # Dev/Default providers must be specified by name.
 # Custom providers must be specified by file path.
+# Any DEFAULT of DEV provider selected will automatically add its
+# dependencies (class hierarchy) to the list of implementations.
+#
+# DEFAULT - Any source file that is located under the providers/default directory.
+# DEV - Any source file that is located under the providers/dev directory.
+# CUSTOM - Any source file that is located anywhere on the filesystem.
+#
 # Usage:
-# bcore_matter_helper_provider_select_implementation(
+# bcore_matter_helper_provider_add_implementation(
 #     DEFAULT "ProviderName1" "ProviderName2"
 #     DEV "DevProviderName1" "DevProviderName2"
 #     CUSTOM "/Path/To/CustomProviderImplementation1.cpp" "/Path/To/CustomProviderImplementation2.cpp"
 # )
-function(bcore_matter_helper_provider_select_implementation)
+function(bcore_matter_helper_provider_add_implementation)
     set(multiValueArgs DEFAULT DEV CUSTOM)
 
     cmake_parse_arguments(HELPER "" "" "${multiValueArgs}" ${ARGN})
 
     if (NOT HELPER_DEFAULT AND NOT HELPER_DEV AND NOT HELPER_CUSTOM)
-        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_provider_select_implementation")
+        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_provider_add_implementation")
     endif()
 
     foreach(provider_impl IN LISTS HELPER_DEFAULT)
@@ -365,22 +373,30 @@ function(bcore_matter_helper_provider_select_implementation)
     set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS "${TEMP_PROVIDER_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
 endfunction()
 
-# Add one or more delegate implementations to the internal list.
+# Add one or more delegate implementations to the list of matter
+# delegates selected.
 # Dev/Default delegates must be specified by name.
 # Custom delegates must be specified by file path.
+# Any DEFAULT of DEV delegate selected will automatically add its
+# dependencies (class hierarchy) to the list of implementations.
+#
+# DEFAULT - Any source file that is located under the delegates/default directory.
+# DEV - Any source file that is located under the delegates/dev directory.
+# CUSTOM - Any source file that is located anywhere on the filesystem.
+#
 # Usage:
-# bcore_matter_helper_delegate_select_implementation(
+# bcore_matter_helper_delegate_add_implementation(
 #     DEFAULT "DelegateName1" "DelegateName2"
 #     DEV "DevDelegateName1" "DevDelegateName2"
 #     CUSTOM "/Path/To/CustomDelegateImplementation1.cpp" "/Path/To/CustomDelegateImplementation2.cpp"
 # )
-function(bcore_matter_helper_delegate_select_implementation)
+function(bcore_matter_helper_delegate_add_implementation)
     set(multiValueArgs DEFAULT DEV CUSTOM)
 
     cmake_parse_arguments(HELPER "" "" "${multiValueArgs}" ${ARGN})
 
     if (NOT HELPER_DEFAULT AND NOT HELPER_DEV AND NOT HELPER_CUSTOM)
-        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_delegate_select_implementation")
+        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_delegate_add_implementation")
     endif()
 
     foreach(delegate_impl IN LISTS HELPER_DEFAULT)
