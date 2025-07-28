@@ -327,11 +327,11 @@ function(bcore_matter_helper_delegate_selected)
     endforeach()
 endfunction()
 
-# Add one or more provider implementations the list of matter
+# Add one or more provider implementations to the list of matter
 # providers selected.
 # Dev/Default providers must be specified by name.
 # Custom providers must be specified by file path.
-# Any DEFAULT of DEV provider selected will automatically add its
+# Any DEFAULT or DEV provider selected will automatically add its
 # dependencies (class hierarchy) to the list of implementations.
 #
 # DEFAULT - Any source file that is located under the providers/default directory.
@@ -377,7 +377,7 @@ endfunction()
 # delegates selected.
 # Dev/Default delegates must be specified by name.
 # Custom delegates must be specified by file path.
-# Any DEFAULT of DEV delegate selected will automatically add its
+# Any DEFAULT or DEV delegate selected will automatically add its
 # dependencies (class hierarchy) to the list of implementations.
 #
 # DEFAULT - Any source file that is located under the delegates/default directory.
