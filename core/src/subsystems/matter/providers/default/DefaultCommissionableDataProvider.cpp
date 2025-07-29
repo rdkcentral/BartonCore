@@ -41,6 +41,7 @@
 #include "lib/support/Base64.h"
 #include "lib/support/CodeUtils.h"
 #include "lib/support/Span.h"
+#include "setup_payload/SetupPayload.h"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -139,6 +140,35 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSpake2pVerifier(MutableByt
     return CHIP_NO_ERROR;
 }
 
+//This was added in Matter SDK 1.4.2 and should be removed when we upgrade to that version
+CHIP_ERROR generateRandomSetupPin(uint32_t & setupPINCode)
+{
+    uint8_t retries          = 0;
+    const uint8_t maxRetries = 10;
+
+    do
+    {
+        ReturnErrorOnFailure(Crypto::DRBG_get_bytes(reinterpret_cast<uint8_t *>(&setupPINCode), sizeof(setupPINCode)));
+
+        // Passcodes shall be restricted to the values 00000001 to 99999998 in decimal, see 5.1.1.6
+        // TODO: Consider revising this method to ensure uniform distribution of setup PIN codes
+        setupPINCode = (setupPINCode % kSetupPINCodeMaximumValue) + 1;
+
+        // Make sure that the Generated Setup Pin code is not one of the invalid passcodes/pin codes defined in the
+        // specification.
+        if (SetupPayload::IsValidSetupPIN(setupPINCode))
+        {
+            return CHIP_NO_ERROR;
+        }
+
+        retries++;
+        // We got pretty unlucky with the random number generator, Just try again.
+        // This shouldn't take many retries assuming DRBG_get_bytes is not broken.
+    } while (retries < maxRetries);
+
+    return CHIP_ERROR_INTERNAL;
+}
+
 CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSetupPasscode(uint32_t &setupPasscode)
 {
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
@@ -148,7 +178,12 @@ CHIP_ERROR DefaultCommissionableDataProvider::RetrieveSetupPasscode(uint32_t &se
     guint32 passcode = b_core_property_provider_get_property_as_uint32(
         propertyProvider, B_CORE_BARTON_MATTER_SETUP_PASSCODE, UINT32_MAX);
 
-    VerifyOrReturnError(passcode != UINT32_MAX, CHIP_ERROR_INTERNAL, icError("Failed to read setup passcode property"));
+    // If the property provider did not return a passcode, we will generate one
+    if (passcode == UINT32_MAX)
+    {
+        icDebug("No setup passcode property found, generating a random one");
+        ReturnErrorOnFailure(generateRandomSetupPin(passcode));
+    }
 
     setupPasscode = passcode;
     return CHIP_NO_ERROR;
