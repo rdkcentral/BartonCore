@@ -191,6 +191,15 @@ G_BEGIN_DECLS
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupDiscriminator"
 
 /**
+ * MATTER_SETUP_PASSCODE: (value "barton.matter.setupPasscode")
+ *
+ * The setup passcode for the Matter device.
+ * Type: uint32
+ */
+#define B_CORE_BARTON_MATTER_SETUP_PASSCODE                                                                  \
+    B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupPasscode"
+
+/**
  * MATTER_SPAKE2P_ITERATION_COUNT: (value "barton.matter.spake2pIterationCount")
  *
  * The iteration count for the Matter device's spake2p verifier.
@@ -216,15 +225,6 @@ G_BEGIN_DECLS
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER                                                                \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pVerifier"
-
-/**
- * MATTER_SETUP_PASSCODE: (value "barton.matter.setupPasscode")
- *
- * The setup passcode for the Matter device.
- * Type: uint32
- */
-#define B_CORE_BARTON_MATTER_SETUP_PASSCODE                                                                  \
-    B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupPasscode"
 
 
 G_END_DECLS
