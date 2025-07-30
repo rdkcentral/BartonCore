@@ -204,6 +204,11 @@ bcore_string_option(NAME BCORE_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
 
+# We're not going to use BCoreMatterHelper to set up defaults (as BCoreMatterHelper applies FORCE
+# sets). However, include it to populate default header paths.
+# Default selected implementations still need to be set up in below lists.
+include(BCoreMatterHelper)
+
 set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
 set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
 set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
@@ -221,15 +226,11 @@ bcore_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
 
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_HEADER_PATHS
-                  DESCRIPTION "List of paths to directories containing matter provider header files."
-                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers"
-                        "${MATTER_PROVIDER_DEFAULT_DIR}")
+                  DESCRIPTION "List of paths to directories containing matter provider header files.")
 
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_HEADER_PATHS
-                  DESCRIPTION "List of paths to directories containing matter delegate header files"
-                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates"
-                        "${MATTER_DELEGATE_DEFAULT_DIR}")
+                  DESCRIPTION "List of paths to directories containing matter delegate header files")
 
 bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DEFINITION BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
