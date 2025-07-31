@@ -33,7 +33,7 @@ include(CMakeParseArguments)
 # from that point on. Users may define the public options in initial cache files or passed
 # as CLI options, but should use this module at any point after that.
 
-set(MATTER_EXTENSION_TYPES "PROVIDER;DELEGATE")
+set(MATTER_EXTENSION_TYPES "PROVIDER;DELEGATE;SERVICE")
 
 # Module may be included from a cmake file that hasn't called `project` yet (likely an initial cache)
 # Figure out the path relative to the current file as that works in all cases.
@@ -69,10 +69,13 @@ set(MATTER_HELPER_PROVIDER_DEPENDENCIES
 set(MATTER_HELPER_DELEGATE_DEPENDENCIES
 )
 
+set(MATTER_HELPER_SERVICE_DEPENDENCIES
+)
+
 # Private
 # Validates that the provided extension type is one of the allowed types
 # Usage:
-# _matter_helper_validate_extension_type(EXTENSION_TYPE "PROVIDER|DELEGATE")
+# _matter_helper_validate_extension_type(EXTENSION_TYPE "PROVIDER|DELEGATE|SERVICE")
 function(_matter_helper_validate_extension_type)
     set(oneValueArgs EXTENSION_TYPE)
 
@@ -219,7 +222,7 @@ endfunction()
 
 # Add a header path to the list of search paths for the specified extension type.
 # Usage:
-# bcore_matter_helper_add_header_path(EXTENSION_TYPE "PROVIDER|DELEGATE" PATH "/Path/To/Header")
+# bcore_matter_helper_add_header_path(EXTENSION_TYPE "PROVIDER|DELEGATE|SERVICE" PATH "/Path/To/Header")
 function(bcore_matter_helper_add_header_path)
     set(oneValueArgs EXTENSION_TYPE PATH)
 
@@ -328,7 +331,7 @@ endfunction()
 #
 # Usage:
 # bcore_matter_helper_add_implementation(
-#     EXTENSION_TYPE "PROVIDER|DELEGATE"
+#     EXTENSION_TYPE "PROVIDER|DELEGATE|SERVICE"
 #     DEFAULT "ExtensionName1" "ExtensionName2"
 #     DEV "DevExtensionName1" "DevExtensionName2"
 #     CUSTOM "/Path/To/CustomImplementation1.cpp" "/Path/To/CustomImplementation2.cpp"
@@ -377,7 +380,7 @@ endfunction()
 
 # Get the list of implementations for the specified extension type.
 # Usage:
-# bcore_matter_helper_get_implementations(EXTENSION_TYPE "PROVIDER|DELEGATE" OUTPUT variable_name)
+# bcore_matter_helper_get_implementations(EXTENSION_TYPE "PROVIDER|DELEGATE|SERVICE" OUTPUT variable_name)
 # Example:
 # bcore_matter_helper_get_implementations(EXTENSION_TYPE PROVIDER OUTPUT providerImpls)
 function(bcore_matter_helper_get_implementations)
@@ -398,7 +401,7 @@ endfunction()
 
 # Get the list of header paths for the specified extension type.
 # Usage:
-# bcore_matter_helper_get_header_paths(EXTENSION_TYPE "PROVIDER|DELEGATE" OUTPUT variable_name)
+# bcore_matter_helper_get_header_paths(EXTENSION_TYPE "PROVIDER|DELEGATE|SERVICE" OUTPUT variable_name)
 # Example:
 # bcore_matter_helper_get_header_paths(EXTENSION_TYPE PROVIDER OUTPUT providerHeaderPaths)
 function(bcore_matter_helper_get_header_paths)

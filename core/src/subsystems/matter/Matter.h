@@ -30,6 +30,7 @@
 #include "AccessRestrictionProvider.h"
 #include "BartonOperationalCredentialsDelegate.hpp"
 #include "BartonCommissionableDataProvider.hpp"
+#include "BartonOperationalKeystore.hpp"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
@@ -294,7 +295,8 @@ namespace barton
 
         std::shared_ptr<BartonCommissionableDataProvider> commissionableDataProvider;
 
-        std::unique_ptr<chip::PersistentStorageOperationalKeystore> operationalKeystore;
+        std::shared_ptr<BartonOperationalKeystore> operationalKeystore;
+
         std::unique_ptr<chip::Credentials::PersistentStorageOpCertStore> opCertStore;
         chip::Crypto::DefaultSessionKeystore sessionKeystore;
         chip::CommonCaseDeviceServerInitParams serverInitParams;

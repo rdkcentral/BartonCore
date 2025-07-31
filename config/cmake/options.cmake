@@ -212,6 +212,7 @@ include(BCoreMatterHelper)
 set(MATTER_EXTENSION_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
 set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/providers/default")
 set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/delegates/default")
+set(MATTER_SERVICE_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/services/default")
 
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
@@ -224,6 +225,11 @@ bcore_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter delegate interfaces."
                   VALUE "${MATTER_DELEGATE_DEFAULT_DIR}/CertifierOperationalCredentialsIssuer.cpp")
 
+bcore_string_option(NAME BCORE_MATTER_SERVICE_IMPLEMENTATIONS
+                  DEFINITION BARTON_CONFIG_MATTER_SERVICE_IMPLEMENTATIONS
+                  DESCRIPTION "List of paths to source files that implement Matter service interfaces."
+                  VALUE "${MATTER_SERVICE_DEFAULT_DIR}/DefaultOperationalKeystore.cpp")
+
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_HEADER_PATHS
                   DESCRIPTION "List of paths to directories containing matter provider header files.")
@@ -231,6 +237,10 @@ bcore_string_option(NAME BCORE_MATTER_PROVIDER_HEADER_PATHS
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_HEADER_PATHS
                   DESCRIPTION "List of paths to directories containing matter delegate header files")
+
+bcore_string_option(NAME BCORE_MATTER_SERVICE_HEADER_PATHS
+                  DEFINITION BARTON_CONFIG_MATTER_SERVICE_HEADER_PATHS
+                  DESCRIPTION "List of paths to directories containing matter service header files")
 
 bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DEFINITION BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME

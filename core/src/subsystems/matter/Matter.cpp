@@ -86,6 +86,7 @@ extern "C" {
 #include "BartonDeviceInstanceInfoProvider.hpp"
 #include "BartonMatterDelegateRegistry.hpp"
 #include "BartonMatterProviderRegistry.hpp"
+#include "BartonMatterServiceRegistry.hpp"
 #include "Matter.h"
 #include "credentials/attestation_verifier/DeviceAttestationVerifier.h"
 
@@ -230,7 +231,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
         return false;
     }
 
-    operationalKeystore = std::make_unique<chip::PersistentStorageOperationalKeystore>();
+    operationalKeystore = BartonMatterServiceRegistry::Instance().GetBartonOperationalKeystore();
     err = operationalKeystore->Init(&storageDelegate);
 
     if (!ChipError::IsSuccess(err))
