@@ -177,7 +177,7 @@ list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
-        xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m)
+        xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
 
 if (BCORE_SUPPORT_SOFTWARE_WATCHDOG)
     set(bCoreLinkLibraries ${bCoreLinkLibraries} xhSoftwareWatchdog)

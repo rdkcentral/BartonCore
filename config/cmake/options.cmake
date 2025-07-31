@@ -237,6 +237,10 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DESCRIPTION "Name of the Matter BLE controller device."
                     VALUE "Matter-Controller")
 
+bcore_string_option(NAME BCORE_LINK_LIBRARIES
+                  DEFINITION BARTON_CONFIG_LINK_LIBRARIES
+                  DESCRIPTION "List of additional libraries to link against when building the Barton Device Service. This allows custom client code to depend on external libraries as well.")
+
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
