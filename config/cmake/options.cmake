@@ -209,9 +209,9 @@ bcore_string_option(NAME BCORE_MATTER_LIB
 # Default selected implementations still need to be set up in below lists.
 include(BCoreMatterHelper)
 
-set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
-set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
-set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
+set(MATTER_EXTENSION_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
+set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/providers/default")
+set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/delegates/default")
 
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS

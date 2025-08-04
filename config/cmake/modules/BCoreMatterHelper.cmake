@@ -33,36 +33,60 @@ include(CMakeParseArguments)
 # from that point on. Users may define the public options in initial cache files or passed
 # as CLI options, but should use this module at any point after that.
 
+set(MATTER_EXTENSION_TYPES "PROVIDER;DELEGATE")
+
 # Module may be included from a cmake file that hasn't called `project` yet (likely an initial cache)
 # Figure out the path relative to the current file as that works in all cases.
-get_filename_component(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../core/src/subsystems/matter" ABSOLUTE)
+get_filename_component(MATTER_EXTENSION_PARENT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../core/src/subsystems/matter" ABSOLUTE)
 
-set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
-set(MATTER_PROVIDER_DEV_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/dev")
-set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
-set(MATTER_DELEGATE_DEV_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/dev")
+# Define paths for each extension type
+foreach(EXTENSION_TYPE ${MATTER_EXTENSION_TYPES})
+    # Convert to lowercase for directory names
+    string(TOLOWER "${EXTENSION_TYPE}" extension_type_lower)
+
+    set(MATTER_${EXTENSION_TYPE}_DEFAULT_DIR "${MATTER_EXTENSION_PARENT_DIR}/${extension_type_lower}s/default")
+    set(MATTER_${EXTENSION_TYPE}_DEV_DIR "${MATTER_EXTENSION_PARENT_DIR}/${extension_type_lower}s/dev")
+
+    message(STATUS "MATTER_${EXTENSION_TYPE}_DEFAULT_DIR: ${MATTER_${EXTENSION_TYPE}_DEFAULT_DIR}")
+    message(STATUS "MATTER_${EXTENSION_TYPE}_DEV_DIR: ${MATTER_${EXTENSION_TYPE}_DEV_DIR}")
+
+    set(MATTER_HELPER_${EXTENSION_TYPE}_HEADER_PATHS
+        "${MATTER_EXTENSION_PARENT_DIR}/${extension_type_lower}s/"
+        "${MATTER_${EXTENSION_TYPE}_DEFAULT_DIR}"
+        "${MATTER_${EXTENSION_TYPE}_DEV_DIR}"
+    )
+
+    message(STATUS "MATTER_HELPER_${EXTENSION_TYPE}_HEADER_PATHS: ${MATTER_HELPER_${EXTENSION_TYPE}_HEADER_PATHS}")
+endforeach()
 
 # Custom associative dictionary for tracking class hiearchy dependencies of well-known
-# providers/delegates. Format for individial list items is:
+# extensions (providers/delegates, etc). Format for individial list items is:
 # "ProviderName:DependencyFilePath[,DependencyFilePath,...]"
 set(MATTER_HELPER_PROVIDER_DEPENDENCIES
-    "DefaultCommissionableDataProvider:${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/BartonCommissionableDataProvider.cpp"
+    "DefaultCommissionableDataProvider:${MATTER_EXTENSION_PARENT_DIR}/providers/BartonCommissionableDataProvider.cpp"
 )
 
 set(MATTER_HELPER_DELEGATE_DEPENDENCIES
 )
 
-set(MATTER_HELPER_PROVIDER_HEADER_PATHS
-    "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers"
-    "${MATTER_PROVIDER_DEFAULT_DIR}"
-    "${MATTER_PROVIDER_DEV_DIR}"
-)
+# Private
+# Validates that the provided extension type is one of the allowed types
+# Usage:
+# _matter_helper_validate_extension_type(EXTENSION_TYPE "PROVIDER|DELEGATE")
+function(_matter_helper_validate_extension_type)
+    set(oneValueArgs EXTENSION_TYPE)
 
-set(MATTER_HELPER_DELEGATE_HEADER_PATHS
-    "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/"
-    "${MATTER_DELEGATE_DEFAULT_DIR}"
-    "${MATTER_DELEGATE_DEV_DIR}"
-)
+    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
+
+    if (NOT HELPER_EXTENSION_TYPE)
+        message(FATAL_ERROR "No extension type specified for _matter_helper_validate_extension_type")
+    endif()
+
+    list(FIND MATTER_EXTENSION_TYPES ${HELPER_EXTENSION_TYPE} extension_type_index)
+    if (extension_type_index EQUAL -1)
+        message(FATAL_ERROR "Invalid extension type: ${HELPER_EXTENSION_TYPE}. Must be one of: ${MATTER_EXTENSION_TYPES}")
+    endif()
+endfunction()
 
 # Private
 # Adds an item to a list if it does not already exist in the list.
@@ -88,20 +112,26 @@ function(_matter_helper_append_if_not_exists)
 endfunction()
 
 # Private
-# Given a well-known provider, adds well-known dependencies documented in
-# MATTER_HELPER_PROVIDER_DEPENDENCIES to BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
-function(_matter_helper_add_provider_dependency_implementations)
-    set(oneValueArgs NAME)
+# Given a well-known extension implementation, adds well-known dependencies documented in
+# MATTER_HELPER_<EXTENSION_TYPE>_DEPENDENCIES to BCORE_MATTER_<EXTENSION_TYPE>_IMPLEMENTATIONS
+function(_matter_helper_add_extension_dependency_implementations)
+    set(oneValueArgs EXTENSION_TYPE NAME)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
     if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_provider_dependency_implementations")
+        message(FATAL_ERROR "No name specified for _matter_helper_add_extension_dependency_implementations")
     endif()
 
-    set(TEMP_PROVIDER_IMPLEMENTATIONS ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS})
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
-    foreach(dependency_association IN LISTS MATTER_HELPER_PROVIDER_DEPENDENCIES)
+    # Get the dependencies and implementations variables for this extension type
+    set(dependencies_var "MATTER_HELPER_${HELPER_EXTENSION_TYPE}_DEPENDENCIES")
+    set(implementations_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_IMPLEMENTATIONS")
+
+    set(temp_implementations ${${implementations_var}})
+
+    foreach(dependency_association IN LISTS ${dependencies_var})
         string(FIND "${dependency_association}" ":" char_index)
         string(SUBSTRING "${dependency_association}" 0 ${char_index} dependency_name)
         math(EXPR char_index "${char_index} + 1")
@@ -110,167 +140,124 @@ function(_matter_helper_add_provider_dependency_implementations)
 
         if (dependency_name STREQUAL HELPER_NAME)
             foreach(dependency IN LISTS dependency_list)
-                message(TRACE "Adding provider dependency implementation: ${dependency}")
+                message(TRACE "Adding ${HELPER_EXTENSION_TYPE} dependency implementation: ${dependency}")
                 _matter_helper_append_if_not_exists(
-                    LIST TEMP_PROVIDER_IMPLEMENTATIONS
+                    LIST temp_implementations
                     ITEM "${dependency}"
                 )
             endforeach()
         endif()
     endforeach()
 
-    set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS "${TEMP_PROVIDER_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
+    set(${implementations_var} "${temp_implementations}" CACHE STRING "" FORCE)
 endfunction()
 
 # Private
-# Given a well-known default provider, adds it and any documented dependencies to
-# BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
-function(_matter_helper_add_default_provider_implementation)
-    set(oneValueArgs NAME)
+# Given a well-known default extension implementation, adds it and any documented dependencies to
+# BCORE_MATTER_<EXTENSION_TYPE>_IMPLEMENTATIONS
+function(_matter_helper_add_default_extension_implementation)
+    set(oneValueArgs EXTENSION_TYPE NAME)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
     if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_default_provider_implementation")
+        message(FATAL_ERROR "No name specified for _matter_helper_add_default_extension_implementation")
     endif()
 
-    set(TEMP_PROVIDER_IMPLEMENTATIONS ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS})
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
-    message(TRACE "Adding default provider implementation: ${HELPER_NAME}")
+    set(default_dir "MATTER_${HELPER_EXTENSION_TYPE}_DEFAULT_DIR")
+    set(implementations_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_IMPLEMENTATIONS")
+
+    set(temp_implementations ${${implementations_var}})
+
+    message(TRACE "Adding default ${HELPER_EXTENSION_TYPE} implementation: ${HELPER_NAME}")
     _matter_helper_append_if_not_exists(
-        LIST TEMP_PROVIDER_IMPLEMENTATIONS
-        ITEM "${MATTER_PROVIDER_DEFAULT_DIR}/${HELPER_NAME}.cpp"
+        LIST temp_implementations
+        ITEM "${${default_dir}}/${HELPER_NAME}.cpp"
     )
 
-    set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS "${TEMP_PROVIDER_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
+    set(${implementations_var} "${temp_implementations}" CACHE STRING "" FORCE)
 
-    _matter_helper_add_provider_dependency_implementations(NAME ${HELPER_NAME})
+    _matter_helper_add_extension_dependency_implementations(
+        EXTENSION_TYPE ${HELPER_EXTENSION_TYPE}
+        NAME ${HELPER_NAME}
+    )
 endfunction()
 
 # Private
-# Given a well-known dev provider, adds it and any documented dependencies to
-# BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
-function(_matter_helper_add_dev_provider_implementation)
-    set(oneValueArgs NAME)
+# Given a well-known dev extension implementation, adds it and any documented dependencies to
+# BCORE_MATTER_<EXTENSION_TYPE>_IMPLEMENTATIONS
+function(_matter_helper_add_dev_extension_implementation)
+    set(oneValueArgs EXTENSION_TYPE NAME)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
     if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_dev_provider_implementation")
+        message(FATAL_ERROR "No name specified for _matter_helper_add_dev_extension_implementation")
     endif()
 
-    set(TEMP_PROVIDER_IMPLEMENTATIONS ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS})
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
-    message(TRACE "Adding dev provider implementation: ${HELPER_NAME}")
+    set(dev_dir "MATTER_${HELPER_EXTENSION_TYPE}_DEV_DIR")
+    set(implementations_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_IMPLEMENTATIONS")
+
+    set(temp_implementations ${${implementations_var}})
+
     _matter_helper_append_if_not_exists(
-        LIST TEMP_PROVIDER_IMPLEMENTATIONS
-        ITEM "${MATTER_PROVIDER_DEV_DIR}/${HELPER_NAME}.cpp"
+        LIST temp_implementations
+        ITEM "${${dev_dir}}/${HELPER_NAME}.cpp"
     )
 
-    set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS "${TEMP_PROVIDER_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
+    set(${implementations_var} "${temp_implementations}" CACHE STRING "" FORCE)
 
-    _matter_helper_add_provider_dependency_implementations(NAME ${HELPER_NAME})
+    _matter_helper_add_extension_dependency_implementations(
+        EXTENSION_TYPE ${HELPER_EXTENSION_TYPE}
+        NAME ${HELPER_NAME}
+    )
 endfunction()
 
-# Private
-# Given a well-known delegate, adds well-known dependencies documented in
-# MATTER_HELPER_DELEGATE_DEPENDENCIES to BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
-function(_matter_helper_add_delegate_dependency_implementations)
-    set(oneValueArgs NAME)
+# Add a header path to the list of search paths for the specified extension type.
+# Usage:
+# bcore_matter_helper_add_header_path(EXTENSION_TYPE "PROVIDER|DELEGATE" PATH "/Path/To/Header")
+function(bcore_matter_helper_add_header_path)
+    set(oneValueArgs EXTENSION_TYPE PATH)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
-    if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_delegate_dependency_implementations")
+    if (NOT HELPER_PATH)
+        message(FATAL_ERROR "No path specified for bcore_matter_helper_add_header_path")
     endif()
 
-    set(TEMP_DELEGATE_IMPLEMENTATIONS ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS})
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
-    foreach(dependency_association IN LISTS MATTER_HELPER_DELEGATE_DEPENDENCIES)
-        string(FIND "${dependency_association}" ":" char_index)
-        string(SUBSTRING "${dependency_association}" 0 ${char_index} dependency_name)
-        math(EXPR char_index "${char_index} + 1")
-        string(SUBSTRING "${dependency_association}" ${char_index} -1 dependency_list)
-        string(REPLACE "," ";" dependency_list "${dependency_list}")
+    set(header_paths_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_HEADER_PATHS")
+    set(temp_header_list ${${header_paths_var}})
 
-        if (dependency_name STREQUAL HELPER_NAME)
-            foreach(dependency IN LISTS dependency_list)
-                message(TRACE "Adding delegate dependency implementation: ${dependency}")
-                _matter_helper_append_if_not_exists(
-                    LIST BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
-                    ITEM "${dependency}"
-                )
-            endforeach()
-        endif()
-    endforeach()
-
-    set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS "${TEMP_DELEGATE_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
-endfunction()
-
-# Private
-# Given a well-known default delegate, adds it and any documented dependencies to
-# BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
-function(_matter_helper_add_default_delegate_implementation)
-    set(oneValueArgs NAME)
-
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_default_delegate_implementation")
-    endif()
-
-    set(TEMP_DELEGATE_IMPLEMENTATIONS ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS})
-
-    message(TRACE "Adding default delegate implementation: ${HELPER_NAME}")
     _matter_helper_append_if_not_exists(
-        LIST TEMP_DELEGATE_IMPLEMENTATIONS
-        ITEM "${MATTER_DELEGATE_DEFAULT_DIR}/${HELPER_NAME}.cpp"
+        LIST temp_header_list
+        ITEM "${HELPER_PATH}"
     )
 
-    set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS "${TEMP_DELEGATE_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
-
-    _matter_helper_add_delegate_dependency_implementations(NAME ${HELPER_NAME})
+    set(${header_paths_var} "${temp_header_list}" CACHE STRING "" FORCE)
 endfunction()
 
 # Private
-# Given a well-known dev delegate, adds it and any documented dependencies to
-# BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
-function(_matter_helper_add_dev_delegate_implementation)
-    set(oneValueArgs NAME)
-
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_NAME)
-        message(FATAL_ERROR "No name specified for _matter_helper_add_dev_delegate_implementation")
-    endif()
-
-    set(TEMP_DELEGATE_IMPLEMENTATIONS ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS})
-
-    message(TRACE "Adding dev delegate implementation: ${HELPER_NAME}")
-    _matter_helper_append_if_not_exists(
-        LIST TEMP_DELEGATE_IMPLEMENTATIONS
-        ITEM "${MATTER_DELEGATE_DEV_DIR}/${HELPER_NAME}.cpp"
-    )
-
-    set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS "${TEMP_DELEGATE_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
-
-    _matter_helper_add_delegate_dependency_implementations(NAME ${HELPER_NAME})
-endfunction()
-
-# Private
-# Add common provider/delegate code and header paths to the public options.
+# Add common extension code and header paths to the public options.
 function(_matter_helper_initialize)
-    foreach(header_path IN LISTS MATTER_HELPER_PROVIDER_HEADER_PATHS)
-        bcore_matter_helper_provider_add_header_path(
-            PATH "${header_path}"
-        )
+
+    foreach(extension_type ${MATTER_EXTENSION_TYPES})
+        set(HEADER_PATHS_VAR "MATTER_HELPER_${extension_type}_HEADER_PATHS")
+
+        foreach(header_path IN LISTS ${HEADER_PATHS_VAR})
+            bcore_matter_helper_add_header_path(
+                EXTENSION_TYPE ${extension_type}
+                PATH "${header_path}"
+            )
+        endforeach()
+
     endforeach()
 
-    foreach(header_path IN LISTS MATTER_HELPER_DELEGATE_HEADER_PATHS)
-        bcore_matter_helper_delegate_add_header_path(
-            PATH "${header_path}"
-        )
-    endforeach()
 endfunction()
 
 # Query if a given provider is selected.
@@ -327,202 +314,107 @@ function(bcore_matter_helper_delegate_selected)
     endforeach()
 endfunction()
 
-# Add one or more provider implementations to the list of matter
-# providers selected.
-# Dev/Default providers must be specified by name.
-# Custom providers must be specified by file path.
-# Any DEFAULT or DEV provider selected will automatically add its
+# Add one or more extension implementations to the list of matter
+# entities selected.
+# Dev/Default entities must be specified by name.
+# Custom entities must be specified by file path.
+# Any DEFAULT or DEV extension selected will automatically add its
 # dependencies (class hierarchy) to the list of implementations.
 #
-# DEFAULT - Any source file that is located under the providers/default directory.
-# DEV - Any source file that is located under the providers/dev directory.
-# CUSTOM - Any source file that is located anywhere on the filesystem.
+# EXTENSION_TYPE - The type of extension (PROVIDER, DELEGATE, etc.)
+# DEFAULT - Any source file located under the <extension_type_lower>s/default directory.
+# DEV - Any source file located under the <extension_type_lower>s/dev directory.
+# CUSTOM - Any source file located anywhere on the filesystem.
 #
 # Usage:
-# bcore_matter_helper_provider_add_implementation(
-#     DEFAULT "ProviderName1" "ProviderName2"
-#     DEV "DevProviderName1" "DevProviderName2"
-#     CUSTOM "/Path/To/CustomProviderImplementation1.cpp" "/Path/To/CustomProviderImplementation2.cpp"
+# bcore_matter_helper_add_implementation(
+#     EXTENSION_TYPE "PROVIDER|DELEGATE"
+#     DEFAULT "ExtensionName1" "ExtensionName2"
+#     DEV "DevExtensionName1" "DevExtensionName2"
+#     CUSTOM "/Path/To/CustomImplementation1.cpp" "/Path/To/CustomImplementation2.cpp"
 # )
-function(bcore_matter_helper_provider_add_implementation)
+function(bcore_matter_helper_add_implementation)
+    set(oneValueArgs EXTENSION_TYPE)
     set(multiValueArgs DEFAULT DEV CUSTOM)
 
-    cmake_parse_arguments(HELPER "" "" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
     if (NOT HELPER_DEFAULT AND NOT HELPER_DEV AND NOT HELPER_CUSTOM)
-        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_provider_add_implementation")
+        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_add_implementation")
     endif()
 
-    foreach(provider_impl IN LISTS HELPER_DEFAULT)
-        _matter_helper_add_default_provider_implementation(NAME ${provider_impl})
-    endforeach()
-
-    foreach(provider_impl IN LISTS HELPER_DEV)
-        _matter_helper_add_dev_provider_implementation(NAME ${provider_impl})
-    endforeach()
-
-    set(TEMP_PROVIDER_IMPLEMENTATIONS ${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS})
-
-    foreach(provider_impl IN LISTS HELPER_CUSTOM)
-        _matter_helper_append_if_not_exists(
-            LIST TEMP_PROVIDER_IMPLEMENTATIONS
-            ITEM "${provider_impl}"
+    # Process DEFAULT implementations
+    foreach(extension_impl IN LISTS HELPER_DEFAULT)
+        _matter_helper_add_default_extension_implementation(
+            EXTENSION_TYPE ${HELPER_EXTENSION_TYPE}
+            NAME ${extension_impl}
         )
     endforeach()
 
-    set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS "${TEMP_PROVIDER_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
-endfunction()
-
-# Add one or more delegate implementations to the list of matter
-# delegates selected.
-# Dev/Default delegates must be specified by name.
-# Custom delegates must be specified by file path.
-# Any DEFAULT or DEV delegate selected will automatically add its
-# dependencies (class hierarchy) to the list of implementations.
-#
-# DEFAULT - Any source file that is located under the delegates/default directory.
-# DEV - Any source file that is located under the delegates/dev directory.
-# CUSTOM - Any source file that is located anywhere on the filesystem.
-#
-# Usage:
-# bcore_matter_helper_delegate_add_implementation(
-#     DEFAULT "DelegateName1" "DelegateName2"
-#     DEV "DevDelegateName1" "DevDelegateName2"
-#     CUSTOM "/Path/To/CustomDelegateImplementation1.cpp" "/Path/To/CustomDelegateImplementation2.cpp"
-# )
-function(bcore_matter_helper_delegate_add_implementation)
-    set(multiValueArgs DEFAULT DEV CUSTOM)
-
-    cmake_parse_arguments(HELPER "" "" "${multiValueArgs}" ${ARGN})
-
-    if (NOT HELPER_DEFAULT AND NOT HELPER_DEV AND NOT HELPER_CUSTOM)
-        message(FATAL_ERROR "No implementation specified for bcore_matter_helper_delegate_add_implementation")
-    endif()
-
-    foreach(delegate_impl IN LISTS HELPER_DEFAULT)
-        _matter_helper_add_default_delegate_implementation(NAME ${delegate_impl})
-    endforeach()
-
-    foreach(delegate_impl IN LISTS HELPER_DEV)
-        _matter_helper_add_dev_delegate_implementation(NAME ${delegate_impl})
-    endforeach()
-
-    set(TEMP_DELEGATE_IMPLEMENTATIONS ${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS})
-
-    foreach(delegate_impl IN LISTS HELPER_CUSTOM)
-        _matter_helper_append_if_not_exists(
-            LIST TEMP_DELEGATE_IMPLEMENTATIONS
-            ITEM "${delegate_impl}"
+    # Process DEV implementations
+    foreach(extension_impl IN LISTS HELPER_DEV)
+        _matter_helper_add_dev_extension_implementation(
+            EXTENSION_TYPE ${HELPER_EXTENSION_TYPE}
+            NAME ${extension_impl}
         )
     endforeach()
 
-    set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS "${TEMP_DELEGATE_IMPLEMENTATIONS}" CACHE STRING "" FORCE)
+    # Process CUSTOM implementations
+    set(implementations_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_IMPLEMENTATIONS")
+    set(temp_implementations ${${implementations_var}})
+
+    foreach(extension_impl IN LISTS HELPER_CUSTOM)
+        _matter_helper_append_if_not_exists(
+            LIST temp_implementations
+            ITEM "${extension_impl}"
+        )
+    endforeach()
+
+    set(${implementations_var} "${temp_implementations}" CACHE STRING "" FORCE)
 endfunction()
 
-# Add a header path to the list of search paths for
-# provider headers.
+# Get the list of implementations for the specified extension type.
 # Usage:
-# bcore_matter_helper_provider_add_header_path(PATH "/Path/To/Header")
-function(bcore_matter_helper_provider_add_header_path)
-    set(oneValueArgs PATH)
-
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_PATH)
-        message(FATAL_ERROR "No path specified for bcore_matter_helper_provider_add_header_path")
-    endif()
-
-    set(TEMP_PROVIDER_HEADER_LIST ${BCORE_MATTER_PROVIDER_HEADER_PATHS})
-
-    _matter_helper_append_if_not_exists(
-        LIST TEMP_PROVIDER_HEADER_LIST
-        ITEM "${HELPER_PATH}"
-    )
-
-    set(BCORE_MATTER_PROVIDER_HEADER_PATHS "${TEMP_PROVIDER_HEADER_LIST}" CACHE STRING "" FORCE)
-endfunction()
-
-# Add a header path to the list of search paths for
-# delegate headers.
-# Usage:
-# bcore_matter_helper_delegate_add_header_path(PATH "/Path/To/Header")
-function(bcore_matter_helper_delegate_add_header_path)
-    set(oneValueArgs PATH)
-
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_PATH)
-        message(FATAL_ERROR "No path specified for bcore_matter_helper_delegate_add_header_path")
-    endif()
-
-    set(TEMP_DELEGATE_HEADER_LIST ${BCORE_MATTER_DELEGATE_HEADER_PATHS})
-
-    _matter_helper_append_if_not_exists(
-        LIST TEMP_DELEGATE_HEADER_LIST
-        ITEM "${HELPER_PATH}"
-    )
-
-    set(BCORE_MATTER_DELEGATE_HEADER_PATHS "${TEMP_DELEGATE_HEADER_LIST}" CACHE STRING "" FORCE)
-endfunction()
-
-# Get the list of provider implementations.
-# Usage:
-# bcore_matter_helper_provider_get_implementations(OUTPUT variable_name)
-function(bcore_matter_helper_provider_get_implementations)
-    set(oneValueArgs OUTPUT)
+# bcore_matter_helper_get_implementations(EXTENSION_TYPE "PROVIDER|DELEGATE" OUTPUT variable_name)
+# Example:
+# bcore_matter_helper_get_implementations(EXTENSION_TYPE PROVIDER OUTPUT providerImpls)
+function(bcore_matter_helper_get_implementations)
+    set(oneValueArgs EXTENSION_TYPE OUTPUT)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
     if (NOT HELPER_OUTPUT)
-        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_provider_get_implementations")
+        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_get_implementations")
     endif()
 
-    set(${HELPER_OUTPUT} "${BCORE_MATTER_PROVIDER_IMPLEMENTATIONS}" PARENT_SCOPE)
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
+
+    set(implementations_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_IMPLEMENTATIONS")
+
+    set(${HELPER_OUTPUT} "${${implementations_var}}" PARENT_SCOPE)
 endfunction()
 
-# Get the list of delegate implementations.
+# Get the list of header paths for the specified extension type.
 # Usage:
-# bcore_matter_helper_delegate_get_implementations(OUTPUT variable_name)
-function(bcore_matter_helper_delegate_get_implementations)
-    set(oneValueArgs OUTPUT)
+# bcore_matter_helper_get_header_paths(EXTENSION_TYPE "PROVIDER|DELEGATE" OUTPUT variable_name)
+# Example:
+# bcore_matter_helper_get_header_paths(EXTENSION_TYPE PROVIDER OUTPUT providerHeaderPaths)
+function(bcore_matter_helper_get_header_paths)
+    set(oneValueArgs EXTENSION_TYPE OUTPUT)
 
     cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
 
     if (NOT HELPER_OUTPUT)
-        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_delegate_get_implementations")
+        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_get_header_paths")
     endif()
 
-    set(${HELPER_OUTPUT} "${BCORE_MATTER_DELEGATE_IMPLEMENTATIONS}" PARENT_SCOPE)
-endfunction()
+    _matter_helper_validate_extension_type(EXTENSION_TYPE ${HELPER_EXTENSION_TYPE})
 
-# Get the list of header paths for provider headers.
-# Usage:
-# bcore_matter_helper_provider_get_header_paths(OUTPUT variable_name)
-function(bcore_matter_helper_provider_get_header_paths)
-    set(oneValueArgs OUTPUT)
+    set(header_paths_var "BCORE_MATTER_${HELPER_EXTENSION_TYPE}_HEADER_PATHS")
 
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_OUTPUT)
-        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_provider_get_header_paths")
-    endif()
-
-    set(${HELPER_OUTPUT} "${BCORE_MATTER_PROVIDER_HEADER_PATHS}" PARENT_SCOPE)
-endfunction()
-
-# Get the list of header paths for delegate headers.
-# Usage:
-# bcore_matter_helper_delegate_get_header_paths(OUTPUT variable_name)
-function(bcore_matter_helper_delegate_get_header_paths)
-    set(oneValueArgs OUTPUT)
-
-    cmake_parse_arguments(HELPER "" "${oneValueArgs}" "" ${ARGN})
-
-    if (NOT HELPER_OUTPUT)
-        message(FATAL_ERROR "No output variable specified for bcore_matter_helper_delegate_get_header_paths")
-    endif()
-
-    set(${HELPER_OUTPUT} "${BCORE_MATTER_DELEGATE_HEADER_PATHS}" PARENT_SCOPE)
+    set(${HELPER_OUTPUT} "${${header_paths_var}}" PARENT_SCOPE)
 endfunction()
 
 _matter_helper_initialize()
