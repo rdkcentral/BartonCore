@@ -95,10 +95,16 @@ if (BCORE_MATTER)
         OUTPUT MATTER_DELEGATE_IMPLEMENTATIONS
     )
 
+    bcore_matter_helper_get_implementations(
+        EXTENSION_TYPE SERVICE
+        OUTPUT MATTER_SERVICE_IMPLEMENTATIONS
+    )
+
     list(APPEND SOURCES
         ${matterSubSrc}
         ${MATTER_PROVIDER_IMPLEMENTATIONS}
         ${MATTER_DELEGATE_IMPLEMENTATIONS}
+        ${MATTER_SERVICE_IMPLEMENTATIONS}
         ${matterDriversSrc}
         ${matterSrc}
         "src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp" # This provider is always required
@@ -137,10 +143,17 @@ if (BCORE_MATTER)
         OUTPUT MATTER_DELEGATE_HEADER_PATHS
     )
 
+    bcore_matter_helper_get_header_paths(
+        EXTENSION_TYPE SERVICE
+        OUTPUT MATTER_SERVICE_HEADER_PATHS
+    )
+
     list(APPEND XTRA_INCLUDES
         ${OPENSSL_INCLUDE_DIRS}
         ${MATTER_PROVIDER_HEADER_PATHS}
-        ${MATTER_DELEGATE_HEADER_PATHS})
+        ${MATTER_DELEGATE_HEADER_PATHS}
+        ${MATTER_SERVICE_HEADER_PATHS}
+    )
 
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)

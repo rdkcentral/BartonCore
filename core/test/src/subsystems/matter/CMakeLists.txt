@@ -33,6 +33,8 @@ list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepar
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/services/default/DefaultOperationalKeystore.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/PersistentStorageDelegate.cpp
                      ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-property-provider.c
                      ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
                      ${PROJECT_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
