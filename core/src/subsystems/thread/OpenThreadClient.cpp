@@ -336,6 +336,10 @@ namespace barton
         {
             icError("Failed to get device role. Error = %d", (int) error);
         }
+        else
+        {
+            retVal = TranslateOTBRDeviceRole(otbrDeviceRole);
+        }
 
         return retVal;
     }

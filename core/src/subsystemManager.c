@@ -61,13 +61,17 @@ typedef struct
 #define MAP_FOREACH(value, map, expr)                                                                                  \
     do                                                                                                                 \
     {                                                                                                                  \
-        GHashTableIter iter;                                                                                           \
-        gpointer key, _value;                                                                                          \
-        g_hash_table_iter_init(&iter, (map));                                                                          \
-        while (g_hash_table_iter_next(&iter, &key, &_value))                                                           \
+        if (map)                                                                                                       \
         {                                                                                                              \
-            value = (SubsystemRegistration *) _value;                                                                  \
-            expr                                                                                                       \
+            GHashTableIter iter = {0};                                                                                 \
+            gpointer key = {0};                                                                                        \
+            gpointer _value = {0};                                                                                     \
+            g_hash_table_iter_init(&iter, (map));                                                                      \
+            while (g_hash_table_iter_next(&iter, &key, &_value))                                                       \
+            {                                                                                                          \
+                value = (SubsystemRegistration *) _value;                                                              \
+                expr                                                                                                   \
+            }                                                                                                          \
         }                                                                                                              \
     } while (0)
 
@@ -209,7 +213,10 @@ GPtrArray *subsystemManagerGetRegisteredSubsystems(void)
 
     READ_LOCK_SCOPE(mutex);
 
+    g_return_val_if_fail(subsystems != NULL, result);
+
     SubsystemRegistration *registration = NULL;
+
     MAP_FOREACH(registration, subsystems, g_ptr_array_add(result, g_strdup(registration->subsystem->name)););
 
     return result;
@@ -222,6 +229,8 @@ cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName)
     cJSON *result = NULL;
 
     READ_LOCK_SCOPE(mutex);
+
+    g_return_val_if_fail(subsystems != NULL, NULL);
 
     SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystemName);
     if (reg != NULL)
@@ -319,7 +328,7 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
         WRITE_LOCK_SCOPE(mutex);
         readyForDevicesCB = readyForDevicesCallback;
-        if (disabledSubsystems != NULL)
+        if (disabledSubsystems && subsystems)
         {
             SubsystemRegistration *registration = NULL;
             MAP_FOREACH(
@@ -331,6 +340,8 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
     {
         READ_LOCK_SCOPE(mutex);
+
+        g_return_if_fail(subsystems != NULL);
 
         // Attempt to perform migrations as necessary before kicking off initialization
         SubsystemRegistration *registration = NULL;
@@ -359,6 +370,8 @@ void subsystemManagerShutdown(void)
     {
         READ_LOCK_SCOPE(mutex);
 
+        g_return_if_fail(subsystems != NULL);
+
         SubsystemRegistration *registration = NULL;
         MAP_FOREACH(
             registration,
@@ -378,6 +391,8 @@ void subsystemManagerAllDriversStarted(void)
 
     {
         READ_LOCK_SCOPE(mutex);
+
+        g_return_if_fail(subsystems != NULL);
 
         SubsystemRegistration *registration = NULL;
         MAP_FOREACH(
@@ -406,6 +421,8 @@ void subsystemManagerAllServicesAvailable(void)
 
     READ_LOCK_SCOPE(mutex);
 
+    g_return_if_fail(subsystems != NULL);
+
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
         registration,
@@ -422,6 +439,8 @@ void subsystemManagerPostRestoreConfig(void)
 
     READ_LOCK_SCOPE(mutex);
 
+    g_return_if_fail(subsystems != NULL);
+
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
         registration,
@@ -433,6 +452,8 @@ void subsystemManagerPostRestoreConfig(void)
 void subsystemManagerSetOtaUpgradeDelay(uint32_t delaySeconds)
 {
     READ_LOCK_SCOPE(mutex);
+
+    g_return_if_fail(subsystems != NULL);
 
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
@@ -453,6 +474,8 @@ void subsystemManagerEnterLPM(void)
 {
     READ_LOCK_SCOPE(mutex);
 
+    g_return_if_fail(subsystems != NULL);
+
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
         registration,
@@ -465,6 +488,8 @@ void subsystemManagerEnterLPM(void)
 void subsystemManagerExitLPM(void)
 {
     READ_LOCK_SCOPE(mutex);
+
+    g_return_if_fail(subsystems != NULL);
 
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
@@ -482,6 +507,8 @@ bool subsystemManagerIsSubsystemReady(const char *subsystem)
     bool result = false;
 
     READ_LOCK_SCOPE(mutex);
+
+    g_return_val_if_fail(subsystems != NULL, false);
 
     SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
     if (reg != NULL)
@@ -502,6 +529,8 @@ bool subsystemManagerIsReadyForDevices(void)
     bool allReady = true;
 
     READ_LOCK_SCOPE(mutex);
+
+    g_return_val_if_fail(subsystems != NULL, false);
 
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(
@@ -529,6 +558,8 @@ bool subsystemManagerRestoreConfig(const char *tempRestoreDir, const char *dynam
     bool result = true;
 
     READ_LOCK_SCOPE(mutex);
+
+    g_return_val_if_fail(subsystems != NULL, false);
 
     SubsystemRegistration *registration = NULL;
     MAP_FOREACH(

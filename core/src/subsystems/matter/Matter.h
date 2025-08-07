@@ -324,9 +324,8 @@ namespace barton
         std::atomic<State> state = {State::stopped};
 
         SessionMessageHandler sessionMessageHandler;
+#if CHIP_CONFIG_USE_ACCESS_RESTRICTIONS
         AccessRestrictionProvider accessRestrictionProvider;
-
-        // This should be supplied by a real client, but default to test value for development
-        chip::VendorId vendorId = chip::VendorId::TestVendor1;
+#endif
     };
 } // namespace barton

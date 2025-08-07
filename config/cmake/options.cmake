@@ -29,7 +29,7 @@
 # Define an interface library, which will not contain source code but instead provide compile definitions
 add_library(bCoreConfig INTERFACE)
 
-macro(bcore_option)
+function(bcore_option)
     # Declare an (ON/OFF) Barton cmake config with `NAME`
     # mapping to `DEFINITION`. Parameter `DESCRIPTION`
     # provides the help string for this Barton cmake config.
@@ -56,9 +56,9 @@ macro(bcore_option)
     else()
         message(STATUS "${BCORE_OPTION_NAME}=OFF --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
-endmacro()
+endfunction()
 
-macro(bcore_string_option)
+function(bcore_string_option)
     # Declare a string Barton cmake config with `NAME`
     # mapping to `DEFINITION`. Parameter `DESCRIPTION`
     # provides the help string for this Barton cmake config.
@@ -68,7 +68,8 @@ macro(bcore_string_option)
     # for the cmake config. If the cmake config is already
     # set, the value does not change.
 
-    set(singleValueArgs NAME DEFINITION DESCRIPTION VALUE)
+    set(singleValueArgs NAME DEFINITION DESCRIPTION)
+    set(multiValueArgs VALUE)
     cmake_parse_arguments(BCORE_OPTION "${optionValueArgs}" "${singleValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (BCORE_OPTION_VALUE)
@@ -86,9 +87,9 @@ macro(bcore_string_option)
     else()
         message(STATUS "${BCORE_OPTION_NAME} unset --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
-endmacro()
+endfunction()
 
-macro(bcore_int_option)
+function(bcore_int_option)
     # Declare an integer Barton cmake config with `NAME`
     # mapping to `DEFINITION`. Parameter `DESCRIPTION`
     # provides the help string for this Barton cmake config.
@@ -115,7 +116,7 @@ macro(bcore_int_option)
     else()
         message(STATUS "${BCORE_OPTION_NAME} unset --> ${BCORE_OPTION_DEFINITION} not defined")
     endif()
-endmacro()
+endfunction()
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Device Service ON/OFF Configs")
@@ -203,6 +204,11 @@ bcore_string_option(NAME BCORE_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
 
+# We're not going to use BCoreMatterHelper to set up defaults (as BCoreMatterHelper applies FORCE
+# sets). However, include it to populate default header paths.
+# Default selected implementations still need to be set up in below lists.
+include(BCoreMatterHelper)
+
 set(MATTER_PROVIDER_DELEGATE_PARENT_DIR "${PROJECT_SOURCE_DIR}/core/src/subsystems/matter")
 set(MATTER_PROVIDER_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/default")
 set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates/default")
@@ -210,25 +216,21 @@ set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegate
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
-                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp;
-                        ${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
+                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp"
+                        "${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
 
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter delegate interfaces."
-                  VALUE "${MATTER_DELEGATE_DEFAULT_DIR}/CertifierOperationalCredentialsIssuer.cpp;")
+                  VALUE "${MATTER_DELEGATE_DEFAULT_DIR}/CertifierOperationalCredentialsIssuer.cpp")
 
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_HEADER_PATHS
-                  DESCRIPTION "List of paths to directories containing matter provider header files."
-                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers;
-                         ${MATTER_PROVIDER_DEFAULT_DIR};")
+                  DESCRIPTION "List of paths to directories containing matter provider header files.")
 
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_HEADER_PATHS
                   DEFINITION BARTON_CONFIG_MATTER_DELEGATE_HEADER_PATHS
-                  DESCRIPTION "List of paths to directories containing matter delegate header files"
-                  VALUE "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegates;
-                         ${MATTER_DELEGATE_DEFAULT_DIR};")
+                  DESCRIPTION "List of paths to directories containing matter delegate header files")
 
 bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DEFINITION BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME

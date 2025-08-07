@@ -92,7 +92,7 @@ fi
 
 pushd ${MY_DIR}
 
-cmake -B ${BUILD_DIR} ${CMAKE_CACHE_OPTION} "$CMAKE_ARGS"
+cmake -B ${BUILD_DIR} ${CMAKE_CACHE_OPTION} ${CMAKE_ARGS}
 cmake --build ${BUILD_DIR} --parallel $(($(nproc) - 1))
 
 popd

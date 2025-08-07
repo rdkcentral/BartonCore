@@ -33,24 +33,15 @@ set(BCORE_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
 set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
 
 # Matter settings
+include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
+
 set(BCORE_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
-set(BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
-    "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates/dev/SelfSignedCertifierOperationalCredentialsIssuer.cpp"
-    CACHE
-    STRING
-    "Delegate implementations")
-set(BCORE_MATTER_DELEGATE_HEADER_PATHS
-    "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/delegates/dev"
-    CACHE
-    STRING
-    "Delegate header paths")
-set(BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
-    "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/dev/BartonTestDACProvider.cpp;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp"
-    CACHE
-    STRING
-    "Provider implementations")
-set(BCORE_MATTER_PROVIDER_HEADER_PATHS
-    "${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/dev;${CMAKE_SOURCE_DIR}/core/src/subsystems/matter/providers/default"
-    CACHE
-    STRING
-    "Provider header paths")
+
+bcore_matter_helper_delegate_add_implementation(
+    DEV SelfSignedCertifierOperationalCredentialsIssuer
+)
+
+bcore_matter_helper_provider_add_implementation(
+    DEFAULT DefaultCommissionableDataProvider
+    DEV BartonTestDACProvider
+)
