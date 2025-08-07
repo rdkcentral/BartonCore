@@ -36,6 +36,7 @@
 
 /**
  * @brief A string enumeration describing the operational envrionment of the device service matter stack
+ * @deprecated - Use B_CORE_BARTON_MATTER_OPERATIONAL_HOST instead.
  */
 #define DEVICE_PROP_MATTER_OPERATIONAL_ENVIRONMENT DEVICE_PROP_MATTER_NS "environment"
 
