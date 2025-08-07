@@ -85,11 +85,13 @@ if (BCORE_MATTER)
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
-    bcore_matter_helper_provider_get_implementations(
+    bcore_matter_helper_get_implementations(
+        EXTENSION_TYPE PROVIDER
         OUTPUT MATTER_PROVIDER_IMPLEMENTATIONS
     )
 
-    bcore_matter_helper_delegate_get_implementations(
+    bcore_matter_helper_get_implementations(
+        EXTENSION_TYPE DELEGATE
         OUTPUT MATTER_DELEGATE_IMPLEMENTATIONS
     )
 
@@ -125,11 +127,13 @@ if (BCORE_MATTER)
 
     bcore_find_package(NAME jsoncpp MIN_VERSION ${JSONCPP_MIN_VERSION} REQUIRED)
 
-    bcore_matter_helper_provider_get_header_paths(
+    bcore_matter_helper_get_header_paths(
+        EXTENSION_TYPE PROVIDER
         OUTPUT MATTER_PROVIDER_HEADER_PATHS
     )
 
-    bcore_matter_helper_delegate_get_header_paths(
+    bcore_matter_helper_get_header_paths(
+        EXTENSION_TYPE DELEGATE
         OUTPUT MATTER_DELEGATE_HEADER_PATHS
     )
 
