@@ -133,7 +133,6 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
                                        icInitialResourceValues *initialResourceValues)
 {
     bool result = true;
-    bool foundOne = false;
     uint64_t eui64 = zigbeeSubsystemIdToEui64(device->uuid);
 
     for (int i = 0; i < discoveredDeviceDetails->numEndpoints; i++)
@@ -150,7 +149,6 @@ static bool fetchInitialResourceValues(ZigbeeDriverCommon *ctx,
                                                   SENSOR_PROFILE_RESOURCE_FAULTED,
                                                   stringValueOfBool(isOccupied));
 
-            foundOne |= result;
         }
 
         if (icDiscoveredDeviceDetailsEndpointHasCluster(
