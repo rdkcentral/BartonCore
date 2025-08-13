@@ -37,11 +37,13 @@ include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
 
 set(BCORE_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
 
-bcore_matter_helper_delegate_add_implementation(
+bcore_matter_helper_add_implementation(
+    EXTENSION_TYPE DELEGATE
     DEV SelfSignedCertifierOperationalCredentialsIssuer
 )
 
-bcore_matter_helper_provider_add_implementation(
+bcore_matter_helper_add_implementation(
+    EXTENSION_TYPE PROVIDER
     DEFAULT DefaultCommissionableDataProvider
     DEV BartonTestDACProvider
 )
