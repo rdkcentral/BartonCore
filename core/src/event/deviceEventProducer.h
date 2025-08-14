@@ -45,7 +45,7 @@
 /*
  * Init the 'class' by wiring up the signals
  */
-void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass);
+void deviceEventProducerClassInit(BCoreClientClass *bCoreClientClass);
 
 /*
  * Initialize the device event producer

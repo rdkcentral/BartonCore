@@ -117,10 +117,10 @@ enum DEVICE_SERVICE_SIGNALS
 
 static guint signals[SIGNAL_MAX];
 
-void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
+void deviceEventProducerClassInit(BCoreClientClass *bCoreClientClass)
 {
     signals[SIGNAL_STATUS_CHANGED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_STATUS_CHANGED,
-                                                  G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                  G_TYPE_FROM_CLASS(bCoreClientClass),
                                                   G_SIGNAL_RUN_LAST,
                                                   0,
                                                   NULL,
@@ -131,7 +131,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                   B_CORE_STATUS_EVENT_TYPE);
 
     signals[SIGNAL_DISCOVERY_STARTED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STARTED,
-                                                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                     G_TYPE_FROM_CLASS(bCoreClientClass),
                                                      G_SIGNAL_RUN_LAST,
                                                      0,
                                                      NULL,
@@ -142,7 +142,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                      B_CORE_DISCOVERY_STARTED_EVENT_TYPE);
 
     signals[SIGNAL_RECOVERY_STARTED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_RECOVERY_STARTED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -153,7 +153,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                     B_CORE_RECOVERY_STARTED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_DISCOVERY_FAILED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_FAILED,
-                                                           G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                           G_TYPE_FROM_CLASS(bCoreClientClass),
                                                            G_SIGNAL_RUN_LAST,
                                                            0,
                                                            NULL,
@@ -164,7 +164,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                            B_CORE_DEVICE_DISCOVERY_FAILED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_DISCOVERED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERED,
-                                                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                     G_TYPE_FROM_CLASS(bCoreClientClass),
                                                      G_SIGNAL_RUN_LAST,
                                                      0,
                                                      NULL,
@@ -175,7 +175,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                      B_CORE_DEVICE_DISCOVERED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_REJECTED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_REJECTED,
-                                                   G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                   G_TYPE_FROM_CLASS(bCoreClientClass),
                                                    G_SIGNAL_RUN_LAST,
                                                    0,
                                                    NULL,
@@ -185,21 +185,20 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                    1,
                                                    B_CORE_DEVICE_REJECTED_EVENT_TYPE);
 
-    signals[SIGNAL_DEVICE_CONFIGURATION_STARTED] =
-        g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_STARTED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
-                     G_SIGNAL_RUN_LAST,
-                     0,
-                     NULL,
-                     NULL,
-                     NULL,
-                     G_TYPE_NONE,
-                     1,
-                     B_CORE_DEVICE_CONFIGURATION_STARTED_EVENT_TYPE);
+    signals[SIGNAL_DEVICE_CONFIGURATION_STARTED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_STARTED,
+                                                                G_TYPE_FROM_CLASS(bCoreClientClass),
+                                                                G_SIGNAL_RUN_LAST,
+                                                                0,
+                                                                NULL,
+                                                                NULL,
+                                                                NULL,
+                                                                G_TYPE_NONE,
+                                                                1,
+                                                                B_CORE_DEVICE_CONFIGURATION_STARTED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_CONFIGURATION_COMPLETED] =
         g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_COMPLETED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                     G_TYPE_FROM_CLASS(bCoreClientClass),
                      G_SIGNAL_RUN_LAST,
                      0,
                      NULL,
@@ -209,20 +208,19 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                      1,
                      B_CORE_DEVICE_CONFIGURATION_COMPLETED_EVENT_TYPE);
 
-    signals[SIGNAL_DEVICE_CONFIGURATION_FAILED] =
-        g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
-                     G_SIGNAL_RUN_LAST,
-                     0,
-                     NULL,
-                     NULL,
-                     NULL,
-                     G_TYPE_NONE,
-                     1,
-                     B_CORE_DEVICE_CONFIGURATION_FAILED_EVENT_TYPE);
+    signals[SIGNAL_DEVICE_CONFIGURATION_FAILED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_CONFIGURATION_FAILED,
+                                                               G_TYPE_FROM_CLASS(bCoreClientClass),
+                                                               G_SIGNAL_RUN_LAST,
+                                                               0,
+                                                               NULL,
+                                                               NULL,
+                                                               NULL,
+                                                               G_TYPE_NONE,
+                                                               1,
+                                                               B_CORE_DEVICE_CONFIGURATION_FAILED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_ADDED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_ADDED,
-                                                G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                G_TYPE_FROM_CLASS(bCoreClientClass),
                                                 G_SIGNAL_RUN_LAST,
                                                 0,
                                                 NULL,
@@ -233,7 +231,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                 B_CORE_DEVICE_ADDED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_RECOVERED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_RECOVERED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -243,20 +241,19 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                     1,
                                                     B_CORE_DEVICE_RECOVERED_EVENT_TYPE);
 
-    signals[SIGNAL_DEVICE_DISCOVERY_COMPLETED] =
-        g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
-                     G_SIGNAL_RUN_LAST,
-                     0,
-                     NULL,
-                     NULL,
-                     NULL,
-                     G_TYPE_NONE,
-                     1,
-                     B_CORE_DEVICE_DISCOVERY_COMPLETED_EVENT_TYPE);
+    signals[SIGNAL_DEVICE_DISCOVERY_COMPLETED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DISCOVERY_COMPLETED,
+                                                              G_TYPE_FROM_CLASS(bCoreClientClass),
+                                                              G_SIGNAL_RUN_LAST,
+                                                              0,
+                                                              NULL,
+                                                              NULL,
+                                                              NULL,
+                                                              G_TYPE_NONE,
+                                                              1,
+                                                              B_CORE_DEVICE_DISCOVERY_COMPLETED_EVENT_TYPE);
 
     signals[SIGNAL_DISCOVERY_STOPPED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DISCOVERY_STOPPED,
-                                                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                     G_TYPE_FROM_CLASS(bCoreClientClass),
                                                      G_SIGNAL_RUN_LAST,
                                                      0,
                                                      NULL,
@@ -267,7 +264,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                      B_CORE_DISCOVERY_STOPPED_EVENT_TYPE);
 
     signals[SIGNAL_RECOVERY_STOPPED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_RECOVERY_STOPPED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -278,7 +275,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                     B_CORE_RECOVERY_STOPPED_EVENT_TYPE);
 
     signals[SIGNAL_RESOURCE_UPDATED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_RESOURCE_UPDATED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -289,7 +286,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                     B_CORE_RESOURCE_UPDATED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_REMOVED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_REMOVED,
-                                                  G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                  G_TYPE_FROM_CLASS(bCoreClientClass),
                                                   G_SIGNAL_RUN_LAST,
                                                   0,
                                                   NULL,
@@ -300,7 +297,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                   B_CORE_DEVICE_REMOVED_EVENT_TYPE);
 
     signals[SIGNAL_ENDPOINT_REMOVED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_REMOVED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -311,7 +308,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                     B_CORE_ENDPOINT_REMOVED_EVENT_TYPE);
 
     signals[SIGNAL_ENDPOINT_ADDED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ENDPOINT_ADDED,
-                                                  G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                  G_TYPE_FROM_CLASS(bCoreClientClass),
                                                   G_SIGNAL_RUN_LAST,
                                                   0,
                                                   NULL,
@@ -322,7 +319,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                   B_CORE_ENDPOINT_ADDED_EVENT_TYPE);
 
     signals[SIGNAL_ZIGBEE_CHANNEL_CHANGED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ZIGBEE_CHANNEL_CHANGED,
-                                                          G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                          G_TYPE_FROM_CLASS(bCoreClientClass),
                                                           G_SIGNAL_RUN_LAST,
                                                           0,
                                                           NULL,
@@ -333,7 +330,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                           B_CORE_ZIGBEE_CHANNEL_CHANGED_EVENT_TYPE);
 
     signals[SIGNAL_STORAGE_CHANGED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_STORAGE_CHANGED,
-                                                   G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                   G_TYPE_FROM_CLASS(bCoreClientClass),
                                                    G_SIGNAL_RUN_LAST,
                                                    0,
                                                    NULL,
@@ -344,7 +341,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                    B_CORE_STORAGE_CHANGED_EVENT_TYPE);
 
     signals[SIGNAL_ZIGBEE_INTERFERENCE] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ZIGBEE_INTERFERENCE,
-                                                       G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                       G_TYPE_FROM_CLASS(bCoreClientClass),
                                                        G_SIGNAL_RUN_LAST,
                                                        0,
                                                        NULL,
@@ -354,20 +351,19 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                        1,
                                                        B_CORE_ZIGBEE_INTERFERENCE_EVENT_TYPE);
 
-    signals[SIGNAL_PAN_ID_ATTACK_CHANGED] =
-        g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ZIGBEE_PAN_ID_ATTACK_CHANGED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
-                     G_SIGNAL_RUN_LAST,
-                     0,
-                     NULL,
-                     NULL,
-                     NULL,
-                     G_TYPE_NONE,
-                     1,
-                     B_CORE_ZIGBEE_PAN_ID_ATTACK_CHANGED_EVENT_TYPE);
+    signals[SIGNAL_PAN_ID_ATTACK_CHANGED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ZIGBEE_PAN_ID_ATTACK_CHANGED,
+                                                         G_TYPE_FROM_CLASS(bCoreClientClass),
+                                                         G_SIGNAL_RUN_LAST,
+                                                         0,
+                                                         NULL,
+                                                         NULL,
+                                                         NULL,
+                                                         G_TYPE_NONE,
+                                                         1,
+                                                         B_CORE_ZIGBEE_PAN_ID_ATTACK_CHANGED_EVENT_TYPE);
 
     signals[SIGNAL_DEVICE_DATABASE_FAILURE] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_DEVICE_DATABASE_FAILURE,
-                                                           G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                           G_TYPE_FROM_CLASS(bCoreClientClass),
                                                            G_SIGNAL_RUN_LAST,
                                                            0,
                                                            NULL,
@@ -378,7 +374,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
                                                            B_CORE_DEVICE_DATABASE_FAILURE_EVENT_TYPE);
 
     signals[SIGNAL_METADATA_UPDATED] = g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_METADATA_UPDATED,
-                                                    G_TYPE_FROM_CLASS(deviceServiceClass),
+                                                    G_TYPE_FROM_CLASS(bCoreClientClass),
                                                     G_SIGNAL_RUN_LAST,
                                                     0,
                                                     NULL,
@@ -390,7 +386,7 @@ void deviceEventProducerClassInit(BCoreClientClass *deviceServiceClass)
 
     signals[SIGNAL_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED] =
         g_signal_new(B_CORE_CLIENT_SIGNAL_NAME_ZIGBEE_REMOTE_CLI_COMMAND_RESPONSE_RECEIVED,
-                     G_TYPE_FROM_CLASS(deviceServiceClass),
+                     G_TYPE_FROM_CLASS(bCoreClientClass),
                      G_SIGNAL_RUN_LAST,
                      0,
                      NULL,
