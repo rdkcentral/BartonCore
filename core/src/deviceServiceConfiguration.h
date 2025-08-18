@@ -30,6 +30,7 @@
 #include "barton-core-initialize-params-container.h"
 #include "provider/barton-core-property-provider.h"
 #include "provider/barton-core-token-provider.h"
+#include "delegate/barton-core-software-watchdog-delegate.h"
 #include <stdbool.h>
 
 /**
@@ -76,6 +77,15 @@ BCoreNetworkCredentialsProvider *deviceServiceConfigurationGetNetworkCredentials
  * @return the property provider
  */
 BCorePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void);
+
+/**
+ * deviceServiceConfigurationGetSoftwareWatchdogDelegate
+ *
+ * @brief This retrieves the software watchdog delegate.
+ *
+ * @return the software watchdog delegate
+ */
+BCoreSoftwareWatchdogDelegate *deviceServiceConfigurationGetSoftwareWatchdogDelegate(void);
 
 /**
  * deviceServiceConfigurationGetStorageDir

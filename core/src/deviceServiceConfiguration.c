@@ -27,6 +27,7 @@
 
 #include "deviceServiceConfiguration.h"
 #include "barton-core-initialize-params-container.h"
+#include "delegate/barton-core-software-watchdog-delegate.h"
 #include "glib-object.h"
 #include "glib.h"
 #include "icConcurrent/threadUtils.h"
@@ -129,6 +130,26 @@ BCorePropertyProvider *deviceServiceConfigurationGetPropertyProvider(void)
     g_object_get(initializeParams,
                  B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
                      [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER],
+                 &retVal,
+                 NULL);
+
+    return retVal;
+}
+
+BCoreSoftwareWatchdogDelegate *deviceServiceConfigurationGetSoftwareWatchdogDelegate(void)
+{
+    LOCK_SCOPE(deviceServiceConfigurationMutex);
+
+    if (initializeParams == NULL)
+    {
+        icError("device service configuration not started");
+        return NULL;
+    }
+
+    BCoreSoftwareWatchdogDelegate *retVal = NULL;
+    g_object_get(initializeParams,
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE],
                  &retVal,
                  NULL);
 

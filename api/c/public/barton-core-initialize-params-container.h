@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "delegate/barton-core-software-watchdog-delegate.h"
 #include "provider/barton-core-network-credentials-provider.h"
 #include "provider/barton-core-property-provider.h"
 #include "provider/barton-core-token-provider.h"
@@ -48,6 +49,9 @@ typedef enum
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER,
 
+    // delegates
+    B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE,
+
     // configuration
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR,
@@ -63,11 +67,11 @@ static const gchar *B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[] = {
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER] = "token-provider",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER] = "network-credentials-provider",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER] = "property-provider",
+    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE] = "software-watchdog-delegate",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR] = "storage-dir",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR] = "firmware-file-dir",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR] = "matter-storage-dir",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR] =
-        "matter-attestation-trust-store-dir",
+    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR] = "matter-attestation-trust-store-dir",
     [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID] = "account-id",
 };
 
@@ -88,6 +92,15 @@ BCoreInitializeParamsContainer *b_core_initialize_params_container_new(void);
  */
 BCoreTokenProvider *
 b_core_initialize_params_container_get_token_provider(BCoreInitializeParamsContainer *self);
+
+/**
+ * b_core_initialize_params_container_get_software_watchdog_delegate
+ * @self: BCoreSoftwareWatchdogDelegate*
+ *
+ * Returns: (transfer full): The software watchdog delegate for Barton
+ */
+BCoreSoftwareWatchdogDelegate *
+b_core_initialize_params_container_get_software_watchdog_delegate(BCoreInitializeParamsContainer *self);
 
 /**
  * b_core_initialize_params_container_get_network_credentials_provider
@@ -160,6 +173,17 @@ gchar *b_core_initialize_params_container_get_account_id(BCoreInitializeParamsCo
  */
 gboolean b_core_initialize_params_container_set_token_provider(BCoreInitializeParamsContainer *self,
                                                                          BCoreTokenProvider *tokenProvider);
+
+/**
+ * b_core_initialize_params_container_set_software_watchdog_delegate
+ * @self: BCoreInitializeParamsContainer*
+ * @softwareWatchdogDelegate: BCoreSoftwareWatchdogDelegate*
+ *
+ * Returns: whether or not the software watchdog delegate was set
+ */
+gboolean b_core_initialize_params_container_set_software_watchdog_delegate(
+    BCoreInitializeParamsContainer *self,
+    BCoreSoftwareWatchdogDelegate *softwareWatchdogDelegate);
 
 /**
  * b_core_initialize_params_container_set_property_provider

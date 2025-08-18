@@ -35,6 +35,7 @@ struct _BCoreInitializeParamsContainer
     GObject parent_instance;
 
     BCoreTokenProvider *tokenProvider;
+    BCoreSoftwareWatchdogDelegate *softwareWatchdogDelegate;
     BCoreNetworkCredentialsProvider *networkCredentialsProvider;
     BCorePropertyProvider *propertyProvider;
 
@@ -54,6 +55,7 @@ static void b_core_initialize_params_container_finalize(GObject *object)
     BCoreInitializeParamsContainer *self = B_CORE_INITIALIZE_PARAMS_CONTAINER(object);
 
     g_clear_object(&self->tokenProvider);
+    g_clear_object(&self->softwareWatchdogDelegate);
     g_clear_object(&self->networkCredentialsProvider);
     g_clear_object(&self->propertyProvider);
 
@@ -75,6 +77,9 @@ b_core_initialize_params_get_property(GObject *object, guint property_id, GValue
     {
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER:
             g_value_set_object(value, self->tokenProvider);
+            break;
+        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE:
+            g_value_set_object(value, self->softwareWatchdogDelegate);
             break;
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER:
             g_value_set_object(value, self->networkCredentialsProvider);
@@ -114,6 +119,9 @@ static void b_core_initialize_params_set_property(GObject *object,
     {
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER:
             b_core_initialize_params_container_set_token_provider(self, g_value_get_object(value));
+            break;
+        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE:
+            b_core_initialize_params_container_set_software_watchdog_delegate(self, g_value_get_object(value));
             break;
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER:
             b_core_initialize_params_container_set_network_credentials_provider(self,
@@ -176,6 +184,14 @@ static void b_core_initialize_params_container_class_init(BCoreInitializeParamsC
                             B_CORE_PROPERTY_PROVIDER_TYPE,
                             G_PARAM_READWRITE);
 
+    properties[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE] =
+        g_param_spec_object(B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
+                                [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SOFTWARE_WATCHDOG_DELEGATE],
+                            "Software Watchdog Delegate",
+                            "The software watchdog delegate",
+                            B_CORE_SOFTWARE_WATCHDOG_DELEGATE_TYPE,
+                            G_PARAM_READWRITE);
+
     properties[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR] =
         g_param_spec_string(B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES
                                 [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR],
@@ -225,6 +241,7 @@ static void b_core_initialize_params_container_init(BCoreInitializeParamsContain
     self->tokenProvider = NULL;
     self->networkCredentialsProvider = NULL;
     self->propertyProvider = B_CORE_PROPERTY_PROVIDER(b_core_default_property_provider_new());
+    self->softwareWatchdogDelegate = NULL;
 
     self->storageDir = NULL;
     self->firmwareFileDir = NULL;
@@ -247,6 +264,20 @@ b_core_initialize_params_container_get_token_provider(BCoreInitializeParamsConta
     if (self->tokenProvider)
     {
         retVal = g_object_ref(self->tokenProvider);
+    }
+
+    return retVal;
+}
+
+BCoreSoftwareWatchdogDelegate *
+b_core_initialize_params_container_get_software_watchdog_delegate(BCoreInitializeParamsContainer *self)
+{
+    g_return_val_if_fail(self != NULL, NULL);
+
+    BCoreSoftwareWatchdogDelegate *retVal = NULL;
+    if (self->softwareWatchdogDelegate)
+    {
+        retVal = g_object_ref(self->softwareWatchdogDelegate);
     }
 
     return retVal;
@@ -325,6 +356,19 @@ gboolean b_core_initialize_params_container_set_token_provider(BCoreInitializePa
     g_clear_object(&self->tokenProvider);
 
     self->tokenProvider = tokenProvider ? g_object_ref(tokenProvider) : NULL;
+
+    return TRUE;
+}
+
+gboolean b_core_initialize_params_container_set_software_watchdog_delegate(
+    BCoreInitializeParamsContainer *self,
+    BCoreSoftwareWatchdogDelegate *softwareWatchdogDelegate)
+{
+    g_return_val_if_fail(self != NULL, FALSE);
+
+    g_clear_object(&self->softwareWatchdogDelegate);
+
+    self->softwareWatchdogDelegate = softwareWatchdogDelegate ? g_object_ref(softwareWatchdogDelegate) : NULL;
 
     return TRUE;
 }
