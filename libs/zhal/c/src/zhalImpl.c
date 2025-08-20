@@ -102,13 +102,9 @@ static pthread_cond_t workerCond = PTHREAD_COND_INITIALIZER;
 
 static pthread_mutex_t workerMutex = PTHREAD_MUTEX_INITIALIZER;
 
-static pthread_mutex_t workerRunningMutex = PTHREAD_MUTEX_INITIALIZER;
+static bool workerShutdown = true;
 
 static void *workerThreadProc(void *);
-
-static bool workerThreadRunning = false;
-
-static bool shouldWorkerContinue(void);
 
 static icHashMap *asyncRequests = NULL; // maps uint32_t (requestId) to WorkItem
 static pthread_mutex_t asyncRequestsMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -165,9 +161,9 @@ int zhalInit(const char *host, int port, zhalCallbacks *cbs, void *ctx, zhalResp
     zhalEventHandlerInit();
     zhalAsyncReceiverStart(host, handleIpcResponse, zhalHandleEvent);
 
-    pthread_mutex_lock(&workerRunningMutex);
-    workerThreadRunning = true;
-    pthread_mutex_unlock(&workerRunningMutex);
+    pthread_mutex_lock(&workerMutex);
+    workerShutdown = false;
+    pthread_mutex_unlock(&workerMutex);
 
     createThread(&workerThread, workerThreadProc, NULL, "zhal");
 
@@ -192,11 +188,9 @@ int zhalTerm(void)
     zhalAsyncReceiverStop();
 
     // Shutdown the worker
-    pthread_mutex_lock(&workerRunningMutex);
-    bool workerThreadWasRunning = workerThreadRunning;
-    workerThreadRunning = false;
-    pthread_mutex_unlock(&workerRunningMutex);
     pthread_mutex_lock(&workerMutex);
+    bool workerThreadWasRunning = !workerShutdown;
+    workerShutdown = true;
     pthread_cond_signal(&workerCond);
     pthread_mutex_unlock(&workerMutex);
 
@@ -939,23 +933,38 @@ static void *workerThreadProc(void *arg)
 {
     icQueue *availableWork = queueCreate();
 
-    while (shouldWorkerContinue())
+    // exit conditions are if shut down via zhalTerm or if error waiting for work
+    while (true)
     {
-        // wait to be woken up
         pthread_mutex_lock(&workerMutex);
+
+        if (workerShutdown)
+        {
+            pthread_mutex_unlock(&workerMutex);
+            break;
+        }
+
         while (!getAvailableWork(availableWork))
         {
+            // no work, so we wait till we get some or are shut down
             if (pthread_cond_wait(&workerCond, &workerMutex) != 0)
             {
                 icLogError(LOG_TAG, "failed to wait on workerCond, terminating workerThreadProc!");
                 break;
             }
-            else if (!shouldWorkerContinue())
+            else if (workerShutdown)
             {
                 break;
             }
         }
+
+        bool shuttingDown = workerShutdown;
         pthread_mutex_unlock(&workerMutex);
+
+        if (shuttingDown)
+        {
+            break;
+        }
 
         // Process any items that were ready
         queueIterate(availableWork, (queueIterateFunc) workOnItem, NULL);
@@ -966,20 +975,9 @@ static void *workerThreadProc(void *arg)
 
     icLogInfo(LOG_TAG, "workerThreadProc exiting");
 
-    queueDestroy(availableWork, NULL);
+    queueDestroy(availableWork, workItemRelease);
 
     return NULL;
-}
-
-static bool shouldWorkerContinue(void)
-{
-    bool keepRunning;
-
-    pthread_mutex_lock(&workerRunningMutex);
-    keepRunning = workerThreadRunning;
-    pthread_mutex_unlock(&workerRunningMutex);
-
-    return keepRunning;
 }
 
 static void logResponse(cJSON *response)
