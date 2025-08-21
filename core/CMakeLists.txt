@@ -218,6 +218,8 @@ target_include_directories(BartonCore PRIVATE
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
+
+set_target_properties(BartonCore PROPERTIES VERSION ${BARTON_CORE_SO_VERSION} SOVERSION ${BARTON_CORE_MAJOR_VERSION})
 install(TARGETS BartonCore DESTINATION lib)
 
 # If specified, generate GIR and typelib. Clients need to ensure that the GIR and/or typelib
@@ -238,7 +240,7 @@ if (BCORE_GEN_GIR)
     endif()
 
     set(NAMESPACE BCore)
-    set(NAMESPACE_VERSION 1.0)
+    set(NAMESPACE_VERSION ${BARTON_CORE_API_VERSION})
     set(GIR_OUTPUT_NAME ${NAMESPACE}-${NAMESPACE_VERSION}.gir)
     set(GIR_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${GIR_OUTPUT_NAME})
     set(TYPELIB_OUTPUT_NAME ${NAMESPACE}-${NAMESPACE_VERSION}.typelib)

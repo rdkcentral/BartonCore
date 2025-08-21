@@ -25,6 +25,28 @@ cmake_minimum_required(VERSION 3.16.5)
 #TODO: project version (snag from git tag)
 project(barton-core)
 
+execute_process(
+                COMMAND git describe --tags --match [0-9]*.[0-9]*.[0-9]*
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                OUTPUT_VARIABLE BARTON_CORE_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+
+message(STATUS "Barton Version: ${BARTON_CORE_VERSION}")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" BARTON_CORE_SO_VERSION ${BARTON_CORE_VERSION})
+message(STATUS "Barton SO Version: ${BARTON_CORE_SO_VERSION}")
+string(REGEX MATCHALL "[0-9]+" BARTON_CORE_VERSION_LIST ${BARTON_CORE_SO_VERSION})
+
+list(GET BARTON_CORE_VERSION_LIST 0 BARTON_CORE_MAJOR_VERSION)
+list(GET BARTON_CORE_VERSION_LIST 1 BARTON_CORE_MINOR_VERSION)
+list(GET BARTON_CORE_VERSION_LIST 2 BARTON_CORE_PATCH_VERSION)
+
+# This is what you may also call the platform version. The focue is API/ABI compatibility.
+# As such, the minor version rarely changes. This is analog to GLib/GTK/GIR namespace
+# version schemeing where a semver of 4.24.3 has api version 4.0
+set(BARTON_CORE_API_VERSION "${BARTON_CORE_MAJOR_VERSION}.0")
+message(STATUS "Barton API Version: ${BARTON_CORE_API_VERSION}")
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 17)
