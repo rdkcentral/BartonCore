@@ -32,6 +32,8 @@ set(BCORE_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
 
 set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
 
+set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
+
 # Matter settings
 include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
 
