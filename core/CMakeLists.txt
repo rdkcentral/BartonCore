@@ -46,7 +46,8 @@ file(GLOB eventSrc "src/event/*.c")
 file(GLOB dbaseSrc "src/database/*.c")
 file(GLOB deviceSrc "src/device/*.c")
 file(GLOB serialSrc "src/serial/*.c")
-set(SOURCES ${mainSrc} ${eventSrc} ${dbaseSrc} ${deviceSrc} ${serialSrc})
+file(GLOB softwareWatchdogSrc "src/softwareWatchdogDelegate/*.c")
+set(SOURCES ${mainSrc} ${eventSrc} ${dbaseSrc} ${deviceSrc} ${serialSrc} ${softwareWatchdogSrc})
 
 # philips lights (if option set)
 if (BCORE_PHILIPS_HUE)
@@ -178,10 +179,6 @@ set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
         xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
-
-if (BCORE_SUPPORT_SOFTWARE_WATCHDOG)
-    set(bCoreLinkLibraries ${bCoreLinkLibraries} xhSoftwareWatchdog)
-endif()
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers

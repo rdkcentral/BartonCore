@@ -36,7 +36,6 @@
 #define DEVICE_FIRMWARE_URL_NODE                              "deviceFirmwareBaseUrl"
 #define CPE_DENYLISTED_DEVICES_PROPERTY_NAME                  "cpe.denylistedDevices"
 #define TOUCHSCREEN_SENSOR_COMMFAIL_TROUBLE_DELAY             "touchscreen.sensor.commFail.troubleDelay"
-#define ZIGBEE_PROPS_PREFIX                                   "cpe.zigbee."
 #define TELEMETRY_PROPS_PREFIX                                "telemetry."
 #define FAST_COMM_FAIL_PROP                                   "zigbee.testing.fastCommFail.flag"
 #define CPE_ZIGBEE_REPORT_DEVICE_INFO_ENABLED                 "cpe.zigbee.reportDeviceInfo.enabled"

@@ -28,6 +28,7 @@
 #define FLEXCORE_ZIGBEESUBSYSTEM_H
 
 #include "device-driver/device-driver.h"
+#include "private/subsystems/zigbee/zigbeeSubsystemWatchdogDelegate.h"
 #include "zigbeeAttributeTypes.h"
 #include <cjson/cJSON.h>
 #include <deviceDescriptor.h>
@@ -35,13 +36,24 @@
 #include <stdbool.h>
 #include <zhal/zhal.h>
 
-#define ZIGBEE_SUBSYSTEM_NAME             "zigbee"
-#define NETWORK_BLOB_PROPERTY_NAME        "ZIGBEE_NETWORK_CONFIG_DATA"
+#define ZIGBEE_CORE_PROCESS_NAME               "ZigbeeCore"
+#define ZIGBEE_SUBSYSTEM_NAME                  "zigbee"
+#define NETWORK_BLOB_PROPERTY_NAME             "ZIGBEE_NETWORK_CONFIG_DATA"
+
+#define ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT "ZIGBEE_INCREMENT_COUNTERS_ON_NEXT_INIT"
+
+// The amount we should increment the counters after things like RMA.  The values here are what we have historically
+// used
+#define NONCE_COUNTER_INCREMENT_AMOUNT         0x1000
+#define FRAME_COUNTER_INCREMENT_AMOUNT         0x1000
 
 /* 27 min */
-#define ZIGBEE_DEFAULT_CHECKIN_INTERVAL_S 27 * 60
+#define ZIGBEE_DEFAULT_CHECKIN_INTERVAL_S      27 * 60
 
-#define FAST_COMM_FAIL_PROP               "zigbee.testing.fastCommFail.flag"
+#define ZIGBEE_CORE_MAX_NETWORK_INIT_RETRIES   3
+
+#define FAST_COMM_FAIL_PROP                    "zigbee.testing.fastCommFail.flag"
+#define ZIGBEE_PROPS_PREFIX                    "cpe.zigbee."
 
 typedef enum
 {
@@ -383,6 +395,29 @@ uint64_t getLocalEui64(void);
  * @return 0 on success
  */
 int zigbeeSubsystemSetAddresses(void);
+
+/**
+ * Set the software watchdog delegate for zigbee subsystem operations.
+ *
+ * IMPORTANT: This must be called BEFORE zigbeeSubsystemInitialize().
+ * Once the subsystem is started, the delegate cannot be changed.
+ *
+ * @param delegate The watchdog delegate implementation, or NULL to disable
+ */
+void zigbeeSubsystemSetWatchdogDelegate(ZigbeeSoftwareWatchdogDelegate *delegate);
+
+/**
+ * Check if the Zigbee network has been successfully initialized.
+ *
+ * @return true if the network is fully initialized and ready for operation,
+ *         false if initialization is still in progress, failed, or not started
+ */
+bool zigbeeSubsystemIsNetworkInitialized(void);
+
+/**
+ * Mark the Zigbee subsystem as ready and operational.
+ */
+void zigbeeSubsystemSetReady(void);
 
 /*
  * Remove a single zigbee device address from those allowed on our network.
