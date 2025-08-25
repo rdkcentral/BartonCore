@@ -83,10 +83,46 @@ static bool allDriversStarted = false;
 static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
 
+Subsystem *createSubsystem(void)
+{
+    Subsystem *retVal = g_atomic_rc_box_new0(Subsystem);
+    return g_steal_pointer(&retVal);
+}
+
+static void destroySubsystem(Subsystem *subsystem)
+{
+    // no members of Subsystem to free
+    return;
+}
+
+Subsystem *acquireSubsystem(Subsystem *subsystem)
+{
+    Subsystem *retVal = NULL;
+
+    if (subsystem)
+    {
+        retVal = g_atomic_rc_box_acquire(subsystem);
+    }
+
+    return retVal;
+}
+
+void releaseSubsystem(Subsystem *subsystem)
+{
+    if (subsystem != NULL)
+    {
+        g_atomic_rc_box_release_full(subsystem, (GDestroyNotify) destroySubsystem);
+    }
+}
+
 static void subsystemRegistrationDestroy(SubsystemRegistration *reg)
 {
-    pthread_mutex_destroy(&reg->mtx);
-    free(reg);
+    if (reg)
+    {
+        pthread_mutex_destroy(&reg->mtx);
+        releaseSubsystem((Subsystem *) reg->subsystem);
+        free(reg);
+    }
 }
 
 static void subsystemRegistrationMapDestroy(void *value)
@@ -178,7 +214,7 @@ void subsystemManagerRegister(Subsystem *subsystem)
     }
 
     SubsystemRegistration *registration = malloc(sizeof(SubsystemRegistration));
-    registration->subsystem = subsystem;
+    registration->subsystem = acquireSubsystem(subsystem);
     mutexInitWithType(&registration->mtx, PTHREAD_MUTEX_ERRORCHECK);
     registration->ready = false;
 
