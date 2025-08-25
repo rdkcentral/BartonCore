@@ -145,15 +145,6 @@ namespace
     std::unique_ptr<ThreadBorderRouterManagementDelegate> otbrDelegate;
     std::optional<ThreadBorderRouterManagement::ServerInstance> threadBorderRouterManagementServer;
     EndpointId threadBorderRouterManagementServerEndpointId = UINT16_MAX;
-
-    constexpr uint8_t BARTON_TEST_CD_KID[20] = {0x9C, 0x60, 0x2C, 0x46, 0x48, 0xE8, 0x7D, 0xD8, 0x26, 0x47,
-                                                0xF4, 0x5E, 0x94, 0x39, 0xB3, 0x85, 0x16, 0xC2, 0xF2, 0x4F};
-
-    constexpr uint8_t BARTON_TEST_CD_PKEY[65] = {
-        0x04, 0xa0, 0x1c, 0x5a, 0x28, 0x71, 0x86, 0x67, 0x22, 0x88, 0x49, 0x6e, 0x22, 0x12, 0x99, 0x9f, 0x18,
-        0xae, 0xe3, 0x5a, 0x7c, 0xf3, 0x74, 0x8e, 0x0c, 0xfe, 0x0b, 0x6b, 0x45, 0xda, 0xc2, 0x70, 0x29, 0x0b,
-        0xad, 0xcd, 0x91, 0xb9, 0x43, 0xd8, 0x58, 0x1e, 0x03, 0x63, 0xa1, 0xba, 0x18, 0xa6, 0x1d, 0xe7, 0xc7,
-        0x6a, 0xbb, 0x2a, 0x0b, 0xdc, 0xef, 0x39, 0xfb, 0xb7, 0x37, 0x1f, 0x83, 0xca, 0x65};
 } // namespace
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -468,31 +459,6 @@ CHIP_ERROR Matter::InitCommissioner()
     // dev build contains test+prod certificates and all others only trust production certs.
     chip::Credentials::DeviceAttestationVerifier *dacVerifier = GetDefaultDACVerifier(&GetAttestationTrustStore());
     dacVerifier->EnableCdTestKeySupport(IsDevelopmentMode());
-
-    if (IsDevelopmentMode())
-    {
-        WellKnownKeysTrustStore * cdTrustStore = dacVerifier->GetCertificationDeclarationTrustStore();
-        ByteSpan comcastTestCDKID(BARTON_TEST_CD_KID, sizeof(BARTON_TEST_CD_KID));
-        chip::Crypto::P256PublicKey comcastTestCDPKey;
-
-        // if we havent added our test key, add it now
-        if (cdTrustStore->LookupVerifyingKey(comcastTestCDKID, comcastTestCDPKey) != CHIP_NO_ERROR)
-        {
-            scoped_generic uint8_t *tmp = NULL;
-            uint16_t decodedLen;
-
-            FixedByteSpan<kP256_PublicKey_Length> comcastTestCDRawPKey(BARTON_TEST_CD_PKEY);
-            comcastTestCDPKey = comcastTestCDRawPKey;
-
-            // Adding a DER certificate forces validation against its chain, but adding
-            // the key ID and public key bypasses that mechanism entirely
-
-            CHIP_ERROR addKeyErr = cdTrustStore->AddTrustedKey(comcastTestCDKID, comcastTestCDPKey);
-
-            ReturnErrorOnFailure(addKeyErr);
-        }
-    }
-
     SetDeviceAttestationVerifier(dacVerifier);
 
     chip::Platform::ScopedMemoryBuffer<uint8_t> noc;
