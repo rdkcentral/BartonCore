@@ -138,8 +138,7 @@ bcore_option(NAME BCORE_PHILIPS_HUE
            DESCRIPTION "Enable Philips Hue support")
 bcore_option(NAME BCORE_GEN_GIR
            DEFINITION BARTON_CONFIG_GEN_GIR
-           DESCRIPTION "Enable generating GIR and typelib information"
-           ENABLE)
+           DESCRIPTION "Enable generating GIR and typelib information")
 bcore_option(NAME BCORE_GENERATE_DEFAULT_LABELS
            DEFINITION BARTON_CONFIG_GENERATE_DEFAULT_LABELS
            DESCRIPTION "Enable generating default labels for devices that support the label resource")
