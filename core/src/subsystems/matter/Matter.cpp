@@ -471,21 +471,26 @@ CHIP_ERROR Matter::InitCommissioner()
 
     if (IsDevelopmentMode())
     {
-        scoped_generic uint8_t *tmp = NULL;
-        uint16_t decodedLen;
-
-        FixedByteSpan<kP256_PublicKey_Length> comcastTestCDRawPKey(BARTON_TEST_CD_PKEY);
-        chip::Crypto::P256PublicKey comcastTestCDPKey(comcastTestCDRawPKey);
-
+        WellKnownKeysTrustStore * cdTrustStore = dacVerifier->GetCertificationDeclarationTrustStore();
         ByteSpan comcastTestCDKID(BARTON_TEST_CD_KID, sizeof(BARTON_TEST_CD_KID));
+        chip::Crypto::P256PublicKey comcastTestCDPKey;
 
-        // Adding a DER certificate forces validation against its chain, but adding
-        // the key ID and public key bypasses that mechanism entirely
+        // if we havent added our test key, add it now
+        if (cdTrustStore->LookupVerifyingKey(comcastTestCDKID, comcastTestCDPKey) != CHIP_NO_ERROR)
+        {
+            scoped_generic uint8_t *tmp = NULL;
+            uint16_t decodedLen;
 
-        CHIP_ERROR addKeyErr =
-            dacVerifier->GetCertificationDeclarationTrustStore()->AddTrustedKey(comcastTestCDKID, comcastTestCDPKey);
+            FixedByteSpan<kP256_PublicKey_Length> comcastTestCDRawPKey(BARTON_TEST_CD_PKEY);
+            comcastTestCDPKey = comcastTestCDRawPKey;
 
-        ReturnErrorOnFailure(addKeyErr);
+            // Adding a DER certificate forces validation against its chain, but adding
+            // the key ID and public key bypasses that mechanism entirely
+
+            CHIP_ERROR addKeyErr = cdTrustStore->AddTrustedKey(comcastTestCDKID, comcastTestCDPKey);
+
+            ReturnErrorOnFailure(addKeyErr);
+        }
     }
 
     SetDeviceAttestationVerifier(dacVerifier);
