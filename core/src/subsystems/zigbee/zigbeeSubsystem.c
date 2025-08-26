@@ -77,12 +77,6 @@
 #include <zhal/zhal.h>
 #include <zigbeeClusters/zigbeeCluster.h>
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-#include "icSoftwareWatchdog/icSoftwareWatchdog.h"
-#include <watchdog/watchdogService_eventAdapter.h>
-#include <watchdog/watchdogService_ipc.h>
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-
 #undef LOG_TAG
 #define LOG_TAG                                            "zigbeeSubsystem"
 
@@ -212,19 +206,11 @@ static uint64_t loadLocalEui64(void);
 
 static void prematureClusterCommandsFreeFunc(void *key, void *value);
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity,
-                                                    uint16_t petFrequencySeconds,
-                                                    uint16_t numOfFailuresToRestart,
-                                                    uint16_t numOfFailuresToReboot);
+static void configureMonitors(void);
 
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+static void zigbeeCoreMonitorFunc(void *arg);
 
-static void configureWatchdogs(void);
-
-static void zigbeeCoreWatchdogFunc(void *arg);
-
-static void zigbeeCoreWatchdogTickle(void);
+static void zigbeeCoreMonitorTickle(void);
 
 static bool waitForNetworkInitialization(void);
 
@@ -253,10 +239,6 @@ static void deviceCallbackDestroy(void *item);
 static void *checkAllDevicesInCommThreadProc(void *arg);
 
 static void responseHandler(const char *responseType, ZHAL_STATUS resultCode);
-
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-static void handleWatchdogStateChangedEvent(watchdogEvent *event);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
 
 typedef struct
 {
@@ -335,8 +317,8 @@ static pthread_cond_t prematureClusterCommandsCond;
 static subsystemInitializedFunc subsystemInitialized = NULL;
 static subsystemDeInitializedFunc subsystemDeinitialized = NULL;
 
-// ZigbeeCore watchdog details
-static uint32_t zigbeeCoreWatchdogTask = 0;
+// ZigbeeCore monitor details
+static uint32_t zigbeeCoreMonitorTask = 0;
 
 static pthread_mutex_t commFailControlMutex = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static pthread_cond_t commFailControlCond = PTHREAD_COND_INITIALIZER;
@@ -344,29 +326,8 @@ static bool fastCommFailTimer = false;
 static pthread_t commFailMonitorThreadId;
 static bool commfailMonitorThreadRunning = false;
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-static icSoftwareWatchdogContext *heartbeatSoftwareWatchdogCtx = NULL;
-static icSoftwareWatchdogContext *networkBusySoftwareWatchdogCtx = NULL;
-static icSoftwareWatchdogContext *commFailSoftwareWatchdogCtx = NULL;
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-
-// this mutex provides protection for the above three watchdog handles
-static pthread_mutex_t watchdogsMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-
-// Set a default for waiting for zigbee core to recover, could make this configurable later
-static uint16_t zigbeeCoreRecoveryProcessTimeoutSecs = 30;
-
-// Set a default for max ping failures for heartbeat, could make this configurable later
-static uint16_t maxZigbeeCoreHeartbeatFailures = 3;
-
-// Set a default for watchdog run interval, could make this configurable later
+// Set a default for monitor run interval, could make this configurable later
 static uint32_t zigbeeCoreHeartbeatPetFrequencySecs = 60;
-
-// Set a default for max network busy failures, could make this configurable later
-static uint16_t maxZigbeeCoreNetworkBusyFailures = 20;
-
-// Set a default for max comm failures, could make this configurable later
-static uint16_t maxAllDevCommFailures = 1;
 
 // A set of device UUIDs that are using hash based link keys which we were notified about before the device was saved
 static icHashMap *earlyHashedBasedLinkKeyDevices = NULL;
@@ -474,28 +435,18 @@ static void waitForInitialZigbeeCoreStartup(void)
         //
         timeTrackerDestroy(timer);
 
-        // We have seen an issue where watchdog says its restarting ZigbeeCore after an xncp upgrade, but for some
-        // reason ZigbeeCore doesn't really restart.  This is an attempt to catch that condition and try one more
-        // watchdog restart to get things working.
+        // We have seen an issue where a watchdog delegate says its restarting ZigbeeCore after a radio upgrade, but for some
+        // reason ZigbeeCore doesn't really restart.  This is an attempt to catch that condition and let the watchdog delegate
+        // try one more time
         if (zhalHeartbeatRc != 0)
         {
-            icLogWarn(LOG_TAG, "Restarting ZigbeeCore, count %d", zigbeeCoreRestartCount);
-            const char *reasonString = zigbeeCoreRecoveryReasonLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT];
-            scoped_generic char *troubleString =
-                stringBuilder("ZigbeeCore was not responding at startup. %s", reasonString);
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-#ifdef BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
-            if (softwareWatchdogImmediateRecoverServiceWithTrouble(
-                    ZIGBEE_CORE_PROCESS_NAME,
-                    ZigbeeCoreRecoveryEntityLabels[ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT],
-                    troubleString,
-                    BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG) == false)
-            {
-                icLogError(LOG_TAG, "immediate zigbeeCore recovery request failed");
-            }
-#endif // BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-            zigbeeCoreRestartCount++;
+            //WATCHDOG: let the delegate know that it should restart ZigbeeCore.  If it does
+            //  it should return a code we can use to know that we should keep trying in this
+            //  loop, otherwise if there is no watchdog delegate or it says it isnt doing anything
+            //  about it, we break
+            // if (delegate wants to restart ZigbeeCore) zigbeeCoreRestartCount++;
+
+            // NOTE: BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG should not be needed in barton anymore
         }
         else
         {
@@ -562,11 +513,8 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     // wait here until ZigbeeCore is functional or we time out
     waitForInitialZigbeeCoreStartup();
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    register_watchdogEvent_eventListener(handleWatchdogStateChangedEvent);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-
-    configureWatchdogs();
+    // configure our health check monitors/tasks
+    configureMonitors();
 
     // wait here for the network to initialize completely
     waitForNetworkInitialization();
@@ -612,10 +560,10 @@ static void zigbeeSubsystemShutdown(void)
     zhalTerm();
     mutexUnlock(&networkInitializedMtx);
 
-    if (zigbeeCoreWatchdogTask > 0)
+    if (zigbeeCoreMonitorTask > 0)
     {
-        cancelRepeatingTask(zigbeeCoreWatchdogTask);
-        zigbeeCoreWatchdogTask = 0;
+        cancelRepeatingTask(zigbeeCoreMonitorTask);
+        zigbeeCoreMonitorTask = 0;
     }
 
     // cancel the devices comm fail polling thread
@@ -634,33 +582,8 @@ static void zigbeeSubsystemShutdown(void)
     {
         pthread_join(commFailMonitorThreadId, NULL);
     }
-    // cleanup/shutdown the watchdogs
-    {
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        LOCK_SCOPE(watchdogsMtx);
 
-        if (heartbeatSoftwareWatchdogCtx != NULL)
-        {
-            softwareWatchdogUnregister(heartbeatSoftwareWatchdogCtx);
-            softwareWatchdogReleaseContext(heartbeatSoftwareWatchdogCtx);
-            heartbeatSoftwareWatchdogCtx = NULL;
-        }
-
-        if (commFailSoftwareWatchdogCtx != NULL)
-        {
-            softwareWatchdogUnregister(commFailSoftwareWatchdogCtx);
-            softwareWatchdogReleaseContext(commFailSoftwareWatchdogCtx);
-            commFailSoftwareWatchdogCtx = NULL;
-        }
-
-        if (networkBusySoftwareWatchdogCtx != NULL)
-        {
-            softwareWatchdogUnregister(networkBusySoftwareWatchdogCtx);
-            softwareWatchdogReleaseContext(networkBusySoftwareWatchdogCtx);
-            networkBusySoftwareWatchdogCtx = NULL;
-        }
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    }
+    // WATCHDOG: cleanup/shutdown the watchdog delegate if needed
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
@@ -716,7 +639,7 @@ static void incrementNetworkCountersIfRequired()
 }
 
 /**
- * This must *not* be called by the zigbeeCoreWatchdogFunc thread
+ * This must *not* be called by the zigbeeCoreMonitorFunc thread
  * @param ignored
  * @return
  */
@@ -770,7 +693,7 @@ static void zigbeeSubsystemSetUnready(void)
     }
 }
 
-// This should ONLY be called from zigbeeCoreWatchdogFunc
+// This should ONLY be called from zigbeeCoreMonitorFunc
 static bool initializeNetwork(void)
 {
     bool result = false;
@@ -1011,12 +934,10 @@ bool zigbeeSubsystemClaimDiscoveredDevice(IcDiscoveredDeviceDetails *details, De
 void zigbeeSubsystemHandleZhalStartupEvent(void)
 {
     // we received a zhal startup event.  Indicate that the network needs to be initialized and tickle our zigbee core
-    //  watchdog to run now in case init is required
+    //  monitor to run now in case init is required
     zigbeeSubsystemSetUnready();
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    zigbeeCoreWatchdogTickle();
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+    zigbeeCoreMonitorTickle();
 }
 
 void zigbeeSubsystemDeviceDiscovered(IcDiscoveredDeviceDetails *details)
@@ -3533,32 +3454,22 @@ bool zigbeeSubsystemUpgradeDeviceFirmwareLegacy(uint64_t eui64,
 /**
  * This function is called periodically to check on the health of ZigbeeCore with a heartbeat request.  The response
  * includes the current PID of ZigbeeCore and whether or not it has been initialized.  Initialization is required
- * whenever ZigbeeCore restarts or if xNCP restarts (in this case the ZigbeeCore PID would remain the same).  The
+ * whenever ZigbeeCore restarts or if the radio restarts (in this case the ZigbeeCore PID would remain the same).  The
  * important part here is the boolean indicating if it is initialized.
  *
- * This is the only place ZigbeeCore initialization occurs.  If xNCP restarts or other processing requires a
+ * This is the only place ZigbeeCore initialization occurs.  If the radio restarts or other processing requires a
  * re-initialization of ZigbeeCore, this recurring task can be triggered to run immediately.
  *
  * @param arg
  */
-static void zigbeeCoreWatchdogFunc(void *arg)
+static void zigbeeCoreMonitorFunc(void *arg)
 {
     pid_t pid = -1;
     bool zigbeeCoreInitialized = false; // indicates if ZigbeeCore thinks initialized
 
     if (zhalHeartbeat(&pid, &zigbeeCoreInitialized) == 0)
     {
-
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        // always pet the software watchdog
-        {
-            mutexLock(&watchdogsMtx);
-            scoped_icSoftwareWatchdogContext context = softwareWatchdogAcquireContext(heartbeatSoftwareWatchdogCtx);
-            mutexUnlock(&watchdogsMtx);
-
-            softwareWatchdogPet(context);
-        }
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+        //WATCHDOG: ZigbeeCore is working, so pet
 
         mutexLock(&networkInitializedMtx);
         bool ourInitialized = networkInitialized; // indicates if we think the network is initialized
@@ -3594,10 +3505,9 @@ static bool waitForNetworkInitialization(void)
     return result;
 }
 
-static void zigbeeCoreWatchdogTickle(void)
+static void zigbeeCoreMonitorTickle(void)
 {
-    LOCK_SCOPE(watchdogsMtx);
-    shortCircuitRepeatingTask(zigbeeCoreWatchdogTask);
+    shortCircuitRepeatingTask(zigbeeCoreMonitorTask);
 }
 
 static bool isDeviceAutoApsAcked(const icDevice *device)
@@ -4147,20 +4057,7 @@ icLinkedList *zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
 
 void zigbeeSubsystemNotifyDeviceCommRestored(icDevice *device)
 {
-    mutexLock(&watchdogsMtx);
-    bool recoveryInProgress = actionOnZigbeeCoreInProgress;
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    scoped_icSoftwareWatchdogContext cfContext = softwareWatchdogAcquireContext(commFailSoftwareWatchdogCtx);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    mutexUnlock(&watchdogsMtx);
-
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-    // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
-    if (recoveryInProgress == false)
-    {
-        softwareWatchdogUpdateStatus(cfContext, true);
-    }
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+    //WATCHDOG: let the delegate know that this device is out of commfail
 }
 
 void zigbeeSubsystemNotifyDeviceCommFail(icDevice *device)
@@ -4239,36 +4136,7 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
 
         if (devicesInCommFail)
         {
-            // All zigbee devices in comm fail, recover ZigbeeCore
-            mutexLock(&watchdogsMtx);
-            bool recoveryInProgress = actionOnZigbeeCoreInProgress;
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-            scoped_icSoftwareWatchdogContext cfContext = softwareWatchdogAcquireContext(commFailSoftwareWatchdogCtx);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-            mutexUnlock(&watchdogsMtx);
-
-            // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
-            if (recoveryInProgress == false)
-            {
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-                softwareWatchdogUpdateStatus(cfContext, false);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-
-                // FOR COMM FAIL TEST ONLY: Set fast comm fail to false to resume normal comm failure timeout to avoid
-                // fast "restart all services" recovery as next recovery step for our test due to fast comm fail
-                // timeout, as that would be invalid case for the test.
-                //
-                mutexLock(&commFailControlMutex);
-                if (fastCommFailTimer)
-                {
-                    fastCommFailTimer = false;
-                    g_autoptr(BCorePropertyProvider) propertyProvider =
-                        deviceServiceConfigurationGetPropertyProvider();
-                    b_core_property_provider_set_property_bool(
-                        propertyProvider, FAST_COMM_FAIL_PROP, fastCommFailTimer);
-                }
-                mutexUnlock(&commFailControlMutex);
-            }
+            //WATCHDOG: let the delegate know that all zigbee devices are in comm fail
         }
     }
 
@@ -4445,8 +4313,8 @@ static void zigbeeSubsystemPostRestoreConfig(void)
     // mark the network uninitialized so it will re-init
     zigbeeSubsystemSetUnready();
 
-    // make the watchdog run now so the initialization will occur
-    zigbeeCoreWatchdogTickle();
+    // make the monitor run now so the initialization will occur
+    zigbeeCoreMonitorTickle();
 
     // wait here for the network to initialize completely (or time out)
     waitForNetworkInitialization();
@@ -4688,64 +4556,24 @@ static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
     if (stringCompare(responseType, ZHAL_RESPONSE_TYPE_ATTRIBUTES_READ, false) == 0 ||
         stringCompare(responseType, ZHAL_RESPONSE_TYPE_SEND_COMMAND, false) == 0)
     {
-        mutexLock(&watchdogsMtx);
-        bool recoveryInProgress = actionOnZigbeeCoreInProgress;
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        scoped_icSoftwareWatchdogContext nbContext = softwareWatchdogAcquireContext(networkBusySoftwareWatchdogCtx);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        mutexUnlock(&watchdogsMtx);
-
-        // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
-        if (recoveryInProgress == false)
-        {
-            // limiting updates when network is in good state
-            bool networkGoodNow = (resultCode != ZHAL_STATUS_NETWORK_BUSY);
-            if (networkGoodNow == false || networkGoodLast != networkGoodNow)
-            {
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-                softwareWatchdogUpdateStatus(nbContext, networkGoodNow);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-                networkGoodLast = networkGoodNow;
-            }
-        }
+        //WATCHDOG: let the delegate know that the zigbee stack is not stuck in a busy state
     }
 }
 /**
- * configure watchdog for zigbeeCore recovery
+ * configure monitors for zigbee system health
  */
-static void configureWatchdogs(void)
+static void configureMonitors(void)
 {
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     if (b_core_property_provider_get_property_as_bool(propertyProvider, ZIGBEE_WATCHDOG_ENABLED_PROP, true))
     {
-        mutexLock(&watchdogsMtx);
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        // configure watchdog for heartbeat
-        heartbeatSoftwareWatchdogCtx = configureWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT,
-                                                         zigbeeCoreHeartbeatPetFrequencySecs,
-                                                         maxZigbeeCoreHeartbeatFailures,
-                                                         maxZigbeeCoreHeartbeatFailures);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
+        // Start our repeating task which, when successful, monitors ZigbeeCore and ensures the
+        // network is initialized.
+        zigbeeCoreMonitorTask =
+            createRepeatingTask(zigbeeCoreHeartbeatPetFrequencySecs, DELAY_SECS, zigbeeCoreMonitorFunc, NULL);
 
-        // Start our repeating task which, when successful, pets the software watchdog for ZigbeeCore and
-        // ensures the network is initialized.  We will do this even if the software watchdog configuration fails
-        // since it takes care of network health as well
-        zigbeeCoreWatchdogTask =
-            createRepeatingTask(zigbeeCoreHeartbeatPetFrequencySecs, DELAY_SECS, zigbeeCoreWatchdogFunc, NULL);
 
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        // configure watchdog for network busy
-        networkBusySoftwareWatchdogCtx = configureWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_NETWORK_BUSY,
-                                                           0,
-                                                           maxZigbeeCoreNetworkBusyFailures,
-                                                           maxZigbeeCoreNetworkBusyFailures);
-
-        // configure watchdog for comm fail
-        commFailSoftwareWatchdogCtx =
-            configureWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL, 0, maxAllDevCommFailures, maxAllDevCommFailures);
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        mutexUnlock(&watchdogsMtx);
         // Start thread to check if all devices are in comm fail. We are not checking it only when
         // deviceCommunicationWatchdog reports a device is in comm fail, because deviceCommunicationWatchdog
         // does not report comm failure again for devices if they are already in comm fail. Zigbee self healing requires
@@ -4761,23 +4589,7 @@ static void configureWatchdogs(void)
         initTimedWaitCond(&commFailControlCond);
         commfailMonitorThreadRunning =
             createThread(&commFailMonitorThreadId, checkAllDevicesInCommThreadProc, NULL, "commFailPoll");
-        bool monitoringCommFail = commfailMonitorThreadRunning;
         mutexUnlock(&commFailControlMutex);
-
-        if (monitoringCommFail == false)
-        {
-            icLogError(LOG_TAG,
-                       "Failed to create thread for comm fail monitoring. Comm Fail recovery will be disabled");
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-            LOCK_SCOPE(watchdogsMtx);
-            if (commFailSoftwareWatchdogCtx != NULL)
-            {
-                softwareWatchdogUnregister(commFailSoftwareWatchdogCtx);
-                softwareWatchdogReleaseContext(commFailSoftwareWatchdogCtx);
-                commFailSoftwareWatchdogCtx = NULL;
-            }
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-        }
     }
     else
     {
@@ -4791,122 +4603,3 @@ static void configureWatchdogs(void)
         zigbeeSubsystemSetReady();
     }
 }
-
-#ifdef BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-/**
- * ensures any related watchdogs are running and configured.  These include the software watchdog and the
- * ZigbeeCore watchdog.
- */
-static icSoftwareWatchdogContext *configureWatchdog(ZigbeeCoreRecoveryEntity entity,
-                                                    uint16_t petFrequencySeconds,
-                                                    uint16_t numOfFailuresToRestart,
-                                                    uint16_t numOfFailuresToReboot)
-{
-    icSoftwareWatchdogContext *context = NULL;
-
-    const char *reasonString = zigbeeCoreRecoveryReasonLabels[entity];
-    scoped_generic char *troubleString = stringBuilder("ZigbeeCore was not responding. %s", reasonString);
-#ifdef BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
-    // configure the software watchdog to first create a software trouble with diag
-    icSoftwareWatchdogRecoveryActionStep *step = softwareWatchdogRecoveryActionStepCreateWithTrouble(
-        BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG, troubleString, true, numOfFailuresToRestart);
-#endif // BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG`
-    if (entity == ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT)
-    {
-        context = softwareWatchdogContextCreate(
-            ZigbeeCoreRecoveryEntityLabels[entity], ZIGBEE_CORE_PROCESS_NAME, petFrequencySeconds, step);
-    }
-    else
-    {
-        context = softwareWatchdogContextCreateForFailureCount(
-            ZigbeeCoreRecoveryEntityLabels[entity], ZIGBEE_CORE_PROCESS_NAME, step);
-    }
-
-    if (context == NULL)
-    {
-        icLogError(LOG_TAG, "%s: failed to create software watchdog context", __func__);
-        softwareWatchdogRecoveryActionStepDestroy(step);
-    }
-    else
-    {
-        // append an additional recovery step to restart ZigbeeCore immediately after the trouble
-        step = softwareWatchdogRecoveryActionStepCreate(
-            SOFTWARE_WATCHDOG_RECOVERY_ACTION_RESTART_PROCESS, troubleString, 0);
-
-        if (softwareWatchdogContextAppendRecoveryActionStep(context, step) == false)
-        {
-            icLogError(LOG_TAG, "%s: failed to append software watchdog restart action", __func__);
-            softwareWatchdogRecoveryActionStepDestroy(step);
-            softwareWatchdogReleaseContext(context);
-            context = NULL;
-        }
-
-        if (context != NULL)
-        {
-            // finally, append another step to reboot if we are still in a failure state after restarting ZigbeeCore
-            step = softwareWatchdogRecoveryActionStepCreate(
-                SOFTWARE_WATCHDOG_RECOVERY_ACTION_REBOOT, troubleString, numOfFailuresToReboot);
-
-            if (softwareWatchdogContextAppendRecoveryActionStep(context, step) == false)
-            {
-                icLogError(LOG_TAG, "%s: failed to append software watchdog reboot action", __func__);
-                softwareWatchdogRecoveryActionStepDestroy(step);
-                softwareWatchdogReleaseContext(context);
-                context = NULL;
-            }
-
-            if (context != NULL && softwareWatchdogRegister(context) == false)
-            {
-                icLogError(LOG_TAG, "%s: failed to register software watchdog", __func__);
-                softwareWatchdogReleaseContext(context);
-                context = NULL;
-            }
-        }
-    }
-
-    return g_steal_pointer(&context);
-}
-
-/**
- * Handle watchdog event for ZigbeeCore starting and stopping, and pause or resume entities' status updates accordingly.
- *
- * @param event event from watchdog
- *
- * @return
- */
-static void handleWatchdogStateChangedEvent(watchdogEvent *event)
-{
-    if (stringCompare(event->name, ZIGBEE_CORE_PROCESS_NAME, false) == 0 &&
-        event->baseEvent.eventCode == WATCHDOG_SERVICE_STATE_CHANGED)
-    {
-        if (event->baseEvent.eventValue == WATCHDOG_EVENT_VALUE_ACTION_DEATH)
-        {
-            LOCK_SCOPE(watchdogsMtx);
-            actionOnZigbeeCoreInProgress = true;
-        }
-        else if (event->baseEvent.eventValue == WATCHDOG_EVENT_VALUE_ACTION_RESTART ||
-                 event->baseEvent.eventValue == WATCHDOG_EVENT_VALUE_ACTION_START)
-        {
-            // Zigbee service has been recovered by one of the entities and it may have rectified issues
-            // of other entities, so we should clear failure counts of current step for all entities.
-            // It will also prevent recovery for entities that may have incremented failure counts while
-            // service was restarting, but event was not handled.
-            //
-            mutexLock(&watchdogsMtx);
-
-            scoped_icSoftwareWatchdogContext nbContext = softwareWatchdogAcquireContext(networkBusySoftwareWatchdogCtx);
-            scoped_icSoftwareWatchdogContext hbContext = softwareWatchdogAcquireContext(heartbeatSoftwareWatchdogCtx);
-            scoped_icSoftwareWatchdogContext cfContext = softwareWatchdogAcquireContext(commFailSoftwareWatchdogCtx);
-            mutexUnlock(&watchdogsMtx);
-
-            softwareWatchdogResetFailureCounts(nbContext, false);
-            softwareWatchdogResetFailureCounts(hbContext, false);
-            softwareWatchdogResetFailureCounts(cfContext, false);
-
-            mutexLock(&watchdogsMtx);
-            actionOnZigbeeCoreInProgress = false;
-            mutexUnlock(&watchdogsMtx);
-        }
-    }
-}
-#endif // BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
