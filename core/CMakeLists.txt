@@ -179,10 +179,6 @@ set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
         xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
 
-if (BCORE_SUPPORT_SOFTWARE_WATCHDOG)
-    set(bCoreLinkLibraries ${bCoreLinkLibraries} xhSoftwareWatchdog)
-endif()
-
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
                             ${XTRA_INCLUDES}

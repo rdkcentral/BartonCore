@@ -28,6 +28,7 @@
 #define FLEXCORE_ZIGBEESUBSYSTEM_H
 
 #include "device-driver/device-driver.h"
+#include "private/subsystems/zigbee/zigbeeWatchdogDelegate.h"
 #include "zigbeeAttributeTypes.h"
 #include <cjson/cJSON.h>
 #include <deviceDescriptor.h>
@@ -35,6 +36,7 @@
 #include <stdbool.h>
 #include <zhal/zhal.h>
 
+#define ZIGBEE_CORE_PROCESS_NAME          "ZigbeeCore"
 #define ZIGBEE_SUBSYSTEM_NAME             "zigbee"
 #define NETWORK_BLOB_PROPERTY_NAME        "ZIGBEE_NETWORK_CONFIG_DATA"
 
@@ -161,6 +163,20 @@ int zigbeeSubsystemUnregisterDiscoveryHandler(ZigbeeSubsystemDeviceDiscoveredHan
 int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64, ZigbeeSubsystemDeviceCallbacks *callbacks);
 
 int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
+
+/**
+ * Set the watchdog delegate for zigbee subsystem operations.
+ *
+ * All function pointers in the delegate structure are mandatory and will be
+ * validated during registration. If any function pointer is NULL, the delegate
+ * will be rejected.
+ *
+ * IMPORTANT: This must be called BEFORE zigbeeSubsystemInitialize().
+ * Once the subsystem is initialized, the delegate cannot be set or changed.
+ *
+ * @param delegate The watchdog delegate implementation
+ */
+void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate);
 
 // increment the discovering device count.  Discovery runs until the count is decremented to zero
 int zigbeeSubsystemStartDiscoveringDevices(void);
