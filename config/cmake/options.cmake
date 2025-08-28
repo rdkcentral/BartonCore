@@ -138,8 +138,7 @@ bcore_option(NAME BCORE_PHILIPS_HUE
            DESCRIPTION "Enable Philips Hue support")
 bcore_option(NAME BCORE_GEN_GIR
            DEFINITION BARTON_CONFIG_GEN_GIR
-           DESCRIPTION "Enable generating GIR and typelib information"
-           ENABLE)
+           DESCRIPTION "Enable generating GIR and typelib information")
 bcore_option(NAME BCORE_GENERATE_DEFAULT_LABELS
            DEFINITION BARTON_CONFIG_GENERATE_DEFAULT_LABELS
            DESCRIPTION "Enable generating default labels for devices that support the label resource")
@@ -219,7 +218,8 @@ set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegate
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
-                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp"
+                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/BartonTestDACProvider.cpp"
+                        "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/BartonCommissionableDataProvider.cpp"
                         "${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
 
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS

@@ -138,7 +138,7 @@ if (BCORE_MATTER)
         ${MATTER_PROVIDER_HEADER_PATHS}
         ${MATTER_DELEGATE_HEADER_PATHS})
 
-    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier jsoncpp)
+    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
 
