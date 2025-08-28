@@ -431,7 +431,7 @@ static void waitForInitialZigbeeCoreStartup(void)
 
             if (watchdogDelegate)
             {
-                if (watchdogDelegate->restartZigbeeCore() == ZIGBEE_CORE_RESTART_ACTIVE)
+                if (watchdogDelegate->restartZhal() == ZHAL_RESTART_ACTIVE)
                 {
                     zigbeeCoreRestartCount++;
                     icLogWarn(LOG_TAG, "ZigbeeCore restart attempted, count %d", zigbeeCoreRestartCount);
@@ -460,28 +460,36 @@ static void waitForInitialZigbeeCoreStartup(void)
 
 void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
 {
+    bool shouldKeepDelegate = false; // Only keep if we successfully accept it
+    bool validDelegate = false;
+
+    if (delegate)
+    {
+        validDelegate = delegate->shutdown && delegate->updateNetworkBusyStatus && delegate->updateCommFailStatus &&
+                        delegate->petZhal && delegate->restartZhal && delegate->notifyDeviceCommRestored &&
+                        delegate->zhalResponseHandler && delegate->getActionInProgress;
+    }
+
     mutexLock(&watchdogDelegateMtx);
     if (!watchdogDelegate)
     {
-        if (delegate)
+        if (validDelegate)
         {
-            bool validDelegate = delegate->initializeWatchdog && delegate->shutdownWatchdog &&
-                                 delegate->updateWatchdogStatus && delegate->petWatchdog &&
-                                 delegate->restartZigbeeCore && delegate->notifyDeviceCommRestored &&
-                                 delegate->zhalResponseHandler && delegate->getActionInProgress;
-
-            if (validDelegate)
-            {
-                watchdogDelegate = delegate;
-            }
-            else
-            {
-                icLogError(
-                    LOG_TAG, "%s: watchdog implementation missing required function pointers, rejecting", __func__);
-            }
+            watchdogDelegate = delegate;
+            shouldKeepDelegate = true;
+        }
+        else
+        {
+            icLogError(LOG_TAG, "%s: invalid watchdog implementation, rejecting", __func__);
         }
     }
     mutexUnlock(&watchdogDelegateMtx);
+
+    // Clean up delegate if we didn't keep it
+    if (delegate && !shouldKeepDelegate)
+    {
+        free(delegate);
+    }
 }
 
 static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallback,
@@ -537,11 +545,6 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     zigbeeEventHandlerInit(&callbacks);
 
     zhalInit(ip, portNum, &callbacks, NULL, responseHandler);
-
-    if (watchdogDelegate)
-    {
-        watchdogDelegate->initializeWatchdog();
-    }
 
     // wait here until ZigbeeCore is functional or we time out
     waitForInitialZigbeeCoreStartup();
@@ -618,7 +621,9 @@ static void zigbeeSubsystemShutdown(void)
 
     if (watchdogDelegate)
     {
-        watchdogDelegate->shutdownWatchdog();
+        watchdogDelegate->shutdown();
+        free(watchdogDelegate);
+        watchdogDelegate = NULL;
     }
 
     // clean up any premature cluster commands we may have received while in discovery
@@ -3507,7 +3512,7 @@ static void zigbeeCoreMonitorFunc(void *arg)
     {
         if (watchdogDelegate)
         {
-            watchdogDelegate->petWatchdog(ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT);
+            watchdogDelegate->petZhal();
         }
 
         mutexLock(&networkInitializedMtx);
@@ -4191,7 +4196,7 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
             // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
             if (!recoveryInProgress)
             {
-                watchdogDelegate->updateWatchdogStatus(ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL, false);
+                watchdogDelegate->updateCommFailStatus(false);
 
                 // FOR COMM FAIL TEST ONLY: Set fast comm fail to false to resume normal comm failure timeout to
                 // avoid fast "restart all services" recovery as next recovery step for our test due to fast comm
@@ -4615,6 +4620,11 @@ void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, z
 
 static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
 {
+    if (!responseType)
+    {
+        return;
+    }
+
     if (watchdogDelegate)
     {
         watchdogDelegate->zhalResponseHandler(responseType, resultCode);

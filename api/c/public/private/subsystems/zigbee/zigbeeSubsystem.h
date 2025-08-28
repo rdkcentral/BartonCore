@@ -36,7 +36,6 @@
 #include <stdbool.h>
 #include <zhal/zhal.h>
 
-#define ZIGBEE_CORE_PROCESS_NAME          "ZigbeeCore"
 #define ZIGBEE_SUBSYSTEM_NAME             "zigbee"
 #define NETWORK_BLOB_PROPERTY_NAME        "ZIGBEE_NETWORK_CONFIG_DATA"
 
@@ -165,16 +164,22 @@ int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64, ZigbeeSubsystemDeviceC
 int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
 
 /**
- * Set the watchdog delegate for zigbee subsystem operations.
+ * Set the optional watchdog delegate for zigbee subsystem operations.
+ *
+ * The watchdog delegate is optional and only needed to ensure the lower-level
+ * Zigbee stack is functional and restarts it when problems are detected. It
+ * provides monitoring capabilities for network communication status, busy states,
+ * and automatic recovery mechanisms for stack failures.
  *
  * All function pointers in the delegate structure are mandatory and will be
  * validated during registration. If any function pointer is NULL, the delegate
- * will be rejected.
+ * will be rejected and destroyed.
  *
- * IMPORTANT: This must be called BEFORE zigbeeSubsystemInitialize().
- * Once the subsystem is initialized, the delegate cannot be set or changed.
+ * IMPORTANT:
+ * - This must be called BEFORE zigbeeSubsystemInitialize().
+ * - Once the subsystem is initialized, the delegate cannot be set or changed.
  *
- * @param delegate The watchdog delegate implementation
+ * @param delegate The watchdog delegate implementation (ownership transferred)
  */
 void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate);
 

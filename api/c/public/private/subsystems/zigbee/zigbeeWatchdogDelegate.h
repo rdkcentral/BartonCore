@@ -32,31 +32,18 @@
 
 typedef enum
 {
-    ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT,
-    ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL,
-    ZIGBEE_CORE_RECOVERY_ENITITY_NETWORK_BUSY
-} ZigbeeCoreRecoveryEntity;
-
-static const char *ZigbeeCoreRecoveryEntityLabels[] = {"heartbeat", "communication failure", "network busy"};
-
-static const char *zigbeeCoreRecoveryReasonLabels[] = {"Recovery reason: heartbeat",
-                                                       "Recovery reason: communication failure",
-                                                       "Recovery reason: network busy"};
-
-typedef enum
-{
-    ZIGBEE_CORE_RESTART_ACTIVE,     // Delegate is attempting restart (keep trying)
-    ZIGBEE_CORE_RESTART_NOT_ACTIVE, // Delegate won't/can't restart (stop trying)
-} ZigbeeCoreRestartStatus;
+    ZHAL_RESTART_ACTIVE,     // Delegate is attempting restart (keep trying)
+    ZHAL_RESTART_NOT_ACTIVE, // Delegate won't/can't restart (stop trying)
+} ZhalRestartStatus;
 
 /**
  * @brief Watchdog delegate interface for Zigbee subsystem monitoring.
  *
  * This structure defines the interface that external watchdog implementations
- * must provide to monitor and manage the health of the Zigbee subsystem and
- * ZigbeeCore process. The Zigbee subsystem uses this delegate to report
- * health status, request recovery actions, and coordinate with system-wide
- * watchdog functionality.
+ * may provide to monitor and manage the health of the Zigbee subsystem.
+ * The Zigbee subsystem uses this delegate to report health status, request
+ * recovery actions, and coordinate with broader system health monitoring
+ * and process management systems.
  *
  * @note ALL function pointers in this structure are MANDATORY and must be
  *       implemented. The Zigbee subsystem will reject any delegate that has
@@ -67,58 +54,53 @@ typedef enum
 typedef struct ZigbeeWatchdogDelegate
 {
     /**
-     * @brief Initialize the software watchdog system.
-     *
-     * This function is called once during subsystem initialization to set up
-     * watchdog monitoring. It should configure any necessary watchdog entities,
-     * timers, or monitoring threads.
-     *
-     */
-    void (*initializeWatchdog)(void);
-
-    /**
-     * @brief Shutdown the software watchdog system.
+     * @brief Shutdown the delegate.
      *
      * This function is called during subsystem shutdown to cleanly disable
      * watchdog monitoring and free resources.
      */
-    void (*shutdownWatchdog)(void);
+    void (*shutdown)(void);
 
     /**
-     * @brief Update the status of a specific Zigbee watchdog entity.
+     * @brief Immediately update the status of the 'network busy' watchdog entity.
      *
-     * This function allows the Zigbee subsystem to report the health status of
-     * various monitored entities (heartbeat, network busy, communication failure).
-     *
-     * @param ZigbeeCoreRecoveryEntity The specific Zigbee entity being reported on
-     * @param status true if the entity is healthy, false if it's in a failure state
+     * @param isHealthy true if the entity is healthy, false if it's in a failure state
      * @return true if the status update was processed successfully, false on error
      */
-    bool (*updateWatchdogStatus)(ZigbeeCoreRecoveryEntity watchdogEntity, bool status);
+    bool (*updateNetworkBusyStatus)(bool isHealthy);
 
     /**
-     * @brief Pet the watchdog for a specific entity.
+     * @brief Immediately update the status of the 'comm fail' watchdog entity.
      *
-     * This function is called to indicate that a specific Zigbee entity is operating
-     * normally and should reset its watchdog timer. This prevents the watchdog from
-     * triggering recovery actions for healthy entities.
+     * @param isHealthy true if the entity is healthy, false if it's in a failure state
+     * @return true if the status update was processed successfully, false on error
+     */
+    bool (*updateCommFailStatus)(bool isHealthy);
+
+    /**
+     * @brief Pet the zhal watchdog.
      *
-     * @param watchdogEntity The specific entity to pet
+     * This function is called to indicate that the zhal process is operating
+     * normally and should reset its watchdog timer. Unlike the updateXxxStatus()
+     * functions which immediately set a specific health state, this function
+     * allows the delegate to determine if the zhal is healthy based on the
+     * frequency of petting and its own timing logic.
+     *
      * @return true if the pet was successful, false on error
      */
-    bool (*petWatchdog)(ZigbeeCoreRecoveryEntity watchdogEntity);
+    bool (*petZhal)(void);
 
     /**
-     * @brief Restart the ZigbeeCore process.
+     * @brief Restart the ZHAL implementation.
      *
-     * This function is called when the Zigbee subsystem determines that ZigbeeCore
-     * needs to be restarted due to failure conditions. The implementation should
-     * attempt to restart the ZigbeeCore process and return the appropriate status.
+     * This function is called when the Zigbee subsystem determines that the ZHAL
+     * implementation needs to be restarted due to failure conditions. The implementation
+     * should attempt to restart the ZHAL process and return the appropriate status.
      *
-     * @return ZIGBEE_CORE_RESTART_ACTIVE if restart is being attempted,
-     *         ZIGBEE_CORE_RESTART_NOT_ACTIVE if restart cannot or will not be performed
+     * @return ZHAL_RESTART_ACTIVE if restart is being attempted,
+     *         ZHAL_RESTART_NOT_ACTIVE if restart cannot or will not be performed
      */
-    ZigbeeCoreRestartStatus (*restartZigbeeCore)(void);
+    ZhalRestartStatus (*restartZhal)(void);
 
     /**
      * @brief Notify that device communication has been restored.
@@ -153,28 +135,3 @@ typedef struct ZigbeeWatchdogDelegate
     bool (*getActionInProgress)(void);
 
 } ZigbeeWatchdogDelegate;
-
-/**
- * @brief Create a new ZigbeeWatchdogDelegate instance.
- *
- * Allocates memory for a new watchdog delegate and initializes all function
- * pointers to NULL. The caller is responsible for setting appropriate function
- * pointers after creation.
- *
- * @param name The name of the process being monitored
- * @return Pointer to newly allocated delegate
- * @note Caller must call destroyZigbeeWatchdogDelegate() to free memory
- */
-ZigbeeWatchdogDelegate *createZigbeeWatchdogDelegate(void);
-
-/**
- * @brief Destroy a ZigbeeWatchdogDelegate instance.
- *
- * Frees the memory allocated for the watchdog delegate. Does not call any
- * of the function pointers (like shutdownWatchdog) - the caller should
- * perform any necessary cleanup before calling this function.
- *
- * @param delegate Pointer to the delegate to destroy, may be NULL (no-op)
- * @note After calling this function, the delegate pointer is invalid
- */
-void destroyZigbeeWatchdogDelegate(ZigbeeWatchdogDelegate *delegate);
