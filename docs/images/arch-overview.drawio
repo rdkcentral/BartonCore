@@ -4,82 +4,82 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="--MTO9YccvEGNLTB4QjE-1" value="" style="html=1;shadow=0;dashed=0;align=center;verticalAlign=middle;shape=mxgraph.arrows2.twoWayArrow;dy=0.65;dx=22;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-1" value="" style="html=1;shadow=0;dashed=0;align=center;verticalAlign=middle;shape=mxgraph.arrows2.twoWayArrow;dy=0.65;dx=22;" parent="1" vertex="1">
           <mxGeometry x="340" y="265" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-2" value="" style="group" vertex="1" connectable="0" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-2" value="" style="group" parent="1" vertex="1" connectable="0">
           <mxGeometry x="60" y="140" width="280" height="280" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-3" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-2">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-3" value="" style="rounded=1;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-2" vertex="1">
           <mxGeometry width="280" height="280" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-4" value="Barton Device Service" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-2">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-4" value="Barton Core" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="--MTO9YccvEGNLTB4QjE-2" vertex="1">
           <mxGeometry x="90" width="100" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-5" value="Device Resource Model" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-2">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-5" value="Device Resource Model" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" parent="--MTO9YccvEGNLTB4QjE-2" vertex="1">
           <mxGeometry x="180" y="170" width="80" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-6" value="" style="group" vertex="1" connectable="0" parent="--MTO9YccvEGNLTB4QjE-2">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-6" value="" style="group" parent="--MTO9YccvEGNLTB4QjE-2" vertex="1" connectable="0">
           <mxGeometry x="20" y="40" width="240" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-7" value="Matter Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-6">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-7" value="Matter Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-6" vertex="1">
           <mxGeometry x="80" y="40" width="70" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-8" value="Thread Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-6">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-8" value="Thread Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-6" vertex="1">
           <mxGeometry x="160" y="40" width="80" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-9" value="Subsystem Manager" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-6">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-9" value="Subsystem Manager" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-6" vertex="1">
           <mxGeometry width="240" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-10" value="Zigbee Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-6">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-10" value="Zigbee Subsystem" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-6" vertex="1">
           <mxGeometry y="40" width="70" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-11" value="" style="group" vertex="1" connectable="0" parent="--MTO9YccvEGNLTB4QjE-2">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-11" value="" style="group" parent="--MTO9YccvEGNLTB4QjE-2" vertex="1" connectable="0">
           <mxGeometry x="20" y="160" width="150" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-12" value="Device Driver Manager" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-11">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-12" value="Device Driver Manager" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-11" vertex="1">
           <mxGeometry width="150" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-13" value="Zigbee Drivers" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-11">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-13" value="Zigbee Drivers" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-11" vertex="1">
           <mxGeometry y="40" width="70" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-14" value="Matter Drivers" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-11">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-14" value="Matter Drivers" style="rounded=0;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-11" vertex="1">
           <mxGeometry x="80" y="40" width="70" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-15" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-15" value="" style="rounded=1;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="400" y="130" width="250" height="290" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-16" value="Example Barton Client" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-16" value="Example Barton Client" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="475" y="130" width="100" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-17" value="Network Credentials Provider" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-17" value="Network Credentials Provider" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="170" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-18" value="Authentication Token Provider" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-18" value="Authentication Token Provider" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="211" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-19" value="Proprietary Device Drivers" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-19" value="Proprietary Device Drivers" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="293" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-20" value="Commissionable Data Provider&lt;div&gt;(Matter)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-20" value="Commissionable Data Provider&lt;div&gt;(Matter)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="334" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-21" value="Device Instance Info Data Provider&amp;nbsp;&lt;span style=&quot;background-color: initial;&quot;&gt;(Matter)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-21" value="Device Instance Info Data Provider&amp;nbsp;&lt;span style=&quot;background-color: initial;&quot;&gt;(Matter)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="375" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-22" value="Property Provider" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-22" value="Property Provider" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="435" y="252" width="180" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-23" value="TR-369,&lt;div&gt;Proprietary, etc.&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-23" value="TR-369,&lt;div&gt;Proprietary, etc.&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="555" y="90" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-24" value="" style="group" vertex="1" connectable="0" parent="1">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-24" value="" style="group" parent="1" vertex="1" connectable="0">
           <mxGeometry x="465" y="10" width="120" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-25" value="Client Cloud" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="--MTO9YccvEGNLTB4QjE-24">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-25" value="Client Cloud" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="--MTO9YccvEGNLTB4QjE-24" vertex="1">
           <mxGeometry width="120" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="--MTO9YccvEGNLTB4QjE-26" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="--MTO9YccvEGNLTB4QjE-25" target="--MTO9YccvEGNLTB4QjE-15">
+        <mxCell id="--MTO9YccvEGNLTB4QjE-26" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="--MTO9YccvEGNLTB4QjE-25" target="--MTO9YccvEGNLTB4QjE-15" edge="1">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="740" y="40" as="sourcePoint" />
             <mxPoint x="740" y="60.710678118654755" as="targetPoint" />
