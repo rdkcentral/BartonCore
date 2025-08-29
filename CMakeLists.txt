@@ -147,8 +147,3 @@ add_subdirectory(core)
 if (BCORE_BUILD_REFERENCE)
     add_subdirectory(reference)
 endif()
-
-if (BCORE_BUILD_DOCS)
-    add_subdirectory(docs)
-endif()
-

@@ -123,10 +123,6 @@ RUN bash -c "set -o pipefail && \
     mkdir -p /usr/local/lib/python3.x && \
     ln -s /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python3.x/dist-packages"
 
-# Add support for building PlantUML diagrams for the documentation
-RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
-    plantuml
-
 ###############################################################################
 # Third party build stage
 #

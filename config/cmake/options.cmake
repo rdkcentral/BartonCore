@@ -149,9 +149,6 @@ bcore_option(NAME BCORE_BUILD_REFERENCE
            DEFINITION BARTON_CONFIG_BUILD_REFERENCE
            DESCRIPTION "Build the reference application"
            ENABLE)
-bcore_option(NAME BCORE_BUILD_DOCS
-           DEFINITION BARTON_CONFIG_BUILD_DOCS
-           DESCRIPTION "Build the documentation")
 bcore_option(NAME BCORE_BUILD_WITH_SSP
            DEFINITION BARTON_CONFIG_BUILD_WITH_SSP
            DESCRIPTION "Build Barton with stack smash protection")

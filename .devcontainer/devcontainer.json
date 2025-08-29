@@ -92,8 +92,7 @@
                 // Build and Project Management
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
-                "doi.fileheadercomment",                 // File header comment generator
-                "jebbs.plantuml"                         // Enable compiling plantuml specs to embeddable images
+                "doi.fileheadercomment"                  // File header comment generator
             ],
 
             "settings":
