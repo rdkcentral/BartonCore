@@ -163,24 +163,10 @@
 #define DEFAULT_RSSI_QUALITY_CROSS_ABOVE_DB                6
 #define DEFAULT_RSSI_QUALITY_CROSS_BELOW_DB                6
 
-#define ZIGBEE_CORE_PROCESS_NAME                           "ZigbeeCore"
-
 #define COMM_FAIL_POLL_THREAD_SLEEP_TIME_SECONDS           (60 * 60)
 
-typedef enum
-{
-    ZIGBEE_CORE_RECOVERY_ENITITY_HEARTBEAT,
-    ZIGBEE_CORE_RECOVERY_ENITITY_COMM_FAIL,
-    ZIGBEE_CORE_RECOVERY_ENITITY_NETWORK_BUSY
-} ZigbeeCoreRecoveryEntity;
-
-static const char *ZigbeeCoreRecoveryEntityLabels[] = {"heartbeat", "communication failure", "network busy"};
-
-static const char *zigbeeCoreRecoveryReasonLabels[] = {"Recovery reason: heartbeat",
-                                                       "Recovery reason: communication failure",
-                                                       "Recovery reason: network busy"};
-
-static bool actionOnZigbeeCoreInProgress = false; // zigbeeCore recovery is in progress or not
+static ZigbeeWatchdogDelegate *watchdogDelegate;
+static pthread_mutex_t watchdogDelegateMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 static zhalCallbacks callbacks;
 
@@ -441,19 +427,68 @@ static void waitForInitialZigbeeCoreStartup(void)
         // try one more time
         if (zhalHeartbeatRc != 0)
         {
-            //WATCHDOG: let the delegate know that it should restart ZigbeeCore.  If it does
-            //  it should return a code we can use to know that we should keep trying in this
-            //  loop, otherwise if there is no watchdog delegate or it says it isnt doing anything
-            //  about it, we break
-            // if (delegate wants to restart ZigbeeCore) zigbeeCoreRestartCount++;
+            bool keepTryingRestart = true;
 
-            // NOTE: BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG should not be needed in barton anymore
+            if (watchdogDelegate)
+            {
+                if (watchdogDelegate->restartZhal() == ZHAL_RESTART_ACTIVE)
+                {
+                    zigbeeCoreRestartCount++;
+                    icLogWarn(LOG_TAG, "ZigbeeCore restart attempted, count %d", zigbeeCoreRestartCount);
+                }
+                else
+                {
+                    // Delegate says it can't/won't restart, stop trying
+                    keepTryingRestart = false;
+                }
+            }
+            else
+            {
+                // No delegate to initiate restart, can't recover
+                keepTryingRestart = false;
+            }
+
+            waitForZigbeeCore = keepTryingRestart;
         }
         else
         {
             // Either we got a heartbeat response, or we timed out a second time.
             waitForZigbeeCore = false;
         }
+    }
+}
+
+void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
+{
+    bool shouldKeepDelegate = false; // Only keep if we successfully accept it
+    bool validDelegate = false;
+
+    if (delegate)
+    {
+        // init and shutdown are optional, all others are mandatory
+        validDelegate = delegate->setAllDevicesInCommFail && delegate->petZhal && delegate->restartZhal &&
+                        delegate->zhalResponseHandler && delegate->getActionInProgress;
+    }
+
+    mutexLock(&watchdogDelegateMtx);
+    if (!watchdogDelegate)
+    {
+        if (validDelegate)
+        {
+            watchdogDelegate = delegate;
+            shouldKeepDelegate = true;
+        }
+        else
+        {
+            icLogError(LOG_TAG, "%s: invalid watchdog implementation, rejecting", __func__);
+        }
+    }
+    mutexUnlock(&watchdogDelegateMtx);
+
+    // Clean up delegate if we didn't keep it
+    if (delegate && !shouldKeepDelegate)
+    {
+        free(delegate);
     }
 }
 
@@ -504,6 +539,15 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     {
         icLogError(LOG_TAG, "%s: port '%s' is not valid!", __func__, port);
         return false;
+    }
+
+    // Initialize the watchdog delegate early in the startup sequence if provided.
+    // This is critical because subsequent initialization tasks (zhalInit,
+    // configureMonitors, waitForInitialZigbeeCoreStartup) may trigger watchdog
+    // operations that depend on the delegate being properly initialized.
+    if (watchdogDelegate && watchdogDelegate->init)
+    {
+        watchdogDelegate->init();
     }
 
     memset(&callbacks, 0, sizeof(callbacks));
@@ -584,7 +628,15 @@ static void zigbeeSubsystemShutdown(void)
         pthread_join(commFailMonitorThreadId, NULL);
     }
 
-    // WATCHDOG: cleanup/shutdown the watchdog delegate if needed
+    if (watchdogDelegate)
+    {
+        if (watchdogDelegate->shutdown)
+        {
+            watchdogDelegate->shutdown();
+        }
+        free(watchdogDelegate);
+        watchdogDelegate = NULL;
+    }
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
@@ -3470,7 +3522,10 @@ static void zigbeeCoreMonitorFunc(void *arg)
 
     if (zhalHeartbeat(&pid, &zigbeeCoreInitialized) == 0)
     {
-        //WATCHDOG: ZigbeeCore is working, so pet
+        if (watchdogDelegate)
+        {
+            watchdogDelegate->petZhal();
+        }
 
         mutexLock(&networkInitializedMtx);
         bool ourInitialized = networkInitialized; // indicates if we think the network is initialized
@@ -4058,7 +4113,10 @@ icLinkedList *zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
 
 void zigbeeSubsystemNotifyDeviceCommRestored(icDevice *device)
 {
-    //WATCHDOG: let the delegate know that this device is out of commfail
+    if (watchdogDelegate)
+    {
+        watchdogDelegate->setAllDevicesInCommFail(false);
+    }
 }
 
 void zigbeeSubsystemNotifyDeviceCommFail(icDevice *device)
@@ -4137,7 +4195,33 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
 
         if (devicesInCommFail)
         {
-            //WATCHDOG: let the delegate know that all zigbee devices are in comm fail
+            bool recoveryInProgress = false;
+
+            if (watchdogDelegate)
+            {
+                // The order of the operations here is important. We need to first check if a recovery is in progress
+                // before we set the "all devices in comm fail" status as this will kick off recovery actions.
+                recoveryInProgress = watchdogDelegate->getActionInProgress();
+                watchdogDelegate->setAllDevicesInCommFail(true);
+            }
+
+            // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
+            if (!recoveryInProgress)
+            {
+                // FOR COMM FAIL TEST ONLY: Set fast comm fail to false to resume normal comm failure timeout to
+                // avoid fast "restart all services" recovery as next recovery step for our test due to fast comm
+                // fail timeout, as that would be invalid case for the test.
+                //
+                mutexLock(&commFailControlMutex);
+                if (fastCommFailTimer)
+                {
+                    fastCommFailTimer = false;
+                    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+                    b_core_property_provider_set_property_bool(
+                        propertyProvider, FAST_COMM_FAIL_PROP, fastCommFailTimer);
+                }
+                mutexUnlock(&commFailControlMutex);
+            }
         }
     }
 
@@ -4546,20 +4630,23 @@ void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, z
 
 static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
 {
-    if (responseType == NULL)
+    if (!responseType)
     {
         return;
     }
 
-    // limit updates when network is not in busy state as each update is through an IPC call
-    static bool networkGoodLast = true; // network is not busy
-
     if (stringCompare(responseType, ZHAL_RESPONSE_TYPE_ATTRIBUTES_READ, false) == 0 ||
         stringCompare(responseType, ZHAL_RESPONSE_TYPE_SEND_COMMAND, false) == 0)
     {
-        //WATCHDOG: let the delegate know that the zigbee stack is not stuck in a busy state
+        bool isNetworkBusy = (resultCode == ZHAL_STATUS_NETWORK_BUSY);
+
+        if (watchdogDelegate)
+        {
+            watchdogDelegate->zhalResponseHandler(isNetworkBusy);
+        }
     }
 }
+
 /**
  * configure monitors for zigbee system health
  */

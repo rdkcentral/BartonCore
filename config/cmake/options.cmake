@@ -182,13 +182,6 @@ bcore_option(NAME BCORE_M1LTE
 bcore_option(NAME BCORE_SETUP_WIZARD
            DEFINITION BARTON_CONFIG_SETUP_WIZARD
            DESCRIPTION "Support for behavioral changes if there is an \"activation period\"")
-bcore_option(NAME BCORE_SUPPORT_SOFTWARE_WATCHDOG
-           DEFINITION BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-           DESCRIPTION "Support for zigbee watchdog feature using the software watchdog library.")
-bcore_int_option(NAME BCORE_SOFTWARE_WATCHDOG_TROUBLE_CODE_ZIGBEE_CORE
-              DEFINITION BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
-              DESCRIPTION "The trouble code to use when reporting a zigbee core failure to the software watchdog library."
-              VALUE 11)
 bcore_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")
