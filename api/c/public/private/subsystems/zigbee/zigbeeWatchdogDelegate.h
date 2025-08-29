@@ -45,37 +45,43 @@ typedef enum
  * recovery actions, and coordinate with broader system health monitoring
  * and process management systems.
  *
- * @note ALL function pointers in this structure are MANDATORY and must be
- *       implemented. The Zigbee subsystem will reject any delegate that has
- *       NULL function pointers during registration.
+ * @note Function pointer requirements:
+ *       - OPTIONAL: init, shutdown (may be NULL if not needed)
+ *       - MANDATORY: All other function pointers must be implemented
+ *       The Zigbee subsystem will reject any delegate that has NULL
+ *       mandatory function pointers during registration.
  *
  * @see zigbeeSubsystemSetWatchdogDelegate()
  */
 typedef struct ZigbeeWatchdogDelegate
 {
     /**
-     * @brief Shutdown the delegate.
+     * @brief Initialize the watchdog delegate (OPTIONAL).
+     *
+     * This function is called during subsystem initialization to set up
+     * watchdog monitoring, configure timers, and prepare for health monitoring
+     * operations. May be NULL if no initialization is required.
+     */
+    void (*init)(void);
+
+    /**
+     * @brief Shutdown the delegate (OPTIONAL).
      *
      * This function is called during subsystem shutdown to cleanly disable
-     * watchdog monitoring and free resources.
+     * watchdog monitoring and free resources. May be NULL if no cleanup is required.
      */
     void (*shutdown)(void);
 
     /**
-     * @brief Immediately update the status of the 'network busy' watchdog entity.
+     * @brief Notify the delegate of device communication failure status.
      *
-     * @param isHealthy true if the entity is healthy, false if it's in a failure state
-     * @return true if the status update was processed successfully, false on error
-     */
-    bool (*updateNetworkBusyStatus)(bool isHealthy);
-
-    /**
-     * @brief Immediately update the status of the 'comm fail' watchdog entity.
+     * This function informs the watchdog delegate when all monitored Zigbee
+     * devices are in communication failure.
      *
-     * @param isHealthy true if the entity is healthy, false if it's in a failure state
-     * @return true if the status update was processed successfully, false on error
+     * @param allInCommFail true when all monitored devices are in comm fail,
+     *                      false when at least one device is communicating
      */
-    bool (*updateCommFailStatus)(bool isHealthy);
+    void (*setAllDevicesInCommFail)(bool allInCommFail);
 
     /**
      * @brief Pet the zhal watchdog.
@@ -103,31 +109,19 @@ typedef struct ZigbeeWatchdogDelegate
     ZhalRestartStatus (*restartZhal)(void);
 
     /**
-     * @brief Notify that device communication has been restored.
-     *
-     * This function is called when devices that were previously in communication
-     * failure have successfully resumed communication. This allows the watchdog
-     * system to update its state and potentially cancel pending recovery actions.
-     *
-     * @return true if the notification was processed successfully, false on error
-     */
-    bool (*notifyDeviceCommRestored)(void);
-
-    /**
      * @brief Handle ZHAL response events for watchdog monitoring.
      *
      * This function is called for each ZHAL operation response to monitor
      * the health of the Zigbee stack.
      *
-     * @param responseType The type of ZHAL operation that completed
-     * @param resultCode The ZHAL_STATUS result code from the operation
+     * @param networkBusy true if the network is busy, false if it's idle
      */
-    void (*zhalResponseHandler)(const char *responseType, ZHAL_STATUS resultCode);
+    void (*zhalResponseHandler)(bool networkBusy);
 
     /**
      * @brief Check if a watchdog recovery action is currently in progress.
      *
-     * This function allows subsystems to query whether the watchdog system
+     * This function allows the subsystem to query whether the watchdog system
      * is currently performing recovery operations (e.g., restarting services).
      *
      * @return true if recovery is in progress, false otherwise

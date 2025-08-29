@@ -171,9 +171,10 @@ int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
  * provides monitoring capabilities for network communication status, busy states,
  * and automatic recovery mechanisms for stack failures.
  *
- * All function pointers in the delegate structure are mandatory and will be
- * validated during registration. If any function pointer is NULL, the delegate
- * will be rejected and destroyed.
+ * Function pointer requirements:
+ * - OPTIONAL: init, shutdown (may be NULL if not needed)
+ * - MANDATORY: All other function pointers must be implemented
+ * The delegate will be rejected if any mandatory function pointer is NULL.
  *
  * IMPORTANT:
  * - This must be called BEFORE zigbeeSubsystemInitialize().
