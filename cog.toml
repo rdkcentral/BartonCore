@@ -7,5 +7,5 @@ ignore_merge_commits = true
 path = "CHANGELOG.md"
 template = "config/cocogitto/templates/remote_extended"
 remote = "github.com"
-owner = "cleithner-comcast"
-repository = "BartonCore_fork"
+owner = "rdkcentral"
+repository = "BartonCore"
