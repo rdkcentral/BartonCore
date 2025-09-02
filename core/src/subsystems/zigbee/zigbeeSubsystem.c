@@ -427,8 +427,6 @@ static void waitForInitialZigbeeCoreStartup(void)
         // try one more time
         if (zhalHeartbeatRc != 0)
         {
-            bool keepTryingRestart = true;
-
             if (watchdogDelegate)
             {
                 if (watchdogDelegate->restartZhal() == ZHAL_RESTART_ACTIVE)
@@ -439,16 +437,14 @@ static void waitForInitialZigbeeCoreStartup(void)
                 else
                 {
                     // Delegate says it can't/won't restart, stop trying
-                    keepTryingRestart = false;
+                    waitForZigbeeCore = false;
                 }
             }
             else
             {
                 // No delegate to initiate restart, can't recover
-                keepTryingRestart = false;
+                waitForZigbeeCore = false;
             }
-
-            waitForZigbeeCore = keepTryingRestart;
         }
         else
         {
@@ -458,8 +454,10 @@ static void waitForInitialZigbeeCoreStartup(void)
     }
 }
 
-void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
+bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
 {
+    bool retVal = false;
+
     bool shouldKeepDelegate = false; // Only keep if we successfully accept it
     bool validDelegate = false;
 
@@ -477,6 +475,7 @@ void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
         {
             watchdogDelegate = delegate;
             shouldKeepDelegate = true;
+            retVal = true;
         }
         else
         {
@@ -490,6 +489,8 @@ void zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
     {
         free(delegate);
     }
+
+    return retVal;
 }
 
 static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallback,
@@ -628,6 +629,7 @@ static void zigbeeSubsystemShutdown(void)
         pthread_join(commFailMonitorThreadId, NULL);
     }
 
+    mutexLock(&watchdogDelegateMtx);
     if (watchdogDelegate)
     {
         if (watchdogDelegate->shutdown)
@@ -637,6 +639,7 @@ static void zigbeeSubsystemShutdown(void)
         free(watchdogDelegate);
         watchdogDelegate = NULL;
     }
+    mutexUnlock(&watchdogDelegateMtx);
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
@@ -4199,13 +4202,13 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
 
             if (watchdogDelegate)
             {
-                // The order of the operations here is important. We need to first check if a recovery is in progress
-                // before we set the "all devices in comm fail" status as this will kick off recovery actions.
+                // The order of the operations here is important. We must first check if a recovery is in progress
+                // before notifying the delegate about comm fail status since setAllDevicesInCommFail(true) can
+                // trigger recovery actions.
                 recoveryInProgress = watchdogDelegate->getActionInProgress();
                 watchdogDelegate->setAllDevicesInCommFail(true);
             }
 
-            // update status only when no recovery is in progress i.e. zigbeeCore is not in restarting phase
             if (!recoveryInProgress)
             {
                 // FOR COMM FAIL TEST ONLY: Set fast comm fail to false to resume normal comm failure timeout to
@@ -4630,7 +4633,7 @@ void zigbeeSubsystemDeviceAnnounced(uint64_t eui64, zhalDeviceType deviceType, z
 
 static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
 {
-    if (!responseType)
+    if (responseType == NULL)
     {
         return;
     }
@@ -4638,11 +4641,11 @@ static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
     if (stringCompare(responseType, ZHAL_RESPONSE_TYPE_ATTRIBUTES_READ, false) == 0 ||
         stringCompare(responseType, ZHAL_RESPONSE_TYPE_SEND_COMMAND, false) == 0)
     {
-        bool isNetworkBusy = (resultCode == ZHAL_STATUS_NETWORK_BUSY);
+        bool operationRejected = (resultCode == ZHAL_STATUS_NETWORK_BUSY);
 
         if (watchdogDelegate)
         {
-            watchdogDelegate->zhalResponseHandler(isNetworkBusy);
+            watchdogDelegate->zhalResponseHandler(operationRejected);
         }
     }
 }

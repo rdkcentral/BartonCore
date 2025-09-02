@@ -87,10 +87,9 @@ typedef struct ZigbeeWatchdogDelegate
      * @brief Pet the zhal watchdog.
      *
      * This function is called to indicate that the zhal process is operating
-     * normally and should reset its watchdog timer. Unlike the updateXxxStatus()
-     * functions which immediately set a specific health state, this function
-     * allows the delegate to determine if the zhal is healthy based on the
-     * frequency of petting and its own timing logic.
+     * normally and should reset its watchdog timer. This allows the delegate to
+     * determine if the zhal is healthy based on the frequency of petting and
+     * its own timing logic.
      *
      * @return true if the pet was successful, false on error
      */
@@ -111,18 +110,21 @@ typedef struct ZigbeeWatchdogDelegate
     /**
      * @brief Handle ZHAL response events for watchdog monitoring.
      *
-     * This function is called for each ZHAL operation response to monitor
+     * This function is called for the ZHAL_RESPONSE_TYPE_ATTRIBUTES_READ and
+     * ZHAL_RESPONSE_TYPE_SEND_COMMAND operation responses to monitor
      * the health of the Zigbee stack.
      *
-     * @param networkBusy true if the network is busy, false if it's idle
+     * @param operationRejected true if ZHAL rejected the operation with
+     *                         ZHAL_STATUS_NETWORK_BUSY (indicating resource
+     *                         exhaustion), false if the operation was accepted
      */
-    void (*zhalResponseHandler)(bool networkBusy);
+    void (*zhalResponseHandler)(bool operationRejected);
 
     /**
      * @brief Check if a watchdog recovery action is currently in progress.
      *
      * This function allows the subsystem to query whether the watchdog system
-     * is currently performing recovery operations (e.g., restarting services).
+     * is currently performing recovery operations (e.g., restarting ZHAL).
      *
      * @return true if recovery is in progress, false otherwise
      */
