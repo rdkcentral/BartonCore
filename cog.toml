@@ -1,0 +1,11 @@
+# Basic settings
+from_latest_tag = true
+ignore_merge_commits = true
+
+# Changelog settings
+[changelog]
+path = "CHANGELOG.md"
+template = "config/cocogitto/templates/remote_extended"
+remote = "github.com"
+owner = "cleithner-comcast"
+repository = "BartonCore_fork"
