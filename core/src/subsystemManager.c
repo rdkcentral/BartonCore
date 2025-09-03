@@ -69,7 +69,8 @@ typedef struct
             g_hash_table_iter_init(&iter, (map));                                                                      \
             while (g_hash_table_iter_next(&iter, &key, &_value))                                                       \
             {                                                                                                          \
-                value = (SubsystemRegistration *) _value;                                                              \
+                g_autoptr(SubsystemRegistration) value =                                                               \
+                    subsystemRegistrationAcquire((SubsystemRegistration *) _value);                                    \
                 expr                                                                                                   \
             }                                                                                                          \
         }                                                                                                              \
@@ -82,16 +83,100 @@ static GHashTable *subsystems;
 static bool allDriversStarted = false;
 static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
+static SubsystemRegistration *subsystemRegistrationAcquire(SubsystemRegistration *reg);
 
+Subsystem *createSubsystem(void)
+{
+    Subsystem *retVal = g_atomic_rc_box_new0(Subsystem);
+    return g_steal_pointer(&retVal);
+}
+
+static void destroySubsystem(Subsystem *subsystem)
+{
+    // no members of Subsystem to free
+    return;
+}
+
+Subsystem *acquireSubsystem(Subsystem *subsystem)
+{
+    Subsystem *retVal = NULL;
+
+    if (subsystem)
+    {
+        retVal = g_atomic_rc_box_acquire(subsystem);
+    }
+
+    return retVal;
+}
+
+void releaseSubsystem(Subsystem *subsystem)
+{
+    if (subsystem)
+    {
+        g_atomic_rc_box_release_full(subsystem, (GDestroyNotify) destroySubsystem);
+    }
+}
+
+/*
+ * Create a new refcounted SubsystemRegistration
+ */
+static SubsystemRegistration *createSubsystemRegistration(void)
+{
+    SubsystemRegistration *retVal = g_atomic_rc_box_new0(SubsystemRegistration);
+    return g_steal_pointer(&retVal);
+}
+
+/**
+ * Acquires a pointer to the reference counted SubsystemRegistration, with its reference count increased.
+ *
+ * @param reg pointer to reference counted SubsystemRegistration
+ */
+static SubsystemRegistration *subsystemRegistrationAcquire(SubsystemRegistration *reg)
+{
+    SubsystemRegistration *retVal = NULL;
+
+    if (reg)
+    {
+        retVal = g_atomic_rc_box_acquire(reg);
+    }
+
+    return retVal;
+}
+
+/**
+ * Cleans up contents of SubsystemRegistration - GLib frees the struct itself when refcount reaches zero
+ */
 static void subsystemRegistrationDestroy(SubsystemRegistration *reg)
 {
-    pthread_mutex_destroy(&reg->mtx);
-    free(reg);
+    if (reg)
+    {
+        pthread_mutex_destroy(&reg->mtx);
+        releaseSubsystem((Subsystem *) reg->subsystem);
+    }
 }
+
+/**
+ * Release a SubsystemRegistration. This will decrement the refcount and destroy the SubsystemRegistration if the
+ * refcount reaches zero.
+ *
+ * @param reg pointer to reference counted SubsystemRegistration
+ */
+static void subsystemRegistrationRelease(SubsystemRegistration *reg)
+{
+    if (reg)
+    {
+        g_atomic_rc_box_release_full(reg, (GDestroyNotify) subsystemRegistrationDestroy);
+    }
+}
+
+/*
+ * Convenience macro to declare a scope bound SubsystemRegistration
+ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(SubsystemRegistration, subsystemRegistrationRelease)
 
 static void subsystemRegistrationMapDestroy(void *value)
 {
-    subsystemRegistrationDestroy(value);
+    subsystemRegistrationRelease((SubsystemRegistration *) value);
 }
 
 /**
@@ -106,7 +191,7 @@ static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
         return;
     }
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystem));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -177,8 +262,8 @@ void subsystemManagerRegister(Subsystem *subsystem)
         return;
     }
 
-    SubsystemRegistration *registration = malloc(sizeof(SubsystemRegistration));
-    registration->subsystem = subsystem;
+    SubsystemRegistration *registration = createSubsystemRegistration();
+    registration->subsystem = acquireSubsystem(subsystem);
     mutexInitWithType(&registration->mtx, PTHREAD_MUTEX_ERRORCHECK);
     registration->ready = false;
 
@@ -232,7 +317,7 @@ cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName)
 
     g_return_val_if_fail(subsystems != NULL, NULL);
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystemName);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystemName));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -510,7 +595,7 @@ bool subsystemManagerIsSubsystemReady(const char *subsystem)
 
     g_return_val_if_fail(subsystems != NULL, false);
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystem));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
