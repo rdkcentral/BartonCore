@@ -45,12 +45,6 @@ typedef enum
  * recovery actions, and coordinate with broader system health monitoring
  * and process management systems.
  *
- * @note Function pointer requirements:
- *       - OPTIONAL: init, shutdown (may be NULL if not needed)
- *       - MANDATORY: All other function pointers must be implemented
- *       The Zigbee subsystem will reject any delegate that has NULL
- *       mandatory function pointers during registration.
- *
  * @see zigbeeSubsystemSetWatchdogDelegate()
  */
 typedef struct ZigbeeWatchdogDelegate
@@ -90,10 +84,8 @@ typedef struct ZigbeeWatchdogDelegate
      * normally and should reset its watchdog timer. This allows the delegate to
      * determine if the zhal is healthy based on the frequency of petting and
      * its own timing logic.
-     *
-     * @return true if the pet was successful, false on error
      */
-    bool (*petZhal)(void);
+    void (*petZhal)(void);
 
     /**
      * @brief Restart the ZHAL implementation.
@@ -115,8 +107,8 @@ typedef struct ZigbeeWatchdogDelegate
      * the health of the Zigbee stack.
      *
      * @param operationRejected true if ZHAL rejected the operation with
-     *                         ZHAL_STATUS_NETWORK_BUSY (indicating resource
-     *                         exhaustion), false if the operation was accepted
+     *                          ZHAL_STATUS_NETWORK_BUSY (indicating resource
+     *                          exhaustion), false if the operation was accepted
      */
     void (*zhalResponseHandler)(bool operationRejected);
 

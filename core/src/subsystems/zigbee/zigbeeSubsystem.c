@@ -482,6 +482,10 @@ bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
             icLogError(LOG_TAG, "%s: invalid watchdog implementation, rejecting", __func__);
         }
     }
+    else
+    {
+        icLogError(LOG_TAG, "%s: watchdog delegate already set, rejecting", __func__);
+    }
     mutexUnlock(&watchdogDelegateMtx);
 
     // Clean up delegate if we didn't keep it

@@ -28,8 +28,8 @@
 #define FLEXCORE_ZIGBEESUBSYSTEM_H
 
 #include "device-driver/device-driver.h"
-#include "private/subsystems/zigbee/zigbeeWatchdogDelegate.h"
 #include "zigbeeAttributeTypes.h"
+#include "zigbeeWatchdogDelegate.h"
 #include <cjson/cJSON.h>
 #include <deviceDescriptor.h>
 #include <icTypes/icLinkedList.h>
@@ -174,6 +174,8 @@ int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
  * IMPORTANT:
  * - This must be called BEFORE zigbeeSubsystemInitialize().
  * - Once the subsystem is initialized, the delegate cannot be set or changed.
+ * - A delegate that has NULL mandatory function pointers will be rejected
+ *   during registration.
  *
  * @param delegate The watchdog delegate implementation (ownership transferred)
  * @return true if the delegate is valid and was set successfully, false otherwise

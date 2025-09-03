@@ -28,7 +28,10 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "icConcurrent/threadUtils.h"
+#include "subsystemManager.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
+#include "subsystems/zigbee/zigbeeWatchdogDelegate.h"
 #include <cmocka.h>
 #include <commonDeviceDefs.h>
 #include <device-driver/device-driver.h>
@@ -53,9 +56,13 @@ static int counter = 0;
 static char templateTempDir[255] = "/tmp/testDirXXXXXX";
 static char *dynamicDir;
 
+static Subsystem *capturedZigbeeSubsystem = NULL;
+static pthread_mutex_t capturedSubsystemMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
+
 icLinkedList *__wrap_deviceServiceGetDevicesBySubsystem(const char *subsystem);
 DeviceDescriptor *__wrap_deviceServiceGetDeviceDescriptorForDevice(icDevice *device);
 gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir();
+void __wrap_subsystemManagerRegister(Subsystem *subsystem);
 static icDevice *createDummyDevice(const char *manufacturer,
                                    const char *model,
                                    const char *hardwareVersion,
@@ -266,6 +273,114 @@ static void test_icDiscoveredDeviceDetailsGetAttributeEndpoint(void **state)
 }
 
 // ******************************
+// Mock watchdog delegate function pointers
+// ******************************
+
+static void mockWatchdogInit(void)
+{
+    // No-op for testing
+}
+
+static void mockWatchdogShutdown(void)
+{
+    // No-op for testing
+}
+
+static void mockWatchdogSetAllDevicesInCommFail(bool allInCommFail)
+{
+    // No-op for testing
+}
+
+static void mockWatchdogPetZhal(void)
+{
+    // No-op for testing
+}
+
+static ZhalRestartStatus mockWatchdogRestartZhal(void)
+{
+    // No-op for testing
+    return ZHAL_RESTART_ACTIVE;
+}
+
+static void mockWatchdogZhalResponseHandler(bool operationRejected)
+{
+    // No-op for testing
+}
+
+static bool mockWatchdogGetActionInProgress(void)
+{
+    // No-op for testing
+    return true;
+}
+
+static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
+{
+    (void) state;
+
+    // Invalid delegate - NULL
+    assert_false(zigbeeSubsystemSetWatchdogDelegate(NULL));
+
+    // Invalid delegate - all function pointers NULL
+    ZigbeeWatchdogDelegate *invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    assert_false(zigbeeSubsystemSetWatchdogDelegate(invalidDelegate));
+    invalidDelegate = NULL;
+
+    // Invalid delegate - some mandatory pointers NULL
+    invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    invalidDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
+    invalidDelegate->petZhal = mockWatchdogPetZhal;
+    invalidDelegate->restartZhal = NULL;
+    invalidDelegate->zhalResponseHandler = NULL;
+    invalidDelegate->init = mockWatchdogInit;
+    invalidDelegate->shutdown = mockWatchdogShutdown;
+
+    assert_false(zigbeeSubsystemSetWatchdogDelegate(invalidDelegate));
+    invalidDelegate = NULL;
+
+    // Valid delegate
+    ZigbeeWatchdogDelegate *validDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    validDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
+    validDelegate->petZhal = mockWatchdogPetZhal;
+    validDelegate->restartZhal = mockWatchdogRestartZhal;
+    validDelegate->zhalResponseHandler = mockWatchdogZhalResponseHandler;
+    validDelegate->getActionInProgress = mockWatchdogGetActionInProgress;
+    validDelegate->init = mockWatchdogInit;
+    validDelegate->shutdown = mockWatchdogShutdown;
+
+    assert_true(zigbeeSubsystemSetWatchdogDelegate(validDelegate));
+
+    // Test invalid delegate is rejected when one already exists
+    invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    invalidDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
+    invalidDelegate->petZhal = mockWatchdogPetZhal;
+    invalidDelegate->restartZhal = NULL;
+    invalidDelegate->zhalResponseHandler = NULL;
+    invalidDelegate->init = mockWatchdogInit;
+    invalidDelegate->shutdown = mockWatchdogShutdown;
+
+    assert_false(zigbeeSubsystemSetWatchdogDelegate(invalidDelegate));
+    invalidDelegate = NULL;
+
+    // test valid delegate is rejected when one already exists
+    ZigbeeWatchdogDelegate *validDelegate2 = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    validDelegate2->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
+    validDelegate2->petZhal = mockWatchdogPetZhal;
+    validDelegate2->restartZhal = mockWatchdogRestartZhal;
+    validDelegate2->zhalResponseHandler = mockWatchdogZhalResponseHandler;
+    validDelegate2->getActionInProgress = mockWatchdogGetActionInProgress;
+    validDelegate2->init = mockWatchdogInit;
+    validDelegate2->shutdown = mockWatchdogShutdown;
+
+    assert_false(zigbeeSubsystemSetWatchdogDelegate(validDelegate2));
+    validDelegate2 = NULL;
+
+    mutexLock(&capturedSubsystemMtx);
+    // Call shutdown to clean up the global watchdog delegate and free the valid delegate stored earlier
+    capturedZigbeeSubsystem->shutdown();
+    mutexUnlock(&capturedSubsystemMtx);
+}
+
+// ******************************
 // Setup/Teardown
 // ******************************
 
@@ -414,6 +529,23 @@ gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir()
     return strdup(dynamicDir);
 }
 
+/**
+ * @brief Wrapper for subsystemManagerRegister to capture the zigbee subsystem.
+ *
+ * This wrapper intercepts the subsystem registration call during test initialization
+ * to capture the zigbee Subsystem struct, which gives us access to its function pointers
+ * for use in test functions.
+ */
+void __wrap_subsystemManagerRegister(Subsystem *subsystem)
+{
+    if (g_strcmp0(subsystem->name, ZIGBEE_SUBSYSTEM_NAME) == 0)
+    {
+        mutexLock(&capturedSubsystemMtx);
+        capturedZigbeeSubsystem = subsystem;
+        mutexUnlock(&capturedSubsystemMtx);
+    }
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -421,7 +553,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_zigbeeSubsystemCleanupFirmwareFilesDoNothingIfFirmwareNeeded),
         cmocka_unit_test(test_encodeDecodeIcDiscoveredDeviceDetails),
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetClusterEndpoint),
-        cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint)};
+        cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint),
+        cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate)};
 
     int retval = cmocka_run_group_tests(tests, dynamicDirSetup, dynamicDirTeardown);
 
