@@ -79,6 +79,7 @@
 
 #undef LOG_TAG
 #define LOG_TAG                                            "zigbeeSubsystem"
+#define logFmt(fmt)                                        "%s: " fmt, __func__
 
 #define ZIGBEE_CORE_IP_PROPERTY_NAME                       "ZIGBEE_CORE_IP"
 #define ZIGBEE_CORE_PORT_PROPERTY_NAME                     "ZIGBEE_CORE_PORT"
@@ -432,7 +433,7 @@ static void waitForInitialZigbeeCoreStartup(void)
                 if (watchdogDelegate->restartZhal() == ZHAL_RESTART_ACTIVE)
                 {
                     zigbeeCoreRestartCount++;
-                    icLogWarn(LOG_TAG, "ZigbeeCore restart attempted, count %d", zigbeeCoreRestartCount);
+                    icWarn("ZigbeeCore restart attempted, count %d", zigbeeCoreRestartCount);
                 }
                 else
                 {
@@ -457,8 +458,6 @@ static void waitForInitialZigbeeCoreStartup(void)
 bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
 {
     bool retVal = false;
-
-    bool shouldKeepDelegate = false; // Only keep if we successfully accept it
     bool validDelegate = false;
 
     if (delegate)
@@ -473,26 +472,21 @@ bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
     {
         if (validDelegate)
         {
-            watchdogDelegate = delegate;
-            shouldKeepDelegate = true;
+            watchdogDelegate = g_steal_pointer(&delegate);
             retVal = true;
         }
         else
         {
-            icLogError(LOG_TAG, "%s: invalid watchdog implementation, rejecting", __func__);
+            icError("invalid watchdog implementation, rejecting");
         }
     }
     else
     {
-        icLogError(LOG_TAG, "%s: watchdog delegate already set, rejecting", __func__);
+        icError("watchdog delegate already set, rejecting");
     }
     mutexUnlock(&watchdogDelegateMtx);
 
-    // Clean up delegate if we didn't keep it
-    if (delegate && !shouldKeepDelegate)
-    {
-        free(delegate);
-    }
+    free(delegate);
 
     return retVal;
 }
@@ -633,17 +627,19 @@ static void zigbeeSubsystemShutdown(void)
         pthread_join(commFailMonitorThreadId, NULL);
     }
 
+    // grab a local pointer to avoid executing callbacks while holding a mutex
     mutexLock(&watchdogDelegateMtx);
-    if (watchdogDelegate)
-    {
-        if (watchdogDelegate->shutdown)
-        {
-            watchdogDelegate->shutdown();
-        }
-        free(watchdogDelegate);
-        watchdogDelegate = NULL;
-    }
+    ZigbeeWatchdogDelegate *localWatchdogDelegate = g_steal_pointer(&watchdogDelegate);
     mutexUnlock(&watchdogDelegateMtx);
+
+    if (localWatchdogDelegate)
+    {
+        if (localWatchdogDelegate->shutdown)
+        {
+            localWatchdogDelegate->shutdown();
+        }
+        free(localWatchdogDelegate);
+    }
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
