@@ -28,6 +28,9 @@
 #pragma once
 
 #include <stdbool.h>
+
+#include <glib.h>
+
 #include <zhal/zhal.h>
 
 typedef enum
@@ -123,3 +126,29 @@ typedef struct ZigbeeWatchdogDelegate
     bool (*getActionInProgress)(void);
 
 } ZigbeeWatchdogDelegate;
+
+/*
+ * Create a new refcounted ZigbeeWatchdogDelegate instance.
+ */
+ZigbeeWatchdogDelegate *zigbeeWatchdogDelegateCreate(void);
+
+/**
+ * Acquires a pointer to the reference counted ZigbeeWatchdogDelegate, with its
+ * reference count increased.
+ *
+ * @param delegate pointer to reference counted ZigbeeWatchdogDelegate
+ */
+ZigbeeWatchdogDelegate *zigbeeWatchdogDelegateAcquire(ZigbeeWatchdogDelegate *delegate);
+
+/**
+ * Release a ZigbeeWatchdogDelegate. This will decrement the refcount and destroy
+ * the ZigbeeWatchdogDelegate if the refcount reaches zero.
+ *
+ * @param delegate pointer to reference counted ZigbeeWatchdogDelegate
+ */
+void zigbeeWatchdogDelegateRelease(ZigbeeWatchdogDelegate *delegate);
+
+/*
+ * Convenience macro to declare a scope bound ZigbeeWatchdogDelegate
+ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(ZigbeeWatchdogDelegate, zigbeeWatchdogDelegateRelease)

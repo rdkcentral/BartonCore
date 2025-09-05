@@ -428,9 +428,11 @@ static void waitForInitialZigbeeCoreStartup(void)
         // try one more time
         if (zhalHeartbeatRc != 0)
         {
-            if (watchdogDelegate)
+            g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+            if (watchdogDelegateRef)
             {
-                if (watchdogDelegate->restartZhal() == ZHAL_RESTART_ACTIVE)
+                if (watchdogDelegateRef->restartZhal() == ZHAL_RESTART_ACTIVE)
                 {
                     zigbeeCoreRestartCount++;
                     icWarn("ZigbeeCore restart attempted, count %d", zigbeeCoreRestartCount);
@@ -486,7 +488,7 @@ bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate)
     }
     mutexUnlock(&watchdogDelegateMtx);
 
-    free(delegate);
+    zigbeeWatchdogDelegateRelease(delegate);
 
     return retVal;
 }
@@ -544,9 +546,11 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
     // This is critical because subsequent initialization tasks (zhalInit,
     // configureMonitors, waitForInitialZigbeeCoreStartup) may trigger watchdog
     // operations that depend on the delegate being properly initialized.
-    if (watchdogDelegate && watchdogDelegate->init)
+    g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+    if (watchdogDelegateRef && watchdogDelegateRef->init)
     {
-        watchdogDelegate->init();
+        watchdogDelegateRef->init();
     }
 
     memset(&callbacks, 0, sizeof(callbacks));
@@ -627,19 +631,10 @@ static void zigbeeSubsystemShutdown(void)
         pthread_join(commFailMonitorThreadId, NULL);
     }
 
-    // grab a local pointer to avoid executing callbacks while holding a mutex
     mutexLock(&watchdogDelegateMtx);
-    ZigbeeWatchdogDelegate *localWatchdogDelegate = g_steal_pointer(&watchdogDelegate);
+    zigbeeWatchdogDelegateRelease(watchdogDelegate);
+    watchdogDelegate = NULL;
     mutexUnlock(&watchdogDelegateMtx);
-
-    if (localWatchdogDelegate)
-    {
-        if (localWatchdogDelegate->shutdown)
-        {
-            localWatchdogDelegate->shutdown();
-        }
-        free(localWatchdogDelegate);
-    }
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
@@ -3525,9 +3520,11 @@ static void zigbeeCoreMonitorFunc(void *arg)
 
     if (zhalHeartbeat(&pid, &zigbeeCoreInitialized) == 0)
     {
-        if (watchdogDelegate)
+        g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+        if (watchdogDelegateRef)
         {
-            watchdogDelegate->petZhal();
+            watchdogDelegateRef->petZhal();
         }
 
         mutexLock(&networkInitializedMtx);
@@ -4116,9 +4113,11 @@ icLinkedList *zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToScan,
 
 void zigbeeSubsystemNotifyDeviceCommRestored(icDevice *device)
 {
-    if (watchdogDelegate)
+    g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+    if (watchdogDelegateRef)
     {
-        watchdogDelegate->setAllDevicesInCommFail(false);
+        watchdogDelegateRef->setAllDevicesInCommFail(false);
     }
 }
 
@@ -4200,13 +4199,15 @@ static void *checkAllDevicesInCommThreadProc(void *arg)
         {
             bool recoveryInProgress = false;
 
-            if (watchdogDelegate)
+            g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+            if (watchdogDelegateRef)
             {
                 // The order of the operations here is important. We must first check if a recovery is in progress
                 // before notifying the delegate about comm fail status since setAllDevicesInCommFail(true) can
                 // trigger recovery actions.
-                recoveryInProgress = watchdogDelegate->getActionInProgress();
-                watchdogDelegate->setAllDevicesInCommFail(true);
+                recoveryInProgress = watchdogDelegateRef->getActionInProgress();
+                watchdogDelegateRef->setAllDevicesInCommFail(true);
             }
 
             if (!recoveryInProgress)
@@ -4643,9 +4644,11 @@ static void responseHandler(const char *responseType, ZHAL_STATUS resultCode)
     {
         bool operationRejected = (resultCode == ZHAL_STATUS_NETWORK_BUSY);
 
-        if (watchdogDelegate)
+        g_autoptr(ZigbeeWatchdogDelegate) watchdogDelegateRef = zigbeeWatchdogDelegateAcquire(watchdogDelegate);
+
+        if (watchdogDelegateRef)
         {
-            watchdogDelegate->zhalResponseHandler(operationRejected);
+            watchdogDelegateRef->zhalResponseHandler(operationRejected);
         }
     }
 }
