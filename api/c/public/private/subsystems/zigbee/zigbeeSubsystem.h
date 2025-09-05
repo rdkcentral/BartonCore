@@ -29,6 +29,7 @@
 
 #include "device-driver/device-driver.h"
 #include "zigbeeAttributeTypes.h"
+#include "zigbeeWatchdogDelegate.h"
 #include <cjson/cJSON.h>
 #include <deviceDescriptor.h>
 #include <icTypes/icLinkedList.h>
@@ -161,6 +162,25 @@ int zigbeeSubsystemUnregisterDiscoveryHandler(ZigbeeSubsystemDeviceDiscoveredHan
 int zigbeeSubsystemRegisterDeviceListener(uint64_t eui64, ZigbeeSubsystemDeviceCallbacks *callbacks);
 
 int zigbeeSubsystemUnregisterDeviceListener(uint64_t eui64);
+
+/**
+ * Set the optional watchdog delegate for zigbee subsystem operations.
+ *
+ * The watchdog delegate is optional and only needed to ensure the lower-level
+ * Zigbee stack is functional and restarts it when problems are detected. It
+ * provides monitoring capabilities for network communication status, busy states,
+ * and automatic recovery mechanisms for stack failures.
+ *
+ * IMPORTANT:
+ * - This must be called BEFORE zigbeeSubsystemInitialize().
+ * - Once the subsystem is initialized, the delegate cannot be set or changed.
+ * - A delegate that has NULL mandatory function pointers will be rejected
+ *   during registration.
+ *
+ * @param delegate The watchdog delegate implementation (ownership transferred)
+ * @return true if the delegate is valid and was set successfully, false otherwise
+ */
+bool zigbeeSubsystemSetWatchdogDelegate(ZigbeeWatchdogDelegate *delegate);
 
 // increment the discovering device count.  Discovery runs until the count is decremented to zero
 int zigbeeSubsystemStartDiscoveringDevices(void);
