@@ -321,12 +321,12 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     assert_false(zigbeeSubsystemSetWatchdogDelegate(NULL));
 
     // Invalid delegate - all function pointers NULL
-    ZigbeeWatchdogDelegate *invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    ZigbeeWatchdogDelegate *invalidDelegate = zigbeeWatchdogDelegateCreate();
     assert_false(zigbeeSubsystemSetWatchdogDelegate(invalidDelegate));
     invalidDelegate = NULL;
 
     // Invalid delegate - some mandatory pointers NULL
-    invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    invalidDelegate = zigbeeWatchdogDelegateCreate();
     invalidDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
     invalidDelegate->petZhal = mockWatchdogPetZhal;
     invalidDelegate->restartZhal = NULL;
@@ -338,7 +338,7 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     invalidDelegate = NULL;
 
     // Valid delegate
-    ZigbeeWatchdogDelegate *validDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    ZigbeeWatchdogDelegate *validDelegate = zigbeeWatchdogDelegateCreate();
     validDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
     validDelegate->petZhal = mockWatchdogPetZhal;
     validDelegate->restartZhal = mockWatchdogRestartZhal;
@@ -350,7 +350,7 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     assert_true(zigbeeSubsystemSetWatchdogDelegate(validDelegate));
 
     // Test invalid delegate is rejected when one already exists
-    invalidDelegate = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    invalidDelegate = zigbeeWatchdogDelegateCreate();
     invalidDelegate->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
     invalidDelegate->petZhal = mockWatchdogPetZhal;
     invalidDelegate->restartZhal = NULL;
@@ -362,7 +362,7 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     invalidDelegate = NULL;
 
     // test valid delegate is rejected when one already exists
-    ZigbeeWatchdogDelegate *validDelegate2 = (ZigbeeWatchdogDelegate *) calloc(1, sizeof(ZigbeeWatchdogDelegate));
+    ZigbeeWatchdogDelegate *validDelegate2 = zigbeeWatchdogDelegateCreate();
     validDelegate2->setAllDevicesInCommFail = mockWatchdogSetAllDevicesInCommFail;
     validDelegate2->petZhal = mockWatchdogPetZhal;
     validDelegate2->restartZhal = mockWatchdogRestartZhal;
