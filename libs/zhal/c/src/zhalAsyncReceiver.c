@@ -40,7 +40,7 @@
 #include <unistd.h>
 
 #define ZHAL_EVENT_PORT            8711
-#define ZHAL_EVENT_MULTICAST_GROUP "225.0.0.51"
+
 #define ASYNC_RECVBUF_SIZE         (64 * 1024)
 #define STOP_WAIT_MILLIS           (250L)
 
@@ -191,27 +191,6 @@ static int setupAsyncSocket()
         return -1;
     }
 
-    /*
-     * We could utilize IP_ADD_SOURCE_MEMBERSHIP here, however, it does not
-     * limit reception of packets from non-source address when handling
-     * 224.0.0.1 (Broadcast all systems).
-     *
-     * Currently, it has been helpful to identify known kernel bugs within
-     * multicast by allowing plain IP_ADD_MEMBERSHIP and auditing any
-     * non-local loopback senders.
-     */
-
-    struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr(ZHAL_EVENT_MULTICAST_GROUP);
-    mreq.imr_interface.s_addr = htonl(INADDR_LOOPBACK);
-    rc = setsockopt(sockFD, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
-    if (rc < 0)
-    {
-        icLogError(LOG_TAG, "unable to join multicast group for listener : %s", strerror(errno));
-        close(sockFD);
-        return -1;
-    }
-
     return sockFD;
 }
 
@@ -266,8 +245,6 @@ static void *asyncReceiverThreadProc(void *arg)
         }
 
         recvBuf[nbytes] = '\0'; // null terminate
-
-        // icLogDebug(LOG_TAG, "received: %s", recvBuf);
 
         /*
          * Only handle packets sent from our local loopback. Any other
