@@ -36,6 +36,7 @@
 #include <unistd.h>
 
 #include "zhalAsyncReceiver.h"
+#include "zhalDataScrubber.h"
 #include "zhalEventHandler.h"
 #include "zhalPrivate.h"
 #include <cjson/cJSON.h>
@@ -865,9 +866,9 @@ static bool workOnItem(WorkItem *item, void *arg)
         return true;
     }
 
-    char *json = cJSON_PrintUnformatted(item->request);
-    icLogDebug(LOG_TAG, "Worker processing JSON: %s", json);
-    free(json);
+    // This filters out any sensitive data, if present, that should not be logged
+    scoped_generic char *filteredJson = zhalFilterJsonForLog(item->request);
+    icLogDebug(LOG_TAG, "Worker processing JSON: %s", filteredJson);
 
     // put in asyncRequests
     pthread_mutex_lock(&asyncRequestsMutex);
