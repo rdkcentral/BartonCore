@@ -632,9 +632,10 @@ static void zigbeeSubsystemShutdown(void)
     }
 
     mutexLock(&watchdogDelegateMtx);
-    zigbeeWatchdogDelegateRelease(watchdogDelegate);
-    watchdogDelegate = NULL;
+    ZigbeeWatchdogDelegate *localWatchdogDelegate = g_steal_pointer(&watchdogDelegate);
     mutexUnlock(&watchdogDelegateMtx);
+
+    zigbeeWatchdogDelegateRelease(g_steal_pointer(&localWatchdogDelegate));
 
     // clean up any premature cluster commands we may have received while in discovery
     pthread_mutex_lock(&prematureClusterCommandsMtx);
