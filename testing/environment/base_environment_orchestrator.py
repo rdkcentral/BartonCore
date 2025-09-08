@@ -32,7 +32,7 @@ from threading import Condition
 import shutil
 
 import gi
-gi.require_version("BCore", "1.0")
+gi.require_version("BCore", "2.0")
 from gi.repository import BCore
 
 from testing.credentials import network_credentials_provider
