@@ -35,7 +35,7 @@ import shutil
 # about this in the top-level CMakeLists.txt file.
 import subprocess
 
-describeCompletedProcess = subprocess.run(
+describe_completed_process = subprocess.run(
     ["git", "describe", "--tags", "--match", "[0-9]*.[0-9]*.[0-9]*"],
     capture_output=True,
     text=True,
@@ -44,7 +44,7 @@ describeCompletedProcess = subprocess.run(
 # Extract the major version from the semver string (e.g., '1.2.3' -> 1)
 import re
 
-semver_str = describeCompletedProcess.stdout.strip()
+semver_str = describe_completed_process.stdout.strip()
 major_version = None
 match = re.match(r"(\d+)\.\d+\.\d+", semver_str)
 if match:
