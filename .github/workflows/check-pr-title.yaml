@@ -59,4 +59,4 @@ jobs:
                     PR_NUM: ${{ github.event.pull_request.number }}
                     PR_TITLE: ${{ github.event.pull_request.title }}
                 run: |
-                    run: cog verify ${{ env.PR_TITLE }}
+                    cog verify "${{ env.PR_TITLE }}"
