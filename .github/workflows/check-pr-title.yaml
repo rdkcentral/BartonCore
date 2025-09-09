@@ -55,8 +55,6 @@ jobs:
             -
                 name: Lint PR title and Report Errors
                 env:
-                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                    PR_NUM: ${{ github.event.pull_request.number }}
                     PR_TITLE: ${{ github.event.pull_request.title }}
                 run: |
                     cog verify "${{ env.PR_TITLE }}"
