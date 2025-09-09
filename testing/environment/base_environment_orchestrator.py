@@ -31,8 +31,30 @@ from pathlib import Path
 from threading import Condition
 import shutil
 
+# Get the expected gir version dynamically. There is some additional information
+# about this in the top-level CMakeLists.txt file.
+import subprocess
+
+describe_completed_process = subprocess.run(
+    ["git", "describe", "--tags", "--match", "[0-9]*.[0-9]*.[0-9]*"],
+    capture_output=True,
+    text=True,
+)
+
+# Extract the major version from the semver string (e.g., '1.2.3' -> 1)
+import re
+
+semver_str = describe_completed_process.stdout.strip()
+major_version = None
+match = re.match(r"(\d+)\.\d+\.\d+", semver_str)
+if match:
+    major_version = match.group(1)
+else:
+    raise ValueError("Could not parse version string: " + semver_str)
+
+
 import gi
-gi.require_version("BCore", "2.0")
+gi.require_version("BCore", major_version + ".0")
 from gi.repository import BCore
 
 from testing.credentials import network_credentials_provider
