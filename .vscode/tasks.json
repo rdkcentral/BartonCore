@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run unit tests",
+            "type": "shell",
+            "command": "ctest --output-on-failure --test-dir ${workspaceFolder}/build",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "Run integration tests",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/ci/run_integration_tests.sh",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "Run all tests",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Run unit tests", "Run integration tests"],
+            "group": {
+                "kind": "test",
+                // Setting this value to true will make this task execute when
+                // `Tasks: Run Test Task` command is selected in the command pallette.
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}
