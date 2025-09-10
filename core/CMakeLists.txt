@@ -138,7 +138,7 @@ if (BCORE_MATTER)
         ${MATTER_PROVIDER_HEADER_PATHS}
         ${MATTER_DELEGATE_HEADER_PATHS})
 
-    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} certifier jsoncpp)
+    list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
 
@@ -317,6 +317,9 @@ if (BCORE_GEN_GIR)
     # We need to run gen_pygobject_stubs after install for it to work.
     install(CODE "execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/gen_pygobject_stubs)")
 endif()
+
+# temporary until zhal is relocated to its own repo
+add_subdirectory(src/zhal/c)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/api/c/test ${PROJECT_BINARY_DIR}/api/c/test)
 add_subdirectory(test)

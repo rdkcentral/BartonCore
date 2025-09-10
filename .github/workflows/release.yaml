@@ -3,7 +3,7 @@
 # If not stated otherwise in this file or this component's LICENSE file the
 # following copyright and licenses apply:
 #
-# Copyright 2024 Comcast Cable Communications Management, LLC
+# Copyright 2025 Comcast Cable Communications Management, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,14 +21,39 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-add_subdirectory(concurrent/c)
-add_subdirectory(config/c)
-add_subdirectory(crypto/c)
-add_subdirectory(device)
-add_subdirectory(json/c)
-add_subdirectory(log/c)
-add_subdirectory(time/c)
-add_subdirectory(types/c)
-add_subdirectory(url/c)
-add_subdirectory(util/c)
-add_subdirectory(xml/c)
+#
+# Created by Christian Leithner on 9/2/2025.
+#
+
+name: Release
+permissions:
+  contents: write
+
+on:
+    workflow_dispatch:
+
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RDKCM_DEPLOY_KEY }}
+
+      - name: Semver release
+        id: release
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          release: true
+
+      - name: Generate Changelog
+        run: cog changelog --at ${{ steps.release.outputs.version }} > CHANGELOG.md
+
+      - name: Upload github release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: CHANGELOG.md
+          tag_name: ${{ steps.release.outputs.version }}

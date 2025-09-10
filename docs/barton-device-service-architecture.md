@@ -1,91 +1,55 @@
 # Barton Device Service Overview
-In Barton, Device Service is responsible for the management and interactions
-with all devices.  Devices can connect with various protocols and technologies
-including Zigbee, Matter, and OpenHome. Note that much of the discussion in this
-documentation is about Zigbee devices, but many of the concepts applies to
-devices on other technologies.  Devices belong to a Device Class which defines
-the type of device.  Some examples of Device Classes are Camera, Light, Door Lock,
-and Sensor (and many others).  Each Device Class supports one or more
-endpoints, each of which supports an Endpoint Profile.  An endpoint on a device
-can be thought of as a port number in networking.  An endpoint provides a
-logical set of functionality such as a light switch.  For example, a single
-physical device such as a refrigerator could have endpoints for temperature,
-lights, door sensors, etc.
 
-Devices are exposed to clients as a set of resources that can be read, written,
-and executed depending on their type and purpose.  More details on how devices
-are composed and how to interact with their resources are below.
+Barton is a sophisticated system that provides management, control, state change notifications,
+and configuration of any kind of device with a common API and data model. Devices can use any
+protocol and technology including Zigbee, Matter, and proprietary methods, without the Barton API
+client's awareness. This design means clients can interact with devices without awareness of the
+underlying technology or protocol. When new device support is added, clients can often gain the
+new functionality without any changes.
 
-![arch](barton-core-arch.png)
+![Archetecture Overview](images/arch-overview.png)
 
-# Hardware Dependencies
-Device Service can function without any hardware dependencies, however its
-capabilities might be reduced.  Below are the common potential hardware
-dependencies depending on configuration.
-## Zigbee
-If Device Service is built with Zigbee support there should be an implementation of
-ZHAL, which is the Zigbee Hardware Abstraction Layer.  This HAL is an atypical HAL
-due to the high level application capabilities it is required to provide.  The intent
-of ZHAL is to enable portability to different Zigbee stack and silicon vendors.  These
-stacks typically provide high level features such as OTA software updating, however if
-a stack does not provide these features, the ZHAL implementor must. See
-[ZIGBEE_SUPPORT.md](ZIGBEE_SUPPORT.md) for more information.
-## Thread
-If Device Service is built with Thread support it will backup and restore configuration
-for a local OpenThread Border Router instance.  Additionally it will retrieve and use
-the associated Thread network credentials when commissioning Matter over Thread devices.
-Additional capabilities such as detailed Thread network health monitoring, Thread 1.4
-ephemeral code commissioning and others are anticipated enhanceents.  Device Service
-expects an OpenThread API over dbus. See [THREAD_SUPPORT.md](THREAD_SUPPORT.md) for
-more information.
-## Bluetooth/BLE
-If Device Service is built with BLE support, Matter devices may be commissioned directly
-by Device Service for Thread or Wi-Fi Operational Network access.  Device Service, the
-Matter stack actually, expects a Bluez API over dbus.
-## Matter
-Matter has no hardware requirements for basic functionality since it is an IPv6 based
-specification.  It can make use of Thread and BLE for commissioning of new devices,
-but after a device has been commissioned for the first time (by any admin/Fabric),
-subsequent commissioning is performed only over IPv6. See
-[MATTER_SUPPORT.md](MATTER_SUPPORT.md) for more information.
+Barton is appropriate for any device that controls other devices. If such a device is also
+controlled by other devices, it is still appropriate. If a device is only controlled by other
+devices and is not itself a controller, it probably is not the right solution.
 
+Barton's API is GObject based and is self-documenting. It can be used to generate bindings for many
+languages including C, C++, Python, Java, and JavaScript. The API is designed to be easy to use and
+understand, making it accessible to developers of all skill levels.
 
-# Key Concepts
-## Device Descriptor List (aka Whitelist / Allowlist)
-Zigbee devices that are allowed to be commissioned can be controlled through
-an 'allow list' which consists of Device Descriptors for each allowed device.
-This list is published to a content server and provided to Barton when it
-changes.
+# Device Data Model
 
-When a Zigbee device joins the network as part of the pairing process Barton
-reads its manufacturer name, model, hardware version, and firmware version.
-These 4 attributes are used to locate the appropriate Device Descriptor.  If no
-Descriptor is found, the device is rejected and told to leave the network.  An
-example of a Device Descriptor is:
+Barton provides a common resource model for all devices. Resources can be read to determine the
+current state, or written and executed to change the state of the device. As a device changes
+state, resource changed events may be emitted. The resources available for each device and their
+function is dictated by their composition which is defined and discoverable through Device Classes
+and Endpoint Profiles.
 
-~~~xml
-<DeviceDescriptor>
-   <uuid>f7d49c2b-7324-4857-96eb-cdee9a44d996</uuid>
-   <description>ZigBee_Gen2_PIR_Std</description>
-   <category>zigbee</category>
-   <manufacturer>Bosch</manufacturer>
-   <model>RFPR-ZB-MS</model>
-   <hardwareVersions>19</hardwareVersions>
-   <firmwareVersions>0x21115401,0x22115401,0x23115401,0x23125401,0x23125402</firmwareVersions>
-   <latestFirmware>
-      <version>0x23125402</version>
-      <filename>Bosch_Motion_G2_V23125402.ota</filename>
-      <type>ota</type>
-   </latestFirmware>
-</DeviceDescriptor>
-~~~
+## Composition through Device Classes and Endpoint Profiles
 
-As shown, the Device Descriptor also contains information about the latest
-firmware for the device.  This is downloaded and supplied to the device if it
-needs a firmware upgrade.
+Devices belong to a Device Class which defines the type of device and acts as a contract for the
+device's composition.  Some examples of Device Classes are Camera, Light, Door Lock, and Sensor
+(and many others).  Each Device Class supports one or more endpoints, each of which belongs to an
+Endpoint Profile which is a contract for the endpoint's composition.  An endpoint on a device can
+be thought of as a port number in IP networking.  An endpoint provides a logical set of
+functionality such as a light switch.  For example, a single physical device such as a refrigerator
+could have endpoints for temperature, lights, door sensors, etc. This physical device would be
+represented in the device model as a Refrigerator Device Class which is defined as having mandatory
+endpoints for Endpoint Profiles Sensor (temperature), Light, and Sensor (contact switch). The
+Device Class specification could also contain optional Endpoint Profiles for other features a
+refrigerator may have — this is just an example.
 
-## Resource Model
-As previously described, devices use a URI based resource model to expose
+### Device Class Specifications
+
+TODO: document or link to specifications for each Device Class.
+
+### Endpoint Profile Specifications
+
+TODO: document or link to specifications for each Endpoint Profile
+
+## Resources
+
+Devices use a URI based resource model to expose
 functionality.  One architectural goal of the resource model is to hide the
 underlying technology that the device uses (Zigbee, Matter, etc.).  This allows
 clients of devices to function without change against devices of any class and
@@ -133,9 +97,74 @@ SecurityService will get notified to take appropriate action.
 Note that the relationship between resources and Zigbee attributes is not
 always 1:1.
 
-## Device Drivers
-Device Drivers are bits of code responsible for the mapping of resources to
-functionality on a device.  The current set of drivers available in Barton are:
+# Protocol Support
+
+If a particular device technology or protocol requires some management or coordination with related
+Device Drivers (described later), a corresponding Subsystem is provided by Barton. Subsystems are
+not required if management or coordination is not needed, for example simple IP communication.
+Below are the currently available Subsystems.
+
+## Matter
+
+Matter support is provided by the Matter Subsystem, which is responsible for:
+
+* Initialization of the Matter SDK
+* Operational Credentials Issuers
+  * Self-signed certificates (for testing)
+  * Comcast’s publicly available xPKI service
+  * Other issuers through Barton’s helper abstractions
+* Device Attestation Provider through Barton’s helper abstractions
+* Simplified commissioner interface
+* Device communication health monitoring
+* Runtime property interface for easy and flexible storage options
+* The Matter SDK’s gmain loop
+* DCL retrieval (TBD)
+* OTA firmware updates based on DCL entries (TBD)
+
+## Zigbee
+
+The Zigbee Subsystem interacts with the Zigbee Hardware Abstraction Layer (ZHAL) and is responsible
+for:
+
+* Initialization of the Zigbee network
+* Backup and restore of the Zigbee network configuration (also useful for RMA scenarios)
+* Zigbee network monitoring and statistics collection
+* Interfaces for sending and receiving Zigbee messages, attribute reports, and stack events
+* Device Descriptor List (DDL) processing (see Device Descriptor List section)
+* OTA firmware updates based on DDL entries
+* Device communication health monitoring
+
+## Thread
+
+The Thread Subsystem interacts with the OpenThread Border Router Agent in order to:
+
+* Backup and restore the Thread network (useful for RMA scenarios)
+* Border router status monitoring
+* Thread network health monitoring (TBD)
+
+## Proprietary
+
+Barton does not currently contain implementations of proprietary Subsystems, however Barton’s
+Subsystem Manager interface supports them if desired.
+
+# Device Drivers
+
+Device Drivers provide the mapping between Barton resources and over-the-air (or over-the-wire)
+interactions with specific types of devices. They are responsible for implementing Device Classes
+for a particular technology.  For example, MatterLightDeviceDriver and ZigbeeLightDeviceDriver are
+two drivers that implement the same device class on different technology stacks. Drivers may or may
+not depend upon a Subsystem.
+
+Drivers are responsible for participating in the device discovery process and ‘claim’ discovered
+devices through a matching process triggered after details of a device are discovered. Once a
+driver claims the device, an entry is created, and persisted, representing the instance and
+associated with the driver. Subsequent interactions with the device are performed through the
+device driver. For example, Device Drivers supporting the Light Device Class are required to have a
+resource on at least one Endpoint called “isOn”.  Writing “true” to this resource would result in
+sending a command to the device over whatever technology/protocol is required to change the light’s
+state to “on”.
+
+The current set of drivers available in Barton are:
 
 * MatterDoorLock
 * MatterLight
@@ -149,17 +178,134 @@ functionality on a device.  The current set of drivers available in Barton are:
 * zigbeeThermostat
 * zigbeeWindowCovering
 
-Drivers are responsible for the configuration of a device (performed during
-pairing), creation of its resources, and reacting to changes from the device
-and to its resources.
+# Hardware Dependencies
 
-## Subsystems
-Subsystems in Device Service provide access to lower level parts of the stack
-in a manner safe for concurrent use by device drivers.  Currently Barton has a
-subsystem for Zigbee, Matter, and Thread.  Future subsystems for BLE and others are
-possible.
+Device Service can function without any hardware dependencies, however its capabilities might be
+reduced.  Below are the common potential hardware dependencies depending on configuration.
 
-## Database
+## Matter
+
+Matter has no hardware requirements for basic functionality since it is an IPv6-based specification.
+It can make use of Thread and BLE for commissioning of new devices, but after a device has been
+commissioned for the first time (by any admin/Fabric), subsequent commissioning is performed only
+over IPv6. Commissioned Thread devices communicate over IPv6 and could be routed from any Border
+Router (on the same device as Barton or somewhere else on the network).
+See [MATTER_SUPPORT.md](MATTER_SUPPORT.md) for more information.
+
+## Zigbee
+
+If Barton is built with Zigbee support, there should be an implementation of ZHAL, which is
+the Zigbee Hardware Abstraction Layer defined by Barton. This HAL is an atypical HAL due to the
+high-level application capabilities it is required to provide. The intent of ZHAL is to enable
+portability to different Zigbee stack and silicon vendors. These stacks typically provide high-level
+features such as OTA software updating; however, if a stack does not provide these features, the
+ZHAL implementation must. See [ZIGBEE_SUPPORT.md](ZIGBEE_SUPPORT.md) for more information.
+
+## Thread
+
+If Device Service is built with Thread support, it will backup and restore configuration for a local
+OpenThread Border Router instance. Additionally, it will retrieve and use the associated Thread
+network credentials when commissioning Matter over Thread devices. Additional capabilities such as
+detailed Thread network health monitoring, Thread 1.4 ephemeral code commissioning, and others are
+anticipated enhancements. Device Service expects an OpenThread API over dbus. See
+[THREAD_SUPPORT.md](THREAD_SUPPORT.md) for more information.
+
+## Bluetooth/BLE
+
+Barton does not directly depend on Bluetooth support. If the Matter support has Bluetooth enabled,
+Matter devices may be commissioned directly for Thread or Wi-Fi Operational Network access. The
+Matter stack expects a Bluez API over dbus on Linux.
+
+# Device Descriptor List (DDL)
+
+Note: The DDL currently only applies to Zigbee devices.
+
+Zigbee devices that are allowed to be commissioned can be controlled through
+an 'allow list' which consists of Device Descriptors for each allowed device.
+This list is published to a content server and provided to Barton when it
+changes.
+
+When a Zigbee device joins the network as part of the pairing process Barton
+reads its manufacturer name, model, hardware version, and firmware version.
+These 4 attributes are used to locate the appropriate Device Descriptor.  If no
+Descriptor is found, the device is rejected and told to leave the network.  An
+example of a Device Descriptor is:
+
+## Customized Configuration
+
+TODO
+
+~~~
+<DeviceDescriptor>
+   <uuid>f7d49c2b-7324-4857-96eb-cdee9a44d996</uuid>
+   <description>ZigBee_Gen2_PIR_Std</description>
+   <category>zigbee</category>
+   <manufacturer>Bosch</manufacturer>
+   <model>RFPR-ZB-MS</model>
+   <hardwareVersions>19</hardwareVersions>
+   <firmwareVersions>0x21115401,0x22115401,0x23115401,0x23125401,0x23125402</firmwareVersions>
+   <latestFirmware>
+      <version>0x23125402</version>
+      <filename>Bosch_Motion_G2_V23125402.ota</filename>
+      <type>ota</type>
+   </latestFirmware>
+</DeviceDescriptor>
+~~~
+
+As shown, the Device Descriptor also contains information about the latest
+firmware for the device.  This is downloaded and supplied to the device if it
+needs a firmware upgrade.
+
+## Restricting Which Devices are Allowed
+
+TODO
+
+# Firmware Management
+
+TODO
+
+## Zigbee
+Most Zigbee devices are compliant with the Over the Air Upgrade cluster's
+firmware management mechanisms that were introduced with the Home Automation
+profile version 1.2.
+
+As mentioned in the Device Descriptor section, when a new firmware image is
+available for a device, the Device Descriptor List (aka whitelist/allowlist) is
+updated with the new firmware version number and filename.  When this updated
+list is published and provided to Barton it is scanned for descriptors
+matching paired devices.  If a paired device needs an upgrade its file is
+downloaded from the content server.  This upgrade mechanism is
+"pulled" from the device through image block requests made to the Zigbee stack.
+The process starts when the device sends a "query next image" request which
+contains its current firmware version.  The response will indicate if
+the Zigbee stack has a newer image for it and the device will start pulling
+blocks until it finishes.
+
+This upgrade mechanism can take a while, especially on battery powered devices.
+While the device is downloading the firmware image it remains fully functional
+until the image is fully downloaded and verified at which point it reboots to
+the new image.  Reboots typically take less than a second.
+
+Note that once a firmware image for a device is downloaded an "image notify"
+command is sent to the device in an attempt to start the upgrade immediately,
+however many of our devices are "sleepy" so they will not receive this message.
+Devices are required to check once a day, minimum, to see if the Zigbee stack
+has a new firmware image available.
+
+# Device Connectivity Monitoring
+Barton has a component that is responsible for detecting communication
+failure with the devices it manages.  Once the Device Communication Watchdog
+determines that a device is in communication failure, the device's
+communicationFailure resource (/000d6f000f486af8/r/communicationFailure from
+the example device earlier) is set to "true".  This triggers a resource changed
+event that can be handled by project specific business logic.
+
+For Zigbee devices, the watchdog tracks the amount of time since the last
+successful message to or from the device.  By default the watchdog will report
+communication failure after 1 hour without any successful communication.  This
+allows for two missed checkin intervals, which are configured for 27 minutes.
+
+# Database
 Device Service stores all of its configuration in individual files. An example
 directory listing is:
 
@@ -592,61 +738,3 @@ details.  For example:
     "currentDeviceDescriptorMd5":   "95c55b67c9cfe93318be19c7a6eab752"
 }
 ~~~
-
-## Device Communication Watchdog
-Device Service has a component that is responsible for detecting communication
-failure with the devices it manages.  Once the Device Communication Watchdog
-determines that a device is in communication failure, the device's
-communicationFailure resource (/000d6f000f486af8/r/communicationFailure from
-the example device earlier) is set to "true".  This triggers a resource changed
-event that can be handled by project specific business logic.
-
-For Zigbee devices, the watchdog tracks the amount of time since the last
-successful message to or from the device.  By default the watchdog will report
-communication failure after 1 hour without any successful communication.  This
-allows for two missed checkin intervals, which are configured for 27 minutes.
-
-# Zigbee Support
-Zigbee stack implementations are external to this repository and follow this
-general architecture:
-
-![zigbee-arch](zigbee-arch.png)
-
-## ZigbeeSubsystem
-The ZigbeeSubsystem is a layer in between Zigbee device drivers and ZHAL
-responsible for safely sharing the Zigbee infrastructure between device
-drivers.
-
-## ZHAL
-ZHAL is the Zigbee Hardware Abstraction Layer.  It is a C library
-(libs/zhal) that converts function calls and events into IPC to the
-Zigbee implementation.
-
-# Zigbee Firmware Management
-Most Zigbee devices are compliant with the Over the Air Upgrade cluster's
-firmware management mechanisms that were introduced with the Home Automation
-profile version 1.2.
-
-As mentioned in the Device Descriptor section, when a new firmware image is
-available for a device, the Device Descriptor List (aka whitelist/allowlist) is
-updated with the new firmware version number and filename.  When this updated
-list is published and provided to Barton it is scanned for descriptors
-matching paired devices.  If a paired device needs an upgrade its file is
-downloaded from the content server.  This upgrade mechanism is
-"pulled" from the device through image block requests made to the Zigbee stack.
-The process starts when the device sends a "query next image" request which
-contains its current firmware version.  The response will indicate if
-the Zigbee stack has a newer image for it and the device will start pulling
-blocks until it finishes.
-
-This upgrade mechanism can take a while, especially on battery powered devices.
-While the device is downloading the firmware image it remains fully functional
-until the image is fully downloaded and verified at which point it reboots to
-the new image.  Reboots typically take less than a second.
-
-Note that once a firmware image for a device is downloaded an "image notify"
-command is sent to the device in an attempt to start the upgrade immediately,
-however many of our devices are "sleepy" so they will not receive this message.
-Devices are required to check once a day, minimum, to see if the Zigbee stack
-has a new firmware image available.
-

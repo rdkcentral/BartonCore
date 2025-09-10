@@ -15,14 +15,14 @@ BartonCore is a comprehensive IoT device service framework designed to manage an
 
 ## Introduction
 
-BartonCore produces a resource sensitive C/C++ based library that represents a local IoT device management and access service.
+BartonCore produces a library for local IoT device management including a unified resource data model for devices implemented with any technology or protocol.
 A client of the library would typically expose the provided functionality to a local or cloud based service or user interface.
 These clients interface with the supported devices through a resource model that abstracts the underlying protocols and transports.
 This abstraction allows for the seamless extension of new protocols, transports, and device types through a pluggable extension design.
 
 The library provides device facilities for:
  - discovery
- - pairing (including secure credentialling)
+ - commissioning/pairing (including secure credentialling)
  - configuration
  - firmware management
  - control

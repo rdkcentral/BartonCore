@@ -38,7 +38,6 @@ set(OPENSSL_MAX_VERSION 1.1.1v)
 set(UUID_MIN_VERSION 1.0.3)
 set(XML_MIN_VERSION 2.9.8)
 set(MBEDCRYPTO_MIN_VERSION 2.28.4)
-set(LIBCERTIFIER_MIN_VERSION 2.2.2)
 
 # We depend on dbus client library and some headers but versioning may not
 # exist for those, so we'll just let the linker find it and pray it
@@ -61,7 +60,3 @@ bcore_find_package(NAME libssl MIN_VERSION ${OPENSSL_MIN_VERSION} MAX_VERSION ${
 bcore_find_package(NAME uuid MIN_VERSION ${UUID_MIN_VERSION} REQUIRED)
 bcore_find_package(NAME libxml-2.0 MIN_VERSION ${XML_MIN_VERSION} REQUIRED)
 bcore_find_package(NAME mbedcrypto MIN_VERSION ${MBEDCRYPTO_MIN_VERSION} REQUIRED)
-
-if (BCORE_MATTER)
-    bcore_find_package(NAME certifier MIN_VERSION ${LIBCERTIFIER_MIN_VERSION} REQUIRED)
-endif()

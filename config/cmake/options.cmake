@@ -119,7 +119,7 @@ function(bcore_int_option)
 endfunction()
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
-message(STATUS "Barton Device Service ON/OFF Configs")
+message(STATUS "Barton Core ON/OFF Configs")
 
 bcore_option(NAME BCORE_ZIGBEE
            DEFINITION BARTON_CONFIG_ZIGBEE
@@ -168,7 +168,7 @@ bcore_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
-message(STATUS "Barton Device Service PRIVATE ON/OFF Configs. These options should not be used by new clients.")
+message(STATUS "Barton Core PRIVATE ON/OFF Configs. These options should not be used by new clients.")
 
 bcore_option(NAME BCORE_PROVIDE_LIBS
            DEFINITION BARTON_CONFIG_PROVIDE_LIBS
@@ -189,7 +189,7 @@ bcore_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
-message(STATUS "Barton Device Service String Configs.")
+message(STATUS "Barton Core String Configs.")
 
 bcore_string_option(NAME BCORE_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
@@ -208,7 +208,8 @@ set(MATTER_DELEGATE_DEFAULT_DIR "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/delegate
 bcore_string_option(NAME BCORE_MATTER_PROVIDER_IMPLEMENTATIONS
                   DEFINITION BARTON_CONFIG_MATTER_PROVIDER_IMPLEMENTATIONS
                   DESCRIPTION "List of paths to source files that implement Matter provider interfaces."
-                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/CertifierDACProvider.cpp"
+                  VALUE "${MATTER_PROVIDER_DEFAULT_DIR}/BartonTestDACProvider.cpp"
+                        "${MATTER_PROVIDER_DELEGATE_PARENT_DIR}/providers/BartonCommissionableDataProvider.cpp"
                         "${MATTER_PROVIDER_DEFAULT_DIR}/DefaultCommissionableDataProvider.cpp")
 
 bcore_string_option(NAME BCORE_MATTER_DELEGATE_IMPLEMENTATIONS
@@ -231,12 +232,12 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 bcore_string_option(NAME BCORE_LINK_LIBRARIES
                   DEFINITION BARTON_CONFIG_LINK_LIBRARIES
-                  DESCRIPTION "List of additional libraries to link against when building the Barton Device Service. This allows custom client code to depend on external libraries as well.")
+                  DESCRIPTION "List of additional libraries to link against when building the Barton Core. This allows custom client code to depend on external libraries as well.")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
-message(STATUS "Barton Device Service Integer Configs.")
+message(STATUS "Barton Core Integer Configs.")
 
 bcore_int_option(NAME BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS
                DEFINITION BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS
