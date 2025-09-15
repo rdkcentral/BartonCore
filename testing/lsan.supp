@@ -59,3 +59,11 @@ leak:python3
 # @see Glib gdbusproxy.[h|c]
 # @see Glib gdbusconnection.[h|c] (particularly g_dbus_connection_signal_subscribe)
 leak:chip::DeviceLayer::ThreadStackManagerImpl
+
+# This class appears to occassionally race with shutdown such that it attempts non-atomic initialization within a main loop context but the
+# loop is cleaned up during process shutdown right in the middle of the scheduled routine. This means that some glib types that are supposed
+# to be scheduled to cleanup on the main loop cannot.
+#
+# @see Matter Linux platform's BluezObjectManager.[h|cpp]
+# @see Matter Linux platform's PlatformManagerImpl::GLibMatterContextInvokeSync
+leak:chip::DeviceLayer::Internal::BluezObjectManager
