@@ -81,14 +81,15 @@ static bool migrate(uint16_t oldVersion, uint16_t newVersion);
 
 __attribute__((constructor)) __attribute__((used)) static void registerSubsystem(void)
 {
-    static Subsystem threadSubsystem = {.migrate = migrate,
-                                        .initialize = initialize,
-                                        .shutdown = shutdown,
-                                        .getStatusJson = getStatusJson,
-                                        .name = THREAD_SUBSYSTEM_NAME,
-                                        .version = THREAD_SUBSYSTEM_VERSION};
+    g_autoptr(Subsystem) threadSubsystem = createSubsystem();
+    threadSubsystem->migrate = migrate;
+    threadSubsystem->initialize = initialize;
+    threadSubsystem->shutdown = shutdown;
+    threadSubsystem->getStatusJson = getStatusJson;
+    threadSubsystem->name = THREAD_SUBSYSTEM_NAME;
+    threadSubsystem->version = THREAD_SUBSYSTEM_VERSION;
 
-    subsystemManagerRegister(&threadSubsystem);
+    subsystemManagerRegister(threadSubsystem);
 }
 
 /*
