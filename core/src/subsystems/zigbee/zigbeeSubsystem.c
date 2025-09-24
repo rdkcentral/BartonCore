@@ -375,21 +375,20 @@ static cJSON *getStatusJson(void);
 
 __attribute__((constructor)) static void registerSubsystem(void)
 {
-    static Subsystem zigbeeSubsystem = {
-        .name = ZIGBEE_SUBSYSTEM_NAME,
-        .onPostRestoreConfig = zigbeeSubsystemPostRestoreConfig,
-        .onAllServicesAvailable = zigbeeSubsystemAllServicesAvailable,
-        .onAllDriversStarted = zigbeeSubsystemAllDriversStarted,
-        .onRestoreConfig = zigbeeSubsystemRestoreConfig,
-        .onLPMStart = zigbeeSubsystemEnterLPM,
-        .onLPMEnd = zigbeeSubsystemExitLPM,
-        .setOtaUpgradeDelay = zigbeeSubsystemSetOtaUpgradeDelay,
-        .initialize = zigbeeSubsystemInitialize,
-        .shutdown = zigbeeSubsystemShutdown,
-        .getStatusJson = getStatusJson,
-    };
+    g_autoptr(Subsystem) zigbeeSubsystem = createSubsystem();
+    zigbeeSubsystem->name = ZIGBEE_SUBSYSTEM_NAME;
+    zigbeeSubsystem->onPostRestoreConfig = zigbeeSubsystemPostRestoreConfig;
+    zigbeeSubsystem->onAllServicesAvailable = zigbeeSubsystemAllServicesAvailable;
+    zigbeeSubsystem->onAllDriversStarted = zigbeeSubsystemAllDriversStarted;
+    zigbeeSubsystem->onRestoreConfig = zigbeeSubsystemRestoreConfig;
+    zigbeeSubsystem->onLPMStart = zigbeeSubsystemEnterLPM;
+    zigbeeSubsystem->onLPMEnd = zigbeeSubsystemExitLPM;
+    zigbeeSubsystem->setOtaUpgradeDelay = zigbeeSubsystemSetOtaUpgradeDelay;
+    zigbeeSubsystem->initialize = zigbeeSubsystemInitialize;
+    zigbeeSubsystem->shutdown = zigbeeSubsystemShutdown;
+    zigbeeSubsystem->getStatusJson = getStatusJson;
 
-    subsystemManagerRegister(&zigbeeSubsystem);
+    subsystemManagerRegister(zigbeeSubsystem);
 }
 
 static void waitForInitialZigbeeCoreStartup(void)

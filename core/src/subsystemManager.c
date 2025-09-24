@@ -26,6 +26,7 @@
 
 #include "deviceService.h"
 #include "deviceServiceConfiguration.h"
+#include "glib.h"
 #include "icUtil/stringUtils.h"
 #include "provider/barton-core-property-provider.h"
 #define LOG_TAG     "deviceService"
@@ -69,29 +70,131 @@ typedef struct
             g_hash_table_iter_init(&iter, (map));                                                                      \
             while (g_hash_table_iter_next(&iter, &key, &_value))                                                       \
             {                                                                                                          \
-                value = (SubsystemRegistration *) _value;                                                              \
+                g_autoptr(SubsystemRegistration) value =                                                               \
+                    subsystemRegistrationAcquire((SubsystemRegistration *) _value);                                    \
                 expr                                                                                                   \
             }                                                                                                          \
         }                                                                                                              \
     } while (0)
 
-static pthread_once_t initOnce = PTHREAD_ONCE_INIT;
-
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
 static GHashTable *subsystems;
 static bool allDriversStarted = false;
+static void subsystemPreRegistrationDestroy(void);
 static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
+static SubsystemRegistration *subsystemRegistrationAcquire(SubsystemRegistration *reg);
+static bool subsystemManagerInitialized = false;
 
+// Pre-registered subsystems are those that wish to be registered before the
+// subsystem manager is initialized. These are typically automatically registered
+// __attribute__((constructor)) functions in subsystem modules.
+static GList *preRegisteredSubsystems = NULL;
+
+__attribute__((constructor)) void registerPreRegistrationDestroy(void)
+{
+    atexit(subsystemPreRegistrationDestroy);
+}
+
+Subsystem *createSubsystem(void)
+{
+    Subsystem *retVal = g_atomic_rc_box_new0(Subsystem);
+    return g_steal_pointer(&retVal);
+}
+
+static void destroySubsystem(Subsystem *subsystem)
+{
+    // no members of Subsystem to free
+    return;
+}
+
+Subsystem *acquireSubsystem(Subsystem *subsystem)
+{
+    Subsystem *retVal = NULL;
+
+    if (subsystem)
+    {
+        retVal = g_atomic_rc_box_acquire(subsystem);
+    }
+
+    return retVal;
+}
+
+void releaseSubsystem(Subsystem *subsystem)
+{
+    if (subsystem)
+    {
+        g_atomic_rc_box_release_full(subsystem, (GDestroyNotify) destroySubsystem);
+    }
+}
+
+/**
+ * Create and initialize a new refcounted SubsystemRegistration.
+ *
+ * @param subsystem The subsystem to create a registration for
+ * @return Pointer to new reference counted SubsystemRegistration
+ */
+static SubsystemRegistration *createSubsystemRegistration(Subsystem *subsystem)
+{
+    SubsystemRegistration *retVal = g_atomic_rc_box_new0(SubsystemRegistration);
+    retVal->subsystem = acquireSubsystem(subsystem);
+    mutexInitWithType(&retVal->mtx, PTHREAD_MUTEX_ERRORCHECK);
+    retVal->ready = false;
+
+    return g_steal_pointer(&retVal);
+}
+
+/**
+ * Acquires a pointer to the reference counted SubsystemRegistration, with its reference count increased.
+ *
+ * @param reg pointer to reference counted SubsystemRegistration
+ */
+static SubsystemRegistration *subsystemRegistrationAcquire(SubsystemRegistration *reg)
+{
+    SubsystemRegistration *retVal = NULL;
+
+    if (reg)
+    {
+        retVal = g_atomic_rc_box_acquire(reg);
+    }
+
+    return retVal;
+}
+
+/**
+ * Cleans up contents of SubsystemRegistration - GLib frees the struct itself when refcount reaches zero
+ */
 static void subsystemRegistrationDestroy(SubsystemRegistration *reg)
 {
-    pthread_mutex_destroy(&reg->mtx);
-    free(reg);
+    if (reg)
+    {
+        pthread_mutex_destroy(&reg->mtx);
+        releaseSubsystem((Subsystem *) reg->subsystem);
+    }
 }
+
+/**
+ * Release a SubsystemRegistration. This will decrement the refcount and destroy the SubsystemRegistration if the
+ * refcount reaches zero.
+ *
+ * @param reg pointer to reference counted SubsystemRegistration
+ */
+static void subsystemRegistrationRelease(SubsystemRegistration *reg)
+{
+    if (reg)
+    {
+        g_atomic_rc_box_release_full(reg, (GDestroyNotify) subsystemRegistrationDestroy);
+    }
+}
+
+/*
+ * Convenience macro to declare a scope bound SubsystemRegistration
+ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(SubsystemRegistration, subsystemRegistrationRelease)
 
 static void subsystemRegistrationMapDestroy(void *value)
 {
-    subsystemRegistrationDestroy(value);
+    subsystemRegistrationRelease((SubsystemRegistration *) value);
 }
 
 /**
@@ -106,7 +209,7 @@ static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
         return;
     }
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystem));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -161,47 +264,51 @@ static void onSubsystemDeinitialized(const char *subsystem)
 }
 
 /**
- * Called by atexit
+ * @brief Cleanup pre-registered subsystems at program exit.
  */
-static void unregisterSubsystems(void)
+static void subsystemPreRegistrationDestroy(void)
 {
-    g_hash_table_destroy(subsystems);
-    subsystems = NULL;
+    WRITE_LOCK_SCOPE(mutex);
+    g_list_free_full(preRegisteredSubsystems, (GDestroyNotify) releaseSubsystem);
+    preRegisteredSubsystems = NULL;
 }
 
-void subsystemManagerRegister(Subsystem *subsystem)
+/**
+ * Helper to register a subsystem to a specific hash table
+ *
+ * @param subsystem The subsystem to register
+ */
+static void subsystemManagerRegisterToTable(Subsystem *subsystem, GHashTable *table)
 {
-    if (subsystem == NULL || subsystem->initialize == NULL || subsystem->name == NULL)
+    if (subsystem == NULL || subsystem->initialize == NULL || subsystem->name == NULL || table == NULL)
     {
         icLogError(LOG_TAG, "%s: Can't register subsystem with unknown type or no initializer!", __func__);
         return;
     }
 
-    SubsystemRegistration *registration = malloc(sizeof(SubsystemRegistration));
-    registration->subsystem = subsystem;
-    mutexInitWithType(&registration->mtx, PTHREAD_MUTEX_ERRORCHECK);
-    registration->ready = false;
+    SubsystemRegistration *registration = createSubsystemRegistration(subsystem);
 
+    if (!g_hash_table_insert(table, (char *) subsystem->name, registration))
     {
-        WRITE_LOCK_SCOPE(mutex);
+        icLogWarn(LOG_TAG, "%s: unable to register subsystem '%s'!", __func__, subsystem->name);
+        subsystemRegistrationDestroy(registration);
+    }
+    else
+    {
+        icLogInfo(LOG_TAG, "subsystem '%s' registered", subsystem->name);
+    }
+}
 
-        if (subsystems == NULL)
-        {
-            subsystems =
-                g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify) subsystemRegistrationMapDestroy);
-            atexit(unregisterSubsystems);
-        }
-
-        if (!g_hash_table_insert(subsystems, (char *) subsystem->name, registration))
-        {
-            subsystemRegistrationDestroy(registration);
-            registration = NULL;
-            icLogWarn(LOG_TAG, "%s: unable to register subsystem '%s'!", __func__, subsystem->name);
-        }
-        else
-        {
-            icLogInfo(LOG_TAG, "subsystem '%s' registered", subsystem->name);
-        }
+void subsystemManagerRegister(Subsystem *subsystem)
+{
+    WRITE_LOCK_SCOPE(mutex);
+    if (!subsystemManagerInitialized)
+    {
+        preRegisteredSubsystems = g_list_append(preRegisteredSubsystems, acquireSubsystem(subsystem));
+    }
+    else
+    {
+        subsystemManagerRegisterToTable(subsystem, subsystems);
     }
 }
 
@@ -232,7 +339,7 @@ cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName)
 
     g_return_val_if_fail(subsystems != NULL, NULL);
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystemName);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystemName));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);
@@ -321,31 +428,71 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 {
     icLogDebug(LOG_TAG, "%s", __func__);
 
-    {
-        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        scoped_generic char *disabledSubsystems = b_core_property_provider_get_property_as_string(
-            propertyProvider, "device.subsystem.disable", NULL);
+    GList *localPreRegisteredSubsystems = NULL;
+    GHashTable *localSubsystems = NULL;
+    bool localSubsystemManagerInitialized = false;
 
+    {
+        WRITE_LOCK_SCOPE(mutex);
+
+        if (subsystemManagerInitialized)
+        {
+            return;
+        }
+
+        localSubsystemManagerInitialized = subsystemManagerInitialized;
+        localPreRegisteredSubsystems = g_steal_pointer(&preRegisteredSubsystems);
+        localSubsystems = g_steal_pointer(&subsystems);
+    }
+
+    if (!localSubsystemManagerInitialized)
+    {
+        localSubsystems =
+            g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify) subsystemRegistrationMapDestroy);
+
+        if (localPreRegisteredSubsystems)
+        {
+            g_list_foreach(localPreRegisteredSubsystems, (GFunc) subsystemManagerRegisterToTable, localSubsystems);
+        }
+
+        localSubsystemManagerInitialized = true;
+    }
+
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+    scoped_generic char *disabledSubsystems =
+        b_core_property_provider_get_property_as_string(propertyProvider, "device.subsystem.disable", NULL);
+
+    if (disabledSubsystems && localSubsystems)
+    {
+        SubsystemRegistration *registration = NULL;
+        MAP_FOREACH(
+            registration,
+            localSubsystems,
+
+            if (strstr(disabledSubsystems, registration->subsystem->name) != NULL) {
+                g_hash_table_iter_remove(&iter);
+            });
+    }
+
+    // Attempt to perform migrations as necessary before kicking off initialization
+    SubsystemRegistration *registration = NULL;
+    MAP_FOREACH(registration, localSubsystems, checkSubsystemForMigration(registration););
+
+    // Move local work to globals atomically. We must do this BEFORE calling
+    // subsystem->initialize() because those functions will trigger callbacks
+    // that need to access the global subsystems table.
+    {
         WRITE_LOCK_SCOPE(mutex);
         readyForDevicesCB = readyForDevicesCallback;
-        if (disabledSubsystems && subsystems)
-        {
-            SubsystemRegistration *registration = NULL;
-            MAP_FOREACH(
-                registration, subsystems, if (strstr(disabledSubsystems, registration->subsystem->name) != NULL) {
-                    g_hash_table_iter_remove(&iter);
-                });
-        }
+        subsystems = g_steal_pointer(&localSubsystems);
+        preRegisteredSubsystems = g_steal_pointer(&localPreRegisteredSubsystems);
+        subsystemManagerInitialized = localSubsystemManagerInitialized;
     }
 
     {
         READ_LOCK_SCOPE(mutex);
 
         g_return_if_fail(subsystems != NULL);
-
-        // Attempt to perform migrations as necessary before kicking off initialization
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(registration, subsystems, checkSubsystemForMigration(registration););
 
         registration = NULL;
         MAP_FOREACH(registration,
@@ -362,26 +509,38 @@ void subsystemManagerShutdown(void)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
+    GHashTable *localSubsystems = NULL;
+    bool localSubsystemManagerInitialized = false;
+
     {
         WRITE_LOCK_SCOPE(mutex);
-        readyForDevicesCB = NULL;
+        localSubsystemManagerInitialized = subsystemManagerInitialized;
+
+        if (localSubsystemManagerInitialized)
+        {
+            localSubsystems = g_steal_pointer(&subsystems);
+            subsystemManagerInitialized = false;
+            readyForDevicesCB = NULL;
+        }
     }
 
+    if (localSubsystemManagerInitialized)
     {
-        READ_LOCK_SCOPE(mutex);
-
-        g_return_if_fail(subsystems != NULL);
-
         SubsystemRegistration *registration = NULL;
         MAP_FOREACH(
             registration,
-            subsystems,
+            localSubsystems,
 
             mutexLock(&registration->mtx);
             registration->ready = false;
             mutexUnlock(&registration->mtx);
 
             if (registration->subsystem->shutdown != NULL) { registration->subsystem->shutdown(); });
+
+        if (localSubsystems)
+        {
+            g_hash_table_destroy(localSubsystems);
+        }
     }
 }
 
@@ -510,7 +669,7 @@ bool subsystemManagerIsSubsystemReady(const char *subsystem)
 
     g_return_val_if_fail(subsystems != NULL, false);
 
-    SubsystemRegistration *reg = g_hash_table_lookup(subsystems, subsystem);
+    g_autoptr(SubsystemRegistration) reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystem));
     if (reg != NULL)
     {
         mutexLock(&reg->mtx);

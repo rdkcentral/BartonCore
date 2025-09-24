@@ -47,70 +47,14 @@ jobs:
                 with:
                     repository: ${{ github.repository }}
             -
+                name: Incorporate cocogitto
+                uses: cocogitto/cocogitto-action@v3
+                with:
+                  release: false
+                  check: false
+            -
                 name: Lint PR title and Report Errors
                 env:
-                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                    PR_NUM: ${{ github.event.pull_request.number }}
                     PR_TITLE: ${{ github.event.pull_request.title }}
                 run: |
-                    # Extract the `Header: Type` section from CONTRIBUTING.md that contains the commit types
-                    header_type_section=$(sed -n '/Header: Type/,/Header: Scope/p' CONTRIBUTING.md)
-
-                    # Extract commit types from the `Header: Type` section
-                    commit_types=$(echo "$header_type_section" | grep -oP '^\s*-\s*`\K[^:]+' | tr '\n' ' ')
-                    commit_types_array=($commit_types)
-
-                    errorMessages=()
-
-                    # Check if title contains a colon
-                    if [[ "$PR_TITLE" == *:* ]]; then
-                        IFS=':' read -r typeAndScope subject <<< "$PR_TITLE"
-
-                        # Check if title attempts to use a scope
-                        scopeDetected=false
-                        if [[ "$typeAndScope" == *"("* ]]; then
-                           scopeDetected=true
-                        fi
-
-                        # Extract the type and optional scope
-                        if [[ "$typeAndScope" =~ ^([a-zA-Z]+)(\(([a-zA-Z0-9_-]*)\))?$ ]]; then
-                            type=${BASH_REMATCH[1]}
-                            scope=${BASH_REMATCH[3]}
-                        fi
-
-                        # Check if the type is valid
-                        if [[ ! " ${commit_types[@]} " =~ " ${type} " ]]; then
-                            valid_types=$(IFS=','; echo "${commit_types_array[*]}")
-                            errorMessages+=("**Invalid type '$type'**; type must be one of the following: ${valid_types}")
-                        fi
-
-                        # Check if the scope was attempted to be used but is empty, e.g. 'feat(): add new feature'
-                        if [[ "$scopeDetected" = true && -z "$scope" ]]; then
-                            errorMessages+=("**Invalid scope '()'**; scopes are optional, but if used must not be empty.")
-                        fi
-
-                        # Check if the subject is empty: e.g. 'feat: '
-                        if [[ -z "$subject" || "$subject" =~ ^[[:space:]]*$ ]]; then
-                            errorMessages+=("**The title's subject is mandatory**; subject is either an empty string or whitespace.")
-                        fi
-                    else
-                        errorMessages+=("PR title must contain a colon.")
-                    fi
-
-                    if [ ${#errorMessages[@]} -ne 0 ]; then
-                        finalErrorMsg="**PR Title Checker**: Error detected in PR title:"
-                        for errorMessage in "${errorMessages[@]}"; do
-                            finalErrorMsg+="\n- $errorMessage"
-                        done
-
-                        finalErrorMsg+="\n\nPlease refer to the commit message guidelines in CONTRIBUTING.md for PR title format."
-                        finalErrorMsg="$(echo -e "$finalErrorMsg")"
-
-                        # Print the error message to the console and post it as a comment on the PR
-                        echo "$finalErrorMsg"
-                        gh pr comment $PR_NUM -b "$(echo "$finalErrorMsg")"
-                        exit 1
-                    else
-                        echo "PR title is valid."
-                        exit 0
-                    fi
+                    cog verify "${{ env.PR_TITLE }}"
