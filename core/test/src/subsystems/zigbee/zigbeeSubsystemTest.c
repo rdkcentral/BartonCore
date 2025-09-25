@@ -406,6 +406,9 @@ static int testTeardown(void **state)
         dynamicDir = NULL;
     }
 
+    // release the captured zigbee subsystem whose memory is allocated during
+    // `__attribute__((constructor)) static void registerSubsystem` in zigbeeSubsystem.c
+    // and acquired in `__wrap_subsystemManagerRegister`
     mutexLock(&capturedSubsystemMtx);
     Subsystem *localCapturedZigbeeSubsystem = g_steal_pointer(&capturedZigbeeSubsystem);
     mutexUnlock(&capturedSubsystemMtx);
@@ -542,7 +545,7 @@ gchar *__wrap_deviceServiceConfigurationGetFirmwareFileDir()
  * @brief Wrapper for subsystemManagerRegister to capture the zigbee subsystem.
  *
  * This wrapper intercepts the subsystem registration call during test initialization
- * to capture the zigbee Subsystem struct, which gives us access to its function pointers
+ * to capture the zigbee Subsystem reference, which gives us access to its function pointers
  * for use in test functions.
  */
 void __wrap_subsystemManagerRegister(Subsystem *subsystem)
