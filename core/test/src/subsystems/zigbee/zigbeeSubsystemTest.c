@@ -541,7 +541,7 @@ void __wrap_subsystemManagerRegister(Subsystem *subsystem)
     if (g_strcmp0(subsystem->name, ZIGBEE_SUBSYSTEM_NAME) == 0)
     {
         mutexLock(&capturedSubsystemMtx);
-        capturedZigbeeSubsystem = subsystem;
+        capturedZigbeeSubsystem = acquireSubsystem(subsystem);
         mutexUnlock(&capturedSubsystemMtx);
     }
 }
