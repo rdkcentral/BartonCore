@@ -376,9 +376,11 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
     validDelegate2 = NULL;
 
     mutexLock(&capturedSubsystemMtx);
-    // Call shutdown to clean up the global watchdog delegate and free the valid delegate stored earlier
-    capturedZigbeeSubsystem->shutdown();
+    g_autoptr(Subsystem) capturedZigbeeSubsystemRef = acquireSubsystem(capturedZigbeeSubsystem);
     mutexUnlock(&capturedSubsystemMtx);
+
+    // Call shutdown to clean up the global watchdog delegate and free the valid delegate stored earlier
+    capturedZigbeeSubsystemRef->shutdown();
 }
 
 // ******************************
