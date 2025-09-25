@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "glib.h"
 #include "icConcurrent/threadUtils.h"
 #include "subsystemManager.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
@@ -384,7 +385,7 @@ static void test_zigbeeSubsystemSetWatchdogDelegate(void **state)
 // Setup/Teardown
 // ******************************
 
-static int dynamicDirSetup(void **state)
+static int testSetup(void **state)
 {
     dynamicDir = mkdtemp(templateTempDir);
 
@@ -395,13 +396,19 @@ static int dynamicDirSetup(void **state)
     return 0;
 }
 
-static int dynamicDirTeardown(void **state)
+static int testTeardown(void **state)
 {
     if (dynamicDir != NULL)
     {
         deleteDirectory(dynamicDir);
         dynamicDir = NULL;
     }
+
+    mutexLock(&capturedSubsystemMtx);
+    Subsystem *localCapturedZigbeeSubsystem = g_steal_pointer(&capturedZigbeeSubsystem);
+    mutexUnlock(&capturedSubsystemMtx);
+
+    releaseSubsystem(g_steal_pointer(&localCapturedZigbeeSubsystem));
 
     (void) state;
 
@@ -556,7 +563,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_icDiscoveredDeviceDetailsGetAttributeEndpoint),
         cmocka_unit_test(test_zigbeeSubsystemSetWatchdogDelegate)};
 
-    int retval = cmocka_run_group_tests(tests, dynamicDirSetup, dynamicDirTeardown);
+    int retval = cmocka_run_group_tests(tests, testSetup, testTeardown);
 
     return retval;
 }
