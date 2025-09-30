@@ -53,6 +53,7 @@ Must be one of the following.
 -   `revert:` A commit that reverts a previous commit
 -   `style:` Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
 -   `test:` Adding missing tests or correcting existing tests
+-   `app:` Changes to the Reference App (`reference/`)
 
 ##### Header: Scope
 
