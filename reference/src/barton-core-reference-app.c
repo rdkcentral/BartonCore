@@ -57,18 +57,20 @@ static gboolean NO_MATTER = FALSE;
 
 static gchar *wifi_ssid = NULL;
 static gchar *wifi_password = NULL;
+static gchar *storage_dir = NULL;
 
 static bool showAdvanced = false;
 
 static GList *categories = NULL;
 
 static GOptionEntry entries[] = {
-    {"novt100",       '1', 0, G_OPTION_ARG_NONE,   &NO_VT100_MODE, "", NULL},
-    {"noZigbee",      'z', 0, G_OPTION_ARG_NONE,   &NO_ZIGBEE, "", NULL},
-    {"noThread",      't', 0, G_OPTION_ARG_NONE,   &NO_THREAD, "", NULL},
-    {"noMatter",      'm', 0, G_OPTION_ARG_NONE,   &NO_MATTER, "", NULL},
-    {"wifi-ssid",     's', 0, G_OPTION_ARG_STRING, &wifi_ssid, "Wi-Fi SSID for commissioning", "SSID"},
-    {"wifi-password", 'p', 0, G_OPTION_ARG_STRING, &wifi_password, "Wi-Fi Password for commissioning", "PASSWORD"},
+    {      "novt100", '1', 0,   G_OPTION_ARG_NONE, &NO_VT100_MODE,                                              "",       NULL},
+    {     "noZigbee", 'z', 0,   G_OPTION_ARG_NONE,     &NO_ZIGBEE,                                              "",       NULL},
+    {     "noThread", 't', 0,   G_OPTION_ARG_NONE,     &NO_THREAD,                                              "",       NULL},
+    {     "noMatter", 'm', 0,   G_OPTION_ARG_NONE,     &NO_MATTER,                                              "",       NULL},
+    {    "wifi-ssid", 's', 0, G_OPTION_ARG_STRING,     &wifi_ssid,                  "Wi-Fi SSID for commissioning",     "SSID"},
+    {"wifi-password", 'p', 0, G_OPTION_ARG_STRING, &wifi_password,              "Wi-Fi Password for commissioning", "PASSWORD"},
+    {  "storage-dir", 'd', 0, G_OPTION_ARG_STRING,   &storage_dir, "Persisted storage directory for configuration",      "DIR"},
     G_OPTION_ENTRY_NULL
 };
 
@@ -178,7 +180,6 @@ static gchar *getDefaultConfigDirectory(void)
 {
     struct passwd *pw = getpwuid(getuid());
     gchar *confDir = stringBuilder("%s/.brtn-ds", pw->pw_dir);
-    g_mkdir_with_parents(confDir, DEFAULT_CONF_DIR_MODE);
     return confDir;
 }
 
@@ -381,7 +382,8 @@ int main(int argc, char **argv)
         b_reference_network_credentials_provider_set_wifi_network_credentials("MySSID", "MyPassword");
     }
 
-    g_autofree gchar *confDir = getDefaultConfigDirectory();
+    g_autofree gchar *confDir = (storage_dir) ? strdup(storage_dir) : getDefaultConfigDirectory();
+    g_mkdir_with_parents(confDir, DEFAULT_CONF_DIR_MODE);
     g_autofree gchar *histFile = stringBuilder("%s/%s", confDir, HISTORY_FILE);
     buildCategories();
 
