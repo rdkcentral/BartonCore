@@ -585,22 +585,15 @@ void subsystemManagerShutdown(void)
         }
     }
 
-    icDebug("finished stealing");
-
     if (localSubsystemManagerInitialized)
     {
-        icDebug("about to loop through subsystems to shut them down");
         g_hash_table_foreach(localSubsystems, shutdownSubsystemCallback, NULL);
-        icDebug("finished shutting down subsystems");
 
         if (localSubsystems)
         {
-            icDebug("about to destroy local subsystems");
             g_hash_table_destroy(localSubsystems);
         }
     }
-
-    icDebug("complete");
 }
 
 /**

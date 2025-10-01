@@ -55,7 +55,6 @@ static int init(void **state)
         retVal = -1;
     }
 
-    icLogDebug(TEST_LOG_TAG, "done initializing test");
     return retVal;
 }
 
@@ -152,7 +151,6 @@ static bool mockOnRestoreConfig(const char *config, const char *restoreConfig)
 static void mockSetOtaUpgradeDelay(uint32_t delaySeconds)
 {
     function_called();
-    icDebug("mockSetOtaUpgradeDelay called with %u", delaySeconds);
     check_expected(delaySeconds);
 }
 
