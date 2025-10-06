@@ -1,0 +1,37 @@
+From af71e6e566366cc3bf683c0eabf49bec2e1d6465 Mon Sep 17 00:00:00 2001
+From: Christian Leithner <christian_leithner@comcast.com>
+Date: Mon, 15 Sep 2025 20:00:33 +0000
+Subject: [PATCH] Patch out visibility restriction
+
+---
+ src/app/BUILD.gn | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/app/BUILD.gn b/src/app/BUILD.gn
+index 40cb416c..09e5c8d3 100644
+--- a/src/app/BUILD.gn
++++ b/src/app/BUILD.gn
+@@ -347,13 +347,13 @@ source_set("required-privileges") {
+   # CodegenDataModelProvider should be the only one using this. Since CodegenDataModelProvider
+   # is part of application code, the visibility is broad. However generally DO NOT USE THIS
+   # unless you are creating a new CodegenDataModelProvider based item
+-  visibility = [
+-    "//:*",  # Top-level apps (e.g. //:bouffalolab-lighting does this)
+-    "${chip_root}/examples/*",
+-    "${chip_root}/src/app/util/*",
+-    "${chip_root}/src/controller/data_model",
+-    "${chip_root}/src/data-model-providers/codegen/*",
+-  ]
++  # visibility = [
++  #   "//:*",  # Top-level apps (e.g. //:bouffalolab-lighting does this)
++  #   "${chip_root}/examples/*",
++  #   "${chip_root}/src/app/util/*",
++  #   "${chip_root}/src/controller/data_model",
++  #   "${chip_root}/src/data-model-providers/codegen/*",
++  # ]
+ 
+   # We still have some strong coupling in this case
+   # Eventually dynamic server should be replaced with code-driven and not try
+-- 
+2.43.0
+

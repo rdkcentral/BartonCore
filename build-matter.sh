@@ -39,6 +39,8 @@ MATTER_BUILD_DIR=${BUILD_DIR}/matter
 MATTER_INSTALL_DIR=${BUILD_DIR}/matter-install
 MATTER_INSTALL_BIN_DIR=${MATTER_INSTALL_DIR}/bin
 
+MATTER_REF=v1.4.2.0
+
 BUILD_WITH_STACK_SMASH_PROTECTION=""
 BUILD_WITH_SANITIZER=""
 MATTER_CONF_DIR=""
@@ -66,9 +68,10 @@ if [ -e ${MATTER_BUILD_DIR} ]; then
 else
     rm -rf ${MATTER_INSTALL_DIR}
     mkdir -p ${BUILD_DIR}
+
     cd ${BUILD_DIR}
     git clone \
-        --branch v1.4.0.0 \
+        --branch ${MATTER_REF} \
         --depth 1 \
         https://github.com/project-chip/connectedhomeip.git \
         matter
@@ -80,10 +83,11 @@ else
     # Ensure that the older OpenSSL version is used for the build
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
 
+    git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_REF} && exit 1)
     ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
 
     cd ${MATTER_BUILD_DIR}
-    git reset --hard
+    git reset --hard ${MATTER_REF}
 fi
 
 # Build and install the Matter example apps for use as test targets
