@@ -55,7 +55,7 @@ extern "C" {
 }
 
 #include CHIP_PROJECT_CONFIG_INCLUDE
-#include <app/clusters/ota-provider/ota-provider.h>
+#include <app/clusters/ota-provider/ota-provider-cluster.h>
 #include <app/clusters/thread-border-router-management-server/thread-border-router-management-server.h>
 #include <app/clusters/thread-network-directory-server/thread-network-directory-server.h>
 #include <app/clusters/wifi-network-management-server/wifi-network-management-server.h>
@@ -67,6 +67,7 @@ extern "C" {
 #include <credentials/FabricTable.h>
 #include <credentials/attestation_verifier/DefaultDeviceAttestationVerifier.h>
 #include <crypto/CHIPCryptoPAL.h>
+#include <data-model-providers/codegen/Instance.h>
 #include <lib/core/CHIPError.h>
 #include <lib/support/CodeUtils.h>
 #include <messaging/ExchangeMgr.h>
@@ -311,6 +312,8 @@ bool Matter::Start()
         serverInitParams.accessRestrictionProvider = &accessRestrictionProvider;
 #endif
 
+        serverInitParams.dataModelProvider = app::CodegenDataModelProviderInstance(&storageDelegate);
+
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
             icError("Server::Init failed: %s", err.AsString());
@@ -432,6 +435,7 @@ CHIP_ERROR Matter::InitCommissioner()
     factoryParams.fabricIndependentStorage = &storageDelegate;
     factoryParams.fabricTable = fabricTable;
     factoryParams.sessionKeystore = &sessionKeystore;
+    factoryParams.dataModelProvider = app::CodegenDataModelProviderInstance(&storageDelegate);
 
     groupDataProvider.SetStorageDelegate(&storageDelegate);
     groupDataProvider.SetSessionKeystore(&sessionKeystore);
