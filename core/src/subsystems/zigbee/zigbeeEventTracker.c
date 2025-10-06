@@ -62,10 +62,10 @@
 #include "icConcurrent/threadUtils.h"
 #include "provider/barton-core-property-provider.h"
 #include "subsystems/zigbee/zigbeeCommonIds.h"
+#include "subsystems/zigbee/zigbeeEventTracker.h"
 #include "subsystems/zigbee/zigbeeSubsystem.h"
 #include "zigbeeClusters/iasZoneCluster.h"
 #include "zigbeeClusters/pollControlCluster.h"
-#include "zigbeeEventTracker.h"
 
 #define LOG_TAG                           "zigbeeEventTracker"
 
