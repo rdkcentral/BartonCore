@@ -138,9 +138,7 @@ if (BCORE_BUILD_WITH_ASAN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 endif()
 
-if (NOT BCORE_PROVIDE_LIBS)
-    add_subdirectory(libs)
-endif()
+add_subdirectory(libs)
 
 add_subdirectory(core)
 
