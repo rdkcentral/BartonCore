@@ -170,9 +170,6 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Core PRIVATE ON/OFF Configs. These options should not be used by new clients.")
 
-bcore_option(NAME BCORE_PROVIDE_LIBS
-           DEFINITION BARTON_CONFIG_PROVIDE_LIBS
-           DESCRIPTION "Choose if private libraries are provided by the client.")
 bcore_option(NAME BCORE_SUPPORT_ALARMS
            DEFINITION BARTON_CONFIG_SUPPORT_ALARMS
            DESCRIPTION "Whether alarms are supported by the client.")
