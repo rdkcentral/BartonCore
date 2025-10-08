@@ -252,24 +252,16 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
         scoped_generic char *pendingAllowlistDownloadUrl = strdup(url);
 
         // When updating the allowList, a repeating task policy will be utilized in order to ensure the update
-        // compeletes eventually. However, the rate at which the task repeats must vary dependent opon the device
-        // and circumstance.
-        // - Touchscreens: If the Touchscreen is currently 'in activation', a more aggressive policy is necessary
-        //                 to ensure activation completes as soon as possible. Otherwise, a less aggressive
-        //                 policy will be implemented.
-        // - Gateways: A less aggressive policy will be implemented to reduce server load since %99.99 of
-        //             Gateways are considered 'unactivated' as far as XHF is concerned.
-        bool useAggressivePolicy = false;
-
-#ifdef BARTON_CONFIG_SETUP_WIZARD
+        // completes eventually. However, the rate at which the task repeats must vary depending on the
+        // urgency of the update.
+        // - Aggressive policy: Uses incremental backoff for time-critical updates where quick completion
+        //                      is essential (e.g., during device activation or setup processes).
+        // - Conservative policy: Uses exponential backoff for routine updates to reduce server load
+        //                        and bandwidth usage during normal operation.
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        int32_t activationState = b_core_property_provider_get_property_as_int32(
-            propertyProvider, PERSIST_CPE_SETUPWIZARD_STATE, ACTIVATION_NOT_STARTED);
-        if (activationState < ACTIVATION_COMPLETE)
-        {
-            useAggressivePolicy = true;
-        }
-#endif
+
+        bool useAggressivePolicy = b_core_property_provider_get_property_as_bool(
+            propertyProvider, DEVICE_DESC_ALLOWLIST_AGGRESSIVE_UPDATE, FALSE);
 
         RepeatingTaskPolicy *policy = NULL;
 

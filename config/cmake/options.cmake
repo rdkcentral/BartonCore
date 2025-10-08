@@ -179,9 +179,6 @@ bcore_option(NAME BCORE_SUPPORT_ALARMS
 bcore_option(NAME BCORE_M1LTE
            DEFINITION BARTON_CONFIG_M1LTE
            DESCRIPTION "Indicates to Barton M1LTE is included.")
-bcore_option(NAME BCORE_SETUP_WIZARD
-           DEFINITION BARTON_CONFIG_SETUP_WIZARD
-           DESCRIPTION "Support for behavioral changes if there is an \"activation period\"")
 bcore_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")
