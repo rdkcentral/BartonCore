@@ -34,6 +34,7 @@
 #define DEVICE_DESC_DENYLIST                                  "deviceDescriptor.blacklist"
 #define POSIX_TIME_ZONE_PROP                                  "POSIX_TZ"
 #define DEVICE_FIRMWARE_URL_NODE                              "deviceFirmwareBaseUrl"
+#define DEVICE_STATIC_STORAGE_DIRECTORY                       "device.staticStorageDirectory"
 #define CPE_DENYLISTED_DEVICES_PROPERTY_NAME                  "cpe.denylistedDevices"
 #define TOUCHSCREEN_SENSOR_COMMFAIL_TROUBLE_DELAY             "touchscreen.sensor.commFail.troubleDelay"
 #define ZIGBEE_PROPS_PREFIX                                   "cpe.zigbee."

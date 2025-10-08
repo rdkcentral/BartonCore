@@ -195,6 +195,10 @@ bcore_string_option(NAME BCORE_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
+bcore_string_option(NAME BCORE_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
+                    DEFINITION BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
+                    DESCRIPTION "Directory to which telemetry files are uploaded in debug builds."
+                    VALUE "/tmp/zigbeeTelemetry/upload")
 
 # We're not going to use BCoreMatterHelper to set up defaults (as BCoreMatterHelper applies FORCE
 # sets). However, include it to populate default header paths.

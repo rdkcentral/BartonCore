@@ -49,6 +49,9 @@
  */
 
 #include "zigbeeTelemetry.h"
+#include "devicePrivateProperties.h"
+#include "deviceServiceConfiguration.h"
+#include "zigbeeTelemetryProperties.h"
 #include <deviceService.h>
 #include <dirent.h>
 #include <errno.h>
@@ -60,9 +63,6 @@
 #include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
 #include <inttypes.h>
-#include <propsMgr/commonProperties.h>
-#include <propsMgr/paths.h>
-#include <propsMgr/propsHelper.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -107,9 +107,11 @@ void zigbeeTelemetryInitialize(void)
 {
     pthread_mutex_lock(&settingsMtx);
 
-    hoursRemaining = getPropertyAsInt32(TELEMETRY_HOURS_REMAINING, 0);
-    allowUpload = getPropertyAsBool(TELEMETRY_ALLOW_UPLOAD, false);
-    maxAllowedFileStorageMb = getPropertyAsUInt32(TELEMETRY_MAX_ALLOWED_FILE_STORAGE, MIN_FILE_STORAGE_MB);
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+    hoursRemaining = b_core_property_provider_get_property_as_int32(propertyProvider, TELEMETRY_HOURS_REMAINING, 0);
+    allowUpload = b_core_property_provider_get_property_as_bool(propertyProvider, TELEMETRY_ALLOW_UPLOAD, false);
+    maxAllowedFileStorageMb = b_core_property_provider_get_property_as_uint32(propertyProvider, TELEMETRY_MAX_ALLOWED_FILE_STORAGE, MIN_FILE_STORAGE_MB);
 
     if (maxAllowedFileStorageMb > MAX_FILE_STORAGE_MB)
     {
@@ -240,8 +242,10 @@ static void processProperties(void)
 
     if (shouldCaptureBeRunning() == true && capabilities == 1)
     {
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
         // Set cpe property, in order to inform server of our capabilities
-        setPropertyUInt32(TELEMETRY_CAPABILITIES, capabilities, true, PROPERTY_SRC_DEVICE);
+        b_core_property_provider_set_property_uint32(propertyProvider, TELEMETRY_CAPABILITIES, capabilities);
         if (isCaptureRunning() == false)
         {
             startCapture();
@@ -264,8 +268,11 @@ static void processProperties(void)
 
 static int invokeCaptureScript(const char *args, char *output, uint32_t outputLen)
 {
-    AUTO_CLEAN(free_generic__auto) char *homeDir = getStaticPath();
-    AUTO_CLEAN(free_generic__auto)
+    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+    char *homeDir = b_core_property_provider_get_property_as_string(
+        propertyProvider, DEVICE_STATIC_STORAGE_DIRECTORY, "/tmp/barton");
+
     char *command = stringBuilder("%s/bin/%s %s", homeDir, TELEMETRY_SCRIPT_FILENAME, args);
     icLogDebug(LOG_TAG, "%s: executing'%s'", __FUNCTION__, command);
 
@@ -613,7 +620,7 @@ static void scrubTelemetryStorageDir(void)
     pthread_mutex_lock(&settingsMtx);
     AUTO_CLEAN(free_generic__auto)
     char *storageDirToBeChecked =
-        (allowUpload == true) ? strdup(CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY) : strdup(storageDir);
+        (allowUpload == true) ? strdup(BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY) : strdup(storageDir);
     uint32_t localMaxAllowedFileStorageMb = maxAllowedFileStorageMb;
     pthread_mutex_unlock(&settingsMtx);
 
@@ -636,13 +643,13 @@ static bool moveCompletedCapturesForUpload(void)
         return false;
     }
 
-    // Create CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY if it don't exist
-    if (mkdir_p(CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, 0777) != 0)
+    // Create BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY if it doesn't exist
+    if (mkdir_p(BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, 0777) != 0)
     {
         icLogError(LOG_TAG,
                    "%s: cannot create directory for upload (%s)!  errno=%d",
                    __FUNCTION__,
-                   CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY,
+                   BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY,
                    errno);
         closedir(d);
         return false;
@@ -655,7 +662,7 @@ static bool moveCompletedCapturesForUpload(void)
         {
             AUTO_CLEAN(free_generic__auto) char *origPath = stringBuilder("%s/%s", storageDir, entry->d_name);
             AUTO_CLEAN(free_generic__auto)
-            char *destPath = stringBuilder("%s/%s", CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, entry->d_name);
+            char *destPath = stringBuilder("%s/%s", BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY, entry->d_name);
 
             if (moveFile(origPath, destPath) == false)
             {
