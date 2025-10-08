@@ -32,6 +32,7 @@
 #define DEVICE_DESCRIPTOR_LIST                                "deviceDescriptorList"
 #define DEVICE_DESC_ALLOWLIST_URL_OVERRIDE                    "deviceDescriptor.whitelist.url.override"
 #define DEVICE_DESC_DENYLIST                                  "deviceDescriptor.blacklist"
+#define DEVICE_DESC_ALLOWLIST_AGGRESSIVE_UPDATE               "deviceDescriptor.allowList.aggressiveUpdate"
 #define POSIX_TIME_ZONE_PROP                                  "POSIX_TZ"
 #define DEVICE_FIRMWARE_URL_NODE                              "deviceFirmwareBaseUrl"
 #define DEVICE_STATIC_STORAGE_DIRECTORY                       "device.staticStorageDirectory"
