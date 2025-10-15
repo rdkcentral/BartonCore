@@ -46,6 +46,13 @@ jobs:
         needs: get-action-constants
 
         steps:
+            # Have to configure Git since we are going to apply patches which results in commit writes.
+            -
+                name: Configure Git
+                run: |
+                    git config --global user.name "GitHub Actions"
+                    git config --global user.email "github_actions@example.com"
+
             -
                 name: Checkout code
                 uses: actions/checkout@v4
