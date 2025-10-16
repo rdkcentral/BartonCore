@@ -183,9 +183,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetVendorName(char * buf, size_t bu
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     g_autofree char * vendorName = b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_VENDOR_NAME, NULL);
-    ReturnErrorCodeIf(vendorName == NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
+    VerifyOrReturnError(vendorName != NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
 
-    ReturnErrorCodeIf(strlen(vendorName) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(vendorName) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, vendorName);
 
     return CHIP_NO_ERROR;
@@ -213,9 +213,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetProductName(char *buf, size_t bu
 
     g_autofree char *productName =
         b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, NULL);
-    ReturnErrorCodeIf(productName == NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
+    VerifyOrReturnError(productName != NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
 
-    ReturnErrorCodeIf(strlen(productName) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(productName) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, productName);
 
     return CHIP_NO_ERROR;
@@ -243,9 +243,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetPartNumber(char *buf, size_t buf
 
     g_autofree char *partNumber =
         b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_PART_NUMBER, NULL);
-    ReturnErrorCodeIf(partNumber == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
+    VerifyOrReturnError(partNumber != NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
-    ReturnErrorCodeIf(strlen(partNumber) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(partNumber) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, partNumber);
 
     return CHIP_NO_ERROR;
@@ -257,9 +257,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetProductURL(char *buf, size_t buf
 
     g_autofree char *productURL =
         b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_PRODUCT_URL, NULL);
-    ReturnErrorCodeIf(productURL == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
+    VerifyOrReturnError(productURL != NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
-    ReturnErrorCodeIf(strlen(productURL) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(productURL) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, productURL);
 
     return CHIP_NO_ERROR;
@@ -271,9 +271,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetProductLabel(char *buf, size_t b
 
     g_autofree char *productLabel =
         b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_PRODUCT_LABEL, NULL);
-    ReturnErrorCodeIf(productLabel == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
+    VerifyOrReturnError(productLabel != NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
-    ReturnErrorCodeIf(strlen(productLabel) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(productLabel) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, productLabel);
 
     return CHIP_NO_ERROR;
@@ -285,9 +285,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetSerialNumber(char *buf, size_t b
 
     g_autofree char *serialNumber =
         b_core_property_provider_get_property_as_string(propertyProvider, B_CORE_BARTON_MATTER_SERIAL_NUMBER, NULL);
-    ReturnErrorCodeIf(serialNumber == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
+    VerifyOrReturnError(serialNumber != NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
-    ReturnErrorCodeIf(strlen(serialNumber) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(serialNumber) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, serialNumber);
 
     return CHIP_NO_ERROR;
@@ -299,7 +299,7 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetManufacturingDate(uint16_t &year
 
     g_autofree char *dateStr = b_core_property_provider_get_property_as_string(
         propertyProvider, B_CORE_BARTON_MATTER_MANUFACTURING_DATE, NULL);
-    ReturnErrorCodeIf(dateStr == NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
+    VerifyOrReturnError(dateStr != NULL, CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE);
 
     // Expecting date in "YYYY-MM-DD" format
     g_autoptr(GDate) date = g_date_new();
@@ -339,9 +339,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetHardwareVersionString(char *buf,
 
     g_autofree char *hwVersionStr = b_core_property_provider_get_property_as_string(
         propertyProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION_STRING, NULL);
-    ReturnErrorCodeIf(hwVersionStr == NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
+    VerifyOrReturnError(hwVersionStr != NULL, CHIP_DEVICE_ERROR_CONFIG_NOT_FOUND);
 
-    ReturnErrorCodeIf(strlen(hwVersionStr) >= bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    VerifyOrReturnError(strlen(hwVersionStr) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
     strcpy(buf, hwVersionStr);
 
     return CHIP_NO_ERROR;
@@ -358,8 +358,9 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetRotatingDeviceIdUniqueId(Mutable
 
         constexpr uint8_t uniqueId[] = CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID;
 
-        ReturnErrorCodeIf(sizeof(uniqueId) > uniqueIdSpan.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
-        ReturnErrorCodeIf(sizeof(uniqueId) != ConfigurationManager::kRotatingDeviceIDUniqueIDLength, CHIP_ERROR_BUFFER_TOO_SMALL);
+        VerifyOrReturnError(sizeof(uniqueId) <= uniqueIdSpan.size(), CHIP_ERROR_BUFFER_TOO_SMALL);
+        VerifyOrReturnError(sizeof(uniqueId) == ConfigurationManager::kRotatingDeviceIDUniqueIDLength,
+                            CHIP_ERROR_BUFFER_TOO_SMALL);
         memcpy(uniqueIdSpan.data(), uniqueId, sizeof(uniqueId));
         uniqueIdSpan.reduce_size(sizeof(uniqueId));
     }
