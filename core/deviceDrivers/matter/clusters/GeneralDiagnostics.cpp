@@ -34,6 +34,8 @@ extern "C" {
 }
 
 #include "GeneralDiagnostics.h"
+#include "lib/core/CHIPError.h"
+#include "lib/support/CodeUtils.h"
 
 namespace barton
 {
@@ -75,6 +77,48 @@ namespace barton
         };
 
         return interfaceInfo.Value().networkType;
+    }
+
+    CHIP_ERROR GeneralDiagnostics::GetCurrentActiveHardwareFaults(std::vector<HardwareFaultEnum> &currentFaults)
+    {
+        CHIP_ERROR err = CHIP_NO_ERROR;
+        currentFaults.clear();
+
+        auto cache = clusterStateCacheRef.lock();
+        if (cache == nullptr)
+        {
+            icDebug("Attribute cache not available");
+            return CHIP_ERROR_INCORRECT_STATE;
+        }
+
+        using TypeInfo = Attributes::ActiveHardwareFaults::TypeInfo;
+        TypeInfo::DecodableType value;
+        err = cache->Get<TypeInfo>({chip::kRootEndpointId, Id, Attributes::ActiveHardwareFaults::Id}, value);
+        if (err == CHIP_NO_ERROR)
+        {
+            auto currIter = value.begin();
+
+            while (currIter.Next())
+            {
+                currentFaults.push_back(currIter.GetValue());
+            }
+
+            if ((err = currIter.GetStatus()) != CHIP_NO_ERROR)
+            {
+                icError("Failed to decode active hardware faults list: %s", err.AsString());
+                return err;
+            }
+
+            currentFaults.push_back(chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum::kUnspecified);
+        }
+        else
+        {
+            // This attribute is optional to support as per Matter 1.4 spec 11.12.6, so no need to warn.
+            icInfo(
+                "Could not get active hardware faults attribute from device %s: %s", deviceId.c_str(), err.AsString());
+        }
+
+        return err;
     }
 
     void GeneralDiagnostics::OnAttributeChanged(chip::app::ClusterStateCache *cache,
@@ -145,4 +189,57 @@ namespace barton
 
         return chip::NullOptional;
     }
+
+    void GeneralDiagnostics::OnEventDataReceived(SubscribeInteraction &subscriber,
+                                                 const chip::app::EventHeader &aEventHeader,
+                                                 chip::TLV::TLVReader *apData,
+                                                 const chip::app::StatusIB *apStatus)
+    {
+        if (!aEventHeader.mPath.IsValidConcreteClusterPath())
+        {
+            icError("Received event with invalid path, dropping it!");
+            return;
+        }
+
+        if (eventHandler == nullptr)
+        {
+            return;
+        }
+
+        icDebug("Endpoint: %u Cluster: " ChipLogFormatMEI " Event " ChipLogFormatMEI,
+                aEventHeader.mPath.mEndpointId,
+                ChipLogValueMEI(aEventHeader.mPath.mClusterId),
+                ChipLogValueMEI(aEventHeader.mPath.mEventId));
+
+        switch (aEventHeader.mPath.mEventId)
+        {
+            case Events::HardwareFaultChange::Id:
+            {
+                Events::HardwareFaultChange::DecodableType value;
+                VerifyOrReturn(chip::app::DataModel::Decode(*apData, value) == CHIP_NO_ERROR,
+                               icError("Failed to decode HardwareFaultChange event"));
+
+                std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> currentFaults;
+                auto currIter = value.current.begin();
+
+                while (currIter.Next())
+                {
+                    currentFaults.push_back(currIter.GetValue());
+                }
+
+                VerifyOrReturn(currIter.GetStatus() == CHIP_NO_ERROR,
+                               icError("Failed to decode all active hardware faults"));
+
+                static_cast<GeneralDiagnostics::EventHandler *>(eventHandler)
+                    ->OnHardwareFaultsChanged(*this, currentFaults);
+                break;
+            }
+
+            default:
+                break;
+                // Logging unexpected events we don't care about can be noisy, and
+                // unsolicited reports from devices is not controllable from here.
+        }
+    }
+
 } // namespace barton
