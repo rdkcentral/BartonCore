@@ -54,13 +54,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define WINDOW_COVERING_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterWindowCoveringDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterWindowCoveringDeviceDriver());
