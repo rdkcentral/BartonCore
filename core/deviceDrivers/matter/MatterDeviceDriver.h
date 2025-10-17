@@ -38,6 +38,7 @@
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/MatterCluster.h"
 #include "clusters/OTARequestor.h"
+#include "clusters/PowerSource.h"
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "subscriptions/SubscribeInteraction.h"
@@ -631,6 +632,30 @@ namespace barton
             }
 
         } generalDiagnosticsEventHandler;
+
+        class PowerSourceEventHandler : public barton::PowerSource::EventHandler
+        {
+            void BatChargeLevelChanged(std::string &deviceUuid,
+                                       chip::app::Clusters::PowerSource::BatChargeLevelEnum chargeLevel) override
+            {
+                bool isLow = chargeLevel != chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk;
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_BATTERY_LOW,
+                               stringValueOfBool(isLow),
+                               NULL);
+            }
+
+            void BatPercentRemainingChanged(std::string &deviceUuid, uint8_t halfIntPercent) override
+            {
+                scoped_generic char *percent = stringBuilder("%u", halfIntPercent / 2);
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_BATTERY_PERCENTAGE_REMAINING,
+                               percent,
+                               NULL);
+            }
+        } powerSourceEventHandler;
 
         std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
             clusterServers;
