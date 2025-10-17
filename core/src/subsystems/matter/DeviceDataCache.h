@@ -144,6 +144,13 @@ namespace barton
         chip::Optional<NetworkUtils::NetworkInterfaceInfo> GetInterfaceInfo() const;
 
         /**
+         * Check the device's power source type.
+         * TODO: Account for multiple power sources (i.e. PowerSource clusters on multiple endpoints).
+         */
+        bool IsBatteryPowered(CHIP_ERROR &error) const;
+        bool IsWiredPowered(CHIP_ERROR &error) const;
+
+        /**
          * Trigger a full reprocessing of the cache's attribute data as if a full attribute report was
          * received, invoking report and attribute callbacks (events not reprocessed).
          *
@@ -292,6 +299,8 @@ namespace barton
 
         SubscriptionIntervalSecs CalculateFinalSubscriptionIntervalSecs();
 
+        // TODO: Account for multiple power sources (i.e. PowerSource clusters on multiple endpoints).
+        uint32_t GetPowerSourceFeatureMap(CHIP_ERROR &error) const;
 
         /**
          * Get a JSON representation of all clusters and attributes for a given endpoint.
@@ -309,6 +318,15 @@ namespace barton
         std::mutex startupPromiseMutex;
         uint64_t lastReportCompletedTimestamp = 0;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
+
+        // Matter 1.4 section 11.7.4.
+        typedef enum
+        {
+            WIRED = 1,
+            BAT = WIRED << 1,
+            RECHG = BAT << 1,
+            REPLC = RECHG << 1
+        } pwrSrcFeatures;
 
         // device id + endpoint id + cluster id to ClusterStateCache Callback
         std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, chip::app::ClusterStateCache::Callback*>
