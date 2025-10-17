@@ -54,6 +54,10 @@ namespace barton
         public:
             virtual void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
                                                     NetworkUtils::NetworkInterfaceInfo info) {};
+
+            virtual void OnHardwareFaultsChanged(
+                GeneralDiagnostics &source,
+                const std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> &currentFaults) {};
         };
 
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
@@ -63,8 +67,16 @@ namespace barton
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
+
+        void OnEventDataReceived(SubscribeInteraction &subscriber,
+                                 const chip::app::EventHeader &aEventHeader,
+                                 chip::TLV::TLVReader *apData,
+                                 const chip::app::StatusIB *apStatus) override;
+
         std::string GetMacAddress();
         std::string GetNetworkType();
+
+        CHIP_ERROR GetCurrentActiveHardwareFaults(std::vector<HardwareFaultEnum> &currentFaults);
 
     private:
         chip::Optional<NetworkUtils::NetworkInterfaceInfo> GetInterfaceInfo(chip::app::ClusterStateCache *cache);

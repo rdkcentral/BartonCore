@@ -153,6 +153,41 @@ void MatterContactSensorDeviceDriver::FetchInitialResourceValues(std::forward_li
         AbandonDeviceWork(readPromise);
         delete readContext;
     }
+
+    auto generalDiagnosticsServer = static_cast<barton::GeneralDiagnostics *>(
+        GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id));
+
+    if (generalDiagnosticsServer == nullptr)
+    {
+        icError("No general diagnostics server on device %s!", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> currentFaults;
+    CHIP_ERROR err = generalDiagnosticsServer->GetCurrentActiveHardwareFaults(currentFaults);
+
+    if (err == CHIP_NO_ERROR)
+    {
+        bool isTampered = (std::find(currentFaults.begin(), currentFaults.end(), HardwareFaultEnum::kTamperDetected) !=
+                           currentFaults.end());
+
+        initialResourceValuesPutEndpointValue(initialResourceValues,
+                                              CONTACT_SENSOR_ENDPOINT,
+                                              SENSOR_PROFILE_RESOURCE_TAMPERED,
+                                              stringValueOfBool(isTampered));
+    }
+    else if (err == CHIP_ERROR_KEY_NOT_FOUND)
+    {
+        icInfo("Device %s does not support active hardware faults attribute", deviceId.c_str());
+        // This attribute is optional to support as per Matter 1.4 spec 11.12.6, so no need to fail the operation here.
+    }
+    else
+    {
+        icError("Could not get active hardware faults attribute from device %s: %s", deviceId.c_str(), err.AsString());
+        FailOperation(promises);
+        return;
+    }
 }
 
 bool MatterContactSensorDeviceDriver::RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues)
@@ -188,7 +223,15 @@ bool MatterContactSensorDeviceDriver::RegisterResources(icDevice *device, icInit
                                      RESOURCE_MODE_READABLE,
                                      CACHING_POLICY_ALWAYS) != nullptr;
 
-    //TODO: other sensor resources (e.g. tampered, etc)
+    const char *initialIsTamperedValue = initialResourceValuesGetEndpointValue(
+        initialResourceValues, CONTACT_SENSOR_ENDPOINT, SENSOR_PROFILE_RESOURCE_TAMPERED);
+
+    result &= createEndpointResource(sensorEndpoint,
+                                     SENSOR_PROFILE_RESOURCE_TAMPERED,
+                                     initialIsTamperedValue,
+                                     RESOURCE_TYPE_BOOLEAN,
+                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_DYNAMIC,
+                                     CACHING_POLICY_ALWAYS) != nullptr;
 
     return result;
 }
@@ -249,6 +292,14 @@ std::unique_ptr<MatterCluster> MatterContactSensorDeviceDriver::MakeCluster(std:
         default:
             return nullptr;
     }
+}
+
+void MatterContactSensorDeviceDriver::SetTamperedEndpointResource(const std::string &deviceId, bool tampered)
+{
+    icDebug();
+
+    updateResource(
+        deviceId.c_str(), CONTACT_SENSOR_ENDPOINT, SENSOR_PROFILE_RESOURCE_TAMPERED, stringValueOfBool(tampered), NULL);
 }
 
 void MatterContactSensorDeviceDriver::BooleanStateClusterEventHandler::StateValueChanged(std::string &deviceUuid,

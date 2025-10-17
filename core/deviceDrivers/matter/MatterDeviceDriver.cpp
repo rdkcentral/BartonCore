@@ -114,7 +114,8 @@ static void communicationRestored(void *ctx, icDevice *device);
 static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *version);
 
 MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *deviceClass, uint8_t dcVersion) :
-    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this)
+    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this),
+    generalDiagnosticsEventHandler(*this)
 {
     driver.driverName = strdup(driverName);
     driver.callbackContext = this;
@@ -598,6 +599,11 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          CACHING_POLICY_ALWAYS);
 
     return RegisterResources(device, initialResourceValues);
+}
+
+void MatterDeviceDriver::SetTamperedEndpointResource(const std::string &deviceId, bool tampered)
+{
+    icDebug("Unimplemented");
 }
 
 void MatterDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
