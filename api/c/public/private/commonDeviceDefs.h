@@ -129,6 +129,7 @@
 #define SENSOR_PROFILE_RESOURCE_DIRTY                                "dirty"
 #define SENSOR_PROFILE_RESOURCE_END_OF_LIFE                          "endOfLife"
 #define SENSOR_PROFILE_RESOURCE_END_OF_LINE_FAULT                    "endOfLineFault"
+#define SENSOR_PROFILE_RESOURCE_CLOSED                               "closed" // for contact sensors (doors/windows)
 #define SENSOR_PROFILE_RESOURCE_ILLUMINANCE                          "illuminance"
 #define SENSOR_PROFILE_RESOURCE_HUMIDITY                             "humidity"
 #define SENSOR_PROFILE_MOTION_TYPE                                   "motion"
