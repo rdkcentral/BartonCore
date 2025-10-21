@@ -40,9 +40,11 @@
 #include "clusters/OTARequestor.h"
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
+#include "matter/MatterDevice.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/DiscoveredDeviceDetails.h"
 #include "subsystems/matter/Matter.h"
+#include "sbmd/SbmdSpec.h"
 #include <condition_variable>
 #include <forward_list>
 #include <future>
@@ -81,8 +83,6 @@ extern "C" {
 
 namespace barton
 {
-    using namespace chip::app::Clusters;
-    using namespace chip::app::DataModel;
     using ClusterKey = std::tuple<std::string, chip::EndpointId, chip::ClusterId>;
     using OtaSoftwareUpdateRequestorStateTransitionEvent =
         chip::app::Clusters::OtaSoftwareUpdateRequestor::Events::StateTransition::DecodableType;
@@ -109,31 +109,19 @@ namespace barton
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
         const char *GetDeviceClass() const;
 
-        bool AddDeviceDataCache(std::shared_ptr<DeviceDataCache> deviceDataCache)
+        virtual bool AddDevice(std::unique_ptr<MatterDevice> device)
         {
             bool result = false;
 
-            const std::string deviceUuid = deviceDataCache->GetDeviceUuid();
+            const std::string deviceId = device->GetDeviceId();
 
             {
-                // Store the cache
-                std::lock_guard<std::mutex> lock(cacheMutex);
-                auto cacheResult = deviceDataCaches.emplace(deviceUuid, std::move(deviceDataCache));
-                result = cacheResult.second;
+                std::lock_guard<std::mutex> lock(devicesMutex);
+                auto deviceResult = devices.emplace(deviceId, std::move(device));
+                result = deviceResult.second;
             }
 
-            return result && InitializeClustersForDevice(deviceUuid);
-        }
-
-        std::shared_ptr<DeviceDataCache> GetDeviceDataCache(const std::string &deviceUuid)
-        {
-            std::lock_guard<std::mutex> lock(cacheMutex);
-            auto it = deviceDataCaches.find(deviceUuid);
-            if (it != deviceDataCaches.end())
-            {
-                return it->second;
-            }
-            return nullptr;
+            return result && InitializeClustersForDevice(deviceId);
         }
 
         virtual bool DeviceRemoved(icDevice *device);
@@ -262,6 +250,7 @@ namespace barton
         struct ClusterReadContext
         {
             void *driverContext;                            // the context provided to the driver for the operation
+            SbmdMapper *mapper;                             // the mapper to use for this read (SBMD drivers only)
             char **value;                                   // non-null if this read is a regular resource read
         };
 
@@ -421,6 +410,10 @@ namespace barton
          * @brief Implement this to perform device specific configuration,
          *        like to issue configuration commands, etc.
          *
+         * TODO: with the addition of MatterDevice, responsibilities for where processing
+         *       goes needs to be re-evaluated. Its possible the driver should pass operations
+         *       on to MatterDevice instances.
+         *
          * @param promises Add a promise for each asynchronous task
          * @param deviceId
          * @param deviceDescriptor
@@ -480,23 +473,26 @@ namespace barton
         MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId,
                     std::shared_ptr<DeviceDataCache> deviceDataCache) = 0;
 
-        /**
-         * @brief Perform some work on each cluster server for a device.
-         *        This method must only be run in a protected stack context.
-         *
-         * @param deviceUuid
-         * @param work
-         */
-        void ForEachServer(const std::string &deviceUuid, std::function<void(MatterCluster *server)> &&work)
+        std::shared_ptr<DeviceDataCache> GetDeviceDataCache(const std::string &deviceUuid)
         {
-            for (const auto &kv : clusterServers)
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            auto it = devices.find(deviceUuid);
+            if (it != devices.end())
             {
-                MatterCluster *server = kv.second.get();
-                if (server->GetDeviceId() == deviceUuid)
-                {
-                    work(server);
-                }
+                return it->second->GetDeviceDataCache();
             }
+            return nullptr;
+        }
+
+        std::shared_ptr<MatterDevice> GetDevice(const std::string &deviceUuid)
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            auto it = devices.find(deviceUuid);
+            if (it != devices.end())
+            {
+                return it->second;
+            }
+            return nullptr;
         }
 
     private:
@@ -648,9 +644,13 @@ namespace barton
         } generalDiagnosticsEventHandler;
 
         /* key deviceId */
-        std::map<std::string, std::shared_ptr<DeviceDataCache>> deviceDataCaches;
-        std::mutex cacheMutex;
+        std::map<std::string, std::shared_ptr<MatterDevice>> devices;
+        std::mutex devicesMutex;
 
+        //with SBMD in play, this should only contain core/standard clusters Barton needs for basic
+        // operation.  Actual device specific clusters are handled by SBMD scripting.
+        // This collection may go away and instead have each of these core clusters specifically
+        // instantiated as members.
         std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
             clusterServers;
 

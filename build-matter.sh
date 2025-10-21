@@ -95,12 +95,14 @@ LIGHTING_APP_NAME=chip-lighting-app
 LOCK_APP_NAME=chip-lock-app
 THERMOSTAT_APP_NAME=thermostat-app
 CONTACT_SENSOR_NAME=contact-sensor-app
+WATER_LEAK_DETECTOR_APP_NAME=water-leak-detector-app
 CHIP_TOOL_NAME=chip-tool
 
 BUILD_LIGHTING_APP=true
 BUILD_LOCK_APP=true
 BUILD_THERMOSTAT_APP=true
 BUILD_CONTACT_SENSOR_APP=true
+BUILD_WATER_LEAK_DETECTOR_APP=true
 BUILD_CHIP_TOOL=true
 
 if [ -e ${MATTER_INSTALL_BIN_DIR}/${LIGHTING_APP_NAME} ]; then
@@ -118,6 +120,11 @@ if [ -e ${MATTER_INSTALL_BIN_DIR}/${THERMOSTAT_APP_NAME} ]; then
     BUILD_THERMOSTAT_APP=false
 fi
 
+if [ -e ${MATTER_INSTALL_BIN_DIR}/${WATER_LEAK_DETECTOR_APP_NAME} ]; then
+    echo "Matter example water leak detector app already exists, skipping build."
+    BUILD_WATER_LEAK_DETECTOR_APP=false
+fi
+
 if [ -e ${MATTER_INSTALL_BIN_DIR}/${CONTACT_SENSOR_NAME} ]; then
     echo "Matter example contact sensor app already exists, skipping build."
     BUILD_CONTACT_SENSOR_APP=false
@@ -132,6 +139,7 @@ if [ "${BUILD_LIGHTING_APP}" = true ] ||
     [ "${BUILD_LOCK_APP}" = true ] ||
     [ "${BUILD_THERMOSTAT_APP}" = true ] ||
     [ "${BUILD_CONTACT_SENSOR_APP}" = true ] ||
+    [ "${BUILD_WATER_LEAK_DETECTOR_APP}" = true ] ||
     [ "${BUILD_CHIP_TOOL}" = true ]; then
 
     cd ${MATTER_BUILD_DIR}
@@ -150,6 +158,10 @@ if [ "${BUILD_LIGHTING_APP}" = true ] ||
 
     if [ "${BUILD_THERMOSTAT_APP}" = true ]; then
         ./scripts/build/build_examples.py --target linux-x64-thermostat build && cp out/linux-x64-thermostat/${THERMOSTAT_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
+    fi
+
+    if [ "${BUILD_WATER_LEAK_DETECTOR_APP}" = true ]; then
+        ./scripts/build/build_examples.py --target linux-x64-water-leak-detector build && cp out/linux-x64-water-leak-detector/${WATER_LEAK_DETECTOR_APP_NAME} ${MATTER_INSTALL_BIN_DIR} && rm -rf out
     fi
 
     if [ "${BUILD_CONTACT_SENSOR_APP}" = true ]; then

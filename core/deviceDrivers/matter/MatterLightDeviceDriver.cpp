@@ -131,13 +131,6 @@ bool MatterLightDeviceDriver::DoRegisterResources(icDevice *device)
 
     icDebug();
 
-    auto deviceCache = GetDeviceDataCache(device->uuid);
-    if (!deviceCache)
-    {
-        icError("No device cache for %s", device->uuid);
-        return false;
-    }
-
     icDeviceEndpoint *endpoint = createEndpoint(device, LIGHT_ENDPOINT, LIGHT_PROFILE, true);
 
     result &= createEndpointResource(endpoint,

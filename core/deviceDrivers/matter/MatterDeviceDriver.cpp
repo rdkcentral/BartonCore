@@ -213,7 +213,7 @@ void MatterDeviceDriver::Shutdown()
     // occur only when the stack lock is held, or chipDie will abort the program
     // to avoid undefined behavior. Drivers are shut down before subsystems.
 
-    deviceDataCaches.clear();
+    devices.clear();
     clusterServers.clear();
 }
 
@@ -356,7 +356,7 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        deviceDataCaches.erase(device->uuid);
+        devices.erase(device->uuid);
     });
 
     return sentRemoveFabricRequest;
@@ -447,7 +447,6 @@ void MatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool
                                              const chip::SessionHandle &sessionHandle)
 {
     icDebug("Unimplemented");
-    FailOperation(promises);
 }
 
 void MatterDeviceDriver::SetTampered(const std::string &deviceId, bool tampered)
@@ -808,14 +807,14 @@ bool MatterDeviceDriver::InitializeDeviceDataCacheIfRequired(const std::string &
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();
 
-        // TODO This needs a timeout so it cant block forever
-        if (!success.get())
+        if (success.wait_for(std::chrono::seconds(MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS)) != std::future_status::ready ||
+            !success.get())
         {
             icError("Failed to start DeviceDataCache for device %s", deviceUuid.c_str());
             return false;
         }
 
-        AddDeviceDataCache(std::move(newCache));
+        AddDevice(std::make_unique<MatterDevice>(deviceUuid, std::move(newCache)));
     }
 
     return true;

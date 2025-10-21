@@ -96,13 +96,6 @@ bool MatterContactSensorDeviceDriver::DoRegisterResources(icDevice *device)
 
     bool result = true;
 
-    auto deviceCache = GetDeviceDataCache(device->uuid);
-    if (!deviceCache)
-    {
-        icError("No device cache for %s", device->uuid);
-        return false;
-    }
-
     icDeviceEndpoint *sensorEndpoint = createEndpoint(device, CONTACT_SENSOR_ENDPOINT, SENSOR_PROFILE, true);
 
     result &= createEndpointResource(sensorEndpoint,
