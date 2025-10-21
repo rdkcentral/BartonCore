@@ -48,8 +48,6 @@ namespace barton
         void OnOffReadComplete(std::string &deviceUuid, bool isOn, void *asyncContext) override;
 
     protected:
-        std::vector<MatterCluster *> GetClustersToSubscribeTo(const std::string &deviceId) override;
-
         void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
                                const std::string &deviceId,
                                chip::Messaging::ExchangeManager &exchangeMgr,

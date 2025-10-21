@@ -56,11 +56,6 @@ namespace barton
                                                     NetworkUtils::NetworkInterfaceInfo info) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            return {1, kSubscriptionMaxIntervalPublisherLimit};
-        }
-
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
         std::string GetMacAddress();

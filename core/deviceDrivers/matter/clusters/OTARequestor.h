@@ -101,12 +101,6 @@ namespace barton
                                           SubscribeInteraction &subscriber) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            SubscriptionIntervalSecs intervalSecs(1, 3600);
-            return intervalSecs;
-        }
-
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
 

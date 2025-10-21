@@ -409,28 +409,7 @@ SubscriptionIntervalSecs MatterDeviceDriver::CalculateFinalSubscriptionIntervalS
 {
     icDebug();
 
-    SubscriptionIntervalSecs intervalSecs(0, 0);
-    uint16_t minIntervalFloorSeconds = 1;
-    uint16_t maxIntervalCeilingSeconds = UINT16_MAX;
-    auto commonClusters = GetCommonClustersToSubscribeTo(deviceId);
-    auto clusters = GetClustersToSubscribeTo(deviceId);
-    clusters.insert(clusters.end(), commonClusters.begin(), commonClusters.end());
-
-    for (auto clusterServer : clusters)
-    {
-        auto intervals = clusterServer->GetDesiredSubscriptionIntervalSecs();
-        if (intervals.minIntervalFloorSecs == 0 || intervals.maxIntervalCeilingSecs == 0)
-        {
-            icError("Failed to retrieve valid subscription interval parameters for our clusters!");
-            return intervalSecs;
-        }
-        minIntervalFloorSeconds = minIntervalFloorSeconds > intervals.minIntervalFloorSecs
-                                      ? minIntervalFloorSeconds
-                                      : intervals.minIntervalFloorSecs;
-        maxIntervalCeilingSeconds = maxIntervalCeilingSeconds < intervals.maxIntervalCeilingSecs
-                                        ? maxIntervalCeilingSeconds
-                                        : intervals.maxIntervalCeilingSecs;
-    }
+    SubscriptionIntervalSecs intervalSecs = GetDesiredSubscriptionIntervalSecs();
 
     // The report interval should be "significantly less" than the comm fail timeout to avoid
     // requiring phase-locked clocks and realtime processing. A factor of 2 was chosen here to
@@ -441,67 +420,36 @@ SubscriptionIntervalSecs MatterDeviceDriver::CalculateFinalSubscriptionIntervalS
     // in practice. Extending this timeout doesn't require any special consideration.
     uint32_t desiredCommfailCeilSecs = GetCommFailTimeoutSecs(deviceId.c_str()) / 2;
 
-    if (maxIntervalCeilingSeconds > desiredCommfailCeilSecs)
+    if (intervalSecs.maxIntervalCeilingSecs > desiredCommfailCeilSecs)
     {
         icInfo("Reducing max interval ceiling from %d secs to %d secs to line up with commfail timeout",
-               maxIntervalCeilingSeconds,
+               intervalSecs.maxIntervalCeilingSecs,
                desiredCommfailCeilSecs);
 
-        maxIntervalCeilingSeconds = desiredCommfailCeilSecs;
+        intervalSecs.maxIntervalCeilingSecs = desiredCommfailCeilSecs;
     }
 
-    if (minIntervalFloorSeconds > maxIntervalCeilingSeconds)
+    if (intervalSecs.minIntervalFloorSecs > intervalSecs.maxIntervalCeilingSecs)
     {
-        uint16_t adjustedMinIntervalFloor = maxIntervalCeilingSeconds - 1 > 0 ? maxIntervalCeilingSeconds - 1 : 1;
+        uint16_t adjustedMinIntervalFloor = intervalSecs.maxIntervalCeilingSecs - 1 > 0 ? intervalSecs.maxIntervalCeilingSecs - 1 : 1;
         icWarn("The requested min interval floor of %d secs is greater than the max interval ceiling of %d secs; "
                "adjusting the floor to %d secs",
-               minIntervalFloorSeconds,
-               maxIntervalCeilingSeconds,
+               intervalSecs.minIntervalFloorSecs,
+               intervalSecs.maxIntervalCeilingSecs,
                adjustedMinIntervalFloor);
-        minIntervalFloorSeconds = adjustedMinIntervalFloor;
+        intervalSecs.minIntervalFloorSecs = adjustedMinIntervalFloor;
     }
 
     icDebug("Will request min interval floor of %d seconds for the subscription on %s",
-            minIntervalFloorSeconds,
+            intervalSecs.minIntervalFloorSecs,
             deviceId.c_str());
     icDebug("Will request max interval ceiling of %d seconds for the subscription on %s",
-            maxIntervalCeilingSeconds,
+            intervalSecs.maxIntervalCeilingSecs,
             deviceId.c_str());
 
-    intervalSecs.minIntervalFloorSecs = minIntervalFloorSeconds;
-    intervalSecs.maxIntervalCeilingSecs = maxIntervalCeilingSeconds;
+    intervalSecs.minIntervalFloorSecs = intervalSecs.minIntervalFloorSecs;
+    intervalSecs.maxIntervalCeilingSecs = intervalSecs.maxIntervalCeilingSecs;
     return intervalSecs;
-}
-
-std::vector<MatterCluster *> MatterDeviceDriver::GetCommonClustersToSubscribeTo(const std::string &deviceId)
-{
-    icDebug();
-
-    auto basicInfoServer = (BasicInformation *) GetAnyServerById(deviceId, chip::app::Clusters::BasicInformation::Id);
-    std::vector<MatterCluster *> clusters = {basicInfoServer};
-
-    auto generalDiagnosticsServer =
-        (GeneralDiagnostics *) GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id);
-    clusters.push_back(generalDiagnosticsServer);
-
-    auto requestorServer = (OTARequestor *) GetAnyServerById(deviceId, OtaSoftwareUpdateRequestor::Id);
-
-    if (requestorServer != nullptr)
-    {
-        clusters.push_back(requestorServer);
-    }
-    else
-    {
-        icInfo("OTA cluster not supported on device %s!", deviceId.c_str());
-    }
-
-    return clusters;
-}
-
-std::vector<MatterCluster *> MatterDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
-{
-    icDebug("Unimplemented");
-    return {};
 }
 
 void MatterDeviceDriver::FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,

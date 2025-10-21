@@ -120,21 +120,31 @@ void deviceCommunicationWatchdogTerm()
 {
     pthread_mutex_lock(&controlMutex);
 
+    if (running == false)
+    {
+        // Already terminated
+        pthread_mutex_unlock(&controlMutex);
+        return;
+    }
+
     running = false;
-
-    failedCallback = NULL;
-    restoredCallback = NULL;
-
-    pthread_mutex_lock(&monitoredDevicesMutex);
-    g_hash_table_destroy(monitoredDevices);
-    monitoredDevices = NULL;
-    pthread_mutex_unlock(&monitoredDevicesMutex);
 
     pthread_cond_broadcast(&controlCond);
 
     pthread_mutex_unlock(&controlMutex);
 
+    // Wait for the thread to finish before destroying resources
     pthread_join(monitorThreadId, NULL);
+    monitorThreadId = 0; // Reset thread ID
+
+    // Now safe to destroy the hash table
+    pthread_mutex_lock(&monitoredDevicesMutex);
+    g_hash_table_destroy(monitoredDevices);
+    monitoredDevices = NULL;
+    pthread_mutex_unlock(&monitoredDevicesMutex);
+
+    failedCallback = NULL;
+    restoredCallback = NULL;
 }
 
 void deviceCommunicationWatchdogMonitorDevice(const char *uuid, const uint32_t commFailTimeoutSeconds, bool inCommFail)
@@ -182,7 +192,10 @@ void deviceCommunicationWatchdogStopMonitoringDevice(const char *uuid)
     icLogDebug(LOG_TAG, "%s: stop monitoring %s", __FUNCTION__, uuid);
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    g_hash_table_remove(monitoredDevices, uuid);
+    if (monitoredDevices != NULL)
+    {
+        g_hash_table_remove(monitoredDevices, uuid);
+    }
     pthread_mutex_unlock(&monitoredDevicesMutex);
 }
 
@@ -197,7 +210,11 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = NULL;
+    if (monitoredDevices != NULL)
+    {
+        info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    }
     if (info != NULL)
     {
         if (setMillisUntilCommFail(info, info->commFailTimeoutSeconds * 1000) >= MIN_UPDATE_INTERVAL_MILLIS)
@@ -244,7 +261,11 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
     bool doNotify = false;
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = NULL;
+    if (monitoredDevices != NULL)
+    {
+        info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    }
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -285,7 +306,11 @@ int32_t deviceCommunicationWatchdogGetRemainingCommFailTimeoutForLPM(const char 
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = NULL;
+    if (monitoredDevices != NULL)
+    {
+        info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    }
     if (info != NULL)
     {
 
@@ -340,7 +365,11 @@ void deviceCommunicationWatchdogSetTimeRemainingForDeviceFromLPM(const char *uui
 
     pthread_mutex_lock(&monitoredDevicesMutex);
 
-    MonitoredDeviceInfo *info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    MonitoredDeviceInfo *info = NULL;
+    if (monitoredDevices != NULL)
+    {
+        info = (MonitoredDeviceInfo *) g_hash_table_lookup(monitoredDevices, uuid);
+    }
     if (info != NULL)
     {
         // if device is not in comm fail
@@ -426,19 +455,23 @@ static void *commFailWatchdogThreadProc(void *arg)
 
         // iterate over all monitored devices and check to see if any have hit comm fail
         pthread_mutex_lock(&monitoredDevicesMutex);
-        GHashTableIter monitoredDevicesIter;
-        gchar *uuid;
-        MonitoredDeviceInfo *info;
-        g_hash_table_iter_init(&monitoredDevicesIter, monitoredDevices);
-        while (g_hash_table_iter_next(&monitoredDevicesIter, (gpointer *) &uuid, (gpointer *) &info))
+
+        // Check if the hash table is still valid (it could be NULL if we're shutting down)
+        if (monitoredDevices != NULL)
         {
-            uint32_t millisUntilCommFail = getMillisUntilCommFail(info);
-
-            icLogTrace(LOG_TAG, "%s: checking on %s", __FUNCTION__, uuid);
-
-            if (isCommfailFast)
+            GHashTableIter monitoredDevicesIter;
+            gchar *uuid;
+            MonitoredDeviceInfo *info;
+            g_hash_table_iter_init(&monitoredDevicesIter, monitoredDevices);
+            while (g_hash_table_iter_next(&monitoredDevicesIter, (gpointer *) &uuid, (gpointer *) &info))
             {
-                millisUntilCommFail /= 100;
+                uint32_t millisUntilCommFail = getMillisUntilCommFail(info);
+
+                icLogTrace(LOG_TAG, "%s: checking on %s", __FUNCTION__, uuid);
+
+                if (isCommfailFast)
+                {
+                    millisUntilCommFail /= 100;
             }
 
             if (millisUntilCommFail == 0 && info->inCommFail == false)
@@ -458,6 +491,7 @@ static void *commFailWatchdogThreadProc(void *arg)
                        stringValueOfBool(info->inCommFail));
 
             setMillisUntilCommFail(info, millisUntilCommFail);
+            }
         }
         pthread_mutex_unlock(&monitoredDevicesMutex);
 
@@ -495,7 +529,11 @@ bool deviceCommunicationWatchdogIsDeviceMonitored(const char *uuid)
     }
 
     pthread_mutex_lock(&monitoredDevicesMutex);
-    gboolean isMonitored = g_hash_table_contains(monitoredDevices, uuid);
+    gboolean isMonitored = false;
+    if (monitoredDevices != NULL)
+    {
+        isMonitored = g_hash_table_contains(monitoredDevices, uuid);
+    }
     pthread_mutex_unlock(&monitoredDevicesMutex);
 
     return isMonitored;

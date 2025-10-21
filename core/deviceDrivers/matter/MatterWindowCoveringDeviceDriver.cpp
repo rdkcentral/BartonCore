@@ -142,22 +142,6 @@ void MatterWindowCoveringDeviceDriver::CurrentPositionLiftPercentageReadComplete
     delete readContext;
 }
 
-std::vector<MatterCluster *> MatterWindowCoveringDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
-{
-    icDebug();
-
-    auto windowCoveringServer = static_cast<WindowCovering *>(GetAnyServerById(deviceId, WINDOW_COVERING_CLUSTER_ID));
-    if (windowCoveringServer == nullptr)
-    {
-        icError("No window covering cluster on device %s!", deviceId.c_str());
-        return {};
-    }
-
-    std::vector<MatterCluster *> clusters;
-    clusters.push_back(windowCoveringServer);
-    return clusters;
-}
-
 void MatterWindowCoveringDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
                                                          const std::string &deviceId,
                                                          chip::Messaging::ExchangeManager &exchangeMgr,
