@@ -43,6 +43,7 @@
 #include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/DiscoveredDeviceDetails.h"
 #include "subsystems/matter/Matter.h"
+#include "sbmd/SbmdSpec.h"
 #include <condition_variable>
 #include <forward_list>
 #include <future>
@@ -262,6 +263,7 @@ namespace barton
         struct ClusterReadContext
         {
             void *driverContext;                            // the context provided to the driver for the operation
+            SbmdMapper *mapper;                             // the mapper to use for this read (SBMD drivers only)
             char **value;                                   // non-null if this read is a regular resource read
         };
 

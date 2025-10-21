@@ -1,0 +1,77 @@
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Door Lock with Light"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 2
+matterMeta:
+  deviceType: "0x000a"
+  revision: 3
+resources: []
+endpoints:
+  - id: 1
+    profile: "doorLock"
+    profileVersion: 3
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        cachingPolicy: "always"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0101"
+              attributeId: "0x0000"
+              name: "LockState"
+              type: "enum8"
+            script: |
+              return LockState === 1;
+      - id: "unlock"
+        type: "function"
+        mapper:
+          execute:
+            command:
+              clusterId: "0x0101"
+              commandId: "0x01"
+              name: "UnlockDoor"
+              args:
+                - name: "PINCode"
+                  type: "octstr"
+                  featureMask: "& 0x81" # COTA & PIN
+            script: |
+              result = [];
+              if (args.length > 0) {
+                for (let i = 0; i < args[0].length; i++) {
+                  result.push(args[0].charCodeAt(i));
+                }
+              }
+              return {PINCode: result};
+  - id: 2
+    profile: "light"
+    profileVersion: 0
+    resources:
+      - id: "isOn"
+        type: "boolean"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+          - "lazySave"
+        cachingPolicy: "always"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0006"
+              attributeId: "0x0000"
+              name: "OnOff"
+              type: "bool"
+          write:
+            command:
+              clusterId: "0x0006"
+              commandId: "0x00"
+              name: "Off"
+            script: |
