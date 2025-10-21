@@ -442,10 +442,8 @@ SubscriptionIntervalSecs MatterDeviceDriver::CalculateFinalSubscriptionIntervalS
         intervalSecs.minIntervalFloorSecs = adjustedMinIntervalFloor;
     }
 
-    icDebug("Will request min interval floor of %d seconds for the subscription on %s",
+    icDebug("Will request min/max interval of %d/%d seconds for the subscription on %s",
             intervalSecs.minIntervalFloorSecs,
-            deviceId.c_str());
-    icDebug("Will request max interval ceiling of %d seconds for the subscription on %s",
             intervalSecs.maxIntervalCeilingSecs,
             deviceId.c_str());
 

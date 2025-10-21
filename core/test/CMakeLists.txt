@@ -153,3 +153,12 @@ bcore_add_cmocka_test(
     WRAPPED_FUNCTIONS b_core_property_provider_get_property_as_bool
     LINK_LIBRARIES BartonCoreStatic
 )
+
+bcore_add_cmocka_test(
+    NAME sbmdParserTest
+    INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/..
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdParserTest.cpp
+    LINK_LIBRARIES BartonCoreStatic yaml-cpp
+)
+
+target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")

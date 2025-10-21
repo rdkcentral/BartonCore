@@ -83,6 +83,8 @@ if (BCORE_MATTER)
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
+    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp")
+
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
     bcore_matter_helper_provider_get_implementations(
@@ -98,6 +100,7 @@ if (BCORE_MATTER)
         ${MATTER_PROVIDER_IMPLEMENTATIONS}
         ${MATTER_DELEGATE_IMPLEMENTATIONS}
         ${matterDriversSrc}
+        ${sbmdSrc}
         ${matterSrc}
         "src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp" # This provider is always required
     )
@@ -138,6 +141,12 @@ if (BCORE_MATTER)
         ${MATTER_PROVIDER_HEADER_PATHS}
         ${MATTER_DELEGATE_HEADER_PATHS})
 
+    # yaml-cpp for SBMD parser
+    pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
+    link_directories(${YAMLCPP_LIBRARY_DIRS})
+    list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
+    list(APPEND XTRA_LIBS yaml-cpp)
+
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
@@ -177,7 +186,11 @@ list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
         xhDeviceHelper xhDeviceDescriptors xhXmlHelper
-        xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
+        xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m quickjs ${BCORE_LINK_LIBRARIES})
+
+if (BCORE_SUPPORT_SOFTWARE_WATCHDOG)
+    set(bCoreLinkLibraries ${bCoreLinkLibraries} xhSoftwareWatchdog)
+endif()
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
