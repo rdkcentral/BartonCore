@@ -1,7 +1,7 @@
-From af71e6e566366cc3bf683c0eabf49bec2e1d6465 Mon Sep 17 00:00:00 2001
+From b4b4d89d536689913bd17f308d93c51e033333be Mon Sep 17 00:00:00 2001
 From: Christian Leithner <christian_leithner@comcast.com>
 Date: Mon, 15 Sep 2025 20:00:33 +0000
-Subject: [PATCH] Patch out visibility restriction
+Subject: [PATCH 2/2] Patch out visibility restriction
 
 For some reason, the SDK put in a gn restriction for the required-privileges
 source_set that prevents any gn from using it either directly or transitively
@@ -37,9 +37,9 @@ index 40cb416c..09e5c8d3 100644
 +  #   "${chip_root}/src/controller/data_model",
 +  #   "${chip_root}/src/data-model-providers/codegen/*",
 +  # ]
-
+ 
    # We still have some strong coupling in this case
    # Eventually dynamic server should be replaced with code-driven and not try
---
+-- 
 2.43.0
 
