@@ -548,13 +548,11 @@ static void test_subsystemManagerSetOtaUpgradeDelay(void **state)
     subsystemManagerSetOtaUpgradeDelay(10);
 
     // Case 3: Subsystem with valid setOtaUpgradeDelay function with 0 delay
-    mySubsystem->setOtaUpgradeDelay = mockSetOtaUpgradeDelay;
     expect_function_call(mockSetOtaUpgradeDelay);
     expect_value(mockSetOtaUpgradeDelay, delaySeconds, 0);
     subsystemManagerSetOtaUpgradeDelay(0);
 
     // Case 4: Subsystem with valid setOtaUpgradeDelay function with large delay
-    mySubsystem->setOtaUpgradeDelay = mockSetOtaUpgradeDelay;
     expect_function_call(mockSetOtaUpgradeDelay);
     expect_value(mockSetOtaUpgradeDelay, delaySeconds, 3600);
     subsystemManagerSetOtaUpgradeDelay(3600);

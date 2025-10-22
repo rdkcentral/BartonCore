@@ -170,25 +170,12 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "- - - - - - - - - - - - - - - - ")
 message(STATUS "Barton Core PRIVATE ON/OFF Configs. These options should not be used by new clients.")
 
-bcore_option(NAME BCORE_PROVIDE_LIBS
-           DEFINITION BARTON_CONFIG_PROVIDE_LIBS
-           DESCRIPTION "Choose if private libraries are provided by the client.")
 bcore_option(NAME BCORE_SUPPORT_ALARMS
            DEFINITION BARTON_CONFIG_SUPPORT_ALARMS
            DESCRIPTION "Whether alarms are supported by the client.")
 bcore_option(NAME BCORE_M1LTE
            DEFINITION BARTON_CONFIG_M1LTE
            DESCRIPTION "Indicates to Barton M1LTE is included.")
-bcore_option(NAME BCORE_SETUP_WIZARD
-           DEFINITION BARTON_CONFIG_SETUP_WIZARD
-           DESCRIPTION "Support for behavioral changes if there is an \"activation period\"")
-bcore_option(NAME BCORE_SUPPORT_SOFTWARE_WATCHDOG
-           DEFINITION BARTON_CONFIG_SUPPORT_SOFTWARE_WATCHDOG
-           DESCRIPTION "Support for zigbee watchdog feature using the software watchdog library.")
-bcore_int_option(NAME BCORE_SOFTWARE_WATCHDOG_TROUBLE_CODE_ZIGBEE_CORE
-              DEFINITION BARTON_CONFIG_SOFTWARE_TROUBLE_CODE_ZIGBEE_CORE_WATCHDOG
-              DESCRIPTION "The trouble code to use when reporting a zigbee core failure to the software watchdog library."
-              VALUE 11)
 bcore_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")
@@ -202,6 +189,10 @@ bcore_string_option(NAME BCORE_MATTER_LIB
                   DEFINITION BARTON_CONFIG_MATTER_LIB
                   DESCRIPTION "Name of the provided Matter library."
                   VALUE "BartonMatter")
+bcore_string_option(NAME BCORE_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
+                    DEFINITION BARTON_CONFIG_DEBUG_TELEMETRY_UPLOAD_DIRECTORY
+                    DESCRIPTION "Directory to which telemetry files are uploaded in debug builds."
+                    VALUE "/tmp/zigbeeTelemetry/upload")
 
 # We're not going to use BCoreMatterHelper to set up defaults (as BCoreMatterHelper applies FORCE
 # sets). However, include it to populate default header paths.
