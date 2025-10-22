@@ -68,10 +68,13 @@ public:
 
     chip::System::Clock::Timestamp GetMRPBaseTimeout() const override { return chip::System::Clock::kZero; }
 
-    chip::System::Clock::Milliseconds32 GetAckTimeout() const override { return chip::System::Clock::kZero; }
+    chip::System::Clock::Milliseconds32 GetAckTimeout(bool isFirstMessageOnExchange) const override
+    {
+        return chip::System::Clock::kZero;
+    }
 
-    chip::System::Clock::Milliseconds32
-    GetMessageReceiptTimeout(chip::System::Clock::Timestamp ourLastActivity) const override
+    chip::System::Clock::Milliseconds32 GetMessageReceiptTimeout(chip::System::Clock::Timestamp ourLastActivity,
+                                                                 bool isFirstMessageOnExchange) const override
     {
         return chip::System::Clock::kZero;
     }
