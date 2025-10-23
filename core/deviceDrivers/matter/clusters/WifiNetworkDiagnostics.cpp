@@ -45,18 +45,6 @@ extern "C" {
 
 namespace barton
 {
-    SubscriptionIntervalSecs WifiNetworkDiagnostics::GetDesiredSubscriptionIntervalSecs()
-    {
-        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        uint16_t minIntervalFloorSeconds = b_core_property_provider_get_property_as_uint16(
-            propertyProvider, DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MIN_INTERVAL_SECS, 60);
-        uint16_t maxIntervalCeilingSeconds = b_core_property_provider_get_property_as_uint16(
-            propertyProvider, DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MAX_INTERVAL_SECS, 60 * 5);
-
-        SubscriptionIntervalSecs intervalSecs(minIntervalFloorSeconds, maxIntervalCeilingSeconds);
-        return intervalSecs;
-    }
-
     void WifiNetworkDiagnostics::OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                                     const chip::app::ConcreteAttributePath &path)
     {

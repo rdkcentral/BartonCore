@@ -53,12 +53,6 @@ namespace barton
             virtual void OnOffReadComplete(std::string &deviceUuid, bool isOn, void *asyncContext) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            SubscriptionIntervalSecs intervalSecs(1, 3600);
-            return intervalSecs;
-        }
-
         bool GetOnOff(void *context,
                       const chip::Messaging::ExchangeManager &exchangeMgr,
                       const chip::SessionHandle &sessionHandle);

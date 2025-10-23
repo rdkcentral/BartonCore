@@ -412,12 +412,15 @@ namespace barton
         virtual bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues);
 
         /**
-         * @brief Return a list of clusters that we wish to subscribe to on this device type.
+         * @brief Return the desired subscription interval for this device. The final interval may be more
+         * frequent if required to support comm fail detection.
          *
-         * @param deviceId
-         * @return std::vector<MatterCluster *>
+         * @return the driver's desired subscription interval
          */
-        virtual std::vector<MatterCluster *> GetClustersToSubscribeTo(const std::string &deviceId);
+        virtual SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs()
+        {
+            return {1, kSubscriptionMaxIntervalPublisherLimit};
+        }
 
         /**
          * @brief Make a cluster instance. Implementations simply create an instance of a supported cluster
@@ -656,14 +659,6 @@ namespace barton
                                    DeviceDescriptor *deviceDescriptor,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
                                    const chip::SessionHandle &sessionHandle);
-
-        /**
-         * @brief Return a list of common Matter clusters required for base functionality that we wish to subscribe to.
-         *
-         * @param deviceId
-         * @return std::vector<MatterCluster *>
-         */
-        virtual std::vector<MatterCluster *> GetCommonClustersToSubscribeTo(const std::string &deviceId);
 
         SubscriptionIntervalSecs CalculateFinalSubscriptionIntervalSecs(const std::string &deviceId);
 

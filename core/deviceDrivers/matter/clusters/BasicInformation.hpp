@@ -52,11 +52,6 @@ namespace barton
             virtual void OnSerialNumberChanged(BasicInformation &source, const std::string &serialNumber) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            return {1, kSubscriptionMaxIntervalPublisherLimit};
-        }
-
         std::string GetFirmwareVersionString();
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,

@@ -41,19 +41,3 @@
 
 #define DEVICE_PROP_MATTER_DAC_P12_PATH         DEVICE_PROP_MATTER_NS "dacP12Path"
 #define DEVICE_PROP_MATTER_DAC_P12_PASSWORD     DEVICE_PROP_MATTER_NS "dacP12Password"
-
-// WifiNetworkDiagnosticsCluster
-
-/**
- * @brief uint16 min rate limiter for Wifi RSSI subscriptions
- * @ref Matter 1.0 11.14
- */
-#define DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MIN_INTERVAL_SECS                                                     \
-    "device.matter.wifiDiagnostics.rssi.minIntervalSeconds"
-
-/**
- * @brief uint16 max rate limiter for Wifi RSSI subscriptions
- * @ref Matter 1.0 11.14
- */
-#define DEVICE_PROP_MATTER_WIFI_DIAGNOSTICS_RSSI_MAX_INTERVAL_SECS                                                     \
-    "device.matter.wifiDiagnostics.rssi.maxIntervalSeconds"

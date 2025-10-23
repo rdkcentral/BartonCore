@@ -151,22 +151,6 @@ void MatterLightDeviceDriver::OnOffReadComplete(std::string &deviceUuid, bool is
     delete readContext;
 }
 
-std::vector<MatterCluster *> MatterLightDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
-{
-    icDebug();
-
-    auto onOffServer = static_cast<OnOff *>(GetAnyServerById(deviceId, ON_OFF_CLUSTER_ID));
-    if (onOffServer == nullptr)
-    {
-        icError("OnOff cluster not present on device %s!", deviceId.c_str());
-        return {};
-    }
-
-    std::vector<MatterCluster *> clusters;
-    clusters.push_back(onOffServer);
-    return clusters;
-}
-
 void MatterLightDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
                                                 const std::string &deviceId,
                                                 chip::Messaging::ExchangeManager &exchangeMgr,

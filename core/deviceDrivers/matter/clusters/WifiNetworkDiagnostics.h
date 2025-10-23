@@ -53,8 +53,6 @@ namespace barton
             virtual void RssiReadComplete(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
-
         bool GetRssi(void *context,
                      const chip::Messaging::ExchangeManager &exchangeMgr,
                      const chip::SessionHandle &sessionHandle);

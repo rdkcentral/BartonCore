@@ -114,14 +114,6 @@ namespace barton
          */
         void SetClusterStateCacheRef(std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCacheRef);
 
-        /**
-         * @brief Return the min interval floor and max interval ceiling, in that order, that this Cluster wants
-         *        for its reporting configuration.
-         *
-         * @return SubscriptionIntervalSecs
-         */
-        virtual SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() = 0;
-
     protected:
         std::mutex mtx;
         EventHandler *eventHandler;

@@ -130,22 +130,6 @@ void MatterDoorLockDeviceDriver::LockStateReadComplete(std::string &deviceUuid,
     delete readContext;
 }
 
-std::vector<MatterCluster *> MatterDoorLockDeviceDriver::GetClustersToSubscribeTo(const std::string &deviceId)
-{
-    icDebug();
-
-    auto doorlockServer = static_cast<DoorLock *>(GetAnyServerById(deviceId, DOORLOCK_CLUSTER_ID));
-    if (doorlockServer == nullptr)
-    {
-        icError("No door lock cluster on device %s", deviceId.c_str());
-        return {};
-    }
-
-    std::vector<MatterCluster *> clusters;
-    clusters.push_back(doorlockServer);
-    return clusters;
-}
-
 void MatterDoorLockDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
                                                    const std::string &deviceId,
                                                    chip::Messaging::ExchangeManager &exchangeMgr,

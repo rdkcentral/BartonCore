@@ -55,12 +55,6 @@ namespace barton
             CurrentPositionLiftPercentageReadComplete(std::string &deviceUuid, uint8_t percent, void *asyncContext) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            SubscriptionIntervalSecs intervalSecs(1, 3600);
-            return intervalSecs;
-        }
-
         bool GetCurrentPositionLiftPercentage(void *context,
                                               const chip::Messaging::ExchangeManager &exchangeMgr,
                                               const chip::SessionHandle &sessionHandle);

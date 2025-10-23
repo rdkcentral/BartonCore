@@ -53,12 +53,6 @@ namespace barton
             virtual void CurrentLevelReadComplete(const std::string &deviceUuid, uint8_t level, void *asyncContext) {};
         };
 
-        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override
-        {
-            SubscriptionIntervalSecs intervalSecs(1, 3600);
-            return intervalSecs;
-        }
-
         bool GetCurrentLevel(void *context,
                              const chip::Messaging::ExchangeManager &exchangeMgr,
                              const chip::SessionHandle &sessionHandle);
