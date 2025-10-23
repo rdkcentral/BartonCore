@@ -460,8 +460,8 @@ static void *commFailWatchdogThreadProc(void *arg)
         if (monitoredDevices != NULL)
         {
             GHashTableIter monitoredDevicesIter;
-            gchar *uuid;
-            MonitoredDeviceInfo *info;
+            gchar *uuid = NULL;
+            MonitoredDeviceInfo *info = NULL;
             g_hash_table_iter_init(&monitoredDevicesIter, monitoredDevices);
             while (g_hash_table_iter_next(&monitoredDevicesIter, (gpointer *) &uuid, (gpointer *) &info))
             {
@@ -472,7 +472,7 @@ static void *commFailWatchdogThreadProc(void *arg)
                 if (isCommfailFast)
                 {
                     millisUntilCommFail /= 100;
-            }
+                }
 
             if (millisUntilCommFail == 0 && info->inCommFail == false)
             {
