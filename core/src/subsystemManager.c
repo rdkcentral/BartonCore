@@ -59,24 +59,6 @@ typedef struct
     bool ready;
 } SubsystemRegistration;
 
-#define MAP_FOREACH(value, map, expr)                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (map)                                                                                                       \
-        {                                                                                                              \
-            GHashTableIter iter = {0};                                                                                 \
-            gpointer key = {0};                                                                                        \
-            gpointer _value = {0};                                                                                     \
-            g_hash_table_iter_init(&iter, (map));                                                                      \
-            while (g_hash_table_iter_next(&iter, &key, &_value))                                                       \
-            {                                                                                                          \
-                g_autoptr(SubsystemRegistration) value =                                                               \
-                    subsystemRegistrationAcquire((SubsystemRegistration *) _value);                                    \
-                expr                                                                                                   \
-            }                                                                                                          \
-        }                                                                                                              \
-    } while (0)
-
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
 static GHashTable *subsystems;
 static bool allDriversStarted = false;
@@ -312,6 +294,15 @@ void subsystemManagerRegister(Subsystem *subsystem)
     }
 }
 
+static void collectSubsystemNamesCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    GPtrArray *result = (GPtrArray *) user_data;
+    g_ptr_array_add(result, g_strdup(registration->subsystem->name));
+}
+
 GPtrArray *subsystemManagerGetRegisteredSubsystems(void)
 {
     icDebug();
@@ -322,9 +313,7 @@ GPtrArray *subsystemManagerGetRegisteredSubsystems(void)
 
     g_return_val_if_fail(subsystems != NULL, result);
 
-    SubsystemRegistration *registration = NULL;
-
-    MAP_FOREACH(registration, subsystems, g_ptr_array_add(result, g_strdup(registration->subsystem->name)););
+    g_hash_table_foreach(subsystems, collectSubsystemNamesCallback, result);
 
     return result;
 }
@@ -424,6 +413,69 @@ static void checkSubsystemForMigration(SubsystemRegistration *registration)
     }
 }
 
+/**
+ * @brief Predicate function for removing disabled subsystems from the hash table.
+ *
+ * Used with g_hash_table_foreach_remove() to conditionally remove subsystems
+ * that are found in the disabled subsystems configuration string.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Pointer to disabled subsystems configuration string
+ * @return TRUE if the subsystem should be removed, FALSE to keep it
+ */
+static gboolean removeDisabledSubsystemPredicate(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_val_if_fail(registration != NULL, FALSE);
+
+    const char *disabledSubsystems = (const char *) user_data;
+
+    return strstr(disabledSubsystems, registration->subsystem->name) != NULL;
+}
+
+/**
+ * @brief Callback function for performing subsystem migrations.
+ *
+ * Used with g_hash_table_foreach() to check and perform migrations for each
+ * registered subsystem as necessary.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void checkSubsystemForMigrationCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    checkSubsystemForMigration(registration);
+}
+
+/**
+ * @brief Callback function for initializing subsystems.
+ *
+ * Used with g_hash_table_foreach() to initialize each registered subsystem.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void initializeSubsystemCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    mutexLock(&registration->mtx);
+    registration->ready = false;
+    mutexUnlock(&registration->mtx);
+
+    if (registration->subsystem->initialize)
+    {
+        registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized);
+    }
+}
+
 void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevicesCallback)
 {
     icLogDebug(LOG_TAG, "%s", __func__);
@@ -464,19 +516,11 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
     if (disabledSubsystems && localSubsystems)
     {
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            localSubsystems,
-
-            if (strstr(disabledSubsystems, registration->subsystem->name) != NULL) {
-                g_hash_table_iter_remove(&iter);
-            });
+        g_hash_table_foreach_remove(localSubsystems, removeDisabledSubsystemPredicate, disabledSubsystems);
     }
 
     // Attempt to perform migrations as necessary before kicking off initialization
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(registration, localSubsystems, checkSubsystemForMigration(registration););
+    g_hash_table_foreach(localSubsystems, checkSubsystemForMigrationCallback, NULL);
 
     // Move local work to globals atomically. We must do this BEFORE calling
     // subsystem->initialize() because those functions will trigger callbacks
@@ -494,14 +538,31 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
         g_return_if_fail(subsystems != NULL);
 
-        registration = NULL;
-        MAP_FOREACH(registration,
-                    subsystems,
+        g_hash_table_foreach(subsystems, initializeSubsystemCallback, NULL);
+    }
+}
 
-                    mutexLock(&registration->mtx);
-                    registration->ready = false;
-                    mutexUnlock(&registration->mtx);
-                    registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized););
+/**
+ * @brief Callback function for shutting down subsystems.
+ *
+ * Used with g_hash_table_foreach() to shutdown each registered subsystem.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void shutdownSubsystemCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    mutexLock(&registration->mtx);
+    registration->ready = false;
+    mutexUnlock(&registration->mtx);
+
+    if (registration->subsystem->shutdown)
+    {
+        registration->subsystem->shutdown();
     }
 }
 
@@ -526,21 +587,33 @@ void subsystemManagerShutdown(void)
 
     if (localSubsystemManagerInitialized)
     {
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            localSubsystems,
-
-            mutexLock(&registration->mtx);
-            registration->ready = false;
-            mutexUnlock(&registration->mtx);
-
-            if (registration->subsystem->shutdown != NULL) { registration->subsystem->shutdown(); });
+        g_hash_table_foreach(localSubsystems, shutdownSubsystemCallback, NULL);
 
         if (localSubsystems)
         {
             g_hash_table_destroy(localSubsystems);
         }
+    }
+}
+
+/**
+ * @brief Callback function for notifying subsystems that all drivers have started.
+ *
+ * Used with g_hash_table_foreach() to notify each registered subsystem that
+ * all device drivers have been started and are ready for operation.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void notifyAllDriversStartedCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    if (registration->subsystem->onAllDriversStarted != NULL)
+    {
+        registration->subsystem->onAllDriversStarted();
     }
 }
 
@@ -553,14 +626,7 @@ void subsystemManagerAllDriversStarted(void)
 
         g_return_if_fail(subsystems != NULL);
 
-        SubsystemRegistration *registration = NULL;
-        MAP_FOREACH(
-            registration,
-            subsystems,
-
-            if (registration->subsystem->onAllDriversStarted != NULL) {
-                registration->subsystem->onAllDriversStarted();
-            });
+        g_hash_table_foreach(subsystems, notifyAllDriversStartedCallback, NULL);
     }
 
     {
@@ -574,6 +640,28 @@ void subsystemManagerAllDriversStarted(void)
     }
 }
 
+
+/**
+ * @brief Callback function for notifying subsystems that all services are available.
+ *
+ * Used with g_hash_table_foreach() to notify each registered subsystem that
+ * all system services are now available and ready for use.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void notifyAllServicesAvailableCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    if (registration->subsystem->onAllServicesAvailable != NULL)
+    {
+        registration->subsystem->onAllServicesAvailable();
+    }
+}
+
 void subsystemManagerAllServicesAvailable(void)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
@@ -582,14 +670,28 @@ void subsystemManagerAllServicesAvailable(void)
 
     g_return_if_fail(subsystems != NULL);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
+    g_hash_table_foreach(subsystems, notifyAllServicesAvailableCallback, NULL);
+}
 
-        if (registration->subsystem->onAllServicesAvailable != NULL) {
-            registration->subsystem->onAllServicesAvailable();
-        });
+/**
+ * @brief Callback function for notifying subsystems to restore their configuration.
+ *
+ * Used with g_hash_table_foreach() to notify each registered subsystem to
+ * restore its configuration after a restore operation.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void notifyPostRestoreConfigCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    if (registration->subsystem->onPostRestoreConfig != NULL)
+    {
+        registration->subsystem->onPostRestoreConfig();
+    }
 }
 
 void subsystemManagerPostRestoreConfig(void)
@@ -600,12 +702,35 @@ void subsystemManagerPostRestoreConfig(void)
 
     g_return_if_fail(subsystems != NULL);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
+    g_hash_table_foreach(subsystems, notifyPostRestoreConfigCallback, NULL);
+}
 
-        if (registration->subsystem->onPostRestoreConfig != NULL) { registration->subsystem->onPostRestoreConfig(); });
+/**
+ * @brief Callback function for setting OTA upgrade delay on subsystems.
+ *
+ * Used with g_hash_table_foreach() to set the OTA upgrade delay on each
+ * registered subsystem that supports this operation.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data uint32_t value cast to gpointer containing the delay in seconds
+ */
+static void setOtaUpgradeDelayCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    uint32_t delaySeconds = GPOINTER_TO_UINT(user_data);
+
+    if (registration->subsystem->setOtaUpgradeDelay)
+    {
+        icLogDebug(LOG_TAG,
+                   "Setting %s OTA upgrade delay to : %" PRIu32 " seconds",
+                   registration->subsystem->name,
+                   delaySeconds);
+
+        registration->subsystem->setOtaUpgradeDelay(delaySeconds);
+    }
 }
 
 void subsystemManagerSetOtaUpgradeDelay(uint32_t delaySeconds)
@@ -614,19 +739,28 @@ void subsystemManagerSetOtaUpgradeDelay(uint32_t delaySeconds)
 
     g_return_if_fail(subsystems != NULL);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
+    g_hash_table_foreach(subsystems, setOtaUpgradeDelayCallback, GUINT_TO_POINTER(delaySeconds));
+}
 
-        if (registration->subsystem->setOtaUpgradeDelay != NULL) {
-            icLogDebug(LOG_TAG,
-                       "Setting %s OTA upgrade delay to : %" PRIu32 " seconds",
-                       registration->subsystem->name,
-                       delaySeconds);
+/**
+ * @brief Callback function for notifying subsystems to enter Low Power Mode.
+ *
+ * Used with g_hash_table_foreach() to notify each registered subsystem to
+ * enter Low Power Mode (LPM) if it supports this operation.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void notifyLPMStartCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
 
-            registration->subsystem->setOtaUpgradeDelay(delaySeconds);
-        });
+    if (registration->subsystem->onLPMStart)
+    {
+        registration->subsystem->onLPMStart();
+    }
 }
 
 void subsystemManagerEnterLPM(void)
@@ -635,14 +769,29 @@ void subsystemManagerEnterLPM(void)
 
     g_return_if_fail(subsystems != NULL);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
-
-        if (registration->subsystem->onLPMStart != NULL) { registration->subsystem->onLPMStart(); });
+    g_hash_table_foreach(subsystems, notifyLPMStartCallback, NULL);
 }
 
+/**
+ * @brief Callback function for notifying subsystems to exit Low Power Mode.
+ *
+ * Used with g_hash_table_foreach() to notify each registered subsystem to
+ * exit Low Power Mode (LPM) if it supports this operation.
+ *
+ * @param key Hash table key (subsystem name)
+ * @param value Hash table value (SubsystemRegistration pointer)
+ * @param user_data Unused parameter (required by GHashTableFunc signature)
+ */
+static void notifyLPMEndCallback(gpointer key, gpointer value, gpointer user_data)
+{
+    g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+    g_return_if_fail(registration != NULL);
+
+    if (registration->subsystem->onLPMEnd != NULL)
+    {
+        registration->subsystem->onLPMEnd();
+    }
+}
 
 void subsystemManagerExitLPM(void)
 {
@@ -650,12 +799,7 @@ void subsystemManagerExitLPM(void)
 
     g_return_if_fail(subsystems != NULL);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
-
-        if (registration->subsystem->onLPMEnd != NULL) { registration->subsystem->onLPMEnd(); });
+    g_hash_table_foreach(subsystems, notifyLPMEndCallback, NULL);
 }
 
 /*
@@ -691,20 +835,27 @@ bool subsystemManagerIsReadyForDevices(void)
 
     g_return_val_if_fail(subsystems != NULL, false);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, subsystems);
 
-        mutexLock(&registration->mtx);
-        bool ready = registration->ready;
-        mutexUnlock(&registration->mtx);
+    while (g_hash_table_iter_next(&iter, &key, &value))
+    {
+        g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+        if (registration != NULL)
+        {
+            mutexLock(&registration->mtx);
+            bool ready = registration->ready;
+            mutexUnlock(&registration->mtx);
 
-        if (ready == false) {
-            icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
-            allReady = false;
-            break;
-        });
+            if (!ready)
+            {
+                icInfo("Subsystem %s is not yet ready", registration->subsystem->name);
+                allReady = false;
+                break;
+            }
+        }
+    }
 
     return allReady && allDriversStarted;
 }
@@ -720,19 +871,24 @@ bool subsystemManagerRestoreConfig(const char *tempRestoreDir, const char *dynam
 
     g_return_val_if_fail(subsystems != NULL, false);
 
-    SubsystemRegistration *registration = NULL;
-    MAP_FOREACH(
-        registration,
-        subsystems,
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, subsystems);
 
-        if (registration->subsystem->onRestoreConfig != NULL) {
+    while (g_hash_table_iter_next(&iter, &key, &value))
+    {
+        g_autoptr(SubsystemRegistration) registration = subsystemRegistrationAcquire((SubsystemRegistration *) value);
+
+        if (registration && registration->subsystem->onRestoreConfig)
+        {
             result &= registration->subsystem->onRestoreConfig(tempRestoreDir, dynamicConfigPath);
 
             if (!result)
             {
                 icWarn("failed for %s!", registration->subsystem->name);
             }
-        });
+        }
+    }
 
     return result;
 }
