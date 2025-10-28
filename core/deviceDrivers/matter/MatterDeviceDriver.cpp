@@ -335,12 +335,14 @@ void MatterDeviceDriver::ConfigureDevice(std::forward_list<std::promise<bool>> &
 
     using namespace chip::app::Clusters;
 
+#ifdef BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
     if (!ConfigureOTARequestorCluster(promises, deviceId, deviceDescriptor, exchangeMgr, sessionHandle))
     {
         icError("Failed to configure OTA Requestor for device %s", deviceId.c_str());
         FailOperation(promises);
         return;
     }
+#endif
 
     DoConfigureDevice(promises, deviceId, deviceDescriptor, exchangeMgr, sessionHandle);
 
