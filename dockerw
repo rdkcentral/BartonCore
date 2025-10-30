@@ -28,17 +28,20 @@ notice() {
 
 set -e
 
-INTERACTIVE_FLAGS="-it"
+if [ -f /.dockerenv ]; then
+    echo "ERROR: dockerw is already running inside a container."
+    echo "Run commands directly in the current container instead of nesting containers."
+    exit 1
+fi
+
+COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 
-while getopts ":npe:t:d" opt; do
+while getopts ":ne:t:d" opt; do
     case ${opt} in
     n) # process option n
-        INTERACTIVE_FLAGS=""
-        ;;
-    p) # pull docker
-        docker pull $IMAGE
+        COMPOSE_INTERACTIVE_FLAGS="--no-TTY"
         ;;
     e) # extra environment variables
         EXTRA_ENV="${EXTRA_ENV} -e ${OPTARG}"
@@ -55,43 +58,24 @@ DIR=$(pwd)
 # generate the `docker/.env` file and ensure the network/image is created
 $DIR/docker/setupDockerEnv.sh
 
-DOCKER_ENV_PATH="$DIR/docker/.env"
-
-# to build/use an image with a custom tag, the tag must be stored in the
-# `docker/.env` file as `IMAGE_TAG=some-tag`
-IMAGE_TAG=$(grep "IMAGE_TAG" "$DOCKER_ENV_PATH" | sed 's/IMAGE_TAG=//')
-IMAGE_REPO=$(grep "IMAGE_REPO" "$DOCKER_ENV_PATH" | sed 's/IMAGE_REPO=//')
-
-IMAGE="$IMAGE_REPO:$IMAGE_TAG"
+COMPOSE_FILE="${DIR}/docker/compose.yaml"
 
 EXTRA_VOLUMES="${DEV_VOL}"
 
-if [ -f /.dockerenv ]; then
-    CURR_CONTAINER=$(hostname)
-    VOLUMES_ARGS="--volumes-from $CURR_CONTAINER"
-else
-
-    VOLUMES_ARGS="-v $DIR:$DIR
-                 -v $HOME:$HOME
-                 --tmpfs /tmp:exec
-                 $EXTRA_VOLUMES"
-fi
+VOLUMES_ARGS="-v $HOME:$HOME
+             $EXTRA_VOLUMES"
 
 # create a unique container name prefixed with the user id, useful when on a shared machine
 USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker run \
+docker compose -f "${COMPOSE_FILE}" run \
     --rm \
-    --name $CONTAINER_NAME \
-    $INTERACTIVE_FLAGS \
-    --privileged \
-    --network $USER-barton-ip6net \
-    --cap-add SYS_PTRACE \
-    $VOLUMES_ARGS \
-    -w "$DIR" \
-    --env-file $DOCKER_ENV_PATH \
-    $EXTRA_ENV \
-    $IMAGE \
+    --name ${CONTAINER_NAME} \
+    ${COMPOSE_INTERACTIVE_FLAGS} \
+    --workdir "${DIR}" \
+    ${VOLUMES_ARGS} \
+    ${EXTRA_ENV} \
+    barton \
     $*
