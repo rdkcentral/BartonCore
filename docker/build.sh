@@ -32,8 +32,6 @@ if [ ! -f $docker_env_path ]; then
 fi
 
 # The image tag is stored in the .env file and is generated when running `setupDockerEnv.sh`.
-# The default tag is 'latest', so if you want to build a specific tag, edit the value of
-# `IMAGE_TAG` within `docker/.env`.
-source $docker_env_path
+# If you want to build a specific tag, edit the value of `IMAGE_TAG` within `docker/.env`.
 
-docker build -t $IMAGE_REPO:$IMAGE_TAG ${script_dir}
+docker compose -f ${script_dir}/compose.yaml build
