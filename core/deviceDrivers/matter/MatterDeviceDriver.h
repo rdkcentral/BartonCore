@@ -247,6 +247,13 @@ namespace barton
     protected:
         DeviceDriver driver;
 
+        struct ClusterReadContext
+        {
+            void *driverContext;                            // the context provided to the driver for the operation
+            icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
+            char **value;                                   // non-null if this read is a regular resource read
+        };
+
         /**
          * @brief Get a server cluster on a given endpoint
          *
