@@ -19,8 +19,7 @@
     // NOTE: VSC will copy some files post-config; .ssh/known_hosts, .gitconfig, etc
     "mounts": [
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-        "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind",
-        "target=/tmp,type=tmpfs"
+        "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind"
     ],
 
     // By setting this value to true, VSC will not run the entrypoint/CMD in the Dockerfile

@@ -164,6 +164,9 @@ bcore_option(NAME BCORE_MATTER_SKIP_SDK
 bcore_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
            DEFINITION BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA
            DESCRIPTION "Use default commissionable data values instead of ones provided by the client")
+bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
+           DEFINITION BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
+           DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
