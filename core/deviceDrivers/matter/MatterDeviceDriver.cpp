@@ -50,7 +50,10 @@
 #include <vector>
 
 #include "MatterDeviceDriver.h"
+#include "app-common/zap-generated/cluster-enums.h"
 #include "app-common/zap-generated/cluster-objects.h"
+#include "app-common/zap-generated/ids/Attributes.h"
+#include "app-common/zap-generated/ids/Clusters.h"
 #include "app/AttributePathParams.h"
 #include "app/ClusterStateCache.h"
 #include "app/EventPathParams.h"
@@ -114,7 +117,8 @@ static void communicationRestored(void *ctx, icDevice *device);
 static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *version);
 
 MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *deviceClass, uint8_t dcVersion) :
-    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this)
+    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this),
+    wifiDiagnosticsClusterEventHandler(*this)
 {
     driver.driverName = strdup(driverName);
     driver.callbackContext = this;
@@ -471,6 +475,63 @@ void MatterDeviceDriver::PopulateInitialResourceValues(std::forward_list<std::pr
                                                        chip::Messaging::ExchangeManager &exchangeMgr,
                                                        const chip::SessionHandle &sessionHandle)
 {
+    icDebug();
+
+    auto *generalDiagnosticsServer = static_cast<barton::GeneralDiagnostics *>(
+        GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id));
+    if (generalDiagnosticsServer == nullptr)
+    {
+        icError("No general diagnostics server on device %s!", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    // It is valid for these resources to be empty at first, so we always populate the initial resource values
+    const char *macAddressStr = nullptr;
+    auto tmp = generalDiagnosticsServer->GetMacAddress();
+    if (!tmp.empty())
+    {
+        macAddressStr = tmp.c_str();
+    }
+    initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_MAC_ADDRESS, macAddressStr);
+
+    const char *networkTypeStr = nullptr;
+    tmp = generalDiagnosticsServer->GetNetworkType();
+    if (!tmp.empty())
+    {
+        networkTypeStr = tmp.c_str();
+    }
+    initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, networkTypeStr);
+
+    if (stringCompare(networkTypeStr, NETWORK_TYPE_WIFI, false) == 0)
+    {
+        auto *wifiDiagServer = static_cast<barton::WifiNetworkDiagnostics *>(
+            GetAnyServerById(deviceId, chip::app::Clusters::WiFiNetworkDiagnostics::Id));
+
+        if (wifiDiagServer == nullptr)
+        {
+            icWarn("No wifi network diagnostics server on device %s!", deviceId.c_str());
+            initialResourceValuesPutDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI, nullptr);
+        }
+        else
+        {
+            promises.emplace_front();
+            auto &readPromise = promises.front();
+            auto readContext = new ClusterReadContext {};
+            readContext->driverContext = &readPromise;
+            readContext->initialResourceValues = initialResourceValues;
+
+            // Paired with WifiNetworkDiagnosticsEventHandler::RssiReadComplete
+            AssociateStoredContext(readContext->driverContext);
+
+            if (!wifiDiagServer->GetRssi(readContext, exchangeMgr, sessionHandle))
+            {
+                AbandonDeviceWork(readPromise);
+                delete readContext;
+            }
+        }
+    }
+
     FetchInitialResourceValues(promises, deviceId, initialResourceValues, exchangeMgr, sessionHandle);
 }
 
@@ -517,13 +578,9 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
         return false;
     }
 
-    const char *macAddressStr = nullptr;
-    tmp = generalDiagnosticsServer->GetMacAddress();
-
-    if (!tmp.empty())
-    {
-        macAddressStr = tmp.c_str();
-    }
+    // Resources from General Diagnostics cluster
+    const char *macAddressStr =
+        initialResourceValuesGetDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_MAC_ADDRESS);
 
     createDeviceResource(device,
                          COMMON_DEVICE_RESOURCE_MAC_ADDRESS,
@@ -532,13 +589,8 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
 
-    const char *networkTypeStr = nullptr;
-    tmp = generalDiagnosticsServer->GetNetworkType();
-
-    if (!tmp.empty())
-    {
-        networkTypeStr = tmp.c_str();
-    }
+    const char *networkTypeStr =
+        initialResourceValuesGetDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_NETWORK_TYPE);
 
     createDeviceResource(device,
                          COMMON_DEVICE_RESOURCE_NETWORK_TYPE,
@@ -546,6 +598,43 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          RESOURCE_TYPE_NETWORK_TYPE,
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
+
+    if (stringCompare(networkTypeStr, NETWORK_TYPE_WIFI, false) == 0)
+    {
+        const char *initialRssi =
+            initialResourceValuesGetDeviceValue(initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI);
+
+        createDeviceResource(device,
+                             COMMON_DEVICE_RESOURCE_FERSSI,
+                             initialRssi,
+                             RESOURCE_TYPE_RSSI,
+                             RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+                             CACHING_POLICY_ALWAYS);
+
+        g_autofree char *linkScoreStr = nullptr;
+        int8_t rssi = 0;
+        std::string linkQuality = LINK_QUALITY_UNKNOWN;
+        if (initialRssi && stringToInt8(initialRssi, &rssi))
+        {
+            uint8_t linkScore = GetLinkScore(rssi);
+            linkScoreStr = g_strdup_printf("%" PRIu8, linkScore);
+            linkQuality = GetLinkQuality(linkScore);
+        }
+
+        createDeviceResource(device,
+                             COMMON_DEVICE_RESOURCE_LINK_SCORE,
+                             linkScoreStr,
+                             RESOURCE_TYPE_PERCENTAGE,
+                             RESOURCE_MODE_READABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_DYNAMIC,
+                             CACHING_POLICY_ALWAYS);
+
+        createDeviceResource(device,
+                             COMMON_DEVICE_RESOURCE_LINK_QUALITY,
+                             linkQuality.c_str(),
+                             RESOURCE_TYPE_SIGNAL_STRENGTH,
+                             RESOURCE_MODE_READABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_DYNAMIC,
+                             CACHING_POLICY_ALWAYS);
+    }
 
     return RegisterResources(device, initialResourceValues);
 }
@@ -1237,6 +1326,11 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
                     std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId);
                 break;
 
+            case chip::app::Clusters::WiFiNetworkDiagnostics::Id:
+                serverRef = std::make_unique<WifiNetworkDiagnostics>(
+                    &wifiDiagnosticsClusterEventHandler, deviceUuid, endpointId);
+                break;
+
             default:
                 serverRef = MakeCluster(deviceUuid, endpointId, clusterId);
         }
@@ -1400,6 +1494,89 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnVersionApplied(OTARequestor
     {
         deviceServiceReconfigureDevice(deviceUuid.c_str(), MATTER_RECONFIGURATION_DELAY_SECS, NULL, false);
     }
+}
+
+uint8_t MatterDeviceDriver::GetLinkScore(int8_t rssi)
+{
+    static double DBM_FLOOR = -90.0;
+    static double DBM_CEIL = -20.0;
+
+    // Clamp rssi to reasonable boundaries
+    rssi = (rssi < DBM_FLOOR) ? DBM_FLOOR : (rssi > DBM_CEIL) ? DBM_CEIL : rssi;
+
+    // This will be a number between 0 and 1 where closer to 0 is close to the ceiling (good) and closer to 1 is close
+    // to the floor (bad).
+    double normalizedRSSI = (DBM_CEIL - rssi) / (DBM_CEIL - DBM_FLOOR);
+
+    // A normalizedRSSI close to 0 (good) should cause the second subtraction operand to be small, leading to a
+    // percentage close to 100. A normalizedRSSI close to 1 (bad) should cause the second subtraction operand being
+    // close to 100, leading to a percentage close to 0.
+    uint8_t percentage = 100 - (100 * normalizedRSSI);
+
+    return percentage;
+}
+
+std::string MatterDeviceDriver::GetLinkQuality(uint8_t linkScore)
+{
+    if (linkScore > 45)
+    {
+        return LINK_QUALITY_GOOD;
+    }
+    else if (linkScore >= 30)
+    {
+        return LINK_QUALITY_FAIR;
+    }
+    else
+    {
+        return LINK_QUALITY_POOR;
+    }
+}
+
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiChanged(const std::string &deviceUuid,
+                                                                         int8_t *rssi,
+                                                                         void *asyncContext)
+{
+    icDebug();
+
+    g_autofree char *rssiStr = nullptr;
+    g_autofree char *linkScoreStr = nullptr;
+    uint8_t linkScore = 0;
+    std::string linkQuality = LINK_QUALITY_UNKNOWN;
+    if (rssi)
+    {
+        rssiStr = g_strdup_printf("%" PRId8, *rssi);
+        linkScore = GetLinkScore(*rssi);
+        linkScoreStr = g_strdup_printf("%" PRIu8, linkScore);
+        linkQuality = GetLinkQuality(linkScore);
+    }
+
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr, nullptr);
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_SCORE, linkScoreStr, nullptr);
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_QUALITY, linkQuality.c_str(), nullptr);
+}
+
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(const std::string &deviceUuid,
+                                                                              int8_t *rssi,
+                                                                              void *asyncContext)
+{
+    auto readContext = static_cast<ClusterReadContext *>(asyncContext);
+
+    g_autofree char *rssiStr = nullptr;
+    if (rssi)
+    {
+        rssiStr = g_strdup_printf("%" PRId8, *rssi);
+    }
+
+    icDebug("RSSI read request is %s", stringCoalesce(rssiStr));
+
+    if (readContext && readContext->initialResourceValues)
+    {
+        initialResourceValuesPutDeviceValue(readContext->initialResourceValues, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr);
+    }
+
+    deviceDriver.OnDeviceWorkCompleted(readContext->driverContext, true);
+
+    delete readContext;
 }
 
 static void communicationFailed(void *ctx, icDevice *device)

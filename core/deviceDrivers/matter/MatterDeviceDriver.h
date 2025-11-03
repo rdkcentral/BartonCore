@@ -38,6 +38,7 @@
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/MatterCluster.h"
 #include "clusters/OTARequestor.h"
+#include "clusters/WifiNetworkDiagnostics.h"
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "subscriptions/SubscribeInteraction.h"
@@ -246,6 +247,13 @@ namespace barton
 
     protected:
         DeviceDriver driver;
+
+        struct ClusterReadContext
+        {
+            void *driverContext;                            // the context provided to the driver for the operation
+            icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
+            char **value;                                   // non-null if this read is a regular resource read
+        };
 
         /**
          * @brief Get a server cluster on a given endpoint
@@ -635,6 +643,20 @@ namespace barton
 
         } generalDiagnosticsEventHandler;
 
+        class WifiNetworkDiagnosticsEventHandler : public WifiNetworkDiagnostics::EventHandler
+        {
+        public:
+            WifiNetworkDiagnosticsEventHandler(MatterDeviceDriver &outer) : deviceDriver(outer) {};
+            void CommandCompleted(void *context, bool success) override
+            {
+                deviceDriver.OnDeviceWorkCompleted(context, success);
+            };
+
+            void RssiChanged(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
+            void RssiReadComplete(const std::string &deviceUuid, int8_t *rssi, void *asyncContext) override;
+            MatterDeviceDriver &deviceDriver;
+        } wifiDiagnosticsClusterEventHandler;
+
         std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
             clusterServers;
 
@@ -722,6 +744,10 @@ namespace barton
         DeviceFirmwareUpdateFailed(OTARequestor &source, uint32_t softwareVersion, SubscribeInteraction &subscriber);
 
         void ProcessDeviceDescriptorMetadata(const icDevice *device, const icStringHashMap *metadata);
+
+        static uint8_t GetLinkScore(int8_t rssi);
+
+        static std::string GetLinkQuality(uint8_t linkScore);
 
         // The following methods are to be called via work functions passed to
         // ConnectAndExecute. To promise asynchronous work, add to the promises list.
