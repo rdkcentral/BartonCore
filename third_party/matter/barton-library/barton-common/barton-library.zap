@@ -353,24 +353,6 @@
           "define": "ACCESS_CONTROL_CLUSTER",
           "side": "server",
           "enabled": 1,
-          "commands": [
-            {
-              "name": "ReviewFabricRestrictions",
-              "code": 0,
-              "mfgCode": null,
-              "source": "client",
-              "isIncoming": 1,
-              "isEnabled": 1
-            },
-            {
-              "name": "ReviewFabricRestrictionsResponse",
-              "code": 1,
-              "mfgCode": null,
-              "source": "server",
-              "isIncoming": 0,
-              "isEnabled": 1
-            }
-          ],
           "attributes": [
             {
               "name": "ACL",
@@ -442,38 +424,6 @@
               "mfgCode": null,
               "side": "server",
               "type": "int16u",
-              "included": 1,
-              "storageOption": "External",
-              "singleton": 0,
-              "bounded": 0,
-              "defaultValue": null,
-              "reportable": 1,
-              "minInterval": 1,
-              "maxInterval": 65534,
-              "reportableChange": 0
-            },
-            {
-              "name": "CommissioningARL",
-              "code": 5,
-              "mfgCode": null,
-              "side": "server",
-              "type": "array",
-              "included": 1,
-              "storageOption": "External",
-              "singleton": 0,
-              "bounded": 0,
-              "defaultValue": null,
-              "reportable": 1,
-              "minInterval": 1,
-              "maxInterval": 65534,
-              "reportableChange": 0
-            },
-            {
-              "name": "ARL",
-              "code": 6,
-              "mfgCode": null,
-              "side": "server",
-              "type": "array",
               "included": 1,
               "storageOption": "External",
               "singleton": 0,
@@ -579,16 +529,7 @@
               "minInterval": 1,
               "maxInterval": 65534,
               "reportableChange": 0
-            }
-          ],
-          "events": [
-            {
-              "name": "FabricRestrictionReviewUpdate",
-              "code": 2,
-              "mfgCode": null,
-              "side": "server",
-              "included": 1
-            }
+            } 
           ]
         },
         {

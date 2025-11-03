@@ -49,7 +49,7 @@ default_args = {
   chip_system_config_use_lwip = false
   chip_system_config_use_sockets = true
   chip_with_lwip = false
-  chip_enable_access_restrictions = true
+  chip_enable_access_restrictions = false
   enable_rtti = true
 
   chip_project_config_include = "<BartonProjectConfig.h>"
