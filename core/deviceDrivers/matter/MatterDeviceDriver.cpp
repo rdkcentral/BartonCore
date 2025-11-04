@@ -59,6 +59,7 @@
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
+#include "clusters/PowerSource.h"
 #include "controller/CHIPCluster.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
@@ -546,6 +547,60 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          RESOURCE_TYPE_NETWORK_TYPE,
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
+
+    // TODO: There can be multiple PowerSource clusters on different endpoints, e.g. on a bridge which has one device
+    // per endpoint with its own power source. For now, we are only handling the scenario in which there is just one
+    // PowerSource cluster on whatever we commission.
+    auto powerSourceServer =
+        static_cast<barton::PowerSource *>(GetAnyServerById(device->uuid, chip::app::Clusters::PowerSource::Id));
+
+    if (powerSourceServer != nullptr)
+    {
+        CHIP_ERROR error;
+        bool isBattery = powerSourceServer->IsBatteryPowerSource(error);
+
+        if (isBattery)
+        {
+            auto chargeLevel = powerSourceServer->GetBatChargeLevel();
+            if (chargeLevel != chip::app::Clusters::PowerSource::BatChargeLevelEnum::kUnknownEnumValue)
+            {
+                bool isLow = chargeLevel != chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk;
+                createDeviceResource(device,
+                                     COMMON_DEVICE_RESOURCE_BATTERY_LOW,
+                                     stringValueOfBool(isLow),
+                                     RESOURCE_TYPE_BOOLEAN,
+                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_DYNAMIC,
+                                     CACHING_POLICY_ALWAYS);
+            }
+            else
+            {
+                icWarn("Error retrieving BatChargeLevel for device %s", device->uuid);
+            }
+
+            // The battery percentage is measured in half percent units (0-200), where e.g. 50 = 25%
+            uint8_t halfPercent;
+            error = powerSourceServer->GetBatPercentRemaining(halfPercent);
+            if (error == CHIP_NO_ERROR)
+            {
+                g_autofree char *percent = g_strdup_printf("%u", halfPercent / 2);
+                createDeviceResource(device,
+                                     COMMON_DEVICE_RESOURCE_BATTERY_PERCENTAGE_REMAINING,
+                                     percent,
+                                     RESOURCE_TYPE_PERCENTAGE,
+                                     RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+                                     CACHING_POLICY_ALWAYS);
+            }
+            else
+            {
+                // Optional for battery-powered devices to support per Matter 1.4 11.7.7, so no need to warn.
+                icInfo("Could not retrieve BatPercentRemaining for device %s", device->uuid);
+            }
+        }
+    }
+    else
+    {
+        icInfo("Power source cluster not supported on device %s", device->uuid);
+    }
 
     return RegisterResources(device, initialResourceValues);
 }
@@ -1235,6 +1290,10 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
             case chip::app::Clusters::GeneralDiagnostics::Id:
                 serverRef =
                     std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId);
+                break;
+
+            case chip::app::Clusters::PowerSource::Id:
+                serverRef = std::make_unique<PowerSource>(&powerSourceEventHandler, deviceUuid, endpointId);
                 break;
 
             default:
