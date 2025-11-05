@@ -31,7 +31,6 @@
 #include "CommissioningOrchestrator.h"
 #include "DeviceDiscoverer.h"
 #include "DiscoveredDeviceDetails.h"
-#include "DiscoveredDeviceDetailsStore.h"
 #include "Matter.h"
 #include "matter/MatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
@@ -135,8 +134,9 @@ namespace barton
 
         SetCommissioningStatus(DiscoveryPending);
 
-        DeviceDiscoverer discoverer(finalNodeId);
-        std::future<bool> success = discoverer.Start();
+        std::string uuid = Subsystem::Matter::NodeIdToUuid(nodeId);
+        auto deviceDataCache = std::make_unique<DeviceDataCache>(uuid);
+        std::future<bool> success = deviceDataCache->Start();
 
         if (success.wait_until(waitingUntil) == std::future_status::ready)
         {
@@ -159,30 +159,32 @@ namespace barton
 
         if (commissioningStatus == DiscoveryCompleted)
         {
-            auto matterDetails = discoverer.GetDetails();
-
-            MatterDeviceDriver *driver = MatterDriverFactory::Instance().GetDriver(matterDetails.get());
+            // GetDriver needs to inspect the cache to determine driver type
+            MatterDeviceDriver *driver = MatterDriverFactory::Instance().GetDriver(deviceDataCache.get());
             if (driver != nullptr)
             {
-                scoped_icStringHashMap *endpointProfileMap = driver->GetEndpointToProfileMap(matterDetails.get());
+                // Extract values before transferring ownership
+                std::string manufacturer = deviceDataCache->GetVendorName();
+                std::string model = deviceDataCache->GetProductName();
+                std::string hardwareVersion = deviceDataCache->GetHardwareVersionString();
+                std::string firmwareVersion = deviceDataCache->GetSoftwareVersionString();
 
-                scoped_generic char *uuid = stringBuilder("%016" PRIx64, finalNodeId);
+                // Transfer ownership to driver
+                driver->AddDeviceDataCache(std::move(deviceDataCache));
+
                 // these are device service details (technology neutral)
                 DeviceFoundDetails details {
                     .deviceDriver = driver->GetDriver(),
                     .subsystem = MATTER_SUBSYSTEM_NAME,
                     .deviceClass = driver->GetDeviceClass(),
                     .deviceClassVersion = driver->GetDeviceClassVersion(),
-                    .deviceUuid = uuid,
-                    .manufacturer = matterDetails->vendorName->c_str(),
-                    .model = matterDetails->productName->c_str(),
-                    .hardwareVersion = matterDetails->hardwareVersion->c_str(),
-                    .firmwareVersion = matterDetails->softwareVersion->c_str(),
-                    .endpointProfileMap = endpointProfileMap,
+                    .deviceUuid = uuid.c_str(),
+                    .manufacturer = manufacturer.c_str(),
+                    .model = model.c_str(),
+                    .hardwareVersion = hardwareVersion.c_str(),
+                    .firmwareVersion = firmwareVersion.c_str(),
+                    .endpointProfileMap = nullptr
                 };
-
-                // save off the details so the pairing functions can look them up if they need
-                DiscoveredDeviceDetailsStore::Instance().PutTemporarily(uuid, matterDetails);
 
                 if (deviceServiceDeviceFound(&details, true))
                 {

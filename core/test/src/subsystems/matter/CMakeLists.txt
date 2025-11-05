@@ -30,6 +30,7 @@ include(BCoreAddCppTest)
 file(GLOB TEST_SRC *.cpp *.c)
 list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepareParamsBuilder.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/MatterCommon.cpp
+                     ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/DeviceDataCache.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/default/DefaultCommissionableDataProvider.cpp
                      ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/providers/BartonDeviceInstanceInfoProvider.cpp
