@@ -38,8 +38,9 @@ namespace barton
     class LevelControl : public MatterCluster
     {
     public:
-        LevelControl(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        LevelControl(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                     std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::LevelControl::Id, deviceDataCache)
         {
         }
 

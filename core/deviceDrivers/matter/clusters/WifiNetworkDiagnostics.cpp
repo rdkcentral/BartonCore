@@ -79,38 +79,33 @@ namespace barton
     {
         icDebug();
 
-        bool result = false;
-        std::shared_ptr<chip::app::ClusterStateCache> cache;
-        if (!(cache = clusterStateCacheRef.lock()))
-        {
-            icError("Failed to get rssi attribute because the cluster state cache expired or was never set");
-            return result;
-        }
-
-        CHIP_ERROR error = CHIP_NO_ERROR;
         using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
         using TypeInfo = Attributes::Rssi::TypeInfo;
 
         chip::app::ConcreteAttributePath path(endpointId,
                                               chip::app::Clusters::WiFiNetworkDiagnostics::Id,
                                               chip::app::Clusters::WiFiNetworkDiagnostics::Attributes::Rssi::Id);
+
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR error = deviceDataCache->GetAttributeData(path, reader);
+        if (error != CHIP_NO_ERROR)
         {
-            TypeInfo::DecodableType value;
-            error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                int8_t *nullableValue = value.IsNull() ? nullptr : &value.Value();
-                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
-                    ->RssiReadComplete(deviceId, nullableValue, context);
-                result = true;
-            }
+            icError("Failed to get rssi attribute data: %s", error.AsString());
+            return false;
         }
 
+        TypeInfo::DecodableType value;
+        error = chip::app::DataModel::Decode(reader, value);
         if (error != CHIP_NO_ERROR)
         {
             icError("Failed to decode rssi attribute: %s", error.AsString());
+            return false;
         }
 
-        return result;
+        int8_t *nullableValue = value.IsNull() ? nullptr : &value.Value();
+        static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
+                    ->RssiReadComplete(deviceId, nullableValue, context);
+
+        return true;
     };
 } // namespace barton

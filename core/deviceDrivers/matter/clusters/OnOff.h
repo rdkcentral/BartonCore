@@ -38,8 +38,9 @@ namespace barton
     class OnOff : public MatterCluster
     {
     public:
-        OnOff(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        OnOff(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+              std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::OnOff::Id, deviceDataCache)
         {
         }
 

@@ -38,8 +38,9 @@ namespace barton
     class BasicInformation : public MatterCluster
     {
     public:
-        BasicInformation(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        BasicInformation(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                         std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, Id, deviceDataCache)
         {
         }
 

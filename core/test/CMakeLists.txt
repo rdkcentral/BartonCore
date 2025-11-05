@@ -103,22 +103,6 @@ if (BCORE_ZIGBEE)
 endif()
 
 if (BCORE_MATTER)
-    bcore_add_cpp_test(NAME testMatterConfigureSubscriptionSpecs
-        # TODO: We shouldn't have to explicitly specify the OpenSSL libraries here. Figure this out later.
-        LIBS ${OPENSSL_LINK_LIBRARIES} BartonCoreStatic
-        INCLUDES ${OPENSSL_INCLUDE_DIRS} ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterConfigureSubscriptionSpecsTest.cpp
-    )
-
-    bcore_add_cpp_test(NAME testMatterSubscribeInteraction
-        # TODO: For some reason, this target requires these libraries to be linked in a different order from the others.
-        # Changing the link order within the bcore_add_cpp_test function itself just caused the other targets to fail
-        # to link. I don't know why, but for now, we're just explicitly specifying the link order here for this one.
-        LIBS BartonCoreStatic gtest gmock gmock_main
-        INCLUDES ${BARTON_PRIVATE_INCLUDES} ${CMAKE_BINARY_DIR}/matter-install/include/matter ${PRIVATE_API_INCLUDES}
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/MatterSubscribeInteractionTest.cpp
-    )
-
     add_subdirectory("src/subsystems/matter")
 endif()
 

@@ -25,6 +25,7 @@
 // Created by tlea200 on 11/4/21.
 //
 
+#include <memory>
 #define logFmt(fmt) "MatterDriverFactory (%s): " fmt, __func__
 #include "subsystems/matter/MatterCommon.h"
 
@@ -54,22 +55,19 @@ bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
     return result;
 }
 
-MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(DiscoveredDeviceDetails *details)
+MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
 {
     MatterDeviceDriver *result = nullptr;
 
-    if (details != nullptr)
+    // iterate over the drivers and allow them to claim the device.  First one to claim it gets it.  Order
+    // of drivers is deterministic since we store in std::map.
+    for (auto const &entry : drivers)
     {
-        // iterate over the drivers and allow them to claim the device.  First one to claim it gets it.  Order
-        // of drivers is deterministic since we store in std::map.
-        for (auto const &entry : drivers)
+        if (entry.second->ClaimDevice(dataCache))
         {
-            if (entry.second->ClaimDevice(details))
-            {
-                icInfo("%s claimed the device", entry.first);
-                result = entry.second;
-                break;
-            }
+            icInfo("%s claimed the device", entry.first);
+            result = entry.second;
+            break;
         }
     }
 

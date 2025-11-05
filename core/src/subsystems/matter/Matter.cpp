@@ -48,6 +48,7 @@ extern "C" {
 #include <icLog/logging.h>
 #include <icTypes/sbrm.h>
 #include <icUtil/base64.h>
+#include "matterSubsystem.h"
 
 #ifdef BARTON_CONFIG_THREAD
 #include <subsystems/thread/threadSubsystem.h>
@@ -152,7 +153,7 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
 {
     MatterDriverFactory::Instance();
 
-    commissionerController = std::make_unique<chip::Controller::DeviceCommissioner>();
+    commissionerController = std::make_shared<chip::Controller::DeviceCommissioner>();
     operationalCredentialsIssuer = BartonMatterDelegateRegistry::Instance().GetBartonOperationalCredentialDelegate();
     commissionableDataProvider = BartonMatterProviderRegistry::Instance().GetBartonCommissionableDataProvider();
 }

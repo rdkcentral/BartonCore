@@ -39,13 +39,12 @@
 
 namespace barton
 {
-    using namespace chip::app::Clusters::GeneralDiagnostics;
-
     class GeneralDiagnostics : public MatterCluster
     {
     public:
-        GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                          std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::GeneralDiagnostics::Id, deviceDataCache)
         {
         }
 
@@ -60,8 +59,5 @@ namespace barton
                                 const chip::app::ConcreteAttributePath &path) override;
         std::string GetMacAddress();
         std::string GetNetworkType();
-
-    private:
-        chip::Optional<NetworkUtils::NetworkInterfaceInfo> GetInterfaceInfo(chip::app::ClusterStateCache *cache);
     };
 } // namespace barton

@@ -105,10 +105,9 @@ namespace barton
         }
     }
 
-    void OTARequestor::OnEventDataReceived(SubscribeInteraction &subscriber,
-                                           const chip::app::EventHeader &aEventHeader,
-                                           chip::TLV::TLVReader *apData,
-                                           const chip::app::StatusIB *apStatus)
+    void OTARequestor::OnEventData(const chip::app::EventHeader &aEventHeader,
+                                   chip::TLV::TLVReader *apData,
+                                   const chip::app::StatusIB *apStatus)
     {
         if (!aEventHeader.mPath.IsValidConcreteClusterPath())
         {
@@ -139,8 +138,7 @@ namespace barton
                                         value.previousState,
                                         value.newState,
                                         value.reason,
-                                        value.targetSoftwareVersion,
-                                        subscriber);
+                                        value.targetSoftwareVersion);
 
                 break;
             }
@@ -156,8 +154,7 @@ namespace barton
                                       value.softwareVersion,
                                       value.bytesDownloaded,
                                       value.progressPercent,
-                                      value.platformCode,
-                                      subscriber);
+                                      value.platformCode);
                 break;
             }
 
@@ -168,7 +165,7 @@ namespace barton
                 ReturnOnFailure(chip::app::DataModel::Decode(*apData, value));
 
                 static_cast<OTARequestor::EventHandler *>(eventHandler)
-                    ->OnVersionApplied(*this, value.softwareVersion, value.productID, subscriber);
+                    ->OnVersionApplied(*this, value.softwareVersion, value.productID);
                 break;
             }
 

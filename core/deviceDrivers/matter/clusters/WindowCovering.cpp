@@ -73,16 +73,6 @@ namespace barton
     {
         icDebug();
 
-        bool result = false;
-        std::shared_ptr<chip::app::ClusterStateCache> cache;
-        if (!(cache = clusterStateCacheRef.lock()))
-        {
-            icError("Failed to get current position lift percent because the cluster state cache expired or was "
-                    "never set");
-            return result;
-        }
-
-        CHIP_ERROR error = CHIP_NO_ERROR;
         using namespace chip::app::Clusters::WindowCovering;
         using TypeInfo = Attributes::CurrentPositionLiftPercentage::TypeInfo;
 
@@ -90,23 +80,26 @@ namespace barton
             endpointId,
             chip::app::Clusters::WindowCovering::Id,
             chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercentage::Id);
-        {
-            TypeInfo::DecodableType value;
-            error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                static_cast<WindowCovering::EventHandler *>(eventHandler)
-                    ->CurrentPositionLiftPercentageReadComplete(deviceId, value.Value(), context);
-                result = true;
-            }
-        }
-
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR error = deviceDataCache->GetAttributeData(path, reader);
         if (error != CHIP_NO_ERROR)
         {
-            icError("Failed to decode current position lift percent attribute: %s", error.AsString());
+            icError("Failed to read current position lift percent attribute: %s", error.AsString());
+            return false;
         }
 
-        return result;
+        TypeInfo::DecodableType value;
+        error = chip::app::DataModel::Decode(reader, value);
+        if (error != CHIP_NO_ERROR)
+        {
+            icError("Failed to decode current position lift percent attribute from device %s: %s", deviceId.c_str(), error.AsString());
+            return false;
+        }
+
+        static_cast<WindowCovering::EventHandler *>(eventHandler)
+                    ->CurrentPositionLiftPercentageReadComplete(deviceId, value.Value(), context);
+
+        return true;
     };
 
     bool WindowCovering::GoToLiftPercentage(void *context,

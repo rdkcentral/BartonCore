@@ -38,8 +38,6 @@ namespace barton
     public:
         MatterDoorLockDeviceDriver();
 
-        bool ClaimDevice(DiscoveredDeviceDetails *details) override;
-
         // DoorLock cluster callbacks
         void CommandCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
         void WriteRequestCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
@@ -51,17 +49,13 @@ namespace barton
                                    void *asyncContext) override;
 
     protected:
-        void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                               const std::string &deviceId,
-                               chip::Messaging::ExchangeManager &exchangeMgr,
-                               const chip::SessionHandle &sessionHandle) override;
+        std::vector<uint16_t> GetSupportedDeviceTypes() override;
+        void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                 const std::string &deviceId,
+                                 chip::Messaging::ExchangeManager &exchangeMgr,
+                                 const chip::SessionHandle &sessionHandle) override;
 
-        void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                        const std::string &deviceId,
-                                        icInitialResourceValues *initialResourceValues,
-                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                        const chip::SessionHandle &sessionHandle) override;
-        bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues) override;
+        bool DoRegisterResources(icDevice *device) override;
 
         void ReadResource(std::forward_list<std::promise<bool>> &promises,
                           const std::string &deviceId,
@@ -82,6 +76,7 @@ namespace barton
         static bool registeredWithFactory;
 
         std::unique_ptr<MatterCluster>
-        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
+        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId,
+                    std::shared_ptr<DeviceDataCache> deviceDataCache) override;
     };
 } // namespace barton

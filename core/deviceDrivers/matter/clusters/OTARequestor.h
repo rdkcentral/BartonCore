@@ -31,6 +31,7 @@
 #include "app/BufferedReadCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "matter/clusters/MatterCluster.h"
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -43,8 +44,9 @@ namespace barton
     class OTARequestor : public MatterCluster
     {
     public:
-        OTARequestor(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        OTARequestor(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                     std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::OtaSoftwareUpdateRequestor::Id, deviceDataCache)
         {
         }
 
@@ -60,14 +62,12 @@ namespace barton
              * @param newState
              * @param reason
              * @param targetSoftwareVersion
-             * @param subscriber
              */
             virtual void OnStateTransition(OTARequestor &source,
                                            OtaSoftwareUpdateRequestor::OTAUpdateStateEnum oldState,
                                            OtaSoftwareUpdateRequestor::OTAUpdateStateEnum newState,
                                            OtaSoftwareUpdateRequestor::OTAChangeReasonEnum reason,
-                                           Nullable<uint32_t> targetSoftwareVersion,
-                                           SubscribeInteraction &subscriber) {};
+                                           Nullable<uint32_t> targetSoftwareVersion) {};
 
             /**
              * @brief This is called whenever a download fails to complete
@@ -77,14 +77,12 @@ namespace barton
              * @param bytesDownloaded
              * @param percentDownloaded
              * @param platformCode
-             * @param subscriber
              */
             virtual void OnDownloadError(OTARequestor &source,
                                          uint32_t softwareVersion,
                                          uint64_t bytesDownloaded,
                                          Nullable<uint8_t> percentDownloaded,
-                                         Nullable<int64_t> platformCode,
-                                         SubscribeInteraction &subscriber) {};
+                                         Nullable<int64_t> platformCode) {};
 
             /**
              * @brief This is called whenever a new version is applied and will match the SoftwareVersion
@@ -93,21 +91,18 @@ namespace barton
              * @param source
              * @param softwareVersion
              * @param productId
-             * @param subscriber
              */
             virtual void OnVersionApplied(OTARequestor &source,
                                           uint32_t softwareVersion,
-                                          uint16_t productId,
-                                          SubscribeInteraction &subscriber) {};
+                                          uint16_t productId) {};
         };
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
 
-        void OnEventDataReceived(SubscribeInteraction &subscriber,
-                                 const chip::app::EventHeader &aEventHeader,
-                                 chip::TLV::TLVReader *apData,
-                                 const chip::app::StatusIB *apStatus) override;
+        void OnEventData(const chip::app::EventHeader &aEventHeader,
+                         chip::TLV::TLVReader *apData,
+                         const chip::app::StatusIB *apStatus) override;
 
         bool SetDefaultOTAProviders(
             void *context,

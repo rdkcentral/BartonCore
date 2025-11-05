@@ -113,6 +113,24 @@
             ]
         },
         {
+            "name": "(gdb) Reference App No Zigbee, No Thread",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/reference/barton-core-reference",
+            "args": ["-z", "-t"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "(gdb) CMake Target",
             "type": "cppdbg",
             "request": "launch",
