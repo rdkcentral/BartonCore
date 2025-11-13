@@ -107,6 +107,11 @@ fi
 
 CURRENT_BUILDER_TAG=$HIGHEST_BUILDER_TAG
 
+if [ -z "$USER" ]; then
+    # USER doesn't exist, we might be in a github codespace
+    export USER=$(whoami)
+fi
+
 ##############################################################################
 # Variables needed to facilitate the Docker compose process. See docker/compose.yaml
 # to see how these variables are used.
