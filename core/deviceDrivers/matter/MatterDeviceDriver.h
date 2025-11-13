@@ -41,6 +41,7 @@
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "subscriptions/SubscribeInteraction.h"
+#include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/DiscoveredDeviceDetails.h"
 #include "subsystems/matter/Matter.h"
 #include <condition_variable>
@@ -97,15 +98,49 @@ namespace barton
     class MatterDeviceDriver
     {
     public:
-        MatterDeviceDriver(const char *driverName, const char *deviceClass, const uint8_t dcVersion);
+        MatterDeviceDriver(const char *driverName,
+                           const char *deviceClass,
+                           const uint8_t dcVersion);
 
         virtual ~MatterDeviceDriver();
 
-        virtual bool ClaimDevice(DiscoveredDeviceDetails *details) = 0;
+        virtual bool ClaimDevice(const DeviceDataCache *deviceDataCache);
+
         DeviceDriver *GetDriver() { return &driver; }
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
-        virtual icStringHashMap *GetEndpointToProfileMap(const DiscoveredDeviceDetails *details);
         const char *GetDeviceClass() const;
+
+        bool AddDeviceDataCache(std::unique_ptr<DeviceDataCache> deviceDataCache)
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+
+            const std::string deviceUuid = deviceDataCache->GetDeviceUuid();
+
+            // Create and transfer ownership of the event handler to the cache
+            auto eventHandler = std::make_unique<DeviceDataCacheEventHandler>(*this, deviceUuid);
+            deviceDataCache->SetEventHandler(std::move(eventHandler));
+
+            // Store the cache
+            auto cacheResult = deviceDataCaches.emplace(deviceUuid, std::move(deviceDataCache));
+            return cacheResult.second;
+        }
+
+        bool RemoveDeviceDataCache(const std::string &deviceUuid)
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            return deviceDataCaches.erase(deviceUuid) > 0;
+        }
+
+        DeviceDataCache *GetDeviceDataCache(const std::string &deviceUuid)
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            auto it = deviceDataCaches.find(deviceUuid);
+            if (it != deviceDataCaches.end())
+            {
+                return it->second.get();
+            }
+            return nullptr;
+        }
 
         virtual bool DeviceRemoved(icDevice *device);
 
@@ -181,28 +216,7 @@ namespace barton
 
         void Shutdown();
 
-        /*
-         * Configures the device using the common driver - configures common matter clusters
-         * such as the OTARequestor cluster for base functionality.
-         */
-        void ConfigureDevice(std::forward_list<std::promise<bool>> &promises,
-                             const std::string &deviceId,
-                             DeviceDescriptor *deviceDescriptor,
-                             chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle);
-
-        void PopulateInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                           const std::string &deviceId,
-                                           icInitialResourceValues *initialResourceValues,
-                                           chip::Messaging::ExchangeManager &exchangeMgr,
-                                           const chip::SessionHandle &sessionHandle);
-
-        bool CreateResources(icDevice *device, icInitialResourceValues *initialResourceValues);
-
-        virtual void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                       const std::string &deviceId,
-                                       chip::Messaging::ExchangeManager &exchangeMgr,
-                                       const chip::SessionHandle &sessionHandle);
+        bool CreateResources(icDevice *device);
 
         virtual void ReadResource(std::forward_list<std::promise<bool>> &promises,
                                   const std::string &deviceId,
@@ -244,8 +258,19 @@ namespace barton
 
         bool ProcessDeviceDescriptor(const icDevice *device, const DeviceDescriptor *dd);
 
+        bool RegisterResources(icDevice *device);
+
+        void SynchronizeDevice(icDevice *device);
+
+        bool ConfigureDevice(icDevice *device, DeviceDescriptor *descriptor);
+
     protected:
         DeviceDriver driver;
+
+        /**
+         * @brief Get the list of Matter device types supported by this driver
+         */
+        virtual std::vector<uint16_t> GetSupportedDeviceTypes() = 0;
 
         /**
          * @brief Get a server cluster on a given endpoint
@@ -266,7 +291,7 @@ namespace barton
         MatterCluster *GetAnyServerById(std::string const &deviceUuid, chip::ClusterId clusterId);
 
         /**
-         * @brief Locate an endpoint that has a cluster server by ID
+         * @brief Locate endpoints that has a cluster server by ID
          *
          * @param deviceUuid
          * @param clusterId
@@ -403,13 +428,28 @@ namespace barton
                                        chip::Messaging::ExchangeManager &exchangeMgr,
                                        const chip::SessionHandle &sessionHandle) {};
 
-        virtual void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                const std::string &deviceId,
-                                                icInitialResourceValues *initialResourceValues,
-                                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                                const chip::SessionHandle &sessionHandle);
+        /**
+         * @brief Called by RegisterResources to perform device-specific resource registration.
+         *        This method is always called in the Matter thread context.
+         *
+         * @param device The device to register resources for
+         * @return true if resources were registered successfully
+         */
+        virtual bool DoRegisterResources(icDevice *device);
 
-        virtual bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues);
+        /**
+         * @brief Called by SynchronizeDevice to perform device-specific synchronization.
+         *        This method is always called in the Matter thread context.
+         *
+         * @param promises Promise list for async operations
+         * @param deviceId The device UUID to synchronize
+         * @param exchangeMgr The Matter exchange manager
+         * @param sessionHandle The Matter session handle
+         */
+        virtual void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                         const std::string &deviceId,
+                                         chip::Messaging::ExchangeManager &exchangeMgr,
+                                         const chip::SessionHandle &sessionHandle);
 
         /**
          * @brief Return the desired subscription interval for this device. The final interval may be more
@@ -454,7 +494,6 @@ namespace barton
     private:
         // These are for unit test fixtures.
         friend class MockMatterDeviceDriver;
-        friend class MatterConfigureSubscriptionSpecsTest;
 
         uint8_t deviceClassVersion;
 
@@ -468,52 +507,37 @@ namespace barton
 
         virtual inline uint32_t GetCommFailTimeoutSecs(const char *deviceUuid) { return commFailTimeoutSecs; }
 
-        class DriverSubscribeEventHandler : public SubscribeInteraction::EventHandler
+        /**
+         * @brief Initialize the device data cache for a given device UUID if it doesn't already exist. Note that this
+         * can block while the cache is being created and populated from the device. If it already exists, this is a
+         * noop.
+         */
+        bool InitializeDeviceDataCacheIfRequired(const std::string &deviceUuid);
+
+        class DeviceDataCacheEventHandler : public DeviceDataCache::EventHandler
         {
         public:
-            DriverSubscribeEventHandler(MatterDeviceDriver &outer, const std::string &deviceUuid) :
+            DeviceDataCacheEventHandler(MatterDeviceDriver &outer, const std::string &deviceUuid) :
                 driver(outer), deviceId(deviceUuid)
             {
             }
 
-            void OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId,
-                                           std::promise<bool> &subscriptionPromise,
-                                           std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCache) override
-            {
-                driver.ForEachServer(this->deviceId, [&clusterStateCache](MatterCluster *server) {
-                    server->SetClusterStateCacheRef(clusterStateCache);
-                });
-                driver.OnDeviceWorkCompleted(&subscriptionPromise, true);
-            }
-
-            void AbandonSubscription(std::promise<bool> &subscriptionPromise) override
-            {
-                driver.AbandonDeviceWork(subscriptionPromise);
-            }
-
-            void OnAttributeChanged(chip::app::ClusterStateCache *cache,
-                                    const chip::app::ConcreteAttributePath &path,
-                                    const std::string deviceId) override
+            void OnAttributeChanged(DeviceDataCache *cache, const chip::app::ConcreteAttributePath &path) override
             {
                 auto server = driver.GetServerById(deviceId, path.mEndpointId, path.mClusterId);
                 if (server)
                 {
-                    server->OnAttributeChanged(cache, path);
+                    server->OnAttributeChanged(cache->GetClusterStateCache(), path);
                 }
             }
 
-            void OnEventData(const chip::app::EventHeader &aEventHeader,
+            void OnEventData(DeviceDataCache *cache,
+                             const chip::app::EventHeader &aEventHeader,
                              chip::TLV::TLVReader *apData,
-                             const chip::app::StatusIB *apStatus,
-                             const std::string deviceId,
-                             SubscribeInteraction &outerSubscriber) override
+                             const chip::app::StatusIB *apStatus) override
             {
-                auto eventPath = aEventHeader.mPath;
-                auto server = driver.GetServerById(deviceId, eventPath.mEndpointId, eventPath.mClusterId);
-                if (server)
-                {
-                    server->OnEventDataReceived(outerSubscriber, aEventHeader, apData, apStatus);
-                }
+                // Event handling is not yet fully implemented in MatterCluster
+                // This is a placeholder for future implementation
             }
 
         private:
@@ -521,8 +545,9 @@ namespace barton
             std::string deviceId;
         };
 
-        /* key, value pair of deviceId, collection of SubscribeInteractions */
-        std::map<std::string, std::unique_ptr<SubscribeInteraction>> subscriptionMap;
+        /* key deviceId */
+        std::map<std::string, std::unique_ptr<DeviceDataCache>> deviceDataCaches;
+        std::mutex cacheMutex;
 
         class OtaRequestorEventHandler : public OTARequestor::EventHandler
         {
@@ -645,24 +670,6 @@ namespace barton
         uint32_t fastLivenessCheckMillis = 30 * 1000;
 
         /**
-         * @brief Called during device configuration, this kicks off the process of
-         *        initiating a subscribe interaction(s) with the device.
-         *
-         * @param promises
-         * @param deviceId
-         * @param deviceDescriptor
-         * @param exchangeMgr
-         * @param sessionHandle
-         */
-        void ConfigureSubscription(std::forward_list<std::promise<bool>> &promises,
-                                   const std::string &deviceId,
-                                   DeviceDescriptor *deviceDescriptor,
-                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                   const chip::SessionHandle &sessionHandle);
-
-        SubscriptionIntervalSecs CalculateFinalSubscriptionIntervalSecs(const std::string &deviceId);
-
-        /**
          * This object can be used to track the status of a ReadAttribute request and,
          * if the request is successfully fulfilled, store the data that was read.
          */
@@ -683,19 +690,6 @@ namespace barton
         };
 
         void DisassociateStoredContextLocked(void *context) { storedContexts.erase(context); }
-
-        /**
-         * @brief Look up a cluster server by device/endpoint ID
-         *
-         * @param deviceUuid
-         * @param endpointId Specify kInvalidEndpointId to find all endpoint IDs with the requested clusterID.
-         *                   Otherwise, the specified endpoint will be searched for the requested cluster.
-         * @param clusterId
-         * @return std::vector<chip::EndpointId> A list of endpoint IDs that have this cluster (empty when not
-         * supported)
-         */
-        std::vector<chip::EndpointId>
-        FindServerEndpoints(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId);
 
         /**
          * @brief Set "this" node as the default OTA provider location on a new device

@@ -28,8 +28,8 @@
 #pragma once
 
 #include "AccessRestrictionProvider.h"
-#include "BartonOperationalCredentialsDelegate.hpp"
 #include "BartonCommissionableDataProvider.hpp"
+#include "BartonOperationalCredentialsDelegate.hpp"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
@@ -194,6 +194,7 @@ namespace barton
         static bool isQRCode(const std::string &codeString);
         void StackThreadProc();
         static chip::NodeId LoadOrGenerateLocalNodeId();
+
         CHIP_ERROR ConfigureOTAProviderNode();
         bool IsAccessibleByOTARequestors();
         CHIP_ERROR AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex);

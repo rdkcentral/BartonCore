@@ -856,7 +856,7 @@ static bool removeDevicesFunc(BCoreClient *client, gint argc, gchar **argv)
     {
         for (GList *devicesIter = devices; devicesIter != NULL; devicesIter = devicesIter->next)
         {
-            g_autoptr(BCoreDevice) device = B_CORE_DEVICE(devicesIter->data);
+            BCoreDevice *device = B_CORE_DEVICE(devicesIter->data);
             g_autofree gchar *uuid = NULL;
             g_object_get(G_OBJECT(device),
                          B_CORE_DEVICE_PROPERTY_NAMES[B_CORE_DEVICE_PROP_UUID],

@@ -53,7 +53,6 @@ extern "C" {
 }
 
 #include "CommissioningOrchestrator.h"
-#include "DiscoveredDeviceDetailsStore.h"
 #include "Matter.h"
 #include "matter/MatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
