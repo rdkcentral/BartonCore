@@ -21,14 +21,5 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-add_subdirectory(concurrent/c)
-add_subdirectory(config/c)
 add_subdirectory(crypto/c)
 add_subdirectory(device)
-add_subdirectory(json/c)
-add_subdirectory(log/c)
-add_subdirectory(time/c)
-add_subdirectory(types/c)
-add_subdirectory(url/c)
-add_subdirectory(util/c)
-add_subdirectory(xml/c)
