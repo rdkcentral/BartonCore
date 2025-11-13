@@ -38,12 +38,12 @@ namespace
     public:
         MOCK_METHOD(void,
                     OnAttributeChanged,
-                    (std::shared_ptr<DeviceDataCache> cache, const chip::app::ConcreteAttributePath &path),
+                    (DeviceDataCache * cache, const chip::app::ConcreteAttributePath &path),
                     (override));
 
         MOCK_METHOD(void,
                     OnEventData,
-                    (std::shared_ptr<DeviceDataCache> cache,
+                    (DeviceDataCache * cache,
                      const chip::app::EventHeader &aEventHeader,
                      chip::TLV::TLVReader *apData,
                      const chip::app::StatusIB *apStatus),

@@ -102,6 +102,10 @@ if (BCORE_ZIGBEE)
     )
 endif()
 
+if (BCORE_MATTER)
+    add_subdirectory("src/subsystems/matter")
+endif()
+
 bcore_add_cmocka_test(
     NAME testCommFail
     TYPE unit
