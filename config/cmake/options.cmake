@@ -167,6 +167,10 @@ bcore_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
 bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
            DEFINITION BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
            DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
+bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
+           DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
+           DESCRIPTION "Build the third-party BartonCommon component"
+           ENABLE)
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

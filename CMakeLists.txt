@@ -92,36 +92,7 @@ if (BCORE_TEST_COVERAGE)
     wrap_target_with_coverage(NAME runTestsWithCoverage WRAPPED_TARGET runTests)
 endif()
 
-# Before building our stuff, build matter if we need to
-if (BCORE_MATTER AND NOT BCORE_MATTER_SKIP_SDK)
-    # Only search default locations. Mostly this is for clients who build matter out of band
-    # already. The script will check our usual matter build location.
-    find_library(MATTER NAMES ${BCORE_MATTER_LIB})
-
-    if (${MATTER} STREQUAL "MATTER-NOTFOUND")
-        # Forward SSP args to building matter
-        if (BCORE_BUILD_WITH_SSP)
-            set(MATTER_SSP_ARG "-s")
-        endif()
-
-        # Forward ASAN args to building matter
-        if (BCORE_BUILD_WITH_ASAN)
-            set(MATTER_ASAN_ARG "-a")
-        endif()
-
-        # TODO: This should be the same as what is available at runtime via providers. Perhaps this should be a public build option
-        set(MATTER_BUILD_COMMAND ./build-matter.sh -c $ENV{HOME}/.brtn-ds/matter ${MATTER_SSP_ARG} ${MATTER_ASAN_ARG})
-
-        execute_process(
-            COMMAND ${MATTER_BUILD_COMMAND}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMAND_ECHO STDOUT
-            # COMMAND_ERROR_IS_FATAL ANY -- Re-enable with cmake 3.19+
-        )
-    else()
-        message(STATUS "Matter found at ${MATTER}")
-    endif()
-endif()
+add_subdirectory(third_party)
 
 # Setup optional compiler/linker global flags
 

@@ -3,7 +3,7 @@
 # If not stated otherwise in this file or this component's LICENSE file the
 # following copyright and licenses apply:
 #
-# Copyright 2024 Comcast Cable Communications Management, LLC
+# Copyright 2025 Comcast Cable Communications Management, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,28 +21,16 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-#--------------------------------------------------------------------------------------
 #
-# CMake definition for the fcore 'types library'
-# Should not be utilized directly, but imported from our parent
-# file via the 'add_subdirectory()' routine.
+# Created by Christian Leithner on 11/12/2025.
 #
-#--------------------------------------------------------------------------------------
 
+include(FetchContent)
 
-# setup include paths
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
+FetchContent_Declare(
+    BartonCommon
+    GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon
+    GIT_TAG 0.1.1
 )
 
-# define source files (using wildcard)
-file(GLOB SOURCES "src/*.[ch]" "public/icTypes/*.h")
-
-add_library(xhTypes STATIC ${SOURCES})
-target_link_libraries(xhTypes xhLog cjson)
-
-# export our 'public' folder so others can include our headers
-target_include_directories(xhTypes PUBLIC public)
-
-# add our 'unit test' to be part of the "make unitTest"
-add_subdirectory(test)
+FetchContent_MakeAvailable(BartonCommon)
