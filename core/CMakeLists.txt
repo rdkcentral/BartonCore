@@ -173,6 +173,14 @@ pkg_check_modules(CURL REQUIRED libcurl)
 link_directories(${CURL_LIBRARY_DIRS})
 list(APPEND XTRA_INCLUDES ${CURL_INCLUDE_DIRS})
 
+bcore_find_include(
+    LIBXML2_INCLUDE_DIR
+    libxml/parser.h
+    libxml2
+    "Libxml2 include directory"
+    XTRA_INCLUDES
+)
+
 # add library dependencies for this binary
 set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
         xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
