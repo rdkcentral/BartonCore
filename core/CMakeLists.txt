@@ -182,10 +182,10 @@ bcore_find_include(
 )
 
 # add library dependencies for this binary
-set(bCoreLinkLibraries bCoreConfig xhLog xhTypes xhTime xhUtil
-        xhConcurrent xhConfig xhUrlHelper xhXmlHelper xhJsonHelper
-        xhDeviceHelper xhDeviceDescriptors xhXmlHelper
-        xhCrypto ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
+set(bCoreLinkLibraries bCoreConfig xhDeviceDescriptors
+        xhConfig xhUrlHelper xhConcurrent xhXmlHelper xhJsonHelper
+        xhDeviceHelper xhXmlHelper xhCrypto xhTime xhUtil xhTypes xhLog
+        ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
