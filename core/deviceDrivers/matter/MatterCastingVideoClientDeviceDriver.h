@@ -1,0 +1,61 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
+//
+// Copyright 2025 Comcast Cable Communications Management, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by Thomas Lea on 11/17/2025
+ */
+
+#pragma once
+
+#include "MatterDeviceDriver.h"
+
+namespace barton
+{
+    class MatterCastingVideoClientDeviceDriver : public MatterDeviceDriver
+    {
+    public:
+        MatterCastingVideoClientDeviceDriver();
+
+        bool ClaimDevice(DiscoveredDeviceDetails *details) override;
+
+    protected:
+        bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues) override
+        {
+            return true;
+        }
+
+        void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
+                                        const std::string &deviceId,
+                                        icInitialResourceValues *initialResourceValues,
+                                        chip::Messaging::ExchangeManager &exchangeMgr,
+                                        const chip::SessionHandle &sessionHandle) override
+        {
+        }
+
+    private:
+        static bool registeredWithFactory;
+
+        std::unique_ptr<MatterCluster>
+        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
+    };
+} // namespace barton
