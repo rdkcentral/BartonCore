@@ -185,7 +185,7 @@ bcore_find_include(
 set(bCoreLinkLibraries bCoreConfig xhDeviceDescriptors
         xhConfig xhUrlHelper xhConcurrent xhXmlHelper xhJsonHelper
         xhDeviceHelper xhXmlHelper xhCrypto xhTime xhUtil xhTypes xhLog
-        ${XTRA_LIBS} cjson uuid curl xml2 z m ${BCORE_LINK_LIBRARIES})
+        ${XTRA_LIBS} cjson uuid curl xml2 z m mbedcrypto ${BCORE_LINK_LIBRARIES})
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
                             ${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers
