@@ -30,10 +30,18 @@
 #--------------------------------------------------------------------------------------
 include(BCoreConfigureGLib)
 
+bcore_find_include(
+    LIBXML2_INCLUDE_DIR
+    libxml/parser.h
+    libxml2
+    "Libxml2 include directory"
+    ""
+)
+
 # setup include paths
 include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${CROSS_OUTPUT}/include/libxml2     # 3rd Party
+        ${LIBXML2_INCLUDE_DIR}
 )
 
 # define source files (using wildcard)
