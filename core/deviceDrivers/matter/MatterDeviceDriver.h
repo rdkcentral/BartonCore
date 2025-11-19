@@ -125,12 +125,6 @@ namespace barton
             return result && InitializeClustersForDevice(deviceUuid);
         }
 
-        bool RemoveDeviceDataCache(const std::string &deviceUuid)
-        {
-            std::lock_guard<std::mutex> lock(cacheMutex);
-            return deviceDataCaches.erase(deviceUuid) > 0;
-        }
-
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache(const std::string &deviceUuid)
         {
             std::lock_guard<std::mutex> lock(cacheMutex);
