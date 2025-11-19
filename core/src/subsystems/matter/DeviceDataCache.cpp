@@ -46,8 +46,11 @@ using namespace barton::Subsystem;
 DeviceDataCache::~DeviceDataCache()
 {
     icDebug();
-    // readClient and clusterStateCache unique_ptrs will be automatically cleaned up
-    // No need for ScheduleWork since they handle their own destruction safely
+    // Explicitly destroy in the correct order to avoid use-after-free
+    // readClient must be destroyed before clusterStateCacheCallback since it calls OnDeallocatePaths
+    readClient.reset();
+    clusterStateCache.reset();
+    clusterStateCacheCallback.reset();
 }
 
 std::future<bool> DeviceDataCache::Start()
@@ -411,6 +414,32 @@ void DeviceDataCache::OnReportBegin()
     icDebug();
 }
 
+void DeviceDataCache::OnEventData(const chip::app::EventHeader &aEventHeader,
+                                  chip::TLV::TLVReader *apData,
+                                  const chip::app::StatusIB *apStatus)
+{
+    auto key = std::make_tuple(deviceUuid, aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
+    auto it = clusterCallbacks.find(key);
+    chip::app::ClusterStateCache::Callback *callback = (it != clusterCallbacks.end()) ? it->second : nullptr;
+    if (callback != nullptr)
+    {
+        callback->OnEventData(aEventHeader, apData, apStatus);
+    }
+}
+
+void DeviceDataCache::OnAttributeData(const chip::app::ConcreteDataAttributePath &aPath,
+                                      chip::TLV::TLVReader *apData,
+                                      const chip::app::StatusIB &aStatus)
+{
+    auto key = std::make_tuple(deviceUuid, aPath.mEndpointId, aPath.mClusterId);
+    auto it = clusterCallbacks.find(key);
+    chip::app::ClusterStateCache::Callback *callback = (it != clusterCallbacks.end()) ? it->second : nullptr;
+    if (callback != nullptr && aStatus.IsSuccess())
+    {
+        callback->OnAttributeChanged(clusterStateCache.get(), aPath);
+    }
+}
+
 Json::Value DeviceDataCache::GetEndpointAsJson(chip::EndpointId endpointId)
 {
     Json::Value endpointJson(Json::objectValue);
@@ -620,7 +649,8 @@ void DeviceDataCache::OnDeviceConnected(chip::Messaging::ExchangeManager &exchan
 {
     icDebug();
 
-    clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*this);
+    clusterStateCacheCallback = std::make_unique<ClusterStateCacheCallback>(this);
+    clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*clusterStateCacheCallback);
     readClient =
         std::make_unique<chip::app::ReadClient>(chip::app::InteractionModelEngine::GetInstance(),
                                                 chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager(),
