@@ -84,6 +84,16 @@ namespace barton
 
                 return chip::kUndefinedNodeId;
             }
+
+            struct SubscriptionIntervalSecs
+            {
+                SubscriptionIntervalSecs(uint16_t floor, uint16_t ceiling) :
+                        minIntervalFloorSecs(floor), maxIntervalCeilingSecs(ceiling)
+                {
+                }
+                uint16_t minIntervalFloorSecs;
+                uint16_t maxIntervalCeilingSecs;
+            };
         } // namespace Matter
     } // namespace Subsystem
 

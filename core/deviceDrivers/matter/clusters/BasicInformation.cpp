@@ -43,29 +43,12 @@ namespace barton
 {
     std::string BasicInformation::GetFirmwareVersionString()
     {
-        auto cache = clusterStateCacheRef.lock();
-
-        if (cache == nullptr)
+        std::string value;
+        if (deviceDataCache->GetSoftwareVersionString(value) == CHIP_NO_ERROR)
         {
-            icDebug("Attribute cache not available");
-            return "";
+            return value;
         }
-
-        using TypeInfo = Attributes::SoftwareVersionString::TypeInfo;
-
-        TypeInfo::DecodableType value;
-        CHIP_ERROR error =
-            cache->Get<TypeInfo>({chip::kRootEndpointId, Id, Attributes::SoftwareVersionString::Id}, value);
-
-        if (error != CHIP_NO_ERROR)
-        {
-            icWarn(
-                "Failed to read SoftwareVersionString attribute for device %s: %s", deviceId.c_str(), error.AsString());
-
-            return "";
-        }
-
-        return {value.data(), value.size()};
+        return "";
     }
 
     void BasicInformation::OnAttributeChanged(chip::app::ClusterStateCache *cache,

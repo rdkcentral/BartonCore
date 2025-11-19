@@ -62,11 +62,9 @@
 #include "controller/CHIPCluster.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
-#include "matter/subscriptions/SubscribeInteraction.h"
 #include "messaging/ExchangeMgr.h"
 #include "platform/CHIPDeviceLayer.h"
 #include "platform/PlatformManager.h"
-#include "subsystems/matter/DiscoveredDeviceDetailsStore.h"
 #include "subsystems/matter/Matter.h"
 #include "subsystems/matter/matterSubsystem.h"
 #include "transport/Session.h"
@@ -103,7 +101,6 @@ static void deviceRemoved(void *ctx, icDevice *device);
 static bool configureDevice(void *ctx, icDevice *device, DeviceDescriptor *descriptor);
 static void synchronizeDevice(void *ctx, icDevice *device);
 static bool processDeviceDescriptor(void *ctx, icDevice *device, DeviceDescriptor *dd);
-static bool fetchInitialResourceValues(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
 static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues);
 static bool devicePersisted(void *ctx, icDevice *device);
 static bool readResource(void *ctx, icDeviceResource *resource, char **value);
@@ -127,7 +124,6 @@ MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *devic
     driver.destroy = deleteDriver;
     driver.deviceRemoved = deviceRemoved;
     driver.configureDevice = configureDevice;
-    driver.fetchInitialResourceValues = fetchInitialResourceValues;
     driver.registerResources = registerResources;
     driver.devicePersisted = devicePersisted;
     driver.readResource = readResource;
@@ -151,9 +147,49 @@ MatterDeviceDriver::~MatterDeviceDriver()
     linkedListDestroy(driver.supportedDeviceClasses, nullptr);
 }
 
-icStringHashMap *MatterDeviceDriver::GetEndpointToProfileMap(const DiscoveredDeviceDetails *details)
+bool MatterDeviceDriver::ClaimDevice(const DeviceDataCache *deviceDataCache)
 {
-    return nullptr;
+    std::vector<uint16_t> deviceTypes = GetSupportedDeviceTypes();
+
+    if (!deviceDataCache)
+    {
+        icError("deviceDataCache is null");
+        return false;
+    }
+
+    // Get all endpoints from the device (excluding root endpoint 0)
+    std::vector<chip::EndpointId> endpointIds = deviceDataCache->GetEndpointIds();
+
+    for (chip::EndpointId endpointId : endpointIds)
+    {
+        // Skip root endpoint 0
+        if (endpointId == 0)
+        {
+            continue;
+        }
+
+        std::vector<uint16_t> deviceTypes;
+        if (deviceDataCache->GetDeviceTypes(endpointId, deviceTypes) != CHIP_NO_ERROR)
+        {
+            continue;
+        }
+
+        auto supportedDeviceTypes = GetSupportedDeviceTypes();
+
+        // Check if any device type on this endpoint matches our supported types
+        for (uint16_t deviceTypeId : deviceTypes)
+        {
+            if (std::find(supportedDeviceTypes.begin(), supportedDeviceTypes.end(), deviceTypeId) !=
+                supportedDeviceTypes.end())
+            {
+                icDebug("Device claimed: endpoint %d has matching device type 0x%04x", endpointId, deviceTypeId);
+                return true;
+            }
+        }
+    }
+
+    icDebug("Device not claimed: no matching device types found");
+    return false;
 }
 
 const char *MatterDeviceDriver::GetDeviceClass() const
@@ -172,11 +208,11 @@ void MatterDeviceDriver::Shutdown()
 
     // Don't rely on ~MatterDeviceDriver() to cleanly deal with objects that
     // interact with the Matter stack: interaction with the Matter stack
-    // via subscriptionMap (which ultimately contains chip::app::ReadClient) must
+    // via deviceDataCaches (which ultimately contains chip::app::ReadClient) must
     // occur only when the stack lock is held, or chipDie will abort the program
     // to avoid undefined behavior. Drivers are shut down before subsystems.
 
-    subscriptionMap.clear();
+    deviceDataCaches.clear();
     clusterServers.clear();
 }
 
@@ -319,225 +355,91 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        subscriptionMap.erase(device->uuid);
+        deviceDataCaches.erase(device->uuid);
     });
 
     return sentRemoveFabricRequest;
 }
 
-void MatterDeviceDriver::ConfigureDevice(std::forward_list<std::promise<bool>> &promises,
-                                         const std::string &deviceId,
-                                         DeviceDescriptor *deviceDescriptor,
-                                         chip::Messaging::ExchangeManager &exchangeMgr,
-                                         const chip::SessionHandle &sessionHandle)
+bool MatterDeviceDriver::ConfigureDevice(icDevice *device, DeviceDescriptor *descriptor)
 {
     icDebug();
 
-    using namespace chip::app::Clusters;
-
-#ifdef BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
-    if (!ConfigureOTARequestorCluster(promises, deviceId, deviceDescriptor, exchangeMgr, sessionHandle))
+    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
     {
-        icError("Failed to configure OTA Requestor for device %s", deviceId.c_str());
-        FailOperation(promises);
-        return;
-    }
-#endif
-
-    DoConfigureDevice(promises, deviceId, deviceDescriptor, exchangeMgr, sessionHandle);
-
-    ConfigureSubscription(promises, deviceId, deviceDescriptor, exchangeMgr, sessionHandle);
-}
-
-void MatterDeviceDriver::ConfigureSubscription(std::forward_list<std::promise<bool>> &promises,
-                                               const std::string &deviceId,
-                                               DeviceDescriptor *deviceDescriptor,
-                                               chip::Messaging::ExchangeManager &exchangeMgr,
-                                               const chip::SessionHandle &sessionHandle)
-{
-    icDebug();
-
-    auto subscriptionIntervalSecs = CalculateFinalSubscriptionIntervalSecs(deviceId);
-    if (subscriptionIntervalSecs.minIntervalFloorSecs == 0 || subscriptionIntervalSecs.maxIntervalCeilingSecs == 0)
-    {
-        icError("Failed to calculate valid subscription interval params");
-        FailOperation(promises);
-        return;
-    }
-
-    chip::app::ReadPrepareParams params(sessionHandle);
-
-    // We want reporting on everything, so we just wildcard everything.
-    auto eventPathParams = new chip::app::EventPathParams;
-    eventPathParams->SetWildcardEndpointId();
-    eventPathParams->SetWildcardClusterId();
-    eventPathParams->SetWildcardEventId();
-    auto attributePathParams = new chip::app::AttributePathParams;
-    attributePathParams->SetWildcardEndpointId();
-    attributePathParams->SetWildcardClusterId();
-    attributePathParams->SetWildcardAttributeId();
-
-    params.mMinIntervalFloorSeconds = subscriptionIntervalSecs.minIntervalFloorSecs;
-    params.mMaxIntervalCeilingSeconds = subscriptionIntervalSecs.maxIntervalCeilingSecs;
-    params.mpEventPathParamsList = eventPathParams;
-    params.mEventPathParamsListSize = 1;
-    params.mpAttributePathParamsList = attributePathParams;
-    params.mAttributePathParamsListSize = 1;
-    params.mKeepSubscriptions = true;
-
-    auto subEventHandler = std::make_unique<DriverSubscribeEventHandler>(*this, deviceId);
-
-    promises.emplace_front();
-    auto &configureSubscriptionPromise = promises.front();
-    AssociateStoredContext(&configureSubscriptionPromise);
-
-    auto subscribeInteraction = std::make_unique<SubscribeInteraction>(
-        std::move(subEventHandler), deviceId, exchangeMgr, configureSubscriptionPromise);
-
-    CHIP_ERROR err = subscribeInteraction->Send(std::move(params));
-
-    if (CHIP_NO_ERROR == err)
-    {
-        subscriptionMap[deviceId] = std::move(subscribeInteraction);
-    }
-    else
-    {
-        icError("Failed to send subscribe request (%s)", err.AsString());
-        subscribeInteraction->AbandonSubscription();
-    }
-}
-
-SubscriptionIntervalSecs MatterDeviceDriver::CalculateFinalSubscriptionIntervalSecs(const std::string &deviceId)
-{
-    icDebug();
-
-    SubscriptionIntervalSecs intervalSecs = GetDesiredSubscriptionIntervalSecs();
-
-    // The report interval should be "significantly less" than the comm fail timeout to avoid
-    // requiring phase-locked clocks and realtime processing. A factor of 2 was chosen here to
-    // allow for weathering transient conditions (e.g., delivery delays/retries), and provide
-    // some fudge factor for activities like reducing the commFailOverrideSeconds metadata.
-    // This allows a reduction by up to 40% (10% safety margin) to "just work" without complex schemes
-    // like a queued-for-next-contact reconfiguration for a value that is unlikely to change
-    // in practice. Extending this timeout doesn't require any special consideration.
-    uint32_t desiredCommfailCeilSecs = GetCommFailTimeoutSecs(deviceId.c_str()) / 2;
-
-    if (intervalSecs.maxIntervalCeilingSecs > desiredCommfailCeilSecs)
-    {
-        icInfo("Reducing max interval ceiling from %d secs to %d secs to line up with commfail timeout",
-               intervalSecs.maxIntervalCeilingSecs,
-               desiredCommfailCeilSecs);
-
-        intervalSecs.maxIntervalCeilingSecs = desiredCommfailCeilSecs;
-    }
-
-    if (intervalSecs.minIntervalFloorSecs > intervalSecs.maxIntervalCeilingSecs)
-    {
-        uint16_t adjustedMinIntervalFloor = intervalSecs.maxIntervalCeilingSecs - 1 > 0 ? intervalSecs.maxIntervalCeilingSecs - 1 : 1;
-        icWarn("The requested min interval floor of %d secs is greater than the max interval ceiling of %d secs; "
-               "adjusting the floor to %d secs",
-               intervalSecs.minIntervalFloorSecs,
-               intervalSecs.maxIntervalCeilingSecs,
-               adjustedMinIntervalFloor);
-        intervalSecs.minIntervalFloorSecs = adjustedMinIntervalFloor;
-    }
-
-    icDebug("Will request min interval floor of %d seconds for the subscription on %s",
-            intervalSecs.minIntervalFloorSecs,
-            deviceId.c_str());
-    icDebug("Will request max interval ceiling of %d seconds for the subscription on %s",
-            intervalSecs.maxIntervalCeilingSecs,
-            deviceId.c_str());
-
-    intervalSecs.minIntervalFloorSecs = intervalSecs.minIntervalFloorSecs;
-    intervalSecs.maxIntervalCeilingSecs = intervalSecs.maxIntervalCeilingSecs;
-    return intervalSecs;
-}
-
-void MatterDeviceDriver::FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                    const std::string &deviceId,
-                                                    icInitialResourceValues *initialResourceValues,
-                                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                                    const chip::SessionHandle &sessionHandle)
-{
-    icDebug("Unimplemented");
-    // default implementation just fails
-    FailOperation(promises);
-}
-
-void MatterDeviceDriver::PopulateInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                       const std::string &deviceId,
-                                                       icInitialResourceValues *initialResourceValues,
-                                                       chip::Messaging::ExchangeManager &exchangeMgr,
-                                                       const chip::SessionHandle &sessionHandle)
-{
-    FetchInitialResourceValues(promises, deviceId, initialResourceValues, exchangeMgr, sessionHandle);
-}
-
-bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValues *initialResourceValues)
-{
-
-    auto *basicInfoServer = static_cast<barton::BasicInformation *>(
-        GetAnyServerById(device->uuid, chip::app::Clusters::BasicInformation::Id));
-
-    if (basicInfoServer == nullptr)
-    {
-        icError("No basic information server on device %s!", device->uuid);
+        icError("Failed to configure device %s: could not initialize DeviceDataCache", device->uuid);
         return false;
     }
 
-    /*
-     * The device may have reported its info upon subscription.
-     * In the event that it hasn't yet, (e.g., sleepy), the value will
-     * be filled in when the next report arrives, so always create the
-     * resource. The absence of a value "now" is not an error.
-     */
+    return ConnectAndExecute(
+        device->uuid,
+        [this, descriptor](std::forward_list<std::promise<bool>> &promises,
+                           const std::string &deviceId,
+                           chip::Messaging::ExchangeManager &exchangeMgr,
+                           const chip::SessionHandle &sessionHandle) {
+            icDebug();
 
-    const char *versionStr = nullptr;
-    auto tmp = basicInfoServer->GetFirmwareVersionString();
+            using namespace chip::app::Clusters;
 
-    if (!tmp.empty())
+#ifdef BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
+            if (!ConfigureOTARequestorCluster(promises, deviceId, descriptor, exchangeMgr, sessionHandle))
+            {
+                icError("Failed to configure OTA Requestor for device %s", deviceId.c_str());
+                FailOperation(promises);
+                return;
+            }
+#endif
+
+            DoConfigureDevice(promises, deviceId, descriptor, exchangeMgr, sessionHandle);
+        },
+        MATTER_ASYNC_DEVICE_TIMEOUT_SECS);
+}
+
+bool MatterDeviceDriver::CreateResources(icDevice *device)
+{
+    icDebug();
+
+    auto deviceCache = GetDeviceDataCache(device->uuid);
+    if (!deviceCache)
     {
-        versionStr = tmp.c_str();
+        icError("No device cache for %s", device->uuid);
+        return false;
+    }
+
+    // these are required and will fail the operation if not found/populated
+    std::string versionStr;
+    if (deviceCache->GetSoftwareVersionString(versionStr) != CHIP_NO_ERROR || versionStr.empty())
+    {
+        icError("No SoftwareVersionString found for device %s!", device->uuid);
+        return false;
+    }
+
+    std::string macAddressStr;
+    if (deviceCache->GetMacAddress(macAddressStr) != CHIP_NO_ERROR || macAddressStr.empty())
+    {
+        icError("No MAC address found for device %s!", device->uuid);
+        return false;
     }
 
     createDeviceResource(device,
                          COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION_STRING,
-                         versionStr,
+                         versionStr.c_str(),
                          RESOURCE_TYPE_STRING,
                          RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
                          CACHING_POLICY_ALWAYS);
 
-    auto *generalDiagnosticsServer = static_cast<barton::GeneralDiagnostics *>(
-        GetAnyServerById(device->uuid, chip::app::Clusters::GeneralDiagnostics::Id));
-
-    if (generalDiagnosticsServer == nullptr)
-    {
-        icError("No general diagnostics server on device %s!", device->uuid);
-        return false;
-    }
-
-    const char *macAddressStr = nullptr;
-    tmp = generalDiagnosticsServer->GetMacAddress();
-
-    if (!tmp.empty())
-    {
-        macAddressStr = tmp.c_str();
-    }
-
     createDeviceResource(device,
                          COMMON_DEVICE_RESOURCE_MAC_ADDRESS,
-                         macAddressStr,
+                         macAddressStr.c_str(),
                          RESOURCE_TYPE_MAC_ADDRESS,
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
 
     const char *networkTypeStr = nullptr;
-    tmp = generalDiagnosticsServer->GetNetworkType();
-
-    if (!tmp.empty())
+    std::string networkType;
+    if (deviceCache->GetNetworkType(networkType) == CHIP_NO_ERROR && !networkType.empty())
     {
-        networkTypeStr = tmp.c_str();
+        networkTypeStr = networkType.c_str();
     }
 
     createDeviceResource(device,
@@ -547,13 +449,58 @@ bool MatterDeviceDriver::CreateResources(icDevice *device, icInitialResourceValu
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
 
-    return RegisterResources(device, initialResourceValues);
+    return RegisterResources(device);
 }
 
-void MatterDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                           const std::string &deviceId,
-                                           chip::Messaging::ExchangeManager &exchangeMgr,
-                                           const chip::SessionHandle &sessionHandle)
+void MatterDeviceDriver::SynchronizeDevice(icDevice *device)
+{
+    icDebug();
+
+    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
+    {
+        icError("Failed to synchronize device %s: could not initialize DeviceDataCache", device->uuid);
+        return;
+    }
+
+    if (!ConnectAndExecute(
+            device->uuid,
+            [this](std::forward_list<std::promise<bool>> &promises,
+                   const std::string &deviceId,
+                   chip::Messaging::ExchangeManager &exchangeMgr,
+                   const chip::SessionHandle &sessionHandle) {
+                icDebug();
+
+                using namespace chip::app::Clusters;
+
+#ifdef BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
+                if (!ConfigureOTARequestorCluster(promises, deviceId, nullptr, exchangeMgr, sessionHandle))
+                {
+                    icError("Failed to configure OTA Requestor for device %s", deviceId.c_str());
+                    FailOperation(promises);
+                    return;
+                }
+#endif
+
+                // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
+                //  can update resources
+                auto deviceCache = GetDeviceDataCache(deviceId);
+                if (deviceCache != nullptr)
+                {
+                    deviceCache->RegenerateAttributeReport();
+                }
+
+                DoSynchronizeDevice(promises, deviceId, exchangeMgr, sessionHandle);
+            },
+            MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS))
+    {
+        icError("Failed to sync device %s", device->uuid);
+    }
+}
+
+void MatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                             const std::string &deviceId,
+                                             chip::Messaging::ExchangeManager &exchangeMgr,
+                                             const chip::SessionHandle &sessionHandle)
 {
     icDebug("Unimplemented");
     FailOperation(promises);
@@ -595,7 +542,58 @@ void MatterDeviceDriver::ExecuteResource(std::forward_list<std::promise<bool>> &
     FailOperation(promises);
 }
 
-bool MatterDeviceDriver::RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues)
+bool MatterDeviceDriver::RegisterResources(icDevice *device)
+{
+    icDebug();
+
+    auto deviceCache = GetDeviceDataCache(device->uuid);
+
+    if (!deviceCache)
+    {
+        return false;
+    }
+
+    g_autofree char *serialNumber = nullptr;
+
+    // Matter 1.0 11.1.6.3: serialNumber must be displayable and human readable.
+    // Displaying an empty string is unreasonable and is a defined 'not present'
+    // value in the details model. The deviceService resource model defines null
+    // as unknown, rather than the empty string.
+
+    std::string serialNumberStr;
+    if (deviceCache->GetSerialNumber(serialNumberStr) == CHIP_NO_ERROR && !serialNumberStr.empty())
+    {
+        serialNumber = strdup(serialNumberStr.c_str());
+    }
+
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_SERIAL_NUMBER,
+                         serialNumber,
+                         RESOURCE_TYPE_SERIAL_NUMBER,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+
+    /*
+     * RunOnMatterSync can only handle a few captures before
+     * the message gets too big. A reference to a bag of
+     * objects is safe to use here, as the lambda will be
+     * retired via std::future before this method returns.
+     */
+
+    struct
+    {
+        MatterDeviceDriver *driver;
+        icDevice *device;
+    } wrapper = {this, device};
+
+    bool registerDone = false;
+
+    RunOnMatterSync([&wrapper, &registerDone] { registerDone = wrapper.driver->DoRegisterResources(wrapper.device); });
+
+    return registerDone;
+}
+
+bool MatterDeviceDriver::DoRegisterResources(icDevice *device)
 {
     icDebug();
     return false;
@@ -603,22 +601,8 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device, icInitialResourceVa
 
 bool MatterDeviceDriver::DevicePersisted(icDevice *device)
 {
-    bool result = false;
-
     icDebug();
-
-    auto details = DiscoveredDeviceDetailsStore::Instance().Get(device->uuid);
-
-    if (details == nullptr)
-    {
-        icError("No matter details found to persist!");
-        return false;
-    }
-
-    DiscoveredDeviceDetailsStore::Instance().Put(device->uuid, details);
-    result = true;
-
-    return result;
+    return true;
 }
 
 // DeviceDriver interface implementation.  Redirects to class methods
@@ -729,7 +713,7 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
         auto nodeId = Subsystem::Matter::UuidToNodeId(deviceId);
 
         CHIP_ERROR getConnectedErr =
-            Matter::GetInstance().GetCommissioner().GetConnectedDevice(nodeId, &successCb, &failCb);
+            Matter::GetInstance().GetCommissioner()->GetConnectedDevice(nodeId, &successCb, &failCb);
         if (getConnectedErr != CHIP_NO_ERROR)
         {
             icError("Failed to start device connection: %s", getConnectedErr.AsString());
@@ -821,39 +805,32 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     return !abort;
 }
 
-static bool configureDevice(void *self, icDevice *device, DeviceDescriptor *descriptor)
+bool MatterDeviceDriver::InitializeDeviceDataCacheIfRequired(const std::string &deviceUuid)
 {
-    icDebug();
+    //if a device cache isnt set yet (there would have been if it had just been paired),
+    // create and set it after it starts successfully
+    auto deviceDataCache = GetDeviceDataCache(deviceUuid);
+    if (deviceDataCache == nullptr)
+    {
+        auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
+        std::future<bool> success = newCache->Start();
 
-    MatterDeviceDriver *myDriver = static_cast<MatterDeviceDriver *>(self);
+        // TODO This needs a timeout so it cant block forever
+        if (!success.get())
+        {
+            icError("Failed to start DeviceDataCache for device %s", deviceUuid.c_str());
+            return false;
+        }
 
-    return myDriver->ConnectAndExecute(
-        device->uuid,
-        [myDriver, descriptor](std::forward_list<std::promise<bool>> &promises,
-                               const std::string &deviceId,
-                               chip::Messaging::ExchangeManager &exchangeMgr,
-                               const chip::SessionHandle &sessionHandle) {
-            myDriver->ConfigureDevice(promises, deviceId, descriptor, exchangeMgr, sessionHandle);
-        },
-        MATTER_ASYNC_DEVICE_TIMEOUT_SECS);
+        AddDeviceDataCache(std::move(newCache));
+    }
+
+    return true;
 }
 
-static bool fetchInitialResourceValues(void *self, icDevice *device, icInitialResourceValues *initialResourceValues)
+static bool configureDevice(void *self, icDevice *device, DeviceDescriptor *descriptor)
 {
-    icDebug();
-
-    MatterDeviceDriver *myDriver = static_cast<MatterDeviceDriver *>(self);
-
-    return myDriver->ConnectAndExecute(
-        device->uuid,
-        [myDriver, initialResourceValues](std::forward_list<std::promise<bool>> &promises,
-                                          const std::string &deviceId,
-                                          chip::Messaging::ExchangeManager &exchangeMgr,
-                                          const chip::SessionHandle &sessionHandle) {
-            myDriver->PopulateInitialResourceValues(
-                promises, deviceId, initialResourceValues, exchangeMgr, sessionHandle);
-        },
-        MATTER_ASYNC_DEVICE_TIMEOUT_SECS);
+    return static_cast<MatterDeviceDriver *>(self)->ConfigureDevice(device, descriptor);
 }
 
 static bool readResource(void *self, icDeviceResource *resource, char **value)
@@ -925,22 +902,7 @@ static bool executeResource(void *self, icDeviceResource *resource, const char *
 
 static void synchronizeDevice(void *self, icDevice *device)
 {
-    icDebug();
-
-    MatterDeviceDriver *myDriver = static_cast<MatterDeviceDriver *>(self);
-    if (!myDriver->ConnectAndExecute(
-            device->uuid,
-            [myDriver](std::forward_list<std::promise<bool>> &promises,
-                       const std::string &deviceId,
-                       chip::Messaging::ExchangeManager &exchangeMgr,
-                       const chip::SessionHandle &sessionHandle) {
-                myDriver->SynchronizeDevice(promises, deviceId, exchangeMgr, sessionHandle);
-            },
-
-            MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS))
-    {
-        icError("Failed to sync device %s", device->uuid);
-    }
+    static_cast<MatterDeviceDriver *>(self)->SynchronizeDevice(device);
 }
 
 
@@ -1038,55 +1000,7 @@ static bool processDeviceDescriptor(void *ctx, icDevice *device, DeviceDescripto
 
 static bool registerResources(void *ctx, icDevice *device, icInitialResourceValues *initialResourceValues)
 {
-    auto matterDetails = DiscoveredDeviceDetailsStore::Instance().Get(device->uuid);
-
-    if (!matterDetails)
-    {
-        return false;
-    }
-
-    const char *serialNumber = nullptr;
-
-    // Matter 1.0 11.1.6.3: serialNumber must be displayable and human readable.
-    // Displaying an empty string is unreasonable and is a defined 'not present'
-    // value in the details model. The deviceService resource model defines null
-    // as unknown, rather than the empty string.
-
-    if (matterDetails->serialNumber.HasValue() && !matterDetails->serialNumber.Value().empty())
-    {
-        serialNumber = matterDetails->serialNumber.Value().c_str();
-    }
-
-    createDeviceResource(device,
-                         COMMON_DEVICE_RESOURCE_SERIAL_NUMBER,
-                         serialNumber,
-                         RESOURCE_TYPE_SERIAL_NUMBER,
-                         RESOURCE_MODE_READABLE,
-                         CACHING_POLICY_ALWAYS);
-
-    auto *driver = static_cast<MatterDeviceDriver *>(ctx);
-
-    /*
-     * RunOnMatterSync can only handle a few captures before
-     * the message gets too big. A reference to a bag of
-     * objects is safe to use here, as the lambda will be
-     * retired via std::future before this method returns.
-     */
-
-    struct
-    {
-        MatterDeviceDriver *driver;
-        icDevice *device;
-        icInitialResourceValues *initialResourceValues;
-    } wrapper = {driver, device, initialResourceValues};
-
-    bool registerDone = false;
-
-    driver->RunOnMatterSync([&wrapper, &registerDone] {
-        registerDone = wrapper.driver->CreateResources(wrapper.device, wrapper.initialResourceValues);
-    });
-
-    return registerDone;
+    return static_cast<MatterDeviceDriver *>(ctx)->RegisterResources(device);
 }
 
 static bool devicePersisted(void *ctx, icDevice *device)
@@ -1114,36 +1028,19 @@ MatterCluster *MatterDeviceDriver::GetAnyServerById(std::string const &deviceUui
 std::vector<chip::EndpointId> MatterDeviceDriver::FindServerEndpoints(std::string const &deviceUuid,
                                                                       chip::ClusterId clusterId)
 {
-    return FindServerEndpoints(deviceUuid, kInvalidEndpointId, clusterId);
-}
-
-std::vector<chip::EndpointId> MatterDeviceDriver::FindServerEndpoints(std::string const &deviceUuid,
-                                                                      chip::EndpointId endpointId,
-                                                                      chip::ClusterId clusterId)
-{
-    auto detailsRef = DiscoveredDeviceDetailsStore::Instance().Get(deviceUuid);
-    auto details = detailsRef.get();
     std::vector<chip::EndpointId> endpoints;
-
-    if (details == nullptr)
+    auto deviceCache = GetDeviceDataCache(deviceUuid);
+    if (deviceCache == nullptr)
     {
-        icError("No discovery details for %s", deviceUuid.c_str());
+        icError("No device cache for %s", deviceUuid.c_str());
         return endpoints;
     }
 
-    for (auto &entry : details->endpointDescriptorData)
+    for (auto &entry : deviceCache->GetEndpointIds())
     {
-        for (auto &&cluster : *entry.second->serverList)
+        if (deviceCache->EndpointHasServerCluster(entry, clusterId))
         {
-            if (cluster == clusterId && (endpointId == kInvalidEndpointId || entry.first == endpointId))
-            {
-                endpoints.push_back(entry.first);
-
-                if (endpointId != kInvalidEndpointId)
-                {
-                    break;
-                }
-            }
+            endpoints.push_back(entry);
         }
     }
 
@@ -1159,7 +1056,16 @@ bool MatterDeviceDriver::IsServerPresent(std::string const &deviceUuid,
         return false;
     }
 
-    return !FindServerEndpoints(deviceUuid, endpointId, clusterId).empty();
+    auto deviceCache = GetDeviceDataCache(deviceUuid);
+    for (auto &entry : deviceCache->GetEndpointIds())
+    {
+        if (entry == endpointId && deviceCache->EndpointHasServerCluster(entry, clusterId))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void MatterDeviceDriver::RunOnMatterSync(std::function<void(void)> work)
@@ -1216,6 +1122,7 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
 
     auto locator = std::make_tuple(deviceUuid, endpointId, clusterId);
     auto serverIt = clusterServers.find(locator);
+    auto deviceDataCache = GetDeviceDataCache(deviceUuid);
 
     if (serverIt == clusterServers.end())
     {
@@ -1225,20 +1132,20 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
         {
             case OtaSoftwareUpdateRequestor::Id:
                 serverRef = std::make_unique<OTARequestor>(
-                    (OTARequestor::EventHandler *) &otaRequestorEventHandler, deviceUuid, endpointId);
+                    (OTARequestor::EventHandler *) &otaRequestorEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::BasicInformation::Id:
-                serverRef = std::make_unique<BasicInformation>(&basicInfoEventHandler, deviceUuid, endpointId);
+                serverRef = std::make_unique<BasicInformation>(&basicInfoEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::GeneralDiagnostics::Id:
                 serverRef =
-                    std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId);
+                    std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             default:
-                serverRef = MakeCluster(deviceUuid, endpointId, clusterId);
+                serverRef = MakeCluster(deviceUuid, endpointId, clusterId, deviceDataCache);
         }
 
         server = serverRef.get();
@@ -1298,14 +1205,11 @@ bool MatterDeviceDriver::ConfigureOTARequestorCluster(std::forward_list<std::pro
 }
 
 void MatterDeviceDriver::DeviceFirmwareUpdateFailed(OTARequestor &source,
-                                                    uint32_t softwareVersion,
-                                                    SubscribeInteraction &subscriber)
+                                                    uint32_t softwareVersion)
 {
     std::string deviceUuid = source.GetDeviceId();
 
     icWarn("Device %s failed to upgrade to version %#" PRIx32, deviceUuid.c_str(), softwareVersion);
-
-    subscriber.SetLivenessCheckMillis(0);
 
     updateResource(
         deviceUuid.c_str(), NULL, COMMON_DEVICE_RESOURCE_FIRMWARE_UPDATE_STATUS, FIRMWARE_UPDATE_STATUS_FAILED, NULL);
@@ -1316,8 +1220,7 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnStateTransition(
     OtaSoftwareUpdateRequestor::OTAUpdateStateEnum oldState,
     OtaSoftwareUpdateRequestor::OTAUpdateStateEnum newState,
     OtaSoftwareUpdateRequestor::OTAChangeReasonEnum reason,
-    Nullable<uint32_t> targetSoftwareVersion,
-    SubscribeInteraction &subscriber)
+    Nullable<uint32_t> targetSoftwareVersion)
 {
     icDebug();
 
@@ -1328,13 +1231,11 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnStateTransition(
         ((reason == OTAChangeReasonEnum::kFailure) || (reason == OTAChangeReasonEnum::kTimeOut)))
     {
         driver.DeviceFirmwareUpdateFailed(
-            source, targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value(), subscriber);
+            source, targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value());
         icWarn("Update faiure reason: %s", reason == OTAChangeReasonEnum::kFailure ? "Failed" : "Timed out");
     }
     else if (newState == OTAUpdateStateEnum::kDownloading)
     {
-        subscriber.SetLivenessCheckMillis(driver.fastLivenessCheckMillis);
-
         std::string deviceUuid = source.GetDeviceId();
 
         updateResource(deviceUuid.c_str(),
@@ -1357,8 +1258,7 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnDownloadError(OTARequestor 
                                                                    uint32_t softwareVersion,
                                                                    uint64_t bytesDownloaded,
                                                                    Nullable<uint8_t> percentDownloaded,
-                                                                   Nullable<int64_t> platformCode,
-                                                                   SubscribeInteraction &subscriber)
+                                                                   Nullable<int64_t> platformCode)
 {
     icWarn(
         "Failed to download software version %#" PRIx32 " for device %#" PRIx64, softwareVersion, source.GetNodeId());
@@ -1373,20 +1273,17 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnDownloadError(OTARequestor 
         icWarn("Failed download indicated platform code %#" PRIx64, platformCode.Value());
     }
 
-    driver.DeviceFirmwareUpdateFailed(source, softwareVersion, subscriber);
+    driver.DeviceFirmwareUpdateFailed(source, softwareVersion);
 }
 
 void MatterDeviceDriver::OtaRequestorEventHandler::OnVersionApplied(OTARequestor &source,
                                                                     uint32_t softwareVersion,
-                                                                    uint16_t productId,
-                                                                    SubscribeInteraction &subscriber)
+                                                                    uint16_t productId)
 {
     std::string deviceUuid = source.GetDeviceId();
     std::string versionStr = Matter::VersionToString(softwareVersion);
 
     icInfo("Software version %s installed successfully on device %s", versionStr.c_str(), deviceUuid.c_str());
-
-    subscriber.SetLivenessCheckMillis(0);
 
     updateResource(deviceUuid.c_str(), NULL, COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION, versionStr.c_str(), NULL);
 

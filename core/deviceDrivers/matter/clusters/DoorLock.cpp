@@ -74,37 +74,32 @@ namespace barton
     {
         icDebug();
 
-        bool result = false;
-        std::shared_ptr<chip::app::ClusterStateCache> cache;
-        if (!(cache = clusterStateCacheRef.lock()))
-        {
-            icError("Failed to get lockstate attribute because the cluster state cache expired or was never set");
-            return false;
-        }
-
         CHIP_ERROR error = CHIP_NO_ERROR;
         using namespace chip::app::Clusters::DoorLock;
         using TypeInfo = Attributes::LockState::TypeInfo;
 
         chip::app::ConcreteAttributePath path(
             endpointId, chip::app::Clusters::DoorLock::Id, chip::app::Clusters::DoorLock::Attributes::LockState::Id);
+        chip::TLV::TLVReader reader;
+        error = deviceDataCache->GetAttributeData(path, reader);
+        if (error != CHIP_NO_ERROR)
         {
-            TypeInfo::DecodableType value;
-            error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                static_cast<DoorLock::EventHandler *>(eventHandler)
-                    ->LockStateReadComplete(deviceId, value.Value(), context);
-                result = true;
-            }
+            icError("Failed to read lockstate attribute: %s", error.AsString());
+            return false;
         }
 
+        TypeInfo::DecodableType value;
+        error = chip::app::DataModel::Decode(reader, value);
         if (error != CHIP_NO_ERROR)
         {
             icError("Failed to decode lockstate attribute: %s", error.AsString());
+            return false;
         }
 
-        return result;
+        static_cast<DoorLock::EventHandler *>(eventHandler)
+            ->LockStateReadComplete(deviceId, value.Value(), context);
+
+        return true;
     };
 
     bool DoorLock::SetLocked(void *context,

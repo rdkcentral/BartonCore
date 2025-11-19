@@ -31,7 +31,6 @@
 #include "CommissioningOrchestrator.h"
 #include "DeviceDiscoverer.h"
 #include "DiscoveredDeviceDetails.h"
-#include "DiscoveredDeviceDetailsStore.h"
 #include "Matter.h"
 #include "matter/MatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
@@ -66,8 +65,8 @@ namespace barton
 
         // TODO: this only works if we are doing one commissioning at a time... probably want Matter to dispatch to
         // multiple
-        Matter::GetInstance().GetCommissioner().RegisterDeviceDiscoveryDelegate(this);
-        Matter::GetInstance().GetCommissioner().RegisterPairingDelegate(this);
+        Matter::GetInstance().GetCommissioner()->RegisterDeviceDiscoveryDelegate(this);
+        Matter::GetInstance().GetCommissioner()->RegisterPairingDelegate(this);
 
         chip::DeviceLayer::PlatformMgr().ScheduleWork(CommissionWorkFuncCb, reinterpret_cast<intptr_t>(this));
 
@@ -91,8 +90,8 @@ namespace barton
 
         // TODO: this only works if we are doing one commissioning at a time... probably want Matter to dispatch to
         // multiple
-        Matter::GetInstance().GetCommissioner().RegisterDeviceDiscoveryDelegate(nullptr);
-        Matter::GetInstance().GetCommissioner().RegisterPairingDelegate(nullptr);
+        Matter::GetInstance().GetCommissioner()->RegisterDeviceDiscoveryDelegate(nullptr);
+        Matter::GetInstance().GetCommissioner()->RegisterPairingDelegate(nullptr);
 
         auto endStatus = this->commissioningStatus;
 
@@ -135,8 +134,9 @@ namespace barton
 
         SetCommissioningStatus(DiscoveryPending);
 
-        DeviceDiscoverer discoverer(finalNodeId);
-        std::future<bool> success = discoverer.Start();
+        std::string uuid = Subsystem::Matter::NodeIdToUuid(nodeId);
+        auto deviceDataCache = std::make_shared<DeviceDataCache>(uuid, Matter::GetInstance().GetCommissioner());
+        std::future<bool> success = deviceDataCache->Start();
 
         if (success.wait_until(waitingUntil) == std::future_status::ready)
         {
@@ -159,33 +159,44 @@ namespace barton
 
         if (commissioningStatus == DiscoveryCompleted)
         {
-            auto matterDetails = discoverer.GetDetails();
-
-            MatterDeviceDriver *driver = MatterDriverFactory::Instance().GetDriver(matterDetails.get());
+            // GetDriver needs to inspect the cache to determine driver type
+            MatterDeviceDriver *driver = MatterDriverFactory::Instance().GetDriver(deviceDataCache.get());
             if (driver != nullptr)
             {
-                scoped_icStringHashMap *endpointProfileMap = driver->GetEndpointToProfileMap(matterDetails.get());
+                // Extract values before transferring ownership
+                std::string manufacturer, model, hardwareVersion, firmwareVersion;
+                deviceDataCache->GetVendorName(manufacturer);
+                deviceDataCache->GetProductName(model);
+                deviceDataCache->GetHardwareVersionString(hardwareVersion);
+                deviceDataCache->GetSoftwareVersionString(firmwareVersion);
 
-                scoped_generic char *uuid = stringBuilder("%016" PRIx64, finalNodeId);
+                // Transfer ownership to driver
+                driver->AddDeviceDataCache(std::move(deviceDataCache));
+
                 // these are device service details (technology neutral)
                 DeviceFoundDetails details {
                     .deviceDriver = driver->GetDriver(),
                     .subsystem = MATTER_SUBSYSTEM_NAME,
                     .deviceClass = driver->GetDeviceClass(),
                     .deviceClassVersion = driver->GetDeviceClassVersion(),
-                    .deviceUuid = uuid,
-                    .manufacturer = matterDetails->vendorName->c_str(),
-                    .model = matterDetails->productName->c_str(),
-                    .hardwareVersion = matterDetails->hardwareVersion->c_str(),
-                    .firmwareVersion = matterDetails->softwareVersion->c_str(),
-                    .endpointProfileMap = endpointProfileMap,
+                    .deviceUuid = uuid.c_str(),
+                    .manufacturer = manufacturer.c_str(),
+                    .model = model.c_str(),
+                    .hardwareVersion = hardwareVersion.c_str(),
+                    .firmwareVersion = firmwareVersion.c_str(),
+                    .endpointProfileMap = nullptr
                 };
-
-                // save off the details so the pairing functions can look them up if they need
-                DiscoveredDeviceDetailsStore::Instance().PutTemporarily(uuid, matterDetails);
 
                 if (deviceServiceDeviceFound(&details, true))
                 {
+                    // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
+                    //  can update resources
+                    auto deviceCache = driver->GetDeviceDataCache(uuid);
+                    if (deviceCache != nullptr)
+                    {
+                        deviceCache->RegenerateAttributeReport();
+                    }
+
                     result = true;
                 }
             }
@@ -244,7 +255,7 @@ namespace barton
         chip::DeviceLayer::PlatformMgr().LockChipStack();
 
         Matter &matter = Matter::GetInstance();
-        if (matter.GetCommissioner().GetConnectedDevice(
+        if (matter.GetCommissioner()->GetConnectedDevice(
                 nodeId, &onDeviceConnectedCallback, &onDeviceConnectionFailureCallback) != CHIP_NO_ERROR)
         {
             icError("Failed to get device connection");
@@ -306,7 +317,7 @@ namespace barton
         {
             icDebug("Calling PairDevice()");
             err =
-                matter.GetCommissioner().PairDevice(randomId, setupPayload.c_str(), commissioningParams, discoveryType);
+                matter.GetCommissioner()->PairDevice(randomId, setupPayload.c_str(), commissioningParams, discoveryType);
             if (err != CHIP_NO_ERROR)
             {
                 icError("PairDevice failed with error: %s", err.AsString());

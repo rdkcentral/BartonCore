@@ -38,8 +38,9 @@ namespace barton
     class WifiNetworkDiagnostics : public MatterCluster
     {
     public:
-        WifiNetworkDiagnostics(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        WifiNetworkDiagnostics(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                              std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::WiFiNetworkDiagnostics::Id, deviceDataCache)
         {
         }
 

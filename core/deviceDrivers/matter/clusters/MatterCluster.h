@@ -27,11 +27,9 @@
 
 #pragma once
 
-#include "app/ClusterStateCache.h"
-#include "app/ReadClient.h"
-#include "app/ReadPrepareParams.h"
 #include "app/WriteClient.h"
-#include "matter/subscriptions/SubscribeInteraction.h"
+#include "lib/core/DataModelTypes.h"
+#include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/MatterCommon.h"
 #include <memory>
 #include <mutex>
@@ -41,7 +39,8 @@
 namespace barton
 {
     class MatterCluster : public chip::app::CommandSender::Callback,
-                          public chip::app::WriteClient::Callback
+                          public chip::app::WriteClient::Callback,
+                          public chip::app::ClusterStateCache::Callback
     {
     public:
         class EventHandler
@@ -51,25 +50,24 @@ namespace barton
             virtual void WriteRequestCompleted(void *context, bool success) {};
         };
 
-        MatterCluster(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            eventHandler(handler), deviceId(std::move(deviceId)), endpointId(endpointId)
+        MatterCluster(EventHandler *handler,
+                      std::string deviceId,
+                      chip::EndpointId endpointId,
+                      chip::ClusterId clusterId,
+                      std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            eventHandler(handler), deviceId(std::move(deviceId)), endpointId(endpointId),
+            clusterId(clusterId), deviceDataCache(std::move(deviceDataCache))
         {
             nodeId = Subsystem::Matter::UuidToNodeId(this->deviceId.c_str());
+
+            auto key = std::make_tuple(this->deviceId, endpointId, clusterId);
+            this->deviceDataCache->SetClusterCallback(key, this);
         };
 
         virtual ~MatterCluster() = default;
 
-        virtual void OnAttributeChanged(chip::app::ClusterStateCache *cache,
-                                        const chip::app::ConcreteAttributePath &path)
-        {
-        }
-
-        virtual void OnEventDataReceived(SubscribeInteraction &subscriber,
-                                         const chip::app::EventHeader &aEventHeader,
-                                         chip::TLV::TLVReader *apData,
-                                         const chip::app::StatusIB *apStatus)
-        {
-        }
+        // ReadClient callbacks
+        virtual void OnDone(chip::app::ReadClient * apReadClient) override;
 
         // CommandSender callbacks
         virtual void OnResponse(chip::app::CommandSender *apCommandSender,
@@ -109,20 +107,14 @@ namespace barton
          */
         inline std::string GetDeviceId() { return deviceId; }
 
-        /**
-         * @brief Set reference to cluster state cache
-         */
-        void SetClusterStateCacheRef(std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCacheRef);
-
     protected:
         std::mutex mtx;
         EventHandler *eventHandler;
         std::string deviceId;
         chip::NodeId nodeId;
         chip::EndpointId endpointId;
-        // This will refer to the ClusterStateCache associated with the subscription that reports on this cluster's
-        // events/attributes
-        std::weak_ptr<chip::app::ClusterStateCache> clusterStateCacheRef;
+        chip::ClusterId clusterId;
+        std::shared_ptr<DeviceDataCache> deviceDataCache;
         void *commandContext {};      // only one command operation can be in flight at a time
         void *writeRequestContext {}; // only one write request operation can be in flight at a time
 

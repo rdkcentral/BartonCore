@@ -35,19 +35,13 @@ extern "C" {
 
 #include "GeneralDiagnostics.h"
 
+using namespace chip::app::Clusters::GeneralDiagnostics;
+
 namespace barton
 {
     std::string GeneralDiagnostics::GetMacAddress()
     {
-        auto cache = clusterStateCacheRef.lock();
-
-        if (cache == nullptr)
-        {
-            icDebug("Attribute cache not available");
-            return "";
-        }
-
-        auto interfaceInfo = GetInterfaceInfo(cache.get());
+        auto interfaceInfo = deviceDataCache->GetInterfaceInfo();
         if (!interfaceInfo.HasValue())
         {
             icWarn("No MAC address for the operational network is found for the device %s", deviceId.c_str());
@@ -59,15 +53,7 @@ namespace barton
 
     std::string GeneralDiagnostics::GetNetworkType()
     {
-        auto cache = clusterStateCacheRef.lock();
-
-        if (cache == nullptr)
-        {
-            icDebug("Attribute cache not available");
-            return "";
-        }
-
-        auto interfaceInfo = GetInterfaceInfo(cache.get());
+        auto interfaceInfo = deviceDataCache->GetInterfaceInfo();
         if (!interfaceInfo.HasValue())
         {
             icWarn("No type for the operational network is found for the device %s", deviceId.c_str());
@@ -89,7 +75,7 @@ namespace barton
         {
             case Attributes::NetworkInterfaces::Id:
             {
-                auto interfaceInfo = GetInterfaceInfo(cache);
+                auto interfaceInfo = deviceDataCache->GetInterfaceInfo();
                 if (interfaceInfo.HasValue())
                 {
                     static_cast<GeneralDiagnostics::EventHandler *>(eventHandler)
@@ -105,44 +91,5 @@ namespace barton
         }
     }
 
-    chip::Optional<NetworkUtils::NetworkInterfaceInfo>
-    GeneralDiagnostics::GetInterfaceInfo(chip::app::ClusterStateCache *cache)
-    {
-        using TypeInfo = Attributes::NetworkInterfaces::TypeInfo;
-        TypeInfo::DecodableType value;
-        CHIP_ERROR error = cache->Get<TypeInfo>({chip::kRootEndpointId, Id, Attributes::NetworkInterfaces::Id}, value);
-        if (error == CHIP_NO_ERROR)
-        {
-            auto sessionMgr =
-                chip::app::InteractionModelEngine::GetInstance()->GetExchangeManager()->GetSessionManager();
-            chip::NodeId nodeId = GetNodeId();
-            chip::Transport::Session *foundSession = nullptr;
 
-            sessionMgr->GetSecureSessions().ForEachSession([nodeId, &foundSession](auto *session) {
-                if (session && session->GetPeer().GetNodeId() == nodeId)
-                {
-                    foundSession = session;
-                    return chip::Loop::Break;
-                }
-                return chip::Loop::Continue;
-            });
-
-            if (foundSession)
-            {
-                char nodeIpv6Addr[INET6_ADDRSTRLEN] = {};
-                foundSession->AsSecureSession()->GetPeerAddress().GetIPAddress().ToString(nodeIpv6Addr);
-                return NetworkUtils::ExtractOperationalInterfaceInfo(value, nodeIpv6Addr);
-            }
-            else
-            {
-                icError("No session found for device %s", deviceId.c_str());
-            }
-        }
-        else
-        {
-            icWarn("Failed to read network interfaces report from device %s: %s", deviceId.c_str(), error.AsString());
-        }
-
-        return chip::NullOptional;
-    }
 } // namespace barton
