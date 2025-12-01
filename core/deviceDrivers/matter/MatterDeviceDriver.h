@@ -456,6 +456,8 @@ namespace barton
                                          chip::Messaging::ExchangeManager &exchangeMgr,
                                          const chip::SessionHandle &sessionHandle);
 
+        virtual void SetTampered(std::string const &deviceId, bool tampered);
+
         /**
          * @brief Return the desired subscription interval for this device. The final interval may be more
          * frequent if required to support comm fail detection.
@@ -610,6 +612,9 @@ namespace barton
 
         class generalDiagnosticsEventHandler : public barton::GeneralDiagnostics::EventHandler
         {
+        public:
+            generalDiagnosticsEventHandler(MatterDeviceDriver &outer) : driver(outer) {};
+
             void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
                                             NetworkUtils::NetworkInterfaceInfo info) override
             {
@@ -626,6 +631,20 @@ namespace barton
                                NULL);
             }
 
+            void OnHardwareFaultsChanged(
+                GeneralDiagnostics &source,
+                const std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> &currentFaults) override
+            {
+                driver.SetTampered(
+                    source.GetDeviceId(),
+                    std::find(currentFaults.begin(),
+                              currentFaults.end(),
+                              chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum::kTamperDetected) !=
+                        currentFaults.end());
+            }
+
+        private:
+            MatterDeviceDriver &driver;
         } generalDiagnosticsEventHandler;
 
         /* key deviceId */
