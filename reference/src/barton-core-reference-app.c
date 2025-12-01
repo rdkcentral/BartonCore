@@ -199,8 +199,9 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
         b_core_property_provider_set_property_string(
             propProvider, B_CORE_BARTON_MATTER_PRODUCT_NAME, "Barton Device");
 
-        b_core_property_provider_set_property_uint16(
-            propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x5678);
+        // For test vendor IDs, the CD product arry allows the range 0x8000 - 0x8063. By default, the DAC is going to be
+        // 0x8001 unless defined in the custom DeviceConfig header (see src/include/platform/CHIPDeviceConfig.h).
+        b_core_property_provider_set_property_uint16(propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x8001);
 
         b_core_property_provider_set_property_uint16(
             propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
