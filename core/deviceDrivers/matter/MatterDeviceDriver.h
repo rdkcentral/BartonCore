@@ -261,6 +261,12 @@ namespace barton
     protected:
         DeviceDriver driver;
 
+        struct ClusterReadContext
+        {
+            void *driverContext;                            // the context provided to the driver for the operation
+            char **value;                                   // non-null if this read is a regular resource read
+        };
+
         /**
          * @brief Get the list of Matter device types supported by this driver
          */

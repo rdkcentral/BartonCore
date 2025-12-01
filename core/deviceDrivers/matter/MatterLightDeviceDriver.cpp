@@ -53,13 +53,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define LIGHT_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterLightDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterLightDeviceDriver());
@@ -113,15 +106,7 @@ void MatterLightDeviceDriver::OnOffReadComplete(std::string &deviceUuid, bool is
 
     auto readContext = static_cast<ClusterReadContext *>(asyncContext);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(
-            readContext->initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON, isOn ? "true" : "false");
-    }
-    else
-    {
-        *readContext->value = strdup(stringValueOfBool(isOn));
-    }
+    *readContext->value = strdup(stringValueOfBool(isOn));
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 

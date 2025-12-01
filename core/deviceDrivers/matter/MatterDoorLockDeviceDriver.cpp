@@ -53,13 +53,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define DOOR_LOCK_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterDoorLockDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
@@ -97,17 +90,7 @@ void MatterDoorLockDeviceDriver::LockStateReadComplete(std::string &deviceUuid,
 
     bool isLocked = (lockState == chip::app::Clusters::DoorLock::DlLockState::kLocked);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(readContext->initialResourceValues,
-                                              DOOR_LOCK_ENDPOINT,
-                                              DOORLOCK_PROFILE_RESOURCE_LOCKED,
-                                              stringValueOfBool(isLocked));
-    }
-    else
-    {
-        *readContext->value = strdup(stringValueOfBool(isLocked));
-    }
+    *readContext->value = strdup(stringValueOfBool(isLocked));
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 

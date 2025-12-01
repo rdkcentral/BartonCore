@@ -53,13 +53,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define WINDOW_COVERING_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterWindowCoveringDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterWindowCoveringDeviceDriver());
@@ -108,18 +101,8 @@ void MatterWindowCoveringDeviceDriver::CurrentPositionLiftPercentageReadComplete
 
     scoped_generic char *percentStr = stringBuilder("%" PRIu8, percent);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(readContext->initialResourceValues,
-                                              WINDOW_COVERING_ENDPOINT,
-                                              WINDOW_COVERING_PROFILE_RESOURCE_LIFT_PERCENTAGE,
-                                              percentStr);
-    }
-    else
-    {
-        *readContext->value = percentStr;
-        percentStr = nullptr;
-    }
+    *readContext->value = percentStr;
+    percentStr = nullptr;
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 
