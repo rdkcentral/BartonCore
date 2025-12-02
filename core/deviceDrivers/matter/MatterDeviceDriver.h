@@ -210,8 +210,6 @@ namespace barton
 
         void Shutdown();
 
-        bool CreateResources(icDevice *device);
-
         virtual void ReadResource(std::forward_list<std::promise<bool>> &promises,
                                   const std::string &deviceId,
                                   icDeviceResource *resource,

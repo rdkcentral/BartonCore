@@ -395,63 +395,6 @@ bool MatterDeviceDriver::ConfigureDevice(icDevice *device, DeviceDescriptor *des
         MATTER_ASYNC_DEVICE_TIMEOUT_SECS);
 }
 
-bool MatterDeviceDriver::CreateResources(icDevice *device)
-{
-    icDebug();
-
-    auto deviceCache = GetDeviceDataCache(device->uuid);
-    if (!deviceCache)
-    {
-        icError("No device cache for %s", device->uuid);
-        return false;
-    }
-
-    // these are required and will fail the operation if not found/populated
-    std::string versionStr;
-    if (deviceCache->GetSoftwareVersionString(versionStr) != CHIP_NO_ERROR || versionStr.empty())
-    {
-        icError("No SoftwareVersionString found for device %s!", device->uuid);
-        return false;
-    }
-
-    std::string macAddressStr;
-    if (deviceCache->GetMacAddress(macAddressStr) != CHIP_NO_ERROR || macAddressStr.empty())
-    {
-        icError("No MAC address found for device %s!", device->uuid);
-        return false;
-    }
-
-    createDeviceResource(device,
-                         COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION_STRING,
-                         versionStr.c_str(),
-                         RESOURCE_TYPE_STRING,
-                         RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
-                         CACHING_POLICY_ALWAYS);
-
-    createDeviceResource(device,
-                         COMMON_DEVICE_RESOURCE_MAC_ADDRESS,
-                         macAddressStr.c_str(),
-                         RESOURCE_TYPE_MAC_ADDRESS,
-                         RESOURCE_MODE_READABLE,
-                         CACHING_POLICY_ALWAYS);
-
-    const char *networkTypeStr = nullptr;
-    std::string networkType;
-    if (deviceCache->GetNetworkType(networkType) == CHIP_NO_ERROR && !networkType.empty())
-    {
-        networkTypeStr = networkType.c_str();
-    }
-
-    createDeviceResource(device,
-                         COMMON_DEVICE_RESOURCE_NETWORK_TYPE,
-                         networkTypeStr,
-                         RESOURCE_TYPE_NETWORK_TYPE,
-                         RESOURCE_MODE_READABLE,
-                         CACHING_POLICY_ALWAYS);
-
-    return RegisterResources(device);
-}
-
 void MatterDeviceDriver::SynchronizeDevice(icDevice *device)
 {
     icDebug();
@@ -550,8 +493,52 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
 
     if (!deviceCache)
     {
+        icError("No device cache for %s", device->uuid);
         return false;
     }
+
+    // these are required and will fail the operation if not found/populated
+    std::string versionStr;
+    if (deviceCache->GetSoftwareVersionString(versionStr) != CHIP_NO_ERROR || versionStr.empty())
+    {
+        icError("No SoftwareVersionString found for device %s!", device->uuid);
+        return false;
+    }
+
+    std::string macAddressStr;
+    if (deviceCache->GetMacAddress(macAddressStr) != CHIP_NO_ERROR || macAddressStr.empty())
+    {
+        icError("No MAC address found for device %s!", device->uuid);
+        return false;
+    }
+
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_FIRMWARE_VERSION_STRING,
+                         versionStr.c_str(),
+                         RESOURCE_TYPE_STRING,
+                         RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS,
+                         CACHING_POLICY_ALWAYS);
+
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_MAC_ADDRESS,
+                         macAddressStr.c_str(),
+                         RESOURCE_TYPE_MAC_ADDRESS,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
+
+    const char *networkTypeStr = nullptr;
+    std::string networkType;
+    if (deviceCache->GetNetworkType(networkType) == CHIP_NO_ERROR && !networkType.empty())
+    {
+        networkTypeStr = networkType.c_str();
+    }
+
+    createDeviceResource(device,
+                         COMMON_DEVICE_RESOURCE_NETWORK_TYPE,
+                         networkTypeStr,
+                         RESOURCE_TYPE_NETWORK_TYPE,
+                         RESOURCE_MODE_READABLE,
+                         CACHING_POLICY_ALWAYS);
 
     g_autofree char *serialNumber = nullptr;
 
