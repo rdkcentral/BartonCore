@@ -66,7 +66,11 @@ MatterContactSensorDeviceDriver::MatterContactSensorDeviceDriver() :
 
 bool MatterContactSensorDeviceDriver::InitializeClustersForDevice(const std::string &deviceUuid)
 {
-    return GetAnyServerById(deviceUuid, chip::app::Clusters::BooleanState::Id) != nullptr;
+    bool result = true;
+    result &= GetAnyServerById(deviceUuid, chip::app::Clusters::BooleanState::Id) != nullptr;
+    // for tamper detection
+    result &= GetAnyServerById(deviceUuid, chip::app::Clusters::GeneralDiagnostics::Id) != nullptr;
+    return result;
 }
 
 std::vector<uint16_t> MatterContactSensorDeviceDriver::GetSupportedDeviceTypes()
@@ -123,6 +127,15 @@ bool MatterContactSensorDeviceDriver::DoRegisterResources(icDevice *device)
     faultedResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
     faultedResource->cachingPolicy = CACHING_POLICY_ALWAYS;
     linkedListAppend(sensorEndpoint->resources, faultedResource);
+
+    auto *tamperedResource = static_cast<icDeviceResource *>(calloc(1, sizeof(icDeviceResource)));
+    tamperedResource->id = strdup(SENSOR_PROFILE_RESOURCE_TAMPERED);
+    tamperedResource->endpointId = strdup(CONTACT_SENSOR_ENDPOINT);
+    tamperedResource->deviceUuid = strdup(device->uuid);
+    tamperedResource->type = strdup(RESOURCE_TYPE_BOOLEAN);
+    tamperedResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+    tamperedResource->cachingPolicy = CACHING_POLICY_ALWAYS;
+    linkedListAppend(sensorEndpoint->resources, tamperedResource);
 
     return result;
 }
@@ -187,6 +200,14 @@ MatterContactSensorDeviceDriver::MakeCluster(std::string const &deviceUuid,
         default:
             return nullptr;
     }
+}
+
+void MatterContactSensorDeviceDriver::SetTampered(const std::string &deviceId, bool tampered)
+{
+    icDebug();
+
+    updateResource(
+        deviceId.c_str(), CONTACT_SENSOR_ENDPOINT, SENSOR_PROFILE_RESOURCE_TAMPERED, stringValueOfBool(tampered), NULL);
 }
 
 void MatterContactSensorDeviceDriver::BooleanStateClusterEventHandler::StateValueChanged(std::string &deviceUuid,

@@ -111,7 +111,8 @@ static void communicationRestored(void *ctx, icDevice *device);
 static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *version);
 
 MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *deviceClass, uint8_t dcVersion) :
-    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this)
+    driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this),
+    generalDiagnosticsEventHandler(*this)
 {
     driver.driverName = strdup(driverName);
     driver.callbackContext = this;
@@ -447,6 +448,11 @@ void MatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool
 {
     icDebug("Unimplemented");
     FailOperation(promises);
+}
+
+void MatterDeviceDriver::SetTampered(const std::string &deviceId, bool tampered)
+{
+    icDebug("Unimplemented");
 }
 
 void MatterDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,

@@ -34,6 +34,7 @@ extern "C" {
 }
 
 #include "GeneralDiagnostics.h"
+#include "lib/core/CHIPError.h"
 
 using namespace chip::app::Clusters::GeneralDiagnostics;
 
@@ -85,11 +86,42 @@ namespace barton
                 {
                     icError("Failed to find any operational network for device %s", deviceId.c_str());
                 };
+                break;
             }
+
+            case Attributes::ActiveHardwareFaults::Id:
+            {
+                using TypeInfo = Attributes::ActiveHardwareFaults::TypeInfo;
+                TypeInfo::DecodableType value;
+                CHIP_ERROR error = cache->Get<TypeInfo>(path, value);
+                if (error == CHIP_NO_ERROR)
+                {
+                    std::vector<HardwareFaultEnum> currentFaults;
+                    auto currIter = value.begin();
+
+                    while (currIter.Next())
+                    {
+                        currentFaults.push_back(currIter.GetValue());
+                    }
+
+                    if ((error = currIter.GetStatus()) != CHIP_NO_ERROR)
+                    {
+                        icError("Failed to decode active hardware faults list: %s", error.AsString());
+                        return;
+                    }
+
+                    static_cast<GeneralDiagnostics::EventHandler *>(eventHandler)
+                        ->OnHardwareFaultsChanged(*this, currentFaults);
+                }
+                else
+                {
+                    icError("Failed to decode active hardware faults attribute: %s", error.AsString());
+                }
+                break;
+            }
+
             default:
                 break;
         }
     }
-
-
 } // namespace barton

@@ -53,10 +53,15 @@ namespace barton
         public:
             virtual void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
                                                     NetworkUtils::NetworkInterfaceInfo info) {};
+
+            virtual void OnHardwareFaultsChanged(
+                GeneralDiagnostics &source,
+                const std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> &currentFaults) {};
         };
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
+
         std::string GetMacAddress();
         std::string GetNetworkType();
     };

@@ -56,6 +56,8 @@ namespace barton
                           chip::Messaging::ExchangeManager &exchangeMgr,
                           const chip::SessionHandle &sessionHandle) override;
 
+        void SetTampered(const std::string &deviceId, bool tampered) override;
+
     private:
         static bool registeredWithFactory;
 
