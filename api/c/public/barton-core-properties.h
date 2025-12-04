@@ -60,16 +60,16 @@ G_BEGIN_DECLS
  * FIFTEEN_FOUR_EUI64: (value "barton.fifteenfour.eui64")
  *
  * The local 802.15.4 eui64 address of this installation.
- * Type: uint64
+ * Property Value Type: uint64
  */
 #define B_CORE_BARTON_FIFTEEN_FOUR_EUI64 B_CORE_BARTON_PREFIX B_CORE_FIFTEEN_FOUR_PREFIX "eui64"
 
 /**
- * MATTER_VENDOR_NAME (value "barton.matter.vendorName")
+ * MATTER_VENDOR_NAME: (value "barton.matter.vendorName")
  *
  * The Vendor Name of the Matter device. Maximum length is 32 characters.
  * This property is required.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_VENDOR_NAME B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "vendorName"
 
@@ -78,16 +78,16 @@ G_BEGIN_DECLS
  *
  * The Vendor ID of the Matter device.
  * This property is required.
- * Type: uint16
+ * Property Value Type: uint16
  */
 #define B_CORE_BARTON_MATTER_VENDOR_ID B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "vid"
 
 /**
- * MATTER_PRODUCT_NAME (value "barton.matter.productName")
+ * MATTER_PRODUCT_NAME: (value "barton.matter.productName")
  *
  * The Product Name of the Matter device. Maximum length is 32 characters.
  * This property is required.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_PRODUCT_NAME B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "productName"
 
@@ -96,7 +96,7 @@ G_BEGIN_DECLS
  *
  * The Product ID of the Matter device.
  * This property is required.
- * Type: uint16
+ * Property Value Type: uint16
  */
 #define B_CORE_BARTON_MATTER_PRODUCT_ID B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "pid"
 
@@ -105,7 +105,7 @@ G_BEGIN_DECLS
  *
  * The Part Number of the Matter device. Maximum length is 32 characters.
  * This property is optional.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_PART_NUMBER                                                                     \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "partNumber"
@@ -115,7 +115,7 @@ G_BEGIN_DECLS
  *
  * The Product URL of the Matter device. Maximum length is 256 characters.
  * This property is optional.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_PRODUCT_URL                                                                     \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "productURL"
@@ -125,7 +125,7 @@ G_BEGIN_DECLS
  *
  * The Product Label of the Matter device. Maximum length is 64 characters.
  * This property is optional.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_PRODUCT_LABEL                                                                   \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "productLabel"
@@ -135,7 +135,7 @@ G_BEGIN_DECLS
  *
  * The Serial Number of the Matter device. Maximum length is 32 characters.
  * This property is optional.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_SERIAL_NUMBER                                                                   \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "serialNumber"
@@ -145,7 +145,7 @@ G_BEGIN_DECLS
  *
  * The Manufacturing Date of the Matter device in "YYYY-MM-DD" format.
  * This property is optional.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_MANUFACTURING_DATE                                                              \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "manufacturingDate"
@@ -155,7 +155,7 @@ G_BEGIN_DECLS
  *
  * The Hardware Version of the Matter device.
  * This property is required.
- * Type: uint16
+ * Property Value Type: uint16
  */
 #define B_CORE_BARTON_MATTER_HARDWARE_VERSION                                                                \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "hardwareVersion"
@@ -165,7 +165,7 @@ G_BEGIN_DECLS
  *
  * The Hardware Version String of the Matter device. 1 to 64 characters.
  * This property is required.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_HARDWARE_VERSION_STRING                                                         \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "hardwareVersionString"
@@ -176,7 +176,7 @@ G_BEGIN_DECLS
  * The default name of the Thread network, provided by the client. This is the name
  * that will be used if we (Barton) create the Thread network ourselves. The end user
  * can still change this later.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_DEFAULT_THREAD_NETWORK_NAME                                                            \
     B_CORE_BARTON_PREFIX B_CORE_THREAD_PREFIX "defaultNetworkName"
@@ -185,7 +185,7 @@ G_BEGIN_DECLS
  * MATTER_SETUP_DISCRIMINATOR: (value "barton.matter.setupDiscriminator")
  *
  * The setup discriminator for the Matter device.
- * Type: uint16
+ * Property Value Type: uint16
  */
 #define B_CORE_BARTON_MATTER_SETUP_DISCRIMINATOR                                                             \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupDiscriminator"
@@ -194,7 +194,7 @@ G_BEGIN_DECLS
  * MATTER_SETUP_PASSCODE: (value "barton.matter.setupPasscode")
  *
  * The setup passcode for the Matter device.
- * Type: uint32
+ * Property Value Type: uint32
  */
 #define B_CORE_BARTON_MATTER_SETUP_PASSCODE                                                                  \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "setupPasscode"
@@ -203,7 +203,7 @@ G_BEGIN_DECLS
  * MATTER_SPAKE2P_ITERATION_COUNT: (value "barton.matter.spake2pIterationCount")
  *
  * The iteration count for the Matter device's spake2p verifier.
- * Type: uint32
+ * Property Value Type: uint32
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_ITERATION_COUNT                                                         \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pIterationCount"
@@ -212,7 +212,7 @@ G_BEGIN_DECLS
  * MATTER_SPAKE2P_SALT: (value "barton.matter.spake2pSalt")
  *
  * The base64-encoded salt for the Matter device's spake2p verifier.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_SALT                                                                    \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pSalt"
@@ -221,7 +221,7 @@ G_BEGIN_DECLS
  * MATTER_SPAKE2P_VERIFIER: (value "barton.matter.spake2pVerifier")
  *
  * The Matter device's base64-encoded spake2p verifier.
- * Type: string
+ * Property Value Type: string
  */
 #define B_CORE_BARTON_MATTER_SPAKE2P_VERIFIER                                                                \
     B_CORE_BARTON_PREFIX B_CORE_MATTER_PREFIX "spake2pVerifier"

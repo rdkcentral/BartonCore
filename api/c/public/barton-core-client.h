@@ -55,11 +55,31 @@ G_DECLARE_FINAL_TYPE(BCoreClient, b_core_client, B_CORE, CLIENT, GObject)
 // - BCoreZigbeeChannelChangeError: 100-199
 // - BCoreReadMetadataError: 200-299
 
+// TODO: We need to redefine the error codes with proper namespace prefixing (eg.
+// B_CORE_READ_RESOURCE_ERROR_NOT_READABLE = 1, etc.). This is, of course, a breaking change, so it should be scheduled
+// with a major version bump.
+
+/**
+ * BCoreReadResourceError:
+ * @READ_RESOURCE_NOT_READABLE: The resource is not readable
+ *
+ * Error codes for read resource operations.
+ */
 typedef enum
 {
     RESOURCE_NOT_READABLE = 1 // The resource is not readable
 } BCoreReadResourceError;
 
+/**
+ * BCoreZigbeeChannelChangeError:
+ * @ZIGBEE_CHANNEL_CHANGE_FAILED: The zigbee channel change failed
+ * @ZIGBEE_CHANNEL_CHANGE_NOT_ALLOWED: The zigbee channel change is not allowed
+ * @ZIGBEE_CHANNEL_CHANGE_INVALID_CHANNEL: The specified zigbee channel is invalid
+ * @ZIGBEE_CHANNEL_CHANGE_IN_PROGRESS: A zigbee channel change is already in progress
+ * @ZIGBEE_CHANNEL_CHANGE_UNABLE_TO_CALCULATE: Unable to calculate the zigbee channel
+ *
+ * Error codes for zigbee channel change operations.
+ */
 typedef enum
 {
     ZIGBEE_CHANNEL_CHANGE_FAILED = 100,
@@ -69,6 +89,12 @@ typedef enum
     ZIGBEE_CHANNEL_CHANGE_UNABLE_TO_CALCULATE,
 } BCoreZigbeeChannelChangeError;
 
+/**
+ * BCoreReadMetadataError:
+ * @METADATA_NOT_ACCESSIBLE: The metadata is not accessible
+ *
+ * Error codes for read metadata operations.
+ */
 typedef enum
 {
     METADATA_NOT_ACCESSIBLE = 200 // The metadata is not accessible
