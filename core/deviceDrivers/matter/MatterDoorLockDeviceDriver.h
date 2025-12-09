@@ -57,12 +57,12 @@ namespace barton
 
         bool DoRegisterResources(icDevice *device) override;
 
-        void ReadResource(std::forward_list<std::promise<bool>> &promises,
-                          const std::string &deviceId,
-                          icDeviceResource *resource,
-                          char **value,
-                          chip::Messaging::ExchangeManager &exchangeMgr,
-                          const chip::SessionHandle &sessionHandle) override;
+        void DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                            const std::string &deviceId,
+                            icDeviceResource *resource,
+                            char **value,
+                            chip::Messaging::ExchangeManager &exchangeMgr,
+                            const chip::SessionHandle &sessionHandle) override;
 
         bool WriteResource(std::forward_list<std::promise<bool>> &promises,
                            const std::string &deviceId,
