@@ -27,6 +27,8 @@
 
 #pragma once
 
+#include "credentials/CHIPCert.h"
+#include "lib/core/CHIPError.h"
 #include <controller/OperationalCredentialsDelegate.h>
 #include <iomanip>
 #include <lib/core/TLV.h>
@@ -125,6 +127,17 @@ namespace barton
                         ByteSpan nonce(nonceBuf.Get(), csrBuf.AllocatedSize());
 
                         CHIP_ERROR fetchErr = GenerateNOCChainAfterValidation(nodeId, fabricId, csr, nonce, rcacSpan, icacSpan, nocSpan);
+
+                        if (fetchErr == CHIP_NO_ERROR && nocSpan.size() > 0)
+                        {
+                            chip::Platform::ScopedMemoryBuffer<uint8_t> chipNoc;
+                            VerifyOrReturnError(chipNoc.Alloc(chip::Credentials::kMaxCHIPCertLength),
+                                                CHIP_ERROR_NO_MEMORY);
+                            chip::MutableByteSpan chipNocSpan(chipNoc.Get(), chip::Credentials::kMaxCHIPCertLength);
+
+                            // Do the same verification checks on the received NOC that Matter is going to do.
+                            fetchErr = Credentials::ConvertX509CertToChipCert(nocSpan, chipNocSpan);
+                        }
 
                         {
                             DeviceLayer::StackLock lock;
