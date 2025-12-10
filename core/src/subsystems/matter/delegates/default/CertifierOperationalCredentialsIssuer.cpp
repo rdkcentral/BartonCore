@@ -247,6 +247,13 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
 
     ChipLogProgress(Controller, "Sending HTTP request to certifier.");
 
+    icTrace("Certifier Request:\n8<---\n%s\n8<---\n", request.c_str());
+    icTrace("SAT CRT:\n8<---\n%s\n8<---\n", satCRT.c_str());
+    icTrace("Headers:");
+    icTrace("\t%s", trackingId.str().c_str());
+    icTrace("\tContent-Type: application/json");
+    icTrace("\tx-xpki-source: matter-commissioner");
+
     CURLcode res = curl_easy_perform(curl.get());
     curl_slist_free_all(headers);
     headers = nullptr;
