@@ -146,7 +146,7 @@ namespace barton
             }
 
             /**
-             * Synchronouse version of GenerateNOCChain for direct use by BartonCore.
+             * Synchronous version of GenerateNOCChain for direct use by BartonCore.
              * Performs validation on the generated NOC to make sure it conforms to
              * what the Matter stack wants.
              */
@@ -166,6 +166,8 @@ namespace barton
 
                 // Do the same verification checks on the received NOC that Matter is going to do.
                 ReturnErrorOnFailure(Credentials::ConvertX509CertToChipCert(noc, chipNocSpan));
+
+                return CHIP_NO_ERROR;
             }
 
             /**
