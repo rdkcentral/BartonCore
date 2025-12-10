@@ -521,7 +521,7 @@ CHIP_ERROR Matter::InitCommissioner()
         icacSpan = MutableByteSpan(icac.Get(), chip::Controller::kMaxCHIPDERCertLength);
         rcacSpan = MutableByteSpan(rcac.Get(), chip::Controller::kMaxCHIPDERCertLength);
 
-        ReturnErrorOnFailure(operationalCredentialsIssuer->GenerateNOCChainAfterValidation(
+        ReturnErrorOnFailure(operationalCredentialsIssuer->GenerateNOCChainSynchronous(
             myNodeId, myFabricId, csrSpan, nonceSpan, rcacSpan, icacSpan, nocSpan));
 
         ReturnErrorOnFailure(SaveNOCChain(rcacSpan, icacSpan, nocSpan));
