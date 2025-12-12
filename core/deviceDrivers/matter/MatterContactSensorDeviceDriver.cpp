@@ -140,12 +140,12 @@ bool MatterContactSensorDeviceDriver::DoRegisterResources(icDevice *device)
     return result;
 }
 
-void MatterContactSensorDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                                   const std::string &deviceId,
-                                                   icDeviceResource *resource,
-                                                   char **value,
-                                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                                   const chip::SessionHandle &sessionHandle)
+void MatterContactSensorDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                                     const std::string &deviceId,
+                                                     icDeviceResource *resource,
+                                                     char **value,
+                                                     chip::Messaging::ExchangeManager &exchangeMgr,
+                                                     const chip::SessionHandle &sessionHandle)
 {
     icDebug("%s", resource->id);
 

@@ -118,6 +118,30 @@ namespace barton
         void *commandContext {};      // only one command operation can be in flight at a time
         void *writeRequestContext {}; // only one write request operation can be in flight at a time
 
+        /**
+         * Context for on-demand attribute reads that send a read request to the device rather than query the cluster
+         * state cache for the attribute value.
+         */
+        struct OnDemandReadContext
+        {
+            /**
+             * @brief Construct a new OnDemandReadContext object
+             *
+             * @param context The caller's context pointer to be passed back in the read complete callback
+             * @param eventHandler The cluster's event handler to invoke the read complete callback on
+             * @param deviceId The device UUID of the device being red from
+            */
+            OnDemandReadContext(void *context,
+                                MatterCluster::EventHandler *eventHandler,
+                                std::string &deviceId) :
+                baseReadContext(context), eventHandler(eventHandler), deviceId(deviceId)
+            {
+            }
+            void *baseReadContext;
+            MatterCluster::EventHandler *eventHandler;
+            std::string &deviceId;
+        };
+
         bool
         SendCommand(chip::app::CommandSender *commandSender, const chip::SessionHandle &sessionHandle, void *context);
 

@@ -144,12 +144,12 @@ bool MatterDoorLockDeviceDriver::DoRegisterResources(icDevice *device)
     return result;
 }
 
-void MatterDoorLockDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                              const std::string &deviceId,
-                                              icDeviceResource *resource,
-                                              char **value,
-                                              chip::Messaging::ExchangeManager &exchangeMgr,
-                                              const chip::SessionHandle &sessionHandle)
+void MatterDoorLockDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                                const std::string &deviceId,
+                                                icDeviceResource *resource,
+                                                char **value,
+                                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                                const chip::SessionHandle &sessionHandle)
 {
     bool asyncCleanup = false;
 

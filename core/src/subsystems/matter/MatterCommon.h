@@ -85,6 +85,18 @@ namespace barton
                 return chip::kUndefinedNodeId;
             }
 
+            /**
+             * Calculate link score for a Matter device, given an RSSI value in dBM (range -120 to 0).
+             * @return link score (range 0-100)
+             */
+            uint8_t calculateLinkScore(int8_t rssi);
+
+            /**
+             * Determine link quality string for a Matter device, given a link score value.
+             * Caller must free the result.
+             */
+            char *determineLinkQuality(uint8_t linkScore);
+
             struct SubscriptionIntervalSecs
             {
                 SubscriptionIntervalSecs(uint16_t floor, uint16_t ceiling) :
