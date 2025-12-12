@@ -144,6 +144,13 @@ namespace barton
         chip::Optional<NetworkUtils::NetworkInterfaceInfo> GetInterfaceInfo() const;
 
         /**
+         * Check the device's power source type.
+         * TODO: Account for multiple power sources (i.e. PowerSource clusters on multiple endpoints).
+         */
+        CHIP_ERROR IsBatteryPowered(bool &isBattery) const;
+        CHIP_ERROR IsWiredPowered(bool &isWired) const;
+
+        /**
          * Trigger a full reprocessing of the cache's attribute data as if a full attribute report was
          * received, invoking report and attribute callbacks (events not reprocessed).
          *
@@ -292,6 +299,8 @@ namespace barton
 
         SubscriptionIntervalSecs CalculateFinalSubscriptionIntervalSecs();
 
+        // TODO: Account for multiple power sources (i.e. PowerSource clusters on multiple endpoints).
+        CHIP_ERROR GetPowerSourceFeatureMap(uint32_t &featureMap) const;
 
         /**
          * Get a JSON representation of all clusters and attributes for a given endpoint.

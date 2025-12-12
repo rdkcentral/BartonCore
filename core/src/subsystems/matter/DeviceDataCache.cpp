@@ -338,6 +338,58 @@ chip::Optional<NetworkUtils::NetworkInterfaceInfo> DeviceDataCache::GetInterface
     return chip::NullOptional;
 }
 
+CHIP_ERROR DeviceDataCache::IsBatteryPowered(bool &isBattery) const
+{
+    uint32_t featureMap = 0;
+    CHIP_ERROR error = GetPowerSourceFeatureMap(featureMap);
+    if (error != CHIP_NO_ERROR)
+    {
+        return error;
+    }
+    isBattery = featureMap & static_cast<uint32_t>(chip::app::Clusters::PowerSource::Feature::kBattery);
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR DeviceDataCache::IsWiredPowered(bool &isWired) const
+{
+    uint32_t featureMap = 0;
+    CHIP_ERROR error = GetPowerSourceFeatureMap(featureMap);
+    if (error != CHIP_NO_ERROR)
+    {
+        return error;
+    }
+    isWired = featureMap & static_cast<uint32_t>(chip::app::Clusters::PowerSource::Feature::kWired);
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR DeviceDataCache::GetPowerSourceFeatureMap(uint32_t &featureMap) const
+{
+    using namespace chip::app::Clusters::PowerSource;
+
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR error = GetAttributeData({chip::kRootEndpointId, Id, Attributes::FeatureMap::Id}, reader);
+    if (error != CHIP_NO_ERROR)
+    {
+        icDebug(
+            "Failed to read PowerSource FeatureMap attribute for device %s: %s", deviceUuid.c_str(), error.AsString());
+        return error;
+    }
+
+    using TypeInfo = Attributes::FeatureMap::TypeInfo;
+    TypeInfo::DecodableType value;
+    error = chip::app::DataModel::Decode(reader, value);
+    if (error != CHIP_NO_ERROR)
+    {
+        icError("Failed to decode PowerSource FeatureMap attribute for device %s: %s",
+                deviceUuid.c_str(),
+                error.AsString());
+        return error;
+    }
+
+    featureMap = value;
+    return CHIP_NO_ERROR;
+}
+
 bool DeviceDataCache::EndpointHasServerCluster(chip::EndpointId endpointId, chip::ClusterId clusterId) const
 {
     if (!clusterStateCache)

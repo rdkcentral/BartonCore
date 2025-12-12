@@ -59,6 +59,7 @@
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
+#include "clusters/PowerSource.h"
 #include "controller/CHIPCluster.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
@@ -565,6 +566,34 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
                          RESOURCE_TYPE_SERIAL_NUMBER,
                          RESOURCE_MODE_READABLE,
                          CACHING_POLICY_ALWAYS);
+
+    bool isBatteryPowered = false;
+    CHIP_ERROR error = deviceCache->IsBatteryPowered(isBatteryPowered);
+    if (error != CHIP_NO_ERROR)
+    {
+        icWarn("Failed to determine power source for device %s: %s", device->uuid, error.AsString());
+    }
+    else if (isBatteryPowered)
+    {
+        auto *batteryLowResource = static_cast<icDeviceResource *>(calloc(1, sizeof(icDeviceResource)));
+        batteryLowResource->id = strdup(COMMON_DEVICE_RESOURCE_BATTERY_LOW);
+        batteryLowResource->endpointId = nullptr;
+        batteryLowResource->deviceUuid = strdup(device->uuid);
+        batteryLowResource->type = strdup(RESOURCE_TYPE_BOOLEAN);
+        batteryLowResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_DYNAMIC;
+        batteryLowResource->cachingPolicy = CACHING_POLICY_ALWAYS;
+        linkedListAppend(device->resources, batteryLowResource);
+
+        // TODO: This resource is optional, per Matter 1.4 section 11.7.7, so maybe we should conditionally create it?
+        auto *batteryPercentageResource = static_cast<icDeviceResource *>(calloc(1, sizeof(icDeviceResource)));
+        batteryPercentageResource->id = strdup(COMMON_DEVICE_RESOURCE_BATTERY_PERCENTAGE_REMAINING);
+        batteryPercentageResource->endpointId = nullptr;
+        batteryPercentageResource->deviceUuid = strdup(device->uuid);
+        batteryPercentageResource->type = strdup(RESOURCE_TYPE_PERCENTAGE);
+        batteryPercentageResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+        batteryPercentageResource->cachingPolicy = CACHING_POLICY_ALWAYS;
+        linkedListAppend(device->resources, batteryPercentageResource);
+    }
 
     /*
      * RunOnMatterSync can only handle a few captures before
@@ -1135,6 +1164,10 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
             case chip::app::Clusters::GeneralDiagnostics::Id:
                 serverRef =
                     std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
+                break;
+
+            case chip::app::Clusters::PowerSource::Id:
+                serverRef = std::make_unique<PowerSource>(&powerSourceEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             default:
