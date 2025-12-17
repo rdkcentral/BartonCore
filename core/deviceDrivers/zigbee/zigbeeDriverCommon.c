@@ -81,7 +81,7 @@
 #ifdef BARTON_CONFIG_ZIGBEE
 
 #define ZIGBEE_COMMON_VERSION_METADATA              "zigbeeCommonVersion"
-#define ZIGBEE_COMMON_VERSION                       2
+#define ZIGBEE_COMMON_VERSION                       3
 #define FIRMWARE_FORMAT_STRING                      "0x%08" PRIx32
 #define DISCOVERED_DEVICE_DETAILS                   "discoveredDetails"
 #define ZIGBEE_ENDPOINT_ID_METADATA_NAME            "zigbee_epid"
@@ -693,6 +693,23 @@ static void migrateZigbeeCommonVersion(ZigbeeDriverCommon *commonDriver, icDevic
             // Add to device
             addNewResource(device->uri, res);
         }
+
+        // Check if the networkType resource already exists before creating it
+        icDeviceResource *existingResource = (icDeviceResource *) linkedListFind(device->resources, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, findDeviceResource);
+        if (existingResource == NULL)
+        {
+            // Create networkType resource
+            icDeviceResource *res = createDeviceResource(device,
+                                                         COMMON_DEVICE_RESOURCE_NETWORK_TYPE,
+                                                         NETWORK_TYPE_ZIGBEE,
+                                                         RESOURCE_TYPE_NETWORK_TYPE,
+                                                         RESOURCE_MODE_READABLE,
+                                                         CACHING_POLICY_ALWAYS);
+
+            // Add to device
+            addNewResource(device->uri, res);
+        }
+
 
         // update driver common version metadata
         AUTO_CLEAN(free_generic__auto) char *versionString = stringBuilder("%d", ZIGBEE_COMMON_VERSION);
