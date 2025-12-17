@@ -160,12 +160,12 @@ bool MatterLightDeviceDriver::DoRegisterResources(icDevice *device)
     return result;
 }
 
-void MatterLightDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                           const std::string &deviceId,
-                                           icDeviceResource *resource,
-                                           char **value,
-                                           chip::Messaging::ExchangeManager &exchangeMgr,
-                                           const chip::SessionHandle &sessionHandle)
+void MatterLightDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                             const std::string &deviceId,
+                                             icDeviceResource *resource,
+                                             char **value,
+                                             chip::Messaging::ExchangeManager &exchangeMgr,
+                                             const chip::SessionHandle &sessionHandle)
 {
     bool asyncCleanup = false;
 

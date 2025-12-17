@@ -38,6 +38,8 @@
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/MatterCluster.h"
 #include "clusters/OTARequestor.h"
+#include "clusters/PowerSource.h"
+#include "clusters/WifiNetworkDiagnostics.h"
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "subsystems/matter/DeviceDataCache.h"
@@ -122,6 +124,13 @@ namespace barton
                 result = cacheResult.second;
             }
 
+            // Initialize power source cluster if available.
+            // TODO: There can be multiple PowerSource clusters on different endpoints, e.g. on a bridge which has one
+            // device per endpoint with its own power source. What you would do is query the PowerSourceConfiguration
+            // cluster for a list of endpoints that have a PowerSource cluster. For now, we are only handling the
+            // scenario in which there is just one PowerSource cluster on anything we commission.
+            GetAnyServerById(deviceUuid, chip::app::Clusters::PowerSource::Id);
+
             return result && InitializeClustersForDevice(deviceUuid);
         }
 
@@ -202,7 +211,6 @@ namespace barton
         void AbortDeviceConnectionAttempt(chip::Callback::Callback<chip::OnDeviceConnected> &successCb,
                                           chip::Callback::Callback<chip::OnDeviceConnectionFailure> &failCb);
 
-
         // The following methods are to be called via work functions passed to
         // ConnectAndExecute. To promise asynchronous work, add to the promises list.
         // Never remove an object from the list. To perform asynchronous work without
@@ -210,12 +218,27 @@ namespace barton
 
         void Shutdown();
 
-        virtual void ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                  const std::string &deviceId,
-                                  icDeviceResource *resource,
-                                  char **value,
-                                  chip::Messaging::ExchangeManager &exchangeMgr,
-                                  const chip::SessionHandle &sessionHandle);
+        /**
+         * @brief Read a resource's value.
+         */
+        void ReadResource(std::forward_list<std::promise<bool>> &promises,
+                          const std::string &deviceId,
+                          icDeviceResource *resource,
+                          char **value,
+                          chip::Messaging::ExchangeManager &exchangeMgr,
+                          const chip::SessionHandle &sessionHandle);
+
+        /**
+         * @brief Called by ReadResource() to read resources specific to a particular device-type.
+         * Driver subclasses shall override this method to implement resource reads that are specific
+         * to their device-type.
+         */
+        virtual void DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                    const std::string &deviceId,
+                                    icDeviceResource *resource,
+                                    char **value,
+                                    chip::Messaging::ExchangeManager &exchangeMgr,
+                                    const chip::SessionHandle &sessionHandle);
 
         /**
          * @brief Write a new value to a resource.
@@ -261,8 +284,9 @@ namespace barton
 
         struct ClusterReadContext
         {
-            void *driverContext;                            // the context provided to the driver for the operation
-            char **value;                                   // non-null if this read is a regular resource read
+            void *driverContext;    // the context provided to the driver for the operation
+            char **value;           // output value pointer
+            const char *resourceId; // optional; in case we want to keep track of the resource being updated
         };
 
         /**
@@ -646,6 +670,49 @@ namespace barton
         private:
             MatterDeviceDriver &driver;
         } generalDiagnosticsEventHandler;
+
+        class PowerSourceEventHandler : public barton::PowerSource::EventHandler
+        {
+            void BatChargeLevelChanged(std::string &deviceUuid,
+                                       chip::app::Clusters::PowerSource::BatChargeLevelEnum chargeLevel) override
+            {
+                bool isLow = chargeLevel != chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk;
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_BATTERY_LOW,
+                               stringValueOfBool(isLow),
+                               NULL);
+            }
+
+            void BatPercentRemainingChanged(std::string &deviceUuid, uint8_t halfPercent) override
+            {
+                // The battery percentage is measured in half percent units (0-200), where e.g. 50 = 25%
+                g_autofree char *percent = g_strdup_printf("%u", halfPercent / 2);
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_BATTERY_PERCENTAGE_REMAINING,
+                               percent,
+                               NULL);
+            }
+        } powerSourceEventHandler;
+
+        class WifiNetworkDiagnosticsEventHandler : public WifiNetworkDiagnostics::EventHandler
+        {
+        public:
+            WifiNetworkDiagnosticsEventHandler(MatterDeviceDriver &outer) : deviceDriver(outer) {};
+            void CommandCompleted(void *context, bool success) override
+            {
+                deviceDriver.OnDeviceWorkCompleted(context, success);
+            };
+
+            void RssiReadComplete(const std::string &deviceUuid,
+                                  const int8_t *rssi,
+                                  bool success,
+                                  void *asyncContext) override;
+
+        private:
+            MatterDeviceDriver &deviceDriver;
+        } wifiDiagnosticsClusterEventHandler;
 
         /* key deviceId */
         std::map<std::string, std::shared_ptr<DeviceDataCache>> deviceDataCaches;

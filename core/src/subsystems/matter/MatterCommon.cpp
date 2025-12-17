@@ -28,8 +28,55 @@
 #include "MatterCommon.h"
 #include <iostream>
 
+#define MATTER_LINK_QUALITY_GOOD_THRESHOLD   46
+#define MATTER_LINK_QUALITY_FAIR_THRESHOLD   30
+
 namespace barton
 {
+    namespace Subsystem
+    {
+        namespace Matter
+        {
+            uint8_t calculateLinkScore(int8_t rssi)
+            {
+                static double DBM_FLOOR = -90.0;
+                static double DBM_CEIL = -20.0;
+
+                // Clamp rssi to reasonable boundaries
+                rssi = (rssi < DBM_FLOOR) ? DBM_FLOOR : (rssi > DBM_CEIL) ? DBM_CEIL : rssi;
+
+                // This will be a number between 0 and 1 where closer to 0 is close to the ceiling (good) and closer to 1 is close
+                // to the floor (bad).
+                double normalizedRSSI = (DBM_CEIL - rssi) / (DBM_CEIL - DBM_FLOOR);
+
+                // A normalizedRSSI close to 0 (good) should cause the second subtraction operand to be small, leading to a
+                // percentage close to 100. A normalizedRSSI close to 1 (bad) should cause the second subtraction operand being
+                // close to 100, leading to a percentage close to 0.
+                uint8_t percentage = 100 - (100 * normalizedRSSI);
+
+                return percentage;
+            }
+
+            /*
+             * Caller frees result
+             */
+            char *determineLinkQuality(uint8_t linkScore)
+            {
+                if (linkScore >= MATTER_LINK_QUALITY_GOOD_THRESHOLD)
+                {
+                    return strdup(LINK_QUALITY_GOOD);
+                }
+                else if (linkScore >= MATTER_LINK_QUALITY_FAIR_THRESHOLD)
+                {
+                    return strdup(LINK_QUALITY_FAIR);
+                }
+                else
+                {
+                    return strdup(LINK_QUALITY_POOR);
+                }
+            }
+        } // namespace Matter
+    } // namespace Subsystem
     namespace NetworkUtils
     {
         chip::Optional<NetworkInterfaceInfo> ExtractOperationalInterfaceInfo(const TypeInfo::DecodableType &value,
