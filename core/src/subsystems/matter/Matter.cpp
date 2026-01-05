@@ -30,6 +30,7 @@
 #include "lib/core/Optional.h"
 #include "platform/DeviceInstanceInfoProvider.h"
 #include "system/SystemClock.h"
+#include "zap-generated/gen_config.h"
 #include <cstdint>
 #include <vector>
 #define LOG_TAG     "Matter"
@@ -140,13 +141,24 @@ static constexpr uint16_t kDefaultPAKEIterationCount = chip::Crypto::kSpake2p_Mi
 
 namespace
 {
+#ifdef CHIP_ENABLE_OPENTHREAD
+    std::unique_ptr<ThreadBorderRouterManagementDelegate> otbrDelegate;
+#endif // CHIP_ENABLE_OPENTHREAD
+
+#ifdef ZCL_USING_THREAD_NETWORK_DIRECTORY_CLUSTER_SERVER
     std::optional<DefaultThreadNetworkDirectoryServer> threadNetworkDirectoryServer;
     EndpointId threadNetworkDirectoryServerEndpointId = UINT16_MAX;
+#endif // ZCL_USING_THREAD_NETWORK_DIRECTORY_CLUSTER_SERVER
+
+#ifdef ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
     std::optional<WiFiNetworkManagementServer> wifiNetworkManagementServer;
     EndpointId wifiNetworkManagementServerEndpointId = UINT16_MAX;
-    std::unique_ptr<ThreadBorderRouterManagementDelegate> otbrDelegate;
+#endif // ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
+
+#ifdef ZCL_USING_THREAD_BORDER_ROUTER_MANAGEMENT_CLUSTER_SERVER
     std::optional<ThreadBorderRouterManagement::ServerInstance> threadBorderRouterManagementServer;
     EndpointId threadBorderRouterManagementServerEndpointId = UINT16_MAX;
+#endif // ZCL_USING_THREAD_BORDER_ROUTER_MANAGEMENT_CLUSTER_SERVER
 } // namespace
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -364,10 +376,12 @@ bool Matter::Start()
                      &psk,
                      NULL);
 
+#ifdef ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
         chip::DeviceLayer::PlatformMgr().LockChipStack();
         wifiNetworkManagementServer->SetNetworkCredentials(ByteSpan(Uint8::from_const_char(ssid), strlen(ssid)),
                                                            ByteSpan(Uint8::from_const_char(psk), strlen(psk)));
         chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+#endif // ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
     }
     else
     {
@@ -1405,6 +1419,8 @@ bool Matter::ClearAccessRestrictionList()
 // Note: Because we have initialized two parts of the stack (commissioner and commissionee), the callback functions
 // below are invoked twice. As long as they're attempting to perform the exact same initialization each time, we can
 // safely ignore calls after the first as a workaround.
+
+#ifdef ZCL_USING_THREAD_NETWORK_DIRECTORY_CLUSTER_SERVER
 void emberAfThreadNetworkDirectoryClusterInitCallback(EndpointId endpoint)
 {
     if (threadNetworkDirectoryServer)
@@ -1419,7 +1435,9 @@ void emberAfThreadNetworkDirectoryClusterInitCallback(EndpointId endpoint)
         threadNetworkDirectoryServerEndpointId = endpoint;
     }
 }
+#endif // ZCL_USING_THREAD_NETWORK_DIRECTORY_CLUSTER_SERVER
 
+#ifdef ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
 void emberAfWiFiNetworkManagementClusterInitCallback(EndpointId endpoint)
 {
     if (wifiNetworkManagementServer)
@@ -1432,7 +1450,9 @@ void emberAfWiFiNetworkManagementClusterInitCallback(EndpointId endpoint)
         wifiNetworkManagementServerEndpointId = endpoint;
     }
 }
+#endif // ZCL_USING_WIFI_NETWORK_MANAGEMENT_CLUSTER_SERVER
 
+#ifdef ZCL_USING_THREAD_DIAGNOSTICS_CLUSTER_SERVER
 void emberAfThreadBorderRouterManagementClusterInitCallback(EndpointId endpoint)
 {
     if (threadBorderRouterManagementServer)
@@ -1447,3 +1467,4 @@ void emberAfThreadBorderRouterManagementClusterInitCallback(EndpointId endpoint)
         threadBorderRouterManagementServerEndpointId = endpoint;
     }
 }
+#endif // ZCL_USING_THREAD_DIAGNOSTICS_CLUSTER_SERVER
