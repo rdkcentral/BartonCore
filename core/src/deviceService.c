@@ -167,6 +167,7 @@ typedef struct
     uint16_t timeoutSeconds;
     bool findOrphanedDevices;
     icLinkedList *filters;
+    icLinkedList *startedDrivers; // list of DeviceDriver* that successfully started
 
     // used for shutdown delay and/or canceling
     bool useMonotonic;
@@ -204,7 +205,8 @@ static uint16_t discoveryTimeoutSeconds = 0;
 static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
                                                                 icLinkedList *filters,
                                                                 uint16_t timeoutSeconds,
-                                                                bool findOrphanedDevices);
+                                                                bool findOrphanedDevices,
+                                                                icLinkedList *startedDrivers);
 
 static bool deviceServiceIsUriAccessible(const char *uri);
 
@@ -420,6 +422,226 @@ static icLinkedList *getDriversForDiscovery(const char *deviceClass)
 }
 
 /*
+ * Validate if discovery can be started for a device class.
+ * Returns true if the device class can be discovered, false otherwise.
+ */
+static bool validateDeviceClassForDiscovery(const char *deviceClass, icLinkedList *drivers, bool findOrphanedDevices)
+{
+    // Check if we have at least one driver
+    if (drivers == NULL || linkedListCount(drivers) == 0)
+    {
+        icWarn("No drivers available for discovery.  Is device service ready?");
+        return false;
+    }
+
+    // If recovery mode, ensure at least one driver supports recovery
+    if (findOrphanedDevices == true)
+    {
+        int recoveryDriversFound = 0;
+        sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
+        while (linkedListIteratorHasNext(driverIterator) == true)
+        {
+            DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
+            if (driver->recoverDevices != NULL)
+            {
+                recoveryDriversFound++;
+            }
+            else
+            {
+                icLogWarn(LOG_TAG, "driver %s does not support device recovery", driver->driverName);
+            }
+        }
+        if (recoveryDriversFound == 0)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Check if discovery should start based on descriptor list readiness.
+ * Returns true if discovery should proceed, false otherwise.
+ */
+static bool checkDescriptorReadinessForDiscovery(const char *deviceClass, icLinkedList *drivers)
+{
+    // If descriptors are ready, we can always proceed
+    if (deviceDescriptorsListIsReady() == true)
+    {
+        return true;
+    }
+
+    // Descriptor list not ready - check if any driver has neverReject=true
+    icLogWarn(LOG_TAG, "discover start called with allowlist in bad state");
+
+    bool hasNeverRejectDriver = false;
+    sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
+    while (linkedListIteratorHasNext(driverIterator) == true)
+    {
+        const DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
+        if (driver->neverReject == true)
+        {
+            hasNeverRejectDriver = true;
+            icLogInfo(LOG_TAG, "discovery of devices for driver %s can not be rejected", driver->driverName);
+        }
+    }
+
+    if (!hasNeverRejectDriver)
+    {
+        icLogWarn(LOG_TAG, "discovery for %s cannot be started with allowlist in bad state", deviceClass);
+    }
+
+    return hasNeverRejectDriver;
+}
+
+/*
+ * Start drivers for a specific device class.
+ * Returns the list of successfully started drivers, or NULL on failure.
+ * The returned list may be empty if all drivers failed but should still be checked.
+ */
+static icLinkedList *startDriversForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
+{
+    icLinkedList *startedDrivers = linkedListCreate();
+    icLinkedList *drivers = deviceDriverManagerGetDeviceDriversByDeviceClass(deviceClass);
+    *anyFailed = false;
+
+    if (drivers == NULL)
+    {
+        return startedDrivers; // Return empty list, not NULL
+    }
+
+    sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
+    while (linkedListIteratorHasNext(driverIterator))
+    {
+        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
+
+        // Skip drivers not eligible for discovery
+        if (driver->neverReject == false && deviceDescriptorsListIsReady() == false)
+        {
+            icLogInfo(LOG_TAG,
+                      "device descriptor list is not latest, skipping %s for device class %s",
+                      driver->driverName,
+                      deviceClass);
+            continue;
+        }
+
+        bool driverStarted = false;
+        if (findOrphanedDevices == true)
+        {
+            if (driver->recoverDevices != NULL)
+            {
+                icLogDebug(LOG_TAG, "telling %s to start device recovery...", driver->driverName);
+                driverStarted = driver->recoverDevices(driver->callbackContext, deviceClass);
+                if (!driverStarted)
+                {
+                    icLogError(LOG_TAG,
+                               "device driver %s failed to start device recovery for device class %s",
+                               driver->driverName,
+                               deviceClass);
+                    *anyFailed = true;
+                }
+                else
+                {
+                    icLogDebug(LOG_TAG, "device driver %s started device recovery successfully", driver->driverName);
+                    linkedListAppend(startedDrivers, driver);
+                }
+            }
+        }
+        else
+        {
+            if (driver->discoverDevices != NULL)
+            {
+                icLogDebug(LOG_TAG, "telling %s to start discovering...", driver->driverName);
+                driverStarted = driver->discoverDevices(driver->callbackContext, deviceClass);
+                if (!driverStarted)
+                {
+                    icLogError(LOG_TAG,
+                               "device driver %s failed to start discovery for device class %s",
+                               driver->driverName,
+                               deviceClass);
+                    *anyFailed = true;
+                }
+                else
+                {
+                    icLogDebug(LOG_TAG, "device driver %s started discovering successfully", driver->driverName);
+                    linkedListAppend(startedDrivers, driver);
+                }
+            }
+        }
+    }
+
+    linkedListDestroy(drivers, standardDoNotFreeFunc);
+    return startedDrivers;
+}
+
+/*
+ * Rollback discovery by stopping all started drivers.
+ */
+static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool findOrphanedDevices)
+{
+    icLogError(LOG_TAG, "Rolling back discovery/recovery start due to driver failures");
+
+    sbIcHashMapIterator *mapIterator = hashMapIteratorCreate(startedDriversPerClass);
+    while (hashMapIteratorHasNext(mapIterator))
+    {
+        char *deviceClass = NULL;
+        uint16_t keyLen = 0;
+        icLinkedList *startedDrivers = NULL;
+        hashMapIteratorGetNext(mapIterator, (void **) &deviceClass, &keyLen, (void **) &startedDrivers);
+
+        // Stop all drivers that successfully started for this device class
+        sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(startedDrivers);
+        while (linkedListIteratorHasNext(driverIterator))
+        {
+            DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
+            if (driver->stopDiscoveringDevices != NULL)
+            {
+                icLogDebug(LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
+                driver->stopDiscoveringDevices(driver->callbackContext, deviceClass);
+            }
+        }
+
+        // Send stopped event for this device class
+        if (findOrphanedDevices)
+        {
+            sendRecoveryStoppedEvent(deviceClass);
+        }
+        else
+        {
+            sendDiscoveryStoppedEvent(deviceClass);
+        }
+
+        // Destroy the list
+        linkedListDestroy(startedDrivers, standardDoNotFreeFunc);
+    }
+}
+
+/*
+ * Create discovery contexts for successfully started device classes.
+ */
+static void createDiscoveryContexts(icLinkedList *newDeviceClassDiscoveries,
+                                    icHashMap *startedDriversPerClass,
+                                    icLinkedList *filters,
+                                    uint16_t timeoutSeconds,
+                                    bool findOrphanedDevices)
+{
+    sbIcLinkedListIterator *iterator = linkedListIteratorCreate(newDeviceClassDiscoveries);
+    while (linkedListIteratorHasNext(iterator))
+    {
+        const char *deviceClass = linkedListIteratorGetNext(iterator);
+
+        // Get the started drivers for this device class
+        icLinkedList *startedDrivers =
+            hashMapGet(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1));
+
+        discoverDeviceClassContext *ctx =
+            startDiscoveryForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
+        hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
+    }
+}
+
+/*
  * assume 'deviceClasses' is a list of strings
  */
 bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
@@ -431,148 +653,114 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
 
     icLogDebug(LOG_TAG, "deviceServiceDiscoverStart");
 
-    if (deviceClasses != NULL)
+    if (deviceClasses == NULL)
     {
-        mutexLock(&discoveryControlMutex);
+        return false;
+    }
 
-        discoveryTimeoutSeconds = timeoutSeconds;
+    mutexLock(&discoveryControlMutex);
 
-        icLinkedList *newDeviceClassDiscoveries = linkedListCreate();
+    discoveryTimeoutSeconds = timeoutSeconds;
+    icLinkedList *newDeviceClassDiscoveries = linkedListCreate();
 
-        icLinkedListIterator *iterator = linkedListIteratorCreate(deviceClasses);
-        while (linkedListIteratorHasNext(iterator) && result)
+    // Phase 1: Validate device classes and check if discovery can start
+    sbIcLinkedListIterator *iterator = linkedListIteratorCreate(deviceClasses);
+    while (linkedListIteratorHasNext(iterator) && result)
+    {
+        char *deviceClass = linkedListIteratorGetNext(iterator);
+
+        // Check if already discovering for this device class
+        if (hashMapGet(activeDiscoveries, deviceClass, (uint16_t) (strlen(deviceClass) + 1)) != NULL)
         {
-            char *deviceClass = linkedListIteratorGetNext(iterator);
+            icLogWarn(
+                LOG_TAG,
+                "deviceServiceDiscoverStart: asked to start discovery for device class %s which is already running",
+                deviceClass);
+            continue;
+        }
 
-            // ensure we arent already discovering for this device class
-            if (hashMapGet(activeDiscoveries, deviceClass, (uint16_t) (strlen(deviceClass) + 1)) != NULL)
+        // Get drivers and validate
+        icLinkedList *drivers = getDriversForDiscovery(deviceClass);
+        bool isValid = validateDeviceClassForDiscovery(deviceClass, drivers, findOrphanedDevices);
+
+        if (isValid)
+        {
+            // Check descriptor readiness
+            bool canStart = checkDescriptorReadinessForDiscovery(deviceClass, drivers);
+            if (canStart)
             {
-                icLogWarn(
-                    LOG_TAG,
-                    "deviceServiceDiscoverStart: asked to start discovery for device class %s which is already running",
-                    deviceClass);
-                continue;
-            }
-
-            icLinkedList *drivers = getDriversForDiscovery(deviceClass);
-
-            // Indicate OK only when all device classes have at least one supported driver
-            if (drivers != NULL && linkedListCount(drivers) > 0)
-            {
-                if (findOrphanedDevices == true)
-                {
-                    int recoveryDriversFound = 0;
-                    icLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
-                    while (linkedListIteratorHasNext(driverIterator) == true)
-                    {
-                        DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
-                        if (driver->recoverDevices != NULL)
-                        {
-                            recoveryDriversFound++;
-                        }
-                        else
-                        {
-                            icLogWarn(LOG_TAG, "driver %s does not support device recovery", driver->driverName);
-                        }
-                    }
-                    linkedListIteratorDestroy(driverIterator);
-                    if (recoveryDriversFound == 0)
-                    {
-                        result = false;
-                    }
-                }
-
-                if (result == true)
-                {
-                    // if allowlist is missing or not the latest due to download failure,
-                    // skip discovery of deviceClass with all drivers having `neverReject` equal to false.
-                    // If any of the drivers has `neverReject` equals to true, we continue with publishing discovery
-                    // event but drivers with `neverReject` equals to true only would be discovered (handled in
-                    // discoverDeviceClassThreadProc)
-                    //
-                    bool shouldStartDiscoveryForDeviceClass = false;
-                    if (deviceDescriptorsListIsReady() == false)
-                    {
-                        icLogWarn(LOG_TAG, "discover start called with allowlist in bad state");
-
-                        icLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
-                        while (linkedListIteratorHasNext(driverIterator) == true)
-                        {
-                            const DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
-                            if (driver->neverReject == true)
-                            {
-                                shouldStartDiscoveryForDeviceClass = true;
-                                icLogInfo(LOG_TAG,
-                                          "discovery of devices for driver %s can not be rejected",
-                                          driver->driverName);
-                            }
-                        }
-                        linkedListIteratorDestroy(driverIterator);
-                    }
-                    else
-                    {
-                        shouldStartDiscoveryForDeviceClass = true;
-                    }
-
-                    if (shouldStartDiscoveryForDeviceClass == true)
-                    {
-                        linkedListAppend(newDeviceClassDiscoveries, deviceClass);
-                    }
-                    else
-                    {
-                        // we have Allowlist in bad state and discovery for all devices in a class
-                        // can be rejected. Report it as failure for discovery request.
-                        //
-                        icLogWarn(
-                            LOG_TAG, "discovery for %s cannot be started with allowlist in bad state", deviceClass);
-                        result = false;
-                    }
-                }
+                linkedListAppend(newDeviceClassDiscoveries, deviceClass);
             }
             else
             {
-                icWarn("No drivers available for discovery.  Is device service ready?");
                 result = false;
             }
-
-            linkedListDestroy(drivers, standardDoNotFreeFunc);
         }
-        linkedListIteratorDestroy(iterator);
-
-        result = result && linkedListCount(newDeviceClassDiscoveries) != 0;
-        if (result)
+        else
         {
-            // provide a full list of active discoveries. due to timing, this event is sent before the new ones are
-            // added to the activeDiscoveries map so we have to merge those two lists
-            icLinkedList *deviceClassesForEvent = linkedListClone(newDeviceClassDiscoveries);
-            sbIcHashMapIterator *activeDiscoveriesIt = hashMapIteratorCreate(activeDiscoveries);
-            while (hashMapIteratorHasNext(activeDiscoveriesIt) == true)
-            {
-                char *key = NULL;
-                uint16_t keyLen = 0;
-                void *value = NULL;
-                hashMapIteratorGetNext(activeDiscoveriesIt, (void **) &key, &keyLen, &value);
-                linkedListAppend(deviceClassesForEvent, strdup(key));
-            }
-            sendDiscoveryStartedEvent(deviceClassesForEvent, timeoutSeconds, findOrphanedDevices);
-            linkedListDestroy(deviceClassesForEvent, NULL);
-
-            iterator = linkedListIteratorCreate(newDeviceClassDiscoveries);
-            while (linkedListIteratorHasNext(iterator))
-            {
-                const char *deviceClass = linkedListIteratorGetNext(iterator);
-
-                discoverDeviceClassContext *ctx =
-                    startDiscoveryForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices);
-                hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
-            }
-            linkedListIteratorDestroy(iterator);
+            result = false;
         }
 
-        linkedListDestroy(newDeviceClassDiscoveries, standardDoNotFreeFunc);
-
-        mutexUnlock(&discoveryControlMutex);
+        linkedListDestroy(drivers, standardDoNotFreeFunc);
     }
+
+    result = result && linkedListCount(newDeviceClassDiscoveries) != 0;
+
+    // Phase 2: Send discovery started event and start drivers
+    if (result)
+    {
+        // Build and send discovery started event
+        icLinkedList *deviceClassesForEvent = linkedListClone(newDeviceClassDiscoveries);
+        sbIcHashMapIterator *activeDiscoveriesIt = hashMapIteratorCreate(activeDiscoveries);
+        while (hashMapIteratorHasNext(activeDiscoveriesIt) == true)
+        {
+            char *key = NULL;
+            uint16_t keyLen = 0;
+            void *value = NULL;
+            hashMapIteratorGetNext(activeDiscoveriesIt, (void **) &key, &keyLen, &value);
+            linkedListAppend(deviceClassesForEvent, strdup(key));
+        }
+        sendDiscoveryStartedEvent(deviceClassesForEvent, timeoutSeconds, findOrphanedDevices);
+        linkedListDestroy(deviceClassesForEvent, NULL);
+
+        // Start drivers for each device class
+        icHashMap *startedDriversPerClass = hashMapCreate();
+        bool anyDriverFailed = false;
+
+        sbIcLinkedListIterator *driverStartIterator = linkedListIteratorCreate(newDeviceClassDiscoveries);
+        while (linkedListIteratorHasNext(driverStartIterator))
+        {
+            const char *deviceClass = linkedListIteratorGetNext(driverStartIterator);
+            bool driverFailed = false;
+            icLinkedList *startedDrivers = startDriversForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
+
+            if (driverFailed)
+            {
+                anyDriverFailed = true;
+            }
+
+            // Always store the list (even if empty) for proper cleanup
+            hashMapPut(
+                startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
+        }
+
+        // Phase 3: Handle success or rollback
+        if (anyDriverFailed)
+        {
+            rollbackFailedDiscovery(startedDriversPerClass, findOrphanedDevices);
+            result = false;
+        }
+        else
+        {
+            createDiscoveryContexts(
+                newDeviceClassDiscoveries, startedDriversPerClass, filters, timeoutSeconds, findOrphanedDevices);
+        }
+
+        hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
+    }
+
+    linkedListDestroy(newDeviceClassDiscoveries, standardDoNotFreeFunc);
+    mutexUnlock(&discoveryControlMutex);
 
     return result;
 }
@@ -3098,76 +3286,9 @@ static void *discoverDeviceClassThreadProc(void *arg)
 {
     discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) arg;
 
-    // start discovery for all device drivers that support this device class
-
-    icLinkedList *startedDeviceDrivers = linkedListCreate();
-
-    bool atLeastOneStarted = false;
-    icLinkedList *deviceDrivers = deviceDriverManagerGetDeviceDriversByDeviceClass(ctx->deviceClass);
-    if (deviceDrivers != NULL)
-    {
-        icLinkedListIterator *driverIterator = linkedListIteratorCreate(deviceDrivers);
-        while (linkedListIteratorHasNext(driverIterator))
-        {
-            DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
-            // If allowList is missing or could not be downloaded, only devices with `neverReject` equals
-            // to true of a class are to be discovered
-            //
-            if (driver->neverReject == false && deviceDescriptorsListIsReady() == false)
-            {
-                icLogInfo(LOG_TAG,
-                          "device descriptor list is not latest, skipping discovery for device %s",
-                          driver->driverName);
-                continue;
-            }
-
-            if (ctx->findOrphanedDevices == true)
-            {
-                if (driver->recoverDevices != NULL)
-                {
-                    icLogDebug(LOG_TAG, "telling %s to start device recovery...", driver->driverName);
-                    bool started = driver->recoverDevices(driver->callbackContext, ctx->deviceClass);
-
-                    if (started == false)
-                    {
-                        // this is only a warning because other drivers for this class might successfully
-                        // start recovery
-                        icLogWarn(LOG_TAG, "device driver %s failed to start device recovery", driver->driverName);
-                    }
-                    else
-                    {
-                        icLogDebug(LOG_TAG, "device driver %s start device recovery successfully", driver->driverName);
-                        atLeastOneStarted = true;
-                        linkedListAppend(startedDeviceDrivers, driver);
-                    }
-                }
-                else
-                {
-                    icLogInfo(LOG_TAG, "device driver %s does not support device recovery", driver->driverName);
-                }
-            }
-            else
-            {
-                if (driver->discoverDevices != NULL)
-                {
-                    icLogDebug(LOG_TAG, "telling %s to start discovering...", driver->driverName);
-                    bool started = driver->discoverDevices(driver->callbackContext, ctx->deviceClass);
-                    if (started == false)
-                    {
-                        icLogError(LOG_TAG, "device driver %s failed to start discovery", driver->driverName);
-                    }
-                    else
-                    {
-                        icLogDebug(LOG_TAG, "device driver %s started discovering successfully", driver->driverName);
-                        atLeastOneStarted = true;
-                        linkedListAppend(startedDeviceDrivers, driver);
-                    }
-                }
-            }
-        }
-        linkedListIteratorDestroy(driverIterator);
-        linkedListDestroy(deviceDrivers, standardDoNotFreeFunc);
-    }
+    // Use the list of drivers that were already started in deviceServiceDiscoverStart
+    icLinkedList *startedDeviceDrivers = ctx->startedDrivers;
+    bool atLeastOneStarted = (startedDeviceDrivers != NULL && linkedListCount(startedDeviceDrivers) > 0);
 
     if (atLeastOneStarted)
     {
@@ -3238,7 +3359,8 @@ static void *discoverDeviceClassThreadProc(void *arg)
 static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
                                                                 icLinkedList *filters,
                                                                 uint16_t timeoutSeconds,
-                                                                bool findOrphanedDevices)
+                                                                bool findOrphanedDevices,
+                                                                icLinkedList *startedDrivers)
 {
     icLogDebug(LOG_TAG, "startDiscoveryForDeviceClass: %s for %d seconds", deviceClass, timeoutSeconds);
 
@@ -3251,6 +3373,7 @@ static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *devi
     ctx->timeoutSeconds = timeoutSeconds;
     ctx->deviceClass = strdup(deviceClass);
     ctx->findOrphanedDevices = findOrphanedDevices;
+    ctx->startedDrivers = startedDrivers; // Take ownership of the list
     if (filters != NULL)
     {
         ctx->filters = linkedListDeepClone(filters, cloneDiscoveryFilterItems, NULL);
