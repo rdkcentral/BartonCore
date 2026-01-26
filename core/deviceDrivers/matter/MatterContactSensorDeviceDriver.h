@@ -1,9 +1,9 @@
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 //
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2025 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,36 +19,28 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 
-/*
- * Created by Thomas Lea on 4/4/2022..
- */
+//
+// Created by Raiyan Chowdhury on 8/9/2024.
+//
 
 #pragma once
 
 #include "MatterDeviceDriver.h"
-#include "clusters/DoorLock.h"
+#include "matter/clusters/BooleanState.h"
 
 namespace barton
+
 {
-    class MatterDoorLockDeviceDriver : public MatterDeviceDriver,
-                                       DoorLock::EventHandler
+    class MatterContactSensorDeviceDriver : public MatterDeviceDriver
     {
     public:
-        MatterDoorLockDeviceDriver();
-
-        // DoorLock cluster callbacks
-        void CommandCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
-        void WriteRequestCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
-        void LockStateChanged(std::string &deviceUuid,
-                              chip::app::Clusters::DoorLock::DlLockState lockState,
-                              void *asyncContext) override;
-        void LockStateReadComplete(std::string &deviceUuid,
-                                   chip::app::Clusters::DoorLock::DlLockState lockState,
-                                   void *asyncContext) override;
+        MatterContactSensorDeviceDriver();
 
     protected:
+        bool InitializeClustersForDevice(const std::string &deviceUuid) override;
+
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
         void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
                                  const std::string &deviceId,
@@ -64,13 +56,7 @@ namespace barton
                             chip::Messaging::ExchangeManager &exchangeMgr,
                             const chip::SessionHandle &sessionHandle) override;
 
-        bool WriteResource(std::forward_list<std::promise<bool>> &promises,
-                           const std::string &deviceId,
-                           icDeviceResource *resource,
-                           const char *previousValue,
-                           const char *newValue,
-                           chip::Messaging::ExchangeManager &exchangeMgr,
-                           const chip::SessionHandle &sessionHandle) override;
+        void SetTampered(const std::string &deviceId, bool tampered) override;
 
     private:
         static bool registeredWithFactory;
@@ -78,5 +64,13 @@ namespace barton
         std::unique_ptr<MatterCluster>
         MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId,
                     std::shared_ptr<DeviceDataCache> deviceDataCache) override;
+
+        class BooleanStateClusterEventHandler : public BooleanState::EventHandler
+        {
+        public:
+            void StateValueChanged(std::string &deviceUuid, bool state) override;
+            void StateValueReadComplete(std::string &deviceUuid, bool state, void *asyncContext) override;
+            MatterContactSensorDeviceDriver *deviceDriver;
+        } booleanStateClusterEventHandler;
     };
 } // namespace barton

@@ -1,9 +1,9 @@
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 //
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2025 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,50 +19,40 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Created by nkhan599 on 3/27/24.
+// Created by Raiyan Chowdhury on 8/16/24.
 //
 
 #pragma once
 
 #include "MatterCluster.h"
-#include "app-common/zap-generated/ids/Attributes.h"
-#include "app-common/zap-generated/ids/Clusters.h"
 #include "app/ClusterStateCache.h"
 #include "app/ConcreteAttributePath.h"
-#include "app/ReadHandler.h"
 #include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
-#include "subsystems/matter/MatterCommon.h"
+#include <string>
 
 namespace barton
 {
-    class GeneralDiagnostics : public MatterCluster
+    class PowerSource : public MatterCluster
     {
     public:
-        GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
-                          std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::GeneralDiagnostics::Id, deviceDataCache)
+        PowerSource(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                    std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::PowerSource::Id, deviceDataCache)
         {
         }
 
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void OnNetworkInterfacesChanged(GeneralDiagnostics &source,
-                                                    NetworkUtils::NetworkInterfaceInfo info) {};
-
-            virtual void OnHardwareFaultsChanged(
-                GeneralDiagnostics &source,
-                const std::vector<chip::app::Clusters::GeneralDiagnostics::HardwareFaultEnum> &currentFaults) {};
+            virtual void BatChargeLevelChanged(std::string &deviceUuid, chip::app::Clusters::PowerSource::BatChargeLevelEnum chargeLevel) {};
+            virtual void BatPercentRemainingChanged(std::string &deviceUuid, uint8_t halfPercent) {};
         };
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
-
-        std::string GetMacAddress();
-        std::string GetNetworkType();
     };
 } // namespace barton

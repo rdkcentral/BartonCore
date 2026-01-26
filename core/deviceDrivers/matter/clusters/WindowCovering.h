@@ -38,8 +38,9 @@ namespace barton
     class WindowCovering : public MatterCluster
     {
     public:
-        WindowCovering(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        WindowCovering(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                       std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::WindowCovering::Id, deviceDataCache)
         {
         }
 

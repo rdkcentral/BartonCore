@@ -27,6 +27,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def assert_device_has_common_resources(client, device, required_resources):
+    """Assert that the device has all required common resources.
+
+    Args:
+        device: BCoreDevice object
+        required_resources: List of required resource names
+
+    Raises:
+        AssertionError: If any required resource is missing
+    """
+    device_uuid = device.props.uuid
+
+    missing_resources = []
+    for resource_name in required_resources:
+        uri = f"/{device_uuid}/r/{resource_name}"
+        resource = client.get_resource_by_uri(uri)
+        if resource is None:
+            missing_resources.append(resource_name)
+
+    assert not missing_resources, f"Device is missing resources: {missing_resources}"
+
 def test_commission_light(default_environment, matter_light):
     default_environment.get_client().commission_device(
         matter_light.get_commissioning_code(), 100
@@ -34,3 +55,15 @@ def test_commission_light(default_environment, matter_light):
     default_environment.wait_for_device_added()
     lights = default_environment.get_client().get_devices_by_device_class("light")
     assert len(lights) == 1
+
+    light = lights[0]
+    assert_device_has_common_resources(
+        default_environment.get_client(),
+        light,
+        [
+            "firmwareVersionString",
+            "macAddress",
+            "networkType",
+            "serialNumber"
+        ]
+    )

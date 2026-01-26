@@ -42,7 +42,6 @@ extern "C" {
 }
 
 #include <chrono>
-#include <subsystems/matter/DiscoveredDeviceDetailsStore.h>
 #include <subsystems/matter/Matter.h>
 
 using namespace barton;
@@ -54,13 +53,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define WINDOW_COVERING_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterWindowCoveringDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterWindowCoveringDeviceDriver());
@@ -70,26 +62,11 @@ MatterWindowCoveringDeviceDriver::MatterWindowCoveringDeviceDriver() :
 {
 }
 
-bool MatterWindowCoveringDeviceDriver::ClaimDevice(DiscoveredDeviceDetails *details)
+std::vector<uint16_t> MatterWindowCoveringDeviceDriver::GetSupportedDeviceTypes()
 {
-    icDebug();
-
-    // see if any endpoint (not the special 0 entry) has our device id
-    for (auto &entry : details->endpointDescriptorData)
-    {
-        if (entry.first > 0)
-        {
-            for (auto &deviceTypeEntry : *entry.second->deviceTypes)
-            {
-                if (deviceTypeEntry == WINDOW_COVERING_CONTROLLER_DEVICE_ID)
-                {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
+    return {
+        WINDOW_COVERING_CONTROLLER_DEVICE_ID,
+    };
 }
 
 void MatterWindowCoveringDeviceDriver::CurrentPositionLiftPercentageChanged(std::string &deviceUuid,
@@ -124,75 +101,38 @@ void MatterWindowCoveringDeviceDriver::CurrentPositionLiftPercentageReadComplete
 
     scoped_generic char *percentStr = stringBuilder("%" PRIu8, percent);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(readContext->initialResourceValues,
-                                              WINDOW_COVERING_ENDPOINT,
-                                              WINDOW_COVERING_PROFILE_RESOURCE_LIFT_PERCENTAGE,
-                                              percentStr);
-    }
-    else
-    {
-        *readContext->value = percentStr;
-        percentStr = nullptr;
-    }
+    *readContext->value = percentStr;
+    percentStr = nullptr;
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 
     delete readContext;
 }
 
-void MatterWindowCoveringDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                                         const std::string &deviceId,
-                                                         chip::Messaging::ExchangeManager &exchangeMgr,
-                                                         const chip::SessionHandle &sessionHandle)
+void MatterWindowCoveringDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                                           const std::string &deviceId,
+                                                           chip::Messaging::ExchangeManager &exchangeMgr,
+                                                           const chip::SessionHandle &sessionHandle)
 {
     icDebug();
 
     // currently we dont do anything during configuration except set up reporting, which also triggers an immediate
     //  report and that takes care of synchronizing state/resources as well.
-    ConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
+    DoConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
 }
 
-void MatterWindowCoveringDeviceDriver::FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                                  const std::string &deviceId,
-                                                                  icInitialResourceValues *initialResourceValues,
-                                                                  chip::Messaging::ExchangeManager &exchangeMgr,
-                                                                  const chip::SessionHandle &sessionHandle)
-{
-    bool result = false;
-
-    icDebug();
-
-    auto server = static_cast<WindowCovering *>(GetAnyServerById(deviceId, WINDOW_COVERING_CLUSTER_ID));
-
-    if (server == nullptr)
-    {
-        icError("WindowCovering cluster not present on device %s", deviceId.c_str());
-        FailOperation(promises);
-        return;
-    }
-
-    promises.emplace_front();
-    auto &readPromise = promises.front();
-    auto readContext = new ClusterReadContext {};
-    readContext->driverContext = &readPromise;
-    readContext->initialResourceValues = initialResourceValues;
-    AssociateStoredContext(readContext->driverContext);
-
-    if (!server->GetCurrentPositionLiftPercentage(readContext, exchangeMgr, sessionHandle))
-    {
-        AbandonDeviceWork(readPromise);
-        delete readContext;
-    }
-}
-
-bool MatterWindowCoveringDeviceDriver::RegisterResources(icDevice *device,
-                                                         icInitialResourceValues *initialResourceValues)
+bool MatterWindowCoveringDeviceDriver::DoRegisterResources(icDevice *device)
 {
     bool result = true;
 
     icDebug();
+
+    auto deviceCache = GetDeviceDataCache(device->uuid);
+    if (!deviceCache)
+    {
+        icError("No device cache for %s", device->uuid);
+        return false;
+    }
 
     icDeviceEndpoint *endpoint = createEndpoint(device, WINDOW_COVERING_ENDPOINT, WINDOW_COVERING_PROFILE, true);
 
@@ -207,18 +147,6 @@ bool MatterWindowCoveringDeviceDriver::RegisterResources(icDevice *device,
     resource->id = strdup(WINDOW_COVERING_PROFILE_RESOURCE_LIFT_PERCENTAGE);
     resource->endpointId = strdup(WINDOW_COVERING_ENDPOINT);
     resource->deviceUuid = strdup(device->uuid);
-
-    const char *initialValue = initialResourceValuesGetEndpointValue(
-        initialResourceValues, WINDOW_COVERING_ENDPOINT, WINDOW_COVERING_PROFILE_RESOURCE_LIFT_PERCENTAGE);
-    if (initialValue)
-    {
-        resource->value = strdup(initialResourceValuesGetEndpointValue(
-            initialResourceValues, WINDOW_COVERING_ENDPOINT, WINDOW_COVERING_PROFILE_RESOURCE_LIFT_PERCENTAGE));
-    }
-    else
-    {
-        result = false;
-    }
     resource->type = strdup(RESOURCE_TYPE_PERCENTAGE);
     resource->mode = RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE |
                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT;
@@ -228,12 +156,12 @@ bool MatterWindowCoveringDeviceDriver::RegisterResources(icDevice *device,
     return result;
 }
 
-void MatterWindowCoveringDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                                    const std::string &deviceId,
-                                                    icDeviceResource *resource,
-                                                    char **value,
-                                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                                    const chip::SessionHandle &sessionHandle)
+void MatterWindowCoveringDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                                      const std::string &deviceId,
+                                                      icDeviceResource *resource,
+                                                      char **value,
+                                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                                      const chip::SessionHandle &sessionHandle)
 {
     bool asyncCleanup = false;
 
@@ -322,11 +250,12 @@ bool MatterWindowCoveringDeviceDriver::WriteResource(std::forward_list<std::prom
 
 std::unique_ptr<MatterCluster> MatterWindowCoveringDeviceDriver::MakeCluster(std::string const &deviceUuid,
                                                                              chip::EndpointId endpointId,
-                                                                             chip::ClusterId clusterId)
+                                                                             chip::ClusterId clusterId,
+                                                                             std::shared_ptr<DeviceDataCache> deviceDataCache)
 {
     if (clusterId == WINDOW_COVERING_CLUSTER_ID)
     {
-        return std::make_unique<WindowCovering>((WindowCovering::EventHandler *) this, deviceUuid, endpointId);
+        return std::make_unique<WindowCovering>((WindowCovering::EventHandler *) this, deviceUuid, endpointId, deviceDataCache);
     }
 
     return nullptr;

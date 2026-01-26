@@ -25,7 +25,6 @@
 // Created by tlea on 11/7/22.
 //
 
-#include "matter/subscriptions/SubscribeInteraction.h"
 #define LOG_TAG     "MatterCluster"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
@@ -148,8 +147,10 @@ namespace barton
         eventHandler->WriteRequestCompleted(localCtx, false);
     }
 
-    void MatterCluster::SetClusterStateCacheRef(std::shared_ptr<chip::app::ClusterStateCache> &clusterStateCache)
+    void MatterCluster::OnDone(chip::app::ReadClient * apReadClient)
     {
-        clusterStateCacheRef = clusterStateCache;
+        icDebug("TODO: should we clean up anything here?");
+
+        //TODO: delete apReadClient? Notify DeviceDataCache? Should it intercept this?
     }
 } // namespace barton

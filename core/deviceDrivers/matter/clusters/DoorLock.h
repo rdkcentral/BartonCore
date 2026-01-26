@@ -39,8 +39,9 @@ namespace barton
     class DoorLock : public MatterCluster
     {
     public:
-        DoorLock(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId) :
-            MatterCluster(handler, deviceId, endpointId)
+        DoorLock(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                 std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::DoorLock::Id, deviceDataCache)
         {
         }
 

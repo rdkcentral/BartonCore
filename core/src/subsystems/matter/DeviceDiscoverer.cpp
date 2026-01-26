@@ -142,7 +142,7 @@ namespace barton
 
         // Step 1:  Connect to device
         Matter &matter = Matter::GetInstance();
-        if (matter.GetCommissioner().GetConnectedDevice(instance->nodeId,
+        if (matter.GetCommissioner()->GetConnectedDevice(instance->nodeId,
                                                         &instance->onDeviceConnectedCallback,
                                                         &instance->onDeviceConnectionFailureCallback) != CHIP_NO_ERROR)
         {

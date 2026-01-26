@@ -42,7 +42,6 @@ extern "C" {
 }
 
 #include <chrono>
-#include <subsystems/matter/DiscoveredDeviceDetailsStore.h>
 #include <subsystems/matter/Matter.h>
 
 using namespace barton;
@@ -54,13 +53,6 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define DOOR_LOCK_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterDoorLockDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
@@ -70,26 +62,11 @@ MatterDoorLockDeviceDriver::MatterDoorLockDeviceDriver() :
 {
 }
 
-bool MatterDoorLockDeviceDriver::ClaimDevice(DiscoveredDeviceDetails *details)
+std::vector<uint16_t> MatterDoorLockDeviceDriver::GetSupportedDeviceTypes()
 {
-    icDebug();
-
-    // see if any endpoint (not the special 0 entry) has our device id
-    for (auto &entry : details->endpointDescriptorData)
-    {
-        if (entry.first > 0)
-        {
-            for (auto &deviceTypeEntry : *entry.second->deviceTypes)
-            {
-                if (deviceTypeEntry == DOORLOCK_DEVICE_ID)
-                {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
+    return {
+        DOORLOCK_DEVICE_ID,
+    };
 }
 
 void MatterDoorLockDeviceDriver::LockStateChanged(std::string &deviceUuid,
@@ -113,73 +90,37 @@ void MatterDoorLockDeviceDriver::LockStateReadComplete(std::string &deviceUuid,
 
     bool isLocked = (lockState == chip::app::Clusters::DoorLock::DlLockState::kLocked);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(readContext->initialResourceValues,
-                                              DOOR_LOCK_ENDPOINT,
-                                              DOORLOCK_PROFILE_RESOURCE_LOCKED,
-                                              stringValueOfBool(isLocked));
-    }
-    else
-    {
-        *readContext->value = strdup(stringValueOfBool(isLocked));
-    }
+    *readContext->value = strdup(stringValueOfBool(isLocked));
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 
     delete readContext;
 }
 
-void MatterDoorLockDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                                   const std::string &deviceId,
-                                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                                   const chip::SessionHandle &sessionHandle)
+void MatterDoorLockDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                                     const std::string &deviceId,
+                                                     chip::Messaging::ExchangeManager &exchangeMgr,
+                                                     const chip::SessionHandle &sessionHandle)
 {
     icDebug();
 
     // currently we dont do anything during configuration except set up reporting, which also triggers an immediate
     //  report and that takes care of synchronizing state/resources as well.
-    ConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
+    DoConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
 }
 
-void MatterDoorLockDeviceDriver::FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                            const std::string &deviceId,
-                                                            icInitialResourceValues *initialResourceValues,
-                                                            chip::Messaging::ExchangeManager &exchangeMgr,
-                                                            const chip::SessionHandle &sessionHandle)
-{
-    bool result = false;
-
-    icDebug();
-
-    auto *server = static_cast<DoorLock *>(GetAnyServerById(deviceId, DOORLOCK_CLUSTER_ID));
-
-    if (server == nullptr)
-    {
-        icError("DoorLock cluster not present on device %s!", deviceId.c_str());
-        FailOperation(promises);
-        return;
-    }
-
-    promises.emplace_front();
-    auto &getStatePromise = promises.front();
-    auto readContext = new ClusterReadContext {};
-    readContext->driverContext = &getStatePromise;
-    readContext->initialResourceValues = initialResourceValues;
-    AssociateStoredContext(readContext->driverContext);
-
-    if (!server->GetLockState(readContext, exchangeMgr, sessionHandle))
-    {
-        AbandonDeviceWork(getStatePromise);
-        delete readContext;
-    }
-}
-
-bool MatterDoorLockDeviceDriver::RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues)
+bool MatterDoorLockDeviceDriver::DoRegisterResources(icDevice *device)
 {
     bool result = true;
 
     icDebug();
+
+    auto deviceCache = GetDeviceDataCache(device->uuid);
+    if (!deviceCache)
+    {
+        icError("No device cache for %s", device->uuid);
+        return false;
+    }
 
     icDeviceEndpoint *endpoint = createEndpoint(device, DOOR_LOCK_ENDPOINT, DOORLOCK_PROFILE, true);
 
@@ -194,19 +135,6 @@ bool MatterDoorLockDeviceDriver::RegisterResources(icDevice *device, icInitialRe
     resource->id = strdup(DOORLOCK_PROFILE_RESOURCE_LOCKED);
     resource->endpointId = strdup(DOOR_LOCK_ENDPOINT);
     resource->deviceUuid = strdup(device->uuid);
-
-    const char *initialValue = initialResourceValuesGetEndpointValue(
-        initialResourceValues, DOOR_LOCK_ENDPOINT, DOORLOCK_PROFILE_RESOURCE_LOCKED);
-    if (initialValue)
-    {
-        resource->value = strdup(initialResourceValuesGetEndpointValue(
-            initialResourceValues, DOOR_LOCK_ENDPOINT, DOORLOCK_PROFILE_RESOURCE_LOCKED));
-    }
-    else
-    {
-        result = false;
-    }
-
     resource->type = strdup(RESOURCE_TYPE_BOOLEAN);
     resource->mode = RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE |
                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT;
@@ -216,12 +144,12 @@ bool MatterDoorLockDeviceDriver::RegisterResources(icDevice *device, icInitialRe
     return result;
 }
 
-void MatterDoorLockDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                              const std::string &deviceId,
-                                              icDeviceResource *resource,
-                                              char **value,
-                                              chip::Messaging::ExchangeManager &exchangeMgr,
-                                              const chip::SessionHandle &sessionHandle)
+void MatterDoorLockDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                                const std::string &deviceId,
+                                                icDeviceResource *resource,
+                                                char **value,
+                                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                                const chip::SessionHandle &sessionHandle)
 {
     bool asyncCleanup = false;
 
@@ -309,11 +237,12 @@ bool MatterDoorLockDeviceDriver::WriteResource(std::forward_list<std::promise<bo
 
 std::unique_ptr<MatterCluster> MatterDoorLockDeviceDriver::MakeCluster(std::string const &deviceUuid,
                                                                        chip::EndpointId endpointId,
-                                                                       chip::ClusterId clusterId)
+                                                                       chip::ClusterId clusterId,
+                                                                       std::shared_ptr<DeviceDataCache> deviceDataCache)
 {
     if (clusterId == DOORLOCK_CLUSTER_ID)
     {
-        return std::make_unique<DoorLock>((DoorLock::EventHandler *) this, deviceUuid, endpointId);
+        return std::make_unique<DoorLock>((DoorLock::EventHandler *) this, deviceUuid, endpointId, deviceDataCache);
     }
 
     return nullptr;

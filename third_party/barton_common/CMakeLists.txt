@@ -3,7 +3,7 @@
 # If not stated otherwise in this file or this component's LICENSE file the
 # following copyright and licenses apply:
 #
-# Copyright 2024 Comcast Cable Communications Management, LLC
+# Copyright 2025 Comcast Cable Communications Management, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,19 +21,16 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-#--------------------------------------------------------------------------------------
 #
-# CMake definition for the fcore device libraries
-# Should not be utilized directly, but imported from our top-level
-# file via the 'add_subdirectory()' routine.
+# Created by Christian Leithner on 11/12/2025.
 #
-#--------------------------------------------------------------------------------------
 
-# the device libraries to compile
-#
-add_subdirectory(descriptors/c)
+include(FetchContent)
 
-# add 'philips hue lights' if the option is set
-if (BCORE_PHILIPS_HUE)
-    add_subdirectory(xhPhilipsHue/c)
-endif (BCORE_PHILIPS_HUE)
+FetchContent_Declare(
+    BartonCommon
+    GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon
+    GIT_TAG 0.1.1
+)
+
+FetchContent_MakeAvailable(BartonCommon)

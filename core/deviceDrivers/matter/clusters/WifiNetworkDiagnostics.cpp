@@ -37,80 +37,65 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
+#include <memory>
 #include "WifiNetworkDiagnostics.h"
 #include "app-common/zap-generated/ids/Attributes.h"
 #include "app-common/zap-generated/ids/Clusters.h"
 #include "app/BufferedReadCallback.h"
 #include "app/InteractionModelEngine.h"
 
-namespace barton
-{
-    void WifiNetworkDiagnostics::OnAttributeChanged(chip::app::ClusterStateCache *cache,
-                                                    const chip::app::ConcreteAttributePath &path)
-    {
-        using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
-        using TypeInfo = Attributes::Rssi::TypeInfo;
+using namespace barton;
 
-        if (path.mClusterId == chip::app::Clusters::WiFiNetworkDiagnostics::Id &&
-            path.mAttributeId == chip::app::Clusters::WiFiNetworkDiagnostics::Attributes::Rssi::Id)
-        {
-            TypeInfo::DecodableType value;
-            CHIP_ERROR error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                int8_t *nullableValue = value.IsNull() ? nullptr : &value.Value();
-                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
-                    ->RssiChanged(deviceId, nullableValue, nullptr);
-            }
-            else
-            {
-                icError("Failed to decode rssi attribute: %s", error.AsString());
-            }
-        }
-        else
-        {
-            icTrace("Unexpected cluster or attribute");
-        }
+bool WifiNetworkDiagnostics::GetRssi(void *context,
+                                     chip::Messaging::ExchangeManager &exchangeMgr,
+                                     const chip::SessionHandle &sessionHandle)
+{
+    icDebug();
+
+    using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
+    using TypeInfo = Attributes::Rssi::TypeInfo;
+
+    // Per Matter 1.4 11.15.6, the RSSI attribute is not reportable, so its value is not populated in the cache via
+    // subscription reports. Therefore, we must read it on-demand.
+    // This context pointer is passed to the read attribute callback, which will be responsible for deleting it. However,
+    // if the ReadAttribute request fails to be sent, then we must delete it here.
+    auto rssiReadContext = new OnDemandReadContext(context, eventHandler, deviceId);
+
+    chip::Controller::ClusterBase cluster(exchangeMgr, sessionHandle, endpointId);
+
+    CHIP_ERROR error = cluster.ReadAttribute<TypeInfo>(
+        rssiReadContext,
+        [](void *context,
+           TypeInfo::DecodableArgType rssiValue) { /*read response success callback*/
+                                                   auto rssiReadContext = static_cast<OnDemandReadContext *>(context);
+                                                   const int8_t *nullableRssiValue =
+                                                       rssiValue.IsNull() ? nullptr : &rssiValue.Value();
+                                                   static_cast<WifiNetworkDiagnostics::EventHandler *>(
+                                                       rssiReadContext->eventHandler)
+                                                       ->RssiReadComplete(rssiReadContext->deviceId,
+                                                                          nullableRssiValue,
+                                                                          true,
+                                                                          rssiReadContext->baseReadContext);
+                                                   delete rssiReadContext;
+        },
+        [](void *context,
+           CHIP_ERROR error) { /*read response failure callback*/
+                               auto rssiReadContext = static_cast<OnDemandReadContext *>(context);
+                               icError("Failed to read RSSI attribute from device %s with error: %s",
+                                       rssiReadContext->deviceId.c_str(),
+                                       error.AsString());
+                               static_cast<WifiNetworkDiagnostics::EventHandler *>(rssiReadContext->eventHandler)
+                                   ->RssiReadComplete(
+                                       rssiReadContext->deviceId, nullptr, false, rssiReadContext->baseReadContext);
+                               delete rssiReadContext;
+        });
+
+    if (error != CHIP_NO_ERROR)
+    {
+        icError("Rssi ReadAttribute command failed with error: %s", error.AsString());
+        delete rssiReadContext;
+        return false;
     }
 
-    bool WifiNetworkDiagnostics::GetRssi(void *context,
-                                         const chip::Messaging::ExchangeManager &exchangeMgr,
-                                         const chip::SessionHandle &sessionHandle)
-    {
-        icDebug();
-
-        bool result = false;
-        std::shared_ptr<chip::app::ClusterStateCache> cache;
-        if (!(cache = clusterStateCacheRef.lock()))
-        {
-            icError("Failed to get rssi attribute because the cluster state cache expired or was never set");
-            return result;
-        }
-
-        CHIP_ERROR error = CHIP_NO_ERROR;
-        using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
-        using TypeInfo = Attributes::Rssi::TypeInfo;
-
-        chip::app::ConcreteAttributePath path(endpointId,
-                                              chip::app::Clusters::WiFiNetworkDiagnostics::Id,
-                                              chip::app::Clusters::WiFiNetworkDiagnostics::Attributes::Rssi::Id);
-        {
-            TypeInfo::DecodableType value;
-            error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                int8_t *nullableValue = value.IsNull() ? nullptr : &value.Value();
-                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
-                    ->RssiReadComplete(deviceId, nullableValue, context);
-                result = true;
-            }
-        }
-
-        if (error != CHIP_NO_ERROR)
-        {
-            icError("Failed to decode rssi attribute: %s", error.AsString());
-        }
-
-        return result;
-    };
-} // namespace barton
+    return true;
+};

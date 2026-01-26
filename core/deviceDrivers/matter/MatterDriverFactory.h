@@ -28,6 +28,7 @@
 #pragma once
 
 #include "matter/MatterDeviceDriver.h"
+#include "subsystems/matter/DeviceDataCache.h"
 #include <map>
 
 namespace barton
@@ -42,7 +43,7 @@ namespace barton
         }
 
         bool RegisterDriver(MatterDeviceDriver *driver);
-        MatterDeviceDriver *GetDriver(DiscoveredDeviceDetails *details);
+        MatterDeviceDriver *GetDriver(const DeviceDataCache *dataCache);
 
     private:
         MatterDriverFactory() = default;

@@ -27,6 +27,8 @@
 
 #pragma once
 
+#include "credentials/CHIPCert.h"
+#include "lib/core/CHIPError.h"
 #include <controller/OperationalCredentialsDelegate.h>
 #include <iomanip>
 #include <lib/core/TLV.h>
@@ -124,7 +126,8 @@ namespace barton
                         ByteSpan csr(csrBuf.Get(), csrBuf.AllocatedSize());
                         ByteSpan nonce(nonceBuf.Get(), csrBuf.AllocatedSize());
 
-                        CHIP_ERROR fetchErr = GenerateNOCChainAfterValidation(nodeId, fabricId, csr, nonce, rcacSpan, icacSpan, nocSpan);
+                        CHIP_ERROR fetchErr =
+                            GenerateNOCChainSynchronous(nodeId, fabricId, csr, nonce, rcacSpan, icacSpan, nocSpan);
 
                         {
                             DeviceLayer::StackLock lock;
@@ -138,6 +141,31 @@ namespace barton
                     mNodeId, mFabricId);
 
                 fetcher.detach();
+
+                return CHIP_NO_ERROR;
+            }
+
+            /**
+             * Synchronous version of GenerateNOCChain for direct use by BartonCore.
+             * Performs validation on the generated NOC to make sure it conforms to
+             * what the Matter stack wants.
+             */
+            CHIP_ERROR GenerateNOCChainSynchronous(NodeId nodeId,
+                                                   FabricId fabricId,
+                                                   const ByteSpan &csr,
+                                                   const ByteSpan &nonce,
+                                                   MutableByteSpan &rcac,
+                                                   MutableByteSpan &icac,
+                                                   MutableByteSpan &noc)
+            {
+                ReturnErrorOnFailure(GenerateNOCChainAfterValidation(nodeId, fabricId, csr, nonce, rcac, icac, noc));
+
+                chip::Platform::ScopedMemoryBuffer<uint8_t> chipNoc;
+                VerifyOrReturnError(chipNoc.Alloc(chip::Credentials::kMaxCHIPCertLength), CHIP_ERROR_NO_MEMORY);
+                chip::MutableByteSpan chipNocSpan(chipNoc.Get(), chip::Credentials::kMaxCHIPCertLength);
+
+                // Do the same verification checks on the received NOC that Matter is going to do.
+                ReturnErrorOnFailure(Credentials::ConvertX509CertToChipCert(noc, chipNocSpan));
 
                 return CHIP_NO_ERROR;
             }

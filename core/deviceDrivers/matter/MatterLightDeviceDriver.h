@@ -39,8 +39,6 @@ namespace barton
     public:
         MatterLightDeviceDriver();
 
-        bool ClaimDevice(DiscoveredDeviceDetails *details) override;
-
         // OnOff cluster callbacks
         void CommandCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
         void WriteRequestCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
@@ -48,24 +46,22 @@ namespace barton
         void OnOffReadComplete(std::string &deviceUuid, bool isOn, void *asyncContext) override;
 
     protected:
-        void SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                               const std::string &deviceId,
-                               chip::Messaging::ExchangeManager &exchangeMgr,
-                               const chip::SessionHandle &sessionHandle) override;
+        bool InitializeClustersForDevice(const std::string &deviceUuid) override;
 
-        void FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                        const std::string &deviceId,
-                                        icInitialResourceValues *initialResourceValues,
-                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                        const chip::SessionHandle &sessionHandle) override;
-        bool RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues) override;
+        std::vector<uint16_t> GetSupportedDeviceTypes() override;
+        void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                 const std::string &deviceId,
+                                 chip::Messaging::ExchangeManager &exchangeMgr,
+                                 const chip::SessionHandle &sessionHandle) override;
 
-        void ReadResource(std::forward_list<std::promise<bool>> &promises,
-                          const std::string &deviceId,
-                          icDeviceResource *resource,
-                          char **value,
-                          chip::Messaging::ExchangeManager &exchangeMgr,
-                          const chip::SessionHandle &sessionHandle) override;
+        bool DoRegisterResources(icDevice *device) override;
+
+        void DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                            const std::string &deviceId,
+                            icDeviceResource *resource,
+                            char **value,
+                            chip::Messaging::ExchangeManager &exchangeMgr,
+                            const chip::SessionHandle &sessionHandle) override;
 
         bool WriteResource(std::forward_list<std::promise<bool>> &promises,
                            const std::string &deviceId,
@@ -79,6 +75,9 @@ namespace barton
         static bool registeredWithFactory;
 
         std::unique_ptr<MatterCluster>
-        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId) override;
+        MakeCluster(std::string const &deviceUuid,
+                    chip::EndpointId endpointId,
+                    chip::ClusterId clusterId,
+                    std::shared_ptr<DeviceDataCache> deviceDataCache) override;
     };
 } // namespace barton

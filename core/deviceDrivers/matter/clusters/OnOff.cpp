@@ -71,36 +71,30 @@ namespace barton
     {
         icDebug();
 
-        bool result = false;
-        std::shared_ptr<chip::app::ClusterStateCache> cache;
-        if (!(cache = clusterStateCacheRef.lock()))
-        {
-            icError("Failed to get onoff attribute because the cluster state cache expired or was never set");
-            return result;
-        }
-
-        CHIP_ERROR error = CHIP_NO_ERROR;
         using namespace chip::app::Clusters::OnOff;
         using TypeInfo = Attributes::OnOff::TypeInfo;
 
         chip::app::ConcreteAttributePath path(
-            endpointId, chip::app::Clusters::OnOff::Id, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
-        {
-            TypeInfo::DecodableType value;
-            error = cache->Get<TypeInfo>(path, value);
-            if (error == CHIP_NO_ERROR)
-            {
-                static_cast<OnOff::EventHandler *>(eventHandler)->OnOffReadComplete(deviceId, value, context);
-                result = true;
-            }
-        }
-
+        endpointId, chip::app::Clusters::OnOff::Id, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR error = deviceDataCache->GetAttributeData(path, reader);
         if (error != CHIP_NO_ERROR)
         {
-            icError("Failed to decode onoff attribute: %s", error.AsString());
+            icError("Failed to read onoff attribute from device %s: %s", deviceId.c_str(), error.AsString());
+            return false;
         }
 
-        return result;
+        TypeInfo::DecodableType value;
+        error = chip::app::DataModel::Decode(reader, value);
+        if (error != CHIP_NO_ERROR)
+        {
+            icError("Failed to decode onoff attribute from device %s: %s", deviceId.c_str(), error.AsString());
+            return false;
+        }
+
+        static_cast<OnOff::EventHandler *>(eventHandler)->OnOffReadComplete(deviceId, value, context);
+
+        return true;
     };
 
     bool OnOff::SetOnOff(void *context,

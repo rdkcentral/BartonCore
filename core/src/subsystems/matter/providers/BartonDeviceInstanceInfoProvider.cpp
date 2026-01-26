@@ -347,6 +347,15 @@ CHIP_ERROR BartonDeviceInstanceInfoProvider::GetHardwareVersionString(char *buf,
     return CHIP_NO_ERROR;
 }
 
+CHIP_ERROR BartonDeviceInstanceInfoProvider::GetSoftwareVersionString(char *buf, size_t bufSize)
+{
+    // Because the software version string is also used internally by Matter for OTA purposes,
+    // we will return a compile-time constant defined in the Matter configuration.
+    VerifyOrReturnError(strlen(CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING) < bufSize, CHIP_ERROR_BUFFER_TOO_SMALL);
+    strcpy(buf, CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING);
+    return CHIP_NO_ERROR;
+}
+
 CHIP_ERROR BartonDeviceInstanceInfoProvider::GetRotatingDeviceIdUniqueId(MutableByteSpan & uniqueIdSpan)
 {
 #if CHIP_ENABLE_ROTATING_DEVICE_ID && defined(CHIP_DEVICE_CONFIG_ROTATING_DEVICE_ID_UNIQUE_ID)

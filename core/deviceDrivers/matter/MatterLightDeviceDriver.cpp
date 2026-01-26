@@ -42,7 +42,6 @@ extern "C" {
 }
 
 #include <chrono>
-#include <subsystems/matter/DiscoveredDeviceDetailsStore.h>
 #include <subsystems/matter/Matter.h>
 
 using namespace barton;
@@ -54,63 +53,34 @@ using namespace std::chrono_literals;
 // this is our endpoint, not the device's
 #define LIGHT_ENDPOINT                  "1"
 
-struct ClusterReadContext
-{
-    void *driverContext;                            // the context provided to the driver for the operation
-    icInitialResourceValues *initialResourceValues; // non-null if this read is the initial resource fetch
-    char **value;                                   // non-null if this read is a regular resource read
-};
-
 // auto register with the factory
 bool MatterLightDeviceDriver::registeredWithFactory =
     MatterDriverFactory::Instance().RegisterDriver(new MatterLightDeviceDriver());
 
 MatterLightDeviceDriver::MatterLightDeviceDriver() : MatterDeviceDriver(MATTER_LIGHT_DEVICE_DRIVER_NAME, LIGHT_DC, 0) {}
 
-bool MatterLightDeviceDriver::ClaimDevice(DiscoveredDeviceDetails *details)
+bool MatterLightDeviceDriver::InitializeClustersForDevice(const std::string &deviceUuid)
 {
-    icDebug();
+    return GetAnyServerById(deviceUuid, chip::app::Clusters::OnOff::Id) != nullptr;
+}
 
-    /*
-     * Matter lighting example:
-2022-02-24 05:58:33.313 : [Matter 709760] - INFO: MatterDriverFactory (GetDriver):
-    {"vendor":"TEST_VENDOR","product":"TEST_PRODUCT","hwVer":"TEST_VERSION","swVer":"prerelease",
-     "endpoints":[{"endpointId":0,"deviceTypes":[{"type":22,"revision":1}],
-     "servers":[4,29,31,40,42,43,44,48,49,50,51,52,53,54,55,59,60,62,63,64,65],"clients":[41],"parts":[1,2]},{"endpointId":1,"deviceTypes":[{"type":257,"revision":1}],"servers":[3,4,6,8,29,768,1030],"clients":[],"parts":[]},{"endpointId":2,"deviceTypes":[],"servers":[],"clients":[],"parts":[]}]}
-     */
-
-    // see if any endpoint (not the special 0 entry) has our device id
-    for (auto &entry : details->endpointDescriptorData)
-    {
-        if (entry.first > 0)
-        {
-            for (auto &deviceTypeEntry : *entry.second->deviceTypes)
-            {
-                switch (deviceTypeEntry)
-                {
-                    case ON_OFF_LIGHT_DEVICE_ID:
-                    case ON_OFF_PLUGIN_UNIT_DEVICE_ID:
-                    case DIMMABLE_LIGHT_DEVICE_ID:
-                    case DIMMABLE_PLUGIN_UNIT_DEVICE_ID:
-                    case COLOR_DIMMABLE_LIGHT_DEVICE_ID:
-                    case COLOR_DIMMABLE2_LIGHT_DEVICE_ID:
-                    case EXTENDED_COLOR_LIGHT_DEVICE_ID:
-                    case EXTENDED_COLOR2_LIGHT_DEVICE_ID:
-                    case COLOR_TEMPERATURE_LIGHT_DEVICE_ID:
-                    case COLOR_TEMPERATURE2_LIGHT_DEVICE_ID:
-                    case ON_OFF_LIGHT_SWITCH_DEVICE_ID:
-                    case DIMMABLE_LIGHT_SWITCH_DEVICE_ID:
-                    case COLOR_DIMMABLE_LIGHT_SWITCH_DEVICE_ID:
-                        return true;
-
-                    default:
-                        break;
-                }
-            }
-        }
-    }
-
-    return false;
+std::vector<uint16_t> MatterLightDeviceDriver::GetSupportedDeviceTypes()
+{
+    return {
+        ON_OFF_LIGHT_DEVICE_ID,
+        ON_OFF_PLUGIN_UNIT_DEVICE_ID,
+        DIMMABLE_LIGHT_DEVICE_ID,
+        DIMMABLE_PLUGIN_UNIT_DEVICE_ID,
+        COLOR_DIMMABLE_LIGHT_DEVICE_ID,
+        COLOR_DIMMABLE2_LIGHT_DEVICE_ID,
+        EXTENDED_COLOR_LIGHT_DEVICE_ID,
+        EXTENDED_COLOR2_LIGHT_DEVICE_ID,
+        COLOR_TEMPERATURE_LIGHT_DEVICE_ID,
+        COLOR_TEMPERATURE2_LIGHT_DEVICE_ID,
+        ON_OFF_LIGHT_SWITCH_DEVICE_ID,
+        DIMMABLE_LIGHT_SWITCH_DEVICE_ID,
+        COLOR_DIMMABLE_LIGHT_SWITCH_DEVICE_ID
+    };
 }
 
 void MatterLightDeviceDriver::OnOffChanged(std::string &deviceUuid, bool on, void *asyncContext)
@@ -136,71 +106,37 @@ void MatterLightDeviceDriver::OnOffReadComplete(std::string &deviceUuid, bool is
 
     auto readContext = static_cast<ClusterReadContext *>(asyncContext);
 
-    if (readContext->initialResourceValues)
-    {
-        initialResourceValuesPutEndpointValue(
-            readContext->initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON, isOn ? "true" : "false");
-    }
-    else
-    {
-        *readContext->value = strdup(stringValueOfBool(isOn));
-    }
+    *readContext->value = strdup(stringValueOfBool(isOn));
 
     OnDeviceWorkCompleted(readContext->driverContext, true);
 
     delete readContext;
 }
 
-void MatterLightDeviceDriver::SynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                                const std::string &deviceId,
-                                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                                const chip::SessionHandle &sessionHandle)
+void MatterLightDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                                  const std::string &deviceId,
+                                                  chip::Messaging::ExchangeManager &exchangeMgr,
+                                                  const chip::SessionHandle &sessionHandle)
 {
     icDebug();
 
     // currently we dont do anything during configuration except set up reporting, which also triggers an immediate
     //  report and that takes care of synchronizing state/resources as well.
-    ConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
+    DoConfigureDevice(promises, deviceId, nullptr, exchangeMgr, sessionHandle);
 }
 
-void MatterLightDeviceDriver::FetchInitialResourceValues(std::forward_list<std::promise<bool>> &promises,
-                                                         const std::string &deviceId,
-                                                         icInitialResourceValues *initialResourceValues,
-                                                         chip::Messaging::ExchangeManager &exchangeMgr,
-                                                         const chip::SessionHandle &sessionHandle)
-{
-    bool result = false;
-
-    icDebug();
-
-    auto server = static_cast<OnOff *>(GetAnyServerById(deviceId, ON_OFF_CLUSTER_ID));
-
-    if (server == nullptr)
-    {
-        icError("OnOff cluster not present on device %s!", deviceId.c_str());
-        FailOperation(promises);
-        return;
-    }
-
-    promises.emplace_front();
-    auto &readPromise = promises.front();
-    auto readContext = new ClusterReadContext {};
-    readContext->driverContext = &readPromise;
-    readContext->initialResourceValues = initialResourceValues;
-    AssociateStoredContext(&readPromise);
-
-    if (!server->GetOnOff(readContext, exchangeMgr, sessionHandle))
-    {
-        AbandonDeviceWork(readPromise);
-        delete readContext;
-    }
-}
-
-bool MatterLightDeviceDriver::RegisterResources(icDevice *device, icInitialResourceValues *initialResourceValues)
+bool MatterLightDeviceDriver::DoRegisterResources(icDevice *device)
 {
     bool result = true;
 
     icDebug();
+
+    auto deviceCache = GetDeviceDataCache(device->uuid);
+    if (!deviceCache)
+    {
+        icError("No device cache for %s", device->uuid);
+        return false;
+    }
 
     icDeviceEndpoint *endpoint = createEndpoint(device, LIGHT_ENDPOINT, LIGHT_PROFILE, true);
 
@@ -215,18 +151,6 @@ bool MatterLightDeviceDriver::RegisterResources(icDevice *device, icInitialResou
     resource->id = strdup(LIGHT_PROFILE_RESOURCE_IS_ON);
     resource->endpointId = strdup(LIGHT_ENDPOINT);
     resource->deviceUuid = strdup(device->uuid);
-
-    const char *initialValue =
-        initialResourceValuesGetEndpointValue(initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON);
-    if (initialValue)
-    {
-        resource->value = strdup(
-            initialResourceValuesGetEndpointValue(initialResourceValues, LIGHT_ENDPOINT, LIGHT_PROFILE_RESOURCE_IS_ON));
-    }
-    else
-    {
-        result = false;
-    }
     resource->type = strdup(RESOURCE_TYPE_BOOLEAN);
     resource->mode = RESOURCE_MODE_READWRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE |
                      RESOURCE_MODE_EMIT_EVENTS | RESOURCE_MODE_LAZY_SAVE_NEXT;
@@ -236,12 +160,12 @@ bool MatterLightDeviceDriver::RegisterResources(icDevice *device, icInitialResou
     return result;
 }
 
-void MatterLightDeviceDriver::ReadResource(std::forward_list<std::promise<bool>> &promises,
-                                           const std::string &deviceId,
-                                           icDeviceResource *resource,
-                                           char **value,
-                                           chip::Messaging::ExchangeManager &exchangeMgr,
-                                           const chip::SessionHandle &sessionHandle)
+void MatterLightDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
+                                             const std::string &deviceId,
+                                             icDeviceResource *resource,
+                                             char **value,
+                                             chip::Messaging::ExchangeManager &exchangeMgr,
+                                             const chip::SessionHandle &sessionHandle)
 {
     bool asyncCleanup = false;
 
@@ -329,12 +253,13 @@ bool MatterLightDeviceDriver::WriteResource(std::forward_list<std::promise<bool>
 
 std::unique_ptr<MatterCluster> MatterLightDeviceDriver::MakeCluster(std::string const &deviceUuid,
                                                                     chip::EndpointId endpointId,
-                                                                    chip::ClusterId clusterId)
+                                                                    chip::ClusterId clusterId,
+                                                                    std::shared_ptr<DeviceDataCache> deviceDataCache)
 {
     switch (clusterId)
     {
         case ON_OFF_CLUSTER_ID:
-            return std::make_unique<OnOff>((OnOff::EventHandler *) this, deviceUuid, endpointId);
+            return std::make_unique<OnOff>((OnOff::EventHandler *) this, deviceUuid, endpointId, deviceDataCache);
 
         default:
             return nullptr;

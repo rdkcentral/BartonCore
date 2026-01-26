@@ -28,8 +28,8 @@
 #pragma once
 
 #include "AccessRestrictionProvider.h"
-#include "BartonOperationalCredentialsDelegate.hpp"
 #include "BartonCommissionableDataProvider.hpp"
+#include "BartonOperationalCredentialsDelegate.hpp"
 #include "DeviceInfoProviderImpl.h"
 #include "IcLogger.hpp"
 #include "OTAProviderImpl.h"
@@ -89,8 +89,7 @@ namespace barton
 
         static CHIP_ERROR ParseSetupPayload(const std::string &codeString, chip::SetupPayload &payload);
 
-        // TODO : yuck, we shouldnt hand this out publicly
-        chip::Controller::DeviceCommissioner &GetCommissioner() { return *commissionerController; }
+        std::shared_ptr<chip::Controller::DeviceCommissioner> GetCommissioner() { return commissionerController; }
 
         chip::NodeId GetNodeId() { return myNodeId; }
 
@@ -194,6 +193,7 @@ namespace barton
         static bool isQRCode(const std::string &codeString);
         void StackThreadProc();
         static chip::NodeId LoadOrGenerateLocalNodeId();
+
         CHIP_ERROR ConfigureOTAProviderNode();
         bool IsAccessibleByOTARequestors();
         CHIP_ERROR AppendOTARequestorsACLEntry(chip::FabricId fabricId, chip::FabricIndex fabricIndex);
@@ -286,7 +286,7 @@ namespace barton
         // defined by barton-library.zap.
         static constexpr chip::EndpointId localEndpointId = 0;
         std::unique_ptr<std::vector<uint8_t>> threadOperationalDataset;
-        std::unique_ptr<chip::Controller::DeviceCommissioner> commissionerController;
+        std::shared_ptr<chip::Controller::DeviceCommissioner> commissionerController;
 
         PersistentStorageDelegate storageDelegate;
 

@@ -53,7 +53,6 @@ extern "C" {
 }
 
 #include "CommissioningOrchestrator.h"
-#include "DiscoveredDeviceDetailsStore.h"
 #include "Matter.h"
 #include "matter/MatterDeviceDriver.h"
 #include "matter/MatterDriverFactory.h"
@@ -582,7 +581,7 @@ static cJSON *getStatusJson()
 {
     icDebug();
 
-    auto nodeId = Matter::GetInstance().GetCommissioner().GetNodeId();
+    auto nodeId = Matter::GetInstance().GetCommissioner()->GetNodeId();
 
     cJSON *result = cJSON_CreateObject();
 

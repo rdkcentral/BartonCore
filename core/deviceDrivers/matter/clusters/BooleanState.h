@@ -1,9 +1,9 @@
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 //
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2025 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,28 +19,28 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 //
-//------------------------------ tabstop = 4 ----------------------------------
+// ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Created by tlea on 4/6/2023
+// Created by Raiyan Chowdhury on 8/12/24.
 //
 
 #pragma once
 
 #include "MatterCluster.h"
-#include "app/BufferedReadCallback.h"
 #include "lib/core/DataModelTypes.h"
-#include <mutex>
 #include <string>
 
 namespace barton
 {
-    class LevelControl : public MatterCluster
+    class BooleanState : public MatterCluster
     {
     public:
-        LevelControl(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+        BooleanState(EventHandler *handler,
+                     std::string deviceId,
+                     chip::EndpointId endpointId,
                      std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::LevelControl::Id, deviceDataCache)
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::BooleanState::Id, deviceDataCache)
         {
         }
 
@@ -50,22 +50,15 @@ namespace barton
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void CurrentLevelChanged(const std::string &deviceUuid, uint8_t level, void *asyncContext) {};
-            virtual void CurrentLevelReadComplete(const std::string &deviceUuid, uint8_t level, void *asyncContext) {};
+            virtual void StateValueChanged(std::string &deviceUuid, bool state) {};
+            virtual void StateValueReadComplete(std::string &deviceUuid, bool state, void *asyncContext) {};
         };
 
-        bool GetCurrentLevel(void *context,
-                             const chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle);
-
-        bool MoveToLevel(void *context,
-                         uint8_t level,
-                         const chip::Messaging::ExchangeManager &exchangeMgr,
-                         const chip::SessionHandle &sessionHandle);
+        bool GetStateValue(void *context,
+                           const chip::Messaging::ExchangeManager &exchangeMgr,
+                           const chip::SessionHandle &sessionHandle);
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
-
-    private:
     };
-} // namespace barton
+}
