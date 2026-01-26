@@ -147,14 +147,6 @@ namespace barton
                 {
                     icError("Failed to get active dataset tlvs. Error = %d", (int) threadApiCallError);
                 }
-
-                // Silabs OTBR isn't functional simply by adding the active dataset. It also needs a soft reset
-                // so it brings up its thread / network stack.
-                threadApiCallError = threadApiBus->Reset();
-                if (threadApiCallError != ClientError::ERROR_NONE)
-                {
-                    icError("Failed to reset OTBR. Error = %d", (int) threadApiCallError);
-                }
             }
             else if (timer.count() <= 0)
             {
@@ -187,17 +179,7 @@ namespace barton
         if ((error = threadApiBus->SetActiveDatasetTlvs(networkDataTlvs)) == ClientError::ERROR_NONE)
         {
             icDebug("Successfully restored thread network");
-            // Silabs OTBR isn't functional simply by adding the active dataset. It also needs a soft reset
-            // so it brings up its thread / network stack.
-            if ((error = threadApiBus->Reset()) == ClientError::ERROR_NONE)
-            {
-                icDebug("Successfully reset OTBR");
-                retVal = true;
-            }
-            else
-            {
-                icError("Failed to reset OTBR. Error = %d", (int) error);
-            }
+            retVal = true;
         }
         else
         {
