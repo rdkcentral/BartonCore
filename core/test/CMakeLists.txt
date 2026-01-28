@@ -39,6 +39,12 @@ bcore_add_cmocka_test(
     WRAPPED_FUNCTIONS
         jsonDatabaseRestore
         subsystemManagerRestoreConfig
+        deviceDriverManagerGetDeviceDriversByDeviceClass
+        sendDiscoveryStartedEvent
+        sendDiscoveryStoppedEvent
+        sendRecoveryStoppedEvent
+        deviceDescriptorsListIsReady
+        deviceServiceIsReadyForDeviceOperation
     LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

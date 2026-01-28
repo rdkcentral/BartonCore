@@ -249,7 +249,8 @@ BCoreStatus *b_core_client_get_status(BCoreClient *self);
  *
  * For each of the provided device classes, find registered device drivers and instruct them to start discovery.
  *
- * Returns: gboolean - TRUE if at least one device driver successfully started discovery.
+ * Returns: gboolean - TRUE if all available device drivers for all provided device classes successfully started
+ * discovery.
  */
 gboolean b_core_client_discover_start(BCoreClient *self,
                                       GList *deviceClasses,
@@ -269,7 +270,8 @@ gboolean b_core_client_discover_start(BCoreClient *self,
  *
  * For each of the provided device classes, find registered device drivers and instruct them to start recovery.
  *
- * Returns: gboolean - TRUE if at least one device driver successfully started recovery.
+ * Returns: gboolean - TRUE if all available device drivers for all provided device classes successfully started
+ * recovery.
  */
 gboolean b_core_client_recover_start(BCoreClient *self,
                                      GList *deviceClasses,

@@ -1188,7 +1188,12 @@ static bool discoverStart(void *ctx, const char *deviceClass)
 
     commonDriver->discoveryActive = true;
 
-    zigbeeSubsystemStartDiscoveringDevices();
+    if (zigbeeSubsystemStartDiscoveringDevices() != 0)
+    {
+        icLogError(LOG_TAG, "%s: failed to start discovering devices", __FUNCTION__);
+        commonDriver->discoveryActive = false;
+        return false;
+    }
 
     return true;
 }
