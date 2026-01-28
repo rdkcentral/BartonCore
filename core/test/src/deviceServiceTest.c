@@ -395,6 +395,8 @@ static void mockStopDiscoveringDevicesCallback(void *ctx, const char *deviceClas
 static int discoveryStartedEventCalled = 0;
 static int discoveryStoppedEventCalled = 0;
 static int recoveryStoppedEventCalled = 0;
+static icLinkedList *discoveryStoppedEventClasses = NULL;
+static icLinkedList *recoveryStoppedEventClasses = NULL;
 
 void __wrap_sendDiscoveryStartedEvent(const icLinkedList *deviceClasses,
                                       uint16_t timeoutSeconds,
@@ -408,13 +410,31 @@ void __wrap_sendDiscoveryStartedEvent(const icLinkedList *deviceClasses,
 
 void __wrap_sendDiscoveryStoppedEvent(const char *deviceClass)
 {
-    check_expected(deviceClass);
+    // Track in list to allow any order for thread-safety
+    if (discoveryStoppedEventClasses != NULL)
+    {
+        linkedListAppend(discoveryStoppedEventClasses, (void *) deviceClass);
+    }
+    else
+    {
+        // Fallback to ordered check if list not initialized
+        check_expected(deviceClass);
+    }
     discoveryStoppedEventCalled++;
 }
 
 void __wrap_sendRecoveryStoppedEvent(const char *deviceClass)
 {
-    check_expected(deviceClass);
+    // Track in list to allow any order for thread-safety
+    if (recoveryStoppedEventClasses != NULL)
+    {
+        linkedListAppend(recoveryStoppedEventClasses, (void *) deviceClass);
+    }
+    else
+    {
+        // Fallback to ordered check if list not initialized
+        check_expected(deviceClass);
+    }
     recoveryStoppedEventCalled++;
 }
 
@@ -444,6 +464,50 @@ bool __wrap_deviceServiceIsReadyForDeviceOperation(void)
     return mockDeviceServiceReady;
 }
 
+// Helper to check if a device class is in the stopped events list
+static bool hasStoppedEventForClass(const char *deviceClass)
+{
+    if (discoveryStoppedEventClasses == NULL)
+    {
+        return false;
+    }
+
+    icLinkedListIterator *iter = linkedListIteratorCreate(discoveryStoppedEventClasses);
+    while (linkedListIteratorHasNext(iter))
+    {
+        const char *cls = (const char *) linkedListIteratorGetNext(iter);
+        if (strcmp(cls, deviceClass) == 0)
+        {
+            linkedListIteratorDestroy(iter);
+            return true;
+        }
+    }
+    linkedListIteratorDestroy(iter);
+    return false;
+}
+
+// Helper to check if a device class is in the recovery stopped events list
+static bool hasRecoveryStoppedEventForClass(const char *deviceClass)
+{
+    if (recoveryStoppedEventClasses == NULL)
+    {
+        return false;
+    }
+
+    icLinkedListIterator *iter = linkedListIteratorCreate(recoveryStoppedEventClasses);
+    while (linkedListIteratorHasNext(iter))
+    {
+        const char *cls = (const char *) linkedListIteratorGetNext(iter);
+        if (strcmp(cls, deviceClass) == 0)
+        {
+            linkedListIteratorDestroy(iter);
+            return true;
+        }
+    }
+    linkedListIteratorDestroy(iter);
+    return false;
+}
+
 // Helper to reset mock tracking
 static void resetMockTracking(void)
 {
@@ -457,6 +521,20 @@ static void resetMockTracking(void)
     mockDriverShouldFailRecovery = false;
     mockDeviceDescriptorsReady = true;
     mockDeviceServiceReady = true; // Default to ready
+
+    // Clean up old tracking lists
+    if (discoveryStoppedEventClasses != NULL)
+    {
+        linkedListDestroy(discoveryStoppedEventClasses, standardDoNotFreeFunc);
+    }
+    if (recoveryStoppedEventClasses != NULL)
+    {
+        linkedListDestroy(recoveryStoppedEventClasses, standardDoNotFreeFunc);
+    }
+
+    // Initialize new tracking lists
+    discoveryStoppedEventClasses = linkedListCreate();
+    recoveryStoppedEventClasses = linkedListCreate();
 }
 
 // Helper to create a mock driver
@@ -555,7 +633,7 @@ static void test_discovery_start_failure_single_driver(void **state)
     expect_value(__wrap_sendDiscoveryStartedEvent, timeoutSeconds, 30);
     expect_value(__wrap_sendDiscoveryStartedEvent, findOrphanedDevices, false);
     expect_string(mockDiscoverDevicesCallback, deviceClass, "testClass");
-    expect_string(__wrap_sendDiscoveryStoppedEvent, deviceClass, "testClass");
+    // Note: stopped event tracked in list, verified after call
 
     // Create device class list
     icLinkedList *deviceClasses = linkedListCreate();
@@ -570,6 +648,7 @@ static void test_discovery_start_failure_single_driver(void **state)
     assert_int_equal(0, stopDiscoveringDevicesCalled); // No drivers to stop since none started
     assert_int_equal(1, discoveryStartedEventCalled);  // Event sent optimistically
     assert_int_equal(1, discoveryStoppedEventCalled);  // Stop event sent due to failure
+    assert_true(hasStoppedEventForClass("testClass"));
 
     // Cleanup
     linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
@@ -605,7 +684,7 @@ static void test_discovery_start_partial_failure_multiple_drivers(void **state)
     expect_string(mockDiscoverDevicesCallback, deviceClass, "testClass");            // driver1 succeeds
     expect_string(mockDiscoverDevicesCallbackAlwaysFails, deviceClass, "testClass"); // driver2 fails
     expect_string(mockStopDiscoveringDevicesCallback, deviceClass, "testClass");
-    expect_string(__wrap_sendDiscoveryStoppedEvent, deviceClass, "testClass");
+    // Note: stopped event tracked in list, verified after call
 
     // Create device class list
     icLinkedList *deviceClasses = linkedListCreate();
@@ -620,6 +699,7 @@ static void test_discovery_start_partial_failure_multiple_drivers(void **state)
     assert_int_equal(1, stopDiscoveringDevicesCalled); // Only the successful driver gets stopped
     assert_int_equal(1, discoveryStartedEventCalled);
     assert_int_equal(1, discoveryStoppedEventCalled);
+    assert_true(hasStoppedEventForClass("testClass"));
 
     // Cleanup
     linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
@@ -689,7 +769,7 @@ static void test_recovery_start_failure(void **state)
     expect_value(__wrap_sendDiscoveryStartedEvent, timeoutSeconds, 30);
     expect_value(__wrap_sendDiscoveryStartedEvent, findOrphanedDevices, true);
     expect_string(mockRecoverDevicesCallback, deviceClass, "testClass");
-    expect_string(__wrap_sendRecoveryStoppedEvent, deviceClass, "testClass");
+    // Note: recovery stopped event tracked in list, verified after call
 
     // Create device class list
     icLinkedList *deviceClasses = linkedListCreate();
@@ -704,6 +784,7 @@ static void test_recovery_start_failure(void **state)
     assert_int_equal(0, stopDiscoveringDevicesCalled);
     assert_int_equal(1, discoveryStartedEventCalled);
     assert_int_equal(1, recoveryStoppedEventCalled); // Recovery stopped event sent
+    assert_true(hasRecoveryStoppedEventForClass("testClass"));
 
     // Cleanup
     linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
@@ -797,8 +878,7 @@ static void test_multiple_device_classes_one_fails(void **state)
     expect_string(mockDiscoverDevicesCallback, deviceClass, "testClass1");
     expect_string(mockDiscoverDevicesCallbackAlwaysFails, deviceClass, "testClass2");
     expect_string(mockStopDiscoveringDevicesCallback, deviceClass, "testClass1");
-    expect_string(__wrap_sendDiscoveryStoppedEvent, deviceClass, "testClass1");
-    expect_string(__wrap_sendDiscoveryStoppedEvent, deviceClass, "testClass2");
+    // Note: stopped events tracked in list, verified after call (order not guaranteed due to threads)
 
     // Create device class list
     icLinkedList *deviceClasses = linkedListCreate();
@@ -814,6 +894,9 @@ static void test_multiple_device_classes_one_fails(void **state)
     assert_int_equal(1, stopDiscoveringDevicesCalled); // Only successful driver gets stopped
     assert_int_equal(1, discoveryStartedEventCalled);
     assert_int_equal(2, discoveryStoppedEventCalled); // Both classes get stopped events
+    // Verify both classes got stopped events (order not guaranteed)
+    assert_true(hasStoppedEventForClass("testClass1"));
+    assert_true(hasStoppedEventForClass("testClass2"));
 
     // Cleanup
     linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
@@ -1012,19 +1095,21 @@ static void test_start_discovery_new_class_while_another_running(void **state)
     destroyMockDriver(driver2);
 }
 
-static void test_neverReject_false_descriptors_ready(void **state)
+/*
+ * Test neverReject=true driver with descriptors ready.
+ * Note: neverReject=false drivers are tested in:
+ *  - test_mixed_neverReject_descriptors_not_ready (filtered when service not ready)
+ *  - test_all_neverReject_false_descriptors_not_ready_fails (all filtered, discovery fails)
+ * Cannot test neverReject=false with service ready because deviceServiceIsReadyForDeviceOperation()
+ * is called internally within deviceService.c and cannot be mocked via linker wrapping.
+ */
+static void test_neverReject_true_descriptors_ready(void **state)
 {
     (void) state;
     resetMockTracking();
     mockDeviceDescriptorsReady = true; // Descriptors are ready
 
-    // Note: In the current implementation, drivers with neverReject=false are filtered out
-    // by getDriversForDiscovery() when deviceServiceIsReadyForDeviceOperation() returns false.
-    // Since we're not fully initializing device service in these unit tests, those drivers
-    // will be removed before we even get to the deviceDescriptorsListIsReady() check.
-    // This test verifies that when using neverReject=true drivers with descriptors ready,
-    // discovery works correctly.
-
+    // Test with neverReject=true driver - should always work when descriptors ready
     DeviceDriver *driver = createMockDriver("testDriver", true, false, true); // neverReject=true
     icLinkedList *drivers1 = linkedListCreate();
     linkedListAppend(drivers1, driver);
@@ -1050,7 +1135,7 @@ static void test_neverReject_false_descriptors_ready(void **state)
     destroyMockDriver(driver);
 }
 
-static void test_neverReject_false_descriptors_not_ready(void **state)
+static void test_neverReject_true_descriptors_not_ready_succeeds(void **state)
 {
     (void) state;
     resetMockTracking();
@@ -1076,39 +1161,6 @@ static void test_neverReject_false_descriptors_not_ready(void **state)
 
     bool result = deviceServiceDiscoverStart(deviceClasses, NULL, 30, false);
 
-    assert_true(result);
-    assert_int_equal(1, discoverDevicesCalled);
-
-    linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
-    destroyMockDriver(driver);
-}
-
-static void test_neverReject_true_descriptors_not_ready(void **state)
-{
-    (void) state;
-    resetMockTracking();
-    mockDeviceDescriptorsReady = false; // Descriptors NOT ready
-
-    // Create driver with neverReject=true
-    DeviceDriver *driver = createMockDriver("testDriver", true, false, true);
-    icLinkedList *drivers1 = linkedListCreate();
-    linkedListAppend(drivers1, driver);
-    icLinkedList *drivers2 = linkedListCreate();
-    linkedListAppend(drivers2, driver);
-
-    will_return(__wrap_deviceDriverManagerGetDeviceDriversByDeviceClass, drivers1);
-    will_return(__wrap_deviceDriverManagerGetDeviceDriversByDeviceClass, drivers2);
-
-    expect_value(__wrap_sendDiscoveryStartedEvent, timeoutSeconds, 30);
-    expect_value(__wrap_sendDiscoveryStartedEvent, findOrphanedDevices, false);
-    expect_string(mockDiscoverDevicesCallback, deviceClass, "testClass");
-
-    icLinkedList *deviceClasses = linkedListCreate();
-    linkedListAppend(deviceClasses, "testClass");
-
-    bool result = deviceServiceDiscoverStart(deviceClasses, NULL, 30, false);
-
-    // Should succeed - neverReject=true drivers are never skipped
     assert_true(result);
     assert_int_equal(1, discoverDevicesCalled);
 
@@ -1184,6 +1236,7 @@ static void test_all_neverReject_false_descriptors_not_ready_fails(void **state)
     destroyMockDriver(driver);
 }
 
+
 // Test that multiple drivers for same class only send ONE stopped event during rollback
 static void test_rollback_multiple_drivers_same_class_single_event(void **state)
 {
@@ -1224,7 +1277,7 @@ static void test_rollback_multiple_drivers_same_class_single_event(void **state)
     expect_string(mockStopDiscoveringDevicesCallback, deviceClass, "testClass"); // driver2 stopped
 
     // CRITICAL: Only ONE stopped event should be sent for this device class
-    expect_string(__wrap_sendDiscoveryStoppedEvent, deviceClass, "testClass");
+    // Note: stopped event tracked in list, verified after call
 
     // Create device class list
     icLinkedList *deviceClasses = linkedListCreate();
@@ -1239,6 +1292,7 @@ static void test_rollback_multiple_drivers_same_class_single_event(void **state)
     assert_int_equal(2, stopDiscoveringDevicesCalled); // Only the two successful drivers get stopped
     assert_int_equal(1, discoveryStartedEventCalled);
     assert_int_equal(1, discoveryStoppedEventCalled); // CRITICAL: Exactly one stopped event
+    assert_true(hasStoppedEventForClass("testClass"));
 
     // Cleanup
     linkedListDestroy(deviceClasses, standardDoNotFreeFunc);
@@ -1303,9 +1357,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_multiple_device_classes_multiple_drivers_per_class),
         cmocka_unit_test(test_start_discovery_while_already_running),
         cmocka_unit_test(test_start_discovery_new_class_while_another_running),
-        cmocka_unit_test(test_neverReject_false_descriptors_ready),
-        cmocka_unit_test(test_neverReject_false_descriptors_not_ready),
-        cmocka_unit_test(test_neverReject_true_descriptors_not_ready),
+        cmocka_unit_test(test_neverReject_true_descriptors_ready),
+        cmocka_unit_test(test_neverReject_true_descriptors_not_ready_succeeds),
         cmocka_unit_test(test_mixed_neverReject_descriptors_not_ready),
         cmocka_unit_test(test_all_neverReject_false_descriptors_not_ready_fails),
         cmocka_unit_test(test_rollback_multiple_drivers_same_class_single_event),
