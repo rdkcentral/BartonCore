@@ -272,12 +272,13 @@ static gboolean maybeInitMatterWithBackoff(void *context)
             return false;
         }
         
-        // Increment retry attempts and calculate new backoff delay
+        // Increment retry attempts and calculate new backoff delay (both protected by lock)
         retryAttempts++;
-        guint newBackoffDelay = calculateBackoffDelay(retryAttempts);
+        guint currentRetryAttempt = retryAttempts;
+        guint newBackoffDelay = calculateBackoffDelay(currentRetryAttempt);
         
         icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", 
-                retryAttempts, newBackoffDelay);
+                currentRetryAttempt, newBackoffDelay);
         
         // Create a new timer source with the new backoff delay
         GSource *newSource = g_timeout_source_new(newBackoffDelay * 1000);
@@ -285,7 +286,9 @@ static gboolean maybeInitMatterWithBackoff(void *context)
         g_source_set_callback(newSource, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(newSource, "maybeInitMatter");
         
-        // Attach to the current context
+        // Attach to the current context and update sourceId
+        // Note: The old source is automatically removed by GLib when this callback returns false
+        // The mutex protection ensures shutdown can't interfere with this atomic operation
         GMainContext *currentContext = g_main_context_get_thread_default();
         sourceId = g_source_attach(newSource, currentContext);
         g_source_unref(newSource);
@@ -303,7 +306,7 @@ static void matterInitLoopThreadFunc()
 
     FIXME: We could optimize this by having our own custom source to manage on an event basis
     instead of a timer. The main issue with that approach is that we have two external
-    dependencies that need to be "ready" before we will succed:
+    dependencies that need to be "ready" before we will succeed:
         1. account id - can be set at any time by the client application
         2. token provider - can fail for any reason (eg. not ready) and has no event to notify us
     */
@@ -312,7 +315,7 @@ static void matterInitLoopThreadFunc()
         subsystemMtx.lock();
 
         // Create our own GMainContext for this thread. We can't use the global default as matter
-        // uses it for its own loop and attempting to init matter what holding the global default context
+        // uses it for its own loop and attempting to init matter while holding the global default context
         // will create a deadlock.
         g_autoptr(GMainContext) thisThreadContext = g_main_context_new();
         g_main_context_push_thread_default(thisThreadContext);
@@ -321,7 +324,10 @@ static void matterInitLoopThreadFunc()
         // Reset retry attempts for the backoff logic
         retryAttempts = 0;
         
-        // Create a one-shot timer source for the initial retry with backoff
+        // Create a one-shot timer source for the first retry with backoff
+        // Note: The immediate call to maybeInitMatter above was attempt 0
+        // This first retry (after the immediate attempt failed) uses retryAttempts=0
+        // Backoff schedule: 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s (retry 4+)
         guint backoffDelay = calculateBackoffDelay(retryAttempts);
         GSource *source = g_timeout_source_new(backoffDelay * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
@@ -696,6 +702,11 @@ static cJSON *getStatusJson()
 
 static void accountIdChanged(const gchar *accountId)
 {
+    // When account ID changes, reset retry attempts as this is a new condition
+    subsystemMtx.lock();
+    retryAttempts = 0;
+    subsystemMtx.unlock();
+    
     std::thread matterInitThread = std::thread(maybeInitMatter, nullptr);
     matterInitThread.detach();
 }
