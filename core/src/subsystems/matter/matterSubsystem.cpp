@@ -69,6 +69,7 @@ using namespace std;
 #define MIGRATED_FILE_SUFFIX                 "_0"
 
 #define MATTER_INIT_ATTEMPT_INTERVAL_SECONDS 15U
+#define MATTER_INIT_MAX_BACKOFF_SECONDS      240U
 
 static std::mutex subsystemMtx;
 static bool initialized = false;
@@ -77,6 +78,7 @@ static GMainLoop *matterInitLoop = nullptr;
 static guint sourceId = 0;
 static char *matterConfigRoot;
 static char *matterKVPath;
+static guint retryAttempts = 0;
 
 #define RETURN_FALSE_IF_NOT_INITIALIZED()                                                                              \
     do                                                                                                                 \
@@ -114,6 +116,8 @@ static void matterInitLoopThreadFunc();
 
 static gboolean maybeInitMatter(void *context);
 
+static gboolean maybeInitMatterWithBackoff(void *context);
+
 static cJSON *getStatusJson();
 
 static void accountIdChanged(const gchar *accountId);
@@ -137,6 +141,23 @@ __attribute__((constructor)) static void registerSubsystem()
 static char *getAccountId()
 {
     return deviceServiceConfigurationGetAccountId();
+}
+
+/**
+ * @brief Calculate the exponential backoff delay for the next retry attempt.
+ *
+ * @param attempt the number of retry attempts
+ * @return the delay in seconds, capped at MATTER_INIT_MAX_BACKOFF_SECONDS
+ */
+static guint calculateBackoffDelay(guint attempt)
+{
+    // Exponential backoff: initial * 2^attempt, capped at max
+    guint delay = MATTER_INIT_ATTEMPT_INTERVAL_SECONDS * (1U << attempt);
+    if (delay > MATTER_INIT_MAX_BACKOFF_SECONDS)
+    {
+        delay = MATTER_INIT_MAX_BACKOFF_SECONDS;
+    }
+    return delay;
 }
 
 /**
@@ -205,6 +226,12 @@ static gboolean maybeInitMatter(void *context)
     subsystemMtx.lock();
     initialized = initSuccessful;
     busy = false;
+    
+    if (initSuccessful)
+    {
+        // Reset retry attempts on success
+        retryAttempts = 0;
+    }
     subsystemMtx.unlock();
 
     if (initSuccessful)
@@ -215,12 +242,58 @@ static gboolean maybeInitMatter(void *context)
     return initSuccessful ? false : true;
 }
 
+/**
+ * @brief Wrapper callback for maybeInitMatter that handles exponential backoff scheduling.
+ * 
+ * This function is called by the GLib main loop timer source. It attempts to initialize Matter,
+ * and if initialization fails, it schedules the next retry with an exponentially increasing delay.
+ * 
+ * @param context unused context pointer
+ * @return FALSE to indicate the timer source should be removed
+ */
+static gboolean maybeInitMatterWithBackoff(void *context)
+{
+    bool needsRetry = maybeInitMatter(context);
+    
+    if (needsRetry)
+    {
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        
+        // Remove the old source if it exists
+        if (sourceId)
+        {
+            g_source_remove(sourceId);
+            sourceId = 0;
+        }
+        
+        // Increment retry attempts and calculate new backoff delay
+        retryAttempts++;
+        guint newBackoffDelay = calculateBackoffDelay(retryAttempts);
+        
+        icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", 
+                retryAttempts + 1, newBackoffDelay);
+        
+        // Create a new timer source with the new backoff delay
+        GSource *newSource = g_timeout_source_new(newBackoffDelay * 1000);
+        g_source_set_priority(newSource, G_PRIORITY_DEFAULT);
+        g_source_set_callback(newSource, maybeInitMatterWithBackoff, nullptr, nullptr);
+        g_source_set_name(newSource, "maybeInitMatter");
+        
+        // Attach to the current context
+        GMainContext *currentContext = g_main_context_get_thread_default();
+        sourceId = g_source_attach(newSource, currentContext);
+        g_source_unref(newSource);
+    }
+    
+    return false; // Always return false to remove the current source
+}
+
 static void matterInitLoopThreadFunc()
 {
     /*
     Attempt to init matter now. If it doesn't work (returns true), use g_timeout_add_seconds to
     add a new source to the thread GMainContext and try to initialize matter on a repeating time
-    interval until it works.
+    interval until it works, with exponential backoff.
 
     FIXME: We could optimize this by having our own custom source to manage on an event basis
     instead of a timer. The main issue with that approach is that we have two external
@@ -239,17 +312,20 @@ static void matterInitLoopThreadFunc()
         g_main_context_push_thread_default(thisThreadContext);
         matterInitLoop = g_main_loop_new(thisThreadContext, false);
 
-        // Create a timer source. This is what g_timeout_add_* does but it attaches to the global default context. We
-        // need to attach to our new context, so make the source by hand.
-        GSource *source = g_timeout_source_new(MATTER_INIT_ATTEMPT_INTERVAL_SECONDS * 1000);
+        // Reset retry attempts for the backoff logic
+        retryAttempts = 0;
+        
+        // Create a one-shot timer source for the initial retry with backoff
+        guint backoffDelay = calculateBackoffDelay(retryAttempts);
+        GSource *source = g_timeout_source_new(backoffDelay * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
-        g_source_set_callback(source, maybeInitMatter, nullptr, nullptr);
+        g_source_set_callback(source, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(source, "maybeInitMatter");
         sourceId = g_source_attach(source, thisThreadContext);
         g_source_unref(source); // Forwarded to the context.
 
-        icDebug("Scheduling maybeInitMatter on %u second interval with source id %u",
-                MATTER_INIT_ATTEMPT_INTERVAL_SECONDS,
+        icDebug("Scheduling initial maybeInitMatter in %u seconds with source id %u",
+                backoffDelay,
                 sourceId);
 
         g_autoptr(GMainLoop) localLoopCopy = g_main_loop_ref(matterInitLoop);
@@ -360,6 +436,7 @@ static void matterSubsystemShutdown()
 
     subsystemMtx.lock();
     initialized = false;
+    retryAttempts = 0;
     if (sourceId)
     {
         g_source_remove(sourceId);
