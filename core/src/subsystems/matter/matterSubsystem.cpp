@@ -152,6 +152,11 @@ static char *getAccountId()
 static guint calculateBackoffDelay(guint attempt)
 {
     // Exponential backoff: initial * 2^attempt, capped at max
+    // Prevent overflow by capping the attempt value
+    if (attempt > 31)
+    {
+        attempt = 31;
+    }
     guint delay = MATTER_INIT_ATTEMPT_INTERVAL_SECONDS * (1U << attempt);
     if (delay > MATTER_INIT_MAX_BACKOFF_SECONDS)
     {
@@ -259,11 +264,12 @@ static gboolean maybeInitMatterWithBackoff(void *context)
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
         
-        // Remove the old source if it exists
-        if (sourceId)
+        // Check if initialization succeeded between the call and acquiring the lock
+        // (e.g., via accountIdChanged callback)
+        if (initialized)
         {
-            g_source_remove(sourceId);
-            sourceId = 0;
+            // Initialization succeeded, no need to retry
+            return false;
         }
         
         // Increment retry attempts and calculate new backoff delay
@@ -271,7 +277,7 @@ static gboolean maybeInitMatterWithBackoff(void *context)
         guint newBackoffDelay = calculateBackoffDelay(retryAttempts);
         
         icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", 
-                retryAttempts + 1, newBackoffDelay);
+                retryAttempts, newBackoffDelay);
         
         // Create a new timer source with the new backoff delay
         GSource *newSource = g_timeout_source_new(newBackoffDelay * 1000);
