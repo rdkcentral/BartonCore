@@ -204,6 +204,13 @@ static void rc_driver_list_unref(RcDriverList *list)
 /* GLib autoptr cleanup function */
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(RcDriverList, rc_driver_list_unref)
 
+/* Helper for hashmap cleanup - unrefs RcDriverList values */
+static void rcDriverListHashMapFreeFunc(void *key, void *value)
+{
+    (void) key;
+    rc_driver_list_unref((RcDriverList *) value);
+}
+
 typedef struct
 {
     char *deviceClass;
@@ -663,11 +670,10 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
         {
             sendDiscoveryStoppedEvent(deviceClass);
         }
-
-        rc_driver_list_unref(startedDrivers);
     }
 
-    hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
+    // Destroy hashmap with proper cleanup function that unrefs each RcDriverList
+    hashMapDestroy(startedDriversPerClass, rcDriverListHashMapFreeFunc);
 }
 
 /*
@@ -695,7 +701,8 @@ static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
         hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
     }
 
-    hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
+    // Destroy hashmap with proper cleanup function that unrefs each RcDriverList
+    hashMapDestroy(startedDriversPerClass, rcDriverListHashMapFreeFunc);
 }
 
 /*
