@@ -1340,6 +1340,14 @@ int zigbeeSubsystemStartDiscoveringDevices(void)
             pthread_mutex_lock(&discoveringRefCountMutex);
             discoveringRefCount--;
             pthread_mutex_unlock(&discoveringRefCountMutex);
+
+            // undo discovery-running side effects since start failed
+            zigbeeEventHandlerDiscoveryRunning(false);
+
+            pthread_mutex_lock(&prematureClusterCommandsMtx);
+            hashMapDestroy(prematureClusterCommands, prematureClusterCommandsFreeFunc);
+            prematureClusterCommands = NULL;
+            pthread_mutex_unlock(&prematureClusterCommandsMtx);
         }
     }
 

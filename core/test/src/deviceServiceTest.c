@@ -449,19 +449,10 @@ icLinkedList *__wrap_deviceDriverManagerGetDeviceDriversByDeviceClass(const char
 // Track whether device descriptors should report ready
 static bool mockDeviceDescriptorsReady = true;
 
-// Track whether device service is ready for device operation
-static bool mockDeviceServiceReady = true;
-
 // Mock for device descriptors
 bool __wrap_deviceDescriptorsListIsReady(void)
 {
     return mockDeviceDescriptorsReady;
-}
-
-// Mock for device service ready status
-bool __wrap_deviceServiceIsReadyForDeviceOperation(void)
-{
-    return mockDeviceServiceReady;
 }
 
 // Helper to check if a device class is in the stopped events list
@@ -520,7 +511,6 @@ static void resetMockTracking(void)
     mockDriverShouldFailDiscovery = false;
     mockDriverShouldFailRecovery = false;
     mockDeviceDescriptorsReady = true;
-    mockDeviceServiceReady = true; // Default to ready
 
     // Clean up old tracking lists
     if (discoveryStoppedEventClasses != NULL)
@@ -1096,12 +1086,28 @@ static void test_start_discovery_new_class_while_another_running(void **state)
 }
 
 /*
- * Test neverReject=true driver with descriptors ready.
- * Note: neverReject=false drivers are tested in:
- *  - test_mixed_neverReject_descriptors_not_ready (filtered when service not ready)
- *  - test_all_neverReject_false_descriptors_not_ready_fails (all filtered, discovery fails)
- * Cannot test neverReject=false with service ready because deviceServiceIsReadyForDeviceOperation()
- * is called internally within deviceService.c and cannot be mocked via linker wrapping.
+ * neverReject test coverage explanation:
+ *
+ * The neverReject flag controls driver filtering in getDriversForDiscovery():
+ * - When deviceServiceIsReadyForDeviceOperation() returns false, drivers with
+ *   neverReject=false are filtered out.
+ * - Drivers with neverReject=true are always included regardless of service state.
+ *
+ * Test limitations:
+ * We CANNOT mock deviceServiceIsReadyForDeviceOperation() via linker --wrap because
+ * it is defined in the same compilation unit (deviceService.c) as getDriversForDiscovery()
+ * which calls it. The linker's --wrap option only intercepts external symbol references
+ * between object files. Intra-object-file calls are resolved at compile time and bypass
+ * the linker entirely.
+ *
+ * As a result, deviceServiceIsReadyForDeviceOperation() always returns the real value
+ * (subsystemsReadyForDevices, which is false in tests), so:
+ * - neverReject=true drivers: Always included (tested below)
+ * - neverReject=false drivers: Always filtered out when service not ready
+ *
+ * To test neverReject=false with a ready service would require either:
+ * 1. Moving deviceServiceIsReadyForDeviceOperation() to a separate .c file, or
+ * 2. Using compile-time function pointer indirection for testability
  */
 static void test_neverReject_true_descriptors_ready(void **state)
 {

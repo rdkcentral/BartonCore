@@ -44,7 +44,6 @@ bcore_add_cmocka_test(
         sendDiscoveryStoppedEvent
         sendRecoveryStoppedEvent
         deviceDescriptorsListIsReady
-        deviceServiceIsReadyForDeviceOperation
     LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
