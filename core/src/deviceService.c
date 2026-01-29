@@ -161,13 +161,56 @@ static void pendingReconfigurationFreeFunc(void *key, void *value);
 static void reconfigureDeviceTask(void *arg);
 
 /* Private data */
+
+/**
+ * Reference-counted wrapper for list of started device drivers.
+ * Provides clear ownership semantics and automatic cleanup.
+ */
+typedef struct
+{
+    icLinkedList *drivers; // list of DeviceDriver* that successfully started
+    gint ref_count;        // atomic reference count
+} RcDriverList;
+
+/* Create a new RcDriverList with ref count of 1 */
+static RcDriverList *rc_driver_list_new(void)
+{
+    RcDriverList *list = g_new0(RcDriverList, 1);
+    list->drivers = linkedListCreate();
+    list->ref_count = 1;
+    return list;
+}
+
+/* Increment reference count (thread-safe) */
+static RcDriverList *rc_driver_list_ref(RcDriverList *list)
+{
+    if (list != NULL)
+    {
+        g_atomic_int_inc(&list->ref_count);
+    }
+    return list;
+}
+
+/* Decrement reference count and free if zero (thread-safe) */
+static void rc_driver_list_unref(RcDriverList *list)
+{
+    if (list != NULL && g_atomic_int_dec_and_test(&list->ref_count))
+    {
+        linkedListDestroy(list->drivers, standardDoNotFreeFunc);
+        g_free(list);
+    }
+}
+
+/* GLib autoptr cleanup function */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(RcDriverList, rc_driver_list_unref)
+
 typedef struct
 {
     char *deviceClass;
     uint16_t timeoutSeconds;
     bool findOrphanedDevices;
     icLinkedList *filters;
-    icLinkedList *startedDrivers; // list of DeviceDriver* that successfully started
+    RcDriverList *startedDrivers; // reference-counted list of DeviceDriver*
 
     // used for shutdown delay and/or canceling
     bool useMonotonic;
@@ -206,7 +249,7 @@ static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const cha
                                                                 icLinkedList *filters,
                                                                 uint16_t timeoutSeconds,
                                                                 bool findOrphanedDevices,
-                                                                icLinkedList *startedDrivers);
+                                                                RcDriverList *startedDrivers);
 
 static bool deviceServiceIsUriAccessible(const char *uri);
 
@@ -497,20 +540,20 @@ static bool checkDescriptorReadinessForDiscovery(const char *deviceClass, icLink
 
 /*
  * Start discovery on related drivers for a specific device class.
- * Returns the list of successfully started drivers, or empty list on failure.
- * The returned list may be empty if all drivers failed but should still be checked.
  *
- * An allocated list is always returned and must be destroyed by the caller.
+ * Returns a new RcDriverList with ref count of 1 containing successfully started drivers.
+ * The returned list is never NULL but may be empty if all drivers failed.
+ * Caller receives ownership of one reference and must call rc_driver_list_unref().
  */
-static icLinkedList *startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
+static RcDriverList *startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
 {
-    icLinkedList *startedDrivers = linkedListCreate();
+    RcDriverList *startedDrivers = rc_driver_list_new();
     icLinkedList *drivers = deviceDriverManagerGetDeviceDriversByDeviceClass(deviceClass);
     *anyFailed = false;
 
     if (drivers == NULL)
     {
-        return startedDrivers; // Return empty list, not NULL
+        return startedDrivers; // Return empty list, never NULL
     }
 
     sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(drivers);
@@ -548,7 +591,7 @@ static icLinkedList *startDriverDiscoveryForDeviceClass(const char *deviceClass,
                 else
                 {
                     icLogDebug(LOG_TAG, "device driver %s started device recovery successfully", driver->driverName);
-                    linkedListAppend(startedDrivers, driver);
+                    linkedListAppend(startedDrivers->drivers, driver);
                 }
             }
         }
@@ -571,7 +614,7 @@ static icLinkedList *startDriverDiscoveryForDeviceClass(const char *deviceClass,
                 else
                 {
                     icLogDebug(LOG_TAG, "device driver %s started discovering successfully", driver->driverName);
-                    linkedListAppend(startedDrivers, driver);
+                    linkedListAppend(startedDrivers->drivers, driver);
                 }
             }
         }
@@ -583,8 +626,6 @@ static icLinkedList *startDriverDiscoveryForDeviceClass(const char *deviceClass,
 
 /*
  * Rollback discovery by stopping all started drivers.
- *
- * Ownership of startedDriversPerClass map is transferred to this function.
  */
 static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool findOrphanedDevices)
 {
@@ -595,18 +636,21 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
     {
         char *deviceClass = NULL;
         uint16_t keyLen = 0;
-        icLinkedList *startedDrivers = NULL;
+        RcDriverList *startedDrivers = NULL;
         hashMapIteratorGetNext(mapIterator, (void **) &deviceClass, &keyLen, (void **) &startedDrivers);
 
-        // Stop all drivers that successfully started for this device class
-        sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(startedDrivers);
-        while (linkedListIteratorHasNext(driverIterator))
+        if (startedDrivers != NULL && startedDrivers->drivers != NULL)
         {
-            DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
-            if (driver->stopDiscoveringDevices != NULL)
+            // Stop all drivers that successfully started for this device class
+            sbIcLinkedListIterator *driverIterator = linkedListIteratorCreate(startedDrivers->drivers);
+            while (linkedListIteratorHasNext(driverIterator))
             {
-                icLogDebug(LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
-                driver->stopDiscoveringDevices(driver->callbackContext, deviceClass);
+                DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
+                if (driver->stopDiscoveringDevices != NULL)
+                {
+                    icLogDebug(LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
+                    driver->stopDiscoveringDevices(driver->callbackContext, deviceClass);
+                }
             }
         }
 
@@ -620,8 +664,7 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
             sendDiscoveryStoppedEvent(deviceClass);
         }
 
-        // Destroy the list
-        linkedListDestroy(startedDrivers, standardDoNotFreeFunc);
+        rc_driver_list_unref(startedDrivers);
     }
 
     hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
@@ -629,8 +672,6 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
 
 /*
  * Start discovery monitoring for successfully started device classes.
- *
- * Ownership of startedDriversPerClass map is transferred to this function.
  */
 static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
                                    icHashMap *startedDriversPerClass,
@@ -643,11 +684,12 @@ static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
     {
         const char *deviceClass = linkedListIteratorGetNext(iterator);
 
-        // Get the started drivers for this device class
-        icLinkedList *startedDrivers =
+        RcDriverList *startedDrivers =
             hashMapGet(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1));
 
-        // transfer ownership of startedDrivers list to the monitor
+        // Take a reference for the monitor context
+        rc_driver_list_ref(startedDrivers);
+
         discoverDeviceClassContext *ctx =
             startDiscoveryMonitorForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
         hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
@@ -748,20 +790,17 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
             const char *deviceClass = linkedListIteratorGetNext(driverStartIterator);
             bool driverFailed = false;
 
-            icLinkedList *startedDrivers = startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
+            RcDriverList *startedDrivers = startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
 
             if (driverFailed)
             {
                 anyDriverFailed = true;
             }
 
-            // Always store the list (even if empty) for proper cleanup
             hashMapPut(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
         }
 
         // Phase 3: Handle success or rollback
-        // Ownership of startedDriversPerClass map is transferred to rollbackFailedDiscovery or
-        // startDiscoveryMonitors
         if (anyDriverFailed)
         {
             rollbackFailedDiscovery(startedDriversPerClass, findOrphanedDevices);
@@ -3301,9 +3340,8 @@ static void *discoveryMonitorThreadProc(void *arg)
 {
     discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) arg;
 
-    // Use the list of drivers that were already started in deviceServiceDiscoverStart
-    // We are responsible for destroying this list
-    icLinkedList *startedDeviceDrivers = ctx->startedDrivers;
+    RcDriverList *startedDriversList = ctx->startedDrivers;
+    icLinkedList *startedDeviceDrivers = startedDriversList ? startedDriversList->drivers : NULL;
     bool atLeastOneStarted = (startedDeviceDrivers != NULL && linkedListCount(startedDeviceDrivers) > 0);
 
     if (atLeastOneStarted)
@@ -3362,7 +3400,7 @@ static void *discoveryMonitorThreadProc(void *arg)
 
     mutexUnlock(&discoveryControlMutex);
 
-    linkedListDestroy(startedDeviceDrivers, standardDoNotFreeFunc);
+    rc_driver_list_unref(startedDriversList);
     pthread_mutex_destroy(&ctx->mtx);
     pthread_cond_destroy(&ctx->cond);
     linkedListDestroy(ctx->filters, destroyDiscoveryFilterFromList);
@@ -3372,15 +3410,11 @@ static void *discoveryMonitorThreadProc(void *arg)
     return NULL;
 }
 
-/*
- * Ownership of startedDrivers list is transferred to the returned context and will be freed
- * by the discovery monitor thread.
-*/
 static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
                                                                        icLinkedList *filters,
                                                                        uint16_t timeoutSeconds,
                                                                        bool findOrphanedDevices,
-                                                                       icLinkedList *startedDrivers)
+                                                                       RcDriverList *startedDrivers)
 {
     icDebug("%s for %d seconds", deviceClass, timeoutSeconds);
 
@@ -3393,7 +3427,7 @@ static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const cha
     ctx->timeoutSeconds = timeoutSeconds;
     ctx->deviceClass = strdup(deviceClass);
     ctx->findOrphanedDevices = findOrphanedDevices;
-    ctx->startedDrivers = startedDrivers; // Take ownership of the list
+    ctx->startedDrivers = startedDrivers; // Holds a reference (already +1 from caller)
     if (filters != NULL)
     {
         ctx->filters = linkedListDeepClone(filters, cloneDiscoveryFilterItems, NULL);
