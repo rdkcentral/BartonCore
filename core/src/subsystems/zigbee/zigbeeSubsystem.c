@@ -1277,15 +1277,6 @@ void zigbeeSubsystemDeviceBeaconReceived(uint64_t eui64,
     }
 }
 
-static void *enableJoinThreadProc(void *arg)
-{
-    icLogDebug(LOG_TAG, "%s", __FUNCTION__);
-
-    zhalNetworkEnableJoin();
-
-    return NULL;
-}
-
 /*
  * Tells unclaimed devices to leave. Should be called after discovery stops.
  */
@@ -1314,6 +1305,7 @@ void zigbeeSubsystemRequestUnclaimedDevicesLeave(void)
  */
 int zigbeeSubsystemStartDiscoveringDevices(void)
 {
+    int result = 0;
     bool enableJoin = false;
 
     pthread_mutex_lock(&discoveringRefCountMutex);
@@ -1339,11 +1331,27 @@ int zigbeeSubsystemStartDiscoveringDevices(void)
         prematureClusterCommands = hashMapCreate();
         pthread_mutex_unlock(&prematureClusterCommandsMtx);
 
-        // this can block for a while... put it in the background
-        createDetachedThread(enableJoinThreadProc, NULL, "zbEnableJoin");
+        result = zhalNetworkEnableJoin();
+        if (result != 0)
+        {
+            icError("zhalNetworkEnableJoin failed with rc=%d", result);
+
+            // roll back our ref count increment
+            pthread_mutex_lock(&discoveringRefCountMutex);
+            discoveringRefCount--;
+            pthread_mutex_unlock(&discoveringRefCountMutex);
+
+            // undo discovery-running side effects since start failed
+            zigbeeEventHandlerDiscoveryRunning(false);
+
+            pthread_mutex_lock(&prematureClusterCommandsMtx);
+            hashMapDestroy(prematureClusterCommands, prematureClusterCommandsFreeFunc);
+            prematureClusterCommands = NULL;
+            pthread_mutex_unlock(&prematureClusterCommandsMtx);
+        }
     }
 
-    return 0;
+    return result;
 }
 
 /*
