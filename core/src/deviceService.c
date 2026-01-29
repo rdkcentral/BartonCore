@@ -202,7 +202,7 @@ static pthread_cond_t reconfigurationControlCond = PTHREAD_COND_INITIALIZER;
 static icHashMap *pendingReconfiguration = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
-static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
+static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
                                                                 icLinkedList *filters,
                                                                 uint16_t timeoutSeconds,
                                                                 bool findOrphanedDevices,
@@ -496,11 +496,13 @@ static bool checkDescriptorReadinessForDiscovery(const char *deviceClass, icLink
 }
 
 /*
- * Start drivers for a specific device class.
- * Returns the list of successfully started drivers, or NULL on failure.
+ * Start discovery on related drivers for a specific device class.
+ * Returns the list of successfully started drivers, or empty list on failure.
  * The returned list may be empty if all drivers failed but should still be checked.
+ *
+ * An allocated list is always returned and must be destroyed by the caller.
  */
-static icLinkedList *startDriversForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
+static icLinkedList *startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
 {
     icLinkedList *startedDrivers = linkedListCreate();
     icLinkedList *drivers = deviceDriverManagerGetDeviceDriversByDeviceClass(deviceClass);
@@ -532,7 +534,9 @@ static icLinkedList *startDriversForDeviceClass(const char *deviceClass, bool fi
             if (driver->recoverDevices != NULL)
             {
                 icLogDebug(LOG_TAG, "telling %s to start device recovery...", driver->driverName);
+
                 driverStarted = driver->recoverDevices(driver->callbackContext, deviceClass);
+
                 if (!driverStarted)
                 {
                     icLogError(LOG_TAG,
@@ -553,7 +557,9 @@ static icLinkedList *startDriversForDeviceClass(const char *deviceClass, bool fi
             if (driver->discoverDevices != NULL)
             {
                 icLogDebug(LOG_TAG, "telling %s to start discovering...", driver->driverName);
+
                 driverStarted = driver->discoverDevices(driver->callbackContext, deviceClass);
+
                 if (!driverStarted)
                 {
                     icLogError(LOG_TAG,
@@ -577,6 +583,8 @@ static icLinkedList *startDriversForDeviceClass(const char *deviceClass, bool fi
 
 /*
  * Rollback discovery by stopping all started drivers.
+ *
+ * Ownership of startedDriversPerClass map is transferred to this function.
  */
 static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool findOrphanedDevices)
 {
@@ -615,16 +623,20 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
         // Destroy the list
         linkedListDestroy(startedDrivers, standardDoNotFreeFunc);
     }
+
+    hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
 }
 
 /*
- * Create discovery contexts for successfully started device classes.
+ * Start discovery monitoring for successfully started device classes.
+ *
+ * Ownership of startedDriversPerClass map is transferred to this function.
  */
-static void createDiscoveryContexts(icLinkedList *newDeviceClassDiscoveries,
-                                    icHashMap *startedDriversPerClass,
-                                    icLinkedList *filters,
-                                    uint16_t timeoutSeconds,
-                                    bool findOrphanedDevices)
+static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
+                                   icHashMap *startedDriversPerClass,
+                                   icLinkedList *filters,
+                                   uint16_t timeoutSeconds,
+                                   bool findOrphanedDevices)
 {
     sbIcLinkedListIterator *iterator = linkedListIteratorCreate(newDeviceClassDiscoveries);
     while (linkedListIteratorHasNext(iterator))
@@ -635,10 +647,13 @@ static void createDiscoveryContexts(icLinkedList *newDeviceClassDiscoveries,
         icLinkedList *startedDrivers =
             hashMapGet(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1));
 
+        // transfer ownership of startedDrivers list to the monitor
         discoverDeviceClassContext *ctx =
-            startDiscoveryForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
+            startDiscoveryMonitorForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
         hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
     }
+
+    hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
 }
 
 /*
@@ -732,7 +747,8 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
         {
             const char *deviceClass = linkedListIteratorGetNext(driverStartIterator);
             bool driverFailed = false;
-            icLinkedList *startedDrivers = startDriversForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
+
+            icLinkedList *startedDrivers = startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
 
             if (driverFailed)
             {
@@ -740,11 +756,12 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
             }
 
             // Always store the list (even if empty) for proper cleanup
-            hashMapPut(
-                startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
+            hashMapPut(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
         }
 
         // Phase 3: Handle success or rollback
+        // Ownership of startedDriversPerClass map is transferred to rollbackFailedDiscovery or
+        // startDiscoveryMonitors
         if (anyDriverFailed)
         {
             rollbackFailedDiscovery(startedDriversPerClass, findOrphanedDevices);
@@ -752,11 +769,9 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
         }
         else
         {
-            createDiscoveryContexts(
+            startDiscoveryMonitors(
                 newDeviceClassDiscoveries, startedDriversPerClass, filters, timeoutSeconds, findOrphanedDevices);
         }
-
-        hashMapDestroy(startedDriversPerClass, standardDoNotFreeHashMapFunc);
     }
 
     linkedListDestroy(newDeviceClassDiscoveries, standardDoNotFreeFunc);
@@ -3282,11 +3297,12 @@ void processDenylistedDevices(const char *propValue)
     }
 }
 
-static void *discoverDeviceClassThreadProc(void *arg)
+static void *discoveryMonitorThreadProc(void *arg)
 {
     discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) arg;
 
     // Use the list of drivers that were already started in deviceServiceDiscoverStart
+    // We are responsible for destroying this list
     icLinkedList *startedDeviceDrivers = ctx->startedDrivers;
     bool atLeastOneStarted = (startedDeviceDrivers != NULL && linkedListCount(startedDeviceDrivers) > 0);
 
@@ -3296,7 +3312,7 @@ static void *discoverDeviceClassThreadProc(void *arg)
         if (ctx->timeoutSeconds > 0)
         {
             icLogDebug(LOG_TAG,
-                       "discoverDeviceClassThreadProc: waiting %d seconds to auto stop discovery/recovery of %s",
+                       "discoveryMonitorThreadProc: waiting %d seconds to auto stop discovery/recovery of %s",
                        ctx->timeoutSeconds,
                        ctx->deviceClass);
             incrementalCondTimedWait(&ctx->cond, &ctx->mtx, ctx->timeoutSeconds);
@@ -3304,14 +3320,14 @@ static void *discoverDeviceClassThreadProc(void *arg)
         else
         {
             icLogDebug(LOG_TAG,
-                       "discoverDeviceClassThreadProc: waiting for explicit stop discovery/recovery of %s",
+                       "discoveryMonitorThreadProc: waiting for explicit stop discovery/recovery of %s",
                        ctx->deviceClass);
             // TODO switch this over to timedWait library
             pthread_cond_wait(&ctx->cond, &ctx->mtx);
         }
         pthread_mutex_unlock(&ctx->mtx);
 
-        icLogInfo(LOG_TAG, "discoverDeviceClassThreadProc: stopping discovery/recovery of %s", ctx->deviceClass);
+        icLogInfo(LOG_TAG, "discoveryMonitorThreadProc: stopping discovery/recovery of %s", ctx->deviceClass);
 
         // stop discovery
         icLinkedListIterator *iterator = linkedListIteratorCreate(startedDeviceDrivers);
@@ -3356,13 +3372,17 @@ static void *discoverDeviceClassThreadProc(void *arg)
     return NULL;
 }
 
-static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *deviceClass,
-                                                                icLinkedList *filters,
-                                                                uint16_t timeoutSeconds,
-                                                                bool findOrphanedDevices,
-                                                                icLinkedList *startedDrivers)
+/*
+ * Ownership of startedDrivers list is transferred to the returned context and will be freed
+ * by the discovery monitor thread.
+*/
+static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
+                                                                       icLinkedList *filters,
+                                                                       uint16_t timeoutSeconds,
+                                                                       bool findOrphanedDevices,
+                                                                       icLinkedList *startedDrivers)
 {
-    icLogDebug(LOG_TAG, "startDiscoveryForDeviceClass: %s for %d seconds", deviceClass, timeoutSeconds);
+    icDebug("%s for %d seconds", deviceClass, timeoutSeconds);
 
     discoverDeviceClassContext *ctx = (discoverDeviceClassContext *) calloc(1, sizeof(discoverDeviceClassContext));
 
@@ -3380,7 +3400,7 @@ static discoverDeviceClassContext *startDiscoveryForDeviceClass(const char *devi
     }
 
     char *name = stringBuilder("discoverDC:%s", deviceClass);
-    createDetachedThread(discoverDeviceClassThreadProc, ctx, name);
+    createDetachedThread(discoveryMonitorThreadProc, ctx, name);
     free(name);
 
     return ctx;
