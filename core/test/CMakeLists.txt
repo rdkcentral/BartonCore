@@ -142,3 +142,32 @@ bcore_add_cmocka_test(
     WRAPPED_FUNCTIONS b_core_property_provider_get_property_as_bool
     LINK_LIBRARIES BartonCoreStatic
 )
+
+bcore_add_cmocka_test(
+    NAME sbmdParserTest
+    INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/..
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdParserTest.cpp
+    LINK_LIBRARIES BartonCoreStatic yaml-cpp
+)
+
+target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+
+if (BCORE_MATTER)
+    include(BCoreAddCppTest)
+    include(BCoreConfigureGLib)
+
+    bcore_add_cpp_test(
+        NAME testQuickJsScript
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/QuickJsScriptTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock quickjs jsoncpp xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers
+                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd
+    )
+
+    if (BUILD_TESTING)
+        bcore_configure_glib()
+    endif()
+endif()

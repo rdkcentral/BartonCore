@@ -132,6 +132,8 @@ cp $PROJECT_CONFIG_DIR/BartonProjectConfig.h $INCLUDE_DIR
 
 # Now snag all the src and third_party headers recursively. rsync is used as a convenience here
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/src/ $INCLUDE_DIR
+rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/src/lib/core $INCLUDE_DIR
+rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/src/lib/support $INCLUDE_DIR
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/src/include/ $INCLUDE_DIR
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/nlassert/repo/include/ $INCLUDE_DIR
 rsync -am --include="*/" --include="*.h**" --exclude="*" $CHIP_ROOT/third_party/nlio/repo/include/ $INCLUDE_DIR
