@@ -54,8 +54,8 @@ using namespace std::chrono_literals;
 #define DOOR_LOCK_ENDPOINT                  "1"
 
 // auto register with the factory
-bool MatterDoorLockDeviceDriver::registeredWithFactory =
-    MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
+//bool MatterDoorLockDeviceDriver::registeredWithFactory =
+//    MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
 
 MatterDoorLockDeviceDriver::MatterDoorLockDeviceDriver() :
     MatterDeviceDriver(MATTER_DOOR_LOCK_DEVICE_DRIVER_NAME, DOORLOCK_DC, 0)
@@ -114,13 +114,6 @@ bool MatterDoorLockDeviceDriver::DoRegisterResources(icDevice *device)
     bool result = true;
 
     icDebug();
-
-    auto deviceCache = GetDeviceDataCache(device->uuid);
-    if (!deviceCache)
-    {
-        icError("No device cache for %s", device->uuid);
-        return false;
-    }
 
     icDeviceEndpoint *endpoint = createEndpoint(device, DOOR_LOCK_ENDPOINT, DOORLOCK_PROFILE, true);
 
