@@ -1,0 +1,103 @@
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Door Lock"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - 0x000a
+  revision: 1
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+resources:
+  - id: "identifySeconds"
+    type: "com.icontrol.seconds"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"
+          attributeId: "0x0000"
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          return {output: sbmdReadArgs.input};
+      write:
+        attribute:
+          clusterId: "0x0003"
+          attributeId: "0x0000"
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          const secs = parseInt(sbmdWriteArgs.input, 10);
+          return {output: secs};
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 3
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0101"
+              attributeId: "0x0000"
+              name: "LockState"
+              type: "enum8"
+            script: |
+              return {output: sbmdReadArgs.input === 1};
+      - id: "lock"
+        type: "function"
+        mapper:
+          execute:
+            command:
+              clusterId: "0x0101"
+              commandId: "0x00"
+              name: "LockDoor"
+              timedInvokeTimeoutMs: 10000
+              args:
+                - name: "PINCode"
+                  type: "octstr"
+            script: |
+              result = null;
+              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) && // COTA & PIN
+                  sbmdCommandArgs.input.length > 0) {
+                result = [];
+                for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
+                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                }
+              }
+              return {output: result};
+
+      - id: "unlock"
+        type: "function"
+        mapper:
+          execute:
+            command:
+              clusterId: "0x0101"
+              commandId: "0x01"
+              name: "UnlockDoor"
+              timedInvokeTimeoutMs: 10000
+              args:
+                - name: "PINCode"
+                  type: "octstr"
+            script: |
+              result = null;
+              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) && // COTA & PIN
+                  sbmdCommandArgs.input.length > 0) {
+                result = [];
+                for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
+                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                }
+              }
+              return {output: result};

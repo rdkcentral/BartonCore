@@ -1,0 +1,95 @@
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Water Leak Detector"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - 0x0043
+  revision: 1
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+resources:
+  - id: "cmdTest"
+    type: "something"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        command:
+          clusterId: "0x0003"
+          commandId: "0x01"
+          name: "UnlockDoor"
+        script: |
+          result = [];
+          if (args.length > 0) {
+            for (let i = 0; i < args[0].length; i++) {
+              result.push(args[0].charCodeAt(i));
+            }
+          }
+          return {PINCode: result};
+      write:
+        command:
+          clusterId: "0x0003"
+          commandId: "0x00"
+          name: "Identify"
+          args:
+            - name: "secs"
+              type: "uint16"
+        script: |
+          console.log(Identify);
+          result = [];
+          if (args.length > 0) {
+            for (let i = 0; i < args[0].length; i++) {
+              result.push(args[0].charCodeAt(i));
+            }
+          }
+          return {PINCode: result};
+
+  - id: "identifySeconds"
+    type: "com.icontrol.seconds"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"
+          attributeId: "0x0000"
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          return IdentifyTime.value + "s";
+      write:
+        attribute:
+          clusterId: "0x0003"
+          attributeId: "0x0000"
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          const secs = parseInt(IdentifyTime.input.slice(0, -1), 10);
+          return JSON.stringify({ "2": secs });
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 3
+    resources:
+      - id: "faulted"
+        type: "com.icontrol.boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0045"
+              attributeId: "0x0000"
+              name: "StateValue"
+              type: "bool"
+            script: |
+              return StateValue.value;
