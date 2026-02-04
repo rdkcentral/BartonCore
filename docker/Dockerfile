@@ -164,7 +164,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libreadline-dev \
     checkinstall \
     zlib1g-dev \
-    socat
+    socat \
+    libyaml-cpp-dev
 
 # Fake Function Framework (FFF)
 #
@@ -258,7 +259,7 @@ RUN cd /tmp && \
     cd build && \
     cmake .. && \
     make install && \
-    rm -rf /tmp/linenoise /tmp/patches
+    rm -rf /tmp/linenoise
 
 # Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
 RUN cd /tmp && \
@@ -281,6 +282,22 @@ RUN cd /tmp && \
     make && \
     make install && \
     rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
+
+# Download, build, and install quickjs, which needs our custom CMakeLists.txt
+RUN cd /tmp && \
+    wget https://bellard.org/quickjs/quickjs-2025-09-13-2.tar.xz && \
+    tar -xvf quickjs-2025-09-13-2.tar.xz && \
+    cd quickjs-2025-09-13 && \
+    cp /tmp/patches/quickjs/CMakeLists.txt . && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make && \
+    make install && \
+    rm -rf /tmp/quickjs-2025-09-13-2.tar.xz /tmp/quickjs-2025-09-13
+
+# Clean up our patches
+RUN rm -rf /tmp/patches
 
 RUN ls /tmp/
 
