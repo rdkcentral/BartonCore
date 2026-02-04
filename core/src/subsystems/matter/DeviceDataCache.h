@@ -119,15 +119,11 @@ namespace barton
         Json::Value GetCacheAsJson();
 
         /**
-         * Set the callback handler for cluster events and attribute changes.
-         *
-         * @param callback Pointer to the callback for a particular device+endpoint+cluster.
-         *                 The cache does not take ownership.
+         * Set the overall callback handler for cluster events and attribute changes.
          */
-        void SetClusterCallback(std::tuple<std::string, chip::EndpointId, chip::ClusterId> key,
-                                chip::app::ClusterStateCache::Callback *callback)
+        void SetCallback(std::unique_ptr<chip::app::ClusterStateCache::Callback> cb)
         {
-            clusterCallbacks[key] = callback;
+            callback = std::move(cb);
         }
 
         /**
@@ -214,9 +210,6 @@ namespace barton
                          chip::TLV::TLVReader *apData,
                          const chip::app::StatusIB *apStatus) override
         {
-            auto key = std::make_tuple(deviceUuid, aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
-            auto it = clusterCallbacks.find(key);
-            chip::app::ClusterStateCache::Callback *callback = (it != clusterCallbacks.end()) ? it->second : nullptr;
             if (callback != nullptr)
             {
                 callback->OnEventData(aEventHeader, apData, apStatus);
@@ -242,9 +235,6 @@ namespace barton
                              chip::TLV::TLVReader *apData,
                              const chip::app::StatusIB &aStatus) override
         {
-            auto key = std::make_tuple(deviceUuid, aPath.mEndpointId, aPath.mClusterId);
-            auto it = clusterCallbacks.find(key);
-            chip::app::ClusterStateCache::Callback *callback = (it != clusterCallbacks.end()) ? it->second : nullptr;
             if (callback != nullptr && aStatus.IsSuccess())
             {
                 callback->OnAttributeChanged(clusterStateCache.get(), aPath);
@@ -319,9 +309,7 @@ namespace barton
         uint64_t lastReportCompletedTimestamp = 0;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
 
-        // device id + endpoint id + cluster id to ClusterStateCache Callback
-        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, chip::app::ClusterStateCache::Callback*>
-            clusterCallbacks;
+        std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
     };

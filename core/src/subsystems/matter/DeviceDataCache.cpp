@@ -46,8 +46,29 @@ using namespace barton::Subsystem;
 DeviceDataCache::~DeviceDataCache()
 {
     icDebug();
-    // readClient and clusterStateCache unique_ptrs will be automatically cleaned up
-    // No need for ScheduleWork since they handle their own destruction safely
+
+    // readClient and clusterStateCache need cleanup to run under the Matter stack context
+
+    // Move the unique_ptrs to local variables so they can be safely destroyed on the Matter thread
+    auto *cacheToDestroy = clusterStateCache.release();
+    auto *clientToDestroy = readClient.release();
+
+    // Only schedule cleanup if there's something to destroy
+    if (cacheToDestroy != nullptr || clientToDestroy != nullptr)
+    {
+        chip::DeviceLayer::PlatformMgr().ScheduleWork(
+            [](intptr_t arg) {
+                auto **ptrs = reinterpret_cast<void **>(arg);
+                auto *cache = static_cast<chip::app::ClusterStateCache *>(ptrs[0]);
+                auto *client = static_cast<chip::app::ReadClient *>(ptrs[1]);
+
+                // Reset in proper order: cache depends on client, so destroy cache first
+                delete cache;
+                delete client;
+                delete[] ptrs;
+            },
+            reinterpret_cast<intptr_t>(new void *[2] {cacheToDestroy, clientToDestroy}));
+    }
 }
 
 std::future<bool> DeviceDataCache::Start()
@@ -543,36 +564,31 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 return;
             }
 
+            if (!self->callback)
+            {
+                icWarn("No registered callback to notify for attribute report regeneration");
+                return;
+            }
+
             // Get all endpoint IDs
             std::vector<chip::EndpointId> endpointIds = self->GetEndpointIds();
 
-            // Trigger OnReportBegin on all registered callbacks
-            for (const auto &[key, callback] : self->clusterCallbacks)
-            {
-                if (callback)
-                {
-                    callback->OnReportBegin();
-                }
-            }
+            self->callback->OnReportBegin();
 
             // Iterate through all endpoints, clusters, and attributes
             for (chip::EndpointId endpointId : endpointIds)
             {
                 self->clusterStateCache->ForEachCluster(endpointId, [self, endpointId](chip::ClusterId clusterId) {
-                    auto key = std::make_tuple(self->deviceUuid, endpointId, clusterId);
-                    auto it = self->clusterCallbacks.find(key);
-                    chip::app::ClusterStateCache::Callback *callback =
-                        (it != self->clusterCallbacks.end()) ? it->second : nullptr;
 
                     // Iterate through all attributes in this cluster
                     self->clusterStateCache->ForEachAttribute(
-                        endpointId, clusterId, [self, callback](const chip::app::ConcreteAttributePath &path) {
-                            if (callback)
-                            {
-                                chip::app::ConcreteDataAttributePath dataPath(
-                                    path.mEndpointId, path.mClusterId, path.mAttributeId);
-                                callback->OnAttributeChanged(self->clusterStateCache.get(), dataPath);
-                            }
+                        endpointId, clusterId, [self](const chip::app::ConcreteAttributePath &path) {
+                            chip::app::ConcreteDataAttributePath dataPath(
+                                path.mEndpointId, path.mClusterId, path.mAttributeId);
+                            chip::TLV::TLVReader reader;
+                            self->clusterStateCache->Get(dataPath, reader);
+                            chip::app::StatusIB aStatus; // Assume success for regeneration (the default)
+                            self->callback->OnAttributeData(dataPath, &reader, aStatus);
 
                             return CHIP_NO_ERROR;
                         });
@@ -581,16 +597,9 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 });
             }
 
-            // Trigger OnReportEnd on all registered callbacks
-            for (const auto &[key, callback] : self->clusterCallbacks)
-            {
-                if (callback)
-                {
-                    callback->OnReportEnd();
-                }
-            }
+            self->callback->OnReportEnd();
 
-            icDebug("Regenerated attribute report for %zu registered callbacks", self->clusterCallbacks.size());
+            icDebug("Done regenerating attribute report");
         },
         reinterpret_cast<intptr_t>(this));
 
