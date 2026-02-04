@@ -28,20 +28,15 @@
 #define LOG_TAG      "MatterBaseDD"
 #define logFmt(fmt)  "(%s): " fmt, __func__
 #define G_LOG_DOMAIN LOG_TAG
-#include "app-common/zap-generated/ids/Clusters.h"
 #include "subsystems/matter/MatterCommon.h"
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
-#include <condition_variable>
 #include <cstdint>
-#include <exception>
 #include <forward_list>
 #include <future>
-#include <limits>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <unistd.h>
@@ -50,12 +45,7 @@
 #include <vector>
 
 #include "MatterDeviceDriver.h"
-#include "app-common/zap-generated/cluster-objects.h"
-#include "app/AttributePathParams.h"
-#include "app/ClusterStateCache.h"
-#include "app/EventPathParams.h"
 #include "app/OperationalSessionSetup.h"
-#include "app/ReadPrepareParams.h"
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
@@ -65,7 +55,6 @@
 #include "lib/core/DataModelTypes.h"
 #include "messaging/ExchangeMgr.h"
 #include "platform/CHIPDeviceLayer.h"
-#include "platform/PlatformManager.h"
 #include "subsystems/matter/Matter.h"
 #include "subsystems/matter/matterSubsystem.h"
 #include "transport/Session.h"
@@ -74,10 +63,8 @@ extern "C" {
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
 #include "device/icDevice.h"
-#include "device/icDeviceMetadata.h"
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
-#include "deviceCommunicationWatchdog.h"
 #include "deviceDescriptor.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
@@ -214,7 +201,7 @@ void MatterDeviceDriver::Shutdown()
     // occur only when the stack lock is held, or chipDie will abort the program
     // to avoid undefined behavior. Drivers are shut down before subsystems.
 
-    deviceDataCaches.clear();
+    devices.clear();
     clusterServers.clear();
 }
 
@@ -357,7 +344,7 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        deviceDataCaches.erase(device->uuid);
+        devices.erase(device->uuid);
     });
 
     return sentRemoveFabricRequest;
@@ -448,7 +435,6 @@ void MatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool
                                              const chip::SessionHandle &sessionHandle)
 {
     icDebug("Unimplemented");
-    FailOperation(promises);
 }
 
 void MatterDeviceDriver::SetTampered(const std::string &deviceId, bool tampered)
@@ -913,14 +899,14 @@ bool MatterDeviceDriver::InitializeDeviceDataCacheIfRequired(const std::string &
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();
 
-        // TODO This needs a timeout so it cant block forever
-        if (!success.get())
+        if (success.wait_for(std::chrono::seconds(MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS)) != std::future_status::ready ||
+            !success.get())
         {
             icError("Failed to start DeviceDataCache for device %s", deviceUuid.c_str());
             return false;
         }
 
-        AddDeviceDataCache(std::move(newCache));
+        AddDevice(std::make_unique<MatterDevice>(deviceUuid, std::move(newCache)));
     }
 
     return true;

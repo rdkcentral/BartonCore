@@ -127,13 +127,6 @@ bool MatterWindowCoveringDeviceDriver::DoRegisterResources(icDevice *device)
 
     icDebug();
 
-    auto deviceCache = GetDeviceDataCache(device->uuid);
-    if (!deviceCache)
-    {
-        icError("No device cache for %s", device->uuid);
-        return false;
-    }
-
     icDeviceEndpoint *endpoint = createEndpoint(device, WINDOW_COVERING_ENDPOINT, WINDOW_COVERING_PROFILE, true);
 
     result &= createEndpointResource(endpoint,

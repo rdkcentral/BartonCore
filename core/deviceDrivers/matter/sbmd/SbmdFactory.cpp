@@ -1,0 +1,113 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
+//
+// Copyright 2024 Comcast Cable Communications Management, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by Thomas Lea on 10/17/2025
+ */
+#define LOG_TAG     "SBMDFactory"
+#define logFmt(fmt) "(%s): " fmt, __func__
+
+#include "SbmdFactory.h"
+#include "SbmdParser.h"
+#include "SpecBasedMatterDeviceDriver.h"
+#include "../MatterDriverFactory.h"
+
+#include <filesystem>
+
+extern "C" {
+#include "deviceServiceConfiguration.h"
+#include <icLog/logging.h>
+}
+
+using namespace barton;
+
+#if 0
+// auto register currently available drivers
+namespace {
+    bool autoRegister = []() {
+        SbmdFactory::Instance().RegisterDrivers();
+        return true;
+    }();
+}
+#endif
+
+bool SbmdFactory::RegisterDrivers()
+{
+    bool allRegistered = true;
+
+    g_autofree gchar *sbmdDir = deviceServiceConfigurationGetSbmdDir();
+    if (sbmdDir == nullptr || sbmdDir[0] == '\0')
+    {
+        icError("SBMD directory not configured. Set the SBMD directory using the '%s' property on the initialize params container.",
+                B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR]);
+        return false;
+    }
+
+    if (!std::filesystem::exists(sbmdDir) || !std::filesystem::is_directory(sbmdDir))
+    {
+        icWarn("SBMD specs directory does not exist: %s", sbmdDir);
+        return false;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(sbmdDir))
+    {
+        if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
+        {
+            try
+            {
+                icDebug("Loading SBMD spec: %s", entry.path().c_str());
+
+                auto spec = SbmdParser::ParseFile(entry.path().string());
+                if (!spec)
+                {
+                    icError("Failed to parse SBMD spec: %s", entry.path().c_str());
+                    allRegistered = false;
+                    continue;
+                }
+
+                auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::move(spec));
+
+                SpecBasedMatterDeviceDriver *rawDriver = driver.get();
+                if (!MatterDriverFactory::Instance().RegisterDriver(rawDriver))
+                {
+                    icError("Failed to register SBMD driver from: %s", entry.path().c_str());
+                    allRegistered = false;
+                    continue;
+                }
+
+                // Factory owns it now.
+                auto *ownedByFactory = driver.release();
+                (void) ownedByFactory;
+
+                icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
+            }
+            catch (const std::exception& e)
+            {
+                icError("Exception loading SBMD spec %s: %s", entry.path().c_str(), e.what());
+                allRegistered = false;
+            }
+        }
+    }
+
+    return allRegistered;
+}
