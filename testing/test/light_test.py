@@ -23,9 +23,15 @@
 
 
 import logging
+from queue import Queue
+import threading
+from typing import Callable
+
+from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
 
 logger = logging.getLogger(__name__)
 
+from gi.repository import BCore
 
 def assert_device_has_common_resources(client, device, required_resources):
     """Assert that the device has all required common resources.
@@ -67,3 +73,41 @@ def test_commission_light(default_environment, matter_light):
             "serialNumber"
         ]
     )
+
+
+def test_light_on_off(default_environment, matter_light):
+    # TODO: Probably need some kind of helper for repetitious blocks like this
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+    lights = default_environment.get_client().get_devices_by_device_class("light")
+    assert len(lights) == 1
+
+    # Add resource update event listener
+    expected_on_off_state = False
+    resource_updated_queue = Queue()
+
+    def check_resource_updates(
+        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
+    ) -> None:
+        # TODO: Probably need some URI builder/helper
+        resource = resource_updated_event.props.resource
+        logger.debug(
+            f"Resource updated: {resource.props.id} with value {resource.props.value}"
+        )
+        if resource.props.id == "isOn":
+            resource_updated_queue.put(bool(resource.props.value))
+
+    default_environment.get_client().connect(
+        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
+    )
+
+    is_on = matter_light.get_cluster(OnOffCluster.CLUSTER_ID).is_on()
+    expected_on_off_state = not is_on
+
+    matter_light.get_cluster(OnOffCluster.CLUSTER_ID).toggle()
+    resource_updated_result = resource_updated_queue.get(timeout=5)
+    assert (
+        resource_updated_result == expected_on_off_state
+    ), "Light on/off state did not update as expected"

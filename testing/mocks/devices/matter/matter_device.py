@@ -26,14 +26,22 @@
 #
 
 from pathlib import Path
+import shutil
 import subprocess
 import logging
-import json
+import tempfile
+from typing import TYPE_CHECKING
 
 from testing.mocks.devices.base_device import BaseDevice
 from testing.helpers.matter import code_generators
-from testing.utils import io_utils
 from testing.utils import process_utils as putils
+from testing.mocks.devices.matter.clusters.matter_cluster import (
+    ClusterType,
+    MatterCluster,
+)
+
+if TYPE_CHECKING:
+    from testing.mocks.devices.matter.device_interactor import ChipToolDeviceInteractor
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +60,6 @@ class MatterDevice(BaseDevice):
         _discriminator (int): The discriminator for the device.
         _vendor_id (int): The vendor ID for the device (default is 0).
         _product_id (int): The product ID for the device (default is 0).
-        _pipe_name (str): The prefix for the named pipe, unique to the device.
-        _pipe_path (str): The path to the named pipe for communication.
         _commissioning_code (str): The commissioning code for the device.
         _process (subprocess.Popen): The process running the device application.
     """
@@ -64,15 +70,16 @@ class MatterDevice(BaseDevice):
     _discriminator: int
     _vendor_id: int
     _product_id: int
-    _pipe_name: str
-    _pipe_path: str
     _commissioning_code: str
     _process: subprocess.Popen
+    _cluster_classes: dict[ClusterType, tuple[type[MatterCluster], int]]
+    _interactor: "ChipToolDeviceInteractor"
+    _chip_tool_node_id: int
+    _kvs_dir: Path
 
     def __init__(
         self,
         app_name: str,
-        pipe_name: str,
         device_class: str,
         vendor_id: int = 0,
         product_id: int = 0,
@@ -80,15 +87,92 @@ class MatterDevice(BaseDevice):
     ):
         self._app_name = app_name
         self._device_class = device_class
-        self._pipe_name = pipe_name
         self._vendor_id = vendor_id
         self._product_id = product_id
         self._mdns_port = mdns_port
         self._passcode = self._set_passcode()
         self._discriminator = self._set_discriminator()
         self._commissioning_code = self._set_commissioning_code()
-        self._pipe_path = None
         self._process = None
+        self._cluster_classes = {}
+        self._interactor = None
+        self._chip_tool_node_id = None
+        # Create a unique temp directory for this device's KVS storage
+        self._kvs_dir = Path(tempfile.mkdtemp(prefix=f"matter_device_{device_class}_"))
+
+    def _register_cluster(
+        self, cluster_class: type[MatterCluster], endpoint_id: int
+    ) -> None:
+        """
+        Register a cluster class that this device supports on a specific endpoint.
+
+        Subclasses should call this in their __init__ to declare which
+        clusters they support and on which endpoints. The endpoint ID should
+        match the device's ZAP configuration.
+
+        Args:
+            cluster_class: The cluster class to register (e.g., OnOffCluster).
+            endpoint_id: The endpoint ID where this cluster resides.
+        """
+        self._cluster_classes[cluster_class.CLUSTER_ID] = (cluster_class, endpoint_id)
+
+    def _set_interactor(
+        self, interactor: "ChipToolDeviceInteractor", node_id: int
+    ) -> None:
+        """
+        Set the interactor and node ID for this device.
+
+        Called by the interactor when the device is registered/commissioned.
+        A device may be commissioned to multiple fabrics with different node IDs;
+        this stores the node ID for the chip-tool fabric specifically.
+
+        Args:
+            interactor: The ChipToolDeviceInteractor for executing commands.
+            node_id: The node ID assigned by chip-tool during commissioning.
+        """
+        self._interactor = interactor
+        self._chip_tool_node_id = node_id
+
+    def get_cluster(self, cluster_type: ClusterType) -> MatterCluster:
+        """
+        Get a cluster interface for this device.
+
+        Args:
+            cluster_type: The Matter cluster ID (e.g., OnOffCluster.CLUSTER_ID).
+
+        Returns:
+            MatterCluster: An instance of the appropriate cluster class.
+
+        Raises:
+            ValueError: If the cluster type is not supported by this device.
+            RuntimeError: If the device has not been registered with an interactor.
+
+        Example:
+            from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
+
+            onoff = light.get_cluster(OnOffCluster.CLUSTER_ID)
+            onoff.on()
+        """
+        if self._interactor is None or self._chip_tool_node_id is None:
+            raise RuntimeError(
+                "Device must be registered with an interactor before getting clusters. "
+                "Use device_interactor.register_device(device) first."
+            )
+
+        cluster_entry = self._cluster_classes.get(cluster_type)
+        if cluster_entry is None:
+            raise ValueError(
+                f"Cluster type 0x{cluster_type:04X} is not supported by this device. "
+                f"Supported clusters: {[f'0x{c:04X}' for c in self._cluster_classes.keys()]}"
+            )
+
+        cluster_class, registered_endpoint = cluster_entry
+
+        return cluster_class(
+            interactor=self._interactor,
+            node_id=self._chip_tool_node_id,
+            endpoint_id=registered_endpoint,
+        )
 
     def _set_passcode(self) -> int:
         """
@@ -118,9 +202,26 @@ class MatterDevice(BaseDevice):
 
     def get_commissioning_code(self) -> str:
         """
-        Returns the commissioning code for the device.
+        Returns the current commissioning code for the device.
+
+        Note: This may change if a commissioning window is opened with ECM,
+        which generates a new passcode. Use set_commissioning_code() to update
+        after opening an ECM commissioning window.
         """
         return self._commissioning_code
+
+    def set_commissioning_code(self, code: str) -> None:
+        """
+        Update the commissioning code for this device.
+
+        This should be called when an ECM commissioning window is opened,
+        as ECM generates a new passcode and the device will advertise with
+        a new commissioning code.
+
+        Args:
+            code: The new manual pairing code (e.g., from chip-tool output).
+        """
+        self._commissioning_code = code
 
     def start(self):
         """
@@ -147,11 +248,11 @@ class MatterDevice(BaseDevice):
                     str(self._product_id),
                     "--secured-device-port",
                     str(self._mdns_port),
+                    "--KVS",
+                    str(self._kvs_dir / "chip_kvs"),
                 ],
                 shell=False,
             )
-
-            self._pipe_path = f"/tmp/{self._pipe_name}_fifo_{self._process.pid}"
 
             logger.debug(f"Started {self._device_class} with PID: {self._process.pid}")
 
@@ -168,33 +269,16 @@ class MatterDevice(BaseDevice):
             putils.terminate_program(self._process)
             self._process = None
 
-    def send_message(self, message: dict):
-        """
-        Sends a message to the device's named pipe.
-
-        Args:
-            message (dict): The message to be sent to the named pipe.
-        """
-        if self._pipe_path:
-            logger.debug(f"Sending message: {message} to path: {self._pipe_path}")
-
-            # NOTE: There is a strange bug in the lighting-app that will not parse
-            # a properly formatted json string correctly. The extra space after the
-            # message is seemingly required for the app to parse the message correctly.
-            io_utils.write_to_file(f"{json.dumps(message)} ", self._pipe_path)
-        else:
-            logger.warning(f"Named pipe path not set for {self._device_class}")
-
     def _cleanup(self):
         """
         Implements the abstract method from BaseDevice.
 
-        Stop the device application and clean up any temporary files.
+        Stop the device application and clean up this device's storage directory.
         """
         logger.debug(f"Cleaning up {self._device_class}")
 
         self.stop()
-        # FIXME: Need to use temporary directories for tests
-        chip_files = Path("/tmp")
-        for file in chip_files.glob("chip*"):
-            file.unlink(missing_ok=True)
+        # Clean up only this device's KVS directory
+        if self._kvs_dir and self._kvs_dir.exists():
+            shutil.rmtree(self._kvs_dir, ignore_errors=True)
+            logger.debug(f"Removed device storage directory {self._kvs_dir}")
