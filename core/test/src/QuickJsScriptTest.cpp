@@ -146,8 +146,8 @@ namespace
     }
 
     // Test: MapAttributeRead with simple boolean passthrough script
-    // Note: TlvToJson wraps scalar values in {"value": ...} format
     TEST_F(QuickJsScriptTest, MapAttributeReadBooleanPassthrough)
+    {
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
