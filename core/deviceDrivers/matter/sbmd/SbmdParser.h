@@ -39,7 +39,7 @@ namespace YAML
 namespace barton
 {
     /**
-     * Parser for SBMD (Schema-Based Matter Driver) YAML files
+     * Parser for SBMD (Specification-Based Matter Driver) YAML files
      */
     class SbmdParser
     {

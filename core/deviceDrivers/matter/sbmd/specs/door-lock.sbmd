@@ -127,12 +127,12 @@ endpoints:
                   type: "octstr"               # Octet string (byte array)
             script: |
               // Convert optional PIN code string to byte array for Matter command
-              result = null;
+              var result = null;
               // Check if both COTA (0x80) and PIN (0x01) features are enabled
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
                 // Convert PIN string to byte array
-                var result = [];
+                result = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
                   result.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }

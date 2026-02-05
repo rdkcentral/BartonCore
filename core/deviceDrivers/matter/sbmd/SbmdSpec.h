@@ -43,7 +43,6 @@ namespace barton
         uint32_t attributeId;
         std::string name;
         std::string type;
-        bool isCached;         // Whether the attribute is cached due to being reportable
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource
         uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
