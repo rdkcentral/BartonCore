@@ -156,7 +156,7 @@ namespace
         attr.type = "bool";
 
         // Script that converts Matter boolean to Barton string
-        // Note: input is now the direct value, not wrapped in {"value": ...}
+        // sbmdReadArgs.input contains the direct TLV value (not wrapped in {"value": ...})
         std::string mapperScript = "return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
