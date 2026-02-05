@@ -391,7 +391,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (readNode["attribute"])
         {
             SbmdAttribute attr;
-            ParseAttribute(readNode["attribute"], attr);
+            if (!ParseAttribute(readNode["attribute"], attr))
+            {
+                icError("Failed to parse read attribute");
+                return false;
+            }
             mapper.readAttribute = attr;
             hasAttribute = true;
         }
@@ -399,7 +403,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (readNode["command"])
         {
             SbmdCommand cmd;
-            ParseCommand(readNode["command"], cmd);
+            if (!ParseCommand(readNode["command"], cmd))
+            {
+                icError("Failed to parse read command");
+                return false;
+            }
             mapper.readCommand = cmd;
             hasCommand = true;
         }
@@ -434,7 +442,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (writeNode["attribute"])
         {
             SbmdAttribute attr;
-            ParseAttribute(writeNode["attribute"], attr);
+            if (!ParseAttribute(writeNode["attribute"], attr))
+            {
+                icError("Failed to parse write attribute");
+                return false;
+            }
             mapper.writeAttribute = attr;
             hasAttribute = true;
         }
@@ -442,7 +454,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (writeNode["command"])
         {
             SbmdCommand cmd;
-            ParseCommand(writeNode["command"], cmd);
+            if (!ParseCommand(writeNode["command"], cmd))
+            {
+                icError("Failed to parse write command");
+                return false;
+            }
             mapper.writeCommand = cmd;
             hasCommand = true;
         }
@@ -477,7 +493,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (executeNode["attribute"])
         {
             SbmdAttribute attr;
-            ParseAttribute(executeNode["attribute"], attr);
+            if (!ParseAttribute(executeNode["attribute"], attr))
+            {
+                icError("Failed to parse execute attribute");
+                return false;
+            }
             mapper.executeAttribute = attr;
             hasAttribute = true;
         }
@@ -485,7 +505,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         if (executeNode["command"])
         {
             SbmdCommand cmd;
-            ParseCommand(executeNode["command"], cmd);
+            if (!ParseCommand(executeNode["command"], cmd))
+            {
+                icError("Failed to parse execute command");
+                return false;
+            }
             mapper.executeCommand = cmd;
             hasCommand = true;
         }

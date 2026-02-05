@@ -36,24 +36,24 @@ binaries through firmware updates.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           Barton Device Service                          │
+│                           Barton Device Service                         │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
+│                                                                         │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐   │
 │  │  SBMD Spec File  │    │   SbmdParser     │    │   SbmdSpec       │   │
 │  │  (YAML .sbmd)    │───▶│                  │───▶│   (C++ structs)  │   │
 │  └──────────────────┘    └──────────────────┘    └────────┬─────────┘   │
-│                                                           │              │
-│                                                           ▼              │
+│                                                           │             │
+│                                                           ▼             │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                SpecBasedMatterDeviceDriver                        │   │
-│  │  ┌─────────────────┐    ┌─────────────────┐                       │   │
-│  │  │  MatterDevice   │    │  QuickJsScript  │                       │   │
-│  │  │  (per device)   │◀──▶│  (JS runtime)   │                       │   │
-│  │  └────────┬────────┘    └────────┬────────┘                       │   │
+│  │                SpecBasedMatterDeviceDriver                       │   │
+│  │  ┌─────────────────┐    ┌─────────────────┐                      │   │
+│  │  │  MatterDevice   │    │  QuickJsScript  │                      │   │
+│  │  │  (per device)   │◀──▶│  (JS runtime)   │                      │   │
+│  │  └────────┬────────┘    └────────┬────────┘                      │   │
 │  └───────────┼──────────────────────┼───────────────────────────────┘   │
-│              │                      │                                    │
-│              ▼                      ▼                                    │
+│              │                      │                                   │
+│              ▼                      ▼                                   │
 │  ┌──────────────────┐    ┌──────────────────────────────────────────┐   │
 │  │ DeviceDataCache  │    │  JavaScript Mapper Scripts               │   │
 │  │ (attribute cache)│    │  - Read: Matter TLV → Barton string      │   │
@@ -62,7 +62,7 @@ binaries through firmware updates.
 │                          │  - Execute Response: Response TLV →      │   │
 │                          │                       Barton string      │   │
 │                          └──────────────────────────────────────────┘   │
-│                                                                          │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -109,7 +109,7 @@ name: "Driver Name"           # Human-readable name (required)
 scriptType: "JavaScript"      # Script type (currently only "JavaScript")
 bartonMeta:                   # Barton-specific metadata (required)
   deviceClass: "doorLock"     # Barton device class
-  deviceClassVersion: 2       # Device class version
+  deviceClassVersion: 3       # Device class version
 matterMeta:                   # Matter-specific metadata (required)
   deviceTypes:                # List of supported Matter device type IDs
     - 0x000a
@@ -126,7 +126,7 @@ endpoints: []                 # Endpoint definitions (required)
 ```yaml
 bartonMeta:
   deviceClass: "doorLock"     # Barton device class identifier
-  deviceClassVersion: 2       # Version of the device class schema
+  deviceClassVersion: 3       # Version of the device class schema
 ```
 
 ### 3.3 Matter Metadata
@@ -665,7 +665,7 @@ name: "Door Lock"
 scriptType: "JavaScript"
 bartonMeta:
   deviceClass: "doorLock"
-  deviceClassVersion: 2
+  deviceClassVersion: 3
 matterMeta:
   deviceTypes:
     - 0x000a
