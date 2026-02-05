@@ -220,7 +220,7 @@ namespace
         attr.type = "uint8";
 
         // Script that converts Matter uint8 to percentage string
-        // Note: input is now the direct value, not wrapped in {"value": ...}
+        // Note: sbmdReadArgs.input contains the direct TLV value.
         std::string mapperScript = R"(
             var level = sbmdReadArgs.input;
             var percent = Math.round(level / 254 * 100);
