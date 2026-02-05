@@ -774,7 +774,7 @@ namespace
         attr.type = "struct";
 
         // Script that accesses the input object
-        // Note: TlvToJson produces {"value": ...} format
+        // Note: sbmdReadArgs.input contains the direct value; any {"value": ...} wrapper from TlvToJson is unwrapped before scripts run
         std::string mapperScript = R"(
             var result = 'input:' + JSON.stringify(sbmdReadArgs.input) +
                          ',device:' + sbmdReadArgs.deviceUuid;
