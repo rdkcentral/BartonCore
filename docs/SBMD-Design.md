@@ -97,7 +97,8 @@ binaries through firmware updates.
 
 ## 3. SBMD File Schema
 
-SBMD specifications are YAML files with the `.sbmd` extension.
+SBMD specifications are YAML files with the `.sbmd` extension. The current schema
+version is **1.0**, as specified in the `schemaVersion` field of each SBMD file.
 
 ### 3.1 Top-Level Structure
 
@@ -140,10 +141,13 @@ matterMeta:
   deviceTypes:                # Matter device type IDs (hex or decimal)
     - 0x000a                  # Door Lock device type
     - 0x000b                  # Alternative device type
-  revision: 1                 # Matter device type revision number
+  revision: 1                 # Matter device type revision number from Matter Spec.
 ```
 
 ### 3.4 Reporting Configuration
+
+A single wildcarded attribute reporting configuration is maintained on the device.
+These settings allow configuration on the min/max intervals.
 
 ```yaml
 reporting:
@@ -288,7 +292,7 @@ mapper:
         - name: "PINCode"
           type: "octstr"
     script: |
-      result = null;
+      var result = null;
       if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
           sbmdCommandArgs.input.length > 0) {
         result = [];
@@ -329,7 +333,6 @@ mapper:
 
 The `scriptResponse` receives the command response in `sbmdCommandResponseArgs.input`
 (already converted from TLV to JSON) and must return a Barton string in the `output` field.
-```
 
 ### 4.3 Combined Mappers
 
@@ -499,7 +502,7 @@ For commands with arguments, the output can be:
 2. **Array of bytes** - For octet string arguments:
    ```javascript
    // Convert string "1234" to byte array for PINCode
-   result = [];
+   var result = [];
    for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
      result.push(sbmdCommandArgs.input[0].charCodeAt(i));
    }
@@ -525,12 +528,12 @@ return {output: null};
 
 **Lock/Unlock with optional PIN:**
 ```javascript
-result = null;
+var result = null;
 // Check if COTA (0x80) and PIN (0x01) features are both enabled
 if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
     sbmdCommandArgs.input.length > 0) {
   // Convert PIN string to byte array
-  result = [];
+  var result = [];
   for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
     result.push(sbmdCommandArgs.input[0].charCodeAt(i));
   }
@@ -727,7 +730,7 @@ endpoints:
                 - name: "PINCode"
                   type: "octstr"
             script: |
-              result = null;
+              var result = null;
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
                 result = [];
@@ -749,7 +752,7 @@ endpoints:
                 - name: "PINCode"
                   type: "octstr"
             script: |
-              result = null;
+              var result = null;
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
                 result = [];

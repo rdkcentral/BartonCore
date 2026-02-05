@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,7 +58,9 @@ namespace barton
         bool operator<(const SbmdAttribute &other) const
         {
             if (clusterId != other.clusterId)
+            {
                 return clusterId < other.clusterId;
+            }
             return attributeId < other.attributeId;
         }
     };
@@ -96,7 +98,9 @@ namespace barton
         bool operator<(const SbmdCommand &other) const
         {
             if (clusterId != other.clusterId)
+            {
                 return clusterId < other.clusterId;
+            }
             return commandId < other.commandId;
         }
     };
@@ -203,10 +207,10 @@ namespace std
     {
         std::size_t operator()(const barton::SbmdAttribute &attr) const noexcept
         {
-            // Combine the two uint32_t values using a simple hash combine approach
+            // Use boost::hash_combine pattern for better hash distribution
             std::size_t h1 = std::hash<uint32_t> {}(attr.clusterId);
             std::size_t h2 = std::hash<uint32_t> {}(attr.attributeId);
-            return h1 ^ (h2 << 1);
+            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
         }
     };
 
@@ -215,10 +219,10 @@ namespace std
     {
         std::size_t operator()(const barton::SbmdCommand &cmd) const noexcept
         {
-            // Combine the two uint32_t values using a simple hash combine approach
+            // Use boost::hash_combine pattern for better hash distribution
             std::size_t h1 = std::hash<uint32_t> {}(cmd.clusterId);
             std::size_t h2 = std::hash<uint32_t> {}(cmd.commandId);
-            return h1 ^ (h2 << 1);
+            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
         }
     };
 } // namespace std

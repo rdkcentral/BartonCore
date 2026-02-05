@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -205,7 +205,6 @@ resources:
   - id: "rootResource"
     type: "boolean"
     modes: ["read"]
-    cachingPolicy: "always"
     mapper:
       read:
         attribute:
@@ -222,7 +221,6 @@ endpoints:
       - id: "endpointResource"
         type: "boolean"
         modes: ["read", "write"]
-        cachingPolicy: "always"
         mapper:
           read:
             attribute:

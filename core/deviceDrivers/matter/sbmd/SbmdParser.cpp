@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -141,6 +141,11 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
                 SetMapperIds(resource);
                 spec->resources.push_back(resource);
             }
+            else
+            {
+                icError("Failed to parse top-level resource, aborting spec load");
+                return nullptr;
+            }
         }
     }
 
@@ -156,7 +161,8 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
             }
             else
             {
-                icWarn("Failed to parse endpoint, skipping");
+                icError("Failed to parse endpoint, aborting spec load");
+                return nullptr;
             }
         }
     }
@@ -313,7 +319,8 @@ bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
     {
         if (!ParseMapper(node["mapper"], resource.mapper))
         {
-            icWarn("Failed to parse mapper for resource %s", resource.id.c_str());
+            icError("Failed to parse mapper for resource %s", resource.id.c_str());
+            return false;
         }
     }
 
@@ -352,6 +359,11 @@ bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint)
             {
                 SetMapperIds(resource, endpoint.id);
                 endpoint.resources.push_back(resource);
+            }
+            else
+            {
+                icError("Failed to parse resource in endpoint %s", endpoint.id.c_str());
+                return false;
             }
         }
     }
@@ -596,14 +608,27 @@ uint32_t SbmdParser::ParseHexOrDecimal(const std::string &value)
         return 0;
     }
 
-    // Check if it's a hex string (starts with "0x" or "0X")
-    if (value.size() > 2 && value[0] == '0' && (value[1] == 'x' || value[1] == 'X'))
+    try
     {
-        return static_cast<uint32_t>(std::stoul(value, nullptr, 16));
+        // Check if it's a hex string (starts with "0x" or "0X")
+        if (value.size() > 2 && value[0] == '0' && (value[1] == 'x' || value[1] == 'X'))
+        {
+            return static_cast<uint32_t>(std::stoul(value, nullptr, 16));
+        }
+        else
+        {
+            return static_cast<uint32_t>(std::stoul(value));
+        }
     }
-    else
+    catch (const std::invalid_argument &e)
     {
-        return static_cast<uint32_t>(std::stoul(value));
+        icError(logFmt("Invalid numeric value '%s': %s"), value.c_str(), e.what());
+        return 0;
+    }
+    catch (const std::out_of_range &e)
+    {
+        icError(logFmt("Numeric value '%s' out of range: %s"), value.c_str(), e.what());
+        return 0;
     }
 }
 

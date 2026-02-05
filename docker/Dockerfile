@@ -164,7 +164,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     libreadline-dev \
     checkinstall \
     zlib1g-dev \
-    socat
+    socat \
+    libyaml-cpp-dev
 
 # Fake Function Framework (FFF)
 #

@@ -1,77 +1,109 @@
+# Door Lock SBMD Specification
+# Maps Matter Door Lock device type to Barton doorLock device class
+
+# SBMD schema version 1.0
 schemaVersion: "1.0"
+# Driver version for this specification
 driverVersion: "1.0"
+# Human-readable driver name
 name: "Door Lock"
+# Script type (currently only JavaScript is supported)
 scriptType: "JavaScript"
+
+# Barton device class mapping
 bartonMeta:
   deviceClass: "doorLock"
-  deviceClassVersion: 2
+  deviceClassVersion: 3
+
+# Matter device type support
 matterMeta:
   deviceTypes:
-    - 0x000a
-  revision: 1
+    - 0x000a  # Matter Door Lock device type
+  revision: 1 # Device Specification revision from Matter spec that this driver complies with
+
+# Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
 reporting:
-  minSecs: 1
-  maxSecs: 3600
+  minSecs: 1      # Minimum reporting interval in seconds
+  maxSecs: 3600   # Maximum reporting interval in seconds (1 hour)
+
+# Device-level resources (not associated with a specific endpoint)
 resources:
+  # Identify timer resource - controls device identification duration
   - id: "identifySeconds"
     type: "com.icontrol.seconds"
     modes:
-      - "read"
-      - "write"
+      - "read"   # Resource can be read
+      - "write"  # Resource can be written
     mapper:
+      # Read mapper: Matter Identify cluster attribute -> Barton seconds
       read:
         attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0000"
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
           name: "IdentifyTime"
-          type: "uint16"
+          type: "uint16"           # Unsigned 16-bit integer
         script: |
+          # Passthrough: attribute value directly becomes Barton string
           return {output: sbmdReadArgs.input};
+      # Write mapper: Barton seconds string -> Matter Identify attribute
       write:
         attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0000"
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
           name: "IdentifyTime"
-          type: "uint16"
+          type: "uint16"           # Unsigned 16-bit integer
         script: |
+          # Convert Barton string to integer for Matter
           const secs = parseInt(sbmdWriteArgs.input, 10);
           return {output: secs};
+
+# Barton endpoints (logical groupings of resources)
 endpoints:
-  - id: "1"
-    profile: "doorLock"
-    profileVersion: 3
+  # Primary door lock endpoint
+  - id: "1"                    # Barton endpoint identifier
+    profile: "doorLock"        # Barton profile name
+    profileVersion: 3          # Profile version
     resources:
+      # Lock state resource - indicates whether the door is locked
       - id: "locked"
         type: "boolean"
         modes:
-          - "read"
-          - "dynamic"
-          - "emitEvents"
+          - "read"        # Resource can be read
+          - "dynamic"     # Value can change asynchronously (via device button, etc.)
+          - "emitEvents"  # Changes generate events to subscribers
         mapper:
+          # Read mapper: Matter LockState enum -> Barton boolean
           read:
             attribute:
-              clusterId: "0x0101"
-              attributeId: "0x0000"
+              clusterId: "0x0101"      # Door Lock cluster
+              attributeId: "0x0000"    # LockState attribute
               name: "LockState"
-              type: "enum8"
+              type: "enum8"            # 8-bit enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked
             script: |
+              # Convert enum to boolean: true if locked (1), false otherwise
               return {output: sbmdReadArgs.input === 1};
+
+      # Lock function resource - locks the door
       - id: "lock"
         type: "function"
         mapper:
+          # Execute mapper: Barton lock function -> Matter LockDoor command
           execute:
             command:
-              clusterId: "0x0101"
-              commandId: "0x00"
+              clusterId: "0x0101"              # Door Lock cluster
+              commandId: "0x00"                # LockDoor command
               name: "LockDoor"
-              timedInvokeTimeoutMs: 10000
+              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
               args:
-                - name: "PINCode"
-                  type: "octstr"
+                - name: "PINCode"              # Optional PIN code argument
+                  type: "octstr"               # Octet string (byte array)
             script: |
-              result = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) && // COTA & PIN
+              // Convert optional PIN code string to byte array for Matter command
+              var result = null;
+              // Check if both COTA (0x80) and PIN (0x01) features are enabled
+              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
+                // Convert PIN string to byte array
                 result = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
                   result.push(sbmdCommandArgs.input[0].charCodeAt(i));
@@ -79,23 +111,28 @@ endpoints:
               }
               return {output: result};
 
+      # Unlock function resource - unlocks the door
       - id: "unlock"
         type: "function"
         mapper:
+          # Execute mapper: Barton unlock function -> Matter UnlockDoor command
           execute:
             command:
-              clusterId: "0x0101"
-              commandId: "0x01"
+              clusterId: "0x0101"              # Door Lock cluster
+              commandId: "0x01"                # UnlockDoor command
               name: "UnlockDoor"
-              timedInvokeTimeoutMs: 10000
+              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
               args:
-                - name: "PINCode"
-                  type: "octstr"
+                - name: "PINCode"              # Optional PIN code argument
+                  type: "octstr"               # Octet string (byte array)
             script: |
+              // Convert optional PIN code string to byte array for Matter command
               result = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) && // COTA & PIN
+              // Check if both COTA (0x80) and PIN (0x01) features are enabled
+              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
-                result = [];
+                // Convert PIN string to byte array
+                var result = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
                   result.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }
