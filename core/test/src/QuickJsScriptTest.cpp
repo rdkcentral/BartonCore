@@ -797,7 +797,7 @@ namespace
         std::string outValue;
         ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
         // Verify it contains expected parts
-        // input is now the direct value, not wrapped in {"value": ...}
+        // Ensure the input value and device UUID appear in the output string
         EXPECT_NE(outValue.find("input:true"), std::string::npos);
         EXPECT_NE(outValue.find("device:test-device-uuid"), std::string::npos);
     }
