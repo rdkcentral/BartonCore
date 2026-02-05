@@ -151,7 +151,7 @@ namespace barton
          * representation of the command response in the following format:
          *
          * sbmdCommandResponseArgs = {
-         *     "input" : <command response TLV converted to JSON>,
+         *     "input" : <unwrapped command response value (the \"value\" field of the command response TLV JSON)>,
          *     "deviceUuid" : <device UUID>,
          *     "clusterId" : <cluster ID>,
          *     "featureMap" : <cluster feature map>,
