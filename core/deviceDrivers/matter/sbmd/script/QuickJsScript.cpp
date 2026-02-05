@@ -336,6 +336,7 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     if (JS_SetPropertyStr(ctx, global, argumentName.c_str(), argVal) < 0)
     {
         icLogError(LOG_TAG, "Failed to set argument variable '%s'", argumentName.c_str());
+        JS_FreeValue(ctx, argVal);
         JS_FreeValue(ctx, global);
         return false;
     }
