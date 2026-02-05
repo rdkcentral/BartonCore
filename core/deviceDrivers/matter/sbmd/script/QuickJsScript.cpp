@@ -360,6 +360,7 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
             JS_FreeCString(ctx, exceptionStr);
         }
         JS_FreeValue(ctx, exception);
+        JS_FreeValue(ctx, scriptResult);
         return false;
     }
 
