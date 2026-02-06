@@ -27,8 +27,8 @@
 
 #pragma once
 
+#include "../SbmdSpec.h"
 #include "lib/core/TLVReader.h"
-#include "matter/sbmd/SbmdSpec.h"
 #include <platform/CHIPDeviceLayer.h>
 
 #include <string>

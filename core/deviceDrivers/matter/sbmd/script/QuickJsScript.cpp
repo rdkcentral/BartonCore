@@ -36,6 +36,7 @@
 #include <lib/support/Span.h>
 #include <lib/support/jsontlv/JsonToTlv.h>
 #include <lib/support/jsontlv/TlvJson.h>
+#include <mutex>
 #include <platform/CHIPDeviceLayer.h>
 #include <sstream>
 
@@ -169,42 +170,65 @@ namespace barton
 
             // If output is an array and we have a single BYTES-type argument,
             // treat it as a byte array that needs base64 encoding
-            if (outputJson.isArray() && args.size() == 1)
+            if (outputJson.isArray())
             {
+                if (args.size() != 1)
+                {
+                    icLogError(
+                        LOG_TAG, "Array output with multiple arguments (%zu) is not yet implemented", args.size());
+                    return Json::writeString(Json::StreamWriterBuilder(), tlvJson);
+                }
+
                 const SbmdArgument &arg = args[0];
                 std::string tlvType = matterTypeToJsonTlvType(arg.type);
 
-                if (tlvType == "BYTES")
+                if (tlvType != "BYTES")
                 {
-                    // Convert array of integers to bytes and base64 encode
-                    std::vector<uint8_t> bytes;
-                    bytes.reserve(outputJson.size());
-                    for (const auto &elem : outputJson)
-                    {
-                        if (elem.isIntegral())
-                        {
-                            bytes.push_back(static_cast<uint8_t>(elem.asInt()));
-                        }
-                        else
-                        {
-                            icLogWarn(LOG_TAG, "Ignoring non-integral value in byte array for argument '%s'", arg.name.c_str());
-                        }
-                    }
-
-                    // Base64 encode the bytes
-                    size_t base64Size = BASE64_ENCODED_LEN(bytes.size()) + 1;
-                    std::vector<char> base64(base64Size);
-                    uint16_t encodedLen =
-                        chip::Base64Encode(bytes.data(), static_cast<uint16_t>(bytes.size()), base64.data());
-                    base64[encodedLen] = '\0';
-
-                    std::string key = "0:" + tlvType;
-                    tlvJson[key] = std::string(base64.data());
-
-                    Json::StreamWriterBuilder writerBuilder;
-                    writerBuilder["indentation"] = "";
-                    return Json::writeString(writerBuilder, tlvJson);
+                    icLogError(
+                        LOG_TAG, "Array output for non-BYTES type '%s' is not yet implemented", arg.type.c_str());
+                    return Json::writeString(Json::StreamWriterBuilder(), tlvJson);
                 }
+
+                // Convert array of integers to bytes and base64 encode
+                std::vector<uint8_t> bytes;
+                bytes.reserve(outputJson.size());
+                for (const auto &elem : outputJson)
+                {
+                    if (elem.isIntegral())
+                    {
+                        bytes.push_back(static_cast<uint8_t>(elem.asInt()));
+                    }
+                    else
+                    {
+                        icLogWarn(
+                            LOG_TAG, "Ignoring non-integral value in byte array for argument '%s'", arg.name.c_str());
+                    }
+                }
+
+                // Check size limit before Base64 encoding (chip::Base64Encode takes uint16_t)
+                if (bytes.size() > UINT16_MAX)
+                {
+                    icLogError(LOG_TAG,
+                               "Byte array too large for argument '%s': %zu bytes exceeds maximum of %u",
+                               arg.name.c_str(),
+                               bytes.size(),
+                               UINT16_MAX);
+                    return Json::writeString(Json::StreamWriterBuilder(), tlvJson);
+                }
+
+                // Base64 encode the bytes
+                size_t base64Size = BASE64_ENCODED_LEN(bytes.size()) + 1;
+                std::vector<char> base64(base64Size);
+                uint16_t encodedLen =
+                    chip::Base64Encode(bytes.data(), static_cast<uint16_t>(bytes.size()), base64.data());
+                base64[encodedLen] = '\0';
+
+                std::string key = "0:" + tlvType;
+                tlvJson[key] = std::string(base64.data());
+
+                Json::StreamWriterBuilder writerBuilder;
+                writerBuilder["indentation"] = "";
+                return Json::writeString(writerBuilder, tlvJson);
             }
 
             // For a single non-array value with a single argument
@@ -242,44 +266,54 @@ namespace barton
 
     } // anonymous namespace
 
-QuickJsScript::QuickJsScript(const std::string &deviceId)
-    : SbmdScript(deviceId), runtime(nullptr), ctx(nullptr)
+    std::unique_ptr<QuickJsScript> QuickJsScript::Create(const std::string &deviceId)
+    {
+        JSRuntime *runtime = JS_NewRuntime();
+        if (!runtime)
+        {
+            icLogError(LOG_TAG, "Failed to create QuickJS runtime for device %s", deviceId.c_str());
+            return nullptr;
+        }
+
+        JSContext *ctx = JS_NewContext(runtime);
+        if (!ctx)
+        {
+            icLogError(LOG_TAG, "Failed to create QuickJS context for device %s", deviceId.c_str());
+            JS_FreeRuntime(runtime);
+            return nullptr;
+        }
+
+        icLogDebug(LOG_TAG, "QuickJS runtime initialized for device %s", deviceId.c_str());
+        return std::unique_ptr<QuickJsScript>(new QuickJsScript(deviceId, runtime, ctx));
+}
+
+QuickJsScript::QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx) :
+    SbmdScript(deviceId), runtime(runtime), ctx(ctx)
 {
-    runtime = JS_NewRuntime();
-    if (!runtime)
-    {
-        icLogError(LOG_TAG, "Failed to create QuickJS runtime for device %s", deviceId.c_str());
-        return;
-    }
-
-    ctx = JS_NewContext(runtime);
-    if (!ctx)
-    {
-        icLogError(LOG_TAG, "Failed to create QuickJS context for device %s", deviceId.c_str());
-        JS_FreeRuntime(runtime);
-        runtime = nullptr;
-        return;
-    }
-
-    icLogDebug(LOG_TAG, "QuickJS runtime initialized for device %s", deviceId.c_str());
 }
 
 QuickJsScript::~QuickJsScript()
 {
-    if (ctx)
-    {
-        JS_FreeContext(ctx);
-    }
-    if (runtime)
-    {
-        JS_FreeRuntime(runtime);
-    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(runtime);
     icLogDebug(LOG_TAG, "QuickJS runtime destroyed for device %s", deviceId.c_str());
 }
 
 bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (script.empty())
+    {
+        icLogError(LOG_TAG,
+                   "Cannot add attribute read mapper: empty script for cluster 0x%X, attribute 0x%X",
+                   attributeInfo.clusterId,
+                   attributeInfo.attributeId);
+        return false;
+    }
+
     attributeReadScripts[attributeInfo] = script;
     icLogDebug(LOG_TAG, "Added attribute read mapper for cluster 0x%X, attribute 0x%X",
                attributeInfo.clusterId, attributeInfo.attributeId);
@@ -289,6 +323,17 @@ bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
 bool QuickJsScript::AddAttributeWriteMapper(const SbmdAttribute &attributeInfo,
                                             const std::string &script)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (script.empty())
+    {
+        icLogError(LOG_TAG,
+                   "Cannot add attribute write mapper: empty script for cluster 0x%X, attribute 0x%X",
+                   attributeInfo.clusterId,
+                   attributeInfo.attributeId);
+        return false;
+    }
+
     attributeWriteScripts[attributeInfo] = script;
     icLogDebug(LOG_TAG, "Added attribute write mapper for cluster 0x%X, attribute 0x%X",
                attributeInfo.clusterId, attributeInfo.attributeId);
@@ -298,6 +343,17 @@ bool QuickJsScript::AddAttributeWriteMapper(const SbmdAttribute &attributeInfo,
 bool QuickJsScript::AddCommandExecuteMapper(const SbmdCommand &commandInfo,
                                             const std::string &script)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (script.empty())
+    {
+        icLogError(LOG_TAG,
+                   "Cannot add command execute mapper: empty script for cluster 0x%X, command 0x%X",
+                   commandInfo.clusterId,
+                   commandInfo.commandId);
+        return false;
+    }
+
     commandExecuteScripts[commandInfo] = script;
     icLogDebug(LOG_TAG, "Added command execute mapper for cluster 0x%X, command 0x%X",
                commandInfo.clusterId, commandInfo.commandId);
@@ -307,6 +363,17 @@ bool QuickJsScript::AddCommandExecuteMapper(const SbmdCommand &commandInfo,
 bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                                     const std::string &script)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (script.empty())
+    {
+        icLogError(LOG_TAG,
+                   "Cannot add command execute response mapper: empty script for cluster 0x%X, command 0x%X",
+                   commandInfo.clusterId,
+                   commandInfo.commandId);
+        return false;
+    }
+
     commandExecuteResponseScripts[commandInfo] = script;
     icLogDebug(LOG_TAG, "Added command execute response mapper for cluster 0x%X, command 0x%X",
                commandInfo.clusterId, commandInfo.commandId);
@@ -318,12 +385,6 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
                                   const JSValue &argumentJson,
                                   JSValue &outJson)
 {
-    if (!ctx)
-    {
-        icLogError(LOG_TAG, "QuickJS context not initialized");
-        return false;
-    }
-
     if (script.empty())
     {
         icLogWarn(LOG_TAG, "Empty script provided");
@@ -370,14 +431,130 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     return true;
 }
 
-bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &value)
+bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
 {
-    if (!ctx)
+    outValue = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
+    if (JS_IsException(outValue))
     {
-        icLogError(LOG_TAG, "QuickJS context not initialized");
+        JSValue exception = JS_GetException(ctx);
+        const char *exceptionStr = JS_ToCString(ctx, exception);
+        icLogError(
+            LOG_TAG, "Failed to parse %s JSON: %s", sourceName.c_str(), exceptionStr ? exceptionStr : "unknown error");
+        if (exceptionStr)
+        {
+            JS_FreeCString(ctx, exceptionStr);
+        }
+        JS_FreeValue(ctx, exception);
+        return false;
+    }
+    return true;
+}
+
+bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value &outJson)
+{
+    // Extract the "output" field from the result JSON object
+    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
+    if (JS_IsUndefined(outputVal))
+    {
+        icLogError(LOG_TAG, "Script result missing 'output' field");
+        JS_FreeValue(ctx, scriptResult);
         return false;
     }
 
+    // Convert the output JSValue to JSON string
+    JSValue jsonStr = JS_JSONStringify(ctx, outputVal, JS_UNDEFINED, JS_UNDEFINED);
+    const char *outValueStr = JS_ToCString(ctx, jsonStr);
+    if (outValueStr == nullptr)
+    {
+        icLogError(LOG_TAG, "Failed to stringify output value");
+        JS_FreeValue(ctx, jsonStr);
+        JS_FreeValue(ctx, outputVal);
+        JS_FreeValue(ctx, scriptResult);
+        return false;
+    }
+
+    icLogDebug(LOG_TAG, "Script output JSON: %s", outValueStr);
+    std::string jsonString = outValueStr;
+    JS_FreeCString(ctx, outValueStr);
+    JS_FreeValue(ctx, jsonStr);
+    JS_FreeValue(ctx, outputVal);
+    JS_FreeValue(ctx, scriptResult);
+
+    // Parse the JSON string to Json::Value
+    Json::CharReaderBuilder readerBuilder;
+    std::istringstream jsonStream(jsonString);
+    std::string parseErrors;
+    if (!Json::parseFromStream(readerBuilder, jsonStream, &outJson, &parseErrors))
+    {
+        icLogError(LOG_TAG, "Failed to parse output JSON: %s", parseErrors.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
+{
+    // Extract the "output" field from the result JSON object
+    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
+    if (JS_IsUndefined(outputVal))
+    {
+        icLogError(LOG_TAG, "Script result missing 'output' field");
+        JS_FreeValue(ctx, scriptResult);
+        return false;
+    }
+
+    const char *resultStr = JS_ToCString(ctx, outputVal);
+    if (resultStr == nullptr)
+    {
+        icLogError(LOG_TAG, "Failed to convert output value to string");
+        JS_FreeValue(ctx, outputVal);
+        JS_FreeValue(ctx, scriptResult);
+        return false;
+    }
+
+    outValue = resultStr;
+    icLogDebug(LOG_TAG, "Script output string: %s", outValue.c_str());
+    JS_FreeCString(ctx, resultStr);
+    JS_FreeValue(ctx, outputVal);
+    JS_FreeValue(ctx, scriptResult);
+    return true;
+}
+
+bool QuickJsScript::EncodeJsonToTlv(const std::string &tlvFormattedJson,
+                                    chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                                    size_t &encodedLength)
+{
+    icLogDebug(LOG_TAG, "TLV formatted JSON: %s", tlvFormattedJson.c_str());
+
+    // Allocate buffer for TLV encoding.
+    // NOTE: kMaxTlvSize is set to 1024 bytes which should handle most payloads.
+    // If future use cases require larger payloads, this may need to be revisited.
+    constexpr size_t kMaxTlvSize = 1024;
+    if (!buffer.Alloc(kMaxTlvSize))
+    {
+        icLogError(LOG_TAG, "Failed to allocate buffer for TLV encoding");
+        return false;
+    }
+
+    // Initialize TLV writer with the buffer
+    chip::TLV::TLVWriter writer;
+    writer.Init(buffer.Get(), kMaxTlvSize);
+
+    // Convert formatted JSON to TLV
+    if (chip::JsonToTlv(tlvFormattedJson, writer) != CHIP_NO_ERROR)
+    {
+        icLogError(LOG_TAG, "Failed to convert JSON to TLV");
+        return false;
+    }
+
+    encodedLength = writer.GetLengthWritten();
+    icLogDebug(LOG_TAG, "Encoded %zu bytes of TLV data", encodedLength);
+    return true;
+}
+
+bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &value)
+{
     JSValue jsValue = JS_NewString(ctx, value.c_str());
     JSValue global = JS_GetGlobalObject(ctx);
     bool success = JS_SetPropertyStr(ctx, global, name.c_str(), jsValue) >= 0;
@@ -386,6 +563,7 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
     if (!success)
     {
         icLogError(LOG_TAG, "Failed to set JS variable '%s'", name.c_str());
+        JS_FreeValue(ctx, jsValue);
     }
 
     return success;
@@ -395,6 +573,7 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      chip::TLV::TLVReader &reader,
                                      std::string &outValue)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
     {
@@ -408,6 +587,15 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     if (chip::TlvToJson(reader, inputJson) != CHIP_NO_ERROR)
     {
         icLogError(LOG_TAG, "Failed to convert TLV to JSON for argument '%s'", attributeInfo.name.c_str());
+        return false;
+    }
+
+    // Validate that the converted JSON has the expected "value" field
+    if (!inputJson.isObject() || !inputJson.isMember("value"))
+    {
+        icLogError(LOG_TAG,
+                   "TLV to JSON result for attribute '%s' does not contain expected 'value' field",
+                   attributeInfo.name.c_str());
         return false;
     }
 
@@ -430,17 +618,9 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     icLogDebug(LOG_TAG, "sbmdReadArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), "<sbmdReadArgs>");
-    if (JS_IsException(argJson))
+    JSValue argJson;
+    if (!ParseJsonToJSValue(jsonString, "sbmdReadArgs", argJson))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(LOG_TAG, "Failed to parse sbmdReadArgs JSON: %s", exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
         return false;
     }
 
@@ -453,33 +633,7 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
         return false;
     }
 
-    // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
-    if (JS_IsUndefined(outputVal))
-    {
-        icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    const char *resultStr = JS_ToCString(ctx, outputVal);
-    if (resultStr != nullptr)
-    {
-        outValue = resultStr;
-        icLogDebug(LOG_TAG, "MapAttributeRead result: %s", outValue.c_str());
-        JS_FreeCString(ctx, resultStr);
-    }
-    else
-    {
-        icLogError(LOG_TAG, "Failed to convert output value to string");
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, outJson);
-    return true;
+    return ExtractScriptOutputAsString(outJson, outValue);
 }
 
 bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
@@ -487,6 +641,7 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
                                       chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                                       size_t &encodedLength)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = attributeWriteScripts.find(attributeInfo);
     if (it == attributeWriteScripts.end())
     {
@@ -514,17 +669,9 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
     icLogDebug(LOG_TAG, "sbmdWriteArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), "<sbmdWriteArgs>");
-    if (JS_IsException(argJson))
+    JSValue argJson;
+    if (!ParseJsonToJSValue(jsonString, "sbmdWriteArgs", argJson))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(LOG_TAG, "Failed to parse sbmdWriteArgs JSON: %s", exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
         return false;
     }
 
@@ -539,86 +686,15 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
         return false;
     }
 
-    icLogDebug(LOG_TAG, "Script execution succeeded, extracting output field");
-
-    // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
-    if (JS_IsUndefined(outputVal))
-    {
-        icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Got output field, stringifying");
-
-    // Convert the output JSValue back to JSON string for TLV conversion
-    JSValue jsonStr = JS_JSONStringify(ctx, outputVal, JS_UNDEFINED, JS_UNDEFINED);
-    icLogDebug(LOG_TAG, "Stringify done, converting to C string");
-    const char *outValueStr = JS_ToCString(ctx, jsonStr);
-    if (outValueStr == nullptr)
-    {
-        icLogError(LOG_TAG, "Failed to stringify output value");
-        JS_FreeValue(ctx, jsonStr);
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Output JSON string: %s", outValueStr);
-    std::string outValue = outValueStr;
-    JS_FreeCString(ctx, outValueStr);
-    JS_FreeValue(ctx, jsonStr);
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, outJson);
-
-    // Parse the output JSON to wrap it in the JsonToTlv format
-    Json::CharReaderBuilder readerBuilder;
-    std::istringstream jsonStream(outValue);
     Json::Value outputJson;
-    std::string parseErrors;
-    if (!Json::parseFromStream(readerBuilder, jsonStream, &outputJson, &parseErrors))
+    if (!ExtractScriptOutputAsJson(outJson, outputJson))
     {
-        icLogError(LOG_TAG, "Failed to parse output JSON: %s", parseErrors.c_str());
         return false;
     }
 
     // Format the value for JsonToTlv using the attribute's type information
     std::string tlvFormattedJson = formatValueForJsonToTlv(outputJson, attributeInfo.type);
-    icLogDebug(LOG_TAG, "TLV formatted JSON: %s", tlvFormattedJson.c_str());
-
-    icLogDebug(LOG_TAG, "Allocating TLV buffer");
-
-    // Allocate buffer for TLV encoding (reasonable max size)
-    constexpr size_t kMaxTlvSize = 1024;
-    if (!buffer.Alloc(kMaxTlvSize))
-    {
-        icLogError(LOG_TAG, "Failed to allocate buffer for TLV encoding");
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Buffer allocated, initializing TLV writer");
-
-    // Initialize TLV writer with the buffer
-    chip::TLV::TLVWriter writer;
-    writer.Init(buffer.Get(), kMaxTlvSize);
-
-    icLogDebug(LOG_TAG, "Converting JSON to TLV: %s", tlvFormattedJson.c_str());
-
-    // Convert the properly formatted JSON back to TLV
-    if (chip::JsonToTlv(tlvFormattedJson, writer) != CHIP_NO_ERROR)
-    {
-        icLogError(LOG_TAG, "Failed to convert JSON to TLV for attribute write");
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "JSON to TLV conversion succeeded");
-
-    // Get the length of encoded data
-    encodedLength = writer.GetLengthWritten();
-    icLogDebug(LOG_TAG, "Encoded %zu bytes of TLV data", encodedLength);
-
-    return true;
+    return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
 }
 
 bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
@@ -626,6 +702,7 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
                                       chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                                       size_t &encodedLength)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = commandExecuteScripts.find(commandInfo);
     if (it == commandExecuteScripts.end())
     {
@@ -657,17 +734,9 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
     icLogDebug(LOG_TAG, "sbmdCommandArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), "<sbmdCommandArgs>");
-    if (JS_IsException(argJson))
+    JSValue argJson;
+    if (!ParseJsonToJSValue(jsonString, "sbmdCommandArgs", argJson))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(LOG_TAG, "Failed to parse sbmdCommandArgs JSON: %s", exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
         return false;
     }
 
@@ -684,92 +753,22 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
         return false;
     }
 
-    icLogDebug(LOG_TAG, "Script execution succeeded, extracting output field");
-
-    // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
-    if (JS_IsUndefined(outputVal))
-    {
-        icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Got output field, stringifying");
-
-    // Convert the output JSValue back to JSON string for TLV conversion
-    JSValue jsonStr = JS_JSONStringify(ctx, outputVal, JS_UNDEFINED, JS_UNDEFINED);
-    icLogDebug(LOG_TAG, "Stringify done, converting to C string");
-    const char *outValueStr = JS_ToCString(ctx, jsonStr);
-    if (outValueStr == nullptr)
-    {
-        icLogError(LOG_TAG, "Failed to stringify output value");
-        JS_FreeValue(ctx, jsonStr);
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Output JSON string: %s", outValueStr);
-    std::string outValue = outValueStr;
-    JS_FreeCString(ctx, outValueStr);
-    JS_FreeValue(ctx, jsonStr);
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, outJson);
-
-    // Parse the output JSON to format it for JsonToTlv
-    Json::CharReaderBuilder readerBuilder;
-    std::istringstream jsonStream(outValue);
     Json::Value outputJson;
-    std::string parseErrors;
-    if (!Json::parseFromStream(readerBuilder, jsonStream, &outputJson, &parseErrors))
+    if (!ExtractScriptOutputAsJson(outJson, outputJson))
     {
-        icLogError(LOG_TAG, "Failed to parse output JSON: %s", parseErrors.c_str());
         return false;
     }
 
     // Format the command arguments for JsonToTlv using the command's arg type information
     std::string tlvFormattedJson = formatCommandArgsForJsonToTlv(outputJson, commandInfo.args);
-    icLogDebug(LOG_TAG, "TLV formatted JSON: %s", tlvFormattedJson.c_str());
-
-    icLogDebug(LOG_TAG, "Allocating TLV buffer");
-
-    // Allocate buffer for TLV encoding (reasonable max size)
-    constexpr size_t kMaxTlvSize = 1024;
-    if (!buffer.Alloc(kMaxTlvSize))
-    {
-        icLogError(LOG_TAG, "Failed to allocate buffer for TLV encoding");
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "Buffer allocated, initializing TLV writer");
-
-    // Initialize TLV writer with the buffer
-    chip::TLV::TLVWriter writer;
-    writer.Init(buffer.Get(), kMaxTlvSize);
-
-    icLogDebug(LOG_TAG, "Converting JSON to TLV: %s", tlvFormattedJson.c_str());
-
-    // Convert the formatted JSON to TLV
-    if (chip::JsonToTlv(tlvFormattedJson, writer) != CHIP_NO_ERROR)
-    {
-        icLogError(LOG_TAG, "Failed to convert JSON to TLV for command execute");
-        return false;
-    }
-
-    icLogDebug(LOG_TAG, "JSON to TLV conversion succeeded");
-
-    // Get the length of encoded data
-    encodedLength = writer.GetLengthWritten();
-    icLogDebug(LOG_TAG, "Encoded %zu bytes of TLV data", encodedLength);
-
-    return true;
+    return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
 }
 
 bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               chip::TLV::TLVReader &reader,
                                               std::string &outValue)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
     {
@@ -783,6 +782,15 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     if (chip::TlvToJson(reader, inputJson) != CHIP_NO_ERROR)
     {
         icLogError(LOG_TAG, "Failed to convert TLV to JSON for command response '%s'", commandInfo.name.c_str());
+        return false;
+    }
+
+    // Validate that the converted JSON has the expected "value" field
+    if (!inputJson.isObject() || !inputJson.isMember("value"))
+    {
+        icLogError(LOG_TAG,
+                   "TLV to JSON result for command response '%s' does not contain expected 'value' field",
+                   commandInfo.name.c_str());
         return false;
     }
 
@@ -804,17 +812,9 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     icLogDebug(LOG_TAG, "sbmdCommandResponseArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), "<sbmdCommandResponseArgs>");
-    if (JS_IsException(argJson))
+    JSValue argJson;
+    if (!ParseJsonToJSValue(jsonString, "sbmdCommandResponseArgs", argJson))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(LOG_TAG, "Failed to parse sbmdCommandResponseArgs JSON: %s", exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
         return false;
     }
 
@@ -827,33 +827,7 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
         return false;
     }
 
-    // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
-    if (JS_IsUndefined(outputVal))
-    {
-        icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    const char *resultStr = JS_ToCString(ctx, outputVal);
-    if (resultStr != nullptr)
-    {
-        outValue = resultStr;
-        icLogDebug(LOG_TAG, "MapCommandExecuteResponse result: %s", outValue.c_str());
-        JS_FreeCString(ctx, resultStr);
-    }
-    else
-    {
-        icLogError(LOG_TAG, "Failed to convert output value to string");
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, outJson);
-        return false;
-    }
-
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, outJson);
-    return true;
+    return ExtractScriptOutputAsString(outJson, outValue);
 }
 
 } // namespace barton

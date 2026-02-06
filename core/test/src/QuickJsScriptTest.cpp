@@ -27,14 +27,14 @@
  * Unit tests for QuickJsScript module focusing on script interfaces.
  */
 
-#include "matter/sbmd/script/QuickJsScript.h"
-#include "matter/sbmd/SbmdSpec.h"
+#include "deviceDrivers/matter/sbmd/script/QuickJsScript.h"
+#include "deviceDrivers/matter/sbmd/SbmdSpec.h"
 #include <gtest/gtest.h>
-#include <memory>
 #include <lib/core/TLVReader.h>
-#include <lib/core/TLVWriter.h>
 #include <lib/core/TLVTypes.h>
+#include <lib/core/TLVWriter.h>
 #include <lib/support/CHIPMem.h>
+#include <memory>
 
 using namespace barton;
 
@@ -65,7 +65,8 @@ namespace
         void SetUp() override
         {
             deviceId = "test-device-uuid";
-            script = std::make_unique<QuickJsScript>(deviceId);
+            script = QuickJsScript::Create(deviceId);
+            ASSERT_NE(script, nullptr) << "Failed to create QuickJsScript";
         }
 
         void TearDown() override { script.reset(); }
@@ -178,7 +179,7 @@ namespace
     }
 
     // Test: MapAttributeRead with boolean false value
-    // Note: TlvToJson wraps scalar values in {"value": ...} format
+    // Note: sbmdReadArgs.input contains the direct TLV value (unwrapped from TlvToJson's {"value": ...} wrapper)
     TEST_F(QuickJsScriptTest, MapAttributeReadBooleanFalse)
     {
         SbmdAttribute attr;
@@ -187,9 +188,9 @@ namespace
         attr.name = "onOff";
         attr.type = "bool";
 
-        // Script needs to properly handle false - compare against undefined, not truthy
-        // Note: TlvToJson produces {"value": bool} for boolean values
-        std::string mapperScript = "return {output: (sbmdReadArgs.input.value === true) ? 'true' : 'false'};";
+        // Script needs to properly handle false - compare against true explicitly
+        // sbmdReadArgs.input contains the direct value (not wrapped)
+        std::string mapperScript = "return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -210,7 +211,7 @@ namespace
     }
 
     // Test: MapAttributeRead with integer value conversion
-    // Note: TlvToJson wraps scalar values in {"value": ...} format
+    // Note: sbmdReadArgs.input contains the direct TLV value (unwrapped from TlvToJson's {"value": ...} wrapper)
     TEST_F(QuickJsScriptTest, MapAttributeReadIntegerConversion)
     {
         SbmdAttribute attr;
@@ -220,7 +221,7 @@ namespace
         attr.type = "uint8";
 
         // Script that converts Matter uint8 to percentage string
-        // Note: sbmdReadArgs.input contains the direct TLV value.
+        // sbmdReadArgs.input contains the direct integer value
         std::string mapperScript = R"(
             var level = sbmdReadArgs.input;
             var percent = Math.round(level / 254 * 100);

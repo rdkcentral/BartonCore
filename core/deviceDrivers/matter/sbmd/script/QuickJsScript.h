@@ -29,22 +29,38 @@
 
 #include "SbmdScript.h"
 #include <map>
+#include <memory>
+#include <mutex>
 
 // Forward declarations for QuickJS types
 struct JSRuntime;
 struct JSContext;
 struct JSValue;
 
+// Forward declaration for JsonCpp
+namespace Json
+{
+    class Value;
+}
+
 namespace barton
 {
     /**
      * QuickJS implementation of SbmdScript for mapping between Barton resources and
      * Matter attributes/commands using JavaScript.
+     *
+     * This class is thread-safe. All public methods are protected by an internal mutex.
      */
     class QuickJsScript : public SbmdScript
     {
     public:
-        explicit QuickJsScript(const std::string &deviceId);
+        /**
+         * Factory method to create a QuickJsScript instance.
+         * @param deviceId The device identifier for this script context
+         * @return A unique_ptr to a QuickJsScript, or nullptr if initialization failed
+         */
+        static std::unique_ptr<QuickJsScript> Create(const std::string &deviceId);
+
         ~QuickJsScript() override;
 
         bool AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
@@ -66,7 +82,7 @@ namespace barton
          * representation of the attribute value in the following format:
          *
          * sbmdReadArgs = {
-         *     "input" : <attribute TLV converted to JSON>,
+         *     "input" : <attribute value (unwrapped from TlvToJson's {"value": ...} wrapper)>,
          *     "deviceUuid" : <device UUID>,
          *     "clusterId" : <cluster ID>,
          *     "featureMap" : <cluster feature map>,
@@ -171,6 +187,9 @@ namespace barton
                                        std::string &outValue) override;
 
     private:
+        explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
+
+        mutable std::mutex mutex_;
         JSRuntime *runtime;
         JSContext *ctx;
 
@@ -187,6 +206,30 @@ namespace barton
                            const std::string &argumentName,
                            const JSValue &argumentJson,
                            JSValue &outJson);
+
+        /**
+         * Parse a JSON string into a QuickJS JSValue.
+         */
+        bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
+
+        /**
+         * Extract the "output" field from a script result and parse it as JSON.
+         * Frees the script result JSValue.
+         */
+        bool ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value &outJson);
+
+        /**
+         * Extract the "output" field from a script result as a string.
+         * Frees the script result JSValue.
+         */
+        bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
+
+        /**
+         * Encode a TLV-formatted JSON string to a buffer.
+         */
+        bool EncodeJsonToTlv(const std::string &tlvFormattedJson,
+                             chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                             size_t &encodedLength);
 
         /**
          * Set a JavaScript variable from a string value
