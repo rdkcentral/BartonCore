@@ -483,6 +483,14 @@ bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value
     }
 
     const char *outValueStr = JS_ToCString(ctx, jsonStr);
+    if (outValueStr == nullptr)
+    {
+        icLogError(LOG_TAG, "Failed to convert JSON string to C string");
+        JS_FreeValue(ctx, jsonStr);
+        JS_FreeValue(ctx, outputVal);
+        JS_FreeValue(ctx, scriptResult);
+        return false;
+    }
     icLogDebug(LOG_TAG, "Script output JSON: %s", outValueStr);
     std::string jsonString = outValueStr;
     JS_FreeCString(ctx, outValueStr);
