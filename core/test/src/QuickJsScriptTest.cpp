@@ -149,7 +149,6 @@ namespace
     // Test: MapAttributeRead with simple boolean passthrough script
     TEST_F(QuickJsScriptTest, MapAttributeReadBooleanPassthrough)
     {
-    {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
         attr.attributeId = 0x0000;

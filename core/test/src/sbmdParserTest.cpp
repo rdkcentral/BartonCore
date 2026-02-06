@@ -170,7 +170,7 @@ static void test_sbmdParserDoorLockFile(void **state)
     // Verify basic metadata
     assert_string_equal(spec->name.c_str(), "Door Lock");
     assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "doorLock");
-    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 2);
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 3);
 
     // Verify matterMeta deviceTypes - 0x000a is 10 (door lock device type)
     assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
@@ -444,14 +444,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should succeed at top level but the resource should have parsing issues
-    // Check that the mapper parsing failed by verifying the resource wasn't added properly
-    assert_non_null(spec.get());
-    // The resource is added but mapper parsing fails, so mapper fields may be incomplete
-    // Current behavior: resource is added despite mapper failure (logged as warning)
-    assert_int_equal((int) spec->resources.size(), 1);
-    // The mapper should have failed - hasRead is set before validation
-    assert_true(spec->resources[0].mapper.hasRead);
+    // Parser should fail when read mapper has both attribute and command
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserMapperWithNeitherAttributeNorCommand(void **state)
@@ -481,13 +475,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser succeeds but mapper should have issues
-    assert_non_null(spec.get());
-    assert_int_equal((int) spec->resources.size(), 1);
-    // hasRead is set but no attribute or command
-    assert_true(spec->resources[0].mapper.hasRead);
-    assert_false(spec->resources[0].mapper.readAttribute.has_value());
-    assert_false(spec->resources[0].mapper.readCommand.has_value());
+    // Parser should fail when read mapper has neither attribute nor command
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserInvalidResourceType(void **state)
@@ -512,9 +501,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser skips invalid resources
-    assert_non_null(spec.get());
-    assert_int_equal((int) spec->resources.size(), 0);
+    // Parser should fail on invalid resource type
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserInvalidEndpointType(void **state)
@@ -539,9 +527,8 @@ endpoints:
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser skips invalid endpoints
-    assert_non_null(spec.get());
-    assert_int_equal((int) spec->endpoints.size(), 0);
+    // Parser should fail on invalid endpoint type
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserInvalidAttributeType(void **state)
@@ -572,8 +559,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser succeeds but attribute should have issues
-    assert_non_null(spec.get());
+    // Parser should fail on invalid attribute type
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserNonexistentFile(void **state)
@@ -630,8 +617,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-    assert_int_equal((int) spec->resources.size(), 1);
+    // Parser should fail when write mapper has both attribute and command
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserExecuteMapperWithBothAttributeAndCommand(void **state)
@@ -670,8 +657,8 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-    assert_int_equal((int) spec->resources.size(), 1);
+    // Parser should fail when execute mapper has both attribute and command
+    assert_null(spec.get());
 }
 
 int main(int argc, const char **argv)

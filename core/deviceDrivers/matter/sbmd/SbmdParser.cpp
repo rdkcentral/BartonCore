@@ -646,12 +646,12 @@ uint32_t SbmdParser::ParseHexOrDecimal(const std::string &value)
     }
     catch (const std::invalid_argument &e)
     {
-        icError(logFmt("Invalid numeric value '%s': %s"), value.c_str(), e.what());
+        icLogError(LOG_TAG, "(%s): Invalid numeric value '%s': %s", __func__, value.c_str(), e.what());
         return 0;
     }
     catch (const std::out_of_range &e)
     {
-        icError(logFmt("Numeric value '%s' out of range: %s"), value.c_str(), e.what());
+        icLogError(LOG_TAG, "(%s): Numeric value '%s' out of range: %s", __func__, value.c_str(), e.what());
         return 0;
     }
 }
