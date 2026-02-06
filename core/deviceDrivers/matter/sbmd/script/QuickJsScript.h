@@ -189,7 +189,7 @@ namespace barton
     private:
         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
 
-        mutable std::mutex mutex_;
+        mutable std::mutex qjsMtx;
         JSRuntime *runtime;
         JSContext *ctx;
 

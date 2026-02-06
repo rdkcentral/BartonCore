@@ -294,7 +294,7 @@ QuickJsScript::QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JS
 
 QuickJsScript::~QuickJsScript()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
     JS_FreeContext(ctx);
     JS_FreeRuntime(runtime);
     icLogDebug(LOG_TAG, "QuickJS runtime destroyed for device %s", deviceId.c_str());
@@ -303,7 +303,7 @@ QuickJsScript::~QuickJsScript()
 bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
 
     if (script.empty())
     {
@@ -323,7 +323,7 @@ bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
 bool QuickJsScript::AddAttributeWriteMapper(const SbmdAttribute &attributeInfo,
                                             const std::string &script)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
 
     if (script.empty())
     {
@@ -343,7 +343,7 @@ bool QuickJsScript::AddAttributeWriteMapper(const SbmdAttribute &attributeInfo,
 bool QuickJsScript::AddCommandExecuteMapper(const SbmdCommand &commandInfo,
                                             const std::string &script)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
 
     if (script.empty())
     {
@@ -363,7 +363,7 @@ bool QuickJsScript::AddCommandExecuteMapper(const SbmdCommand &commandInfo,
 bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                                     const std::string &script)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
 
     if (script.empty())
     {
@@ -397,7 +397,6 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     if (JS_SetPropertyStr(ctx, global, argumentName.c_str(), argVal) < 0)
     {
         icLogError(LOG_TAG, "Failed to set argument variable '%s'", argumentName.c_str());
-        JS_FreeValue(ctx, argVal);
         JS_FreeValue(ctx, global);
         return false;
     }
@@ -445,7 +444,7 @@ bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std:
             JS_FreeCString(ctx, exceptionStr);
         }
         JS_FreeValue(ctx, exception);
-        return false;
+        JS_FreeValue(ctx, outValue);
     }
     return true;
 }
@@ -563,7 +562,6 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
     if (!success)
     {
         icLogError(LOG_TAG, "Failed to set JS variable '%s'", name.c_str());
-        JS_FreeValue(ctx, jsValue);
     }
 
     return success;
@@ -573,7 +571,7 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      chip::TLV::TLVReader &reader,
                                      std::string &outValue)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
     {
@@ -641,7 +639,7 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
                                       chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                                       size_t &encodedLength)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
     auto it = attributeWriteScripts.find(attributeInfo);
     if (it == attributeWriteScripts.end())
     {
@@ -702,7 +700,7 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
                                       chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                                       size_t &encodedLength)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
     auto it = commandExecuteScripts.find(commandInfo);
     if (it == commandExecuteScripts.end())
     {
@@ -768,7 +766,7 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               chip::TLV::TLVReader &reader,
                                               std::string &outValue)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(qjsMtx);
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
     {
