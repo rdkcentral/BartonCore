@@ -457,21 +457,32 @@ bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value
     {
         icLogError(LOG_TAG, "Script result missing 'output' field");
         JS_FreeValue(ctx, scriptResult);
+        JS_FreeValue(ctx, outputVal);
         return false;
     }
 
     // Convert the output JSValue to JSON string
     JSValue jsonStr = JS_JSONStringify(ctx, outputVal, JS_UNDEFINED, JS_UNDEFINED);
-    const char *outValueStr = JS_ToCString(ctx, jsonStr);
-    if (outValueStr == nullptr)
+    if (JS_IsException(jsonStr))
     {
-        icLogError(LOG_TAG, "Failed to stringify output value");
-        JS_FreeValue(ctx, jsonStr);
+        JSValue exception = JS_GetException(ctx);
+        const char *errorStr = JS_ToCString(ctx, exception);
+        if (errorStr != nullptr)
+        {
+            icLogError(LOG_TAG, "Failed to stringify output value: %s", errorStr);
+            JS_FreeCString(ctx, errorStr);
+        }
+        else
+        {
+            icLogError(LOG_TAG, "Failed to stringify output value: <unknown QuickJS error>");
+        }
+        JS_FreeValue(ctx, exception);
         JS_FreeValue(ctx, outputVal);
         JS_FreeValue(ctx, scriptResult);
         return false;
     }
 
+    const char *outValueStr = JS_ToCString(ctx, jsonStr);
     icLogDebug(LOG_TAG, "Script output JSON: %s", outValueStr);
     std::string jsonString = outValueStr;
     JS_FreeCString(ctx, outValueStr);
@@ -500,6 +511,7 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
     {
         icLogError(LOG_TAG, "Script result missing 'output' field");
         JS_FreeValue(ctx, scriptResult);
+        JS_FreeValue(ctx, outputVal);
         return false;
     }
 
@@ -556,6 +568,9 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
 {
     JSValue jsValue = JS_NewString(ctx, value.c_str());
     JSValue global = JS_GetGlobalObject(ctx);
+
+    // NOTE: JS_SetPropertyStr consumes the reference to jsValue (on success or failure),
+    // so jsValue must NOT be freed manually after this call.
     bool success = JS_SetPropertyStr(ctx, global, name.c_str(), jsValue) >= 0;
     JS_FreeValue(ctx, global);
 
