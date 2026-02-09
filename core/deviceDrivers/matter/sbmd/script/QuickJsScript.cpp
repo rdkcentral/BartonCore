@@ -50,6 +50,109 @@ namespace barton
 
     namespace
     {
+        /**
+         * RAII wrapper for QuickJS JSValue.
+         * Automatically frees the JSValue when the guard goes out of scope.
+         */
+        class JsValueGuard
+        {
+        public:
+            JsValueGuard(JSContext *ctx, JSValue value) : ctx_(ctx), value_(value) {}
+            ~JsValueGuard()
+            {
+                if (ctx_)
+                {
+                    JS_FreeValue(ctx_, value_);
+                }
+            }
+
+            // Non-copyable
+            JsValueGuard(const JsValueGuard &) = delete;
+            JsValueGuard &operator=(const JsValueGuard &) = delete;
+
+            // Movable
+            JsValueGuard(JsValueGuard &&other) noexcept : ctx_(other.ctx_), value_(other.value_)
+            {
+                other.ctx_ = nullptr;
+            }
+
+            JsValueGuard &operator=(JsValueGuard &&other) noexcept
+            {
+                if (this != &other)
+                {
+                    if (ctx_)
+                    {
+                        JS_FreeValue(ctx_, value_);
+                    }
+                    ctx_ = other.ctx_;
+                    value_ = other.value_;
+                    other.ctx_ = nullptr;
+                }
+                return *this;
+            }
+
+            JSValue get() const { return value_; }
+            JSValue *ptr() { return &value_; }
+
+            // Release ownership without freeing (for returning values to caller)
+            JSValue release()
+            {
+                ctx_ = nullptr;
+                return value_;
+            }
+
+        private:
+            JSContext *ctx_;
+            JSValue value_;
+        };
+
+        /**
+         * RAII wrapper for QuickJS C strings.
+         * Automatically frees the string when the guard goes out of scope.
+         */
+        class JsCStringGuard
+        {
+        public:
+            JsCStringGuard(JSContext *ctx, const char *str) : ctx_(ctx), str_(str) {}
+            ~JsCStringGuard()
+            {
+                if (ctx_ && str_)
+                {
+                    JS_FreeCString(ctx_, str_);
+                }
+            }
+
+            // Non-copyable
+            JsCStringGuard(const JsCStringGuard &) = delete;
+            JsCStringGuard &operator=(const JsCStringGuard &) = delete;
+
+            // Movable
+            JsCStringGuard(JsCStringGuard &&other) noexcept : ctx_(other.ctx_), str_(other.str_)
+            {
+                other.ctx_ = nullptr;
+                other.str_ = nullptr;
+            }
+
+            const char *get() const { return str_; }
+            explicit operator bool() const { return str_ != nullptr; }
+
+        private:
+            JSContext *ctx_;
+            const char *str_;
+        };
+
+        /**
+         * Extracts the current QuickJS exception as a string.
+         * Clears the exception from the context.
+         * @param ctx The QuickJS context
+         * @return The exception message, or "unknown error" if unavailable
+         */
+        std::string GetExceptionString(JSContext *ctx)
+        {
+            JsValueGuard exceptionGuard(ctx, JS_GetException(ctx));
+            JsCStringGuard strGuard(ctx, JS_ToCString(ctx, exceptionGuard.get()));
+            return strGuard ? strGuard.get() : "unknown error";
+        }
 
         /**
          * Maps Matter type strings to the JsonToTlv type format strings.
@@ -58,73 +161,49 @@ namespace barton
          */
         std::string matterTypeToJsonTlvType(const std::string &matterType)
         {
-            // Boolean type
-            if (matterType == "bool" || matterType == "boolean")
+            // clang-format off
+            static const std::unordered_map<std::string, std::string> typeMap = {
+                // Boolean types
+                {"bool", "BOOL"}, {"boolean", "BOOL"},
+                // Unsigned integer types
+                {"uint8", "UINT"}, {"uint16", "UINT"}, {"uint32", "UINT"}, {"uint64", "UINT"},
+                {"enum8", "UINT"}, {"enum16", "UINT"},
+                {"bitmap8", "UINT"}, {"bitmap16", "UINT"}, {"bitmap32", "UINT"}, {"bitmap64", "UINT"},
+                {"percent", "UINT"}, {"percent100ths", "UINT"},
+                {"epoch-s", "UINT"}, {"epoch-us", "UINT"}, {"posix-ms", "UINT"}, {"elapsed-s", "UINT"}, {"utc", "UINT"},
+                {"fabric-idx", "UINT"}, {"fabric-id", "UINT"}, {"node-id", "UINT"}, {"vendor-id", "UINT"},
+                {"devtype-id", "UINT"}, {"group-id", "UINT"}, {"endpoint-no", "UINT"}, {"cluster-id", "UINT"},
+                {"attrib-id", "UINT"}, {"field-id", "UINT"}, {"event-id", "UINT"}, {"command-id", "UINT"},
+                {"action-id", "UINT"}, {"trans-id", "UINT"}, {"data-ver", "UINT"}, {"entry-idx", "UINT"},
+                {"systime-ms", "UINT"}, {"systime-us", "UINT"},
+                // Signed integer types
+                {"int8", "INT"}, {"int16", "INT"}, {"int24", "INT"}, {"int32", "INT"},
+                {"int40", "INT"}, {"int48", "INT"}, {"int56", "INT"}, {"int64", "INT"},
+                {"temperature", "INT"}, {"amperage-ma", "INT"}, {"voltage-mv", "INT"},
+                {"power-mw", "INT"}, {"energy-mwh", "INT"},
+                // Floating point types
+                {"single", "FLOAT"}, {"float", "FLOAT"}, {"double", "DOUBLE"},
+                // String types
+                {"string", "STRING"}, {"char_string", "STRING"}, {"long_char_string", "STRING"},
+                // Byte string types
+                {"octstr", "BYTES"}, {"octet_string", "BYTES"}, {"long_octet_string", "BYTES"},
+                {"ipadr", "BYTES"}, {"ipv4adr", "BYTES"}, {"ipv6adr", "BYTES"}, {"ipv6pre", "BYTES"},
+                {"hwadr", "BYTES"}, {"semtag", "BYTES"},
+                // Struct type
+                {"struct", "STRUCT"},
+                // Array/list types
+                {"list", "ARRAY-?"}, {"array", "ARRAY-?"},
+                // Null type
+                {"null", "NULL"},
+            };
+            // clang-format on
+
+            auto it = typeMap.find(matterType);
+            if (it != typeMap.end())
             {
-                return "BOOL";
-            }
-            // Unsigned integer types
-            if (matterType == "uint8" || matterType == "uint16" || matterType == "uint32" || matterType == "uint64" ||
-                matterType == "enum8" || matterType == "enum16" || matterType == "bitmap8" ||
-                matterType == "bitmap16" || matterType == "bitmap32" || matterType == "bitmap64" ||
-                matterType == "percent" || matterType == "percent100ths" || matterType == "epoch-s" ||
-                matterType == "epoch-us" || matterType == "posix-ms" || matterType == "elapsed-s" ||
-                matterType == "utc" || matterType == "fabric-idx" || matterType == "fabric-id" ||
-                matterType == "node-id" || matterType == "vendor-id" || matterType == "devtype-id" ||
-                matterType == "group-id" || matterType == "endpoint-no" || matterType == "cluster-id" ||
-                matterType == "attrib-id" || matterType == "field-id" || matterType == "event-id" ||
-                matterType == "command-id" || matterType == "action-id" || matterType == "trans-id" ||
-                matterType == "data-ver" || matterType == "entry-idx" || matterType == "systime-ms" ||
-                matterType == "systime-us")
-            {
-                return "UINT";
-            }
-            // Signed integer types
-            if (matterType == "int8" || matterType == "int16" || matterType == "int24" || matterType == "int32" ||
-                matterType == "int40" || matterType == "int48" || matterType == "int56" || matterType == "int64" ||
-                matterType == "temperature" || matterType == "amperage-ma" || matterType == "voltage-mv" ||
-                matterType == "power-mw" || matterType == "energy-mwh")
-            {
-                return "INT";
-            }
-            // Floating point types
-            if (matterType == "single" || matterType == "float")
-            {
-                return "FLOAT";
-            }
-            if (matterType == "double")
-            {
-                return "DOUBLE";
-            }
-            // String types
-            if (matterType == "string" || matterType == "char_string" || matterType == "long_char_string")
-            {
-                return "STRING";
-            }
-            // Byte string types
-            if (matterType == "octstr" || matterType == "octet_string" || matterType == "long_octet_string" ||
-                matterType == "ipadr" || matterType == "ipv4adr" || matterType == "ipv6adr" ||
-                matterType == "ipv6pre" || matterType == "hwadr" || matterType == "semtag")
-            {
-                return "BYTES";
-            }
-            // Struct type
-            if (matterType == "struct")
-            {
-                return "STRUCT";
-            }
-            // Array/list types
-            if (matterType == "list" || matterType == "array")
-            {
-                return "ARRAY-?";
-            }
-            // Null type
-            if (matterType == "null")
-            {
-                return "NULL";
+                return it->second;
             }
 
-            // Default: treat unknown types as generic (let JsonToTlv infer)
             icLogWarn(LOG_TAG, "Unknown Matter type '%s', using STRUCT as fallback", matterType.c_str());
             return "STRUCT";
         }
@@ -392,15 +471,15 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     }
 
     // Set the JSON object as a global variable (duplicate value to maintain ownership)
+    // NOTE: JS_SetPropertyStr consumes the reference to argVal on success or failure,
+    // so we don't need to free argVal here
     JSValue argVal = JS_DupValue(ctx, argumentJson);
-    JSValue global = JS_GetGlobalObject(ctx);
-    if (JS_SetPropertyStr(ctx, global, argumentName.c_str(), argVal) < 0)
+    JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
+    if (JS_SetPropertyStr(ctx, globalGuard.get(), argumentName.c_str(), argVal) < 0)
     {
         icLogError(LOG_TAG, "Failed to set argument variable '%s'", argumentName.c_str());
-        JS_FreeValue(ctx, global);
         return false;
     }
-    JS_FreeValue(ctx, global);
 
     // Wrap the script body in a function and execute it
     std::string wrappedScript = "(function() { " + script + " })()";
@@ -408,24 +487,15 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     icLogDebug(LOG_TAG, "Executing script: %s", wrappedScript.c_str());
 
     // Execute the script
-    JSValue scriptResult = JS_Eval(ctx, wrappedScript.c_str(), wrappedScript.length(),
-                                   "<sbmd_script>", JS_EVAL_TYPE_GLOBAL);
-    if (JS_IsException(scriptResult))
+    JsValueGuard scriptResultGuard(
+        ctx, JS_Eval(ctx, wrappedScript.c_str(), wrappedScript.length(), "<sbmd_script>", JS_EVAL_TYPE_GLOBAL));
+    if (JS_IsException(scriptResultGuard.get()))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(LOG_TAG, "Script execution failed: %s",
-                   exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
-        JS_FreeValue(ctx, scriptResult);
+        icLogError(LOG_TAG, "Script execution failed: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    outJson = scriptResult;
+    outJson = scriptResultGuard.release();
     icLogDebug(LOG_TAG, "Script executed successfully");
     return true;
 }
@@ -435,68 +505,43 @@ bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std:
     outValue = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
     if (JS_IsException(outValue))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *exceptionStr = JS_ToCString(ctx, exception);
-        icLogError(
-            LOG_TAG, "Failed to parse %s JSON: %s", sourceName.c_str(), exceptionStr ? exceptionStr : "unknown error");
-        if (exceptionStr)
-        {
-            JS_FreeCString(ctx, exceptionStr);
-        }
-        JS_FreeValue(ctx, exception);
-        JS_FreeValue(ctx, outValue);
+        icLogError(LOG_TAG, "Failed to parse %s JSON: %s", sourceName.c_str(), GetExceptionString(ctx).c_str());
+        // outValue is already an exception, no need to free it separately
+        return false;
     }
     return true;
 }
 
 bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value &outJson)
 {
+    // Take ownership of scriptResult for automatic cleanup
+    JsValueGuard scriptResultGuard(ctx, scriptResult);
+
     // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
-    if (JS_IsUndefined(outputVal))
+    JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, scriptResultGuard.get(), "output"));
+    if (JS_IsUndefined(outputValGuard.get()))
     {
         icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, scriptResult);
-        JS_FreeValue(ctx, outputVal);
         return false;
     }
 
     // Convert the output JSValue to JSON string
-    JSValue jsonStr = JS_JSONStringify(ctx, outputVal, JS_UNDEFINED, JS_UNDEFINED);
-    if (JS_IsException(jsonStr))
+    JsValueGuard jsonStrGuard(ctx, JS_JSONStringify(ctx, outputValGuard.get(), JS_UNDEFINED, JS_UNDEFINED));
+    if (JS_IsException(jsonStrGuard.get()))
     {
-        JSValue exception = JS_GetException(ctx);
-        const char *errorStr = JS_ToCString(ctx, exception);
-        if (errorStr != nullptr)
-        {
-            icLogError(LOG_TAG, "Failed to stringify output value: %s", errorStr);
-            JS_FreeCString(ctx, errorStr);
-        }
-        else
-        {
-            icLogError(LOG_TAG, "Failed to stringify output value: <unknown QuickJS error>");
-        }
-        JS_FreeValue(ctx, exception);
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, scriptResult);
+        icLogError(LOG_TAG, "Failed to stringify output value: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    const char *outValueStr = JS_ToCString(ctx, jsonStr);
-    if (outValueStr == nullptr)
+    JsCStringGuard outValueStrGuard(ctx, JS_ToCString(ctx, jsonStrGuard.get()));
+    if (!outValueStrGuard)
     {
         icLogError(LOG_TAG, "Failed to convert JSON string to C string");
-        JS_FreeValue(ctx, jsonStr);
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, scriptResult);
         return false;
     }
-    icLogDebug(LOG_TAG, "Script output JSON: %s", outValueStr);
-    std::string jsonString = outValueStr;
-    JS_FreeCString(ctx, outValueStr);
-    JS_FreeValue(ctx, jsonStr);
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, scriptResult);
+
+    icLogDebug(LOG_TAG, "Script output JSON: %s", outValueStrGuard.get());
+    std::string jsonString = outValueStrGuard.get();
 
     // Parse the JSON string to Json::Value
     Json::CharReaderBuilder readerBuilder;
@@ -513,30 +558,26 @@ bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value
 
 bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
 {
+    // Take ownership of scriptResult for automatic cleanup
+    JsValueGuard scriptResultGuard(ctx, scriptResult);
+
     // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
-    if (JS_IsUndefined(outputVal))
+    JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, scriptResultGuard.get(), "output"));
+    if (JS_IsUndefined(outputValGuard.get()))
     {
         icLogError(LOG_TAG, "Script result missing 'output' field");
-        JS_FreeValue(ctx, scriptResult);
-        JS_FreeValue(ctx, outputVal);
         return false;
     }
 
-    const char *resultStr = JS_ToCString(ctx, outputVal);
-    if (resultStr == nullptr)
+    JsCStringGuard resultStrGuard(ctx, JS_ToCString(ctx, outputValGuard.get()));
+    if (!resultStrGuard)
     {
         icLogError(LOG_TAG, "Failed to convert output value to string");
-        JS_FreeValue(ctx, outputVal);
-        JS_FreeValue(ctx, scriptResult);
         return false;
     }
 
-    outValue = resultStr;
+    outValue = resultStrGuard.get();
     icLogDebug(LOG_TAG, "Script output string: %s", outValue.c_str());
-    JS_FreeCString(ctx, resultStr);
-    JS_FreeValue(ctx, outputVal);
-    JS_FreeValue(ctx, scriptResult);
     return true;
 }
 
@@ -547,10 +588,10 @@ bool QuickJsScript::EncodeJsonToTlv(const std::string &tlvFormattedJson,
     icLogDebug(LOG_TAG, "TLV formatted JSON: %s", tlvFormattedJson.c_str());
 
     // Allocate buffer for TLV encoding.
-    // NOTE: kMaxTlvSize is set to 1024 bytes which should handle most payloads.
-    // If future use cases require larger payloads, this may need to be revisited.
-    constexpr size_t kMaxTlvSize = 1024;
-    if (!buffer.Alloc(kMaxTlvSize))
+    // JSON text is always larger than the equivalent TLV binary encoding due to
+    // JSON overhead (quotes, colons, commas, type annotations, base64 expansion for bytes).
+    size_t bufferSize = tlvFormattedJson.length();
+    if (!buffer.Alloc(bufferSize))
     {
         icLogError(LOG_TAG, "Failed to allocate buffer for TLV encoding");
         return false;
@@ -558,7 +599,7 @@ bool QuickJsScript::EncodeJsonToTlv(const std::string &tlvFormattedJson,
 
     // Initialize TLV writer with the buffer
     chip::TLV::TLVWriter writer;
-    writer.Init(buffer.Get(), kMaxTlvSize);
+    writer.Init(buffer.Get(), bufferSize);
 
     // Convert formatted JSON to TLV
     if (chip::JsonToTlv(tlvFormattedJson, writer) != CHIP_NO_ERROR)
@@ -574,14 +615,12 @@ bool QuickJsScript::EncodeJsonToTlv(const std::string &tlvFormattedJson,
 
 bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &value)
 {
-    JSValue jsValue = JS_NewString(ctx, value.c_str());
-    JSValue global = JS_GetGlobalObject(ctx);
-
     // NOTE: JS_SetPropertyStr consumes the reference to jsValue (on success or failure),
-    // so jsValue must NOT be freed manually after this call.
-    bool success = JS_SetPropertyStr(ctx, global, name.c_str(), jsValue) >= 0;
-    JS_FreeValue(ctx, global);
+    // so jsValue must NOT be freed manually after this call, and is not wrapped in a guard.
+    JSValue jsValue = JS_NewString(ctx, value.c_str());
+    JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
 
+    bool success = JS_SetPropertyStr(ctx, globalGuard.get(), name.c_str(), jsValue) >= 0;
     if (!success)
     {
         icLogError(LOG_TAG, "Failed to set JS variable '%s'", name.c_str());
@@ -639,17 +678,15 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     icLogDebug(LOG_TAG, "sbmdReadArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson;
-    if (!ParseJsonToJSValue(jsonString, "sbmdReadArgs", argJson))
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdReadArgs", argJsonRaw))
     {
         return false;
     }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
 
     JSValue outJson;
-    bool success = ExecuteScript(it->second, "sbmdReadArgs", argJson, outJson);
-    JS_FreeValue(ctx, argJson);
-
-    if (!success)
+    if (!ExecuteScript(it->second, "sbmdReadArgs", argJsonGuard.get(), outJson))
     {
         return false;
     }
@@ -690,17 +727,15 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
     icLogDebug(LOG_TAG, "sbmdWriteArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson;
-    if (!ParseJsonToJSValue(jsonString, "sbmdWriteArgs", argJson))
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdWriteArgs", argJsonRaw))
     {
         return false;
     }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
 
     JSValue outJson;
-    bool success = ExecuteScript(it->second, "sbmdWriteArgs", argJson, outJson);
-    JS_FreeValue(ctx, argJson);
-
-    if (!success)
+    if (!ExecuteScript(it->second, "sbmdWriteArgs", argJsonGuard.get(), outJson))
     {
         icLogError(LOG_TAG, "Failed to execute write mapping script for cluster 0x%X, attribute 0x%X",
                    attributeInfo.clusterId, attributeInfo.attributeId);
@@ -755,17 +790,15 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
     icLogDebug(LOG_TAG, "sbmdCommandArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson;
-    if (!ParseJsonToJSValue(jsonString, "sbmdCommandArgs", argJson))
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdCommandArgs", argJsonRaw))
     {
         return false;
     }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
 
     JSValue outJson;
-    bool success = ExecuteScript(it->second, "sbmdCommandArgs", argJson, outJson);
-    JS_FreeValue(ctx, argJson);
-
-    if (!success)
+    if (!ExecuteScript(it->second, "sbmdCommandArgs", argJsonGuard.get(), outJson))
     {
         icLogError(LOG_TAG,
                    "Failed to execute command mapping script for cluster 0x%X, command 0x%X",
@@ -833,17 +866,15 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     icLogDebug(LOG_TAG, "sbmdCommandResponseArgs JSON: %s", jsonString.c_str());
 
     // Parse JSON string to JSValue
-    JSValue argJson;
-    if (!ParseJsonToJSValue(jsonString, "sbmdCommandResponseArgs", argJson))
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdCommandResponseArgs", argJsonRaw))
     {
         return false;
     }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
 
     JSValue outJson;
-    bool success = ExecuteScript(it->second, "sbmdCommandResponseArgs", argJson, outJson);
-    JS_FreeValue(ctx, argJson);
-
-    if (!success)
+    if (!ExecuteScript(it->second, "sbmdCommandResponseArgs", argJsonGuard.get(), outJson))
     {
         return false;
     }
