@@ -502,13 +502,14 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
 
 bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
 {
-    outValue = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
-    if (JS_IsException(outValue))
+    JSValue parsed = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
+    if (JS_IsException(parsed))
     {
         icLogError(LOG_TAG, "Failed to parse %s JSON: %s", sourceName.c_str(), GetExceptionString(ctx).c_str());
-        // outValue is already an exception, no need to free it separately
+        JS_FreeValue(ctx, parsed);
         return false;
     }
+    outValue = parsed;
     return true;
 }
 
