@@ -25,6 +25,7 @@
 // Created by tlea on 12/5/25
 //
 
+#include "json/writer.h"
 #define LOG_TAG "QuickJsScript"
 
 #include "QuickJsScript.h"
@@ -39,6 +40,7 @@
 #include <mutex>
 #include <platform/CHIPDeviceLayer.h>
 #include <sstream>
+#include <unordered_map>
 
 extern "C" {
 #include <icLog/logging.h>
@@ -275,7 +277,14 @@ namespace barton
                 {
                     if (elem.isIntegral())
                     {
-                        bytes.push_back(static_cast<uint8_t>(elem.asInt()));
+                        int value = elem.asInt();
+                        if (value < 0 || value > 255)
+                        {
+                            icLogError(
+                                LOG_TAG, "Invalid value in byte array for argument '%s': %d", arg.name.c_str(), value);
+                            return Json::writeString(Json::StreamWriterBuilder(), tlvJson);
+                        }
+                        bytes.push_back(static_cast<uint8_t>(value));
                     }
                     else
                     {
