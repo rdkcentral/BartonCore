@@ -50,17 +50,20 @@ namespace barton
         // Equality operator for map key usage
         bool operator==(const SbmdAttribute &other) const
         {
-            return clusterId == other.clusterId && attributeId == other.attributeId;
+            return clusterId == other.clusterId && attributeId == other.attributeId &&
+                   resourceEndpointId == other.resourceEndpointId && resourceId == other.resourceId;
         }
 
         // Less-than operator for std::map usage
         bool operator<(const SbmdAttribute &other) const
         {
             if (clusterId != other.clusterId)
-            {
                 return clusterId < other.clusterId;
-            }
-            return attributeId < other.attributeId;
+            if (attributeId != other.attributeId)
+                return attributeId < other.attributeId;
+            if (resourceEndpointId != other.resourceEndpointId)
+                return resourceEndpointId < other.resourceEndpointId;
+            return resourceId < other.resourceId;
         }
     };
 
@@ -90,17 +93,20 @@ namespace barton
         // Equality operator for map key usage
         bool operator==(const SbmdCommand &other) const
         {
-            return clusterId == other.clusterId && commandId == other.commandId;
+            return clusterId == other.clusterId && commandId == other.commandId &&
+                   resourceEndpointId == other.resourceEndpointId && resourceId == other.resourceId;
         }
 
         // Less-than operator for std::map usage
         bool operator<(const SbmdCommand &other) const
         {
             if (clusterId != other.clusterId)
-            {
                 return clusterId < other.clusterId;
-            }
-            return commandId < other.commandId;
+            if (commandId != other.commandId)
+                return commandId < other.commandId;
+            if (resourceEndpointId != other.resourceEndpointId)
+                return resourceEndpointId < other.resourceEndpointId;
+            return resourceId < other.resourceId;
         }
     };
 
