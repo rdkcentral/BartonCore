@@ -38,6 +38,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <optional>
 
 extern "C" {
 #include <device/icDeviceResource.h>
@@ -391,9 +392,10 @@ namespace barton
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
         // Fast O(1) lookup for readable attributes in OnAttributeData callback
-        std::
-            unordered_map<chip::app::ConcreteAttributePath, AttributeReadBinding, AttributePathHash, AttributePathEqual>
-                readableAttributeLookup;
+        std::unordered_map<chip::app::ConcreteAttributePath,
+                           AttributeReadBinding,
+                           AttributePathHash,
+                           AttributePathEqual> readableAttributeLookup;
 
         // Context for tracking active write operations
         struct WriteContext
