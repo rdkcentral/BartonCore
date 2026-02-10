@@ -37,6 +37,7 @@
 #include <future>
 #include <map>
 #include <string>
+#include <unordered_map>
 
 extern "C" {
 #include <device/icDeviceResource.h>
@@ -399,6 +400,7 @@ namespace barton
         {
             std::promise<bool> *writePromise;
             std::unique_ptr<chip::app::WriteClient> writeClient;
+            bool success = true; // Track overall success across all attribute responses
         };
         std::map<chip::app::WriteClient *, WriteContext> activeWriteContexts;
 

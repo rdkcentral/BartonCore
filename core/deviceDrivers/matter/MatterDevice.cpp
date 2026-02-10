@@ -59,9 +59,10 @@ MatterDevice::MatterDevice(std::string deviceId, std::shared_ptr<DeviceDataCache
 MatterDevice::~MatterDevice()
 {
     icDebug("Destroying MatterDevice %s", deviceId.c_str());
-
-    // The callback is automatically unregistered when SetCallback is called with nullptr
-    // or when the DeviceDataCache is destroyed
+    if (deviceDataCache)
+    {
+        deviceDataCache->SetCallback(nullptr);
+    }
 }
 
 void MatterDevice::CacheCallback::OnReportBegin()
@@ -714,13 +715,11 @@ void MatterDevice::OnResponse(const chip::app::WriteClient * apWriteClient, cons
     auto it = activeWriteContexts.find(const_cast<chip::app::WriteClient *>(apWriteClient));
     if (it != activeWriteContexts.end())
     {
-        bool success = attributeStatus.IsSuccess();
-        if (!success)
+        if (!attributeStatus.IsSuccess())
         {
             icError("Write failed with status 0x%x", static_cast<unsigned int>(attributeStatus.mStatus));
+            it->second.success = false;
         }
-        // Note: We don't set the promise here; we wait for OnDone to do that
-        // because there may be multiple attribute responses
     }
 }
 
@@ -746,12 +745,12 @@ void MatterDevice::OnDone(chip::app::WriteClient * apWriteClient)
     auto it = activeWriteContexts.find(apWriteClient);
     if (it != activeWriteContexts.end())
     {
-        // If we haven't already signaled the promise (via OnError), signal success now
+        // If we haven't already signaled the promise (via OnError), signal the result now
         // Check if the promise is still valid by trying to get its future state
         try
         {
             // If set_value hasn't been called, this will succeed
-            it->second.writePromise->set_value(true);
+            it->second.writePromise->set_value(it->second.success);
         }
         catch (const std::future_error &e)
         {

@@ -62,9 +62,9 @@ DeviceDataCache::~DeviceDataCache()
                 auto *cache = static_cast<chip::app::ClusterStateCache *>(ptrs[0]);
                 auto *client = static_cast<chip::app::ReadClient *>(ptrs[1]);
 
-                // Reset in proper order: cache depends on client, so destroy cache first
-                delete cache;
+                // Reset in proper order: client depends on cache, so destroy client first
                 delete client;
+                delete cache;
                 delete[] ptrs;
             },
             reinterpret_cast<intptr_t>(new void *[2] {cacheToDestroy, clientToDestroy}));
@@ -586,8 +586,21 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                             chip::app::ConcreteDataAttributePath dataPath(
                                 path.mEndpointId, path.mClusterId, path.mAttributeId);
                             chip::TLV::TLVReader reader;
-                            self->clusterStateCache->Get(dataPath, reader);
-                            chip::app::StatusIB aStatus; // Assume success for regeneration (the default)
+
+                            CHIP_ERROR err = self->clusterStateCache->Get(dataPath, reader);
+                            if (err != CHIP_NO_ERROR)
+                            {
+                                icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32 ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                                       static_cast<unsigned int>(dataPath.mEndpointId),
+                                       static_cast<uint32_t>(dataPath.mClusterId),
+                                       static_cast<uint32_t>(dataPath.mAttributeId),
+                                       err.Format());
+
+                                // Skip notifying the callback for this attribute; continue with others.
+                                return CHIP_NO_ERROR;
+                            }
+
+                            chip::app::StatusIB aStatus(chip::Protocols::InteractionModel::Status::Success);
                             self->callback->OnAttributeData(dataPath, &reader, aStatus);
 
                             return CHIP_NO_ERROR;
