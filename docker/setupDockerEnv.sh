@@ -112,7 +112,7 @@ CURRENT_BUILDER_TAG=$HIGHEST_BUILDER_TAG
 
 
 echo "OVERRIDING docker-builder version!  Don't merge this to main"
-IMAGE_TAG="docker-builder-1.5"
+IMAGE_TAG="1.5"
 CURRENT_BUILDER_TAG=$IMAGE_TAG
 
 

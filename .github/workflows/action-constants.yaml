@@ -66,7 +66,9 @@ jobs:
             -
                 id: set-image-tag-output
                 run: |
-                    latest_tag_reachable=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+                    # DONT MERGE
+                    #latest_tag_reachable=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+                    latest_tag_reachable="1.5"
                     # print to console for debugging
                     echo "latest_tag_reachable=$latest_tag_reachable"
                     echo "image_tag=$latest_tag_reachable" >> $GITHUB_OUTPUT
