@@ -53,6 +53,7 @@ typedef enum
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR,
+    B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID,
 
     N_B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTIES
@@ -60,15 +61,15 @@ typedef enum
 
 static const gchar *B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[] = {
     NULL,
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_TOKEN_PROVIDER] = "token-provider",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_NETWORK_CREDENTIALS_PROVIDER] = "network-credentials-provider",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_PROPERTY_PROVIDER] = "property-provider",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_STORAGE_DIR] = "storage-dir",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_FIRMWARE_FILE_DIR] = "firmware-file-dir",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR] = "matter-storage-dir",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR] =
-        "matter-attestation-trust-store-dir",
-    [B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID] = "account-id",
+    "token-provider",
+    "network-credentials-provider",
+    "property-provider",
+    "storage-dir",
+    "firmware-file-dir",
+    "matter-storage-dir",
+    "matter-attestation-trust-store-dir",
+    "sbmd-dir",
+    "account-id",
 };
 
 /**
@@ -144,6 +145,14 @@ gchar *b_core_initialize_params_container_get_matter_attestation_trust_store_dir
     BCoreInitializeParamsContainer *self);
 
 /**
+ * b_core_initialize_params_container_get_sbmd_dir
+ * @self: BCoreInitializeParamsContainer*
+ *
+ * Returns: (transfer full): The directory device service will use for SBMD specification files.
+ */
+gchar *b_core_initialize_params_container_get_sbmd_dir(BCoreInitializeParamsContainer *self);
+
+/**
  * b_core_initialize_params_container_get_account_id
  * @self: BCoreInitializeParamsContainer*
  *
@@ -215,6 +224,13 @@ void b_core_initialize_params_container_set_matter_storage_dir(BCoreInitializePa
 void b_core_initialize_params_container_set_matter_attestation_trust_store_dir(
     BCoreInitializeParamsContainer *self,
     const gchar *matterAttestationTrustStoreDir);
+
+/**
+ * b_core_initialize_params_container_set_sbmd_dir
+ * @self: BCoreInitializeParamsContainer*
+ * @sbmdDir: const gchar*
+ */
+void b_core_initialize_params_container_set_sbmd_dir(BCoreInitializeParamsContainer *self, const gchar *sbmdDir);
 
 /**
  * b_core_initialize_params_container_set_account_id

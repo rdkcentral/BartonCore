@@ -58,6 +58,7 @@ static gboolean NO_MATTER = FALSE;
 static gchar *wifi_ssid = NULL;
 static gchar *wifi_password = NULL;
 static gchar *storage_dir = NULL;
+static gchar *sbmd_dir = NULL;
 
 static bool showAdvanced = false;
 
@@ -71,6 +72,7 @@ static GOptionEntry entries[] = {
     {    "wifi-ssid", 's', 0, G_OPTION_ARG_STRING,     &wifi_ssid,                  "Wi-Fi SSID for commissioning",     "SSID"},
     {"wifi-password", 'p', 0, G_OPTION_ARG_STRING, &wifi_password,              "Wi-Fi Password for commissioning", "PASSWORD"},
     {  "storage-dir", 'd', 0, G_OPTION_ARG_STRING,   &storage_dir, "Persisted storage directory for configuration",      "DIR"},
+    {     "sbmd-dir", 'b', 0, G_OPTION_ARG_STRING,      &sbmd_dir, "Directory containing SBMD specification files",      "DIR"},
     G_OPTION_ENTRY_NULL
 };
 
@@ -299,6 +301,11 @@ static BCoreClient *initializeClient(gchar *confDir)
 {
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
     b_core_initialize_params_container_set_storage_dir(params, confDir);
+
+    if (sbmd_dir != NULL)
+    {
+        b_core_initialize_params_container_set_sbmd_dir(params, sbmd_dir);
+    }
 
     g_autofree gchar *matterConfDir = stringBuilder("%s/matter", confDir);
     g_mkdir_with_parents(matterConfDir, DEFAULT_CONF_DIR_MODE);
