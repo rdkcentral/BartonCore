@@ -601,7 +601,7 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                             }
 
                             chip::app::StatusIB aStatus(chip::Protocols::InteractionModel::Status::Success);
-                            self->callback->OnAttributeData(dataPath, &reader, aStatus);
+                            self->OnAttributeData(dataPath, &reader, aStatus);
 
                             return CHIP_NO_ERROR;
                         });
