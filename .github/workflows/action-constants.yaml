@@ -69,7 +69,7 @@ jobs:
                     # DONT MERGE THIS TO MAIN
                     #latest_tag_reachable=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
                     echo "HARD CODED docker-builder tag!"
-                    latest_tag_reachable: "docker-builder-1.5"
+                    latest_tag_reachable="docker-builder-1.5"
                     # print to console for debugging
                     echo "latest_tag_reachable=$latest_tag_reachable"
                     echo "image_tag=$latest_tag_reachable" >> $GITHUB_OUTPUT
