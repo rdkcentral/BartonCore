@@ -68,7 +68,14 @@ IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 #
 # The version is notated by the `version` file.
 
-HIGHEST_BUILDER_TAG=$(cat $DIR/version)
+VERSION_FILE="$DIR/version"
+if [ ! -s "$VERSION_FILE" ]; then
+    echo "Error: Docker builder version file '$VERSION_FILE' is missing or empty." >&2
+    echo "Please ensure the repository is fully checked out and that '$VERSION_FILE' contains a valid version string." >&2
+    exit 1
+fi
+
+HIGHEST_BUILDER_TAG=$(cat "$VERSION_FILE")
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
 
