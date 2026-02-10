@@ -47,7 +47,9 @@ DeviceDataCache::~DeviceDataCache()
 {
     icDebug();
 
-    // readClient and clusterStateCache need cleanup to run under the Matter stack context
+    // readClient and clusterStateCache need cleanup to run under the Matter stack context.
+    // We must wait for destruction to complete synchronously to avoid use-after-free,
+    // since clusterStateCache holds a reference to *this as its callback.
 
     // Move the unique_ptrs to local variables so they can be safely destroyed on the Matter thread
     auto *cacheToDestroy = clusterStateCache.release();
@@ -56,18 +58,29 @@ DeviceDataCache::~DeviceDataCache()
     // Only schedule cleanup if there's something to destroy
     if (cacheToDestroy != nullptr || clientToDestroy != nullptr)
     {
+        std::promise<void> destructionComplete;
+        std::future<void> destructionFuture = destructionComplete.get_future();
+
         chip::DeviceLayer::PlatformMgr().ScheduleWork(
             [](intptr_t arg) {
-                auto **ptrs = reinterpret_cast<void **>(arg);
-                auto *cache = static_cast<chip::app::ClusterStateCache *>(ptrs[0]);
-                auto *client = static_cast<chip::app::ReadClient *>(ptrs[1]);
+                auto *context = reinterpret_cast<std::tuple<void *, void *, std::promise<void> *> *>(arg);
+                auto *cache = static_cast<chip::app::ClusterStateCache *>(std::get<0>(*context));
+                auto *client = static_cast<chip::app::ReadClient *>(std::get<1>(*context));
+                auto *promise = std::get<2>(*context);
 
                 // Reset in proper order: client depends on cache, so destroy client first
                 delete client;
                 delete cache;
-                delete[] ptrs;
+
+                // Signal that destruction is complete
+                promise->set_value();
+                delete context;
             },
-            reinterpret_cast<intptr_t>(new void *[2] {cacheToDestroy, clientToDestroy}));
+            reinterpret_cast<intptr_t>(
+                new std::tuple<void *, void *, std::promise<void> *>(cacheToDestroy, clientToDestroy, &destructionComplete)));
+
+        // Wait for the Matter thread to complete destruction before returning
+        destructionFuture.wait();
     }
 }
 
