@@ -107,6 +107,18 @@ fi
 
 CURRENT_BUILDER_TAG=$HIGHEST_BUILDER_TAG
 
+
+
+
+
+echo "OVERRIDING docker-builder version!  Don't merge this to main"
+IMAGE_TAG="1.5"
+CURRENT_BUILDER_TAG=$IMAGE_TAG
+
+
+
+
+
 ##############################################################################
 # Variables needed to facilitate the Docker compose process. See docker/compose.yaml
 # to see how these variables are used.
