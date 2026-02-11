@@ -67,39 +67,47 @@ bool SbmdFactory::RegisterDrivers()
         return false;
     }
 
-    for (const auto& entry : dirIterator)
+    try
     {
-        if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
+        for (const auto& entry : dirIterator)
         {
-            try
+            if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
             {
-                icDebug("Loading SBMD spec: %s", entry.path().c_str());
-
-                auto spec = SbmdParser::ParseFile(entry.path().string());
-                if (!spec)
+                try
                 {
-                    icError("Failed to parse SBMD spec: %s", entry.path().c_str());
-                    allRegistered = false;
-                    continue;
+                    icDebug("Loading SBMD spec: %s", entry.path().c_str());
+
+                    auto spec = SbmdParser::ParseFile(entry.path().string());
+                    if (!spec)
+                    {
+                        icError("Failed to parse SBMD spec: %s", entry.path().c_str());
+                        allRegistered = false;
+                        continue;
+                    }
+
+                    auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::move(spec));
+
+                    if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
+                    {
+                        icError("Failed to register SBMD driver from: %s", entry.path().c_str());
+                        allRegistered = false;
+                        continue;
+                    }
+
+                    icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
                 }
-
-                auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::move(spec));
-
-                if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
+                catch (const std::exception& e)
                 {
-                    icError("Failed to register SBMD driver from: %s", entry.path().c_str());
+                    icError("Exception loading SBMD spec %s: %s", entry.path().c_str(), e.what());
                     allRegistered = false;
-                    continue;
                 }
-
-                icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
-            }
-            catch (const std::exception& e)
-            {
-                icError("Exception loading SBMD spec %s: %s", entry.path().c_str(), e.what());
-                allRegistered = false;
             }
         }
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        icError("Filesystem error during SBMD directory iteration: %s", e.what());
+        allRegistered = false;
     }
 
     return allRegistered;
