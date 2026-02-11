@@ -203,7 +203,7 @@ namespace barton
                     }
                     else
                     {
-                        icError("Failed to retrieve device %s from driver after adding it", uuid.c_str());
+                        icError("Failed to retrieve device %s from driver immediately after adding it - this should not occur", uuid.c_str());
                     }
                 }
             }
