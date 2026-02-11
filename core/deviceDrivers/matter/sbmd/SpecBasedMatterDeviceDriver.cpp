@@ -63,6 +63,83 @@ std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
     return spec->matterMeta.deviceTypes;
 }
 
+bool SpecBasedMatterDeviceDriver::ValidateMapper(const SbmdMapper &mapper, const std::string &resourceId)
+{
+    // Validate read mapper
+    if (mapper.hasRead)
+    {
+        // Script must be non-empty
+        if (mapper.readScript.empty())
+        {
+            icError("Resource %s has read enabled but readScript is empty", resourceId.c_str());
+            return false;
+        }
+
+        // Must use attribute (commands not supported for read)
+        if (!mapper.readAttribute.has_value())
+        {
+            icError("Resource %s has read enabled but no readAttribute specified", resourceId.c_str());
+            return false;
+        }
+
+        if (mapper.readCommand.has_value())
+        {
+            icError("Resource %s uses readCommand which is not yet supported", resourceId.c_str());
+            return false;
+        }
+    }
+
+    // Validate write mapper
+    if (mapper.hasWrite)
+    {
+        // Script must be non-empty
+        if (mapper.writeScript.empty())
+        {
+            icError("Resource %s has write enabled but writeScript is empty", resourceId.c_str());
+            return false;
+        }
+
+        // Must use attribute (commands not supported for write)
+        if (!mapper.writeAttribute.has_value())
+        {
+            icError("Resource %s has write enabled but no writeAttribute specified", resourceId.c_str());
+            return false;
+        }
+
+        if (mapper.writeCommand.has_value())
+        {
+            icError("Resource %s uses writeCommand which is not yet supported", resourceId.c_str());
+            return false;
+        }
+    }
+
+    // Validate execute mapper
+    if (mapper.hasExecute)
+    {
+        // Script must be non-empty
+        if (mapper.executeScript.empty())
+        {
+            icError("Resource %s has execute enabled but executeScript is empty", resourceId.c_str());
+            return false;
+        }
+
+        // Must use command (attributes not supported for execute)
+        if (!mapper.executeCommand.has_value())
+        {
+            icError("Resource %s has execute enabled but no executeCommand specified", resourceId.c_str());
+            return false;
+        }
+
+        if (mapper.executeAttribute.has_value())
+        {
+            icError("Resource %s uses executeAttribute which is not yet supported", resourceId.c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
     auto script = CreateConfiguredScript(device->GetDeviceId());
@@ -81,6 +158,16 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         for (const auto &resource : endpoint.resources)
         {
             allResources.push_back(resource);
+        }
+    }
+
+    // Validate all mappers before binding any resources
+    for (const auto &sbmdResource : allResources)
+    {
+        if (!ValidateMapper(sbmdResource.mapper, sbmdResource.id))
+        {
+            icLogError(LOG_TAG, "Mapper validation failed for resource %s, cannot add device", sbmdResource.id.c_str());
+            return false;
         }
     }
 
