@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,40 +21,27 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-//
-// Created by tlea200 on 11/4/21.
-//
+/*
+ * Created by Thomas Lea on 10/17/2025
+ */
 
 #pragma once
 
-#include "matter/MatterDeviceDriver.h"
-#include "subsystems/matter/DeviceDataCache.h"
-#include <map>
-#include <memory>
-#include <vector>
-
 namespace barton
 {
-    class MatterDriverFactory
+    class SbmdFactory
     {
     public:
-        static MatterDriverFactory &Instance()
+        static SbmdFactory &Instance()
         {
-            static MatterDriverFactory instance;
+            static SbmdFactory instance;
             return instance;
         }
 
-        // TODO: Remove when native drivers are removed in support of SBMD drivers only
-        bool RegisterDriver(MatterDeviceDriver *driver);
-        bool RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver);
-        MatterDeviceDriver *GetDriver(const DeviceDataCache *dataCache);
+        bool RegisterDrivers();
 
     private:
-        MatterDriverFactory() = default;
-        ~MatterDriverFactory() = default;
-        // TODO: Remove when native drivers are removed in support of SBMD drivers only
-        std::map<std::string, MatterDeviceDriver *> drivers;
-        std::vector<std::unique_ptr<MatterDeviceDriver>> ownedDrivers;
+        SbmdFactory() = default;
+        ~SbmdFactory() = default;
     };
-
-} // namespace barton
+} //namespace barton

@@ -94,6 +94,7 @@ extern "C" {
 
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
+#include "matter/sbmd/SbmdFactory.h"
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
@@ -164,6 +165,10 @@ namespace
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 {
     MatterDriverFactory::Instance();
+    if(!SbmdFactory::Instance().RegisterDrivers())
+    {
+        icWarn("Failed to register SBMD drivers. Functionality may be reduced.");
+    }
 
     commissionerController = std::make_shared<chip::Controller::DeviceCommissioner>();
     operationalCredentialsIssuer = BartonMatterDelegateRegistry::Instance().GetBartonOperationalCredentialDelegate();

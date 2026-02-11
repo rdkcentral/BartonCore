@@ -41,18 +41,48 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
+// TODO: Remove when native drivers are removed in support of SBMD drivers only
 bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
 {
     bool result = false;
     if (driver != nullptr && driver->GetDriver() != nullptr && driver->GetDriver()->driverName != nullptr)
     {
         icDebug("%s", driver->GetDriver()->driverName);
-        drivers.emplace(driver->GetDriver()->driverName, driver);
 
         result = deviceDriverManagerRegisterDriver(driver->GetDriver());
+        if (result)
+        {
+            drivers.emplace(driver->GetDriver()->driverName, driver);
+        }
     }
 
     return result;
+}
+
+bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver)
+{
+    if (!driver || !driver->GetDriver() || !driver->GetDriver()->driverName)
+    {
+        return false;
+    }
+
+    MatterDeviceDriver *rawDriver = driver.get();
+
+    icDebug("%s", rawDriver->GetDriver()->driverName);
+
+    bool result = deviceDriverManagerRegisterDriver(rawDriver->GetDriver());
+    if (!result)
+    {
+        // Registration failed; do not insert into drivers and allow driver to be destroyed.
+        return false;
+    }
+
+    drivers.emplace(rawDriver->GetDriver()->driverName, rawDriver);
+
+    // Take ownership of the driver to ensure its lifetime matches entries in 'drivers'.
+    ownedDrivers.push_back(std::move(driver));
+
+    return true;
 }
 
 MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
@@ -65,7 +95,7 @@ MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache
     {
         if (entry.second->ClaimDevice(dataCache))
         {
-            icInfo("%s claimed the device", entry.first);
+            icInfo("%s claimed the device", entry.first.c_str());
             result = entry.second;
             break;
         }

@@ -40,6 +40,90 @@ namespace barton
 
     namespace
     {
+        bool ValidateMapper(const SbmdMapper &mapper, const std::string &resourceId)
+        {
+            // Validate read mapper
+            if (mapper.hasRead)
+            {
+                // Script must be non-empty
+                if (mapper.readScript.empty())
+                {
+                    icError("Resource %s has read enabled but readScript is empty", resourceId.c_str());
+                    return false;
+                }
+
+                // Must use attribute (commands not supported for read)
+                if (!mapper.readAttribute.has_value())
+                {
+                    icError("Resource %s has read enabled but no readAttribute specified", resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.readCommand.has_value())
+                {
+                    icError("Resource %s uses readCommand which is not yet supported", resourceId.c_str());
+                    return false;
+                }
+            }
+
+            // Validate write mapper
+            if (mapper.hasWrite)
+            {
+                // Script must be non-empty
+                if (mapper.writeScript.empty())
+                {
+                    icError("Resource %s has write enabled but writeScript is empty", resourceId.c_str());
+                    return false;
+                }
+
+                // Must use attribute (commands not supported for write)
+                if (!mapper.writeAttribute.has_value())
+                {
+                    icError("Resource %s has write enabled but no writeAttribute specified", resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.writeCommand.has_value())
+                {
+                    icError("Resource %s uses writeCommand which is not yet supported", resourceId.c_str());
+                    return false;
+                }
+            }
+
+            // Validate execute mapper
+            if (mapper.hasExecute)
+            {
+                // Script must be non-empty
+                if (mapper.executeScript.empty())
+                {
+                    icError("Resource %s has execute enabled but executeScript is empty", resourceId.c_str());
+                    return false;
+                }
+
+                // Must use command (attributes not supported for execute)
+                if (!mapper.executeCommand.has_value())
+                {
+                    icError("Resource %s has execute enabled but no executeCommand specified", resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.executeAttribute.has_value())
+                {
+                    icError("Resource %s uses executeAttribute which is not yet supported", resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.executeResponseScript.has_value() && !mapper.executeCommand.has_value())
+                {
+                    icError("Resource %s has execute response script but no executeCommand specified",
+                            resourceId.c_str());
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /**
          * Helper to set resource and endpoint IDs on all mapper attributes and commands.
          */
@@ -75,9 +159,9 @@ namespace barton
         }
 } // anonymous namespace
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
 {
-    auto spec = std::make_unique<SbmdSpec>();
+    auto spec = std::make_shared<SbmdSpec>();
 
     // Parse top-level fields
     if (root["schemaVersion"])
@@ -170,7 +254,7 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
     return spec;
 }
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
 {
     try
     {
@@ -197,7 +281,7 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
     }
 }
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseString(const std::string &yamlContent)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseString(const std::string &yamlContent)
 {
     try
     {
@@ -320,6 +404,12 @@ bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
         if (!ParseMapper(node["mapper"], resource.mapper))
         {
             icError("Failed to parse mapper for resource %s", resource.id.c_str());
+            return false;
+        }
+
+        if (!ValidateMapper(resource.mapper, resource.id))
+        {
+            icError("Mapper validation failed for resource %s", resource.id.c_str());
             return false;
         }
     }

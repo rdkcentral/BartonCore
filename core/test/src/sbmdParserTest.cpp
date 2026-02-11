@@ -479,6 +479,142 @@ endpoints: []
     assert_null(spec.get());
 }
 
+static void test_sbmdParserReadMapperMissingScript(void **state)
+{
+    (void) state;
+
+    // Read mapper must have a non-empty script
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources:
+  - id: "testResource"
+    type: "boolean"
+    modes: ["read"]
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0001"
+          attributeId: "0x0002"
+          name: "TestAttr"
+          type: "bool"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserWriteMapperMissingScript(void **state)
+{
+    (void) state;
+
+    // Write mapper must have a non-empty script
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources:
+  - id: "testResource"
+    type: "boolean"
+    modes: ["write"]
+    mapper:
+      write:
+        attribute:
+          clusterId: "0x0001"
+          attributeId: "0x0002"
+          name: "TestAttr"
+          type: "bool"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserExecuteMapperMissingScript(void **state)
+{
+    (void) state;
+
+    // Execute mapper must have a non-empty script
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources:
+  - id: "testResource"
+    type: "function"
+    modes: []
+    mapper:
+      execute:
+        command:
+          clusterId: "0x0001"
+          commandId: "0x0003"
+          name: "TestCmd"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserExecuteMapperWithAttributeUnsupported(void **state)
+{
+    (void) state;
+
+    // Execute mapper does not support attributes (must be a command)
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources:
+  - id: "testResource"
+    type: "function"
+    modes: []
+    mapper:
+      execute:
+        attribute:
+          clusterId: "0x0001"
+          attributeId: "0x0002"
+          name: "TestAttr"
+          type: "bool"
+        script: "return {};"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
 static void test_sbmdParserInvalidResourceType(void **state)
 {
     (void) state;
@@ -678,6 +814,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidReportingType),
         cmocka_unit_test(test_sbmdParserMapperWithBothAttributeAndCommand),
         cmocka_unit_test(test_sbmdParserMapperWithNeitherAttributeNorCommand),
+        cmocka_unit_test(test_sbmdParserReadMapperMissingScript),
+        cmocka_unit_test(test_sbmdParserWriteMapperMissingScript),
+        cmocka_unit_test(test_sbmdParserExecuteMapperMissingScript),
+        cmocka_unit_test(test_sbmdParserExecuteMapperWithAttributeUnsupported),
         cmocka_unit_test(test_sbmdParserInvalidResourceType),
         cmocka_unit_test(test_sbmdParserInvalidEndpointType),
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),

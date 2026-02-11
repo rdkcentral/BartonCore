@@ -28,20 +28,15 @@
 #define LOG_TAG      "MatterBaseDD"
 #define logFmt(fmt)  "(%s): " fmt, __func__
 #define G_LOG_DOMAIN LOG_TAG
-#include "app-common/zap-generated/ids/Clusters.h"
 #include "subsystems/matter/MatterCommon.h"
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
-#include <condition_variable>
 #include <cstdint>
-#include <exception>
 #include <forward_list>
 #include <future>
-#include <limits>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <unistd.h>
@@ -50,12 +45,7 @@
 #include <vector>
 
 #include "MatterDeviceDriver.h"
-#include "app-common/zap-generated/cluster-objects.h"
-#include "app/AttributePathParams.h"
-#include "app/ClusterStateCache.h"
-#include "app/EventPathParams.h"
 #include "app/OperationalSessionSetup.h"
-#include "app/ReadPrepareParams.h"
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/OTARequestor.h"
@@ -65,7 +55,6 @@
 #include "lib/core/DataModelTypes.h"
 #include "messaging/ExchangeMgr.h"
 #include "platform/CHIPDeviceLayer.h"
-#include "platform/PlatformManager.h"
 #include "subsystems/matter/Matter.h"
 #include "subsystems/matter/matterSubsystem.h"
 #include "transport/Session.h"
@@ -74,10 +63,8 @@ extern "C" {
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
 #include "device/icDevice.h"
-#include "device/icDeviceMetadata.h"
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
-#include "deviceCommunicationWatchdog.h"
 #include "deviceDescriptor.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
@@ -214,7 +201,7 @@ void MatterDeviceDriver::Shutdown()
     // occur only when the stack lock is held, or chipDie will abort the program
     // to avoid undefined behavior. Drivers are shut down before subsystems.
 
-    deviceDataCaches.clear();
+    devices.clear();
     clusterServers.clear();
 }
 
@@ -357,7 +344,10 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        deviceDataCaches.erase(device->uuid);
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            devices.erase(device->uuid);
+        }
     });
 
     return sentRemoveFabricRequest;
@@ -367,9 +357,9 @@ bool MatterDeviceDriver::ConfigureDevice(icDevice *device, DeviceDescriptor *des
 {
     icDebug();
 
-    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid, MATTER_ASYNC_DEVICE_TIMEOUT_SECS))
     {
-        icError("Failed to configure device %s: could not initialize DeviceDataCache", device->uuid);
+        icError("Failed to configure device %s: could not add device", device->uuid);
         return false;
     }
 
@@ -401,9 +391,9 @@ void MatterDeviceDriver::SynchronizeDevice(icDevice *device)
 {
     icDebug();
 
-    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid, MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS))
     {
-        icError("Failed to synchronize device %s: could not initialize DeviceDataCache", device->uuid);
+        icError("Failed to synchronize device %s: could not add device", device->uuid);
         return;
     }
 
@@ -448,7 +438,6 @@ void MatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool
                                              const chip::SessionHandle &sessionHandle)
 {
     icDebug("Unimplemented");
-    FailOperation(promises);
 }
 
 void MatterDeviceDriver::SetTampered(const std::string &deviceId, bool tampered)
@@ -903,24 +892,23 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     return !abort;
 }
 
-bool MatterDeviceDriver::InitializeDeviceDataCacheIfRequired(const std::string &deviceUuid)
+bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid, uint16_t timeoutSeconds)
 {
-    //if a device cache isnt set yet (there would have been if it had just been paired),
-    // create and set it after it starts successfully
-    auto deviceDataCache = GetDeviceDataCache(deviceUuid);
-    if (deviceDataCache == nullptr)
+    //if a device isnt available yet (there would have been if it had just been paired),
+    // create and start the device data cache and add the device.
+    if (GetDevice(deviceUuid) == nullptr)
     {
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();
 
-        // TODO This needs a timeout so it cant block forever
-        if (!success.get())
+        if (success.wait_for(std::chrono::seconds(timeoutSeconds)) != std::future_status::ready || !success.get())
         {
             icError("Failed to start DeviceDataCache for device %s", deviceUuid.c_str());
             return false;
         }
 
-        AddDeviceDataCache(std::move(newCache));
+        // Propagate the result of AddDevice so callers can detect failures.
+        return AddDevice(std::make_unique<MatterDevice>(deviceUuid, std::move(newCache)));
     }
 
     return true;

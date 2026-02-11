@@ -152,16 +152,9 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
 
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)
 {
-    auto deviceCache = GetDeviceDataCache();
-    if (deviceCache == nullptr)
+    for (auto &entry : deviceDataCache->GetEndpointIds())
     {
-        icError("No device cache for %s", deviceId.c_str());
-        return false;
-    }
-
-    for (auto &entry : deviceCache->GetEndpointIds())
-    {
-        if (deviceCache->EndpointHasServerCluster(entry, clusterId))
+        if (deviceDataCache->EndpointHasServerCluster(entry, clusterId))
         {
             outEndpointId = entry;
             return true;
@@ -194,13 +187,29 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
 bool MatterDevice::BindResourceInfo(const char *uri,
                                     const std::optional<SbmdAttribute> &attribute,
                                     const std::optional<SbmdCommand> &command,
-                                    const char *operationType,
+                                    ResourceOperation operation,
                                     std::map<std::string, ResourceBinding> &bindings)
 {
     if (uri == nullptr)
     {
         icError("URI is null");
         return false;
+    }
+
+    const char *operationType = "unknown";
+    switch (operation)
+    {
+        case ResourceOperation::Read:
+            operationType = "read";
+            break;
+        case ResourceOperation::Write:
+            operationType = "write";
+            break;
+        case ResourceOperation::Execute:
+            operationType = "execute";
+            break;
+        default:
+            break;
     }
 
     // Validate: must have exactly one of attribute or command
@@ -243,7 +252,7 @@ bool MatterDevice::BindResourceInfo(const char *uri,
                 attribute->attributeId);
 
         // If this is a read binding, add to fast lookup map for OnAttributeData callback
-        if (strcmp(operationType, "read") == 0)
+        if (operation == ResourceOperation::Read)
         {
             AttributeReadBinding readBinding;
             readBinding.uri = uri;
@@ -291,17 +300,20 @@ bool MatterDevice::BindResourceInfo(const char *uri,
 
 bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
 {
-    return BindResourceInfo(uri, mapper.readAttribute, mapper.readCommand, "read", resourceReadBindings);
+    return BindResourceInfo(
+        uri, mapper.readAttribute, mapper.readCommand, ResourceOperation::Read, resourceReadBindings);
 }
 
 bool MatterDevice::BindResourceWriteInfo(const char *uri, const SbmdMapper &mapper)
 {
-    return BindResourceInfo(uri, mapper.writeAttribute, mapper.writeCommand, "write", resourceWriteBindings);
+    return BindResourceInfo(
+        uri, mapper.writeAttribute, mapper.writeCommand, ResourceOperation::Write, resourceWriteBindings);
 }
 
 bool MatterDevice::BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper)
 {
-    return BindResourceInfo(uri, mapper.executeAttribute, mapper.executeCommand, "execute", resourceExecuteBindings);
+    return BindResourceInfo(
+        uri, mapper.executeAttribute, mapper.executeCommand, ResourceOperation::Execute, resourceExecuteBindings);
 }
 
 void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &promises,

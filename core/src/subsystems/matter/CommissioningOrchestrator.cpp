@@ -170,8 +170,16 @@ namespace barton
                 deviceDataCache->GetHardwareVersionString(hardwareVersion);
                 deviceDataCache->GetSoftwareVersionString(firmwareVersion);
 
+                std::unique_ptr<MatterDevice> device =
+                    std::make_unique<MatterDevice>(uuid, deviceDataCache);
+
                 // Transfer ownership to driver
-                driver->AddDeviceDataCache(std::move(deviceDataCache));
+                if (!driver->AddDevice(std::move(device)))
+                {
+                    icError("Failed to add Matter device with UUID %s to driver", uuid.c_str());
+                    SetCommissioningStatus(CommissioningCompleteFailed);
+                    return false;
+                }
 
                 // these are device service details (technology neutral)
                 DeviceFoundDetails details {
@@ -189,14 +197,11 @@ namespace barton
 
                 if (deviceServiceDeviceFound(&details, true))
                 {
-                    // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
-                    //  can update resources
-                    auto deviceCache = driver->GetDeviceDataCache(uuid);
-                    if (deviceCache != nullptr)
-                    {
-                        deviceCache->RegenerateAttributeReport();
-                    }
-
+                    // reprocessing the attributes in the cache will trigger the callbacks from registered clusters
+                    // which
+                    //  can update resources. We can use our original shared_ptr to the cache since MatterDevice
+                    //  stores a shared copy - it remains valid after ownership transfer.
+                    deviceDataCache->RegenerateAttributeReport();
                     result = true;
                 }
             }
