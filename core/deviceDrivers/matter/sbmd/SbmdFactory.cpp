@@ -85,7 +85,7 @@ bool SbmdFactory::RegisterDrivers()
                         continue;
                     }
 
-                    auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::move(spec));
+                    auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::shared_ptr<SbmdSpec>(std::move(spec)));
 
                     if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
                     {
