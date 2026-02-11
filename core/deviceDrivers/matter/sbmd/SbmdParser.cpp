@@ -75,9 +75,9 @@ namespace barton
         }
 } // anonymous namespace
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
 {
-    auto spec = std::make_unique<SbmdSpec>();
+    auto spec = std::make_shared<SbmdSpec>();
 
     // Parse top-level fields
     if (root["schemaVersion"])
@@ -170,7 +170,7 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
     return spec;
 }
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
 {
     try
     {
@@ -197,7 +197,7 @@ std::unique_ptr<SbmdSpec> SbmdParser::ParseFile(const std::string &filePath)
     }
 }
 
-std::unique_ptr<SbmdSpec> SbmdParser::ParseString(const std::string &yamlContent)
+std::shared_ptr<SbmdSpec> SbmdParser::ParseString(const std::string &yamlContent)
 {
     try
     {
