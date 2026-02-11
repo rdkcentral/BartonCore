@@ -201,6 +201,10 @@ namespace barton
                         retrievedDevice->GetDeviceDataCache()->RegenerateAttributeReport();
                         result = true;
                     }
+                    else
+                    {
+                        icError("Failed to retrieve device %s from driver after adding it", uuid.c_str());
+                    }
                 }
             }
         }
