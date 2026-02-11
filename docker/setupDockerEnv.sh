@@ -66,11 +66,16 @@ IMAGE_REPO="ghcr.io/rdkcentral/barton_builder"
 # - Warns when custom tags exist based on different builder versions
 # - Allows restoring custom tags after updates if needed
 #
-# The version tags are tied to git tags (docker-builder-*) to maintain consistency
-# between code and build environment versions.
+# The version is notated by the `version` file.
 
-# Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
-HIGHEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+VERSION_FILE="$DIR/version"
+if [ ! -s "$VERSION_FILE" ]; then
+    echo "Error: Docker builder version file '$VERSION_FILE' is missing or empty." >&2
+    echo "Please ensure the repository is fully checked out and that '$VERSION_FILE' contains a valid version string." >&2
+    exit 1
+fi
+
+HIGHEST_BUILDER_TAG=$(cat "$VERSION_FILE")
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
 
@@ -79,8 +84,8 @@ if [ -f "$OUTFILE" ]; then
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
     if [ "$HIGHEST_BUILDER_TAG" != "$CURRENT_BUILDER_TAG" ]; then
-        echo "Current docker-builder tag ($CURRENT_BUILDER_TAG) is not in sync with the latest docker-builder available in this lineage ($HIGHEST_BUILDER_TAG)."
-        echo "The value of IMAGE_TAG in docker/.env will be updated to use the latest docker-builder version in this lineage."
+        echo "Current barton_builder tag ($CURRENT_BUILDER_TAG) is not in sync with the latest barton_builder available in this lineage ($HIGHEST_BUILDER_TAG)."
+        echo "The value of IMAGE_TAG in docker/.env will be updated to use the latest barton_builder version in this lineage."
         BUILDER_TAG_CHANGED=true
     fi
 
@@ -92,7 +97,7 @@ if [ -f "$OUTFILE" ]; then
     fi
 
     if [ "$CUSTOM_TAG" = true ] && [ "$BUILDER_TAG_CHANGED" = true ]; then
-        echo "WARNING: The custom image tag '$IMAGE_TAG' is based on a different docker-builder version ($CURRENT_BUILDER_TAG)."
+        echo "WARNING: The custom image tag '$IMAGE_TAG' is based on a different barton_builder version ($CURRENT_BUILDER_TAG)."
         echo "To continue using your custom tag, you should:"
         echo "1. Rebuild your custom image"
         echo "2. Set the value of IMAGE_TAG in docker/.env back to '$IMAGE_TAG'"
@@ -106,18 +111,6 @@ if [ -f "$OUTFILE" ]; then
 fi
 
 CURRENT_BUILDER_TAG=$HIGHEST_BUILDER_TAG
-
-
-
-
-
-echo "OVERRIDING docker-builder version!  Don't merge this to main"
-IMAGE_TAG="1.5"
-CURRENT_BUILDER_TAG=$IMAGE_TAG
-
-
-
-
 
 ##############################################################################
 # Variables needed to facilitate the Docker compose process. See docker/compose.yaml
