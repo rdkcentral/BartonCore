@@ -41,6 +41,7 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
+// TODO: Remove when native drivers are removed in support of SBMD drivers only
 bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
 {
     bool result = false;

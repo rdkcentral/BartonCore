@@ -44,6 +44,7 @@ namespace barton
             return instance;
         }
 
+        // TODO: Remove when native drivers are removed in support of SBMD drivers only
         bool RegisterDriver(MatterDeviceDriver *driver);
         bool RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver);
         MatterDeviceDriver *GetDriver(const DeviceDataCache *dataCache);
@@ -51,6 +52,7 @@ namespace barton
     private:
         MatterDriverFactory() = default;
         ~MatterDriverFactory() = default;
+        // TODO: Remove when native drivers are removed in support of SBMD drivers only
         std::map<const char *, MatterDeviceDriver *> drivers;
         std::vector<std::unique_ptr<MatterDeviceDriver>> ownedDrivers;
     };
