@@ -88,6 +88,16 @@ namespace barton
          */
         void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
 
+        /**
+         * Validate that a mapper configuration is valid and supported.
+         * Checks that scripts are non-empty and that the mapper uses supported
+         * attribute/command combinations.
+         * @param mapper The mapper to validate
+         * @param resourceId The resource ID for error reporting
+         * @return True if the mapper is valid, false otherwise
+         */
+        bool ValidateMapper(const SbmdMapper &mapper, const std::string &resourceId);
+
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
     };
 } // namespace barton
