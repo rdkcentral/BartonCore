@@ -85,7 +85,7 @@ MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache
     {
         if (entry.second->ClaimDevice(dataCache))
         {
-            icInfo("%s claimed the device", entry.first);
+            icInfo("%s claimed the device", entry.first.c_str());
             result = entry.second;
             break;
         }

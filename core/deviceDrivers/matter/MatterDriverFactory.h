@@ -53,7 +53,7 @@ namespace barton
         MatterDriverFactory() = default;
         ~MatterDriverFactory() = default;
         // TODO: Remove when native drivers are removed in support of SBMD drivers only
-        std::map<const char *, MatterDeviceDriver *> drivers;
+        std::map<std::string, MatterDeviceDriver *> drivers;
         std::vector<std::unique_ptr<MatterDeviceDriver>> ownedDrivers;
     };
 
