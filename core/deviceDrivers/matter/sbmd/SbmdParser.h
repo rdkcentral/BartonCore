@@ -49,18 +49,18 @@ namespace barton
          * @param filePath Path to the YAML file
          * @return Parsed SbmdSpec, or nullptr on error
          */
-        static std::unique_ptr<SbmdSpec> ParseFile(const std::string &filePath);
+        static std::shared_ptr<SbmdSpec> ParseFile(const std::string &filePath);
 
         /**
          * Parse an SBMD YAML string
          * @param yamlContent YAML content as a string
          * @return Parsed SbmdSpec, or nullptr on error
          */
-        static std::unique_ptr<SbmdSpec> ParseString(const std::string &yamlContent);
+        static std::shared_ptr<SbmdSpec> ParseString(const std::string &yamlContent);
 
     private:
         // Common parsing implementation
-        static std::unique_ptr<SbmdSpec> ParseYamlNode(const YAML::Node &root);
+        static std::shared_ptr<SbmdSpec> ParseYamlNode(const YAML::Node &root);
 
         // Helper methods for parsing different sections
         static bool ParseBartonMeta(const YAML::Node &node, SbmdBartonMeta &meta);
