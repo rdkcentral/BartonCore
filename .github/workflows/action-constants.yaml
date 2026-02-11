@@ -66,9 +66,11 @@ jobs:
             -
                 id: set-image-tag-output
                 run: |
-                    # DONT MERGE
-                    #latest_tag_reachable=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
-                    latest_tag_reachable="1.5"
+                    latest_tag_reachable=$(head -n 1 docker/version | tr -d '\r' | xargs)
+                    if [ -z "$latest_tag_reachable" ]; then
+                        echo "Error: docker/version is empty or contains only whitespace." >&2
+                        exit 1
+                    fi
                     # print to console for debugging
                     echo "latest_tag_reachable=$latest_tag_reachable"
                     echo "image_tag=$latest_tag_reachable" >> $GITHUB_OUTPUT
