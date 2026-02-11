@@ -30,6 +30,8 @@
 #include "matter/MatterDeviceDriver.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include <map>
+#include <memory>
+#include <vector>
 
 namespace barton
 {
@@ -43,12 +45,14 @@ namespace barton
         }
 
         bool RegisterDriver(MatterDeviceDriver *driver);
+        bool RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver);
         MatterDeviceDriver *GetDriver(const DeviceDataCache *dataCache);
 
     private:
         MatterDriverFactory() = default;
         ~MatterDriverFactory() = default;
         std::map<const char *, MatterDeviceDriver *> drivers;
+        std::vector<std::unique_ptr<MatterDeviceDriver>> ownedDrivers;
     };
 
 } // namespace barton
