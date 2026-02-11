@@ -194,7 +194,7 @@ namespace barton
                 {
                     // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
                     //  can update resources
-                    deviceDataCache->RegenerateAttributeReport();
+                    device->GetDeviceDataCache()->RegenerateAttributeReport();
                     result = true;
                 }
             }

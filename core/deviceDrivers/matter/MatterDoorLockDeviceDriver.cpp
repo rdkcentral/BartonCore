@@ -58,6 +58,7 @@ using namespace std::chrono_literals;
 //       this driver is here for reference only.
 //bool MatterDoorLockDeviceDriver::registeredWithFactory =
 //    MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
+bool MatterDoorLockDeviceDriver::registeredWithFactory = false;
 
 MatterDoorLockDeviceDriver::MatterDoorLockDeviceDriver() :
     MatterDeviceDriver(MATTER_DOOR_LOCK_DEVICE_DRIVER_NAME, DOORLOCK_DC, 0)

@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2025 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,11 +28,9 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SpecBasedMatterDeviceDriver.h"
-#include "app/ConcreteAttributePath.h"
 #include "matter/sbmd/SbmdSpec.h"
 #include "matter/sbmd/script/QuickJsScript.h"
 #include <memory>
-#include <algorithm>
 
 extern "C" {
 #include <commonDeviceDefs.h>
@@ -63,59 +61,6 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpe
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
     return spec->matterMeta.deviceTypes;
-}
-
-bool SpecBasedMatterDeviceDriver::GetAttributePath(const MatterDevice &device,
-                                                   const SbmdAttribute &attributeInfo,
-                                                   app::ConcreteAttributePath &outPath)
-{
-    auto deviceDataCache = device.GetDeviceDataCache();
-    if (deviceDataCache == nullptr)
-    {
-        icLogWarn(LOG_TAG, logFmt("DeviceDataCache is not available; cannot resolve attribute path"));
-        return false;
-    }
-
-    // first see if the attribute exists on the root endpoint
-    if (deviceDataCache->EndpointHasServerCluster(0, attributeInfo.clusterId))
-    {
-        outPath.mEndpointId = 0;
-        outPath.mClusterId = attributeInfo.clusterId;
-        outPath.mAttributeId = attributeInfo.attributeId;
-        return true;
-    }
-
-    // otherwise, search the endpoint used to host this driver's device type
-    auto endpoints = deviceDataCache->GetEndpointIds();
-    for (auto endpointId : endpoints)
-    {
-        if (endpointId == 0)
-        {
-            continue; // already checked root endpoint which is device type agnostic
-        }
-
-        std::vector<uint16_t> deviceTypes;
-        deviceDataCache->GetDeviceTypes(endpointId, deviceTypes);
-        // see if this endpoint has any of our device types
-        for (auto deviceType : deviceTypes)
-        {
-            // Check if this device type matches any in our spec
-            if (std::find(spec->matterMeta.deviceTypes.begin(), spec->matterMeta.deviceTypes.end(), deviceType) !=
-                spec->matterMeta.deviceTypes.end())
-            {
-                // This endpoint hosts one of our device types
-                if (deviceDataCache->EndpointHasServerCluster(endpointId, attributeInfo.clusterId))
-                {
-                    outPath.mEndpointId = endpointId;
-                    outPath.mClusterId = attributeInfo.clusterId;
-                    outPath.mAttributeId = attributeInfo.attributeId;
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
 }
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
@@ -187,49 +132,7 @@ std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(
     // Add mappers from top-level resources
     for (const auto &resource : spec->resources)
     {
-        if (resource.mapper.hasRead && !resource.mapper.readScript.empty())
-        {
-            if (resource.mapper.readAttribute.has_value())
-            {
-                script->AddAttributeReadMapper(resource.mapper.readAttribute.value(), resource.mapper.readScript);
-            }
-            else if (resource.mapper.readCommand.has_value())
-            {
-                // Reading from command not yet implemented
-                icError("Read mapper with command not yet supported for resource %s", resource.id.c_str());
-            }
-        }
-        if (resource.mapper.hasWrite && !resource.mapper.writeScript.empty())
-        {
-            if (resource.mapper.writeAttribute.has_value())
-            {
-                script->AddAttributeWriteMapper(resource.mapper.writeAttribute.value(), resource.mapper.writeScript);
-            }
-            else if (resource.mapper.writeCommand.has_value())
-            {
-                // Writing to command not yet implemented
-                icError("Write mapper with command not yet supported for resource %s", resource.id.c_str());
-            }
-        }
-        if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())
-        {
-            if (resource.mapper.executeAttribute.has_value())
-            {
-                // Executing attribute not yet implemented
-                icError("Execute mapper with attribute not yet supported for resource %s", resource.id.c_str());
-            }
-            else if (resource.mapper.executeCommand.has_value())
-            {
-                script->AddCommandExecuteMapper(resource.mapper.executeCommand.value(), resource.mapper.executeScript);
-
-                // Add response script if present
-                if (resource.mapper.executeResponseScript.has_value())
-                {
-                    script->AddCommandExecuteResponseMapper(resource.mapper.executeCommand.value(),
-                                                           resource.mapper.executeResponseScript.value());
-                }
-            }
-        }
+        AddResourceMappers(*script, resource);
     }
 
     // Add mappers from endpoint resources
@@ -237,55 +140,54 @@ std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(
     {
         for (const auto &resource : endpoint.resources)
         {
-            if (resource.mapper.hasRead && !resource.mapper.readScript.empty())
-            {
-                if (resource.mapper.readAttribute.has_value())
-                {
-                    script->AddAttributeReadMapper(resource.mapper.readAttribute.value(), resource.mapper.readScript);
-                }
-                else if (resource.mapper.readCommand.has_value())
-                {
-                    // Reading from command not yet implemented
-                    icError("Read mapper with command not yet supported for resource %s", resource.id.c_str());
-                }
-            }
-            if (resource.mapper.hasWrite && !resource.mapper.writeScript.empty())
-            {
-                if (resource.mapper.writeAttribute.has_value())
-                {
-                    script->AddAttributeWriteMapper(resource.mapper.writeAttribute.value(),
-                                                    resource.mapper.writeScript);
-                }
-                else if (resource.mapper.writeCommand.has_value())
-                {
-                    // Writing to command not yet implemented
-                    icError("Write mapper with command not yet supported for resource %s", resource.id.c_str());
-                }
-            }
-            if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())
-            {
-                if (resource.mapper.executeAttribute.has_value())
-                {
-                    // Executing attribute not yet implemented
-                    icError("Execute mapper with attribute not yet supported for resource %s", resource.id.c_str());
-                }
-                else if (resource.mapper.executeCommand.has_value())
-                {
-                    script->AddCommandExecuteMapper(resource.mapper.executeCommand.value(),
-                                                    resource.mapper.executeScript);
-
-                    // Add response script if present
-                    if (resource.mapper.executeResponseScript.has_value())
-                    {
-                        script->AddCommandExecuteResponseMapper(resource.mapper.executeCommand.value(),
-                                                               resource.mapper.executeResponseScript.value());
-                    }
-                }
-            }
+            AddResourceMappers(*script, resource);
         }
     }
 
     return script;
+}
+
+void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const SbmdResource &resource)
+{
+    if (resource.mapper.hasRead && !resource.mapper.readScript.empty())
+    {
+        if (resource.mapper.readAttribute.has_value())
+        {
+            script.AddAttributeReadMapper(resource.mapper.readAttribute.value(), resource.mapper.readScript);
+        }
+        else if (resource.mapper.readCommand.has_value())
+        {
+            icError("Read mapper with command not yet supported for resource %s", resource.id.c_str());
+        }
+    }
+    if (resource.mapper.hasWrite && !resource.mapper.writeScript.empty())
+    {
+        if (resource.mapper.writeAttribute.has_value())
+        {
+            script.AddAttributeWriteMapper(resource.mapper.writeAttribute.value(), resource.mapper.writeScript);
+        }
+        else if (resource.mapper.writeCommand.has_value())
+        {
+            icError("Write mapper with command not yet supported for resource %s", resource.id.c_str());
+        }
+    }
+    if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())
+    {
+        if (resource.mapper.executeAttribute.has_value())
+        {
+            icError("Execute mapper with attribute not yet supported for resource %s", resource.id.c_str());
+        }
+        else if (resource.mapper.executeCommand.has_value())
+        {
+            script.AddCommandExecuteMapper(resource.mapper.executeCommand.value(), resource.mapper.executeScript);
+
+            if (resource.mapper.executeResponseScript.has_value())
+            {
+                script.AddCommandExecuteResponseMapper(resource.mapper.executeCommand.value(),
+                                                       resource.mapper.executeResponseScript.value());
+            }
+        }
+    }
 }
 
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()

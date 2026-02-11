@@ -77,7 +77,6 @@ namespace barton
             script = std::move(newScript);
         }
 
-        //TODO Removed in an upcoming SBMD commit
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**

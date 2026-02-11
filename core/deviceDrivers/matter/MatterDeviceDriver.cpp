@@ -357,9 +357,9 @@ bool MatterDeviceDriver::ConfigureDevice(icDevice *device, DeviceDescriptor *des
 {
     icDebug();
 
-    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid))
     {
-        icError("Failed to configure device %s: could not initialize DeviceDataCache", device->uuid);
+        icError("Failed to configure device %s: could not add device", device->uuid);
         return false;
     }
 
@@ -391,9 +391,9 @@ void MatterDeviceDriver::SynchronizeDevice(icDevice *device)
 {
     icDebug();
 
-    if (!InitializeDeviceDataCacheIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid))
     {
-        icError("Failed to synchronize device %s: could not initialize DeviceDataCache", device->uuid);
+        icError("Failed to synchronize device %s: could not add device", device->uuid);
         return;
     }
 
@@ -892,12 +892,11 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     return !abort;
 }
 
-bool MatterDeviceDriver::InitializeDeviceDataCacheIfRequired(const std::string &deviceUuid)
+bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid)
 {
-    //if a device cache isnt set yet (there would have been if it had just been paired),
-    // create and set it after it starts successfully
-    auto deviceDataCache = GetDeviceDataCache(deviceUuid);
-    if (deviceDataCache == nullptr)
+    //if a device isnt available yet (there would have been if it had just been paired),
+    // create and start the device data cache and add the device.
+    if (GetDevice(deviceUuid) == nullptr)
     {
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();

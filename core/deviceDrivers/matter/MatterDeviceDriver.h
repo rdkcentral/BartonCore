@@ -278,7 +278,7 @@ namespace barton
             void *driverContext;    // the context provided to the driver for the operation
             char **value;           // output value pointer
             const char *resourceId; // optional; in case we want to keep track of the resource being updated
-            SbmdMapper *mapper;                             // the mapper to use for this read (SBMD drivers only)
+            SbmdMapper *mapper;     // the mapper to use for this read (SBMD drivers only)
         };
 
         /**
@@ -437,10 +437,6 @@ namespace barton
          * @brief Implement this to perform device specific configuration,
          *        like to issue configuration commands, etc.
          *
-         * TODO: with the addition of MatterDevice, responsibilities for where processing
-         *       goes needs to be re-evaluated. Its possible the driver should pass operations
-         *       on to MatterDevice instances.
-         *
          * @param promises Add a promise for each asynchronous task
          * @param deviceId
          * @param deviceDescriptor
@@ -541,11 +537,12 @@ namespace barton
         virtual inline uint32_t GetCommFailTimeoutSecs(const char *deviceUuid) { return commFailTimeoutSecs; }
 
         /**
-         * @brief Initialize the device data cache for a given device UUID if it doesn't already exist. Note that this
-         * can block while the cache is being created and populated from the device. If it already exists, this is a
-         * noop.
+         * @brief Initialize the device data cache for a given device UUID if it doesn't already exist and
+         *        add the device to the internal device map. Note that this can block while the cache is
+         *        being created and populated from the device. If it already exists, this is a
+         *        noop.
          */
-        bool InitializeDeviceDataCacheIfRequired(const std::string &deviceUuid);
+        bool AddDeviceIfRequired(const std::string &deviceUuid);
 
         class OtaRequestorEventHandler : public OTARequestor::EventHandler
         {

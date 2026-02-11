@@ -152,16 +152,9 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
 
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)
 {
-    auto deviceCache = GetDeviceDataCache();
-    if (deviceCache == nullptr)
+    for (auto &entry : deviceDataCache->GetEndpointIds())
     {
-        icError("No device cache for %s", deviceId.c_str());
-        return false;
-    }
-
-    for (auto &entry : deviceCache->GetEndpointIds())
-    {
-        if (deviceCache->EndpointHasServerCluster(entry, clusterId))
+        if (deviceDataCache->EndpointHasServerCluster(entry, clusterId))
         {
             outEndpointId = entry;
             return true;

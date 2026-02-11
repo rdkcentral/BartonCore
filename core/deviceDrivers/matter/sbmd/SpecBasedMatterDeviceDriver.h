@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2025 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -75,20 +75,18 @@ namespace barton
         std::shared_ptr<SbmdSpec> spec;
 
         /**
-         * Search the device data cache to find the correct attribute path.
-         * When endpoints have overlapping clusters, this searches for endpoints
-         * that match the driver's supported device types to disambiguate.
-         */
-        bool GetAttributePath(const MatterDevice &device,
-                              const SbmdAttribute &attributeInfo,
-                              app::ConcreteAttributePath &outPath);
-
-        /**
          * Create and configure a script engine with all mappers from the spec
          * @param deviceId The device ID for the script instance
          * @return A configured SbmdScript instance
          */
         std::unique_ptr<SbmdScript> CreateConfiguredScript(const std::string &deviceId);
+
+        /**
+         * Add mappers from a resource to the script engine
+         * @param script The script engine to configure
+         * @param resource The resource containing mapper configurations
+         */
+        void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
 
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
     };

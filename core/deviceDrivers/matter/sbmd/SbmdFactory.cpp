@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,16 +40,6 @@ extern "C" {
 }
 
 using namespace barton;
-
-#if 0
-// auto register currently available drivers
-namespace {
-    bool autoRegister = []() {
-        SbmdFactory::Instance().RegisterDrivers();
-        return true;
-    }();
-}
-#endif
 
 bool SbmdFactory::RegisterDrivers()
 {
