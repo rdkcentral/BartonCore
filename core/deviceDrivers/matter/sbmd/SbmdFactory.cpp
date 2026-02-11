@@ -59,15 +59,13 @@ bool SbmdFactory::RegisterDrivers()
         icWarn("SBMD specs directory does not exist or cannot be accessed: %s", sbmdDir);
         return false;
     }
-    
-    ec.clear();
+
     if (!std::filesystem::is_directory(sbmdDir, ec) || ec)
     {
         icWarn("SBMD specs path is not a directory: %s", sbmdDir);
         return false;
     }
 
-    ec.clear();
     std::filesystem::directory_iterator dirIterator(sbmdDir, ec);
     if (ec)
     {
