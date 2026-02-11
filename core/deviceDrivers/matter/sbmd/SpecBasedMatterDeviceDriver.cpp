@@ -74,18 +74,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     device->SetScript(std::move(script));
 
     // for each resource in the spec, add an entry to a concrete attribute or command path
-    // combine device resources with endpoint resources so we can iterate over all of them
-    std::vector<SbmdResource> allResources = spec->resources;
-    for (const auto &endpoint : spec->endpoints)
-    {
-        for (const auto &resource : endpoint.resources)
-        {
-            allResources.push_back(resource);
-        }
-    }
-
-    for (const auto &sbmdResource : allResources)
-    {
+    // Helper lambda to configure a single resource
+    auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
@@ -122,6 +112,28 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             if (!device->BindResourceExecuteInfo(uri, sbmdResource.mapper))
             {
                 icError("  Failed to bind execute script for resource %s", sbmdResource.id.c_str());
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // Configure device-level resources
+    for (const auto &resource : spec->resources)
+    {
+        if (!configureResource(resource))
+        {
+            return false;
+        }
+    }
+
+    // Configure endpoint-level resources
+    for (const auto &endpoint : spec->endpoints)
+    {
+        for (const auto &resource : endpoint.resources)
+        {
+            if (!configureResource(resource))
+            {
                 return false;
             }
         }
