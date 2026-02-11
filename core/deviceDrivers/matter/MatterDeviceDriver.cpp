@@ -908,7 +908,8 @@ bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid)
             return false;
         }
 
-        AddDevice(std::make_unique<MatterDevice>(deviceUuid, std::move(newCache)));
+        // Propagate the result of AddDevice so callers can detect failures.
+        return AddDevice(std::make_unique<MatterDevice>(deviceUuid, std::move(newCache)));
     }
 
     return true;
