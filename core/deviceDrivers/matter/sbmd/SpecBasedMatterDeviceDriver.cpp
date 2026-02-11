@@ -65,7 +65,13 @@ std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
-    device->SetScript(CreateConfiguredScript(device->GetDeviceId()));
+    auto script = CreateConfiguredScript(device->GetDeviceId());
+    if (!script)
+    {
+        icLogError(LOG_TAG, "Failed to create script for device %s, cannot add device", device->GetDeviceId().c_str());
+        return false;
+    }
+    device->SetScript(std::move(script));
 
     // for each resource in the spec, add an entry to a concrete attribute or command path
     // combine device resources with endpoint resources so we can iterate over all of them
@@ -128,6 +134,11 @@ std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(
 {
     // For now, only QuickJS is supported
     auto script = QuickJsScript::Create(deviceId);
+    if (!script)
+    {
+        icLogError(LOG_TAG, "Failed to create script for device %s", deviceId.c_str());
+        return nullptr;
+    }
 
     // Add mappers from top-level resources
     for (const auto &resource : spec->resources)
