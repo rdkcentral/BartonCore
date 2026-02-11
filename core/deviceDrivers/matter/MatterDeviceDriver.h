@@ -541,8 +541,11 @@ namespace barton
          *        add the device to the internal device map. Note that this can block while the cache is
          *        being created and populated from the device. If it already exists, this is a
          *        noop.
+         *
+         * @param deviceUuid Device UUID
+         * @param timeoutSeconds Timeout to wait for cache start
          */
-        bool AddDeviceIfRequired(const std::string &deviceUuid);
+        bool AddDeviceIfRequired(const std::string &deviceUuid, uint16_t timeoutSeconds);
 
         class OtaRequestorEventHandler : public OTARequestor::EventHandler
         {

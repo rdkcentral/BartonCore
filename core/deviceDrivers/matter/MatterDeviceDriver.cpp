@@ -357,7 +357,7 @@ bool MatterDeviceDriver::ConfigureDevice(icDevice *device, DeviceDescriptor *des
 {
     icDebug();
 
-    if (!AddDeviceIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid, MATTER_ASYNC_DEVICE_TIMEOUT_SECS))
     {
         icError("Failed to configure device %s: could not add device", device->uuid);
         return false;
@@ -391,7 +391,7 @@ void MatterDeviceDriver::SynchronizeDevice(icDevice *device)
 {
     icDebug();
 
-    if (!AddDeviceIfRequired(device->uuid))
+    if (!AddDeviceIfRequired(device->uuid, MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS))
     {
         icError("Failed to synchronize device %s: could not add device", device->uuid);
         return;
@@ -892,7 +892,7 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     return !abort;
 }
 
-bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid)
+bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid, uint16_t timeoutSeconds)
 {
     //if a device isnt available yet (there would have been if it had just been paired),
     // create and start the device data cache and add the device.
@@ -901,8 +901,7 @@ bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid)
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
         std::future<bool> success = newCache->Start();
 
-        if (success.wait_for(std::chrono::seconds(MATTER_ASYNC_SYNCHRONIZE_DEVICE_TIMEOUT_SECS)) != std::future_status::ready ||
-            !success.get())
+        if (success.wait_for(std::chrono::seconds(timeoutSeconds)) != std::future_status::ready || !success.get())
         {
             icError("Failed to start DeviceDataCache for device %s", deviceUuid.c_str());
             return false;
