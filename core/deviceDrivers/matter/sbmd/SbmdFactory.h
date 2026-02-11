@@ -48,6 +48,11 @@ namespace barton
         SbmdFactory() = default;
         ~SbmdFactory();
 
+        // Stores drivers created by this factory to ensure proper cleanup.
+        // MatterDriverFactory holds raw pointers to these drivers. Since both are
+        // singletons with static storage duration, and MatterDriverFactory is
+        // initialized first, it will be destroyed last, ensuring the raw pointers
+        // remain valid.
         std::vector<std::unique_ptr<MatterDeviceDriver>> drivers;
     };
 } //namespace barton
