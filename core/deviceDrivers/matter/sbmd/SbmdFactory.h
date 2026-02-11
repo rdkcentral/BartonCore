@@ -27,6 +27,10 @@
 
 #pragma once
 
+#include "../MatterDeviceDriver.h"
+#include <memory>
+#include <vector>
+
 namespace barton
 {
     class SbmdFactory
@@ -42,6 +46,8 @@ namespace barton
 
     private:
         SbmdFactory() = default;
-        ~SbmdFactory() = default;
+        ~SbmdFactory();
+
+        std::vector<std::unique_ptr<MatterDeviceDriver>> drivers;
     };
 } //namespace barton
