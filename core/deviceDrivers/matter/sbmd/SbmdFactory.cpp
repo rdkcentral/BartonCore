@@ -53,13 +53,31 @@ bool SbmdFactory::RegisterDrivers()
         return false;
     }
 
-    if (!std::filesystem::exists(sbmdDir) || !std::filesystem::is_directory(sbmdDir))
+    std::error_code ec;
+    bool exists = std::filesystem::exists(sbmdDir, ec);
+    if (ec)
+    {
+        icError("Failed to check if SBMD directory exists %s: %s", sbmdDir, ec.message().c_str());
+        return false;
+    }
+    if (!exists)
     {
         icWarn("SBMD specs directory does not exist: %s", sbmdDir);
         return false;
     }
 
-    std::error_code ec;
+    bool isDir = std::filesystem::is_directory(sbmdDir, ec);
+    if (ec)
+    {
+        icError("Failed to check if SBMD path is a directory %s: %s", sbmdDir, ec.message().c_str());
+        return false;
+    }
+    if (!isDir)
+    {
+        icWarn("SBMD specs path is not a directory: %s", sbmdDir);
+        return false;
+    }
+
     std::filesystem::directory_iterator dirIterator(sbmdDir, ec);
     if (ec)
     {
