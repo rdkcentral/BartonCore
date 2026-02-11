@@ -243,6 +243,16 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
         icDeviceEndpoint *endpoint =
             createEndpoint(device, sbmdEndpoint.id.c_str(), sbmdEndpoint.profile.c_str(), true);
 
+        if (endpoint == nullptr)
+        {
+            icError("Failed to create endpoint '%s' with profile '%s'",
+                    sbmdEndpoint.id.c_str(),
+                    sbmdEndpoint.profile.c_str());
+            result = false;
+            continue;
+        }
+
+        endpoint->profileVersion = sbmdEndpoint.profileVersion;
         for (auto &sbmdResource : sbmdEndpoint.resources)
         {
             uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
