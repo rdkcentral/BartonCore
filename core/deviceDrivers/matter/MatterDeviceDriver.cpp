@@ -344,7 +344,10 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             }
         }
 
-        devices.erase(device->uuid);
+        {
+            std::lock_guard<std::mutex> lock(devicesMutex);
+            devices.erase(device->uuid);
+        }
     });
 
     return sentRemoveFabricRequest;
