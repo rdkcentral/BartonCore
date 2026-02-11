@@ -366,6 +366,13 @@ namespace barton
             ResourceBinding binding;
         };
 
+        enum class ResourceOperation
+        {
+            Read,
+            Write,
+            Execute
+        };
+
         /**
          * Internal helper to bind resource info for any operation type.
          * Reduces code duplication between read/write/execute binding.
@@ -373,14 +380,14 @@ namespace barton
          * @param uri The resource URI
          * @param attribute Optional attribute to bind
          * @param command Optional command to bind
-         * @param operationType The operation type for logging ("read", "write", or "execute")
+         * @param operation The operation type
          * @param bindings The binding map to store the result in
          * @return True if binding was successful, false otherwise.
          */
         bool BindResourceInfo(const char *uri,
                               const std::optional<SbmdAttribute> &attribute,
                               const std::optional<SbmdCommand> &command,
-                              const char *operationType,
+                              ResourceOperation operation,
                               std::map<std::string, ResourceBinding> &bindings);
 
         std::string deviceId;
