@@ -24,7 +24,6 @@
 /*
  * Created by Thomas Lea on 10/20/25
  */
-#include "lib/core/DataModelTypes.h"
 #define LOG_TAG     "SBMDD"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
@@ -32,8 +31,8 @@
 #include "app/ConcreteAttributePath.h"
 #include "matter/sbmd/SbmdSpec.h"
 #include "matter/sbmd/script/QuickJsScript.h"
-#include "subsystems/matter/DeviceDataCache.h"
 #include <memory>
+#include <algorithm>
 
 extern "C" {
 #include <commonDeviceDefs.h>
@@ -70,7 +69,12 @@ bool SpecBasedMatterDeviceDriver::GetAttributePath(const MatterDevice &device,
                                                    const SbmdAttribute &attributeInfo,
                                                    app::ConcreteAttributePath &outPath)
 {
-    auto deviceDataCache = GetDeviceDataCache(device.GetDeviceId());
+    auto deviceDataCache = device.GetDeviceDataCache();
+    if (deviceDataCache == nullptr)
+    {
+        icLogWarn(LOG_TAG, logFmt("DeviceDataCache is not available; cannot resolve attribute path"));
+        return false;
+    }
 
     // first see if the attribute exists on the root endpoint
     if (deviceDataCache->EndpointHasServerCluster(0, attributeInfo.clusterId))

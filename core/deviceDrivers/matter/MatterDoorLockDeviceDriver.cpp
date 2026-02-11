@@ -54,6 +54,8 @@ using namespace std::chrono_literals;
 #define DOOR_LOCK_ENDPOINT                  "1"
 
 // auto register with the factory
+// NOTE: this is disabled in favor of the SBMD driver.  These C++ drivers will be removed after SBMD.
+//       this driver is here for reference only.
 //bool MatterDoorLockDeviceDriver::registeredWithFactory =
 //    MatterDriverFactory::Instance().RegisterDriver(new MatterDoorLockDeviceDriver());
 

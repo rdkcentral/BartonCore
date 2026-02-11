@@ -165,7 +165,10 @@ namespace
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
 {
     MatterDriverFactory::Instance();
-    SbmdFactory::Instance().RegisterDrivers();
+    if(!SbmdFactory::Instance().RegisterDrivers())
+    {
+        icWarn("Failed to register SBMD drivers. Functionality may be reduced.");
+    }
 
     commissionerController = std::make_shared<chip::Controller::DeviceCommissioner>();
     operationalCredentialsIssuer = BartonMatterDelegateRegistry::Instance().GetBartonOperationalCredentialDelegate();
