@@ -48,9 +48,12 @@ bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
     if (driver != nullptr && driver->GetDriver() != nullptr && driver->GetDriver()->driverName != nullptr)
     {
         icDebug("%s", driver->GetDriver()->driverName);
-        drivers.emplace(driver->GetDriver()->driverName, driver);
 
         result = deviceDriverManagerRegisterDriver(driver->GetDriver());
+        if (result)
+        {
+            drivers.emplace(driver->GetDriver()->driverName, driver);
+        }
     }
 
     return result;
