@@ -59,7 +59,15 @@ bool SbmdFactory::RegisterDrivers()
         return false;
     }
 
-    for (const auto& entry : std::filesystem::directory_iterator(sbmdDir))
+    std::error_code ec;
+    std::filesystem::directory_iterator dirIterator(sbmdDir, ec);
+    if (ec)
+    {
+        icError("Failed to open SBMD directory %s: %s", sbmdDir, ec.message().c_str());
+        return false;
+    }
+
+    for (const auto& entry : dirIterator)
     {
         if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
         {
