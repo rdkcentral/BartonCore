@@ -77,17 +77,12 @@ bool SbmdFactory::RegisterDrivers()
 
                 auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(std::move(spec));
 
-                SpecBasedMatterDeviceDriver *rawDriver = driver.get();
-                if (!MatterDriverFactory::Instance().RegisterDriver(rawDriver))
+                if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
                 {
                     icError("Failed to register SBMD driver from: %s", entry.path().c_str());
                     allRegistered = false;
                     continue;
                 }
-
-                // Factory owns it now.
-                auto *ownedByFactory = driver.release();
-                (void) ownedByFactory;
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }

@@ -41,6 +41,7 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
+// TODO: Remove when native drivers are removed in support of SBMD drivers only
 bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
 {
     bool result = false;
@@ -52,6 +53,25 @@ bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
         result = deviceDriverManagerRegisterDriver(driver->GetDriver());
     }
 
+    return result;
+}
+
+bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver)
+{
+    if (!driver)
+    {
+        return false;
+    }
+
+    MatterDeviceDriver *rawDriver = driver.get();
+    bool result = RegisterDriver(rawDriver);
+    
+    if (result)
+    {
+        // Take ownership of the driver
+        ownedDrivers.push_back(std::move(driver));
+    }
+    
     return result;
 }
 
