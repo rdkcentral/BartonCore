@@ -192,19 +192,12 @@ namespace barton
 
                 if (deviceServiceDeviceFound(&details, true))
                 {
-                    // Retrieve device from driver after ownership transfer
-                    auto retrievedDevice = driver->GetDevice(uuid);
-                    if (retrievedDevice != nullptr)
-                    {
-                        // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
-                        //  can update resources
-                        retrievedDevice->GetDeviceDataCache()->RegenerateAttributeReport();
-                        result = true;
-                    }
-                    else
-                    {
-                        icError("Failed to retrieve device %s from driver immediately after adding it - this should not occur", uuid.c_str());
-                    }
+                    // reprocessing the attributes in the cache will trigger the callbacks from registered clusters
+                    // which
+                    //  can update resources. We can use our original shared_ptr to the cache since MatterDevice
+                    //  stores a shared copy - it remains valid after ownership transfer.
+                    deviceDataCache->RegenerateAttributeReport();
+                    result = true;
                 }
             }
         }
