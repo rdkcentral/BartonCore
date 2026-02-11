@@ -75,7 +75,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
     // for each resource in the spec, add an entry to a concrete attribute or command path
     // Helper lambda to configure a single resource
-    auto configureResource = [&](const SbmdResource &sbmdResource) -> bool {
+    auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
