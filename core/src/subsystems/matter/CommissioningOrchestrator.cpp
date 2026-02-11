@@ -174,7 +174,12 @@ namespace barton
                     std::make_unique<MatterDevice>(uuid, deviceDataCache);
 
                 // Transfer ownership to driver
-                driver->AddDevice(std::move(device));
+                if (!driver->AddDevice(std::move(device)))
+                {
+                    icError("Failed to add Matter device with UUID %s to driver", uuid.c_str());
+                    SetCommissioningStatus(CommissioningCompleteFailed);
+                    return false;
+                }
 
                 // these are device service details (technology neutral)
                 DeviceFoundDetails details {
