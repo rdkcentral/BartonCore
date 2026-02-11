@@ -58,21 +58,28 @@ bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
 
 bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver)
 {
-    if (!driver)
+    if (!driver || !driver->GetDriver() || !driver->GetDriver()->driverName)
     {
         return false;
     }
 
     MatterDeviceDriver *rawDriver = driver.get();
-    bool result = RegisterDriver(rawDriver);
-    
-    if (result)
+
+    icDebug("%s", rawDriver->GetDriver()->driverName);
+
+    bool result = deviceDriverManagerRegisterDriver(rawDriver->GetDriver());
+    if (!result)
     {
-        // Take ownership of the driver
-        ownedDrivers.push_back(std::move(driver));
+        // Registration failed; do not insert into drivers and allow driver to be destroyed.
+        return false;
     }
-    
-    return result;
+
+    drivers.emplace(rawDriver->GetDriver()->driverName, rawDriver);
+
+    // Take ownership of the driver to ensure its lifetime matches entries in 'drivers'.
+    ownedDrivers.push_back(std::move(driver));
+
+    return true;
 }
 
 MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
