@@ -192,10 +192,15 @@ namespace barton
 
                 if (deviceServiceDeviceFound(&details, true))
                 {
-                    // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
-                    //  can update resources
-                    device->GetDeviceDataCache()->RegenerateAttributeReport();
-                    result = true;
+                    // Retrieve device from driver after ownership transfer
+                    auto retrievedDevice = driver->GetDevice(uuid);
+                    if (retrievedDevice != nullptr)
+                    {
+                        // reprocessing the attributes in the cache will trigger the callbacks from registered clusters which
+                        //  can update resources
+                        retrievedDevice->GetDeviceDataCache()->RegenerateAttributeReport();
+                        result = true;
+                    }
                 }
             }
         }
