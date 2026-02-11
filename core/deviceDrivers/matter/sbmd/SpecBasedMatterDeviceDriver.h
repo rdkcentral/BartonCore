@@ -71,7 +71,6 @@ namespace barton
                              const chip::SessionHandle &sessionHandle) override;
 
     private:
-        static bool registeredWithFactory;
 
         std::shared_ptr<SbmdSpec> spec;
 
