@@ -84,7 +84,6 @@ def test_light_on_off(default_environment, matter_light):
     assert len(lights) == 1
 
     # Add resource update event listener
-    expected_on_off_state = False
     resource_updated_queue = Queue()
 
     def check_resource_updates(
