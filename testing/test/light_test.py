@@ -27,12 +27,11 @@ from queue import Queue
 import threading
 from typing import Callable
 
+from gi.repository import BCore
+
 from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
 
 logger = logging.getLogger(__name__)
-
-from gi.repository import BCore
-
 def assert_device_has_common_resources(client, device, required_resources):
     """Assert that the device has all required common resources.
 
