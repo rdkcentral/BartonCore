@@ -24,8 +24,6 @@
 
 import logging
 from queue import Queue
-import threading
-from typing import Callable
 
 from gi.repository import BCore
 
