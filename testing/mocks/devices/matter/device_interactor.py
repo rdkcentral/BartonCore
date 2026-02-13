@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -311,6 +312,11 @@ class ChipToolDeviceInteractor:
                 node_id=node_id,
                 timeout=commissioning_window_timeout,
             )
+            # If commissioning window fails to open, raise an exception
+            if not result.success:
+                error_msg = f"Failed to open commissioning window on node {node_id}: {result.stderr}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
             # Update the device's commissioning code so get_commissioning_code()
             # returns the correct code for other controllers to use
             if new_code:
@@ -413,8 +419,6 @@ class ChipToolDeviceInteractor:
         Returns:
             The manual pairing code string, or None if not found.
         """
-        import re
-
         # Match pattern like: Manual pairing code: [12345678901]
         match = re.search(r"Manual pairing code:\s*\[([0-9]+)\]", output)
         if match:
