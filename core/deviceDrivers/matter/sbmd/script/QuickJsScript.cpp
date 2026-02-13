@@ -1014,6 +1014,27 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
     // Take ownership of script result for cleanup
     JsValueGuard resultGuard(ctx, outJson);
 
+    // Validate that the script result is a non-null object before accessing properties.
+    // If the script returned null, a primitive, or threw an exception, JS_GetPropertyStr
+    // would produce cascading failures.
+    if (JS_IsException(resultGuard.get()))
+    {
+        icLogError(LOG_TAG, "Script execution returned an exception: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
+
+    if (JS_IsNull(resultGuard.get()) || JS_IsUndefined(resultGuard.get()))
+    {
+        icLogError(LOG_TAG, "Script result is null or undefined; expected an object with 'output' field");
+        return false;
+    }
+
+    if (!JS_IsObject(resultGuard.get()))
+    {
+        icLogError(LOG_TAG, "Script result is not an object; expected an object with 'output' field");
+        return false;
+    }
+
     // Determine the selected command
     const SbmdCommand *selectedCommand = nullptr;
 
@@ -1028,6 +1049,11 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
     {
         // Extract the "command" field to get the selected command name
         JsValueGuard commandValGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "command"));
+        if (JS_IsException(commandValGuard.get()))
+        {
+            icLogError(LOG_TAG, "Failed to access 'command' field: %s", GetExceptionString(ctx).c_str());
+            return false;
+        }
         if (JS_IsUndefined(commandValGuard.get()))
         {
             icLogError(LOG_TAG, "Script result missing 'command' field (required when multiple commands available)");
@@ -1063,6 +1089,11 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
 
     // Extract the "output" field for the command arguments
     JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "output"));
+    if (JS_IsException(outputValGuard.get()))
+    {
+        icLogError(LOG_TAG, "Failed to access 'output' field: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
     if (JS_IsUndefined(outputValGuard.get()))
     {
         icLogError(LOG_TAG, "Script result missing 'output' field");

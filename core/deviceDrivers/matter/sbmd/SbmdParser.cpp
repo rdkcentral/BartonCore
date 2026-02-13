@@ -544,9 +544,6 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         const YAML::Node &writeNode = node["write"];
         mapper.hasWrite = true;
 
-        bool hasAttribute = false;
-        bool hasCommands = false;
-
         if (writeNode["attribute"])
         {
             SbmdAttribute attr;
@@ -556,7 +553,6 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
                 return false;
             }
             mapper.writeAttribute = attr;
-            hasAttribute = true;
         }
 
         // Parse single command (goes into writeCommands vector)
@@ -575,7 +571,6 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
                 return false;
             }
             mapper.writeCommands.push_back(cmd);
-            hasCommands = true;
         }
 
         // Parse commands list (multiple commands for script selection)
@@ -591,7 +586,6 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
                 }
                 mapper.writeCommands.push_back(cmd);
             }
-            hasCommands = !mapper.writeCommands.empty();
         }
 
         // Validation is done later in ValidateMapper
