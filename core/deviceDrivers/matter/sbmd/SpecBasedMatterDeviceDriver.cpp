@@ -189,9 +189,10 @@ void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const S
         {
             script.AddAttributeWriteMapper(resource.mapper.writeAttribute.value(), resource.mapper.writeScript);
         }
-        else if (resource.mapper.writeCommand.has_value())
+        else if (!resource.mapper.writeCommands.empty())
         {
-            icError("Write mapper with command not yet supported for resource %s", resource.id.c_str());
+            // Commands (single or multiple) - pass the commands directly
+            script.AddCommandsWriteMapper(resource.mapper.writeCommands, resource.mapper.writeScript);
         }
     }
     if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())

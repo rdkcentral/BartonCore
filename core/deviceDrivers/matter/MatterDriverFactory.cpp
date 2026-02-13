@@ -27,12 +27,9 @@
 
 #include <memory>
 #define logFmt(fmt) "MatterDriverFactory (%s): " fmt, __func__
-#include "subsystems/matter/MatterCommon.h"
 
 #include "MatterDriverFactory.h"
 #include "matter/MatterDeviceDriver.h"
-#include <iostream>
-#include <sstream>
 
 using namespace barton;
 
@@ -79,8 +76,10 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
 
     drivers.emplace(rawDriver->GetDriver()->driverName, rawDriver);
 
-    // Take ownership of the driver to ensure its lifetime matches entries in 'drivers'.
-    ownedDrivers.push_back(std::move(driver));
+    // Release ownership - deviceDriverManager takes ownership and will handle cleanup
+    // via the destroy callback (which calls delete on the MatterDeviceDriver).
+    // Do NOT store in ownedDrivers to avoid double-free during shutdown.
+    [[maybe_unused]] auto *released = driver.release();
 
     return true;
 }

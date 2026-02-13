@@ -76,6 +76,13 @@ namespace barton
                                              const std::string &script) override;
 
         /**
+         * Add a write mapper for write operations that use commands.
+         *
+         * @see SbmdScript::AddCommandsWriteMapper
+         */
+        bool AddCommandsWriteMapper(const std::vector<SbmdCommand> &commands, const std::string &script) override;
+
+        /**
          * Convert a Matter attribute value to a Barton resource string value.
          *
          * The script will be executed with a JSON object named "sbmdReadArgs" containing the JSON
@@ -186,6 +193,35 @@ namespace barton
                                        chip::TLV::TLVReader &reader,
                                        std::string &outValue) override;
 
+        /**
+         * Convert a Barton write value to a Matter command selection and arguments.
+         *
+         * The script will be executed with a JSON object named "sbmdWriteArgs" containing:
+         *
+         * sbmdWriteArgs = {
+         *     "input" : <Barton string representation of the value to write>,
+         *     "deviceUuid" : <device UUID>,
+         *     "commands" : [<array of available command names>]
+         * }
+         *
+         * The script should return a JSON object with the following fields:
+         *
+         * {"output" : <JSON representation of the command args TLV (or null if no args)>,
+         *  "command" : <name of the command to execute (required when multiple commands are available;
+         *               optional/ignored when only a single command is available)>}
+         *
+         * Note: When only one command is available, the "command" field is optional and
+         * the single command will be auto-selected. The "command" field is required when
+         * multiple commands are available.
+         *
+         * @see SbmdScript::MapWriteCommand
+         */
+        bool MapWriteCommand(const std::vector<SbmdCommand> &availableCommands,
+                             const std::string &inValue,
+                             std::string &selectedCommandName,
+                             chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                             size_t &encodedLength) override;
+
     private:
         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
 
@@ -198,6 +234,12 @@ namespace barton
         std::map<SbmdAttribute, std::string> attributeWriteScripts;
         std::map<SbmdCommand, std::string> commandExecuteScripts;
         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
+        std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
+
+        /**
+         * Generate a deterministic key from a commands vector for script lookup.
+         */
+        static std::string GenerateCommandsKey(const std::vector<SbmdCommand> &commands);
 
         /**
          * Execute a script.

@@ -54,8 +54,11 @@ using namespace std::chrono_literals;
 #define LIGHT_ENDPOINT                  "1"
 
 // auto register with the factory
-bool MatterLightDeviceDriver::registeredWithFactory =
-    MatterDriverFactory::Instance().RegisterDriver(new MatterLightDeviceDriver());
+// NOTE: this is disabled in favor of the SBMD driver.  These C++ drivers will be removed after SBMD.
+//       this driver is here for reference only.
+//bool MatterLightDeviceDriver::registeredWithFactory =
+//    MatterDriverFactory::Instance().RegisterDriver(new MatterLightDeviceDriver());
+bool MatterLightDeviceDriver::registeredWithFactory = false;
 
 MatterLightDeviceDriver::MatterLightDeviceDriver() : MatterDeviceDriver(MATTER_LIGHT_DEVICE_DRIVER_NAME, LIGHT_DC, 0) {}
 

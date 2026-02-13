@@ -76,16 +76,20 @@ namespace barton
                     return false;
                 }
 
-                // Must use attribute (commands not supported for write)
-                if (!mapper.writeAttribute.has_value())
+                // Must use attribute or command(s) (but not both)
+                bool hasAttr = mapper.writeAttribute.has_value();
+                bool hasCmds = !mapper.writeCommands.empty();
+
+                if (!hasAttr && !hasCmds)
                 {
-                    icError("Resource %s has write enabled but no writeAttribute specified", resourceId.c_str());
+                    icError("Resource %s has write enabled but no writeAttribute or writeCommands specified",
+                            resourceId.c_str());
                     return false;
                 }
-
-                if (mapper.writeCommand.has_value())
+                if (hasAttr && hasCmds)
                 {
-                    icError("Resource %s uses writeCommand which is not yet supported", resourceId.c_str());
+                    icError("Resource %s has write enabled with both attribute and command(s) - only one allowed",
+                            resourceId.c_str());
                     return false;
                 }
             }
@@ -131,12 +135,15 @@ namespace barton
         {
             resource.resourceEndpointId = endpointId;
 
-            auto setIds = [&](std::optional<SbmdAttribute> &attr, std::optional<SbmdCommand> &cmd) {
+            auto setAttrIds = [&](std::optional<SbmdAttribute> &attr) {
                 if (attr.has_value())
                 {
                     attr.value().resourceEndpointId = endpointId;
                     attr.value().resourceId = resource.id;
                 }
+            };
+
+            auto setCmdIds = [&](std::optional<SbmdCommand> &cmd) {
                 if (cmd.has_value())
                 {
                     cmd.value().resourceEndpointId = endpointId;
@@ -144,17 +151,28 @@ namespace barton
                 }
             };
 
+            auto setCmdsIds = [&](std::vector<SbmdCommand> &cmds) {
+                for (auto &cmd : cmds)
+                {
+                    cmd.resourceEndpointId = endpointId;
+                    cmd.resourceId = resource.id;
+                }
+            };
+
             if (resource.mapper.hasRead)
             {
-                setIds(resource.mapper.readAttribute, resource.mapper.readCommand);
+                setAttrIds(resource.mapper.readAttribute);
+                setCmdIds(resource.mapper.readCommand);
             }
             if (resource.mapper.hasWrite)
             {
-                setIds(resource.mapper.writeAttribute, resource.mapper.writeCommand);
+                setAttrIds(resource.mapper.writeAttribute);
+                setCmdsIds(resource.mapper.writeCommands);
             }
             if (resource.mapper.hasExecute)
             {
-                setIds(resource.mapper.executeAttribute, resource.mapper.executeCommand);
+                setAttrIds(resource.mapper.executeAttribute);
+                setCmdIds(resource.mapper.executeCommand);
             }
         }
 } // anonymous namespace
@@ -526,9 +544,6 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         const YAML::Node &writeNode = node["write"];
         mapper.hasWrite = true;
 
-        bool hasAttribute = false;
-        bool hasCommand = false;
-
         if (writeNode["attribute"])
         {
             SbmdAttribute attr;
@@ -538,32 +553,42 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
                 return false;
             }
             mapper.writeAttribute = attr;
-            hasAttribute = true;
         }
 
+        // Parse single command (goes into writeCommands vector)
         if (writeNode["command"])
         {
+            if (writeNode["commands"])
+            {
+                icError("write mapper cannot have both 'command' and 'commands'");
+                return false;
+            }
+
             SbmdCommand cmd;
             if (!ParseCommand(writeNode["command"], cmd))
             {
                 icError("Failed to parse write command");
                 return false;
             }
-            mapper.writeCommand = cmd;
-            hasCommand = true;
+            mapper.writeCommands.push_back(cmd);
         }
 
-        if (!hasAttribute && !hasCommand)
+        // Parse commands list (multiple commands for script selection)
+        if (writeNode["commands"] && writeNode["commands"].IsSequence())
         {
-            icError("write mapper must have either 'attribute' or 'command'");
-            return false;
+            for (const auto &cmdNode : writeNode["commands"])
+            {
+                SbmdCommand cmd;
+                if (!ParseCommand(cmdNode, cmd))
+                {
+                    icError("Failed to parse command in commands list");
+                    return false;
+                }
+                mapper.writeCommands.push_back(cmd);
+            }
         }
 
-        if (hasAttribute && hasCommand)
-        {
-            icError("write mapper cannot have both 'attribute' and 'command'");
-            return false;
-        }
+        // Validation is done later in ValidateMapper
 
         if (writeNode["script"])
         {
@@ -691,7 +716,22 @@ bool SbmdParser::ParseCommand(const YAML::Node &node, SbmdCommand &command)
     // Parse timed invoke timeout (if specified, command requires timed invoke)
     if (node["timedInvokeTimeoutMs"])
     {
-        command.timedInvokeTimeoutMs = node["timedInvokeTimeoutMs"].as<uint32_t>();
+        uint32_t timeoutValue = node["timedInvokeTimeoutMs"].as<uint32_t>();
+        if (timeoutValue > UINT16_MAX)
+        {
+            if (!command.name.empty())
+            {
+                icLogError(LOG_TAG, logFmt("timedInvokeTimeoutMs value %u for command '%s' exceeds maximum allowed value of %u"),
+                           timeoutValue, command.name.c_str(), UINT16_MAX);
+            }
+            else
+            {
+                icLogError(LOG_TAG, logFmt("timedInvokeTimeoutMs value %u exceeds maximum allowed value of %u"),
+                           timeoutValue, UINT16_MAX);
+            }
+            return false;
+        }
+        command.timedInvokeTimeoutMs = static_cast<uint16_t>(timeoutValue);
     }
 
     // Parse command arguments

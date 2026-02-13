@@ -328,12 +328,19 @@ namespace barton
 
         struct ResourceBinding
         {
-            // Union-like structure: has either attribute path + attribute, or command path + command
-            bool isAttribute; // true if attribute, false if command
+            enum class Type
+            {
+                Attribute,
+                Commands
+            };
+            Type type;
+
+            // For Attribute type
             chip::app::ConcreteAttributePath attributePath;
-            chip::app::ConcreteCommandPath commandPath;
             std::optional<SbmdAttribute> attribute;
-            std::optional<SbmdCommand> command;
+
+            // For Commands type (single command = size 1, multiple = size > 1)
+            std::vector<SbmdCommand> commands;
         };
 
         // Hash function for ConcreteAttributePath to enable fast lookup
@@ -379,16 +386,41 @@ namespace barton
          *
          * @param uri The resource URI
          * @param attribute Optional attribute to bind
-         * @param command Optional command to bind
+         * @param commands Commands to bind (empty = no commands, size 1 = single, size > 1 = multiple)
          * @param operation The operation type
          * @param bindings The binding map to store the result in
          * @return True if binding was successful, false otherwise.
          */
         bool BindResourceInfo(const char *uri,
                               const std::optional<SbmdAttribute> &attribute,
-                              const std::optional<SbmdCommand> &command,
+                              const std::vector<SbmdCommand> &commands,
                               ResourceOperation operation,
                               std::map<std::string, ResourceBinding> &bindings);
+
+        /**
+         * Send a command to the device using pre-encoded TLV data.
+         * Common helper used by both write-command and execute-command paths.
+         *
+         * @param promises Forward list of promises to fulfill on completion
+         * @param command The command definition with cluster info and optional timed invoke timeout
+         * @param endpointId The endpoint to send the command to
+         * @param tlvBuffer Buffer containing the TLV-encoded command arguments
+         * @param encodedLength Length of the encoded TLV data
+         * @param exchangeMgr The exchange manager for Matter communication
+         * @param sessionHandle The session handle for the device
+         * @param uri The resource URI (for logging)
+         * @param response Optional pointer to store command response (nullptr for write operations)
+         * @return True if command was successfully initiated, false otherwise
+         */
+        bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                const SbmdCommand &command,
+                                chip::EndpointId endpointId,
+                                const uint8_t *tlvBuffer,
+                                size_t encodedLength,
+                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                const chip::SessionHandle &sessionHandle,
+                                const char *uri,
+                                char **response);
 
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;

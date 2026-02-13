@@ -186,7 +186,7 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
 
 bool MatterDevice::BindResourceInfo(const char *uri,
                                     const std::optional<SbmdAttribute> &attribute,
-                                    const std::optional<SbmdCommand> &command,
+                                    const std::vector<SbmdCommand> &commands,
                                     ResourceOperation operation,
                                     std::map<std::string, ResourceBinding> &bindings)
 {
@@ -212,10 +212,10 @@ bool MatterDevice::BindResourceInfo(const char *uri,
             break;
     }
 
-    // Validate: must have exactly one of attribute or command
-    if ((!attribute.has_value() && !command.has_value()) || (attribute.has_value() && command.has_value()))
+    // Validate: must have exactly one of attribute or commands
+    if ((!attribute.has_value() && commands.empty()) || (attribute.has_value() && !commands.empty()))
     {
-        icError("Must have either attribute or command, but not both");
+        icError("Must have either attribute or commands, but not both");
         return false;
     }
 
@@ -231,7 +231,7 @@ bool MatterDevice::BindResourceInfo(const char *uri,
             return false;
         }
 
-        binding.isAttribute = true;
+        binding.type = ResourceBinding::Type::Attribute;
         binding.attributePath.mEndpointId = endpointId;
         binding.attributePath.mClusterId = attribute->clusterId;
         binding.attributePath.mAttributeId = attribute->attributeId;
@@ -266,32 +266,28 @@ bool MatterDevice::BindResourceInfo(const char *uri,
     }
     else
     {
-        // Bind command
-        if (!GetEndpointForCluster(command->clusterId, endpointId))
+        // Bind commands
+        binding.type = ResourceBinding::Type::Commands;
+        binding.commands = commands;
+
+        // Populate feature maps for all commands
+        for (auto &cmd : binding.commands)
         {
-            icError("Failed to find endpoint for cluster 0x%x", command->clusterId);
-            return false;
+            if (!GetEndpointForCluster(cmd.clusterId, endpointId))
+            {
+                icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
+                        cmd.name.c_str(), cmd.clusterId, uri);
+                return false;
+            }
+
+            uint32_t featureMapValue = 0;
+            if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
+            {
+                cmd.featureMap = featureMapValue;
+            }
         }
 
-        binding.isAttribute = false;
-        binding.commandPath.mEndpointId = endpointId;
-        binding.commandPath.mClusterId = command->clusterId;
-        binding.commandPath.mCommandId = command->commandId;
-        binding.command = command;
-
-        // Populate the feature map from the cache
-        uint32_t featureMapValue = 0;
-        if (GetClusterFeatureMap(endpointId, command->clusterId, featureMapValue))
-        {
-            binding.command->featureMap = featureMapValue;
-        }
-
-        icDebug("Bound resource %s for URI: %s (endpoint: %u, cluster: 0x%x, command: 0x%x)",
-                operationType,
-                uri,
-                endpointId,
-                command->clusterId,
-                command->commandId);
+        icDebug("Bound resource %s for URI: %s (%zu command(s))", operationType, uri, commands.size());
     }
 
     bindings[uri] = binding;
@@ -300,20 +296,161 @@ bool MatterDevice::BindResourceInfo(const char *uri,
 
 bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
 {
-    return BindResourceInfo(
-        uri, mapper.readAttribute, mapper.readCommand, ResourceOperation::Read, resourceReadBindings);
+    std::vector<SbmdCommand> commands;
+    if (mapper.readCommand.has_value())
+    {
+        commands.push_back(mapper.readCommand.value());
+    }
+    return BindResourceInfo(uri, mapper.readAttribute, commands, ResourceOperation::Read, resourceReadBindings);
 }
 
 bool MatterDevice::BindResourceWriteInfo(const char *uri, const SbmdMapper &mapper)
 {
     return BindResourceInfo(
-        uri, mapper.writeAttribute, mapper.writeCommand, ResourceOperation::Write, resourceWriteBindings);
+        uri, mapper.writeAttribute, mapper.writeCommands, ResourceOperation::Write, resourceWriteBindings);
 }
 
 bool MatterDevice::BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper)
 {
+    std::vector<SbmdCommand> commands;
+    if (mapper.executeCommand.has_value())
+    {
+        commands.push_back(mapper.executeCommand.value());
+    }
     return BindResourceInfo(
-        uri, mapper.executeAttribute, mapper.executeCommand, ResourceOperation::Execute, resourceExecuteBindings);
+        uri, mapper.executeAttribute, commands, ResourceOperation::Execute, resourceExecuteBindings);
+}
+
+bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                      const SbmdCommand &command,
+                                      chip::EndpointId endpointId,
+                                      const uint8_t *tlvBuffer,
+                                      size_t encodedLength,
+                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                      const chip::SessionHandle &sessionHandle,
+                                      const char *uri,
+                                      char **response)
+{
+    // Validate TLV buffer before processing
+    if (tlvBuffer == nullptr || encodedLength == 0)
+    {
+        icError("Invalid TLV buffer for command at URI: %s (buffer=%p, length=%zu)", uri, tlvBuffer, encodedLength);
+        return false;
+    }
+
+    // Create TLV reader from the encoded data
+    // JsonToTlv wraps the value in a structure, so we need to navigate into it
+    chip::TLV::TLVReader reader;
+    reader.Init(tlvBuffer, encodedLength);
+    if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+    {
+        icError("Invalid TLV structure for command at URI: %s", uri);
+        return false;
+    }
+
+    // Create CommandSender with ExtendableCallback (this)
+    // Pass the timed flag from the command definition - timed commands require a timed invoke
+    bool isTimedRequest = command.timedInvokeTimeoutMs.has_value();
+    auto commandSender = std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest);
+
+    if (!commandSender)
+    {
+        icError("Failed to create CommandSender for URI: %s", uri);
+        return false;
+    }
+
+    // Prepare the command
+    // SetStartDataStruct(true) tells the SDK to start the CommandFields structure for us
+    chip::app::CommandSender::PrepareCommandParameters prepareParams;
+    prepareParams.SetStartDataStruct(true);
+
+    chip::app::CommandPathParams commandPath(endpointId,
+                                             0, /* group not used */
+                                             command.clusterId,
+                                             command.commandId,
+                                             chip::app::CommandPathFlags::kEndpointIdValid);
+
+    CHIP_ERROR err = commandSender->PrepareCommand(commandPath, prepareParams);
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to prepare command for URI: %s, error: %s", uri, err.AsString());
+        return false;
+    }
+
+    // Get the TLV writer and copy our preencoded command data
+    chip::TLV::TLVWriter *writer = commandSender->GetCommandDataIBTLVWriter();
+    if (writer == nullptr)
+    {
+        icError("Failed to get TLV writer for command at URI: %s", uri);
+        return false;
+    }
+
+    // Enter the source container to access its elements
+    // Our source TLV is a structure from JsonToTlv, we need to copy the elements inside
+    chip::TLV::TLVType containerType;
+    err = reader.EnterContainer(containerType);
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to enter TLV container for URI: %s, error: %s", uri, err.AsString());
+        return false;
+    }
+
+    // Copy each element from the reader to the writer
+    while ((err = reader.Next()) == CHIP_NO_ERROR)
+    {
+        err = writer->CopyElement(reader);
+        if (err != CHIP_NO_ERROR)
+        {
+            icError("Failed to copy command element for URI: %s, error: %s", uri, err.AsString());
+            return false;
+        }
+    }
+
+    // Check if we exited the loop due to end of container or error
+    if (err != CHIP_END_OF_TLV)
+    {
+        icError("Error iterating TLV elements for URI: %s, error: %s", uri, err.AsString());
+        return false;
+    }
+
+    // Finish the command
+    // SetEndDataStruct(true) tells the SDK to end the CommandFields structure for us
+    // For timed requests, we need to provide the timeout in FinishCommandParameters
+    chip::app::CommandSender::FinishCommandParameters finishParams(
+        isTimedRequest ? chip::MakeOptional(command.timedInvokeTimeoutMs.value()) : chip::NullOptional);
+    finishParams.SetEndDataStruct(true);
+    err = commandSender->FinishCommand(finishParams);
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to finish command for URI: %s, error: %s", uri, err.AsString());
+        return false;
+    }
+
+    // Create a promise for this command operation
+    promises.emplace_front();
+    auto &commandPromise = promises.front();
+
+    // Send the command request
+    err = commandSender->SendCommandRequest(sessionHandle);
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to send command request for URI: %s, error: %s", uri, err.AsString());
+        commandPromise.set_value(false);
+        return false;
+    }
+
+    icDebug("Successfully initiated command %s for URI: %s", command.name.c_str(), uri);
+
+    // Store the context to track this command operation
+    CommandContext context;
+    context.commandPromise = &commandPromise;
+    context.commandSender = std::move(commandSender);
+    context.commandInfo = command;
+    context.response = response;
+    auto * commandSenderPtr = context.commandSender.get();
+    activeCommandContexts[commandSenderPtr] = std::move(context);
+
+    return true;
 }
 
 void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &promises,
@@ -342,7 +479,7 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
 
     std::string outValue;
 
-    if (binding.isAttribute)
+    if (binding.type == ResourceBinding::Type::Attribute)
     {
         // Get the attribute data from the cache
         chip::TLV::TLVReader reader;
@@ -400,6 +537,14 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
         return;
     }
 
+    // Check if we have a script engine (needed for all write paths)
+    if (!script)
+    {
+        icError("No script engine available for device %s", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
     // Look up the binding
     auto it = resourceWriteBindings.find(resource->uri);
     if (it == resourceWriteBindings.end())
@@ -411,16 +556,72 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
 
     const ResourceBinding &binding = it->second;
 
-    if (binding.isAttribute)
+    if (binding.type == ResourceBinding::Type::Commands)
     {
-        // Check if we have a script engine
-        if (!script)
+        // Execute the script to get the TLV args (and selected command name if multiple commands)
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
+        size_t encodedLength = 0;
+
+        if (!script->MapWriteCommand(
+                binding.commands, newValue != nullptr ? newValue : "", selectedCommandName, tlvBuffer, encodedLength))
         {
-            icError("No script engine available for device %s", deviceId.c_str());
+            icError("Failed to execute write-command mapping script for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
 
+        // Find the selected command - if only one, use it directly
+        const SbmdCommand *selectedCommand = nullptr;
+        if (binding.commands.size() == 1)
+        {
+            selectedCommand = &binding.commands[0];
+        }
+        else
+        {
+            for (const auto &cmd : binding.commands)
+            {
+                if (cmd.name == selectedCommandName)
+                {
+                    selectedCommand = &cmd;
+                    break;
+                }
+            }
+
+            if (selectedCommand == nullptr)
+            {
+                icError("Script selected unknown command '%s' for URI: %s", selectedCommandName.c_str(), resource->uri);
+                FailOperation(promises);
+                return;
+            }
+        }
+
+        // Get the endpoint for this command
+        chip::EndpointId endpointId;
+        if (!GetEndpointForCluster(selectedCommand->clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x", selectedCommand->clusterId);
+            FailOperation(promises);
+            return;
+        }
+
+        // Send the command using the common helper
+        if (!SendCommandFromTlv(promises,
+                                *selectedCommand,
+                                endpointId,
+                                tlvBuffer.Get(),
+                                encodedLength,
+                                exchangeMgr,
+                                sessionHandle,
+                                resource->uri,
+                                nullptr))
+        {
+            FailOperation(promises);
+            return;
+        }
+    }
+    else if (binding.type == ResourceBinding::Type::Attribute)
+    {
         // Execute the script to map the string value to TLV data
         chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
         size_t encodedLength = 0;
@@ -493,8 +694,7 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
     }
     else
     {
-        // Writing to a command is not yet implemented
-        icError("Writing to command for URI: %s is not yet implemented", resource->uri);
+        icError("Invalid write binding type for URI: %s", resource->uri);
         FailOperation(promises);
         return;
     }
@@ -525,16 +725,25 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
 
     const ResourceBinding &binding = it->second;
 
-    if (binding.isAttribute)
+    if (binding.type == ResourceBinding::Type::Attribute)
     {
         // Executing an attribute is not yet supported
         icError("Executing attribute for URI: %s is not supported", resource->uri);
         FailOperation(promises);
         return;
     }
-    else
+    else if (binding.type == ResourceBinding::Type::Commands)
     {
-        // Execute command
+        // Execute command (should be exactly one command for execute bindings)
+        if (binding.commands.empty())
+        {
+            icError("No command bound for execute URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        const SbmdCommand &command = binding.commands[0];
+
         // Check if we have a script engine
         if (!script)
         {
@@ -554,132 +763,42 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
         // The script will allocate the buffer and return the encoded length
         chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
         size_t encodedLength = 0;
-        if (!script->MapCommandExecute(binding.command.value(), argumentValues, tlvBuffer, encodedLength))
+        if (!script->MapCommandExecute(command, argumentValues, tlvBuffer, encodedLength))
         {
             icError("Failed to execute command mapping script for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
 
-        // Create a TLV reader from the encoded data
-        // JsonToTlv wraps the value in a structure, so we need to navigate into it
-        chip::TLV::TLVReader reader;
-        reader.Init(tlvBuffer.Get(), encodedLength);
-        if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+        // Get the endpoint for this command
+        chip::EndpointId endpointId;
+        if (!GetEndpointForCluster(command.clusterId, endpointId))
         {
-            icError("Invalid TLV structure from MapCommandExecute for URI: %s", resource->uri);
+            icError("Failed to find endpoint for cluster 0x%x", command.clusterId);
             FailOperation(promises);
             return;
         }
 
-        // Create CommandSender with ExtendableCallback (this)
-        // Pass the timed flag from the command definition - timed commands require a timed invoke
-        bool isTimedRequest = binding.command->timedInvokeTimeoutMs.has_value();
-        auto commandSender = std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest);
-
-        if (!commandSender)
+        // Send the command using the common helper
+        if (!SendCommandFromTlv(promises,
+                                command,
+                                endpointId,
+                                tlvBuffer.Get(),
+                                encodedLength,
+                                exchangeMgr,
+                                sessionHandle,
+                                resource->uri,
+                                response))
         {
-            icError("Failed to create CommandSender for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
-
-        // Prepare the command
-        // SetStartDataStruct(true) tells the SDK to start the CommandFields structure for us
-        chip::app::CommandSender::PrepareCommandParameters prepareParams;
-        prepareParams.SetStartDataStruct(true);
-
-        chip::app::CommandPathParams commandPath(binding.commandPath.mEndpointId,
-                                                 0, /* group not used */
-                                                 binding.commandPath.mClusterId,
-                                                 binding.commandPath.mCommandId,
-                                                 chip::app::CommandPathFlags::kEndpointIdValid);
-
-        CHIP_ERROR err = commandSender->PrepareCommand(commandPath, prepareParams);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to prepare command for URI: %s, error: %s", resource->uri, err.AsString());
-            FailOperation(promises);
-            return;
-        }
-
-        // Get the TLV writer and copy our preencoded command data
-        chip::TLV::TLVWriter *writer = commandSender->GetCommandDataIBTLVWriter();
-        if (writer == nullptr)
-        {
-            icError("Failed to get TLV writer for command for URI: %s", resource->uri);
-            FailOperation(promises);
-            return;
-        }
-
-        // Enter the source container to access its elements
-        // Our source TLV is a structure from JsonToTlv, we need to copy the elements inside
-        chip::TLV::TLVType containerType;
-        err = reader.EnterContainer(containerType);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to enter TLV container for URI: %s, error: %s", resource->uri, err.AsString());
-            FailOperation(promises);
-            return;
-        }
-
-        // Copy each element from the reader to the writer
-        while ((err = reader.Next()) == CHIP_NO_ERROR)
-        {
-            err = writer->CopyElement(reader);
-            if (err != CHIP_NO_ERROR)
-            {
-                icError("Failed to copy command element for URI: %s, error: %s", resource->uri, err.AsString());
-                FailOperation(promises);
-                return;
-            }
-        }
-
-        // Check if we exited the loop due to end of container or error
-        if (err != CHIP_END_OF_TLV)
-        {
-            icError("Error iterating TLV elements for URI: %s, error: %s", resource->uri, err.AsString());
-            FailOperation(promises);
-            return;
-        }
-
-        // Finish the command
-        // SetEndDataStruct(true) tells the SDK to end the CommandFields structure for us
-        // For timed requests, we need to provide the timeout in FinishCommandParameters
-        chip::app::CommandSender::FinishCommandParameters finishParams(
-            isTimedRequest ? chip::MakeOptional(static_cast<uint16_t>(binding.command->timedInvokeTimeoutMs.value()))
-                           : chip::NullOptional);
-        finishParams.SetEndDataStruct(true);
-        err = commandSender->FinishCommand(finishParams);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to finish command for URI: %s, error: %s", resource->uri, err.AsString());
-            FailOperation(promises);
-            return;
-        }
-
-        // Create a promise for this command operation
-        promises.emplace_front();
-        auto &commandPromise = promises.front();
-
-        // Send the command request
-        err = commandSender->SendCommandRequest(sessionHandle);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to send command request for URI: %s, error: %s", resource->uri, err.AsString());
-            commandPromise.set_value(false);
-            return;
-        }
-
-        icDebug("Successfully initiated command for resource %s", resource->uri);
-
-        // Store the context to track this command operation
-        CommandContext context;
-        context.commandPromise = &commandPromise;
-        context.commandSender = std::move(commandSender);
-        context.commandInfo = binding.command.value();
-        context.response = response;
-        activeCommandContexts[context.commandSender.get()] = std::move(context);
+    }
+    else
+    {
+        icError("Invalid execute binding type for URI: %s", resource->uri);
+        FailOperation(promises);
+        return;
     }
 }
 

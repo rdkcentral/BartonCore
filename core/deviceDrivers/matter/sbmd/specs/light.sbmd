@@ -1,0 +1,146 @@
+# Light SBMD Specification
+# Maps Matter light device types to Barton light device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Light"
+# Script type (currently only JavaScript is supported)
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "light"
+  deviceClassVersion: 0
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0100  # On/Off Light
+    - 0x010a  # On/Off Plug-in Unit
+    - 0x0101  # Dimmable Light
+    - 0x010b  # Dimmable Plug-in Unit
+    - 0x0102  # Color Dimmable Light
+    - 0x0200  # Color Dimmable Light (alternate)
+    - 0x010d  # Extended Color Light
+    - 0x0210  # Extended Color Light (alternate)
+    - 0x010c  # Color Temperature Light
+    - 0x0220  # Color Temperature Light (alternate)
+    - 0x0103  # On/Off Light Switch
+    - 0x0104  # Dimmable Light Switch
+    - 0x0105  # Color Dimmable Light Switch
+  revision: 1
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+# Device-level resources (not associated with a specific endpoint)
+resources:
+  - id: "identifySeconds"
+    type: "com.icontrol.seconds"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          return {output: sbmdReadArgs.input};
+      write:
+        attribute:
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          const secs = parseInt(sbmdWriteArgs.input, 10);
+          return {output: secs};
+
+endpoints:
+  - id: "1"
+    profile: "light"
+    profileVersion: 0
+    resources:
+      - id: "isOn"
+        type: "boolean"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0006"      # On/Off cluster
+              attributeId: "0x0000"    # OnOff attribute
+              name: "OnOff"
+              type: "bool"
+            script: |
+              return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};
+          write:
+            commands: # one of these commands is selected by the script based on input
+              - name: "Off"
+                clusterId: "0x0006"      # On/Off cluster
+                commandId: "0x0000"      # Off command
+              - name: "On"
+                clusterId: "0x0006"      # On/Off cluster
+                commandId: "0x0001"      # On command
+            script: |
+              // Commands have no args. Select one of the above commands based on input
+              return {output: null, command: (sbmdWriteArgs.input === 'true') ? 'On' : 'Off'};
+
+      - id: "currentLevel"
+        type: "com.icontrol.lightLevel"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0008"      # Level Control cluster
+              attributeId: "0x0000"    # CurrentLevel attribute
+              name: "CurrentLevel"
+              type: "uint8"
+            script: |
+              const level = sbmdReadArgs.input;
+              const percent = Math.round(level / 254 * 100);
+              return {output: percent.toString()};
+          write:
+            command:
+              clusterId: "0x0008"      # Level Control cluster
+              commandId: "0x0004"      # MoveToLevelWithOnOff
+              name: "MoveToLevelWithOnOff"
+              args:
+                - name: "Level"
+                  type: "uint8"
+                - name: "TransitionTime"
+                  type: "uint16"
+                - name: "OptionsMask"
+                  type: "uint8"
+                - name: "OptionsOverride"
+                  type: "uint8"
+            script: |
+              let percent = parseInt(sbmdWriteArgs.input, 10);
+              if (isNaN(percent)) percent = 0;
+              if (percent < 0) percent = 0;
+              if (percent > 100) percent = 100;
+
+              const level = Math.round(percent / 100 * 254);
+              return {
+                output: {
+                  Level: level,
+                  TransitionTime: 0,
+                  OptionsMask: 0,
+                  OptionsOverride: 0
+                }
+              };
