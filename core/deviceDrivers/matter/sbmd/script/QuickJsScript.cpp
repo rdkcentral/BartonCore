@@ -576,12 +576,8 @@ bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std:
     if (!JS_IsNull(pendingException) && !JS_IsUndefined(pendingException))
     {
         icLogWarn(LOG_TAG, "Cleared pending exception before parsing %s JSON", sourceName.c_str());
-        JS_FreeValue(ctx, pendingException);
     }
-    else
-    {
-        JS_FreeValue(ctx, pendingException);
-    }
+    JS_FreeValue(ctx, pendingException);
 
     JSValue parsed = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
     if (JS_IsException(parsed))
