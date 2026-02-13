@@ -492,16 +492,17 @@ bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandIn
 std::string QuickJsScript::GenerateCommandsKey(const std::vector<SbmdCommand> &commands)
 {
     // Generate a deterministic key from the commands vector
-    // Format: "clusterId1/commandId1,clusterId2/commandId2,..."
-    std::string key;
-    for (size_t i = 0; i < commands.size(); ++i)
+    // Uses resource identity (endpointId:resourceId) to differentiate different resources
+    // that may use the same command set
+    if (commands.empty())
     {
-        if (i > 0)
-        {
-            key += ",";
-        }
-        key += std::to_string(commands[i].clusterId) + "/" + std::to_string(commands[i].commandId);
+        return "";
     }
+
+    // All commands in a write command set belong to the same resource, so use the first command's identity
+    const auto &first = commands[0];
+    std::string key = first.resourceEndpointId.value_or("") + ":" + first.resourceId;
+
     return key;
 }
 

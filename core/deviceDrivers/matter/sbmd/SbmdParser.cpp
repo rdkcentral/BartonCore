@@ -716,7 +716,7 @@ bool SbmdParser::ParseCommand(const YAML::Node &node, SbmdCommand &command)
     // Parse timed invoke timeout (if specified, command requires timed invoke)
     if (node["timedInvokeTimeoutMs"])
     {
-        command.timedInvokeTimeoutMs = node["timedInvokeTimeoutMs"].as<uint32_t>();
+        command.timedInvokeTimeoutMs = node["timedInvokeTimeoutMs"].as<uint16_t>();
     }
 
     // Parse command arguments

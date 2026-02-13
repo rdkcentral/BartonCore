@@ -84,7 +84,7 @@ namespace barton
         uint32_t clusterId;
         uint32_t commandId;
         std::string name;
-        std::optional<uint32_t> timedInvokeTimeoutMs; // If set, command requires timed invoke with this timeout
+        std::optional<uint16_t> timedInvokeTimeoutMs; // If set, command requires timed invoke with this timeout
         std::vector<SbmdArgument> args;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource

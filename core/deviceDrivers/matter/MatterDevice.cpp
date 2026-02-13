@@ -320,13 +320,20 @@ bool MatterDevice::BindResourceExecuteInfo(const char *uri, const SbmdMapper &ma
 bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
                                       const SbmdCommand &command,
                                       chip::EndpointId endpointId,
-                                      uint8_t *tlvBuffer,
+                                      const uint8_t *tlvBuffer,
                                       size_t encodedLength,
                                       chip::Messaging::ExchangeManager &exchangeMgr,
                                       const chip::SessionHandle &sessionHandle,
                                       const char *uri,
                                       char **response)
 {
+    // Validate TLV buffer before processing
+    if (tlvBuffer == nullptr || encodedLength == 0)
+    {
+        icError("Invalid TLV buffer for command at URI: %s (buffer=%p, length=%zu)", uri, tlvBuffer, encodedLength);
+        return false;
+    }
+
     // Create TLV reader from the encoded data
     // JsonToTlv wraps the value in a structure, so we need to navigate into it
     chip::TLV::TLVReader reader;
@@ -406,8 +413,7 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     // SetEndDataStruct(true) tells the SDK to end the CommandFields structure for us
     // For timed requests, we need to provide the timeout in FinishCommandParameters
     chip::app::CommandSender::FinishCommandParameters finishParams(
-        isTimedRequest ? chip::MakeOptional(static_cast<uint16_t>(command.timedInvokeTimeoutMs.value()))
-                       : chip::NullOptional);
+        isTimedRequest ? chip::MakeOptional(command.timedInvokeTimeoutMs.value()) : chip::NullOptional);
     finishParams.SetEndDataStruct(true);
     err = commandSender->FinishCommand(finishParams);
     if (err != CHIP_NO_ERROR)

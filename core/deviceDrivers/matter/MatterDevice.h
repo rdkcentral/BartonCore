@@ -415,7 +415,7 @@ namespace barton
         bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
                                 const SbmdCommand &command,
                                 chip::EndpointId endpointId,
-                                uint8_t *tlvBuffer,
+                                const uint8_t *tlvBuffer,
                                 size_t encodedLength,
                                 chip::Messaging::ExchangeManager &exchangeMgr,
                                 const chip::SessionHandle &sessionHandle,
