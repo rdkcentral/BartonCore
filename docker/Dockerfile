@@ -90,6 +90,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     python3-markdown \
     python3-pip \
     python3-venv \
+    python3-jsonschema \
     flex \
     bison \
     libglib2.0-dev \
@@ -168,7 +169,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     checkinstall \
     zlib1g-dev \
     socat \
-    libyaml-cpp-dev
+    libyaml-cpp-dev \
+    quickjs
 
 # Fake Function Framework (FFF)
 #
@@ -286,7 +288,8 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
 
-# Download, build, and install quickjs, which needs our custom CMakeLists.txt
+# Download, build, and install quickjs, which needs our custom CMakeLists.txt. The quickjs package
+# installed by apt above only provides the binary utilities for build-time usage/testing.
 RUN cd /tmp && \
     wget https://bellard.org/quickjs/quickjs-2025-09-13-2.tar.xz && \
     tar -xvf quickjs-2025-09-13-2.tar.xz && \
