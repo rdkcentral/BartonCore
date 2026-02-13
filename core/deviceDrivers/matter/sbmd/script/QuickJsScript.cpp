@@ -1069,9 +1069,17 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
         return false;
     }
 
-    // If output is null, the command has no arguments - encode an empty structure
+    // If output is null, the command is assumed to have no arguments - encode an empty structure.
+    // Validate that the selected command actually declares no arguments to catch script/spec mismatches.
     if (JS_IsNull(outputValGuard.get()))
     {
+        if (!selectedCommand->args.empty())
+        {
+            icLogError(LOG_TAG,
+                       "Script returned 'output: null' for command '%s', but the command declares arguments",
+                       selectedCommandName.c_str());
+            return false;
+        }
         icLogDebug(LOG_TAG, "Command %s has no arguments (output is null)", selectedCommandName.c_str());
         // Encode an empty TLV structure
         std::string emptyJson = "{}";
