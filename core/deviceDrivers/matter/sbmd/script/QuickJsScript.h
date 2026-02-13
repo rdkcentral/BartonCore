@@ -204,10 +204,11 @@ namespace barton
          *     "commands" : [<array of available command names>]
          * }
          *
-         * The script should return a JSON object of the following format:
+         * The script should return a JSON object with the following fields:
          *
          * {"output" : <JSON representation of the command args TLV (or null if no args)>,
-         *  "command" : <name of the command to execute>}
+         *  "command" : <name of the command to execute (required when multiple commands are available;
+         *               optional/ignored when only a single command is available)>}
          *
          * Note: When only one command is available, the "command" field is optional and
          * the single command will be auto-selected. The "command" field is required when
