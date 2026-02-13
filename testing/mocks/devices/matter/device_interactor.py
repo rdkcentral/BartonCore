@@ -246,7 +246,7 @@ class ChipToolDeviceInteractor:
         node_id: int | None = None,
         timeout: int = 5,
         open_commissioning_window: bool = True,
-        commissioning_window_timeout: int = 10,
+        commissioning_window_timeout: int = 180,
     ) -> RegisteredDevice:
         """
         Commission a MatterDevice using chip-tool and register it for interactions.
@@ -262,7 +262,8 @@ class ChipToolDeviceInteractor:
             open_commissioning_window: If True, opens a commissioning window after
                 successful commissioning to allow other controllers to commission.
             commissioning_window_timeout: Time in seconds for the commissioning
-                window to remain open.
+                window to remain open. Specification section 5.4.2.3 demands a minimum
+                of 180 seconds (3 minutes).
 
         Returns:
             RegisteredDevice: The registered device with its assigned node ID.
