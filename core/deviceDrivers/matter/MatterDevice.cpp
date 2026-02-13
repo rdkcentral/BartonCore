@@ -447,7 +447,8 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     context.commandSender = std::move(commandSender);
     context.commandInfo = command;
     context.response = response;
-    activeCommandContexts[context.commandSender.get()] = std::move(context);
+    auto * commandSenderPtr = context.commandSender.get();
+    activeCommandContexts[commandSenderPtr] = std::move(context);
 
     return true;
 }
