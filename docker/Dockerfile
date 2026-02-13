@@ -90,6 +90,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     python3-markdown \
     python3-pip \
     python3-venv \
+    python3-jsonschema \
+    python3-yaml \
     flex \
     bison \
     libglib2.0-dev \

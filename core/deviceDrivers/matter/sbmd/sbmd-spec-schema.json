@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema.json",
+  "title": "SBMD Specification Schema",
+  "description": "JSON Schema for validating Specification-Based Matter Driver (SBMD) YAML files",
+  "type": "object",
+  "required": ["schemaVersion", "driverVersion", "name", "bartonMeta", "matterMeta"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "SBMD schema version",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "driverVersion": {
+      "type": "string",
+      "description": "Driver version for this specification",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable driver name",
+      "minLength": 1
+    },
+    "scriptType": {
+      "type": "string",
+      "description": "Script type (currently only JavaScript is supported)",
+      "enum": ["JavaScript"]
+    },
+    "bartonMeta": {
+      "$ref": "#/$defs/bartonMeta"
+    },
+    "matterMeta": {
+      "$ref": "#/$defs/matterMeta"
+    },
+    "reporting": {
+      "$ref": "#/$defs/reporting"
+    },
+    "resources": {
+      "type": "array",
+      "description": "Device-level resources (not associated with a specific endpoint)",
+      "items": {
+        "$ref": "#/$defs/resource"
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "description": "Barton endpoints (logical groupings of resources)",
+      "items": {
+        "$ref": "#/$defs/endpoint"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "bartonMeta": {
+      "type": "object",
+      "description": "Barton device class mapping",
+      "required": ["deviceClass", "deviceClassVersion"],
+      "properties": {
+        "deviceClass": {
+          "type": "string",
+          "description": "Barton device class name",
+          "minLength": 1
+        },
+        "deviceClassVersion": {
+          "type": "integer",
+          "description": "Barton device class version",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "matterMeta": {
+      "type": "object",
+      "description": "Matter device type support",
+      "required": ["deviceTypes", "revision"],
+      "properties": {
+        "deviceTypes": {
+          "type": "array",
+          "description": "Matter device type IDs (hex or decimal)",
+          "items": {
+            "type": ["integer", "string"],
+            "description": "Device type ID (e.g., 0x0100 or 256)"
+          },
+          "minItems": 1
+        },
+        "revision": {
+          "type": "integer",
+          "description": "Device specification revision from Matter spec",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "reporting": {
+      "type": "object",
+      "description": "Subscription reporting configuration",
+      "properties": {
+        "minSecs": {
+          "type": "integer",
+          "description": "Minimum reporting interval in seconds",
+          "minimum": 0
+        },
+        "maxSecs": {
+          "type": "integer",
+          "description": "Maximum reporting interval in seconds",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "endpoint": {
+      "type": "object",
+      "description": "Barton endpoint definition",
+      "required": ["id", "profile", "profileVersion", "resources"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Barton endpoint identifier",
+          "minLength": 1
+        },
+        "profile": {
+          "type": "string",
+          "description": "Barton profile name",
+          "minLength": 1
+        },
+        "profileVersion": {
+          "type": "integer",
+          "description": "Profile version",
+          "minimum": 0
+        },
+        "resources": {
+          "type": "array",
+          "description": "Resources on this endpoint",
+          "items": {
+            "$ref": "#/$defs/resource"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "resource": {
+      "type": "object",
+      "description": "Device resource definition",
+      "required": ["id", "type", "mapper"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Resource identifier",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Resource type (e.g., boolean, string, function)",
+          "minLength": 1
+        },
+        "modes": {
+          "type": "array",
+          "description": "Resource modes",
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "dynamic", "emitEvents"]
+          }
+        },
+        "mapper": {
+          "$ref": "#/$defs/mapper"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mapper": {
+      "type": "object",
+      "description": "Mapper configuration for a resource",
+      "properties": {
+        "read": {
+          "$ref": "#/$defs/readMapper"
+        },
+        "write": {
+          "$ref": "#/$defs/writeMapper"
+        },
+        "execute": {
+          "$ref": "#/$defs/executeMapper"
+        }
+      },
+      "additionalProperties": false
+    },
+    "readMapper": {
+      "type": "object",
+      "description": "Read mapper configuration",
+      "required": ["script"],
+      "properties": {
+        "attribute": {
+          "$ref": "#/$defs/attribute"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {"required": ["attribute"]},
+        {"required": ["command"]}
+      ],
+      "not": {
+        "required": ["attribute", "command"]
+      },
+      "additionalProperties": false
+    },
+    "writeMapper": {
+      "type": "object",
+      "description": "Write mapper configuration",
+      "required": ["script"],
+      "properties": {
+        "attribute": {
+          "$ref": "#/$defs/attribute"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "commands": {
+          "type": "array",
+          "description": "Multiple commands (script selects which to execute)",
+          "items": {
+            "$ref": "#/$defs/command"
+          },
+          "minItems": 1
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {"required": ["attribute"]},
+        {"required": ["command"]},
+        {"required": ["commands"]}
+      ],
+      "additionalProperties": false
+    },
+    "executeMapper": {
+      "type": "object",
+      "description": "Execute mapper configuration",
+      "required": ["command", "script"],
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script",
+          "minLength": 1
+        },
+        "scriptResponse": {
+          "type": "string",
+          "description": "JavaScript script for processing command response"
+        }
+      },
+      "additionalProperties": false
+    },
+    "attribute": {
+      "type": "object",
+      "description": "Matter cluster attribute definition",
+      "required": ["clusterId", "attributeId", "name", "type"],
+      "properties": {
+        "clusterId": {
+          "type": ["integer", "string"],
+          "description": "Matter cluster ID (hex or decimal)"
+        },
+        "attributeId": {
+          "type": ["integer", "string"],
+          "description": "Matter attribute ID (hex or decimal)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Attribute name",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Matter data type",
+          "$ref": "#/$defs/matterType"
+        }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "description": "Matter cluster command definition",
+      "required": ["clusterId", "commandId", "name"],
+      "properties": {
+        "clusterId": {
+          "type": ["integer", "string"],
+          "description": "Matter cluster ID (hex or decimal)"
+        },
+        "commandId": {
+          "type": ["integer", "string"],
+          "description": "Matter command ID (hex or decimal)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Command name",
+          "minLength": 1
+        },
+        "timedInvokeTimeoutMs": {
+          "type": "integer",
+          "description": "Timeout for timed invoke in milliseconds",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "args": {
+          "type": "array",
+          "description": "Command arguments",
+          "items": {
+            "$ref": "#/$defs/argument"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "argument": {
+      "type": "object",
+      "description": "Command argument definition",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Argument name",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "description": "Matter data type",
+          "$ref": "#/$defs/matterType"
+        }
+      },
+      "additionalProperties": false
+    },
+    "matterType": {
+      "type": "string",
+      "description": "Matter data type",
+      "enum": [
+        "bool", "boolean",
+        "uint8", "uint16", "uint32", "uint64",
+        "int8", "int16", "int24", "int32", "int40", "int48", "int56", "int64",
+        "enum8", "enum16",
+        "bitmap8", "bitmap16", "bitmap32", "bitmap64",
+        "single", "float", "double",
+        "string", "char_string", "long_char_string",
+        "octstr", "octet_string", "long_octet_string",
+        "percent", "percent100ths",
+        "epoch-s", "epoch-us", "posix-ms", "elapsed-s", "utc",
+        "systime-ms", "systime-us",
+        "temperature", "amperage-ma", "voltage-mv", "power-mw", "energy-mwh",
+        "ipadr", "ipv4adr", "ipv6adr", "ipv6pre", "hwadr", "semtag",
+        "fabric-idx", "fabric-id", "node-id", "vendor-id", "devtype-id",
+        "group-id", "endpoint-no", "cluster-id", "attrib-id", "event-id",
+        "command-id", "action-id", "trans-id", "data-ver", "entry-idx",
+        "struct", "list", "array", "null"
+      ]
+    }
+  }
+}
