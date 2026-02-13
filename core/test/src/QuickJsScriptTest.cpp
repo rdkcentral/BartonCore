@@ -1680,4 +1680,185 @@ namespace
         EXPECT_EQ(outValue2, "response2");
     }
 
+    // ========================================================================
+    // MapWriteCommand Tests
+    // ========================================================================
+
+    // Test: Single command write without explicitly specifying command name
+    TEST_F(QuickJsScriptTest, MapWriteCommandSingleAutoSelect)
+    {
+        SbmdCommand cmd;
+        cmd.clusterId = 0x0008;
+        cmd.commandId = 0x0004;
+        cmd.name = "MoveToLevelWithOnOff";
+        SbmdArgument arg1;
+        arg1.name = "Level";
+        arg1.type = "uint8";
+        cmd.args.push_back(arg1);
+        SbmdArgument arg2;
+        arg2.name = "TransitionTime";
+        arg2.type = "uint16";
+        cmd.args.push_back(arg2);
+
+        std::vector<SbmdCommand> commands = {cmd};
+
+        // Script does not specify "command" field - should auto-select the only command
+        std::string mapperScript = "return {output: {Level: 100, TransitionTime: 0}};";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        ASSERT_TRUE(script->MapWriteCommand(commands, "100", selectedCommandName, buffer, encodedLength));
+        EXPECT_EQ(selectedCommandName, "MoveToLevelWithOnOff");
+        EXPECT_GT(encodedLength, 0u);
+    }
+
+    // Test: Single command write with explicitly specifying command name (also valid)
+    TEST_F(QuickJsScriptTest, MapWriteCommandSingleExplicit)
+    {
+        SbmdCommand cmd;
+        cmd.clusterId = 0x0008;
+        cmd.commandId = 0x0004;
+        cmd.name = "MoveToLevelWithOnOff";
+        SbmdArgument arg1;
+        arg1.name = "Level";
+        arg1.type = "uint8";
+        cmd.args.push_back(arg1);
+
+        std::vector<SbmdCommand> commands = {cmd};
+
+        // Script explicitly specifies "command" field even though there's only one
+        std::string mapperScript = "return {output: {Level: 50}, command: 'MoveToLevelWithOnOff'};";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        ASSERT_TRUE(script->MapWriteCommand(commands, "50", selectedCommandName, buffer, encodedLength));
+        EXPECT_EQ(selectedCommandName, "MoveToLevelWithOnOff");
+        EXPECT_GT(encodedLength, 0u);
+    }
+
+    // Test: Multiple commands write with specifying command name (required)
+    TEST_F(QuickJsScriptTest, MapWriteCommandMultipleSelectOn)
+    {
+        SbmdCommand cmdOff;
+        cmdOff.clusterId = 0x0006;
+        cmdOff.commandId = 0x0000;
+        cmdOff.name = "Off";
+
+        SbmdCommand cmdOn;
+        cmdOn.clusterId = 0x0006;
+        cmdOn.commandId = 0x0001;
+        cmdOn.name = "On";
+
+        std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
+
+        // Script selects "On" command based on input
+        std::string mapperScript = R"(
+            return {
+                output: null,
+                command: (sbmdWriteArgs.input === 'true') ? 'On' : 'Off'
+            };
+        )";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        // Test selecting "On"
+        ASSERT_TRUE(script->MapWriteCommand(commands, "true", selectedCommandName, buffer, encodedLength));
+        EXPECT_EQ(selectedCommandName, "On");
+    }
+
+    // Test: Multiple commands write selecting different command
+    TEST_F(QuickJsScriptTest, MapWriteCommandMultipleSelectOff)
+    {
+        SbmdCommand cmdOff;
+        cmdOff.clusterId = 0x0006;
+        cmdOff.commandId = 0x0000;
+        cmdOff.name = "Off";
+
+        SbmdCommand cmdOn;
+        cmdOn.clusterId = 0x0006;
+        cmdOn.commandId = 0x0001;
+        cmdOn.name = "On";
+
+        std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
+
+        std::string mapperScript = R"(
+            return {
+                output: null,
+                command: (sbmdWriteArgs.input === 'true') ? 'On' : 'Off'
+            };
+        )";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        // Test selecting "Off"
+        ASSERT_TRUE(script->MapWriteCommand(commands, "false", selectedCommandName, buffer, encodedLength));
+        EXPECT_EQ(selectedCommandName, "Off");
+    }
+
+    // Test: Multiple commands write without specifying command name (should fail)
+    TEST_F(QuickJsScriptTest, MapWriteCommandMultipleMissingCommandFails)
+    {
+        SbmdCommand cmdOff;
+        cmdOff.clusterId = 0x0006;
+        cmdOff.commandId = 0x0000;
+        cmdOff.name = "Off";
+
+        SbmdCommand cmdOn;
+        cmdOn.clusterId = 0x0006;
+        cmdOn.commandId = 0x0001;
+        cmdOn.name = "On";
+
+        std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
+
+        // Script does NOT specify "command" field - should fail for multiple commands
+        std::string mapperScript = "return {output: null};";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        // Should fail because "command" field is missing
+        EXPECT_FALSE(script->MapWriteCommand(commands, "true", selectedCommandName, buffer, encodedLength));
+    }
+
+    // Test: Multiple commands write with unknown command name (should fail)
+    TEST_F(QuickJsScriptTest, MapWriteCommandMultipleUnknownCommandFails)
+    {
+        SbmdCommand cmdOff;
+        cmdOff.clusterId = 0x0006;
+        cmdOff.commandId = 0x0000;
+        cmdOff.name = "Off";
+
+        SbmdCommand cmdOn;
+        cmdOn.clusterId = 0x0006;
+        cmdOn.commandId = 0x0001;
+        cmdOn.name = "On";
+
+        std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
+
+        // Script specifies a command name that doesn't exist
+        std::string mapperScript = "return {output: null, command: 'Toggle'};";
+        ASSERT_TRUE(script->AddCommandsWriteMapper(commands, mapperScript));
+
+        std::string selectedCommandName;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> buffer;
+        size_t encodedLength = 0;
+
+        // Should fail because "Toggle" is not in the available commands
+        EXPECT_FALSE(script->MapWriteCommand(commands, "true", selectedCommandName, buffer, encodedLength));
+    }
+
 } // namespace

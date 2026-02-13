@@ -63,6 +63,16 @@ namespace barton
                                                      const std::string &script) = 0;
 
         /**
+         * Add a write mapper for write operations that use commands.
+         * The script will be used when a write operation needs to select which command to execute.
+         *
+         * @param commands The commands available for this write mapper
+         * @param script The JavaScript script for the mapper
+         * @return true if the mapper was added successfully, false otherwise
+         */
+        virtual bool AddCommandsWriteMapper(const std::vector<SbmdCommand> &commands, const std::string &script) = 0;
+
+        /**
          * Convert a Matter attribute value to a Barton resource string value.
          *
          * @param attributeInfo Information about the Matter attribute
@@ -122,6 +132,23 @@ namespace barton
         virtual bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                                chip::TLV::TLVReader &reader,
                                                std::string &outValue) = 0;
+
+        /**
+         * Convert a Barton write value to a Matter command selection and arguments.
+         * Used when a write mapper has multiple commands and the script selects which to execute.
+         *
+         * @param availableCommands The list of commands the script can select from
+         * @param inValue Barton string representation of the value to write
+         * @param[out] selectedCommandName The name of the command selected by the script
+         * @param[out] buffer TLV buffer to write the converted command arguments to
+         * @param[out] encodedLength Length of the encoded TLV data
+         * @return true if mapping was successful, false otherwise
+         */
+        virtual bool MapWriteCommand(const std::vector<SbmdCommand> &availableCommands,
+                                     const std::string &inValue,
+                                     std::string &selectedCommandName,
+                                     chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                                     size_t &encodedLength) = 0;
 
     protected:
         std::string deviceId;

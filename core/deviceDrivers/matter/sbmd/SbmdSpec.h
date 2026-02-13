@@ -112,7 +112,7 @@ namespace barton
 
     /**
      * Represents a mapper configuration for a resource.
-     * Each mapper type (read, write, execute) must have EITHER an attribute OR a command.
+     * Each mapper type (read, write, execute) must have EITHER an attribute OR command(s).
      */
     struct SbmdMapper
     {
@@ -122,10 +122,12 @@ namespace barton
         std::optional<SbmdCommand> readCommand;
         std::string readScript;
 
-        // Write mapping - must have either attribute or command
+        // Write mapping - must have attribute or command(s)
+        // If writeCommands has one entry, it's auto-selected
+        // If multiple entries, script returns which command to execute
         bool hasWrite = false;
         std::optional<SbmdAttribute> writeAttribute;
-        std::optional<SbmdCommand> writeCommand;
+        std::vector<SbmdCommand> writeCommands; // Commands for write (single or multiple)
         std::string writeScript;
 
         // Execute mapping - must have either attribute or command

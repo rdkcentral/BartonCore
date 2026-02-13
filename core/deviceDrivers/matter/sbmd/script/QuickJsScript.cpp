@@ -152,8 +152,29 @@ namespace barton
         std::string GetExceptionString(JSContext *ctx)
         {
             JsValueGuard exceptionGuard(ctx, JS_GetException(ctx));
+
+            // First try direct string conversion (works for string exceptions)
             JsCStringGuard strGuard(ctx, JS_ToCString(ctx, exceptionGuard.get()));
-            return strGuard ? strGuard.get() : "unknown error";
+            if (strGuard)
+            {
+                return strGuard.get();
+            }
+
+            // If that fails, try to get the "message" property (for Error objects)
+            if (JS_IsObject(exceptionGuard.get()))
+            {
+                JsValueGuard msgGuard(ctx, JS_GetPropertyStr(ctx, exceptionGuard.get(), "message"));
+                if (!JS_IsUndefined(msgGuard.get()))
+                {
+                    JsCStringGuard msgStrGuard(ctx, JS_ToCString(ctx, msgGuard.get()));
+                    if (msgStrGuard)
+                    {
+                        return msgStrGuard.get();
+                    }
+                }
+            }
+
+            return "unknown error";
         }
 
         /**
@@ -468,6 +489,44 @@ bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandIn
     return true;
 }
 
+std::string QuickJsScript::GenerateCommandsKey(const std::vector<SbmdCommand> &commands)
+{
+    // Generate a deterministic key from the commands vector
+    // Format: "clusterId1/commandId1,clusterId2/commandId2,..."
+    std::string key;
+    for (size_t i = 0; i < commands.size(); ++i)
+    {
+        if (i > 0)
+        {
+            key += ",";
+        }
+        key += std::to_string(commands[i].clusterId) + "/" + std::to_string(commands[i].commandId);
+    }
+    return key;
+}
+
+bool QuickJsScript::AddCommandsWriteMapper(const std::vector<SbmdCommand> &commands, const std::string &script)
+{
+    std::lock_guard<std::mutex> lock(qjsMtx);
+
+    if (script.empty())
+    {
+        icLogError(LOG_TAG, "Cannot add write commands mapper: empty script");
+        return false;
+    }
+
+    if (commands.empty())
+    {
+        icLogError(LOG_TAG, "Cannot add write commands mapper: no commands");
+        return false;
+    }
+
+    std::string key = GenerateCommandsKey(commands);
+    writeCommandsScripts[key] = script;
+    icLogDebug(LOG_TAG, "Added write commands mapper for key %s", key.c_str());
+    return true;
+}
+
 bool QuickJsScript::ExecuteScript(const std::string &script,
                                   const std::string &argumentName,
                                   const JSValue &argumentJson,
@@ -486,7 +545,8 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
     if (JS_SetPropertyStr(ctx, globalGuard.get(), argumentName.c_str(), argVal) < 0)
     {
-        icLogError(LOG_TAG, "Failed to set argument variable '%s'", argumentName.c_str());
+        icLogError(
+            LOG_TAG, "Failed to set argument variable '%s': %s", argumentName.c_str(), GetExceptionString(ctx).c_str());
         return false;
     }
 
@@ -511,6 +571,18 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
 
 bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
 {
+    // Clear any pending exception from previous operations that might interfere
+    JSValue pendingException = JS_GetException(ctx);
+    if (!JS_IsNull(pendingException) && !JS_IsUndefined(pendingException))
+    {
+        icLogWarn(LOG_TAG, "Cleared pending exception before parsing %s JSON", sourceName.c_str());
+        JS_FreeValue(ctx, pendingException);
+    }
+    else
+    {
+        JS_FreeValue(ctx, pendingException);
+    }
+
     JSValue parsed = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
     if (JS_IsException(parsed))
     {
@@ -546,7 +618,7 @@ bool QuickJsScript::ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value
     JsCStringGuard outValueStrGuard(ctx, JS_ToCString(ctx, jsonStrGuard.get()));
     if (!outValueStrGuard)
     {
-        icLogError(LOG_TAG, "Failed to convert JSON string to C string");
+        icLogError(LOG_TAG, "Failed to convert JSON string to C string: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
@@ -582,7 +654,7 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
     JsCStringGuard resultStrGuard(ctx, JS_ToCString(ctx, outputValGuard.get()));
     if (!resultStrGuard)
     {
-        icLogError(LOG_TAG, "Failed to convert output value to string");
+        icLogError(LOG_TAG, "Failed to convert output value to string: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
@@ -633,7 +705,7 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
     bool success = JS_SetPropertyStr(ctx, globalGuard.get(), name.c_str(), jsValue) >= 0;
     if (!success)
     {
-        icLogError(LOG_TAG, "Failed to set JS variable '%s'", name.c_str());
+        icLogError(LOG_TAG, "Failed to set JS variable '%s': %s", name.c_str(), GetExceptionString(ctx).c_str());
     }
 
     return success;
@@ -890,6 +962,154 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     }
 
     return ExtractScriptOutputAsString(outJson, outValue);
+}
+
+bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCommands,
+                                    const std::string &inValue,
+                                    std::string &selectedCommandName,
+                                    chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                                    size_t &encodedLength)
+{
+    std::lock_guard<std::mutex> lock(qjsMtx);
+
+    std::string key = GenerateCommandsKey(availableCommands);
+    auto it = writeCommandsScripts.find(key);
+    if (it == writeCommandsScripts.end())
+    {
+        icLogError(LOG_TAG, "No write commands mapper found for key %s", key.c_str());
+        return false;
+    }
+
+    // Build the sbmdWriteArgs JSON object with available command names
+    Json::Value argsJson;
+    argsJson["input"] = inValue;
+    argsJson["deviceUuid"] = deviceId;
+
+    Json::Value commandsArray(Json::arrayValue);
+    for (const auto &cmd : availableCommands)
+    {
+        commandsArray.append(cmd.name);
+    }
+    argsJson["commands"] = commandsArray;
+
+    // Convert Json::Value to string for parsing in QuickJS
+    Json::StreamWriterBuilder writerBuilder;
+    writerBuilder["indentation"] = "";
+    std::string jsonString = Json::writeString(writerBuilder, argsJson);
+
+    icLogDebug(LOG_TAG, "sbmdWriteArgs JSON for write-command: %s", jsonString.c_str());
+
+    // Parse JSON string to JSValue
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdWriteArgs", argJsonRaw))
+    {
+        return false;
+    }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+
+    JSValue outJson;
+    if (!ExecuteScript(it->second, "sbmdWriteArgs", argJsonGuard.get(), outJson))
+    {
+        icLogError(LOG_TAG, "Failed to execute write-command mapping script for key %s", key.c_str());
+        return false;
+    }
+
+    // Take ownership of script result for cleanup
+    JsValueGuard resultGuard(ctx, outJson);
+
+    // Determine the selected command
+    const SbmdCommand *selectedCommand = nullptr;
+
+    if (availableCommands.size() == 1)
+    {
+        // Auto-select when there's only one command - no need for "command" field in script output
+        selectedCommand = &availableCommands[0];
+        selectedCommandName = selectedCommand->name;
+        icLogDebug(LOG_TAG, "Auto-selected single command: %s", selectedCommandName.c_str());
+    }
+    else
+    {
+        // Extract the "command" field to get the selected command name
+        JsValueGuard commandValGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "command"));
+        if (JS_IsUndefined(commandValGuard.get()))
+        {
+            icLogError(LOG_TAG, "Script result missing 'command' field (required when multiple commands available)");
+            return false;
+        }
+
+        JsCStringGuard commandStrGuard(ctx, JS_ToCString(ctx, commandValGuard.get()));
+        if (!commandStrGuard)
+        {
+            icLogError(LOG_TAG, "Failed to convert 'command' field to string: %s", GetExceptionString(ctx).c_str());
+            return false;
+        }
+        selectedCommandName = commandStrGuard.get();
+
+        icLogDebug(LOG_TAG, "Script selected command: %s", selectedCommandName.c_str());
+
+        // Find the selected command in the available commands
+        for (const auto &cmd : availableCommands)
+        {
+            if (cmd.name == selectedCommandName)
+            {
+                selectedCommand = &cmd;
+                break;
+            }
+        }
+
+        if (selectedCommand == nullptr)
+        {
+            icLogError(LOG_TAG, "Script selected unknown command '%s'", selectedCommandName.c_str());
+            return false;
+        }
+    }
+
+    // Extract the "output" field for the command arguments
+    JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "output"));
+    if (JS_IsUndefined(outputValGuard.get()))
+    {
+        icLogError(LOG_TAG, "Script result missing 'output' field");
+        return false;
+    }
+
+    // If output is null, the command has no arguments - encode an empty structure
+    if (JS_IsNull(outputValGuard.get()))
+    {
+        icLogDebug(LOG_TAG, "Command %s has no arguments (output is null)", selectedCommandName.c_str());
+        // Encode an empty TLV structure
+        std::string emptyJson = "{}";
+        return EncodeJsonToTlv(emptyJson, buffer, encodedLength);
+    }
+
+    // Convert output to JSON string for TLV encoding
+    JsValueGuard jsonStrGuard(ctx, JS_JSONStringify(ctx, outputValGuard.get(), JS_UNDEFINED, JS_UNDEFINED));
+    if (JS_IsException(jsonStrGuard.get()))
+    {
+        icLogError(LOG_TAG, "Failed to stringify output value: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
+
+    JsCStringGuard outJsonStrGuard(ctx, JS_ToCString(ctx, jsonStrGuard.get()));
+    if (!outJsonStrGuard)
+    {
+        icLogError(LOG_TAG, "Failed to convert output JSON to C string: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
+
+    // Parse the JSON output
+    Json::CharReaderBuilder readerBuilder;
+    Json::Value outputJson;
+    std::string parseErrors;
+    std::istringstream jsonStream(outJsonStrGuard.get());
+    if (!Json::parseFromStream(readerBuilder, jsonStream, &outputJson, &parseErrors))
+    {
+        icLogError(LOG_TAG, "Failed to parse output JSON: %s", parseErrors.c_str());
+        return false;
+    }
+
+    // Format the command arguments for JsonToTlv using the selected command's arg type information
+    std::string tlvFormattedJson = formatCommandArgsForJsonToTlv(outputJson, selectedCommand->args);
+    return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
 }
 
 } // namespace barton
