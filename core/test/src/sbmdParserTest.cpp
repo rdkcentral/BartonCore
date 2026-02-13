@@ -976,6 +976,125 @@ endpoints: []
     assert_int_equal((int) resource.mapper.writeCommands[1].commandId, 0x0001);
 }
 
+static void test_sbmdParserTimedInvokeTimeoutMsValid(void **state)
+{
+    (void) state;
+
+    // Test that valid timedInvokeTimeoutMs values (within uint16_t range) are accepted
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+resources:
+  - id: "lock"
+    type: "function"
+    mapper:
+      execute:
+        command:
+          clusterId: "0x0101"
+          commandId: "0x00"
+          name: "LockDoor"
+          timedInvokeTimeoutMs: 10000
+        script: "return {output: null};"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    
+    // Verify command was parsed with timedInvokeTimeoutMs
+    assert_int_equal((int) spec->resources.size(), 1);
+    auto &resource = spec->resources[0];
+    assert_true(resource.mapper.hasExecute);
+    assert_true(resource.mapper.executeCommand.has_value());
+    assert_true(resource.mapper.executeCommand->timedInvokeTimeoutMs.has_value());
+    assert_int_equal((int) resource.mapper.executeCommand->timedInvokeTimeoutMs.value(), 10000);
+}
+
+static void test_sbmdParserTimedInvokeTimeoutMsMaxValue(void **state)
+{
+    (void) state;
+
+    // Test that max valid value (UINT16_MAX = 65535) is accepted
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+resources:
+  - id: "lock"
+    type: "function"
+    mapper:
+      execute:
+        command:
+          clusterId: "0x0101"
+          commandId: "0x00"
+          name: "LockDoor"
+          timedInvokeTimeoutMs: 65535
+        script: "return {output: null};"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    
+    // Verify command was parsed with timedInvokeTimeoutMs at max value
+    assert_int_equal((int) spec->resources.size(), 1);
+    auto &resource = spec->resources[0];
+    assert_true(resource.mapper.hasExecute);
+    assert_true(resource.mapper.executeCommand.has_value());
+    assert_true(resource.mapper.executeCommand->timedInvokeTimeoutMs.has_value());
+    assert_int_equal((int) resource.mapper.executeCommand->timedInvokeTimeoutMs.value(), 65535);
+}
+
+static void test_sbmdParserTimedInvokeTimeoutMsOutOfRange(void **state)
+{
+    (void) state;
+
+    // Test that values exceeding UINT16_MAX are rejected with clear error
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+resources:
+  - id: "lock"
+    type: "function"
+    mapper:
+      execute:
+        command:
+          clusterId: "0x0101"
+          commandId: "0x00"
+          name: "LockDoor"
+          timedInvokeTimeoutMs: 70000
+        script: "return {output: null};"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail with targeted error message for out-of-range value
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -988,6 +1107,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserResourceIdFields),
         cmocka_unit_test(test_sbmdParserWriteMapperWithSingleCommand),
         cmocka_unit_test(test_sbmdParserWriteMapperWithMultipleCommands),
+        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsValid),
+        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsMaxValue),
         // Negative tests - error handling
         cmocka_unit_test(test_sbmdParserInvalidYamlSyntax),
         cmocka_unit_test(test_sbmdParserMissingRequiredFields),
@@ -1007,6 +1128,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserEmptyString),
         cmocka_unit_test(test_sbmdParserWriteMapperWithBothAttributeAndCommand),
         cmocka_unit_test(test_sbmdParserExecuteMapperWithBothAttributeAndCommand),
+        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsOutOfRange),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
