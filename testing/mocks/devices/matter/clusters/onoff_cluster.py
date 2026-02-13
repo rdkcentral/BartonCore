@@ -35,7 +35,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from testing.mocks.devices.matter.clusters.matter_cluster import ClusterType, MatterCluster
+from testing.mocks.devices.matter.clusters.matter_cluster import ClusterId, MatterCluster
 
 if TYPE_CHECKING:
     from testing.mocks.devices.matter.device_interactor import (
@@ -69,7 +69,7 @@ class OnOffCluster(MatterCluster):
     """
 
     # Matter Cluster ID for On/Off cluster
-    CLUSTER_ID: ClusterType = 0x0006
+    CLUSTER_ID: ClusterId = 0x0006
 
     def __init__(
         self,
@@ -93,7 +93,7 @@ class OnOffCluster(MatterCluster):
         )
 
     @staticmethod
-    def cluster_type() -> ClusterType:
+    def cluster_type() -> ClusterId:
         """Return the Matter cluster ID."""
         return OnOffCluster.CLUSTER_ID
 
@@ -101,7 +101,7 @@ class OnOffCluster(MatterCluster):
     # Commands
     # -------------------------------------------------------------------------
 
-    def on(self, timeout: int = 30) -> DeviceInteractionResult:
+    def on(self, timeout: int = 5) -> DeviceInteractionResult:
         """
         Turn the device on.
 
@@ -114,7 +114,7 @@ class OnOffCluster(MatterCluster):
         logger.debug(f"Turning on node {self._node_id} endpoint {self._endpoint_id}")
         return self.invoke_command("on", timeout=timeout)
 
-    def off(self, timeout: int = 30) -> DeviceInteractionResult:
+    def off(self, timeout: int = 5) -> DeviceInteractionResult:
         """
         Turn the device off.
 
@@ -127,7 +127,7 @@ class OnOffCluster(MatterCluster):
         logger.debug(f"Turning off node {self._node_id} endpoint {self._endpoint_id}")
         return self.invoke_command("off", timeout=timeout)
 
-    def toggle(self, timeout: int = 30) -> DeviceInteractionResult:
+    def toggle(self, timeout: int = 5) -> DeviceInteractionResult:
         """
         Toggle the device state.
 
@@ -173,7 +173,7 @@ class OnOffCluster(MatterCluster):
     # Attributes
     # -------------------------------------------------------------------------
 
-    def is_on(self, timeout: int = 30) -> bool:
+    def is_on(self, timeout: int = 5) -> bool:
         """
         Check if the device is currently on.
 
@@ -231,7 +231,7 @@ class OnOffCluster(MatterCluster):
         logger.warning(f"Could not parse on-off value from output: {output}")
         return False
 
-    def get_on_time(self, timeout: int = 30) -> int:
+    def get_on_time(self, timeout: int = 5) -> int:
         """
         Get the OnTime attribute value.
 
@@ -249,7 +249,7 @@ class OnOffCluster(MatterCluster):
             raise RuntimeError(f"Failed to read on-time attribute: {result.stderr}")
         return self._parse_uint_value(result.stdout)
 
-    def get_off_wait_time(self, timeout: int = 30) -> int:
+    def get_off_wait_time(self, timeout: int = 5) -> int:
         """
         Get the OffWaitTime attribute value.
 

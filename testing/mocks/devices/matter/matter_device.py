@@ -36,7 +36,7 @@ from testing.mocks.devices.base_device import BaseDevice
 from testing.helpers.matter import code_generators
 from testing.utils import process_utils as putils
 from testing.mocks.devices.matter.clusters.matter_cluster import (
-    ClusterType,
+    ClusterId,
     MatterCluster,
 )
 
@@ -72,7 +72,7 @@ class MatterDevice(BaseDevice):
     _product_id: int
     _commissioning_code: str
     _process: subprocess.Popen
-    _cluster_classes: dict[ClusterType, tuple[type[MatterCluster], int]]
+    _cluster_classes: dict[ClusterId, tuple[type[MatterCluster], int]]
     _interactor: "ChipToolDeviceInteractor"
     _chip_tool_node_id: int
     _kvs_dir: Path
@@ -133,18 +133,18 @@ class MatterDevice(BaseDevice):
         self._interactor = interactor
         self._chip_tool_node_id = node_id
 
-    def get_cluster(self, cluster_type: ClusterType) -> MatterCluster:
+    def get_cluster(self, cluster_id: ClusterId) -> MatterCluster:
         """
         Get a cluster interface for this device.
 
         Args:
-            cluster_type: The Matter cluster ID (e.g., OnOffCluster.CLUSTER_ID).
+            cluster_id: The Matter cluster ID (e.g., OnOffCluster.CLUSTER_ID).
 
         Returns:
             MatterCluster: An instance of the appropriate cluster class.
 
         Raises:
-            ValueError: If the cluster type is not supported by this device.
+            ValueError: If the cluster ID is not supported by this device.
             RuntimeError: If the device has not been registered with an interactor.
 
         Example:
@@ -159,10 +159,10 @@ class MatterDevice(BaseDevice):
                 "Use device_interactor.register_device(device) first."
             )
 
-        cluster_entry = self._cluster_classes.get(cluster_type)
+        cluster_entry = self._cluster_classes.get(cluster_id)
         if cluster_entry is None:
             raise ValueError(
-                f"Cluster type 0x{cluster_type:04X} is not supported by this device. "
+                f"Cluster ID 0x{cluster_id:04X} is not supported by this device. "
                 f"Supported clusters: {[f'0x{c:04X}' for c in self._cluster_classes.keys()]}"
             )
 

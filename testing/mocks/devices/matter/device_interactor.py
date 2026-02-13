@@ -48,13 +48,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DeviceInteractionResult:
     """
-    Represents the result of a device interaction command.
+    Represents the result of a device interaction operation.
 
     Attributes:
-        success (bool): Whether the command executed successfully.
-        return_code (int): The return code from the command.
-        stdout (str): Standard output from the command.
-        stderr (str): Standard error from the command.
+        success (bool): Whether the operation executed successfully.
+        return_code (int): The return code from the operation.
+        stdout (str): Standard output from the operation.
+        stderr (str): Standard error from the operation.
         data (Any): Parsed JSON data from the output, if available.
     """
 
@@ -83,7 +83,7 @@ class ChipToolDeviceInteractor:
     """
     ChipToolDeviceInteractor provides a wrapper around chip-tool CLI for interacting
     with Matter devices. It manages a chip-tool process and provides methods that
-    map to chip-tool CLI commands for cluster interactions.
+    map to chip-tool CLI operations for cluster interactions.
 
     This class handles:
     - Commissioning Matter devices via chip-tool
@@ -175,13 +175,13 @@ class ChipToolDeviceInteractor:
     def _run_command(
         self,
         args: list[str],
-        timeout: int = 60,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
-        Execute a command and return the result.
+        Execute a chip-tool command and return the result.
 
         Args:
-            args: Command arguments to pass to the underlying tool.
+            args: Arguments to pass to chip-tool.
             timeout: Command timeout in seconds.
 
         Returns:
@@ -244,9 +244,9 @@ class ChipToolDeviceInteractor:
         self,
         device: MatterDevice,
         node_id: int | None = None,
-        timeout: int = 120,
+        timeout: int = 5,
         open_commissioning_window: bool = True,
-        commissioning_window_timeout: int = 300,
+        commissioning_window_timeout: int = 10,
     ) -> RegisteredDevice:
         """
         Commission a MatterDevice using chip-tool and register it for interactions.
@@ -323,7 +323,7 @@ class ChipToolDeviceInteractor:
     def _open_commissioning_window(
         self,
         node_id: int,
-        timeout: int = 300,
+        timeout: int = 5,
         use_enhanced: bool = True,
         iteration: int = 1000,
         discriminator: int | None = None,
@@ -376,7 +376,7 @@ class ChipToolDeviceInteractor:
 
         logger.info(f"Opening commissioning window on node {node_id} for {timeout}s")
         # Use a longer timeout for the command since it needs to communicate with the device
-        result = self._run_command(cmd_args, timeout=60)
+        result = self._run_command(cmd_args, timeout=5)
 
         new_commissioning_code = None
         if result.success:
@@ -420,13 +420,13 @@ class ChipToolDeviceInteractor:
             return match.group(1)
         return None
 
-    def unregister_device(self, node_id: int, timeout: int = 30) -> DeviceInteractionResult:
+    def unregister_device(self, node_id: int, timeout: int = 5) -> DeviceInteractionResult:
         """
         Unpair and unregister a device.
 
         Args:
             node_id: The node ID of the device to unpair.
-            timeout: Command timeout in seconds.
+            timeout: Operation timeout in seconds.
 
         Returns:
             DeviceInteractionResult: Result of the unpair operation.
@@ -473,7 +473,7 @@ class ChipToolDeviceInteractor:
         endpoint_id: int,
         cluster: str,
         attribute: str,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Read an attribute from a cluster on a device.
@@ -483,7 +483,7 @@ class ChipToolDeviceInteractor:
             endpoint_id: The endpoint ID on the device.
             cluster: The cluster name (e.g., "onoff", "levelcontrol").
             attribute: The attribute name to read (e.g., "on-off", "current-level").
-            timeout: Command timeout in seconds.
+            timeout: Operation timeout in seconds.
 
         Returns:
             DeviceInteractionResult: Result containing the attribute value.
@@ -500,7 +500,7 @@ class ChipToolDeviceInteractor:
         cluster: str,
         attribute: str,
         value: Any,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Write a value to an attribute on a cluster.
@@ -511,7 +511,7 @@ class ChipToolDeviceInteractor:
             cluster: The cluster name.
             attribute: The attribute name to write.
             value: The value to write.
-            timeout: Command timeout in seconds.
+            timeout: Operation timeout in seconds.
 
         Returns:
             DeviceInteractionResult: Result of the write operation.
@@ -528,7 +528,7 @@ class ChipToolDeviceInteractor:
         cluster: str,
         command: str,
         arguments: dict[str, Any] | None = None,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Invoke a command on a cluster.
@@ -539,7 +539,7 @@ class ChipToolDeviceInteractor:
             cluster: The cluster name.
             command: The command name to invoke (e.g., "on", "off", "toggle").
             arguments: Optional dictionary of command arguments.
-            timeout: Command timeout in seconds.
+            timeout: Operation timeout in seconds.
 
         Returns:
             DeviceInteractionResult: Result of the command invocation.
@@ -558,7 +558,7 @@ class ChipToolDeviceInteractor:
     # Utility Methods
     # -------------------------------------------------------------------------
 
-    def discover_commissionable(self, timeout: int = 30) -> DeviceInteractionResult:
+    def discover_commissionable(self, timeout: int = 5) -> DeviceInteractionResult:
         """
         Discover commissionable devices on the network.
 
@@ -574,7 +574,7 @@ class ChipToolDeviceInteractor:
         )
 
     def resolve_node(
-        self, node_id: int, fabric_id: int = 1, timeout: int = 30
+        self, node_id: int, fabric_id: int = 1, timeout: int = 5
     ) -> DeviceInteractionResult:
         """
         Resolve a node's network address.
@@ -582,7 +582,7 @@ class ChipToolDeviceInteractor:
         Args:
             node_id: The node ID to resolve.
             fabric_id: The fabric ID the node belongs to.
-            timeout: Command timeout in seconds.
+            timeout: Operation timeout in seconds.
 
         Returns:
             DeviceInteractionResult: Result containing the node's address.

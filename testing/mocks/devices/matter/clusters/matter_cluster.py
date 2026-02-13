@@ -62,9 +62,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ClusterType is simply an alias for int - concrete clusters define their
+# ClusterId is simply an alias for int - concrete clusters define their
 # Matter cluster ID as a class constant (e.g., OnOffCluster.CLUSTER_ID = 0x0006)
-ClusterType = int
+ClusterId = int
 
 
 class MatterCluster(ABC):
@@ -123,7 +123,7 @@ class MatterCluster(ABC):
         """The chip-tool cluster name."""
         return self._cluster_name
 
-    def read_attribute(self, attribute: str, timeout: int = 30) -> DeviceInteractionResult:
+    def read_attribute(self, attribute: str, timeout: int = 5) -> DeviceInteractionResult:
         """
         Read an attribute from this cluster.
 
@@ -143,7 +143,7 @@ class MatterCluster(ABC):
         )
 
     def write_attribute(
-        self, attribute: str, value: Any, timeout: int = 30
+        self, attribute: str, value: Any, timeout: int = 5
     ) -> DeviceInteractionResult:
         """
         Write a value to an attribute on this cluster.
@@ -169,7 +169,7 @@ class MatterCluster(ABC):
         self,
         command: str,
         arguments: dict[str, Any] | None = None,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Invoke a command on this cluster.
@@ -193,11 +193,11 @@ class MatterCluster(ABC):
 
     @staticmethod
     @abstractmethod
-    def cluster_type() -> ClusterType:
+    def cluster_type() -> ClusterId:
         """
         Return the Matter cluster ID for this cluster.
 
         Returns:
-            ClusterType: The Matter cluster ID (e.g., 0x0006 for OnOff).
+            ClusterId: The Matter cluster ID (e.g., 0x0006 for OnOff).
         """
         pass

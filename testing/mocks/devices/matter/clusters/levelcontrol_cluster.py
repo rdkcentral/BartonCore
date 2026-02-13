@@ -35,7 +35,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from testing.mocks.devices.matter.clusters.matter_cluster import ClusterType, MatterCluster
+from testing.mocks.devices.matter.clusters.matter_cluster import ClusterId, MatterCluster
 
 if TYPE_CHECKING:
     from testing.mocks.devices.matter.device_interactor import (
@@ -74,7 +74,7 @@ class LevelControlCluster(MatterCluster):
     """
 
     # Matter Cluster ID for Level Control cluster
-    CLUSTER_ID: ClusterType = 0x0008
+    CLUSTER_ID: ClusterId = 0x0008
 
     def __init__(
         self,
@@ -98,7 +98,7 @@ class LevelControlCluster(MatterCluster):
         )
 
     @staticmethod
-    def cluster_type() -> ClusterType:
+    def cluster_type() -> ClusterId:
         """Return the Matter cluster ID."""
         return LevelControlCluster.CLUSTER_ID
 
@@ -112,7 +112,7 @@ class LevelControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific level.
@@ -147,7 +147,7 @@ class LevelControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific level with on/off behavior.
@@ -183,7 +183,7 @@ class LevelControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Step the level up or down.
@@ -211,7 +211,7 @@ class LevelControlCluster(MatterCluster):
             timeout=timeout,
         )
 
-    def stop(self, timeout: int = 30) -> DeviceInteractionResult:
+    def stop(self, timeout: int = 5) -> DeviceInteractionResult:
         """
         Stop any ongoing level change.
 
@@ -227,7 +227,7 @@ class LevelControlCluster(MatterCluster):
     # Attributes
     # -------------------------------------------------------------------------
 
-    def get_current_level(self, timeout: int = 30) -> int:
+    def get_current_level(self, timeout: int = 5) -> int:
         """
         Get the current level value.
 
@@ -245,7 +245,7 @@ class LevelControlCluster(MatterCluster):
             raise RuntimeError(f"Failed to read current-level attribute: {result.stderr}")
         return self._parse_level_value(result.stdout)
 
-    def get_min_level(self, timeout: int = 30) -> int:
+    def get_min_level(self, timeout: int = 5) -> int:
         """
         Get the minimum supported level.
 
@@ -263,7 +263,7 @@ class LevelControlCluster(MatterCluster):
             raise RuntimeError(f"Failed to read min-level attribute: {result.stderr}")
         return self._parse_level_value(result.stdout)
 
-    def get_max_level(self, timeout: int = 30) -> int:
+    def get_max_level(self, timeout: int = 5) -> int:
         """
         Get the maximum supported level.
 

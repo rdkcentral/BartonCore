@@ -35,7 +35,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from testing.mocks.devices.matter.clusters.matter_cluster import ClusterType, MatterCluster
+from testing.mocks.devices.matter.clusters.matter_cluster import ClusterId, MatterCluster
 
 if TYPE_CHECKING:
     from testing.mocks.devices.matter.device_interactor import (
@@ -61,7 +61,7 @@ class ColorControlCluster(MatterCluster):
     """
 
     # Matter Cluster ID for Color Control cluster
-    CLUSTER_ID: ClusterType = 0x0300
+    CLUSTER_ID: ClusterId = 0x0300
 
     def __init__(
         self,
@@ -85,7 +85,7 @@ class ColorControlCluster(MatterCluster):
         )
 
     @staticmethod
-    def cluster_type() -> ClusterType:
+    def cluster_type() -> ClusterId:
         """Return the Matter cluster ID."""
         return ColorControlCluster.CLUSTER_ID
 
@@ -100,7 +100,7 @@ class ColorControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific hue value.
@@ -134,7 +134,7 @@ class ColorControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific saturation value.
@@ -167,7 +167,7 @@ class ColorControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific hue and saturation.
@@ -202,7 +202,7 @@ class ColorControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific XY color.
@@ -236,7 +236,7 @@ class ColorControlCluster(MatterCluster):
         transition_time: int = 0,
         options_mask: int = 0,
         options_override: int = 0,
-        timeout: int = 30,
+        timeout: int = 5,
     ) -> DeviceInteractionResult:
         """
         Move to a specific color temperature.
@@ -266,7 +266,7 @@ class ColorControlCluster(MatterCluster):
     # Attributes
     # -------------------------------------------------------------------------
 
-    def get_current_hue(self, timeout: int = 30) -> int:
+    def get_current_hue(self, timeout: int = 5) -> int:
         """
         Get the current hue value.
 
@@ -284,7 +284,7 @@ class ColorControlCluster(MatterCluster):
             raise RuntimeError(f"Failed to read current-hue attribute: {result.stderr}")
         return self._parse_color_value(result.stdout)
 
-    def get_current_saturation(self, timeout: int = 30) -> int:
+    def get_current_saturation(self, timeout: int = 5) -> int:
         """
         Get the current saturation value.
 
@@ -304,7 +304,7 @@ class ColorControlCluster(MatterCluster):
             )
         return self._parse_color_value(result.stdout)
 
-    def get_color_temperature(self, timeout: int = 30) -> int:
+    def get_color_temperature(self, timeout: int = 5) -> int:
         """
         Get the current color temperature in mireds.
 
