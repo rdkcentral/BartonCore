@@ -1691,6 +1691,8 @@ namespace
         cmd.clusterId = 0x0008;
         cmd.commandId = 0x0004;
         cmd.name = "MoveToLevelWithOnOff";
+        cmd.resourceId = "test-resource-1";
+        cmd.resourceEndpointId = "1";
         SbmdArgument arg1;
         arg1.name = "Level";
         arg1.type = "uint8";
@@ -1722,6 +1724,8 @@ namespace
         cmd.clusterId = 0x0008;
         cmd.commandId = 0x0004;
         cmd.name = "MoveToLevelWithOnOff";
+        cmd.resourceId = "test-resource-2";
+        cmd.resourceEndpointId = "1";
         SbmdArgument arg1;
         arg1.name = "Level";
         arg1.type = "uint8";
@@ -1749,11 +1753,15 @@ namespace
         cmdOff.clusterId = 0x0006;
         cmdOff.commandId = 0x0000;
         cmdOff.name = "Off";
+        cmdOff.resourceId = "test-resource-3";
+        cmdOff.resourceEndpointId = "1";
 
         SbmdCommand cmdOn;
         cmdOn.clusterId = 0x0006;
         cmdOn.commandId = 0x0001;
         cmdOn.name = "On";
+        cmdOn.resourceId = "test-resource-3";
+        cmdOn.resourceEndpointId = "1";
 
         std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
 
@@ -1782,11 +1790,15 @@ namespace
         cmdOff.clusterId = 0x0006;
         cmdOff.commandId = 0x0000;
         cmdOff.name = "Off";
+        cmdOff.resourceId = "test-resource-4";
+        cmdOff.resourceEndpointId = "1";
 
         SbmdCommand cmdOn;
         cmdOn.clusterId = 0x0006;
         cmdOn.commandId = 0x0001;
         cmdOn.name = "On";
+        cmdOn.resourceId = "test-resource-4";
+        cmdOn.resourceEndpointId = "1";
 
         std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
 
@@ -1814,11 +1826,15 @@ namespace
         cmdOff.clusterId = 0x0006;
         cmdOff.commandId = 0x0000;
         cmdOff.name = "Off";
+        cmdOff.resourceId = "test-resource-5";
+        cmdOff.resourceEndpointId = "1";
 
         SbmdCommand cmdOn;
         cmdOn.clusterId = 0x0006;
         cmdOn.commandId = 0x0001;
         cmdOn.name = "On";
+        cmdOn.resourceId = "test-resource-5";
+        cmdOn.resourceEndpointId = "1";
 
         std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
 
@@ -1841,11 +1857,15 @@ namespace
         cmdOff.clusterId = 0x0006;
         cmdOff.commandId = 0x0000;
         cmdOff.name = "Off";
+        cmdOff.resourceId = "test-resource-6";
+        cmdOff.resourceEndpointId = "1";
 
         SbmdCommand cmdOn;
         cmdOn.clusterId = 0x0006;
         cmdOn.commandId = 0x0001;
         cmdOn.name = "On";
+        cmdOn.resourceId = "test-resource-6";
+        cmdOn.resourceEndpointId = "1";
 
         std::vector<SbmdCommand> commands = {cmdOff, cmdOn};
 
