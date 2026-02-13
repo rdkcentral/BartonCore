@@ -202,7 +202,7 @@ static void test_sbmdParserLightFile(void **state)
     assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 0);
 
     // Verify matterMeta contains at least On/Off Light and Dimmable Light
-    assert_true(spec->matterMeta.deviceTypes.size() >= 2);
+    assert_true(spec->matterMeta.deviceTypes.size() >= 3);
     assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0100);
     assert_int_equal((int) spec->matterMeta.deviceTypes[2], 0x0101);
 
