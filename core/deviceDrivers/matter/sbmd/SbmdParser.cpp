@@ -719,7 +719,16 @@ bool SbmdParser::ParseCommand(const YAML::Node &node, SbmdCommand &command)
         uint32_t timeoutValue = node["timedInvokeTimeoutMs"].as<uint32_t>();
         if (timeoutValue > UINT16_MAX)
         {
-            icLogError(LOG_TAG, logFmt("timedInvokeTimeoutMs value %u exceeds maximum allowed value of %u"), timeoutValue, UINT16_MAX);
+            if (!command.name.empty())
+            {
+                icLogError(LOG_TAG, logFmt("timedInvokeTimeoutMs value %u for command '%s' exceeds maximum allowed value of %u"),
+                           timeoutValue, command.name.c_str(), UINT16_MAX);
+            }
+            else
+            {
+                icLogError(LOG_TAG, logFmt("timedInvokeTimeoutMs value %u exceeds maximum allowed value of %u"),
+                           timeoutValue, UINT16_MAX);
+            }
             return false;
         }
         command.timedInvokeTimeoutMs = static_cast<uint16_t>(timeoutValue);
