@@ -209,6 +209,10 @@ namespace barton
          * {"output" : <JSON representation of the command args TLV (or null if no args)>,
          *  "command" : <name of the command to execute>}
          *
+         * Note: When only one command is available, the "command" field is optional and
+         * the single command will be auto-selected. The "command" field is required when
+         * multiple commands are available.
+         *
          * @see SbmdScript::MapWriteCommand
          */
         bool MapWriteCommand(const std::vector<SbmdCommand> &availableCommands,
