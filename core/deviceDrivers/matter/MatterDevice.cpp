@@ -273,13 +273,17 @@ bool MatterDevice::BindResourceInfo(const char *uri,
         // Populate feature maps for all commands
         for (auto &cmd : binding.commands)
         {
-            if (GetEndpointForCluster(cmd.clusterId, endpointId))
+            if (!GetEndpointForCluster(cmd.clusterId, endpointId))
             {
-                uint32_t featureMapValue = 0;
-                if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
-                {
-                    cmd.featureMap = featureMapValue;
-                }
+                icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
+                        cmd.name.c_str(), cmd.clusterId, uri);
+                return false;
+            }
+
+            uint32_t featureMapValue = 0;
+            if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
+            {
+                cmd.featureMap = featureMapValue;
             }
         }
 

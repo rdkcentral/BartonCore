@@ -562,6 +562,12 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         // Parse single command (goes into writeCommands vector)
         if (writeNode["command"])
         {
+            if (writeNode["commands"])
+            {
+                icError("write mapper cannot have both 'command' and 'commands'");
+                return false;
+            }
+
             SbmdCommand cmd;
             if (!ParseCommand(writeNode["command"], cmd))
             {
