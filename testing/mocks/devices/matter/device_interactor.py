@@ -314,9 +314,9 @@ class ChipToolDeviceInteractor:
             )
             # If commissioning window fails to open, raise an exception
             if not result.success:
-                error_msg = f"Failed to open commissioning window on node {node_id}: {result.stderr}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
+                raise RuntimeError(
+                    f"Failed to open commissioning window on node {node_id}: {result.stderr}"
+                )
             # Update the device's commissioning code so get_commissioning_code()
             # returns the correct code for other controllers to use
             if new_code:
