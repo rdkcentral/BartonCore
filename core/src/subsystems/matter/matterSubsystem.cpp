@@ -231,12 +231,6 @@ static gboolean maybeInitMatter(void *context)
     subsystemMtx.lock();
     initialized = initSuccessful;
     busy = false;
-    
-    if (initSuccessful)
-    {
-        // Reset retry attempts on success
-        retryAttempts = 0;
-    }
     subsystemMtx.unlock();
 
     if (initSuccessful)
@@ -320,13 +314,16 @@ static void matterInitLoopThreadFunc()
         g_main_context_push_thread_default(thisThreadContext);
         matterInitLoop = g_main_loop_new(thisThreadContext, false);
 
-        // Reset retry attempts for the backoff logic
+        // (Re)initialize retryAttempts for the backoff logic.
+        // Note: retryAttempts is statically initialized to 0 on the first thread start,
+        // but we explicitly reset it here so that if this thread is ever restarted after
+        // a previous run, the backoff sequence starts from the initial delay again.
         retryAttempts = 0;
         
-        // Create a one-shot timer source for the first retry with backoff
-        // Note: The immediate call to maybeInitMatter above was attempt 0
-        // This first retry (after the immediate attempt failed) uses retryAttempts=0
-        // Backoff schedule: 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s (retry 4+)
+        // Create a one-shot timer source for the first scheduled retry with backoff
+        // Note: The immediate synchronous maybeInitMatter call above is not counted as a retry attempt
+        // This first scheduled retry uses retryAttempts=0
+        // Backoff schedule (scheduled retries): 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s (retry 4+)
         guint backoffDelay = calculateBackoffDelay(retryAttempts);
         g_autoptr(GSource) source = g_timeout_source_new(backoffDelay * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
