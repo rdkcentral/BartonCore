@@ -285,6 +285,36 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
 
+
+# Matter sample apps for use as test targets
+# MATTER_REF is passed as a build arg, sourced from matter-version file
+ARG MATTER_REF
+SHELL ["/bin/bash", "-c"]
+RUN cd /tmp && \
+    git clone --branch ${MATTER_REF} --depth 1 https://github.com/project-chip/connectedhomeip.git matter && \
+    cd matter && \
+    ./scripts/checkout_submodules.py --shallow --platform linux && \
+    export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH && \
+    . ./scripts/activate.sh && \
+    ./scripts/build/build_examples.py --target linux-x64-light-rpc build && \
+    cp out/linux-x64-light-rpc/chip-lighting-app /usr/local/bin && \
+    rm -rf out && \
+    ./scripts/build/build_examples.py --target linux-x64-lock build && \
+    cp out/linux-x64-lock/chip-lock-app /usr/local/bin && \
+    rm -rf out && \
+    ./scripts/build/build_examples.py --target linux-x64-thermostat build && \
+    cp out/linux-x64-thermostat/thermostat-app /usr/local/bin && \
+    rm -rf out && \
+    ./scripts/build/build_examples.py --target linux-x64-contact-sensor build && \
+    cp out/linux-x64-contact-sensor/contact-sensor-app /usr/local/bin && \
+    rm -rf out && \
+    ./scripts/build/build_examples.py --target linux-x64-chip-tool build && \
+    cp out/linux-x64-chip-tool/chip-tool /usr/local/bin && \
+    rm -rf out && \
+    cd /tmp && \
+    rm -rf /tmp/matter
+SHELL ["/bin/sh", "-c"]
+
 RUN ls /tmp/
 
 # Ensure the system uses OpenSSL 3 by default

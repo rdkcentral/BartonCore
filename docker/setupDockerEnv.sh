@@ -128,6 +128,8 @@ echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
 # Save off the current builder tag to keep track of the latest version
 echo "CURRENT_BUILDER_TAG=$CURRENT_BUILDER_TAG" >> $OUTFILE
+# Save off the Matter version for building sample apps in Docker
+echo "MATTER_REF=$(cat $BARTON_TOP/matter-version)" >> $OUTFILE
 ##############################################################################
 
 ##############################################################################
@@ -153,8 +155,6 @@ echo "CURRENT_BUILDER_TAG=$CURRENT_BUILDER_TAG" >> $OUTFILE
 echo "LSAN_OPTIONS=suppressions=$BARTON_TOP/testing/lsan.supp" >> $OUTFILE
 # path to various necessary python packages, including the modules defined in the $BARTON_TOP/testing directory
 echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/dist-packages:$BARTON_TOP" >> $OUTFILE
-# path to the matter sample apps
-echo "MATTER_SAMPLE_APPS_PATH=$BARTON_TOP/build/matter-install/bin" >> $OUTFILE
 # path to libbCore.so
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
