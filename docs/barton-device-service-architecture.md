@@ -151,9 +151,15 @@ Subsystem Manager interface supports them if desired.
 
 Device Drivers provide the mapping between Barton resources and over-the-air (or over-the-wire)
 interactions with specific types of devices. They are responsible for implementing Device Classes
-for a particular technology.  For example, MatterLightDeviceDriver and ZigbeeLightDeviceDriver are
-two drivers that implement the same device class on different technology stacks. Drivers may or may
-not depend upon a Subsystem.
+for a particular technology.
+
+For Matter devices, drivers are provided via Specification-Based Matter Drivers (SBMD), which use
+declarative YAML specification files to define the mapping between Matter attributes/commands and
+Barton resources. See [SBMD-Design.md](SBMD-Design.md) for details.
+
+For Zigbee and other technologies, drivers are implemented in C/C++. For example,
+ZigbeeLightDeviceDriver and ZigbeeSensorDeviceDriver are native drivers that implement their
+respective device classes. Drivers may or may not depend upon a Subsystem.
 
 Drivers are responsible for participating in the device discovery process and ‘claim’ discovered
 devices through a matching process triggered after details of a device are discovered. Once a
@@ -164,11 +170,8 @@ resource on at least one Endpoint called “isOn”.  Writing “true” to this
 sending a command to the device over whatever technology/protocol is required to change the light’s
 state to “on”.
 
-The current set of drivers available in Barton are:
+The native drivers available in Barton are:
 
-* MatterDoorLock
-* MatterLight
-* MatterWindowCovering
 * philipsHue
 * zigbeeDoorLock
 * zigbeeLight
@@ -177,6 +180,10 @@ The current set of drivers available in Barton are:
 * zigbeeSensor
 * zigbeeThermostat
 * zigbeeWindowCovering
+
+Matter device types are supported via SBMD specification files (`.sbmd`) which are loaded at
+runtime from the configured SBMD directory. See [SBMD-Design.md](SBMD-Design.md) for information
+on creating and deploying SBMD specifications.
 
 # Hardware Dependencies
 
