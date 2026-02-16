@@ -375,6 +375,10 @@ namespace barton
 
     } // anonymous namespace
 
+    // Default QuickJS stack size (256KB) can cause stack overflow during JSON parsing.
+    // 2MB provides adequate headroom for script execution and JSON operations.
+    static constexpr size_t kQuickJsStackSize = 2 * 1024 * 1024;
+
     std::unique_ptr<QuickJsScript> QuickJsScript::Create(const std::string &deviceId)
     {
         JSRuntime *runtime = JS_NewRuntime();
@@ -383,6 +387,9 @@ namespace barton
             icLogError(LOG_TAG, "Failed to create QuickJS runtime for device %s", deviceId.c_str());
             return nullptr;
         }
+
+        // Set a larger stack size to prevent stack overflow during JSON parsing
+        JS_SetMaxStackSize(runtime, kQuickJsStackSize);
 
         JSContext *ctx = JS_NewContext(runtime);
         if (!ctx)
