@@ -66,7 +66,7 @@ print_rebuild_warning() {
 print_version_mismatch_warning() {
     echo ""
     print_header_footer
-    echo "WARNING: Your container is based on the docker-builder version $CURRENT_BUILDER_TAG,"
+    echo "WARNING: Your container is based on the barton_builder version $CURRENT_BUILDER_TAG,"
     echo "         but the latest version for this lineage is $LATEST_BUILDER_TAG"
     echo ""
 
@@ -85,8 +85,8 @@ print_version_mismatch_warning() {
 
 # Check if we're inside a container
 if [ -f "/.dockerenv" ] && [ -n "$CURRENT_BUILDER_TAG" ]; then
-    # Find the highest versioned image tag reachable by HEAD that matches 'docker-builder-*'
-    LATEST_BUILDER_TAG=$(git tag -l 'docker-builder-*' --sort=-v:refname --merged | head -n 1 | sed 's/docker-builder-//')
+    TOP_DIR=$(git rev-parse --show-toplevel)
+    LATEST_BUILDER_TAG=$(cat "${TOP_DIR}/docker/version")
 
     if [ -n "$LATEST_BUILDER_TAG" ] && [ "$CURRENT_BUILDER_TAG" != "$LATEST_BUILDER_TAG" ]; then
         print_version_mismatch_warning

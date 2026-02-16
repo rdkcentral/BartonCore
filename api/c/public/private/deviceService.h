@@ -77,7 +77,7 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir);
  * @param timeoutSeconds - the number of seconds to perform discovery before automatically stopping
  * @param findOrphanedDevices - if true, limit discovery to orphaned previously paired devices
  *
- * @returns true if at least one device driver successfully started discovery.
+ * @returns true if all related device drivers successfully started discovery.
  */
 bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
                                 icLinkedList *filters,
