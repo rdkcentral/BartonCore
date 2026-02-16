@@ -46,8 +46,8 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
     }
 
     MatterDeviceDriver *rawDriver = driver.get();
-    // Store driver name as a string for safety. The driver name is checked for null
-    // at line 43 and should remain constant after registration.
+    // Store driver name as a string for safety. The driver name is validated
+    // earlier in this function and should remain constant after registration.
     std::string driverName = rawDriver->GetDriver()->driverName;
 
     icDebug("%s", driverName.c_str());
