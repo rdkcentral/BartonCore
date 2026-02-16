@@ -42,6 +42,7 @@ pytest_plugins = [
     "testing.environment.default_environment_orchestrator",
     # Devices
     "testing.mocks.devices.matter.matter_light",
+    "testing.mocks.devices.matter.device_interactor",
     # ZHAL
     "testing.mocks.zhal.mock_zhal_implementation",
     ## events
