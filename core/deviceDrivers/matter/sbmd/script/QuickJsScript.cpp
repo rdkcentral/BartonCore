@@ -375,10 +375,6 @@ namespace barton
 
     } // anonymous namespace
 
-    // Default QuickJS stack size (256KB) can cause stack overflow during JSON parsing.
-    // 2MB provides adequate headroom for script execution and JSON operations.
-    static constexpr size_t kQuickJsStackSize = 2 * 1024 * 1024;
-
     std::unique_ptr<QuickJsScript> QuickJsScript::Create(const std::string &deviceId)
     {
         JSRuntime *runtime = JS_NewRuntime();
@@ -387,9 +383,6 @@ namespace barton
             icLogError(LOG_TAG, "Failed to create QuickJS runtime for device %s", deviceId.c_str());
             return nullptr;
         }
-
-        // Set a larger stack size to prevent stack overflow during JSON parsing
-        JS_SetMaxStackSize(runtime, kQuickJsStackSize);
 
         JSContext *ctx = JS_NewContext(runtime);
         if (!ctx)
@@ -720,6 +713,11 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      std::string &outValue)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
     {
@@ -786,6 +784,11 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
                                       size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = attributeWriteScripts.find(attributeInfo);
     if (it == attributeWriteScripts.end())
     {
@@ -845,6 +848,11 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
                                       size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = commandExecuteScripts.find(commandInfo);
     if (it == commandExecuteScripts.end())
     {
@@ -909,6 +917,11 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               std::string &outValue)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
     {
@@ -975,6 +988,10 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
                                     size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
 
     std::string key = GenerateCommandsKey(availableCommands);
     auto it = writeCommandsScripts.find(key);
