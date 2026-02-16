@@ -167,7 +167,8 @@ Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric
     MatterDriverFactory::Instance();
     if(!SbmdFactory::Instance().RegisterDrivers())
     {
-        icWarn("Failed to register SBMD drivers. Functionality may be reduced.");
+        icError("FATAL: Failed to register SBMD drivers. Matter subsystem cannot continue.");
+        throw std::runtime_error("Failed to register SBMD drivers - duplicate driver names or other fatal errors");
     }
 
     commissionerController = std::make_shared<chip::Controller::DeviceCommissioner>();
