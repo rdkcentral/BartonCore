@@ -217,10 +217,28 @@ if(NOT WIN32)
     target_link_options(quickjs PRIVATE -rdynamic)
 endif()
 
+###############################################################################
+# Build qjs (QuickJS interpreter) and qjsc (QuickJS compiler) executables
+###############################################################################
+
+# qjs - QuickJS interpreter
+add_executable(qjs qjs.c)
+target_link_libraries(qjs PRIVATE quickjs)
+set_target_properties(qjs PROPERTIES
+    OUTPUT_NAME "qjs"
+)
+
+# qjsc - QuickJS compiler
+add_executable(qjsc qjsc.c)
+target_link_libraries(qjsc PRIVATE quickjs)
+set_target_properties(qjsc PROPERTIES
+    OUTPUT_NAME "qjsc"
+)
+
 # Install configuration
 include(GNUInstallDirs)
 
-install(TARGETS quickjs
+install(TARGETS quickjs qjs qjsc
     EXPORT quickjs-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -274,6 +292,7 @@ install(FILES
 message(STATUS "QuickJS ${QUICKJS_VERSION_STRING} Configuration Summary:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Shared library: ${BUILD_SHARED_LIBS}")
+message(STATUS "  Executables: qjs, qjsc")
 message(STATUS "  LTO: ${CONFIG_LTO}")
 message(STATUS "  Address Sanitizer: ${CONFIG_ASAN}")
 message(STATUS "  Memory Sanitizer: ${CONFIG_MSAN}")
