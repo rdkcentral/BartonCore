@@ -275,8 +275,8 @@ def main():
     if not args.no_scripts:
         qjsc_path = find_qjsc()
         if not qjsc_path:
-            print("WARNING: qjsc not found, skipping JavaScript validation", file=sys.stderr)
-            print("         Install with: apt install quickjs", file=sys.stderr)
+            print("WARNING: qjsc (QuickJS compiler) not found, skipping JavaScript validation", file=sys.stderr)
+            print("         The quickjs package should provide qjsc. Check installation.", file=sys.stderr)
 
     # Load schema
     try:
