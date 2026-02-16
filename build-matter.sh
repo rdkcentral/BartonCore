@@ -45,7 +45,7 @@ BUILD_WITH_STACK_SMASH_PROTECTION=""
 BUILD_WITH_SANITIZER=""
 MATTER_CONF_DIR=""
 
-# Prevent building Java bits which we dont need/use. I couldnt find a better way.
+# Prevent building Java bits which we don't need/use. I couldn't find a better way.
 unset JAVA_HOME
 
 while getopts ":hc:sa" option; do
