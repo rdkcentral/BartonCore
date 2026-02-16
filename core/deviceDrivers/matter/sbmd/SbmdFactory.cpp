@@ -107,7 +107,9 @@ bool SbmdFactory::RegisterDrivers()
 
                     if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
                     {
-                        icError("Failed to register SBMD driver from: %s", entry.path().c_str());
+                        icError("FATAL: Failed to register SBMD driver from: %s. "
+                                "This is a fatal error. Matter subsystem will not be ready.", 
+                                entry.path().c_str());
                         allRegistered = false;
                         continue;
                     }

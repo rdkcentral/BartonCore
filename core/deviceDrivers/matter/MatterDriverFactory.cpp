@@ -38,24 +38,6 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
-// TODO: Remove when native drivers are removed in support of SBMD drivers only
-bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
-{
-    bool result = false;
-    if (driver != nullptr && driver->GetDriver() != nullptr && driver->GetDriver()->driverName != nullptr)
-    {
-        icDebug("%s", driver->GetDriver()->driverName);
-
-        result = deviceDriverManagerRegisterDriver(driver->GetDriver());
-        if (result)
-        {
-            drivers.emplace(driver->GetDriver()->driverName, driver);
-        }
-    }
-
-    return result;
-}
-
 bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver)
 {
     if (!driver || !driver->GetDriver() || !driver->GetDriver()->driverName)
@@ -64,17 +46,31 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
     }
 
     MatterDeviceDriver *rawDriver = driver.get();
+    // Store driver name as a string for safety. The driver name is validated
+    // earlier in this function and should remain constant after registration.
+    std::string driverName = rawDriver->GetDriver()->driverName;
 
-    icDebug("%s", rawDriver->GetDriver()->driverName);
+    icDebug("%s", driverName.c_str());
+
+    // Check for duplicate driver name before registration
+    if (drivers.find(driverName) != drivers.end())
+    {
+        icError("FATAL: Driver with name '%s' is already registered. "
+                "Duplicate driver names are not allowed. "
+                "Check SBMD specs for conflicting 'name' fields.", driverName.c_str());
+        return false;
+    }
 
     bool result = deviceDriverManagerRegisterDriver(rawDriver->GetDriver());
     if (!result)
     {
         // Registration failed; do not insert into drivers and allow driver to be destroyed.
+        icError("Failed to register driver '%s' with device driver manager", driverName.c_str());
         return false;
     }
 
-    drivers.emplace(rawDriver->GetDriver()->driverName, rawDriver);
+    // Use the stored string as the map key to ensure consistency
+    drivers.emplace(driverName, rawDriver);
 
     // Release ownership - deviceDriverManager takes ownership and will handle cleanup
     // via the destroy callback (which calls delete on the MatterDeviceDriver).

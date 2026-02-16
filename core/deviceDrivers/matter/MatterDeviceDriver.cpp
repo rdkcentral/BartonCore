@@ -1240,16 +1240,12 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
                 break;
 
             default:
-                serverRef = MakeCluster(deviceUuid, endpointId, clusterId, deviceDataCache);
+                // Device-specific clusters are handled by SBMD scripting
+                icTrace("Cluster %#" PRIx32 " not handled by core - may be SBMD managed", clusterId);
+                return nullptr;
         }
 
         server = serverRef.get();
-
-        if (server == nullptr)
-        {
-            icTrace("Cluster %#" PRIx32 " not implemented!", clusterId);
-            return server;
-        }
 
         clusterServers[locator] = std::move(serverRef);
     }

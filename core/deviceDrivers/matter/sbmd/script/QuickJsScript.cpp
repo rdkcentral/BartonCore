@@ -713,6 +713,11 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      std::string &outValue)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
     {
@@ -779,6 +784,11 @@ bool QuickJsScript::MapAttributeWrite(const SbmdAttribute &attributeInfo,
                                       size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = attributeWriteScripts.find(attributeInfo);
     if (it == attributeWriteScripts.end())
     {
@@ -838,6 +848,11 @@ bool QuickJsScript::MapCommandExecute(const SbmdCommand &commandInfo,
                                       size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = commandExecuteScripts.find(commandInfo);
     if (it == commandExecuteScripts.end())
     {
@@ -902,6 +917,11 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               std::string &outValue)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
     {
@@ -968,6 +988,10 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
                                     size_t &encodedLength)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
 
     std::string key = GenerateCommandsKey(availableCommands);
     auto it = writeCommandsScripts.find(key);

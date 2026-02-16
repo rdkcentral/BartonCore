@@ -28,7 +28,6 @@
 #define LOG_TAG "MatterDevice"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "app/ConcreteCommandPath.h"
 #include "app/WriteClient.h"
 #include <clusters/shared/GlobalIds.h>
 #include <platform/CHIPDeviceLayer.h>

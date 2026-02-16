@@ -485,19 +485,6 @@ namespace barton
             return {1, kSubscriptionMaxIntervalPublisherLimit};
         }
 
-        /**
-         * @brief Make a cluster instance. Implementations simply create an instance of a supported cluster
-         * implementation.
-         *
-         * TODO: This method to be removed once all drivers moved to SBMD
-         *
-         * @param deviceUuid
-         * @return MatterCluster* A heap allocated cluster for this device/endpoint/cluster
-         */
-        virtual std::unique_ptr<MatterCluster>
-        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId,
-                    std::shared_ptr<DeviceDataCache> deviceDataCache) { return nullptr; }
-
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache(const std::string &deviceUuid)
         {
             std::lock_guard<std::mutex> lock(devicesMutex);
@@ -719,10 +706,8 @@ namespace barton
         std::map<std::string, std::shared_ptr<MatterDevice>> devices;
         std::mutex devicesMutex;
 
-        //with SBMD in play, this should only contain core/standard clusters Barton needs for basic
-        // operation.  Actual device specific clusters are handled by SBMD scripting.
-        // This collection may go away and instead have each of these core clusters specifically
-        // instantiated as members.
+        // This contains only core/standard clusters Barton needs for basic operation.
+        // Device-specific clusters are handled by SBMD scripting.
         std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
             clusterServers;
 
