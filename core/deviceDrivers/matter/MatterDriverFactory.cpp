@@ -46,16 +46,16 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
     }
 
     MatterDeviceDriver *rawDriver = driver.get();
-    const char *driverName = rawDriver->GetDriver()->driverName;
+    std::string driverName = rawDriver->GetDriver()->driverName;
 
-    icDebug("%s", driverName);
+    icDebug("%s", driverName.c_str());
 
     // Check for duplicate driver name before registration
     if (drivers.find(driverName) != drivers.end())
     {
         icError("FATAL: Driver with name '%s' is already registered. "
                 "Duplicate driver names are not allowed. "
-                "Check SBMD specs for conflicting 'name' fields.", driverName);
+                "Check SBMD specs for conflicting 'name' fields.", driverName.c_str());
         return false;
     }
 
@@ -63,7 +63,7 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
     if (!result)
     {
         // Registration failed; do not insert into drivers and allow driver to be destroyed.
-        icError("Failed to register driver '%s' with device driver manager", driverName);
+        icError("Failed to register driver '%s' with device driver manager", driverName.c_str());
         return false;
     }
 
