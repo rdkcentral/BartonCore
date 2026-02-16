@@ -281,7 +281,7 @@ static gboolean maybeInitMatterWithBackoff(void *context)
                 currentRetryAttempt, newBackoffDelay);
         
         // Create a new timer source with the new backoff delay
-        GSource *newSource = g_timeout_source_new(newBackoffDelay * 1000);
+        g_autoptr(GSource) newSource = g_timeout_source_new(newBackoffDelay * 1000);
         g_source_set_priority(newSource, G_PRIORITY_DEFAULT);
         g_source_set_callback(newSource, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(newSource, "maybeInitMatter");
@@ -291,7 +291,6 @@ static gboolean maybeInitMatterWithBackoff(void *context)
         // The mutex protection ensures shutdown can't interfere with this atomic operation
         GMainContext *currentContext = g_main_context_get_thread_default();
         sourceId = g_source_attach(newSource, currentContext);
-        g_source_unref(newSource);
     }
     
     return false; // Always return false to remove the current source
@@ -329,12 +328,11 @@ static void matterInitLoopThreadFunc()
         // This first retry (after the immediate attempt failed) uses retryAttempts=0
         // Backoff schedule: 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s (retry 4+)
         guint backoffDelay = calculateBackoffDelay(retryAttempts);
-        GSource *source = g_timeout_source_new(backoffDelay * 1000);
+        g_autoptr(GSource) source = g_timeout_source_new(backoffDelay * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
         g_source_set_callback(source, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(source, "maybeInitMatter");
         sourceId = g_source_attach(source, thisThreadContext);
-        g_source_unref(source); // Forwarded to the context.
 
         icDebug("Scheduling initial maybeInitMatter in %u seconds with source id %u",
                 backoffDelay,
