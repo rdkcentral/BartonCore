@@ -39,6 +39,8 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
+            args:
+                - MATTER_REF=$MATTER_REF
         env_file:
             - .env
         networks:

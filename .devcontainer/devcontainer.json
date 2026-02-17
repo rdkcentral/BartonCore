@@ -43,7 +43,6 @@
 
         // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
         // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
-        "PATH": "${containerEnv:PATH}:${containerEnv:MATTER_SAMPLE_APPS_PATH}",
         "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
         "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}"
     },

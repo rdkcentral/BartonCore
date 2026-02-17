@@ -44,14 +44,13 @@ if [ -n "$BUILDER_UID" -a -n "$BUILDER_GID" -a -n "$BUILDER_USER" ]; then
 fi
 
 # Check if required environment variables are set
-if [ -z "$MATTER_SAMPLE_APPS_PATH" ] || [ -z "$BARTON_PYTHONPATH" ] || [ -z "$LIB_BARTON_SHARED_PATH" ]; then
+if [ -z "$BARTON_PYTHONPATH" ] || [ -z "$LIB_BARTON_SHARED_PATH" ]; then
     echo "One or more required environment variables are not set."
     exit 1
 fi
 
 # see `docker/setupDockerEnv.sh` for more details on these custom PATHs
 # NOTE: do not add a custom PATH here without first defining it in `docker/setupDockerEnv.sh`
-export PATH=$MATTER_SAMPLE_APPS_PATH:$PATH
 export PYTHONPATH=$PYTHONPATH:$BARTON_PYTHONPATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$LIB_BARTON_SHARED_PATH
 
