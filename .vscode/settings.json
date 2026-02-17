@@ -144,6 +144,9 @@
         },
         "gn": {
             "commentprefix": "${commentprefix_hash}"
+        },
+        "py": {
+            "commentprefix": "${commentprefix_hash}"
         }
     },
     "fileHeaderComment.template": {
