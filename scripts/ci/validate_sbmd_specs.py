@@ -275,22 +275,28 @@ def main():
     parser.add_argument('specs', nargs='+', help='Path(s) to .sbmd files or directories')
     parser.add_argument('-q', '--quiet', action='store_true', help='Only show errors')
     parser.add_argument('--no-scripts', action='store_true', help='Skip JavaScript validation')
-    parser.add_argument('--stubs', required=True, help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
+    parser.add_argument('--stubs', help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
     args = parser.parse_args()
 
-    # Load stubs for script validation
-    try:
-        stubs = load_stubs(args.stubs)
-    except FileNotFoundError:
-        print(f"ERROR: Stubs file not found: {args.stubs}", file=sys.stderr)
-        return 1
-    except (json.JSONDecodeError, ValueError) as e:
-        print(f"ERROR: Invalid stubs file {args.stubs}: {e}", file=sys.stderr)
-        return 1
-
-    # Find qjs for script validation
+    # Find qjs and load stubs for script validation
     qjs_path = None
+    stubs = None
     if not args.no_scripts:
+        # Check if stubs argument was provided
+        if not args.stubs:
+            print("ERROR: --stubs is required when JavaScript validation is enabled", file=sys.stderr)
+            print("       Use --no-scripts to skip JavaScript validation", file=sys.stderr)
+            return 1
+        # Load stubs for script validation
+        try:
+            stubs = load_stubs(args.stubs)
+        except FileNotFoundError:
+            print(f"ERROR: Stubs file not found: {args.stubs}", file=sys.stderr)
+            return 1
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"ERROR: Invalid stubs file {args.stubs}: {e}", file=sys.stderr)
+            return 1
+        # Find qjs executable
         qjs_path = find_qjs()
         if not qjs_path:
             print("WARNING: qjs not found, skipping JavaScript validation", file=sys.stderr)
