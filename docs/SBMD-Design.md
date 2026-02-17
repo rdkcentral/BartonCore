@@ -100,6 +100,11 @@ binaries through firmware updates.
 SBMD specifications are YAML files with the `.sbmd` extension. The current schema
 version is **1.0**, as specified in the `schemaVersion` field of each SBMD file.
 
+> **JSON Schema**: A formal JSON Schema for validating SBMD files is available at
+> [`core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json`](../core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json).
+> All `.sbmd` files in the `specs/` directory are automatically validated against
+> this schema during the build process.
+
 ### 3.1 Top-Level Structure
 
 ```yaml
@@ -364,6 +369,10 @@ mapper:
 Scripts are executed in a QuickJS JavaScript runtime. Each mapper type provides a
 specific input object and expects a specific output format.
 
+> **TypeScript Definitions**: A formal schema for all script interfaces is available in
+> [`core/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts`](../core/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts).
+> This file can be used for IDE autocompletion and type checking during script development.
+
 ### 5.1 Read Mapper Script Interface
 
 #### Input Object: `sbmdReadArgs`
@@ -571,6 +580,58 @@ sbmdCommandResponseArgs = {
 ```javascript
 return {
     output: <barton_response> // String response for Barton
+};
+```
+
+### 5.5 Write Command Mapper Script Interface
+
+When a resource write maps to one or more Matter commands instead of an attribute
+write, the write mapper uses the `sbmdWriteArgs` variable with a command-specific
+structure.
+
+#### Input Object: `sbmdWriteArgs` (for command writes)
+
+```javascript
+sbmdWriteArgs = {
+    input: "value",           // Barton string value to write
+    deviceUuid: "uuid-string",// Device UUID
+    commands: ["Off", "On"]   // Array of available command names
+}
+```
+
+#### Expected Output
+
+```javascript
+return {
+    output: <command_args>,   // Command arguments (null, value, or object)
+    command: "commandName"    // Required when multiple commands available
+};
+```
+
+#### Auto-Selection
+
+When only one command is defined in the SBMD spec, it is automatically selected
+and the `command` field is not required in the script output.
+
+#### Examples
+
+**Single command (auto-selected):**
+```javascript
+// SBMD spec has: command: MoveToLevelWithOnOff
+// Input: sbmdWriteArgs.input = "50" (50%)
+var percent = parseInt(sbmdWriteArgs.input, 10);
+var level = Math.round(percent / 100 * 254);
+return {output: {Level: level, TransitionTime: 0, OptionsMask: 0, OptionsOverride: 0}};
+```
+
+**Multiple commands (script selects):**
+```javascript
+// SBMD spec has: commands: [Off, On]
+// Input: sbmdWriteArgs.input = "true"
+var isOn = sbmdWriteArgs.input === 'true';
+return {
+    output: null,
+    command: isOn ? 'On' : 'Off'
 };
 ```
 
