@@ -31,7 +31,7 @@ string(STRIP "${QUICKJS_VERSION_STRING}" QUICKJS_VERSION_STRING)
 # QuickJS uses YYYY-MM-DD format, we'll convert to YYYY.MM.DD for CMake
 string(REPLACE "-" "." QUICKJS_VERSION "${QUICKJS_VERSION_STRING}")
 
-project(quickjs 
+project(quickjs
     VERSION ${QUICKJS_VERSION}
     DESCRIPTION "QuickJS JavaScript Engine"
     LANGUAGES C
@@ -113,7 +113,7 @@ if(NOT WIN32)
         #include <unistd.h>
         int main() { closefrom(0); return 0; }
     " HAVE_CLOSEFROM)
-    
+
     if(HAVE_CLOSEFROM)
         target_compile_definitions(quickjs PRIVATE HAVE_CLOSEFROM)
     endif()
@@ -138,13 +138,13 @@ if(CONFIG_CLANG OR CONFIG_GCC)
         -Wchar-subscripts
         -funsigned-char
     )
-    
+
     if(CONFIG_GCC)
         target_compile_options(quickjs PRIVATE
             -Wno-array-bounds
             -Wno-format-truncation
         )
-        
+
         # Check for newer GCC warnings
         include(CheckCCompilerFlag)
         check_c_compiler_flag(-Wno-infinite-recursion HAS_WNO_INFINITE_RECURSION)
@@ -217,10 +217,38 @@ if(NOT WIN32)
     target_link_options(quickjs PRIVATE -rdynamic)
 endif()
 
+###############################################################################
+# Build qjs (QuickJS interpreter) and qjsc (QuickJS compiler) executables
+###############################################################################
+
+# qjsc - QuickJS compiler (built first, needed to generate repl.c)
+add_executable(qjsc qjsc.c)
+target_link_libraries(qjsc PRIVATE quickjs)
+target_compile_definitions(qjsc PRIVATE CONFIG_VERSION="${QUICKJS_VERSION_STRING}")
+set_target_properties(qjsc PROPERTIES OUTPUT_NAME "qjsc")
+
+# Generate repl.c from repl.js using qjsc
+set(REPL_JS "${CMAKE_CURRENT_SOURCE_DIR}/repl.js")
+set(REPL_C "${CMAKE_CURRENT_BINARY_DIR}/repl.c")
+
+add_custom_command(
+    OUTPUT ${REPL_C}
+    COMMAND qjsc -s -c -o ${REPL_C} -m ${REPL_JS}
+    DEPENDS qjsc ${REPL_JS}
+    COMMENT "Generating repl.c from repl.js"
+    VERBATIM
+)
+
+# qjs - QuickJS interpreter (needs generated repl.c)
+add_executable(qjs qjs.c ${REPL_C})
+target_link_libraries(qjs PRIVATE quickjs)
+target_compile_definitions(qjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION_STRING}")
+set_target_properties(qjs PROPERTIES OUTPUT_NAME "qjs")
+
 # Install configuration
 include(GNUInstallDirs)
 
-install(TARGETS quickjs
+install(TARGETS quickjs qjs qjsc
     EXPORT quickjs-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -274,6 +302,7 @@ install(FILES
 message(STATUS "QuickJS ${QUICKJS_VERSION_STRING} Configuration Summary:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Shared library: ${BUILD_SHARED_LIBS}")
+message(STATUS "  Executables: qjs, qjsc")
 message(STATUS "  LTO: ${CONFIG_LTO}")
 message(STATUS "  Address Sanitizer: ${CONFIG_ASAN}")
 message(STATUS "  Memory Sanitizer: ${CONFIG_MSAN}")
