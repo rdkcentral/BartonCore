@@ -111,7 +111,7 @@ version is **1.0**, as specified in the `schemaVersion` field of each SBMD file.
 schemaVersion: "1.0"          # SBMD schema version (required)
 driverVersion: "1.0"          # Driver version (required)
 name: "Driver Name"           # Human-readable name (required)
-scriptType: "JavaScript"      # Script type (currently only "JavaScript")
+scriptType: "JavaScript"      # Script type (see below)
 bartonMeta:                   # Barton-specific metadata (required)
   deviceClass: "doorLock"     # Barton device class
   deviceClassVersion: 3       # Device class version
@@ -126,7 +126,21 @@ resources: []                 # Top-level (device) resources (optional)
 endpoints: []                 # Endpoint definitions (required)
 ```
 
-### 3.2 Barton Metadata
+### 3.2 Script Type
+
+The `scriptType` field specifies the JavaScript runtime requirements for the driver:
+
+| Value | Description |
+|-------|-------------|
+| `JavaScript` | Default. Scripts use only `SbmdUtils` helpers. |
+| `JavaScript+matterjs` | Scripts require the `MatterClusters` global for TLV encoding. |
+
+Drivers that use `JavaScript+matterjs` require the matter.js cluster bundle to be
+built and available. If the bundle is not present, device initialization will fail.
+See [SBMD matter.js Integration](SBMD_MATTERJS_INTEGRATION.md) for details on using
+matter.js for TLV encoding.
+
+### 3.3 Barton Metadata
 
 ```yaml
 bartonMeta:
@@ -134,7 +148,7 @@ bartonMeta:
   deviceClassVersion: 3       # Version of the device class schema
 ```
 
-### 3.3 Matter Metadata
+### 3.4 Matter Metadata
 
 The Matter metadata is used to determine which SBMD specification should be used
 for a particular device. When a Matter device is commissioned, its device type is
@@ -149,7 +163,7 @@ matterMeta:
   revision: 1                 # Matter device type revision number from Matter Spec.
 ```
 
-### 3.4 Reporting Configuration
+### 3.5 Reporting Configuration
 
 A single wildcarded attribute reporting configuration is maintained on the device.
 These settings allow configuration on the min/max intervals.
@@ -160,7 +174,7 @@ reporting:
   maxSecs: 3600               # Maximum subscription reporting interval (seconds)
 ```
 
-### 3.5 Endpoints
+### 3.6 Endpoints
 
 Endpoints in this context are Barton device data model concepts and should not be
 confused with Matter endpoints. These represent logical groupings of resources
@@ -176,7 +190,7 @@ endpoints:
     resources: []             # Resources on this endpoint
 ```
 
-### 3.6 Resources
+### 3.7 Resources
 
 Resources define the Barton data model elements and their mapping to Matter:
 
@@ -223,25 +237,40 @@ Mappers bridge two different data representations:
 - **Matter side**: Data is encoded as **TLV** (Tag-Length-Value) binary format for
   over-the-air communication with devices.
 
-Since JavaScript cannot directly manipulate TLV binary data, the SBMD runtime converts
-TLV to/from **JSON** as an intermediate format that scripts can work with:
+#### Read Operations
+
+For read operations, the SBMD runtime retrieves attribute data from the device and
+passes it to the script as base64-encoded TLV. The script decodes the TLV and
+transforms it to a Barton string:
 
 ```
 Read Flow:
-  Matter Device → TLV → [TlvToJson] → JSON → Script → Barton String
-
-Write Flow:
-  Barton String → Script → JSON → [JsonToTlv] → TLV → Matter Device
-
-Execute Flow:
-  Barton Args (strings) → Script → JSON → [JsonToTlv] → TLV → Matter Device
-
-Execute Response Flow:
-  Matter Device → TLV → [TlvToJson] → JSON → Script → Barton String
+  Matter Device → TLV → Base64 → Script (decode + transform) → Barton String
 ```
 
-The Matter SDK's `TlvToJson` and `JsonToTlv` utilities handle the TLV↔JSON conversion
-automatically. Script authors work exclusively with JSON values and Barton strings.
+Scripts use `SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64)` to decode the TLV data
+into native JavaScript values.
+
+#### Write and Execute Operations
+
+For write and execute operations, scripts encode data as TLV and return it as
+base64. The script returns a structured JSON object with `tlvBase64` containing
+the encoded data:
+
+```
+Write/Execute Flow:
+  Barton Input → Script (transform + encode) → tlvBase64 → Matter Device
+
+Execute Response Flow:
+  Matter Device → TLV → Base64 → Script (decode + transform) → Barton String
+```
+
+Write and execute mapper scripts return one of:
+- `{write: {clusterId, attributeId, tlvBase64}}` - for attribute writes
+- `{invoke: {clusterId, commandId, tlvBase64, ...}}` - for command invocations
+
+Scripts use `SbmdUtils.Tlv.encode*()` helpers or the [matter.js cluster library](SBMD_MATTERJS_INTEGRATION.md)
+for TLV encoding.
 
 ### 4.1 Attribute Mapping
 
@@ -261,51 +290,57 @@ mapper:
       return {output: sbmdReadArgs.input === 1};
 ```
 
-#### Write Mapper with Attribute
+#### Write Mapper
 
-Maps a Barton resource write to a Matter attribute:
+Maps a Barton resource write to a Matter operation. Write mappers are script-only and
+must return the full operation details. The script can return either a `write` operation
+(for attribute writes) or an `invoke` operation (for command-based writes):
 
 ```yaml
 mapper:
   write:
-    attribute:
-      clusterId: "0x0003"
-      attributeId: "0x0000"
-      name: "IdentifyTime"
-      type: "uint16"
     script: |
+      // Return a write operation with attribute details
       const secs = parseInt(sbmdWriteArgs.input, 10);
-      return {output: secs};
+      return {write: {clusterId: 3, attributeId: 0, value: secs}};
+```
+
+Or invoke a command:
+
+```yaml
+mapper:
+  write:
+    script: |
+      // Return an invoke operation with command details
+      return {invoke: {clusterId: 6, commandId: sbmdWriteArgs.input ? 1 : 0, args: {}}};
 ```
 
 ### 4.2 Command Mapping
 
-#### Execute Mapper with Command
+#### Execute Mapper
 
-Maps a Barton function execution to a Matter command. The `script` converts Barton
-string arguments into the JSON format needed for the command's TLV encoding:
+Maps a Barton function execution to a Matter command. Execute mappers are script-only
+and must return an `invoke` operation with full command details:
 
 ```yaml
 mapper:
   execute:
-    command:
-      clusterId: "0x0101"           # Matter cluster ID
-      commandId: "0x00"             # Matter command ID
-      name: "LockDoor"              # Command name
-      timedInvokeTimeoutMs: 10000   # Timed invoke timeout (optional)
-      args:                         # Command arguments
-        - name: "PINCode"
-          type: "octstr"
     script: |
-      var result = null;
+      // Build PINCode bytes if credential service is supported
+      var pinCode = null;
       if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
           sbmdCommandArgs.input.length > 0) {
-        result = [];
+        pinCode = [];
         for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-          result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+          pinCode.push(sbmdCommandArgs.input[0].charCodeAt(i));
         }
       }
-      return {output: result};
+      return {invoke: {
+        clusterId: 257,
+        commandId: 0,
+        timedInvokeTimeoutMs: 10000,
+        args: {PINCode: pinCode}
+      }};
 ```
 
 #### Execute Response Mapper (scriptResponse)
@@ -317,16 +352,13 @@ string that can be returned to the caller:
 ```yaml
 mapper:
   execute:
-    command:
-      clusterId: "0x0101"
-      commandId: "0x03"             # GetUser command
-      name: "GetUser"
-      args:
-        - name: "userIndex"
-          type: "uint16"
     script: |
-      // Convert Barton user index string to number
-      return {output: parseInt(sbmdCommandArgs.input[0], 10)};
+      // Return invoke with user index from input
+      return {invoke: {
+        clusterId: 257,
+        commandId: 3,
+        args: {userIndex: parseInt(sbmdCommandArgs.input[0], 10)}
+      }};
     scriptResponse: |
       // Convert GetUserResponse to Barton string
       var user = sbmdCommandResponseArgs.input;
@@ -336,8 +368,8 @@ mapper:
       return {output: ""};
 ```
 
-The `scriptResponse` receives the command response in `sbmdCommandResponseArgs.input`
-(already converted from TLV to JSON) and must return a Barton string in the `output` field.
+The `scriptResponse` receives the command response in `sbmdCommandResponseArgs.tlvBase64`
+which the script decodes using `SbmdUtils.Tlv.decode()` before returning a Barton string.
 
 ### 4.3 Combined Mappers
 
@@ -352,17 +384,18 @@ mapper:
       name: "IdentifyTime"
       type: "uint16"
     script: |
-      return {output: sbmdReadArgs.input};
+      var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+      return {output: secs.toString()};
   write:
-    attribute:
-      clusterId: "0x0003"
-      attributeId: "0x0000"
-      name: "IdentifyTime"
-      type: "uint16"
     script: |
       const secs = parseInt(sbmdWriteArgs.input, 10);
-      return {output: secs};
+      const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+      return {write: {clusterId: 3, attributeId: 0, tlvBase64: tlvBase64}};
 ```
+
+> **Note:** Read mappers require `attribute:` or `command:` metadata to specify the
+> Matter operation since it is performed first in order to provide data to the script.
+> Write and execute mappers are script-only and return full operation details directly.
 
 ## 5. JavaScript Script Interfaces
 
@@ -379,14 +412,14 @@ specific input object and expects a specific output format.
 
 ```javascript
 sbmdReadArgs = {
-    input: <value>,           // Attribute value (JSON-converted from TLV)
-    deviceUuid: "uuid-string",// Device UUID
-    clusterId: 6,             // Cluster ID (number)
-    featureMap: 0,            // Cluster feature map (number)
-    endpointId: "1",          // Endpoint ID (string, may be empty for device resources)
-    attributeId: 0,           // Attribute ID (number)
-    attributeName: "OnOff",   // Attribute name from spec
-    attributeType: "bool"     // Attribute type from spec
+    tlvBase64: "...",          // Base64-encoded TLV data from Matter attribute
+    deviceUuid: "uuid-string", // Device UUID
+    clusterId: 6,              // Cluster ID (number)
+    featureMap: 0,             // Cluster feature map (number)
+    endpointId: "1",           // Endpoint ID (string, may be empty for device resources)
+    attributeId: 0,            // Attribute ID (number)
+    attributeName: "OnOff",    // Attribute name from spec
+    attributeType: "bool"      // Attribute type from spec
 }
 ```
 
@@ -402,29 +435,30 @@ return {
 
 **Boolean passthrough:**
 ```javascript
-// Input: sbmdReadArgs.input = true
-return {output: sbmdReadArgs.input};
-// Output: "true"
+// Decode TLV boolean and return as string
+var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+return {output: val ? 'true' : 'false'};
 ```
 
 **Enum to boolean conversion (Door Lock state):**
 ```javascript
 // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-// Input: sbmdReadArgs.input = 1
-return {output: sbmdReadArgs.input === 1};
-// Output: "true" (locked)
+var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+return {output: lockState === 1 ? 'true' : 'false'};
 ```
 
 **Percentage conversion (Level Control):**
 ```javascript
-// Input: sbmdReadArgs.input = 127 (Matter level 0-254)
-var level = sbmdReadArgs.input;
+// Decode level (0-254) and convert to percentage string
+var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
 var percent = Math.round(level / 254 * 100);
 return {output: percent.toString()};
-// Output: "50"
 ```
 
 ### 5.2 Write Mapper Script Interface
+
+Write mappers are script-only—the script determines the complete Matter operation
+to perform and returns it as a structured JSON object.
 
 #### Input Object: `sbmdWriteArgs`
 
@@ -432,50 +466,94 @@ return {output: percent.toString()};
 sbmdWriteArgs = {
     input: "value",           // Barton string value to write
     deviceUuid: "uuid-string",// Device UUID
-    clusterId: 6,             // Cluster ID (number)
-    featureMap: 0,            // Cluster feature map (number)
-    endpointId: "1",          // Endpoint ID (string)
-    attributeId: 0,           // Attribute ID (number)
-    attributeName: "OnOff",   // Attribute name from spec
-    attributeType: "bool"     // Attribute type from spec
+    featureMap: 0,            // Cluster feature map (number, from read attribute binding)
+    endpointId: "1"           // Endpoint ID (string)
 }
 ```
 
 #### Expected Output
 
+The script must return one of two operation types:
+
+**For attribute writes:**
 ```javascript
 return {
-    output: <matter_value>    // Value to write to Matter attribute (JSON format)
+    write: {
+        clusterId: <number>,    // Matter cluster ID
+        attributeId: <number>,  // Matter attribute ID
+        tlvBase64: <string>     // Base64-encoded TLV value
+    }
+};
+```
+
+**For command invocations:**
+```javascript
+return {
+    invoke: {
+        clusterId: <number>,           // Matter cluster ID
+        commandId: <number>,           // Matter command ID
+        tlvBase64: <string>,           // Base64-encoded TLV arguments (or "" for no args)
+        timedInvokeTimeoutMs?: <number> // Optional timed invoke timeout
+    }
 };
 ```
 
 #### Examples
 
-**Boolean string to boolean:**
+**Attribute write - integer value:**
 ```javascript
-// Input: sbmdWriteArgs.input = "true"
-return {output: sbmdWriteArgs.input === 'true'};
-// Output: true (boolean for Matter)
-```
-
-**String to integer:**
-```javascript
-// Input: sbmdWriteArgs.input = "30"
+// Input: sbmdWriteArgs.input = "30" (seconds)
 const secs = parseInt(sbmdWriteArgs.input, 10);
-return {output: secs};
-// Output: 30 (integer for Matter)
+const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+return {
+    write: {
+        clusterId: 3,       // Identify cluster
+        attributeId: 0,     // IdentifyTime attribute
+        tlvBase64: tlvBase64
+    }
+};
 ```
 
-**Percentage to level:**
+**Command invocation - On/Off:**
+```javascript
+// Input: sbmdWriteArgs.input = "true" or "false"
+const isOn = sbmdWriteArgs.input === 'true';
+return {
+    invoke: {
+        clusterId: 6,       // OnOff cluster
+        commandId: isOn ? 1 : 0,  // On=1, Off=0
+        tlvBase64: ""       // No arguments
+    }
+};
+```
+
+**Command invocation - Level Control with matter.js:**
 ```javascript
 // Input: sbmdWriteArgs.input = "50" (50%)
 var percent = parseInt(sbmdWriteArgs.input, 10);
 var level = Math.round(percent / 100 * 254);
-return {output: level};
-// Output: 127 (Matter level)
+
+// Use matter.js for TLV encoding (requires scriptType: "JavaScript+matterjs")
+const TlvMoveToLevelWithOnOff = MatterClusters.LevelControl.LevelControl.TlvMoveToLevelWithOnOffRequest;
+const tlvBytes = TlvMoveToLevelWithOnOff.encode({
+    level: level,
+    transitionTime: 0,
+    optionsMask: {},
+    optionsOverride: {}
+});
+return {
+    invoke: {
+        clusterId: 8,       // LevelControl cluster
+        commandId: 4,       // MoveToLevelWithOnOff
+        tlvBase64: btoa(String.fromCharCode(...tlvBytes))
+    }
+};
 ```
 
 ### 5.3 Execute Mapper Script Interface
+
+Execute mappers are script-only—the script determines the complete Matter command
+to invoke and returns it as a structured JSON object.
 
 #### Input Object: `sbmdCommandArgs`
 
@@ -483,11 +561,8 @@ return {output: level};
 sbmdCommandArgs = {
     input: ["arg1", "arg2"],  // Array of Barton argument strings
     deviceUuid: "uuid-string",// Device UUID
-    clusterId: 257,           // Cluster ID (number)
-    featureMap: 129,          // Cluster feature map (number)
-    endpointId: "1",          // Endpoint ID (string)
-    commandId: 0,             // Command ID (number)
-    commandName: "LockDoor"   // Command name from spec
+    featureMap: 129,          // Cluster feature map (from read attribute binding)
+    endpointId: "1"           // Endpoint ID (string)
 }
 ```
 
@@ -495,66 +570,52 @@ sbmdCommandArgs = {
 
 ```javascript
 return {
-    output: <command_args>    // Command arguments (JSON format matching arg definitions)
+    invoke: {
+        clusterId: <number>,           // Matter cluster ID
+        commandId: <number>,           // Matter command ID
+        tlvBase64: <string>,           // Base64-encoded TLV arguments (or "" for no args)
+        timedInvokeTimeoutMs?: <number> // Optional timed invoke timeout
+    }
 };
 ```
-
-#### Command Arguments Format
-
-For commands with arguments, the output can be:
-
-1. **Single value** - For commands with one argument:
-   ```javascript
-   return {output: 30};  // Single uint16 argument
-   ```
-
-2. **Array of bytes** - For octet string arguments:
-   ```javascript
-   // Convert string "1234" to byte array for PINCode
-   var result = [];
-   for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-     result.push(sbmdCommandArgs.input[0].charCodeAt(i));
-   }
-   return {output: result};
-   ```
-
-3. **null** - For optional arguments not being sent:
-   ```javascript
-   return {output: null};
-   ```
-
-4. **Object** - For commands with multiple named arguments:
-   ```javascript
-   return {output: {level: 127, transitionTime: 10}};
-   ```
 
 #### Examples
 
 **Simple command with no arguments:**
 ```javascript
-return {output: null};
+// Toggle command
+return {
+    invoke: {
+        clusterId: 6,       // OnOff cluster
+        commandId: 2,       // Toggle
+        tlvBase64: ""       // No arguments
+    }
+};
 ```
 
-**Lock/Unlock with optional PIN:**
+**Lock/Unlock with optional PIN and timed invoke:**
 ```javascript
-var result = null;
+var args = { PINCode: null };
 // Check if COTA (0x80) and PIN (0x01) features are both enabled
 if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
     sbmdCommandArgs.input.length > 0) {
   // Convert PIN string to byte array
-  var result = [];
+  var pinBytes = [];
   for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-    result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+    pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
   }
+  args.PINCode = pinBytes;
 }
-return {output: result};
-```
-
-**Command with timeout argument:**
-```javascript
-// Input: sbmdCommandArgs.input = ["30"]
-const secs = parseInt(sbmdCommandArgs.input[0], 10);
-return {output: secs};
+// Encode struct with PINCode field at tag 0
+const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
+return {
+    invoke: {
+        clusterId: 257,     // DoorLock cluster
+        commandId: 0,       // LockDoor
+        timedInvokeTimeoutMs: 10000,
+        tlvBase64: tlvBase64
+    }
+};
 ```
 
 ### 5.4 Execute Response Mapper Script Interface
@@ -565,13 +626,13 @@ For commands that return data, an optional `scriptResponse` can process the resp
 
 ```javascript
 sbmdCommandResponseArgs = {
-    input: <response_value>,  // Command response (JSON-converted from TLV)
-    deviceUuid: "uuid-string",// Device UUID
-    clusterId: 257,           // Cluster ID (number)
-    featureMap: 129,          // Cluster feature map (number)
-    endpointId: "1",          // Endpoint ID (string)
-    commandId: 0,             // Command ID (number)
-    commandName: "LockDoor"   // Command name from spec
+    tlvBase64: "...",          // Base64-encoded TLV response data
+    deviceUuid: "uuid-string", // Device UUID
+    clusterId: 257,            // Cluster ID (number)
+    featureMap: 129,           // Cluster feature map (number)
+    endpointId: "1",           // Endpoint ID (string)
+    commandId: 0,              // Command ID (number)
+    commandName: "LockDoor"    // Command name from spec
 }
 ```
 
@@ -583,63 +644,11 @@ return {
 };
 ```
 
-### 5.5 Write Command Mapper Script Interface
-
-When a resource write maps to one or more Matter commands instead of an attribute
-write, the write mapper uses the `sbmdWriteArgs` variable with a command-specific
-structure.
-
-#### Input Object: `sbmdWriteArgs` (for command writes)
-
-```javascript
-sbmdWriteArgs = {
-    input: "value",           // Barton string value to write
-    deviceUuid: "uuid-string",// Device UUID
-    commands: ["Off", "On"]   // Array of available command names
-}
-```
-
-#### Expected Output
-
-```javascript
-return {
-    output: <command_args>,   // Command arguments (null, value, or object)
-    command: "commandName"    // Required when multiple commands available
-};
-```
-
-#### Auto-Selection
-
-When only one command is defined in the SBMD spec, it is automatically selected
-and the `command` field is not required in the script output.
-
-#### Examples
-
-**Single command (auto-selected):**
-```javascript
-// SBMD spec has: command: MoveToLevelWithOnOff
-// Input: sbmdWriteArgs.input = "50" (50%)
-var percent = parseInt(sbmdWriteArgs.input, 10);
-var level = Math.round(percent / 100 * 254);
-return {output: {Level: level, TransitionTime: 0, OptionsMask: 0, OptionsOverride: 0}};
-```
-
-**Multiple commands (script selects):**
-```javascript
-// SBMD spec has: commands: [Off, On]
-// Input: sbmdWriteArgs.input = "true"
-var isOn = sbmdWriteArgs.input === 'true';
-return {
-    output: null,
-    command: isOn ? 'On' : 'Off'
-};
-```
-
 ## 6. Matter Data Types
 
 ### 6.1 Supported SBMD Types
 
-The following Matter data types are supported in attribute and argument definitions:
+The following Matter data types are supported in read mapper attribute definitions:
 
 | Category | Types |
 |----------|-------|
@@ -655,14 +664,16 @@ The following Matter data types are supported in attribute and argument definiti
 | **Matter Identifiers** | `fabric-idx`, `fabric-id`, `node-id`, `vendor-id`, `devtype-id`, `group-id`, `endpoint-no`, `cluster-id`, `attrib-id`, `event-id`, `command-id` |
 | **Complex** | `struct`, `list`, `array` |
 
-### 6.2 Type Conversion
+### 6.2 TLV Decoding for Read Operations
 
-The QuickJS script engine automatically converts between Matter TLV and JSON:
+For read operations, the C++ runtime passes attribute data (or command responses) as
+base64-encoded TLV. Scripts use `SbmdUtils.Tlv.decode()` to convert TLV to JavaScript:
 
-- **TLV → JSON** (read operations): Matter SDK's `TlvToJson` converts attribute data
-- **JSON → TLV** (write/execute operations): Matter SDK's `JsonToTlv` converts script output
+```javascript
+var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+```
 
-Scripts work with native JavaScript types:
+The decoder automatically handles all TLV types and returns native JavaScript values:
 - Booleans: `true`/`false`
 - Numbers: JavaScript numbers (automatic integer/float handling)
 - Strings: JavaScript strings
@@ -670,50 +681,46 @@ Scripts work with native JavaScript types:
 - Structs: JavaScript objects
 - Arrays/Lists: JavaScript arrays
 
-### 6.3 Type-Directed TLV Encoding
+The `type` field in the mapper's `attribute:` section is for documentation purposes.
 
-When converting script output (JSON) back to binary TLV for transmission to the device,
-the **`type` field specified in the SBMD attribute or argument definition** determines
-how the value is encoded. This is critical because JavaScript is loosely typed—a
-JavaScript number could be encoded as various TLV types (uint8, int16, enum8, etc.).
+### 6.3 TLV Encoding for Write and Execute Operations
 
-For example, given this attribute definition:
+For write and execute operations, scripts encode values as TLV and return base64-encoded
+data. Two encoding approaches are available:
 
-```yaml
-attribute:
-  clusterId: "0x0008"
-  attributeId: "0x0000"
-  name: "CurrentLevel"
-  type: "uint8"          # <-- This type is used for TLV encoding
+#### SbmdUtils.Tlv Encoding
+
+The built-in `SbmdUtils.Tlv` helpers provide simple encoding for primitive and struct types:
+
+```javascript
+// Encode primitive values
+var tlv = SbmdUtils.Tlv.encode(42, 'uint16');
+var tlv = SbmdUtils.Tlv.encode(true, 'bool');
+
+// Encode structs with field schema
+var args = { PINCode: [0x31, 0x32, 0x33, 0x34] };
+var tlv = SbmdUtils.Tlv.encodeStruct(args, {
+    PINCode: {tag: 0, type: 'octstr'}
+});
 ```
 
-If the script returns `{output: 127}`, the SBMD runtime:
+#### matter.js Encoding
 
-1. Reads the `type` field from the attribute definition (`uint8`)
-2. Maps `uint8` to the appropriate TLV type (`UINT`)
-3. Encodes the JSON value `127` as an unsigned 8-bit integer in TLV format
+For complex structures or type-safe encoding with schema validation, scripts can use
+the [matter.js cluster library](SBMD_MATTERJS_INTEGRATION.md):
 
-The same applies to command arguments:
-
-```yaml
-command:
-  clusterId: "0x0101"
-  commandId: "0x00"
-  name: "LockDoor"
-  args:
-    - name: "PINCode"
-      type: "octstr"     # <-- This type directs TLV encoding for this argument
+```javascript
+const TlvCmd = MatterClusters.LevelControl.LevelControl.TlvMoveToLevelWithOnOffRequest;
+const tlvBytes = TlvCmd.encode({
+    level: 127,
+    transitionTime: 0,
+    optionsMask: {},
+    optionsOverride: {}
+});
+var tlvBase64 = btoa(String.fromCharCode(...tlvBytes));
 ```
 
-If the script returns `{output: [49, 50, 51, 52]}` (byte array), the runtime encodes
-it as an octet string in the final TLV because the argument's `type` is `octstr`.
-
-**Important**: The script's JSON output must be compatible with the declared type.
-For example:
-- `uint8`/`uint16`/etc.: Script should return a number
-- `bool`: Script should return `true` or `false`
-- `string`: Script should return a string
-- `octstr`: Script should return an array of byte values (0-255)
+Using matter.js requires `scriptType: "JavaScript+matterjs"` in the spec file.
 
 ## 7. Complete Examples
 
@@ -748,16 +755,13 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          return {output: sbmdReadArgs.input};
+          var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: secs.toString()};
       write:
-        attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0000"
-          name: "IdentifyTime"
-          type: "uint16"
         script: |
           const secs = parseInt(sbmdWriteArgs.input, 10);
-          return {output: secs};
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return {write: {clusterId: 3, attributeId: 0, tlvBase64: tlvBase64}};
 endpoints:
   - id: "1"
     profile: "doorLock"
@@ -777,51 +781,50 @@ endpoints:
               name: "LockState"
               type: "enum8"
             script: |
-              return {output: sbmdReadArgs.input === 1};
+              var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: lockState === 1 ? 'true' : 'false'};
       - id: "lock"
         type: "function"
         mapper:
           execute:
-            command:
-              clusterId: "0x0101"
-              commandId: "0x00"
-              name: "LockDoor"
-              timedInvokeTimeoutMs: 10000
-              args:
-                - name: "PINCode"
-                  type: "octstr"
             script: |
-              var result = null;
+              var args = { PINCode: null };
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
-                result = [];
+                var pinBytes = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                  pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }
+                args.PINCode = pinBytes;
               }
-              return {output: result};
+              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
+              return {invoke: {
+                clusterId: 257,
+                commandId: 0,
+                timedInvokeTimeoutMs: 10000,
+                tlvBase64: tlvBase64
+              }};
       - id: "unlock"
         type: "function"
         mapper:
           execute:
-            command:
-              clusterId: "0x0101"
-              commandId: "0x01"
-              name: "UnlockDoor"
-              timedInvokeTimeoutMs: 10000
-              args:
-                - name: "PINCode"
-                  type: "octstr"
             script: |
-              var result = null;
+              var args = { PINCode: null };
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
                   sbmdCommandArgs.input.length > 0) {
-                result = [];
+                var pinBytes = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                  pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }
+                args.PINCode = pinBytes;
               }
-              return {output: result};
+              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
+              return {invoke: {
+                clusterId: 257,
+                commandId: 1,
+                timedInvokeTimeoutMs: 10000,
+                tlvBase64: tlvBase64
+              }};
 ```
 
 ### 7.2 Water Leak Detector
@@ -855,16 +858,13 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          return {output: sbmdReadArgs.input};
+          var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: secs.toString()};
       write:
-        attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0000"
-          name: "IdentifyTime"
-          type: "uint16"
         script: |
           const secs = parseInt(sbmdWriteArgs.input, 10);
-          return {output: secs};
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return {write: {clusterId: 3, attributeId: 0, tlvBase64: tlvBase64}};
 endpoints:
   - id: "1"
     profile: "sensor"
@@ -884,7 +884,8 @@ endpoints:
               name: "StateValue"
               type: "bool"
             script: |
-              return {output: sbmdReadArgs.input};
+              var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: val ? 'true' : 'false'};
 ```
 
 ## 8. Authoring Guidelines
@@ -914,17 +915,20 @@ endpoints:
 
 **Identity passthrough (no transformation):**
 ```javascript
-return {output: sbmdReadArgs.input};
+var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+return {output: val.toString()};
 ```
 
 **Boolean enum conversion:**
 ```javascript
-return {output: sbmdReadArgs.input === <expected_value>};
+var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+return {output: val === <expected_value> ? 'true' : 'false'};
 ```
 
 **Numeric scaling:**
 ```javascript
-var scaled = Math.round(sbmdReadArgs.input * <scale_factor>);
+var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+var scaled = Math.round(val * <scale_factor>);
 return {output: scaled.toString()};
 ```
 
@@ -968,6 +972,14 @@ Future versions may support:
 - Dynamic loading of new specs without restart
 - Remote spec distribution
 - Spec versioning and updates
+
+### 9.4 matter.js Cluster Integration
+
+SBMD supports integration with the [matter.js](https://github.com/matter-js/matter.js)
+cluster library for type-safe TLV encoding and decoding. When available, SBMD scripts
+can use the `MatterClusters` global object to access Matter cluster TLV schemas.
+
+See [SBMD_MATTERJS_INTEGRATION.md](SBMD_MATTERJS_INTEGRATION.md) for detailed documentation.
 
 ## 10. Appendix
 

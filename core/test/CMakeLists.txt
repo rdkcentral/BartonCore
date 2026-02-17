@@ -160,6 +160,9 @@ if (BCORE_MATTER)
         NAME testQuickJsScript
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/QuickJsScriptTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/MatterJsClusterLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/SbmdUtilsLoader.cpp
         LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock quickjs jsoncpp xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${CMAKE_BINARY_DIR}/matter-install/include/matter

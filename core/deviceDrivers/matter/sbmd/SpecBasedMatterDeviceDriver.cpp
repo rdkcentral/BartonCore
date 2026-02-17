@@ -101,7 +101,9 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
         if (sbmdResource.mapper.hasWrite)
         {
-            if (!device->BindResourceWriteInfo(uri, sbmdResource.mapper))
+            // Write mappers are script-only - script returns full operation details
+            std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
+            if (!device->BindWriteInfo(uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
             {
                 icError("  Failed to bind write script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -109,7 +111,10 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
         if (sbmdResource.mapper.hasExecute)
         {
-            if (!device->BindResourceExecuteInfo(uri, sbmdResource.mapper))
+            // Execute mappers are script-only - script returns full operation details
+            std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
+            if (!device->BindExecuteInfo(
+                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
             {
                 icError("  Failed to bind execute script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -185,32 +190,15 @@ void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const S
     }
     if (resource.mapper.hasWrite && !resource.mapper.writeScript.empty())
     {
-        if (resource.mapper.writeAttribute.has_value())
-        {
-            script.AddAttributeWriteMapper(resource.mapper.writeAttribute.value(), resource.mapper.writeScript);
-        }
-        else if (!resource.mapper.writeCommands.empty())
-        {
-            // Commands (single or multiple) - pass the commands directly
-            script.AddCommandsWriteMapper(resource.mapper.writeCommands, resource.mapper.writeScript);
-        }
+        // Write mappers are script-only - script returns full operation details (invoke/write)
+        std::string resourceKey = resource.resourceEndpointId.value_or("") + ":" + resource.id;
+        script.AddWriteMapper(resourceKey, resource.mapper.writeScript);
     }
     if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())
     {
-        if (resource.mapper.executeAttribute.has_value())
-        {
-            icError("Execute mapper with attribute not yet supported for resource %s", resource.id.c_str());
-        }
-        else if (resource.mapper.executeCommand.has_value())
-        {
-            script.AddCommandExecuteMapper(resource.mapper.executeCommand.value(), resource.mapper.executeScript);
-
-            if (resource.mapper.executeResponseScript.has_value())
-            {
-                script.AddCommandExecuteResponseMapper(resource.mapper.executeCommand.value(),
-                                                       resource.mapper.executeResponseScript.value());
-            }
-        }
+        // Execute mappers are script-only - script returns full operation details (invoke)
+        std::string resourceKey = resource.resourceEndpointId.value_or("") + ":" + resource.id;
+        script.AddExecuteMapper(resourceKey, resource.mapper.executeScript, resource.mapper.executeResponseScript);
     }
 }
 

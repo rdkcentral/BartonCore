@@ -43,22 +43,19 @@ resources:
           name: "IdentifyTime"
           type: "uint16"           # Unsigned 16-bit integer
 
-        # Passthrough: attribute value directly becomes Barton string
+        # Decode TLV and convert to string
         script: |
-          return {output: sbmdReadArgs.input};
+          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: value.toString()};
 
       # Write mapper: Barton seconds string -> Matter Identify attribute
+      # Script returns full operation details - no metadata needed
       write:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"           # Unsigned 16-bit integer
-
-        # Convert Barton string to integer for Matter
         script: |
-          const secs = parseInt(sbmdWriteArgs.input, 10);
-          return {output: secs};
+          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          // Encode uint16 value to TLV
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 # Barton endpoints (logical groupings of resources)
 endpoints:
@@ -83,64 +80,56 @@ endpoints:
               name: "LockState"
               type: "enum8"            # 8-bit enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked
             script: |
-              return {output: sbmdReadArgs.input === 1};
+              // Decode TLV enum value: 0=NotFullyLocked, 1=Locked, 2=Unlocked
+              const lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: lockState === 1 ? 'true' : 'false'};
 
       # Lock function resource - locks the door
       - id: "lock"
         type: "function"
         mapper:
           # Execute mapper: Barton lock function -> Matter LockDoor command
+          # Script returns full operation details - no metadata needed
           execute:
-            command:
-              clusterId: "0x0101"              # Door Lock cluster
-              commandId: "0x00"                # LockDoor command
-              name: "LockDoor"
-              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
-              args:
-                - name: "PINCode"              # Optional PIN code argument
-                  type: "octstr"               # Octet string (byte array)
-
-            # Goal: Convert optional PIN code string to byte array for Matter command
-            # Step 1: Check if both COTA (0x80) and PIN (0x01) features are enabled
-            # Step 2: Convert PIN string to byte array
-            # Step 3: return byte array in JSON return object's output element
             script: |
-              var result = null;
+              // Build command arguments struct
+              const args = {};
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                result = [];
+                  sbmdCommandArgs.input.length > 0 && sbmdCommandArgs.input[0]) {
+                // Convert PIN string to byte array for context tag 0 (PINCode)
+                const pinBytes = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                  pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }
+                args[0] = new Uint8Array(pinBytes);
               }
-              return {output: result};
+              // Encode struct and return invoke response
+              const tlvBase64 = Object.keys(args).length > 0
+                ? SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}})
+                : null;
+              return SbmdUtils.Response.invoke(0x0101, 0x00, tlvBase64, {timedInvokeTimeoutMs: 10000});
 
       # Unlock function resource - unlocks the door
       - id: "unlock"
         type: "function"
         mapper:
           # Execute mapper: Barton unlock function -> Matter UnlockDoor command
+          # Script returns full operation details - no metadata needed
           execute:
-            command:
-              clusterId: "0x0101"              # Door Lock cluster
-              commandId: "0x01"                # UnlockDoor command
-              name: "UnlockDoor"
-              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
-              args:
-                - name: "PINCode"              # Optional PIN code argument
-                  type: "octstr"               # Octet string (byte array)
-
-            # Goal: Convert optional PIN code string to byte array for Matter command
-            # Step 1: Check if both COTA (0x80) and PIN (0x01) features are enabled
-            # Step 2: Convert PIN string to byte array
-            # Step 3: return byte array in JSON return object's output element
             script: |
-              var result = null;
+              // Build command arguments struct
+              const args = {};
               if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                result = [];
+                  sbmdCommandArgs.input.length > 0 && sbmdCommandArgs.input[0]) {
+                // Convert PIN string to byte array for context tag 0 (PINCode)
+                const pinBytes = [];
                 for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+                  pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
                 }
+                args[0] = new Uint8Array(pinBytes);
               }
-              return {output: result};
+              // Encode struct and return invoke response
+              const tlvBase64 = Object.keys(args).length > 0
+                ? SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}})
+                : null;
+              return SbmdUtils.Response.invoke(0x0101, 0x01, tlvBase64, {timedInvokeTimeoutMs: 10000});

@@ -112,28 +112,23 @@ namespace barton
 
     /**
      * Represents a mapper configuration for a resource.
-     * Each mapper type (read, write, execute) must have EITHER an attribute OR command(s).
+     * Read mappers use attribute or command metadata to know what to read.
+     * Write and execute mappers are script-only - the script returns full operation details.
      */
     struct SbmdMapper
     {
-        // Read mapping - must have either attribute or command
+        // Read mapping - requires attribute or command metadata
         bool hasRead = false;
         std::optional<SbmdAttribute> readAttribute;
         std::optional<SbmdCommand> readCommand;
         std::string readScript;
 
-        // Write mapping - must have attribute or command(s)
-        // If writeCommands has one entry, it's auto-selected
-        // If multiple entries, script returns which command to execute
+        // Write mapping - script-only, returns full operation details (invoke/write)
         bool hasWrite = false;
-        std::optional<SbmdAttribute> writeAttribute;
-        std::vector<SbmdCommand> writeCommands; // Commands for write (single or multiple)
         std::string writeScript;
 
-        // Execute mapping - must have either attribute or command
+        // Execute mapping - script-only, returns full operation details (invoke)
         bool hasExecute = false;
-        std::optional<SbmdAttribute> executeAttribute;
-        std::optional<SbmdCommand> executeCommand;
         std::string executeScript;
         std::optional<std::string> executeResponseScript;
     };
@@ -202,6 +197,13 @@ namespace barton
         SbmdReporting reporting;
         std::vector<SbmdResource> resources;  // Top-level resources
         std::vector<SbmdEndpoint> endpoints;
+
+        /**
+         * Check if this spec uses matter.js for script execution.
+         * When true, write mappers return fully-specified operations (invoke/write)
+         * and the command/commands/attribute metadata in the SBMD file is ignored.
+         */
+        bool UsesMatterJs() const { return scriptType == "JavaScript+matterjs"; }
     };
 
 } // namespace barton

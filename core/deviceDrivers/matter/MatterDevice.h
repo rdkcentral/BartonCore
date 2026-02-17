@@ -128,23 +128,33 @@ namespace barton
 
         /**
          * Bind a resource URI for write operations.
-         * Can bind either an attribute or command based on what's in the mapper.
+         * The script returns full operation details (invoke/write) including cluster/command/attribute IDs.
          *
          * @param uri The resource URI
-         * @param mapper The mapper containing write configuration
+         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
+         * @param endpointId The endpoint ID (may be empty for device-level resources)
+         * @param resourceId The resource identifier
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceWriteInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindWriteInfo(const char *uri,
+                           const std::string &resourceKey,
+                           const std::string &endpointId,
+                           const std::string &resourceId);
 
         /**
          * Bind a resource URI for execute operations.
-         * Can bind either an attribute or command based on what's in the mapper.
+         * The script returns full operation details (invoke) including cluster/command IDs.
          *
          * @param uri The resource URI
-         * @param mapper The mapper containing execute configuration
+         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
+         * @param endpointId The endpoint ID (may be empty for device-level resources)
+         * @param resourceId The resource identifier
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindExecuteInfo(const char *uri,
+                             const std::string &resourceKey,
+                             const std::string &endpointId,
+                             const std::string &resourceId);
 
         /**
          * Handle a resource read request by looking up the binding and executing the script.
@@ -331,7 +341,8 @@ namespace barton
             enum class Type
             {
                 Attribute,
-                Commands
+                Command,
+                ScriptOnly // For write/execute mappers - script returns full operation details
             };
             Type type;
 
@@ -339,8 +350,13 @@ namespace barton
             chip::app::ConcreteAttributePath attributePath;
             std::optional<SbmdAttribute> attribute;
 
-            // For Commands type (single command = size 1, multiple = size > 1)
-            std::vector<SbmdCommand> commands;
+            // For Command type
+            std::optional<SbmdCommand> command;
+
+            // For ScriptOnly type - resource identity for script lookup
+            std::string resourceKey;
+            std::string endpointId;
+            std::string resourceId;
         };
 
         // Hash function for ConcreteAttributePath to enable fast lookup
@@ -372,30 +388,6 @@ namespace barton
             std::string uri;
             ResourceBinding binding;
         };
-
-        enum class ResourceOperation
-        {
-            Read,
-            Write,
-            Execute
-        };
-
-        /**
-         * Internal helper to bind resource info for any operation type.
-         * Reduces code duplication between read/write/execute binding.
-         *
-         * @param uri The resource URI
-         * @param attribute Optional attribute to bind
-         * @param commands Commands to bind (empty = no commands, size 1 = single, size > 1 = multiple)
-         * @param operation The operation type
-         * @param bindings The binding map to store the result in
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindResourceInfo(const char *uri,
-                              const std::optional<SbmdAttribute> &attribute,
-                              const std::vector<SbmdCommand> &commands,
-                              ResourceOperation operation,
-                              std::map<std::string, ResourceBinding> &bindings);
 
         /**
          * Send a command to the device using pre-encoded TLV data.

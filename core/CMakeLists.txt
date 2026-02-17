@@ -73,6 +73,7 @@ endif() #BARTON_CONFIG_ZIGBEE
 
 if (BCORE_MATTER)
     include(BCoreMatterHelper)
+    include(BCoreMatterJsClusters)
 
     # Check for jsoncpp here rather than in DependencyVersions.cmake because the
     # Matter build process installs jsoncpp, and might not be available during
@@ -179,6 +180,59 @@ if (BCORE_MATTER)
         COMMENT "Validating SBMD specification files against schema..."
     )
 
+    # Build matter.js cluster bundle for QuickJS SBMD runtime
+    # This bundle provides TLV encoding/decoding for SBMD scripts
+    bcore_matterjs_build_clusters()
+
+    # Conditionally generate embedded header from the bundle
+    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+        # Get the path to the bundle for embedding
+        bcore_matterjs_get_bundle_path(OUTPUT MATTERJS_BUNDLE_PATH)
+
+        # Generate embedded header from the bundle
+        set(MATTERJS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/MatterJsClustersEmbedded.h")
+        bcore_matterjs_embed_bundle(
+            OUTPUT ${MATTERJS_EMBEDDED_HEADER}
+            VARIABLE_NAME kMatterJsClustersBundle
+        )
+    else()
+        message(STATUS "matter.js cluster bundle will not be embedded (BCORE_MATTER_USE_MATTERJS=${BCORE_MATTER_USE_MATTERJS})")
+        set(MATTERJS_EMBEDDED_HEADER "")
+    endif()
+
+    # Embed SbmdUtils bundle (always available for SBMD scripts)
+    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-utils.js")
+    set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
+    set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
+
+    add_custom_command(
+        OUTPUT "${SBMD_UTILS_EMBEDDED_HEADER}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD utilities bundle as C header..."
+        COMMAND python3 "${EMBED_SCRIPT}"
+            --input "${SBMD_UTILS_SOURCE}"
+            --output "${SBMD_UTILS_EMBEDDED_HEADER}"
+            --variable "kSbmdUtilsBundle"
+        DEPENDS "${SBMD_UTILS_SOURCE}" "${EMBED_SCRIPT}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        COMMENT "Generating embedded C header for SBMD utilities bundle"
+        VERBATIM
+    )
+
+    # Add header generation as a source dependency
+    # Include matterjs header only if enabled
+    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+        add_custom_target(generate_matterjs_header
+            DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
+        )
+    else()
+        add_custom_target(generate_matterjs_header
+            DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
+        )
+    endif()
+
+    # Include the generated header directory
+    list(APPEND XTRA_INCLUDES ${CMAKE_CURRENT_BINARY_DIR}/src)
+
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
 endif()
@@ -247,6 +301,9 @@ target_include_directories(bCoreObject PRIVATE
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
+if (BCORE_MATTER)
+    add_dependencies(bCoreObject generate_matterjs_header)
+endif()
 
 add_library(BartonCoreStatic STATIC $<TARGET_OBJECTS:bCoreObject>)
 target_link_libraries(BartonCoreStatic ${bCoreLinkLibraries})

@@ -25,8 +25,11 @@
 import logging
 from queue import Queue
 
+import pytest
+
 from gi.repository import BCore
 
+from testing.conftest import requires_matterjs
 from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,8 @@ def assert_device_has_common_resources(client, device, required_resources):
 
     assert not missing_resources, f"Device is missing resources: {missing_resources}"
 
+
+@requires_matterjs
 def test_commission_light(default_environment, matter_light):
     default_environment.get_client().commission_device(
         matter_light.get_commissioning_code(), 100
@@ -72,6 +77,7 @@ def test_commission_light(default_environment, matter_light):
     )
 
 
+@requires_matterjs
 def test_light_on_off(default_environment, matter_light):
     # TODO: Probably need some kind of helper for repetitious blocks like this
     default_environment.get_client().commission_device(

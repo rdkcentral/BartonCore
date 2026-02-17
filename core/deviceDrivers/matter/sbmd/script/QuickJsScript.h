@@ -33,7 +33,6 @@
 #include <mutex>
 
 // Forward declarations for QuickJS types
-struct JSRuntime;
 struct JSContext;
 struct JSValue;
 
@@ -66,21 +65,20 @@ namespace barton
         bool AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                     const std::string &script) override;
 
-        bool AddAttributeWriteMapper(const SbmdAttribute &attributeInfo,
-                                     const std::string &script) override;
-
-        bool AddCommandExecuteMapper(const SbmdCommand &commandInfo,
-                                     const std::string &script) override;
-
         bool AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                              const std::string &script) override;
 
         /**
-         * Add a write mapper for write operations that use commands.
-         *
-         * @see SbmdScript::AddCommandsWriteMapper
+         * @see SbmdScript::AddWriteMapper
          */
-        bool AddCommandsWriteMapper(const std::vector<SbmdCommand> &commands, const std::string &script) override;
+        bool AddWriteMapper(const std::string &resourceKey, const std::string &script) override;
+
+        /**
+         * @see SbmdScript::AddExecuteMapper
+         */
+        bool AddExecuteMapper(const std::string &resourceKey,
+                              const std::string &script,
+                              const std::optional<std::string> &responseScript) override;
 
         /**
          * Convert a Matter attribute value to a Barton resource string value.
@@ -110,64 +108,6 @@ namespace barton
                               std::string &outValue) override;
 
         /**
-         * Convert a Barton resource string value to a Matter attribute value which can be sent
-         * to the device over the air.
-         *
-         * The script will be executed with a JSON object named "sbmdWriteArgs" containing the JSON
-         * representation of the Barton string value in the following format:
-         *
-         * sbmdWriteArgs = {
-         *     "input" : <Barton string representation of the attribute value>,
-         *     "deviceUuid" : <device UUID>,
-         *     "clusterId" : <cluster ID>,
-         *     "featureMap" : <cluster feature map>,
-         *     "endpointId" : <endpoint ID>,
-         *     "attributeId" : <attribute ID>,
-         *     "attributeName" : <attribute name>,
-         *     "attributeType" : <attribute type>
-         * }
-         *
-         * The script should return a JSON object of the following format:
-         *
-         * {"output" : <JSON representation of the attribute TLV>}
-         *
-         * @see SbmdScript::MapAttributeWrite
-         */
-        bool MapAttributeWrite(const SbmdAttribute &attributeInfo,
-                               const std::string &inValue,
-                               chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
-                               size_t &encodedLength) override;
-
-        /**
-         * Convert a Barton command argument values to a Matter command which can be sent
-         * to the device over the air. If a Matter command does not take any arguments,
-         * it is not necessary to invoke this mapping method.
-         *
-         * The script will be executed with a JSON object named "sbmdCommandArgs" containing the JSON
-         * representation of the Barton string values in the following format:
-         *
-         * sbmdCommandArgs = {
-         *     "input" : <array of Barton string representations of the command arguments>,
-         *     "deviceUuid" : <device UUID>,
-         *     "clusterId" : <cluster ID>,
-         *     "featureMap" : <cluster feature map>,
-         *     "endpointId" : <endpoint ID>,
-         *     "commandId" : <command ID>,
-         *     "commandName" : <command name>
-         * }
-         *
-         * The script should return a JSON object of the following format:
-         *
-         * {"output" : <JSON representation of the command args TLV>}
-         *
-         * @see SbmdScript::MapCommandExecute
-         */
-        bool MapCommandExecute(const SbmdCommand &commandInfo,
-                               const std::vector<std::string> &argumentValues,
-                               chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
-                               size_t &encodedLength) override;
-
-        /**
          * Convert a Matter command response to a Barton resource string value.
          *
          * The script will be executed with a JSON object named "sbmdCommandResponseArgs" containing the JSON
@@ -194,52 +134,35 @@ namespace barton
                                        std::string &outValue) override;
 
         /**
-         * Convert a Barton write value to a Matter command selection and arguments.
-         *
-         * The script will be executed with a JSON object named "sbmdWriteArgs" containing:
-         *
-         * sbmdWriteArgs = {
-         *     "input" : <Barton string representation of the value to write>,
-         *     "deviceUuid" : <device UUID>,
-         *     "commands" : [<array of available command names>]
-         * }
-         *
-         * The script should return a JSON object with the following fields:
-         *
-         * {"output" : <JSON representation of the command args TLV (or null if no args)>,
-         *  "command" : <name of the command to execute (required when multiple commands are available;
-         *               optional/ignored when only a single command is available)>}
-         *
-         * Note: When only one command is available, the "command" field is optional and
-         * the single command will be auto-selected. The "command" field is required when
-         * multiple commands are available.
-         *
-         * @see SbmdScript::MapWriteCommand
+         * @see SbmdScript::MapWrite
          */
-        bool MapWriteCommand(const std::vector<SbmdCommand> &availableCommands,
-                             const std::string &inValue,
-                             std::string &selectedCommandName,
-                             chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
-                             size_t &encodedLength) override;
+        bool MapWrite(const std::string &resourceKey,
+                      const std::string &endpointId,
+                      const std::string &resourceId,
+                      const std::string &inValue,
+                      ScriptWriteResult &result) override;
+
+        /**
+         * @see SbmdScript::MapExecute
+         */
+        bool MapExecute(const std::string &resourceKey,
+                        const std::string &endpointId,
+                        const std::string &resourceId,
+                        const std::string &inValue,
+                        ScriptWriteResult &result) override;
 
     private:
-        explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
+        explicit QuickJsScript(const std::string &deviceId);
 
-        mutable std::mutex qjsMtx;
-        JSRuntime *runtime;
-        JSContext *ctx;
+        // Mutex for protecting script collections (separate from QuickJS context mutex)
+        mutable std::mutex scriptsMutex;
 
         // Stored scripts for each mapper
         std::map<SbmdAttribute, std::string> attributeReadScripts;
-        std::map<SbmdAttribute, std::string> attributeWriteScripts;
-        std::map<SbmdCommand, std::string> commandExecuteScripts;
         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
-        std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
-
-        /**
-         * Generate a deterministic key from a commands vector for script lookup.
-         */
-        static std::string GenerateCommandsKey(const std::vector<SbmdCommand> &commands);
+        std::map<std::string, std::string> writeScripts;           // resourceKey -> script
+        std::map<std::string, std::string> executeScripts;         // resourceKey -> script
+        std::map<std::string, std::string> executeResponseScripts; // resourceKey -> response script
 
         /**
          * Execute a script.
@@ -255,26 +178,13 @@ namespace barton
         bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
 
         /**
-         * Extract the "output" field from a script result and parse it as JSON.
-         * Frees the script result JSValue.
-         */
-        bool ExtractScriptOutputAsJson(JSValue &scriptResult, Json::Value &outJson);
-
-        /**
          * Extract the "output" field from a script result as a string.
          * Frees the script result JSValue.
          */
         bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
 
         /**
-         * Encode a TLV-formatted JSON string to a buffer.
-         */
-        bool EncodeJsonToTlv(const std::string &tlvFormattedJson,
-                             chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
-                             size_t &encodedLength);
-
-        /**
-         * Set a JavaScript variable from a string value
+         * Set a JavaScript variable from a string value.
          */
         bool SetJsVariable(const std::string &name, const std::string &value);
     };

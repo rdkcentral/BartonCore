@@ -183,11 +183,7 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
     return true;
 }
 
-bool MatterDevice::BindResourceInfo(const char *uri,
-                                    const std::optional<SbmdAttribute> &attribute,
-                                    const std::vector<SbmdCommand> &commands,
-                                    ResourceOperation operation,
-                                    std::map<std::string, ResourceBinding> &bindings)
+bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
 {
     if (uri == nullptr)
     {
@@ -195,129 +191,127 @@ bool MatterDevice::BindResourceInfo(const char *uri,
         return false;
     }
 
-    const char *operationType = "unknown";
-    switch (operation)
+    // Validate: must have exactly one of attribute or command
+    if ((!mapper.readAttribute.has_value() && !mapper.readCommand.has_value()) ||
+        (mapper.readAttribute.has_value() && mapper.readCommand.has_value()))
     {
-        case ResourceOperation::Read:
-            operationType = "read";
-            break;
-        case ResourceOperation::Write:
-            operationType = "write";
-            break;
-        case ResourceOperation::Execute:
-            operationType = "execute";
-            break;
-        default:
-            break;
-    }
-
-    // Validate: must have exactly one of attribute or commands
-    if ((!attribute.has_value() && commands.empty()) || (attribute.has_value() && !commands.empty()))
-    {
-        icError("Must have either attribute or commands, but not both");
+        icError("Must have either readAttribute or readCommand, but not both");
         return false;
     }
 
     ResourceBinding binding;
     chip::EndpointId endpointId;
 
-    if (attribute.has_value())
+    if (mapper.readAttribute.has_value())
     {
-        // Bind attribute
-        if (!GetEndpointForCluster(attribute->clusterId, endpointId))
+        const auto &attribute = mapper.readAttribute.value();
+
+        if (!GetEndpointForCluster(attribute.clusterId, endpointId))
         {
-            icError("Failed to find endpoint for cluster 0x%x", attribute->clusterId);
+            icError("Failed to find endpoint for cluster 0x%x", attribute.clusterId);
             return false;
         }
 
         binding.type = ResourceBinding::Type::Attribute;
         binding.attributePath.mEndpointId = endpointId;
-        binding.attributePath.mClusterId = attribute->clusterId;
-        binding.attributePath.mAttributeId = attribute->attributeId;
+        binding.attributePath.mClusterId = attribute.clusterId;
+        binding.attributePath.mAttributeId = attribute.attributeId;
         binding.attribute = attribute;
 
         // Populate the feature map from the cache
         uint32_t featureMapValue = 0;
-        if (GetClusterFeatureMap(endpointId, attribute->clusterId, featureMapValue))
+        if (GetClusterFeatureMap(endpointId, attribute.clusterId, featureMapValue))
         {
             binding.attribute->featureMap = featureMapValue;
         }
 
-        icDebug("Bound resource %s for URI: %s (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
-                operationType,
+        icDebug("Bound resource read for URI: %s (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
                 uri,
                 endpointId,
-                attribute->clusterId,
-                attribute->attributeId);
+                attribute.clusterId,
+                attribute.attributeId);
 
-        // If this is a read binding, add to fast lookup map for OnAttributeData callback
-        if (operation == ResourceOperation::Read)
-        {
-            AttributeReadBinding readBinding;
-            readBinding.uri = uri;
-            readBinding.binding = binding;
-            readableAttributeLookup[binding.attributePath] = std::move(readBinding);
-            icDebug("Added readable attribute to fast lookup (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
-                    endpointId,
-                    attribute->clusterId,
-                    attribute->attributeId);
-        }
+        // Add to fast lookup map for OnAttributeData callback
+        AttributeReadBinding readBinding;
+        readBinding.uri = uri;
+        readBinding.binding = binding;
+        readableAttributeLookup[binding.attributePath] = std::move(readBinding);
+        icDebug("Added readable attribute to fast lookup (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
+                endpointId,
+                attribute.clusterId,
+                attribute.attributeId);
     }
     else
     {
-        // Bind commands
-        binding.type = ResourceBinding::Type::Commands;
-        binding.commands = commands;
+        binding.type = ResourceBinding::Type::Command;
+        binding.command = mapper.readCommand.value();
 
-        // Populate feature maps for all commands
-        for (auto &cmd : binding.commands)
+        // Populate feature map for the command
+        SbmdCommand &cmd = binding.command.value();
+        if (!GetEndpointForCluster(cmd.clusterId, endpointId))
         {
-            if (!GetEndpointForCluster(cmd.clusterId, endpointId))
-            {
-                icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
-                        cmd.name.c_str(), cmd.clusterId, uri);
-                return false;
-            }
-
-            uint32_t featureMapValue = 0;
-            if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
-            {
-                cmd.featureMap = featureMapValue;
-            }
+            icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
+                    cmd.name.c_str(),
+                    cmd.clusterId,
+                    uri);
+            return false;
         }
 
-        icDebug("Bound resource %s for URI: %s (%zu command(s))", operationType, uri, commands.size());
+        uint32_t featureMapValue = 0;
+        if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
+        {
+            cmd.featureMap = featureMapValue;
+        }
+
+        icDebug("Bound resource read for URI: %s (command: %s)", uri, cmd.name.c_str());
     }
 
-    bindings[uri] = binding;
+    resourceReadBindings[uri] = binding;
     return true;
 }
 
-bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
+bool MatterDevice::BindWriteInfo(const char *uri,
+                                 const std::string &resourceKey,
+                                 const std::string &endpointId,
+                                 const std::string &resourceId)
 {
-    std::vector<SbmdCommand> commands;
-    if (mapper.readCommand.has_value())
+    if (uri == nullptr)
     {
-        commands.push_back(mapper.readCommand.value());
+        icError("URI is null");
+        return false;
     }
-    return BindResourceInfo(uri, mapper.readAttribute, commands, ResourceOperation::Read, resourceReadBindings);
+
+    ResourceBinding binding;
+    binding.type = ResourceBinding::Type::ScriptOnly;
+    binding.resourceKey = resourceKey;
+    binding.endpointId = endpointId;
+    binding.resourceId = resourceId;
+
+    resourceWriteBindings[uri] = binding;
+    icDebug("Bound write for URI %s (resourceKey=%s)", uri, resourceKey.c_str());
+    return true;
 }
 
-bool MatterDevice::BindResourceWriteInfo(const char *uri, const SbmdMapper &mapper)
+bool MatterDevice::BindExecuteInfo(const char *uri,
+                                   const std::string &resourceKey,
+                                   const std::string &endpointId,
+                                   const std::string &resourceId)
 {
-    return BindResourceInfo(
-        uri, mapper.writeAttribute, mapper.writeCommands, ResourceOperation::Write, resourceWriteBindings);
-}
-
-bool MatterDevice::BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper)
-{
-    std::vector<SbmdCommand> commands;
-    if (mapper.executeCommand.has_value())
+    if (uri == nullptr)
     {
-        commands.push_back(mapper.executeCommand.value());
+        icError("URI is null");
+        return false;
     }
-    return BindResourceInfo(
-        uri, mapper.executeAttribute, commands, ResourceOperation::Execute, resourceExecuteBindings);
+
+    ResourceBinding binding;
+    binding.type = ResourceBinding::Type::ScriptOnly;
+    binding.resourceKey = resourceKey;
+    binding.endpointId = endpointId;
+    binding.resourceId = resourceId;
+
+    resourceExecuteBindings[uri] = binding;
+    icDebug("Bound execute for URI %s (resourceKey=%s)", uri, resourceKey.c_str());
+    return true;
 }
 
 bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
@@ -555,141 +549,127 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
 
     const ResourceBinding &binding = it->second;
 
-    if (binding.type == ResourceBinding::Type::Commands)
+    if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
-        // Execute the script to get the TLV args (and selected command name if multiple commands)
-        std::string selectedCommandName;
-        chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
-        size_t encodedLength = 0;
-
-        if (!script->MapWriteCommand(
-                binding.commands, newValue != nullptr ? newValue : "", selectedCommandName, tlvBuffer, encodedLength))
-        {
-            icError("Failed to execute write-command mapping script for URI: %s", resource->uri);
-            FailOperation(promises);
-            return;
-        }
-
-        // Find the selected command - if only one, use it directly
-        const SbmdCommand *selectedCommand = nullptr;
-        if (binding.commands.size() == 1)
-        {
-            selectedCommand = &binding.commands[0];
-        }
-        else
-        {
-            for (const auto &cmd : binding.commands)
-            {
-                if (cmd.name == selectedCommandName)
-                {
-                    selectedCommand = &cmd;
-                    break;
-                }
-            }
-
-            if (selectedCommand == nullptr)
-            {
-                icError("Script selected unknown command '%s' for URI: %s", selectedCommandName.c_str(), resource->uri);
-                FailOperation(promises);
-                return;
-            }
-        }
-
-        // Get the endpoint for this command
-        chip::EndpointId endpointId;
-        if (!GetEndpointForCluster(selectedCommand->clusterId, endpointId))
-        {
-            icError("Failed to find endpoint for cluster 0x%x", selectedCommand->clusterId);
-            FailOperation(promises);
-            return;
-        }
-
-        // Send the command using the common helper
-        if (!SendCommandFromTlv(promises,
-                                *selectedCommand,
-                                endpointId,
-                                tlvBuffer.Get(),
-                                encodedLength,
-                                exchangeMgr,
-                                sessionHandle,
-                                resource->uri,
-                                nullptr))
-        {
-            FailOperation(promises);
-            return;
-        }
-    }
-    else if (binding.type == ResourceBinding::Type::Attribute)
-    {
-        // Execute the script to map the string value to TLV data
-        chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
-        size_t encodedLength = 0;
-
-        if (!script->MapAttributeWrite(binding.attribute.value(), newValue, tlvBuffer, encodedLength))
+        // Execute the script to get the full operation details
+        ScriptWriteResult result;
+        if (!script->MapWrite(binding.resourceKey,
+                              binding.endpointId,
+                              binding.resourceId,
+                              newValue != nullptr ? newValue : "",
+                              result))
         {
             icError("Failed to execute write mapping script for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
 
-        // Create a TLV reader from the encoded data
-        // JsonToTlv wraps the value in a structure, so we need to navigate into it
-        chip::TLV::TLVReader reader;
-        reader.Init(tlvBuffer.Get(), encodedLength);
-        if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+        // Determine the endpoint to use
+        chip::EndpointId endpointId;
+        if (result.endpointId.has_value())
         {
-            icError("Invalid TLV structure from MapAttributeWrite for URI: %s", resource->uri);
-            FailOperation(promises);
-            return;
+            endpointId = result.endpointId.value();
         }
-        chip::TLV::TLVType containerType;
-        if (reader.EnterContainer(containerType) != CHIP_NO_ERROR || reader.Next() != CHIP_NO_ERROR)
+        else if (!GetEndpointForCluster(result.clusterId, endpointId))
         {
-            icError("Failed to navigate TLV structure from MapAttributeWrite for URI: %s", resource->uri);
+            icError("Failed to find endpoint for cluster 0x%x", result.clusterId);
             FailOperation(promises);
             return;
         }
 
-        // Create WriteClient to send the attribute write
-        auto writeClient = std::make_unique<chip::app::WriteClient>(
-            const_cast<chip::Messaging::ExchangeManager *>(&exchangeMgr), this, chip::Optional<uint16_t>::Missing());
-
-        if (!writeClient)
+        if (result.type == ScriptWriteResult::OperationType::Invoke)
         {
-            icError("Failed to create WriteClient for URI: %s", resource->uri);
+            // Build a temporary SbmdCommand from the result for SendCommandFromTlv
+            SbmdCommand cmd;
+            cmd.clusterId = result.clusterId;
+            cmd.commandId = result.commandId;
+            cmd.name = "script-invoke"; // placeholder name
+            if (result.timedInvokeTimeoutMs.has_value())
+            {
+                cmd.timedInvokeTimeoutMs = result.timedInvokeTimeoutMs.value();
+            }
+
+            if (!SendCommandFromTlv(promises,
+                                    cmd,
+                                    endpointId,
+                                    result.tlvBuffer.Get(),
+                                    result.tlvLength,
+                                    exchangeMgr,
+                                    sessionHandle,
+                                    resource->uri,
+                                    nullptr))
+            {
+                FailOperation(promises);
+                return;
+            }
+        }
+        else if (result.type == ScriptWriteResult::OperationType::Write)
+        {
+            // Create TLV reader from the result
+            chip::TLV::TLVReader reader;
+            reader.Init(result.tlvBuffer.Get(), result.tlvLength);
+            if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+            {
+                icError("Invalid TLV structure from write script for URI: %s", resource->uri);
+                FailOperation(promises);
+                return;
+            }
+            chip::TLV::TLVType containerType;
+            if (reader.EnterContainer(containerType) != CHIP_NO_ERROR || reader.Next() != CHIP_NO_ERROR)
+            {
+                icError("Failed to navigate TLV structure from write script for URI: %s", resource->uri);
+                FailOperation(promises);
+                return;
+            }
+
+            // Build the attribute path
+            chip::app::ConcreteAttributePath attrPath(endpointId, result.clusterId, result.attributeId);
+
+            // Create WriteClient to send the attribute write
+            auto writeClient =
+                std::make_unique<chip::app::WriteClient>(const_cast<chip::Messaging::ExchangeManager *>(&exchangeMgr),
+                                                         this,
+                                                         chip::Optional<uint16_t>::Missing());
+
+            if (!writeClient)
+            {
+                icError("Failed to create WriteClient for URI: %s", resource->uri);
+                FailOperation(promises);
+                return;
+            }
+
+            CHIP_ERROR err = writeClient->PutPreencodedAttribute(attrPath, reader);
+            if (err != CHIP_NO_ERROR)
+            {
+                icError("Failed to encode preencoded attribute for URI: %s, error: %s", resource->uri, err.AsString());
+                FailOperation(promises);
+                return;
+            }
+
+            promises.emplace_front();
+            auto &writePromise = promises.front();
+
+            err = writeClient->SendWriteRequest(sessionHandle);
+            if (err != CHIP_NO_ERROR)
+            {
+                icError("Failed to send write request for URI: %s, error: %s", resource->uri, err.AsString());
+                writePromise.set_value(false);
+                return;
+            }
+
+            icDebug("Successfully initiated matter.js attribute write for resource %s", resource->uri);
+
+            WriteContext context;
+            context.writePromise = &writePromise;
+            context.writeClient = std::move(writeClient);
+            activeWriteContexts[context.writeClient.get()] = std::move(context);
+        }
+        else
+        {
+            icError("matter.js write script returned invalid operation type for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
-
-        // Use PutPreencodedAttribute to send the pre-encoded TLV data
-        CHIP_ERROR err = writeClient->PutPreencodedAttribute(binding.attributePath, reader);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to encode preencoded attribute for URI: %s, error: %s", resource->uri, err.AsString());
-            FailOperation(promises);
-            return;
-        }
-
-        // Create a promise for this write operation
-        promises.emplace_front();
-        auto &writePromise = promises.front();
-
-        // Send the write request
-        err = writeClient->SendWriteRequest(sessionHandle);
-        if (err != CHIP_NO_ERROR)
-        {
-            icError("Failed to send write request for URI: %s, error: %s", resource->uri, err.AsString());
-            writePromise.set_value(false);
-            return;
-        }
-
-        icDebug("Successfully initiated write for resource %s", resource->uri);
-
-        // Store the context to track this write operation
-        WriteContext context;
-        context.writePromise = &writePromise;
-        context.writeClient = std::move(writeClient);
-        activeWriteContexts[context.writeClient.get()] = std::move(context);
     }
     else
     {
@@ -724,71 +704,63 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
 
     const ResourceBinding &binding = it->second;
 
-    if (binding.type == ResourceBinding::Type::Attribute)
+    if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
-        // Executing an attribute is not yet supported
-        icError("Executing attribute for URI: %s is not supported", resource->uri);
-        FailOperation(promises);
-        return;
-    }
-    else if (binding.type == ResourceBinding::Type::Commands)
-    {
-        // Execute command (should be exactly one command for execute bindings)
-        if (binding.commands.empty())
+        // Execute using script that returns full operation details
+        ScriptWriteResult result;
+
+        // Parse the input argument(s)
+        std::string inputValue = (arg != nullptr) ? arg : "";
+
+        if (!script->MapExecute(binding.resourceKey, binding.endpointId, binding.resourceId, inputValue, result))
         {
-            icError("No command bound for execute URI: %s", resource->uri);
+            icError("Failed to execute mapping script for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
 
-        const SbmdCommand &command = binding.commands[0];
-
-        // Check if we have a script engine
-        if (!script)
-        {
-            icError("No script engine available for device %s", deviceId.c_str());
-            FailOperation(promises);
-            return;
-        }
-
-        // Parse the input argument (for now, assume it's a single string argument)
-        std::vector<std::string> argumentValues;
-        if (arg != nullptr && strlen(arg) > 0)
-        {
-            argumentValues.push_back(arg);
-        }
-
-        // Execute the script to map the input arguments to command TLV data
-        // The script will allocate the buffer and return the encoded length
-        chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
-        size_t encodedLength = 0;
-        if (!script->MapCommandExecute(command, argumentValues, tlvBuffer, encodedLength))
-        {
-            icError("Failed to execute command mapping script for URI: %s", resource->uri);
-            FailOperation(promises);
-            return;
-        }
-
-        // Get the endpoint for this command
+        // Determine the endpoint to use
         chip::EndpointId endpointId;
-        if (!GetEndpointForCluster(command.clusterId, endpointId))
+        if (result.endpointId.has_value())
         {
-            icError("Failed to find endpoint for cluster 0x%x", command.clusterId);
+            endpointId = result.endpointId.value();
+        }
+        else if (!GetEndpointForCluster(result.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x", result.clusterId);
             FailOperation(promises);
             return;
         }
 
-        // Send the command using the common helper
-        if (!SendCommandFromTlv(promises,
-                                command,
-                                endpointId,
-                                tlvBuffer.Get(),
-                                encodedLength,
-                                exchangeMgr,
-                                sessionHandle,
-                                resource->uri,
-                                response))
+        if (result.type == ScriptWriteResult::OperationType::Invoke)
         {
+            // Build a temporary SbmdCommand from the result for SendCommandFromTlv
+            SbmdCommand cmd;
+            cmd.clusterId = result.clusterId;
+            cmd.commandId = result.commandId;
+            cmd.name = "script-execute";
+            if (result.timedInvokeTimeoutMs.has_value())
+            {
+                cmd.timedInvokeTimeoutMs = result.timedInvokeTimeoutMs.value();
+            }
+
+            if (!SendCommandFromTlv(promises,
+                                    cmd,
+                                    endpointId,
+                                    result.tlvBuffer.Get(),
+                                    result.tlvLength,
+                                    exchangeMgr,
+                                    sessionHandle,
+                                    resource->uri,
+                                    response))
+            {
+                FailOperation(promises);
+                return;
+            }
+        }
+        else
+        {
+            icError("Execute binding returned write operation instead of invoke for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
