@@ -140,10 +140,10 @@ def validate_js_syntax(script: str, stub_type: str, location: str, qjsc_path: st
             temp_path = f.name
 
         # Use qjsc to compile to bytecode (parse/compile only, no execution)
-        # The -c flag compiles to C code, but we can use -o /dev/null to just validate
+        # The -c flag compiles to C code, but we can use os.devnull to just validate
         # qjsc will exit with error if there are syntax errors
         result = subprocess.run(
-            [qjsc_path, '-c', '-o', '/dev/null', temp_path],
+            [qjsc_path, '-c', '-o', os.devnull, temp_path],
             capture_output=True,
             text=True,
             timeout=5
