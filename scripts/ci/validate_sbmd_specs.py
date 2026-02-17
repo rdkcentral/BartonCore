@@ -30,7 +30,7 @@
 SBMD Specification Validator
 
 Validates .sbmd YAML files against the SBMD JSON Schema and validates
-embedded JavaScript scripts using QuickJS.
+embedded JavaScript scripts using QuickJS compiler (qjsc).
 
 Usage:
     validate_sbmd_specs.py <schema_file> <spec_file_or_directory> [<spec_file_or_directory> ...]
@@ -111,9 +111,10 @@ def find_sbmd_files(paths: list) -> list:
     return sorted(sbmd_files)
 
 
-def validate_js_syntax(script: str, stub_type: str, location: str, qjs_path: str, stubs: dict) -> list:
+def validate_js_syntax(script: str, stub_type: str, location: str, qjsc_path: str, stubs: dict) -> list:
     """
-    Validate JavaScript syntax using QuickJS.
+    Validate JavaScript syntax using QuickJS compiler (qjsc).
+    Compiles to bytecode without executing, catching syntax errors only.
     Returns a list of error messages, empty if valid.
     """
     errors = []
@@ -132,16 +133,17 @@ def validate_js_syntax(script: str, stub_type: str, location: str, qjs_path: str
 }})();
 '''
 
-    # Write to temp file and validate with qjs
+    # Write to temp file and validate with qjsc
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
             f.write(wrapped_script)
             temp_path = f.name
 
-        # Use qjs to parse and execute the script (will catch syntax errors)
-        # Note: --quit only instantiates interpreter, doesn't parse, so we run without it
+        # Use qjsc to compile to bytecode (parse/compile only, no execution)
+        # The -c flag compiles to C code, but we can use -o /dev/null to just validate
+        # qjsc will exit with error if there are syntax errors
         result = subprocess.run(
-            [qjs_path, temp_path],
+            [qjsc_path, '-c', '-o', '/dev/null', temp_path],
             capture_output=True,
             text=True,
             timeout=5
@@ -238,7 +240,7 @@ def extract_all_scripts(spec_data: dict) -> list:
     return scripts
 
 
-def validate_scripts(spec_data: dict, qjs_path: str, stubs: dict) -> list:
+def validate_scripts(spec_data: dict, qjsc_path: str, stubs: dict) -> list:
     """
     Validate all JavaScript scripts in the spec.
     Returns a list of error messages, empty if all valid.
@@ -247,19 +249,19 @@ def validate_scripts(spec_data: dict, qjs_path: str, stubs: dict) -> list:
     scripts = extract_all_scripts(spec_data)
 
     for script, stub_type, location in scripts:
-        errors.extend(validate_js_syntax(script, stub_type, location, qjs_path, stubs))
+        errors.extend(validate_js_syntax(script, stub_type, location, qjsc_path, stubs))
 
     return errors
 
 
-def find_qjs() -> str:
-    """Find the qjs executable."""
-    qjs_path = shutil.which('qjs')
-    if qjs_path:
-        return qjs_path
+def find_qjsc() -> str:
+    """Find the qjsc (QuickJS compiler) executable."""
+    qjsc_path = shutil.which('qjsc')
+    if qjsc_path:
+        return qjsc_path
 
     # Check common locations
-    common_paths = ['/usr/bin/qjs', '/usr/local/bin/qjs']
+    common_paths = ['/usr/bin/qjsc', '/usr/local/bin/qjsc']
     for path in common_paths:
         if os.path.isfile(path) and os.access(path, os.X_OK):
             return path
@@ -288,12 +290,12 @@ def main():
         print(f"ERROR: Invalid stubs file {args.stubs}: {e}", file=sys.stderr)
         return 1
 
-    # Find qjs for script validation
-    qjs_path = None
+    # Find qjsc for script validation
+    qjsc_path = None
     if not args.no_scripts:
-        qjs_path = find_qjs()
-        if not qjs_path:
-            print("WARNING: qjs not found, skipping JavaScript validation", file=sys.stderr)
+        qjsc_path = find_qjsc()
+        if not qjsc_path:
+            print("WARNING: qjsc not found, skipping JavaScript validation", file=sys.stderr)
             print("         Install with: apt install quickjs", file=sys.stderr)
 
     # Load schema
@@ -316,7 +318,7 @@ def main():
         return 1
 
     if not args.quiet:
-        validation_type = "schema and scripts" if qjs_path else "schema only"
+        validation_type = "schema and scripts" if qjsc_path else "schema only"
         print(f"Validating {len(sbmd_files)} SBMD file(s) ({validation_type})...")
 
     # Validate each file
@@ -341,9 +343,9 @@ def main():
         # Schema validation
         errors = validate_spec(spec_data, validator, sbmd_file)
 
-        # Script validation (only if schema is valid and qjs available)
-        if not errors and qjs_path:
-            errors.extend(validate_scripts(spec_data, qjs_path, stubs))
+        # Script validation (only if schema is valid and qjsc available)
+        if not errors and qjsc_path:
+            errors.extend(validate_scripts(spec_data, qjsc_path, stubs))
 
         if errors:
             print(f"FAIL: {sbmd_file}")
