@@ -114,7 +114,7 @@ def find_sbmd_files(paths: list) -> list:
 def validate_js_syntax(script: str, stub_type: str, location: str, qjsc_path: str, stubs: dict) -> list:
     """
     Validate JavaScript syntax using QuickJS compiler (qjsc).
-    Compiles to bytecode without executing, catching syntax errors only.
+    Uses compilation as a validation step without executing code.
     Returns a list of error messages, empty if valid.
     """
     errors = []
@@ -139,9 +139,9 @@ def validate_js_syntax(script: str, stub_type: str, location: str, qjsc_path: st
             f.write(wrapped_script)
             temp_path = f.name
 
-        # Use qjsc to compile to bytecode (parse/compile only, no execution)
-        # The -c flag compiles to C code, but we can use os.devnull to just validate
-        # qjsc will exit with error if there are syntax errors
+        # Use qjsc to validate syntax by attempting compilation (parse/compile only, no execution)
+        # The -c flag compiles to C code; output is discarded via os.devnull
+        # qjsc will exit with error if there are syntax errors during parsing
         result = subprocess.run(
             [qjsc_path, '-c', '-o', os.devnull, temp_path],
             capture_output=True,
