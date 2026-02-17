@@ -257,7 +257,8 @@
         },
         "scriptResponse": {
           "type": "string",
-          "description": "JavaScript script for processing command response"
+          "description": "JavaScript script for processing command response",
+          "minLength": 1
         }
       },
       "additionalProperties": false

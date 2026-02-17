@@ -277,7 +277,7 @@ def main():
     parser.add_argument('specs', nargs='+', help='Path(s) to .sbmd files or directories')
     parser.add_argument('-q', '--quiet', action='store_true', help='Only show errors')
     parser.add_argument('--no-scripts', action='store_true', help='Skip JavaScript validation')
-    parser.add_argument('--stubs', required=True, help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
+    parser.add_argument('--stubs', help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
     args = parser.parse_args()
 
     # Load stubs for script validation
