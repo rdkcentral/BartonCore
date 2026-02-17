@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,38 +22,28 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Created by Thomas Lea on 4/4/2022..
+ * Created by Thomas Lea on 10/20/25
  */
 
 #pragma once
 
-#include "MatterDeviceDriver.h"
-#include "clusters/DoorLock.h"
+#include "../MatterDeviceDriver.h"
+#include "../MatterDevice.h"
+#include "SbmdSpec.h"
+#include <memory>
 
 namespace barton
 {
-    class MatterDoorLockDeviceDriver : public MatterDeviceDriver,
-                                       DoorLock::EventHandler
+    class SpecBasedMatterDeviceDriver : public MatterDeviceDriver
     {
     public:
-        MatterDoorLockDeviceDriver();
+        SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
+        std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
-        // DoorLock cluster callbacks
-        void CommandCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
-        void WriteRequestCompleted(void *context, bool success) override { OnDeviceWorkCompleted(context, success); };
-        void LockStateChanged(std::string &deviceUuid,
-                              chip::app::Clusters::DoorLock::DlLockState lockState,
-                              void *asyncContext) override;
-        void LockStateReadComplete(std::string &deviceUuid,
-                                   chip::app::Clusters::DoorLock::DlLockState lockState,
-                                   void *asyncContext) override;
+        bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
     protected:
-        std::vector<uint16_t> GetSupportedDeviceTypes() override;
-        void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
-                                 const std::string &deviceId,
-                                 chip::Messaging::ExchangeManager &exchangeMgr,
-                                 const chip::SessionHandle &sessionHandle) override;
+        SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
         bool DoRegisterResources(icDevice *device) override;
 
@@ -72,11 +62,32 @@ namespace barton
                            chip::Messaging::ExchangeManager &exchangeMgr,
                            const chip::SessionHandle &sessionHandle) override;
 
-    private:
-        static bool registeredWithFactory;
+        void ExecuteResource(std::forward_list<std::promise<bool>> &promises,
+                             const std::string &deviceId,
+                             icDeviceResource *resource,
+                             const char *arg,
+                             char **response,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle) override;
 
-        std::unique_ptr<MatterCluster>
-        MakeCluster(std::string const &deviceUuid, chip::EndpointId endpointId, chip::ClusterId clusterId,
-                    std::shared_ptr<DeviceDataCache> deviceDataCache) override;
+    private:
+
+        std::shared_ptr<SbmdSpec> spec;
+
+        /**
+         * Create and configure a script engine with all mappers from the spec
+         * @param deviceId The device ID for the script instance
+         * @return A configured SbmdScript instance
+         */
+        std::unique_ptr<SbmdScript> CreateConfiguredScript(const std::string &deviceId);
+
+        /**
+         * Add mappers from a resource to the script engine
+         * @param script The script engine to configure
+         * @param resource The resource containing mapper configurations
+         */
+        void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
+
+        uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
     };
 } // namespace barton

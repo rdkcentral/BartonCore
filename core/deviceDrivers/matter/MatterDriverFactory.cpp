@@ -27,12 +27,9 @@
 
 #include <memory>
 #define logFmt(fmt) "MatterDriverFactory (%s): " fmt, __func__
-#include "subsystems/matter/MatterCommon.h"
 
 #include "MatterDriverFactory.h"
 #include "matter/MatterDeviceDriver.h"
-#include <iostream>
-#include <sstream>
 
 using namespace barton;
 
@@ -41,18 +38,46 @@ extern "C" {
 #include <icLog/logging.h>
 }
 
-bool MatterDriverFactory::RegisterDriver(MatterDeviceDriver *driver)
+bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> driver)
 {
-    bool result = false;
-    if (driver != nullptr && driver->GetDriver() != nullptr && driver->GetDriver()->driverName != nullptr)
+    if (!driver || !driver->GetDriver() || !driver->GetDriver()->driverName)
     {
-        icDebug("%s", driver->GetDriver()->driverName);
-        drivers.emplace(driver->GetDriver()->driverName, driver);
-
-        result = deviceDriverManagerRegisterDriver(driver->GetDriver());
+        return false;
     }
 
-    return result;
+    MatterDeviceDriver *rawDriver = driver.get();
+    // Store driver name as a string for safety. The driver name is validated
+    // earlier in this function and should remain constant after registration.
+    std::string driverName = rawDriver->GetDriver()->driverName;
+
+    icDebug("%s", driverName.c_str());
+
+    // Check for duplicate driver name before registration
+    if (drivers.find(driverName) != drivers.end())
+    {
+        icError("FATAL: Driver with name '%s' is already registered. "
+                "Duplicate driver names are not allowed. "
+                "Check SBMD specs for conflicting 'name' fields.", driverName.c_str());
+        return false;
+    }
+
+    bool result = deviceDriverManagerRegisterDriver(rawDriver->GetDriver());
+    if (!result)
+    {
+        // Registration failed; do not insert into drivers and allow driver to be destroyed.
+        icError("Failed to register driver '%s' with device driver manager", driverName.c_str());
+        return false;
+    }
+
+    // Use the stored string as the map key to ensure consistency
+    drivers.emplace(driverName, rawDriver);
+
+    // Release ownership - deviceDriverManager takes ownership and will handle cleanup
+    // via the destroy callback (which calls delete on the MatterDeviceDriver).
+    // Do NOT store in ownedDrivers to avoid double-free during shutdown.
+    [[maybe_unused]] auto *released = driver.release();
+
+    return true;
 }
 
 MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
@@ -65,7 +90,7 @@ MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache
     {
         if (entry.second->ClaimDevice(dataCache))
         {
-            icInfo("%s claimed the device", entry.first);
+            icInfo("%s claimed the device", entry.first.c_str());
             result = entry.second;
             break;
         }

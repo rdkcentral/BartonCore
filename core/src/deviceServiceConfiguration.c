@@ -225,6 +225,25 @@ gchar *deviceServiceConfigurationGetMatterAttestationTrustStoreDir(void)
     return retVal;
 }
 
+gchar *deviceServiceConfigurationGetSbmdDir(void)
+{
+    LOCK_SCOPE(deviceServiceConfigurationMutex);
+
+    if (initializeParams == NULL)
+    {
+        icError("device service configuration not started");
+        return NULL;
+    }
+
+    gchar *retVal = NULL;
+    g_object_get(initializeParams,
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR],
+                 &retVal,
+                 NULL);
+
+    return retVal;
+}
+
 gchar *deviceServiceConfigurationGetAccountId(void)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);

@@ -24,6 +24,7 @@ Barton's API is based upon GObject (the GLib Object System) in native C as the p
    - `b_core_initialize_params_container_set_matter_storage_dir`
    - `b_core_initialize_params_container_set_matter_attestation_trust_store_dir`
    - `b_core_initialize_params_container_set_network_credentials_provider`
+   - `b_core_initialize_params_container_set_sbmd_dir`
 4. Create the `BCoreClient` instance with `b_core_client_new`
 5. Start the client with `b_core_client_start`
 6. Wire up any desired events using `g_signal_connect`.  Some typical top-level signals of interest include:

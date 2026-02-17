@@ -59,9 +59,6 @@ namespace barton
             clusterId(clusterId), deviceDataCache(std::move(deviceDataCache))
         {
             nodeId = Subsystem::Matter::UuidToNodeId(this->deviceId.c_str());
-
-            auto key = std::make_tuple(this->deviceId, endpointId, clusterId);
-            this->deviceDataCache->SetClusterCallback(key, this);
         };
 
         virtual ~MatterCluster() = default;

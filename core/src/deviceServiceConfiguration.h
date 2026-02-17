@@ -114,6 +114,15 @@ gchar *deviceServiceConfigurationGetMatterStorageDir(void);
 gchar *deviceServiceConfigurationGetMatterAttestationTrustStoreDir(void);
 
 /**
+ * deviceServiceConfigurationGetSbmdDir
+ *
+ * @brief This retrieves the SBMD spec directory.
+ *
+ * @return the SBMD spec directory
+ */
+gchar *deviceServiceConfigurationGetSbmdDir(void);
+
+/**
  * deviceServiceConfigurationGetAccountId
  *
  * @brief This retrieves the account ID.

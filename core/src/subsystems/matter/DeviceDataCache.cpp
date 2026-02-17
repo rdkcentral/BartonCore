@@ -46,8 +46,54 @@ using namespace barton::Subsystem;
 DeviceDataCache::~DeviceDataCache()
 {
     icDebug();
-    // readClient and clusterStateCache unique_ptrs will be automatically cleaned up
-    // No need for ScheduleWork since they handle their own destruction safely
+
+    // readClient and clusterStateCache need cleanup to run under the Matter stack context.
+    // We must wait for destruction to complete synchronously to avoid use-after-free,
+    // since clusterStateCache holds a reference to *this as its callback.
+
+    // Move the unique_ptrs to local variables so they can be safely destroyed on the Matter thread
+    auto *cacheToDestroy = clusterStateCache.release();
+    auto *clientToDestroy = readClient.release();
+
+    // Only perform cleanup if there's something to destroy
+    if (cacheToDestroy != nullptr || clientToDestroy != nullptr)
+    {
+        // Check if we're already on the Matter thread to avoid deadlock
+        if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
+        {
+            // Already on Matter thread - destroy directly
+            // Reset in proper order: client depends on cache, so destroy client first
+            delete clientToDestroy;
+            delete cacheToDestroy;
+        }
+        else
+        {
+            // Not on Matter thread - schedule destruction and wait
+            std::promise<void> destructionComplete;
+            std::future<void> destructionFuture = destructionComplete.get_future();
+
+            chip::DeviceLayer::PlatformMgr().ScheduleWork(
+                [](intptr_t arg) {
+                    auto *context = reinterpret_cast<std::tuple<void *, void *, std::promise<void> *> *>(arg);
+                    auto *cache = static_cast<chip::app::ClusterStateCache *>(std::get<0>(*context));
+                    auto *client = static_cast<chip::app::ReadClient *>(std::get<1>(*context));
+                    auto *promise = std::get<2>(*context);
+
+                    // Reset in proper order: client depends on cache, so destroy client first
+                    delete client;
+                    delete cache;
+
+                    // Signal that destruction is complete
+                    promise->set_value();
+                    delete context;
+                },
+                reinterpret_cast<intptr_t>(
+                    new std::tuple<void *, void *, std::promise<void> *>(cacheToDestroy, clientToDestroy, &destructionComplete)));
+
+            // Wait for the Matter thread to complete destruction before returning
+            destructionFuture.wait();
+        }
+    }
 }
 
 std::future<bool> DeviceDataCache::Start()
@@ -543,36 +589,44 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 return;
             }
 
+            if (!self->callback)
+            {
+                icWarn("No registered callback to notify for attribute report regeneration");
+                return;
+            }
+
             // Get all endpoint IDs
             std::vector<chip::EndpointId> endpointIds = self->GetEndpointIds();
 
-            // Trigger OnReportBegin on all registered callbacks
-            for (const auto &[key, callback] : self->clusterCallbacks)
-            {
-                if (callback)
-                {
-                    callback->OnReportBegin();
-                }
-            }
+            self->callback->OnReportBegin();
 
             // Iterate through all endpoints, clusters, and attributes
             for (chip::EndpointId endpointId : endpointIds)
             {
                 self->clusterStateCache->ForEachCluster(endpointId, [self, endpointId](chip::ClusterId clusterId) {
-                    auto key = std::make_tuple(self->deviceUuid, endpointId, clusterId);
-                    auto it = self->clusterCallbacks.find(key);
-                    chip::app::ClusterStateCache::Callback *callback =
-                        (it != self->clusterCallbacks.end()) ? it->second : nullptr;
 
                     // Iterate through all attributes in this cluster
                     self->clusterStateCache->ForEachAttribute(
-                        endpointId, clusterId, [self, callback](const chip::app::ConcreteAttributePath &path) {
-                            if (callback)
+                        endpointId, clusterId, [self](const chip::app::ConcreteAttributePath &path) {
+                            chip::app::ConcreteDataAttributePath dataPath(
+                                path.mEndpointId, path.mClusterId, path.mAttributeId);
+                            chip::TLV::TLVReader reader;
+
+                            CHIP_ERROR err = self->clusterStateCache->Get(dataPath, reader);
+                            if (err != CHIP_NO_ERROR)
                             {
-                                chip::app::ConcreteDataAttributePath dataPath(
-                                    path.mEndpointId, path.mClusterId, path.mAttributeId);
-                                callback->OnAttributeChanged(self->clusterStateCache.get(), dataPath);
+                                icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32 ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                                       static_cast<unsigned int>(dataPath.mEndpointId),
+                                       static_cast<uint32_t>(dataPath.mClusterId),
+                                       static_cast<uint32_t>(dataPath.mAttributeId),
+                                       err.Format());
+
+                                // Skip notifying the callback for this attribute; continue with others.
+                                return CHIP_NO_ERROR;
                             }
+
+                            chip::app::StatusIB aStatus(chip::Protocols::InteractionModel::Status::Success);
+                            self->OnAttributeData(dataPath, &reader, aStatus);
 
                             return CHIP_NO_ERROR;
                         });
@@ -581,16 +635,9 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 });
             }
 
-            // Trigger OnReportEnd on all registered callbacks
-            for (const auto &[key, callback] : self->clusterCallbacks)
-            {
-                if (callback)
-                {
-                    callback->OnReportEnd();
-                }
-            }
+            self->callback->OnReportEnd();
 
-            icDebug("Regenerated attribute report for %zu registered callbacks", self->clusterCallbacks.size());
+            icDebug("Done regenerating attribute report");
         },
         reinterpret_cast<intptr_t>(this));
 

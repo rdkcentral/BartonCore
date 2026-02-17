@@ -33,6 +33,10 @@
 #include <deviceService/securityState.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define CURRENT_DEVICE_DESCRIPTOR_URL "currentDeviceDescriptorUrl"
 #define CURRENT_DEVICE_DESCRIPTOR_MD5 "currentDeviceDescriptorMd5"
 #define CURRENT_DENYLIST_URL          "currentDenylistUrl"
@@ -246,5 +250,9 @@ bool deviceServiceIsShuttingDown(void);
  * @return the token provider
  */
 BCoreTokenProvider *deviceServiceGetTokenProvider(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // FLEXCORE_DEVICESERVICEPRIVATE_H
