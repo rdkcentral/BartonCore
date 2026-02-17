@@ -160,7 +160,7 @@ if (BCORE_MATTER)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
     # Collect all .sbmd files for dependency tracking
-    file(GLOB SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
+    file(GLOB CONFIGURE_DEPENDS SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
 
     # Generate stubs from .d.ts file
     add_custom_command(
@@ -174,7 +174,7 @@ if (BCORE_MATTER)
     # Create a custom target that validates SBMD specs
     add_custom_target(validate_sbmd_specs ALL
         COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPECS_DIR} --stubs ${SBMD_STUBS_FILE}
-        DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE}
+        DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Validating SBMD specification files against schema..."
     )

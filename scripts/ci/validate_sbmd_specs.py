@@ -193,13 +193,18 @@ def extract_scripts_from_resource(resource: dict, endpoint_id: str = None) -> li
         # Determine if it's attribute or command write
         if write_mapper.get('attribute'):
             stub_type = 'write_attribute'
-        else:
+        elif write_mapper.get('command') or write_mapper.get('commands'):
             stub_type = 'write_command'
-        scripts.append((
-            write_mapper['script'],
-            stub_type,
-            f"{location_prefix}.mapper.write.script"
-        ))
+        else:
+            # Skip if neither attribute, command, nor commands field is present
+            stub_type = None
+
+        if stub_type:
+            scripts.append((
+                write_mapper['script'],
+                stub_type,
+                f"{location_prefix}.mapper.write.script"
+            ))
 
     # Execute mapper
     execute_mapper = mapper.get('execute')

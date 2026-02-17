@@ -233,7 +233,7 @@ set(REPL_C "${CMAKE_CURRENT_BINARY_DIR}/repl.c")
 
 add_custom_command(
     OUTPUT ${REPL_C}
-    COMMAND qjsc -s -c -o ${REPL_C} -m ${REPL_JS}
+    COMMAND $<TARGET_FILE:qjsc> -s -c -o ${REPL_C} -m ${REPL_JS}
     DEPENDS qjsc ${REPL_JS}
     COMMENT "Generating repl.c from repl.js"
     VERBATIM

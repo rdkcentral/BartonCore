@@ -56,13 +56,31 @@ def parse_interface(content: str, name: str) -> dict:
     """
     # Find the interface definition
     # Match: interface Name { ... } or interface Name extends Base { ... }
-    pattern = rf'interface\s+{re.escape(name)}\s+(?:extends\s+\w+\s+)?\{{([^}}]+)\}}'
+    pattern = rf'interface\s+{re.escape(name)}\s*(?:extends\s+\w+\s*)?\{{'
     match = re.search(pattern, content, re.DOTALL)
 
     if not match:
         return {}
 
-    body = match.group(1)
+    # Locate the opening brace and find the matching closing brace with nesting
+    open_brace_index = match.end() - 1  # pattern ends with '{'
+    depth = 0
+    close_brace_index = None
+    for i in range(open_brace_index, len(content)):
+        ch = content[i]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                close_brace_index = i
+                break
+
+    if close_brace_index is None:
+        # Unbalanced braces; treat as not found
+        return {}
+
+    body = content[open_brace_index + 1:close_brace_index]
     props = {}
 
     # Parse properties: name: type; or name?: type;

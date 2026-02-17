@@ -282,7 +282,7 @@
           "minLength": 1
         },
         "type": {
-          "type": "string",
+
           "description": "Matter data type",
           "$ref": "#/$defs/matterType"
         }
@@ -334,7 +334,7 @@
           "minLength": 1
         },
         "type": {
-          "type": "string",
+
           "description": "Matter data type",
           "$ref": "#/$defs/matterType"
         }
