@@ -287,7 +287,6 @@ def main():
             print("ERROR: --stubs is required when JavaScript validation is enabled", file=sys.stderr)
             print("       Use --no-scripts to skip JavaScript validation", file=sys.stderr)
             return 1
-        
         # Load stubs for script validation
         try:
             stubs = load_stubs(args.stubs)
@@ -297,7 +296,6 @@ def main():
         except (json.JSONDecodeError, ValueError) as e:
             print(f"ERROR: Invalid stubs file {args.stubs}: {e}", file=sys.stderr)
             return 1
-        
         # Find qjs executable
         qjs_path = find_qjs()
         if not qjs_path:
