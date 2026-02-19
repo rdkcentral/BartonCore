@@ -1,6 +1,5 @@
 # Light SBMD Specification
 # Maps Matter light device types to Barton light device class
-# Uses MatterClusters (matter.js) for TLV encoding
 
 # SBMD schema version 1.0
 schemaVersion: "1.0"
@@ -9,7 +8,7 @@ driverVersion: "1.0"
 # Human-readable driver name
 name: "Light"
 # Script type (currently only JavaScript is supported)
-scriptType: "JavaScript+matterjs"
+scriptType: "JavaScript"
 
 # Barton device class mapping
 bartonMeta:
@@ -54,28 +53,12 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          // Use MatterClusters for type-safe TLV decoding
-          const { TlvUInt16 } = MatterClusters;
-          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          const value = TlvUInt16.decode(tlvBytes);
-          return {output: value.toString()};
-      # Write mapper: script returns full operation details - no metadata needed
+          return {output: sbmdReadArgs.input};
       write:
         script: |
-          // Use MatterClusters for type-safe TLV encoding of attribute write
-          const { TlvUInt16 } = MatterClusters.Tlv;
-
           const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-
-          // Encode uint16 value to TLV and return as attribute write
-          const tlvBytes = TlvUInt16.encode(secs);
-          return {
-            write: {
-              clusterId: 0x0003,      // Identify cluster
-              attributeId: 0x0000,    // IdentifyTime attribute
-              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-            }
-          };
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 endpoints:
   - id: "1"
@@ -97,23 +80,12 @@ endpoints:
               name: "OnOff"
               type: "bool"
             script: |
-              // Use MatterClusters for type-safe TLV decoding
-              const { TlvBoolean } = MatterClusters;
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvBoolean.decode(tlvBytes);
-              return {output: value ? 'true' : 'false'};
+              return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};
           write:
-            # Script returns full operation details - no metadata needed
             script: |
               // On/Off commands have no arguments
               const commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
-              // No tlvBase64 needed since these commands have no arguments
-              return {
-                invoke: {
-                  clusterId: 0x0006,   // On/Off cluster
-                  commandId: commandId
-                }
-              };
+              return SbmdUtils.Response.invoke(0x0006, commandId);
 
       - id: "currentLevel"
         type: "com.icontrol.lightLevel"
@@ -130,19 +102,11 @@ endpoints:
               name: "CurrentLevel"
               type: "uint8"
             script: |
-              // Use MatterClusters for type-safe TLV decoding
-              const { TlvUInt8 } = MatterClusters;
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const level = TlvUInt8.decode(tlvBytes);
+              const level = sbmdReadArgs.input;
               const percent = Math.round(level / 254 * 100);
               return {output: percent.toString()};
           write:
-            # Script returns full operation details - no metadata needed
             script: |
-              // Use MatterClusters for type-safe TLV encoding
-              // MoveToLevelWithOnOff uses the same TLV schema as MoveToLevel
-              const { TlvMoveToLevelRequest } = MatterClusters.LevelControl.LevelControl;
-
               let percent = parseInt(sbmdWriteArgs.input, 10);
               if (isNaN(percent)) percent = 0;
               if (percent < 0) percent = 0;
@@ -151,20 +115,18 @@ endpoints:
               // Convert percentage (0-100) to Matter level (0-254)
               const level = Math.round(percent / 100 * 254);
 
-              // Build properly typed command data per Matter spec
-              const commandData = {
-                level: level,
-                transitionTime: null,
-                optionsMask: { executeIfOff: false, coupleColorTempToLevel: false },
-                optionsOverride: { executeIfOff: false, coupleColorTempToLevel: false }
+              // Encode MoveToLevelWithOnOff command args as TLV struct
+              const args = {
+                Level: level,
+                TransitionTime: 0,
+                OptionsMask: 0,
+                OptionsOverride: 0
               };
-
-              // Encode to TLV bytes and return full invoke details
-              const tlvBytes = TlvMoveToLevelRequest.encode(commandData);
-              return {
-                invoke: {
-                  clusterId: 0x0008,    // Level Control cluster
-                  commandId: 0x0004,    // MoveToLevelWithOnOff
-                  tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-                }
+              const schema = {
+                Level: {tag: 0, type: 'uint8'},
+                TransitionTime: {tag: 1, type: 'uint16'},
+                OptionsMask: {tag: 2, type: 'uint8'},
+                OptionsOverride: {tag: 3, type: 'uint8'}
               };
+              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
+              return SbmdUtils.Response.invoke(0x0008, 0x0004, tlvBase64);
