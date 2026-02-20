@@ -429,7 +429,7 @@ namespace barton
         };
 
         // Structure to hold URI and event info for fast event lookup
-        struct EventReadBinding
+        struct EventBinding
         {
             std::string uri;
             SbmdEvent event;
@@ -498,9 +498,9 @@ namespace barton
                            AttributePathEqual> readableAttributeLookup;
         // Fast O(1) lookup for events in OnEventData callback
         std::unordered_map<chip::app::ConcreteEventPath,
-                           EventReadBinding,
+                           EventBinding,
                            EventPathHash,
-                           EventPathEqual> readableEventLookup;
+                           EventPathEqual> eventLookup;
 
         // Context for tracking active write operations
         struct WriteContext

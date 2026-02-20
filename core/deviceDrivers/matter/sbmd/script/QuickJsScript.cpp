@@ -1172,18 +1172,18 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
     return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
 }
 
-bool QuickJsScript::AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script)
+bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
-    eventReadScripts[eventInfo] = script;
-    icLogDebug(LOG_TAG, "Added event read mapper for event %s (cluster 0x%x, event 0x%x)",
+    eventScripts[eventInfo] = script;
+    icLogDebug(LOG_TAG, "Added event mapper for event %s (cluster 0x%x, event 0x%x)",
                eventInfo.name.c_str(), eventInfo.clusterId, eventInfo.eventId);
     return true;
 }
 
-bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
-                                  chip::TLV::TLVReader &reader,
-                                  std::string &outValue)
+bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
+                              chip::TLV::TLVReader &reader,
+                              std::string &outValue)
 {
     std::lock_guard<std::mutex> lock(qjsMtx);
 
@@ -1191,10 +1191,10 @@ bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
     // runtime is called from a different thread than where it was created
     JS_UpdateStackTop(runtime);
 
-    auto it = eventReadScripts.find(eventInfo);
-    if (it == eventReadScripts.end())
+    auto it = eventScripts.find(eventInfo);
+    if (it == eventScripts.end())
     {
-        icLogError(LOG_TAG, "No event read mapper found for event %s", eventInfo.name.c_str());
+        icLogError(LOG_TAG, "No event mapper found for event %s", eventInfo.name.c_str());
         return false;
     }
 

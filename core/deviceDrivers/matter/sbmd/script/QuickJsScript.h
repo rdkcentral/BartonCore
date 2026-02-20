@@ -223,11 +223,11 @@ namespace barton
                              size_t &encodedLength) override;
 
         /**
-         * Add an event mapper for reading event data.
+         * Add an event mapper.
          *
-         * @see SbmdScript::AddEventReadMapper
+         * @see SbmdScript::AddEventMapper
          */
-        bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) override;
+        bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) override;
 
         /**
          * Convert a Matter event value to a Barton resource string value.
@@ -250,11 +250,11 @@ namespace barton
          *
          * {"output" : <Barton string representation of the event data>}
          *
-         * @see SbmdScript::MapEventRead
+         * @see SbmdScript::MapEvent
          */
-        bool MapEventRead(const SbmdEvent &eventInfo,
-                          chip::TLV::TLVReader &reader,
-                          std::string &outValue) override;
+        bool MapEvent(const SbmdEvent &eventInfo,
+                      chip::TLV::TLVReader &reader,
+                      std::string &outValue) override;
 
     private:
         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
@@ -269,7 +269,7 @@ namespace barton
         std::map<SbmdCommand, std::string> commandExecuteScripts;
         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
         std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
-        std::map<SbmdEvent, std::string> eventReadScripts;
+        std::map<SbmdEvent, std::string> eventScripts;
 
         /**
          * Generate a deterministic key from a commands vector for script lookup.

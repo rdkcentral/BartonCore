@@ -153,8 +153,8 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
             aEventHeader.mPath.mEventId);
 
     // Fast O(1) lookup for events
-    auto it = device->readableEventLookup.find(aEventHeader.mPath);
-    if (it == device->readableEventLookup.end())
+    auto it = device->eventLookup.find(aEventHeader.mPath);
+    if (it == device->eventLookup.end())
     {
         // Not an event with a mapper - this is the common case
         return;
@@ -187,7 +187,7 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
 
     // Execute the script to map the TLV event data to a string value
     std::string outValue;
-    if (!device->script->MapEventRead(eventInfo, reader, outValue))
+    if (!device->script->MapEvent(eventInfo, reader, outValue))
     {
         icError("Failed to execute event mapping script for URI: %s", uri.c_str());
         return;
@@ -434,9 +434,9 @@ bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdMapper &mapp
     // Add the event script mapper if we have a script
     if (script && !mapper.eventScript.empty())
     {
-        if (!script->AddEventReadMapper(eventWithFeatureMap, mapper.eventScript))
+        if (!script->AddEventMapper(eventWithFeatureMap, mapper.eventScript))
         {
-            icError("Failed to add event read mapper for URI: %s", uri);
+            icError("Failed to add event mapper for URI: %s", uri);
             return false;
         }
     }
@@ -445,10 +445,10 @@ bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdMapper &mapp
     chip::app::ConcreteEventPath eventPath(endpointId, event.clusterId, event.eventId);
 
     // Store in the fast lookup map
-    EventReadBinding binding;
+    EventBinding binding;
     binding.uri = uri;
     binding.event = eventWithFeatureMap;
-    readableEventLookup[eventPath] = binding;
+    eventLookup[eventPath] = binding;
 
     icDebug("Bound event for URI: %s (endpoint=%u, cluster=0x%x, event=0x%x)",
             uri,
