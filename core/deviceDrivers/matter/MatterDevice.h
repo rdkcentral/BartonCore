@@ -147,6 +147,16 @@ namespace barton
         bool BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper);
 
         /**
+         * Bind a resource URI for event updates.
+         * Called when an event from the device should update a resource.
+         *
+         * @param uri The resource URI
+         * @param mapper The mapper containing event configuration
+         * @return True if binding was successful, false otherwise.
+         */
+        bool BindResourceEventInfo(const char *uri, const SbmdMapper &mapper);
+
+        /**
          * Handle a resource read request by looking up the binding and executing the script.
          * If the related attribute data is in the cache, this is a synchronous operation.
          * Otherwise, it may involve an asynchronous read from the device [NOT YET IMPLEMENTED].
@@ -285,6 +295,20 @@ namespace barton
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
 
         /**
+         * Common helper to update a resource from TLV data using a script mapper.
+         * Refactored from OnAttributeChanged to be shared with OnEventData.
+         *
+         * @param uri The resource URI to update
+         * @param resourceId The resource ID extracted from the URI
+         * @param resourceEndpointId Optional resource endpoint ID
+         * @param value The string value to update the resource to
+         */
+        void UpdateResourceFromTlv(const std::string &uri,
+                                    const char *resourceId,
+                                    const std::optional<std::string> &resourceEndpointId,
+                                    const std::string &value);
+
+        /**
          * @brief Call to ensure a driver operation is considered failed, e.g.,
          *        when no promises have been made. This does nothing
          *        when promises have been stored in the Matter SDK for a pending
@@ -317,6 +341,9 @@ namespace barton
             void OnReportEnd() override;
             void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                     const chip::app::ConcreteAttributePath &aPath) override;
+            void OnEventData(const chip::app::EventHeader &aEventHeader,
+                             chip::TLV::TLVReader *apData,
+                             const chip::app::StatusIB *apStatus) override;
             void OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId) override;
             void OnError(CHIP_ERROR aError) override;
             void OnDeallocatePaths(chip::app::ReadPrepareParams &&aReadPrepareParams) override;
@@ -371,6 +398,36 @@ namespace barton
         {
             std::string uri;
             ResourceBinding binding;
+        };
+
+        // Hash function for ConcreteEventPath to enable fast lookup
+        struct EventPathHash
+        {
+            std::size_t operator()(const chip::app::ConcreteEventPath &path) const
+            {
+                std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
+                std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
+                std::size_t h3 = std::hash<chip::EventId> {}(path.mEventId);
+                return h1 ^ (h2 << 1) ^ (h3 << 2);
+            }
+        };
+
+        // Equality function for ConcreteEventPath
+        struct EventPathEqual
+        {
+            bool operator()(const chip::app::ConcreteEventPath &lhs,
+                            const chip::app::ConcreteEventPath &rhs) const
+            {
+                return lhs.mEndpointId == rhs.mEndpointId && lhs.mClusterId == rhs.mClusterId &&
+                       lhs.mEventId == rhs.mEventId;
+            }
+        };
+
+        // Structure to hold URI and event info for fast event lookup
+        struct EventReadBinding
+        {
+            std::string uri;
+            SbmdEvent event;
         };
 
         enum class ResourceOperation
@@ -434,6 +491,11 @@ namespace barton
                            AttributeReadBinding,
                            AttributePathHash,
                            AttributePathEqual> readableAttributeLookup;
+        // Fast O(1) lookup for events in OnEventData callback
+        std::unordered_map<chip::app::ConcreteEventPath,
+                           EventReadBinding,
+                           EventPathHash,
+                           EventPathEqual> readableEventLookup;
 
         // Context for tracking active write operations
         struct WriteContext

@@ -1172,4 +1172,101 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
     return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
 }
 
+bool QuickJsScript::AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script)
+{
+    std::lock_guard<std::mutex> lock(qjsMtx);
+    eventReadScripts[eventInfo] = script;
+    icLogDebug(LOG_TAG, "Added event read mapper for event %s (cluster 0x%x, event 0x%x)",
+               eventInfo.name.c_str(), eventInfo.clusterId, eventInfo.eventId);
+    return true;
+}
+
+bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
+                                  chip::TLV::TLVReader &reader,
+                                  std::string &outValue)
+{
+    std::lock_guard<std::mutex> lock(qjsMtx);
+
+    // Update stack top for cross-thread usage - QuickJS needs this when the
+    // runtime is called from a different thread than where it was created
+    JS_UpdateStackTop(runtime);
+
+    auto it = eventReadScripts.find(eventInfo);
+    if (it == eventReadScripts.end())
+    {
+        icLogError(LOG_TAG, "No event read mapper found for event %s", eventInfo.name.c_str());
+        return false;
+    }
+
+    // Convert TLV data to JSON
+    std::string eventDataJson;
+    if (!TlvToJson(reader, eventDataJson))
+    {
+        icLogError(LOG_TAG, "Failed to convert event TLV to JSON for event %s", eventInfo.name.c_str());
+        return false;
+    }
+
+    icLogDebug(LOG_TAG, "Event data JSON for %s: %s", eventInfo.name.c_str(), eventDataJson.c_str());
+
+    // Parse the JSON so we can unwrap the "value" field
+    Json::CharReaderBuilder readerBuilder;
+    Json::Value eventJson;
+    std::string parseErrors;
+    std::istringstream jsonStream(eventDataJson);
+    if (!Json::parseFromStream(readerBuilder, jsonStream, &eventJson, &parseErrors))
+    {
+        icLogError(LOG_TAG, "Failed to parse event JSON for %s: %s", eventInfo.name.c_str(), parseErrors.c_str());
+        return false;
+    }
+
+    // Extract the "value" field (TlvToJson wraps the data in {"value": ...})
+    Json::Value unwrappedValue;
+    if (eventJson.isMember("value"))
+    {
+        unwrappedValue = eventJson["value"];
+    }
+    else
+    {
+        icLogError(LOG_TAG, "Event JSON missing 'value' field for %s", eventInfo.name.c_str());
+        return false;
+    }
+
+    // Build the sbmdEventArgs JSON object
+    Json::Value argsJson;
+    argsJson["input"] = unwrappedValue;
+    argsJson["deviceUuid"] = deviceId;
+    argsJson["clusterId"] = eventInfo.clusterId;
+    argsJson["featureMap"] = eventInfo.featureMap;
+    argsJson["eventId"] = eventInfo.eventId;
+    argsJson["eventName"] = eventInfo.name;
+    argsJson["eventType"] = eventInfo.type;
+
+    // Convert Json::Value to string for parsing in QuickJS
+    Json::StreamWriterBuilder writerBuilder;
+    writerBuilder["indentation"] = "";
+    std::string jsonString = Json::writeString(writerBuilder, argsJson);
+
+    icLogDebug(LOG_TAG, "sbmdEventArgs JSON for %s: %s", eventInfo.name.c_str(), jsonString.c_str());
+
+    // Parse JSON string to JSValue
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdEventArgs", argJsonRaw))
+    {
+        return false;
+    }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+
+    JSValue outJson;
+    if (!ExecuteScript(it->second, "sbmdEventArgs", argJsonGuard.get(), outJson))
+    {
+        icLogError(LOG_TAG, "Failed to execute event read mapping script for %s", eventInfo.name.c_str());
+        return false;
+    }
+
+    // Take ownership of script result for cleanup
+    JsValueGuard resultGuard(ctx, outJson);
+
+    return ExtractScriptOutputAsString(resultGuard.release(), outValue);
+}
+
 } // namespace barton
