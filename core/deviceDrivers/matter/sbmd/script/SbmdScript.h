@@ -154,6 +154,29 @@ namespace barton
                                      chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                                      size_t &encodedLength) = 0;
 
+        /**
+         * Add an event mapper for reading event data.
+         * The script will be used when an event is received from the device.
+         *
+         * @param eventInfo Information about the Matter event
+         * @param script The JavaScript script for the mapper
+         * @return true if the mapper was added successfully, false otherwise
+         */
+        virtual bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) = 0;
+
+        /**
+         * Convert a Matter event value to a Barton resource string value.
+         *
+         * @param eventInfo Information about the Matter event
+         * @param reader TLV reader positioned at the event data after having read it from the device
+         * @param outValue will contain a Barton string representation of the event data as converted
+         *        by the script.
+         * @return true if mapping was successful, false otherwise
+         */
+        virtual bool MapEventRead(const SbmdEvent &eventInfo,
+                                  chip::TLV::TLVReader &reader,
+                                  std::string &outValue) = 0;
+
     protected:
         std::string deviceId;
     };

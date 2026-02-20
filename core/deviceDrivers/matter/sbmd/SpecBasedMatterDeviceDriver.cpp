@@ -115,6 +115,14 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 return false;
             }
         }
+        if (sbmdResource.mapper.event.has_value())
+        {
+            if (!device->BindResourceEventInfo(uri.c_str(), sbmdResource.mapper))
+            {
+                icError("  Failed to bind event script for resource %s", sbmdResource.id.c_str());
+                return false;
+            }
+        }
         return true;
     };
 

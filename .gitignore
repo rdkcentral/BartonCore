@@ -5,6 +5,7 @@ cmake_install.cmake
 build
 .cache
 _codeql_detected_source_root
+*.gch
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

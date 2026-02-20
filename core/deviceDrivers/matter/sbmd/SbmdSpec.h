@@ -111,6 +111,39 @@ namespace barton
     };
 
     /**
+     * Represents a Matter cluster event
+     */
+    struct SbmdEvent
+    {
+        uint32_t clusterId;
+        uint32_t eventId;
+        std::string name;
+        std::string type;                              // Event data type (e.g., "struct", "uint8", etc.) for script reference
+        std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
+        std::string resourceId;                        // Resource ID from the owning SbmdResource
+        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
+
+        // Equality operator for map key usage
+        bool operator==(const SbmdEvent &other) const
+        {
+            return clusterId == other.clusterId && eventId == other.eventId &&
+                   resourceEndpointId == other.resourceEndpointId && resourceId == other.resourceId;
+        }
+
+        // Less-than operator for std::map usage
+        bool operator<(const SbmdEvent &other) const
+        {
+            if (clusterId != other.clusterId)
+                return clusterId < other.clusterId;
+            if (eventId != other.eventId)
+                return eventId < other.eventId;
+            if (resourceEndpointId != other.resourceEndpointId)
+                return resourceEndpointId < other.resourceEndpointId;
+            return resourceId < other.resourceId;
+        }
+    };
+
+    /**
      * Represents a mapper configuration for a resource.
      * Each mapper type (read, write, execute) must have EITHER an attribute OR command(s).
      */
@@ -136,6 +169,10 @@ namespace barton
         std::optional<SbmdCommand> executeCommand;
         std::string executeScript;
         std::optional<std::string> executeResponseScript;
+
+        // Event mapping - for updating resources based on events
+        std::optional<SbmdEvent> event;
+        std::string eventScript;
     };
 
     /**
@@ -230,6 +267,30 @@ namespace std
             std::size_t h1 = std::hash<uint32_t> {}(cmd.clusterId);
             std::size_t h2 = std::hash<uint32_t> {}(cmd.commandId);
             return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        }
+    };
+
+    template<>
+    struct hash<barton::SbmdEvent>
+    {
+        std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
+        {
+            // Use boost::hash_combine pattern for better hash distribution
+            // Include all fields used in operator== to maintain hash/equality contract
+            std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
+            std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
+            std::size_t h3 = 0;
+            if (evt.resourceEndpointId.has_value())
+            {
+                h3 = std::hash<std::string> {}(evt.resourceEndpointId.value());
+            }
+            std::size_t h4 = std::hash<std::string> {}(evt.resourceId);
+
+            std::size_t seed = h1;
+            seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= h4 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            return seed;
         }
     };
 } // namespace std

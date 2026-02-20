@@ -222,6 +222,40 @@ namespace barton
                              chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
                              size_t &encodedLength) override;
 
+        /**
+         * Add an event mapper for reading event data.
+         *
+         * @see SbmdScript::AddEventReadMapper
+         */
+        bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) override;
+
+        /**
+         * Convert a Matter event value to a Barton resource string value.
+         *
+         * The script will be executed with a JSON object named "sbmdEventArgs" containing the JSON
+         * representation of the event data in the following format:
+         *
+         * sbmdEventArgs = {
+         *     "input" : <event data (unwrapped from TlvToJson's {"value": ...} wrapper)>,
+         *     "deviceUuid" : <device UUID>,
+         *     "clusterId" : <cluster ID>,
+         *     "featureMap" : <cluster feature map>,
+         *     "endpointId" : <endpoint ID>,
+         *     "eventId" : <event ID>,
+         *     "eventName" : <event name>,
+         *     "eventType" : <event type>
+         * }
+         *
+         * The script should return a JSON object of the following format:
+         *
+         * {"output" : <Barton string representation of the event data>}
+         *
+         * @see SbmdScript::MapEventRead
+         */
+        bool MapEventRead(const SbmdEvent &eventInfo,
+                          chip::TLV::TLVReader &reader,
+                          std::string &outValue) override;
+
     private:
         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
 
@@ -235,6 +269,7 @@ namespace barton
         std::map<SbmdCommand, std::string> commandExecuteScripts;
         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
         std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
+        std::map<SbmdEvent, std::string> eventReadScripts;
 
         /**
          * Generate a deterministic key from a commands vector for script lookup.
