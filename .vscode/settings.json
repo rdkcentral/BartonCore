@@ -144,7 +144,6 @@
         },
         "gn": {
             "commentprefix": "${commentprefix_hash}"
-
         }
     },
     "fileHeaderComment.template": {
