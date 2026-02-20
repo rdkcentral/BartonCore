@@ -53,16 +53,13 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          return {output: sbmdReadArgs.input};
+          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: value.toString()};
       write:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"
         script: |
-          const secs = parseInt(sbmdWriteArgs.input, 10);
-          return {output: secs};
+          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 endpoints:
   - id: "1"
@@ -84,18 +81,13 @@ endpoints:
               name: "OnOff"
               type: "bool"
             script: |
-              return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: (value === true) ? 'true' : 'false'};
           write:
-            commands: # one of these commands is selected by the script based on input
-              - name: "Off"
-                clusterId: "0x0006"      # On/Off cluster
-                commandId: "0x0000"      # Off command
-              - name: "On"
-                clusterId: "0x0006"      # On/Off cluster
-                commandId: "0x0001"      # On command
             script: |
-              // Commands have no args. Select one of the above commands based on input
-              return {output: null, command: (sbmdWriteArgs.input === 'true') ? 'On' : 'Off'};
+              // On/Off commands have no arguments
+              const commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
+              return SbmdUtils.Response.invoke(0x0006, commandId);
 
       - id: "currentLevel"
         type: "com.icontrol.lightLevel"
@@ -112,35 +104,31 @@ endpoints:
               name: "CurrentLevel"
               type: "uint8"
             script: |
-              const level = sbmdReadArgs.input;
+              const level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               const percent = Math.round(level / 254 * 100);
               return {output: percent.toString()};
           write:
-            command:
-              clusterId: "0x0008"      # Level Control cluster
-              commandId: "0x0004"      # MoveToLevelWithOnOff
-              name: "MoveToLevelWithOnOff"
-              args:
-                - name: "Level"
-                  type: "uint8"
-                - name: "TransitionTime"
-                  type: "uint16"
-                - name: "OptionsMask"
-                  type: "uint8"
-                - name: "OptionsOverride"
-                  type: "uint8"
             script: |
               let percent = parseInt(sbmdWriteArgs.input, 10);
               if (isNaN(percent)) percent = 0;
               if (percent < 0) percent = 0;
               if (percent > 100) percent = 100;
 
+              // Convert percentage (0-100) to Matter level (0-254)
               const level = Math.round(percent / 100 * 254);
-              return {
-                output: {
-                  Level: level,
-                  TransitionTime: 0,
-                  OptionsMask: 0,
-                  OptionsOverride: 0
-                }
+
+              // Encode MoveToLevelWithOnOff command args as TLV struct
+              const args = {
+                Level: level,
+                TransitionTime: 0,
+                OptionsMask: 0,
+                OptionsOverride: 0
               };
+              const schema = {
+                Level: {tag: 0, type: 'uint8'},
+                TransitionTime: {tag: 1, type: 'uint16'},
+                OptionsMask: {tag: 2, type: 'uint8'},
+                OptionsOverride: {tag: 3, type: 'uint8'}
+              };
+              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
+              return SbmdUtils.Response.invoke(0x0008, 0x0004, tlvBase64);

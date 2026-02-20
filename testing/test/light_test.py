@@ -51,6 +51,7 @@ def assert_device_has_common_resources(client, device, required_resources):
 
     assert not missing_resources, f"Device is missing resources: {missing_resources}"
 
+
 def test_commission_light(default_environment, matter_light):
     default_environment.get_client().commission_device(
         matter_light.get_commissioning_code(), 100

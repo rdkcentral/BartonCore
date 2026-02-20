@@ -216,7 +216,8 @@ static void test_sbmdParserLightFile(void **state)
     assert_true(spec->resources[0].mapper.hasRead);
     assert_true(spec->resources[0].mapper.hasWrite);
     assert_true(spec->resources[0].mapper.readAttribute.has_value());
-    assert_true(spec->resources[0].mapper.writeAttribute.has_value());
+    // Write uses script-only approach
+    assert_false(spec->resources[0].mapper.writeScript.empty());
 
     // Verify endpoints and core light resources
     assert_int_equal((int) spec->endpoints.size(), 1);
@@ -224,7 +225,7 @@ static void test_sbmdParserLightFile(void **state)
     assert_string_equal(spec->endpoints[0].profile.c_str(), "light");
     assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
 
-    // isOn resource maps to OnOff cluster - uses writeCommands for command selection
+    // isOn resource maps to OnOff cluster - uses MatterJs script-only approach
     auto &isOn = spec->endpoints[0].resources[0];
     assert_string_equal(isOn.id.c_str(), "isOn");
     assert_true(isOn.mapper.hasRead);
@@ -232,17 +233,10 @@ static void test_sbmdParserLightFile(void **state)
     assert_true(isOn.mapper.readAttribute.has_value());
     assert_int_equal((int) isOn.mapper.readAttribute->clusterId, 0x0006);
     assert_int_equal((int) isOn.mapper.readAttribute->attributeId, 0x0000);
-    // Write uses commands list (multiple commands, script selects which)
-    assert_false(isOn.mapper.writeAttribute.has_value());
-    assert_int_equal((int) isOn.mapper.writeCommands.size(), 2);
-    assert_string_equal(isOn.mapper.writeCommands[0].name.c_str(), "Off");
-    assert_int_equal((int) isOn.mapper.writeCommands[0].clusterId, 0x0006);
-    assert_int_equal((int) isOn.mapper.writeCommands[0].commandId, 0x0000);
-    assert_string_equal(isOn.mapper.writeCommands[1].name.c_str(), "On");
-    assert_int_equal((int) isOn.mapper.writeCommands[1].clusterId, 0x0006);
-    assert_int_equal((int) isOn.mapper.writeCommands[1].commandId, 0x0001);
+    // Write uses script-only approach
+    assert_false(isOn.mapper.writeScript.empty());
 
-    // currentLevel resource maps to LevelControl cluster - uses single writeCommand
+    // currentLevel resource maps to LevelControl cluster - uses MatterJs script-only approach
     auto &currentLevel = spec->endpoints[0].resources[1];
     assert_string_equal(currentLevel.id.c_str(), "currentLevel");
     assert_true(currentLevel.mapper.hasRead);
@@ -250,13 +244,8 @@ static void test_sbmdParserLightFile(void **state)
     assert_true(currentLevel.mapper.readAttribute.has_value());
     assert_int_equal((int) currentLevel.mapper.readAttribute->clusterId, 0x0008);
     assert_int_equal((int) currentLevel.mapper.readAttribute->attributeId, 0x0000);
-    // Write uses single command (stored in writeCommands with single entry)
-    assert_false(currentLevel.mapper.writeAttribute.has_value());
-    assert_int_equal((int) currentLevel.mapper.writeCommands.size(), 1);
-    assert_int_equal((int) currentLevel.mapper.writeCommands[0].clusterId, 0x0008);
-    assert_int_equal((int) currentLevel.mapper.writeCommands[0].commandId, 0x0004);
-    assert_string_equal(currentLevel.mapper.writeCommands[0].name.c_str(), "MoveToLevelWithOnOff");
-    assert_int_equal((int) currentLevel.mapper.writeCommands[0].args.size(), 4);
+    // Write uses script-only approach
+    assert_false(currentLevel.mapper.writeScript.empty());
 }
 
 static void test_sbmdParserResourceIdFields(void **state)
@@ -303,21 +292,12 @@ endpoints:
               type: "bool"
             script: "return value;"
           write:
-            attribute:
-              clusterId: "0x0003"
-              attributeId: "0x0004"
-              name: "TestAttr2"
-              type: "bool"
             script: "return value;"
       - id: "executeResource"
         type: "function"
         modes: []
         mapper:
           execute:
-            command:
-              clusterId: "0x0005"
-              commandId: "0x0006"
-              name: "TestCmd"
             script: "return {};"
 )";
 
@@ -356,10 +336,7 @@ endpoints:
     assert_string_equal(epResource1.mapper.readAttribute->resourceEndpointId.value().c_str(), "ep1");
 
     assert_true(epResource1.mapper.hasWrite);
-    assert_true(epResource1.mapper.writeAttribute.has_value());
-    assert_string_equal(epResource1.mapper.writeAttribute->resourceId.c_str(), "endpointResource");
-    assert_true(epResource1.mapper.writeAttribute->resourceEndpointId.has_value());
-    assert_string_equal(epResource1.mapper.writeAttribute->resourceEndpointId.value().c_str(), "ep1");
+    assert_false(epResource1.mapper.writeScript.empty());
 
     // Second endpoint resource with execute
     auto &epResource2 = spec->endpoints[0].resources[1];
@@ -368,10 +345,7 @@ endpoints:
     assert_string_equal(epResource2.resourceEndpointId.value().c_str(), "ep1");
 
     assert_true(epResource2.mapper.hasExecute);
-    assert_true(epResource2.mapper.executeCommand.has_value());
-    assert_string_equal(epResource2.mapper.executeCommand->resourceId.c_str(), "executeResource");
-    assert_true(epResource2.mapper.executeCommand->resourceEndpointId.has_value());
-    assert_string_equal(epResource2.mapper.executeCommand->resourceEndpointId.value().c_str(), "ep1");
+    assert_false(epResource2.mapper.executeScript.empty());
 }
 
 // ============================================================================
@@ -590,7 +564,7 @@ static void test_sbmdParserWriteMapperMissingScript(void **state)
 {
     (void) state;
 
-    // Write mapper must have a non-empty script
+    // Write mapper must have a non-empty script (write is script-only now)
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -608,11 +582,6 @@ resources:
     modes: ["write"]
     mapper:
       write:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
 endpoints: []
 )";
 
@@ -624,7 +593,7 @@ static void test_sbmdParserExecuteMapperMissingScript(void **state)
 {
     (void) state;
 
-    // Execute mapper must have a non-empty script
+    // Execute mapper must have a non-empty script (execute is script-only now)
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -642,45 +611,6 @@ resources:
     modes: []
     mapper:
       execute:
-        command:
-          clusterId: "0x0001"
-          commandId: "0x0003"
-          name: "TestCmd"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_null(spec.get());
-}
-
-static void test_sbmdParserExecuteMapperWithAttributeUnsupported(void **state)
-{
-    (void) state;
-
-    // Execute mapper does not support attributes (must be a command)
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "sensor"
-  deviceClassVersion: 2
-matterMeta:
-  deviceTypes:
-    - "0x0043"
-  revision: 1
-resources:
-  - id: "testResource"
-    type: "function"
-    modes: []
-    mapper:
-      execute:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
-        script: "return {};"
 endpoints: []
 )";
 
@@ -790,311 +720,6 @@ static void test_sbmdParserEmptyString(void **state)
     assert_true(spec->schemaVersion.empty());
 }
 
-static void test_sbmdParserWriteMapperWithBothAttributeAndCommand(void **state)
-{
-    (void) state;
-
-    // Test that write mapper also validates attribute/command exclusivity
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "sensor"
-  deviceClassVersion: 2
-matterMeta:
-  deviceTypes:
-    - "0x0043"
-  revision: 1
-resources:
-  - id: "testResource"
-    type: "boolean"
-    modes: ["write"]
-    mapper:
-      write:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
-        command:
-          clusterId: "0x0001"
-          commandId: "0x0003"
-          name: "TestCmd"
-        script: "return value;"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail when write mapper has both attribute and command
-    assert_null(spec.get());
-}
-
-static void test_sbmdParserExecuteMapperWithBothAttributeAndCommand(void **state)
-{
-    (void) state;
-
-    // Test that execute mapper also validates attribute/command exclusivity
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "sensor"
-  deviceClassVersion: 2
-matterMeta:
-  deviceTypes:
-    - "0x0043"
-  revision: 1
-resources:
-  - id: "testResource"
-    type: "function"
-    modes: []
-    mapper:
-      execute:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
-        command:
-          clusterId: "0x0001"
-          commandId: "0x0003"
-          name: "TestCmd"
-        script: "return {};"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail when execute mapper has both attribute and command
-    assert_null(spec.get());
-}
-
-static void test_sbmdParserWriteMapperWithSingleCommand(void **state)
-{
-    (void) state;
-
-    // Write mapper with a single command (use case: write operation executes one command)
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "light"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - "0x0101"
-  revision: 1
-resources:
-  - id: "level"
-    type: "number"
-    modes: ["write"]
-    mapper:
-      write:
-        command:
-          clusterId: "0x0008"
-          commandId: "0x0004"
-          name: "MoveToLevelWithOnOff"
-          args:
-            - name: "Level"
-              type: "uint8"
-            - name: "TransitionTime"
-              type: "uint16"
-        script: |
-          return {output: {Level: 100, TransitionTime: 0}};
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-
-    // Verify write mapper has single command (stored in writeCommands vector)
-    assert_int_equal((int) spec->resources.size(), 1);
-    auto &resource = spec->resources[0];
-    assert_true(resource.mapper.hasWrite);
-    assert_false(resource.mapper.writeAttribute.has_value());
-    assert_int_equal((int) resource.mapper.writeCommands.size(), 1);
-    assert_string_equal(resource.mapper.writeCommands[0].name.c_str(), "MoveToLevelWithOnOff");
-    assert_int_equal((int) resource.mapper.writeCommands[0].clusterId, 0x0008);
-    assert_int_equal((int) resource.mapper.writeCommands[0].commandId, 0x0004);
-    assert_int_equal((int) resource.mapper.writeCommands[0].args.size(), 2);
-}
-
-static void test_sbmdParserWriteMapperWithMultipleCommands(void **state)
-{
-    (void) state;
-
-    // Write mapper with multiple commands (use case: script selects which command to execute)
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "light"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - "0x0100"
-  revision: 1
-resources:
-  - id: "power"
-    type: "boolean"
-    modes: ["write"]
-    mapper:
-      write:
-        commands:
-          - clusterId: "0x0006"
-            commandId: "0x0000"
-            name: "Off"
-          - clusterId: "0x0006"
-            commandId: "0x0001"
-            name: "On"
-        script: |
-          return {output: null, command: (sbmdWriteArgs.input === 'true') ? 'On' : 'Off'};
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-
-    // Verify write mapper has multiple commands
-    assert_int_equal((int) spec->resources.size(), 1);
-    auto &resource = spec->resources[0];
-    assert_true(resource.mapper.hasWrite);
-    assert_false(resource.mapper.writeAttribute.has_value());
-    assert_int_equal((int) resource.mapper.writeCommands.size(), 2);
-
-    // Verify first command (Off)
-    assert_string_equal(resource.mapper.writeCommands[0].name.c_str(), "Off");
-    assert_int_equal((int) resource.mapper.writeCommands[0].clusterId, 0x0006);
-    assert_int_equal((int) resource.mapper.writeCommands[0].commandId, 0x0000);
-
-    // Verify second command (On)
-    assert_string_equal(resource.mapper.writeCommands[1].name.c_str(), "On");
-    assert_int_equal((int) resource.mapper.writeCommands[1].clusterId, 0x0006);
-    assert_int_equal((int) resource.mapper.writeCommands[1].commandId, 0x0001);
-}
-
-static void test_sbmdParserTimedInvokeTimeoutMsValid(void **state)
-{
-    (void) state;
-
-    // Test that valid timedInvokeTimeoutMs values (within uint16_t range) are accepted
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "doorLock"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - "0x000a"
-  revision: 1
-resources:
-  - id: "lock"
-    type: "function"
-    mapper:
-      execute:
-        command:
-          clusterId: "0x0101"
-          commandId: "0x00"
-          name: "LockDoor"
-          timedInvokeTimeoutMs: 10000
-        script: "return {output: null};"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-    
-    // Verify command was parsed with timedInvokeTimeoutMs
-    assert_int_equal((int) spec->resources.size(), 1);
-    auto &resource = spec->resources[0];
-    assert_true(resource.mapper.hasExecute);
-    assert_true(resource.mapper.executeCommand.has_value());
-    assert_true(resource.mapper.executeCommand->timedInvokeTimeoutMs.has_value());
-    assert_int_equal((int) resource.mapper.executeCommand->timedInvokeTimeoutMs.value(), 10000);
-}
-
-static void test_sbmdParserTimedInvokeTimeoutMsMaxValue(void **state)
-{
-    (void) state;
-
-    // Test that max valid value (UINT16_MAX = 65535) is accepted
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "doorLock"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - "0x000a"
-  revision: 1
-resources:
-  - id: "lock"
-    type: "function"
-    mapper:
-      execute:
-        command:
-          clusterId: "0x0101"
-          commandId: "0x00"
-          name: "LockDoor"
-          timedInvokeTimeoutMs: 65535
-        script: "return {output: null};"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    assert_non_null(spec.get());
-    
-    // Verify command was parsed with timedInvokeTimeoutMs at max value
-    assert_int_equal((int) spec->resources.size(), 1);
-    auto &resource = spec->resources[0];
-    assert_true(resource.mapper.hasExecute);
-    assert_true(resource.mapper.executeCommand.has_value());
-    assert_true(resource.mapper.executeCommand->timedInvokeTimeoutMs.has_value());
-    assert_int_equal((int) resource.mapper.executeCommand->timedInvokeTimeoutMs.value(), 65535);
-}
-
-static void test_sbmdParserTimedInvokeTimeoutMsOutOfRange(void **state)
-{
-    (void) state;
-
-    // Test that values exceeding UINT16_MAX are rejected with clear error
-    const char *yaml = R"(
-schemaVersion: "1.0"
-driverVersion: "1.0"
-name: "Test Device"
-bartonMeta:
-  deviceClass: "doorLock"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - "0x000a"
-  revision: 1
-resources:
-  - id: "lock"
-    type: "function"
-    mapper:
-      execute:
-        command:
-          clusterId: "0x0101"
-          commandId: "0x00"
-          name: "LockDoor"
-          timedInvokeTimeoutMs: 70000
-        script: "return {output: null};"
-endpoints: []
-)";
-
-    auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail with targeted error message for out-of-range value
-    assert_null(spec.get());
-}
-
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -1105,10 +730,6 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserDoorLockFile),
         cmocka_unit_test(test_sbmdParserLightFile),
         cmocka_unit_test(test_sbmdParserResourceIdFields),
-        cmocka_unit_test(test_sbmdParserWriteMapperWithSingleCommand),
-        cmocka_unit_test(test_sbmdParserWriteMapperWithMultipleCommands),
-        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsValid),
-        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsMaxValue),
         // Negative tests - error handling
         cmocka_unit_test(test_sbmdParserInvalidYamlSyntax),
         cmocka_unit_test(test_sbmdParserMissingRequiredFields),
@@ -1120,15 +741,11 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserReadMapperMissingScript),
         cmocka_unit_test(test_sbmdParserWriteMapperMissingScript),
         cmocka_unit_test(test_sbmdParserExecuteMapperMissingScript),
-        cmocka_unit_test(test_sbmdParserExecuteMapperWithAttributeUnsupported),
         cmocka_unit_test(test_sbmdParserInvalidResourceType),
         cmocka_unit_test(test_sbmdParserInvalidEndpointType),
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
-        cmocka_unit_test(test_sbmdParserWriteMapperWithBothAttributeAndCommand),
-        cmocka_unit_test(test_sbmdParserExecuteMapperWithBothAttributeAndCommand),
-        cmocka_unit_test(test_sbmdParserTimedInvokeTimeoutMsOutOfRange),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

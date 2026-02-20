@@ -23,8 +23,8 @@
     },
     "scriptType": {
       "type": "string",
-      "description": "Script type (currently only JavaScript is supported)",
-      "enum": ["JavaScript"]
+      "description": "Script type: 'JavaScript' for legacy JSON/TLV conversion, 'JavaScript+matterjs' for matter.js TLV encoding",
+      "enum": ["JavaScript", "JavaScript+matterjs"]
     },
     "bartonMeta": {
       "$ref": "#/$defs/bartonMeta"
@@ -88,6 +88,14 @@
           "type": "integer",
           "description": "Device specification revision from Matter spec",
           "minimum": 1
+        },
+        "featureClusters": {
+          "type": "array",
+          "description": "Cluster IDs to get feature maps from for script access",
+          "items": {
+            "type": ["integer", "string"],
+            "description": "Cluster ID (hex or decimal)"
+          }
         }
       },
       "additionalProperties": false
@@ -238,14 +246,15 @@
       "oneOf": [
         {"required": ["attribute"]},
         {"required": ["command"]},
-        {"required": ["commands"]}
+        {"required": ["commands"]},
+        {"not": {"anyOf": [{"required": ["attribute"]}, {"required": ["command"]}, {"required": ["commands"]}]}}
       ],
       "additionalProperties": false
     },
     "executeMapper": {
       "type": "object",
       "description": "Execute mapper configuration",
-      "required": ["command", "script"],
+      "required": ["script"],
       "properties": {
         "command": {
           "$ref": "#/$defs/command"

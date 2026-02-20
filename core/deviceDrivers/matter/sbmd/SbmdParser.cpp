@@ -69,27 +69,10 @@ namespace barton
             // Validate write mapper
             if (mapper.hasWrite)
             {
-                // Script must be non-empty
+                // Script must be non-empty - write mappers are script-only
                 if (mapper.writeScript.empty())
                 {
                     icError("Resource %s has write enabled but writeScript is empty", resourceId.c_str());
-                    return false;
-                }
-
-                // Must use attribute or command(s) (but not both)
-                bool hasAttr = mapper.writeAttribute.has_value();
-                bool hasCmds = !mapper.writeCommands.empty();
-
-                if (!hasAttr && !hasCmds)
-                {
-                    icError("Resource %s has write enabled but no writeAttribute or writeCommands specified",
-                            resourceId.c_str());
-                    return false;
-                }
-                if (hasAttr && hasCmds)
-                {
-                    icError("Resource %s has write enabled with both attribute and command(s) - only one allowed",
-                            resourceId.c_str());
                     return false;
                 }
             }
@@ -97,30 +80,10 @@ namespace barton
             // Validate execute mapper
             if (mapper.hasExecute)
             {
-                // Script must be non-empty
+                // Script must be non-empty - execute mappers are script-only
                 if (mapper.executeScript.empty())
                 {
                     icError("Resource %s has execute enabled but executeScript is empty", resourceId.c_str());
-                    return false;
-                }
-
-                // Must use command (attributes not supported for execute)
-                if (!mapper.executeCommand.has_value())
-                {
-                    icError("Resource %s has execute enabled but no executeCommand specified", resourceId.c_str());
-                    return false;
-                }
-
-                if (mapper.executeAttribute.has_value())
-                {
-                    icError("Resource %s uses executeAttribute which is not yet supported", resourceId.c_str());
-                    return false;
-                }
-
-                if (mapper.executeResponseScript.has_value() && !mapper.executeCommand.has_value())
-                {
-                    icError("Resource %s has execute response script but no executeCommand specified",
-                            resourceId.c_str());
                     return false;
                 }
             }
@@ -164,16 +127,7 @@ namespace barton
                 setAttrIds(resource.mapper.readAttribute);
                 setCmdIds(resource.mapper.readCommand);
             }
-            if (resource.mapper.hasWrite)
-            {
-                setAttrIds(resource.mapper.writeAttribute);
-                setCmdsIds(resource.mapper.writeCommands);
-            }
-            if (resource.mapper.hasExecute)
-            {
-                setAttrIds(resource.mapper.executeAttribute);
-                setCmdIds(resource.mapper.executeCommand);
-            }
+            // Note: Write and execute mappers are script-only, no metadata to set IDs on
         }
 } // anonymous namespace
 
@@ -370,6 +324,17 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
         meta.revision = node["revision"].as<uint32_t>();
     }
 
+    // Parse optional featureClusters
+    if (node["featureClusters"] && node["featureClusters"].IsSequence())
+    {
+        for (const auto &clusterNode : node["featureClusters"])
+        {
+            std::string clusterStr = clusterNode.as<std::string>();
+            uint32_t clusterId = ParseHexOrDecimal(clusterStr);
+            meta.featureClusters.push_back(clusterId);
+        }
+    }
+
     return true;
 }
 
@@ -538,57 +503,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         }
     }
 
-    // Parse write mapping
+    // Parse write mapping - script-only, no metadata
     if (node["write"])
     {
         const YAML::Node &writeNode = node["write"];
         mapper.hasWrite = true;
-
-        if (writeNode["attribute"])
-        {
-            SbmdAttribute attr;
-            if (!ParseAttribute(writeNode["attribute"], attr))
-            {
-                icError("Failed to parse write attribute");
-                return false;
-            }
-            mapper.writeAttribute = attr;
-        }
-
-        // Parse single command (goes into writeCommands vector)
-        if (writeNode["command"])
-        {
-            if (writeNode["commands"])
-            {
-                icError("write mapper cannot have both 'command' and 'commands'");
-                return false;
-            }
-
-            SbmdCommand cmd;
-            if (!ParseCommand(writeNode["command"], cmd))
-            {
-                icError("Failed to parse write command");
-                return false;
-            }
-            mapper.writeCommands.push_back(cmd);
-        }
-
-        // Parse commands list (multiple commands for script selection)
-        if (writeNode["commands"] && writeNode["commands"].IsSequence())
-        {
-            for (const auto &cmdNode : writeNode["commands"])
-            {
-                SbmdCommand cmd;
-                if (!ParseCommand(cmdNode, cmd))
-                {
-                    icError("Failed to parse command in commands list");
-                    return false;
-                }
-                mapper.writeCommands.push_back(cmd);
-            }
-        }
-
-        // Validation is done later in ValidateMapper
 
         if (writeNode["script"])
         {
@@ -596,50 +515,11 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         }
     }
 
-    // Parse execute mapping
+    // Parse execute mapping - script-only, no metadata
     if (node["execute"])
     {
         const YAML::Node &executeNode = node["execute"];
         mapper.hasExecute = true;
-
-        bool hasAttribute = false;
-        bool hasCommand = false;
-
-        if (executeNode["attribute"])
-        {
-            SbmdAttribute attr;
-            if (!ParseAttribute(executeNode["attribute"], attr))
-            {
-                icError("Failed to parse execute attribute");
-                return false;
-            }
-            mapper.executeAttribute = attr;
-            hasAttribute = true;
-        }
-
-        if (executeNode["command"])
-        {
-            SbmdCommand cmd;
-            if (!ParseCommand(executeNode["command"], cmd))
-            {
-                icError("Failed to parse execute command");
-                return false;
-            }
-            mapper.executeCommand = cmd;
-            hasCommand = true;
-        }
-
-        if (!hasAttribute && !hasCommand)
-        {
-            icError("execute mapper must have either 'attribute' or 'command'");
-            return false;
-        }
-
-        if (hasAttribute && hasCommand)
-        {
-            icError("execute mapper cannot have both 'attribute' and 'command'");
-            return false;
-        }
 
         if (executeNode["script"])
         {

@@ -77,6 +77,21 @@ namespace barton
             script = std::move(newScript);
         }
 
+        /**
+         * Set the list of cluster IDs to get feature maps from.
+         * These are specified in the SBMD spec's matterMeta.featureClusters.
+         * If the device cache is already available, also updates the cached feature maps.
+         */
+        void SetFeatureClusters(std::vector<uint32_t> clusters)
+        {
+            featureClusters = std::move(clusters);
+            // If we already have a script and cache, update feature maps now
+            if (script && deviceDataCache)
+            {
+                UpdateCachedFeatureMaps();
+            }
+        }
+
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**
@@ -128,23 +143,33 @@ namespace barton
 
         /**
          * Bind a resource URI for write operations.
-         * Can bind either an attribute or command based on what's in the mapper.
+         * The script returns full operation details (invoke/write) including cluster/command/attribute IDs.
          *
          * @param uri The resource URI
-         * @param mapper The mapper containing write configuration
+         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
+         * @param endpointId The endpoint ID (may be empty for device-level resources)
+         * @param resourceId The resource identifier
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceWriteInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindWriteInfo(const char *uri,
+                           const std::string &resourceKey,
+                           const std::string &endpointId,
+                           const std::string &resourceId);
 
         /**
          * Bind a resource URI for execute operations.
-         * Can bind either an attribute or command based on what's in the mapper.
+         * The script returns full operation details (invoke) including cluster/command IDs.
          *
          * @param uri The resource URI
-         * @param mapper The mapper containing execute configuration
+         * @param resourceKey The resource key for script lookup (endpointId:resourceId)
+         * @param endpointId The endpoint ID (may be empty for device-level resources)
+         * @param resourceId The resource identifier
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindExecuteInfo(const char *uri,
+                             const std::string &resourceKey,
+                             const std::string &endpointId,
+                             const std::string &resourceId);
 
         /**
          * Handle a resource read request by looking up the binding and executing the script.
@@ -285,6 +310,12 @@ namespace barton
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
 
         /**
+         * Compute feature maps for all configured featureClusters and pass them to the script.
+         * Called when subscription is established and cluster data is available.
+         */
+        void UpdateCachedFeatureMaps();
+
+        /**
          * @brief Call to ensure a driver operation is considered failed, e.g.,
          *        when no promises have been made. This does nothing
          *        when promises have been stored in the Matter SDK for a pending
@@ -331,7 +362,8 @@ namespace barton
             enum class Type
             {
                 Attribute,
-                Commands
+                Command,
+                ScriptOnly // For write/execute mappers - script returns full operation details
             };
             Type type;
 
@@ -339,8 +371,13 @@ namespace barton
             chip::app::ConcreteAttributePath attributePath;
             std::optional<SbmdAttribute> attribute;
 
-            // For Commands type (single command = size 1, multiple = size > 1)
-            std::vector<SbmdCommand> commands;
+            // For Command type
+            std::optional<SbmdCommand> command;
+
+            // For ScriptOnly type - resource identity for script lookup
+            std::string resourceKey;
+            std::string endpointId;
+            std::string resourceId;
         };
 
         // Hash function for ConcreteAttributePath to enable fast lookup
@@ -373,30 +410,6 @@ namespace barton
             ResourceBinding binding;
         };
 
-        enum class ResourceOperation
-        {
-            Read,
-            Write,
-            Execute
-        };
-
-        /**
-         * Internal helper to bind resource info for any operation type.
-         * Reduces code duplication between read/write/execute binding.
-         *
-         * @param uri The resource URI
-         * @param attribute Optional attribute to bind
-         * @param commands Commands to bind (empty = no commands, size 1 = single, size > 1 = multiple)
-         * @param operation The operation type
-         * @param bindings The binding map to store the result in
-         * @return True if binding was successful, false otherwise.
-         */
-        bool BindResourceInfo(const char *uri,
-                              const std::optional<SbmdAttribute> &attribute,
-                              const std::vector<SbmdCommand> &commands,
-                              ResourceOperation operation,
-                              std::map<std::string, ResourceBinding> &bindings);
-
         /**
          * Send a command to the device using pre-encoded TLV data.
          * Common helper used by both write-command and execute-command paths.
@@ -426,6 +439,7 @@ namespace barton
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
         std::unique_ptr<CacheCallback> cacheCallback;
+        std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
         std::map<std::string, ResourceBinding> resourceReadBindings;
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;

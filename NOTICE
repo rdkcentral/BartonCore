@@ -52,3 +52,8 @@ Code borrowed from: https://github.com/meekrosoft/fff
 Copyright (c) 2010-2022 Michael Long (@meekrosoft)
 All rights reserved.
 Licensed under the MIT License
+
+scripts/build-matterjs-clusters.sh
+Code borrowed from: https://github.com/tpisto/pasm/blob/master/lib/pasm/helpers.js
+Copyright (c) 2012 Tommi Pisto
+Licensed under the MIT License
