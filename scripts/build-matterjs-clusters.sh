@@ -27,13 +27,16 @@
 # Build script to create a QuickJS-compatible bundle of the matter.js cluster
 # library for TLV encoding/decoding in SBMD drivers.
 #
+# See: GitHub: tpisto/pasm/helpers.js
+# Copyright (c) 2012 Tommi Pisto
+# Licensed under the MIT License
 
 set -e
 
 help() {
-    echo "Usage: $0 [-o <output_dir>] [-v <version>] [-h]"
+    echo "Usage: $0 -v <version> [-o <output_dir>] [-h]"
+    echo "  -v  matter.js version/tag to use (required)"
     echo "  -o  Output directory for the bundled JavaScript (default: build/matterjs-clusters)"
-    echo "  -v  matter.js version/tag to use (default: main)"
     echo "  -h  Display help"
 }
 
@@ -42,7 +45,7 @@ PROJECT_ROOT=$(realpath "${MY_DIR}/..")
 BUILD_DIR=${PROJECT_ROOT}/build
 OUTPUT_DIR=${BUILD_DIR}/matterjs-clusters
 MATTERJS_BUILD_DIR=${BUILD_DIR}/matterjs-src
-MATTERJS_VERSION="main"
+MATTERJS_VERSION=""
 
 while getopts ":ho:v:" option; do
     case $option in
@@ -63,6 +66,12 @@ while getopts ":ho:v:" option; do
         ;;
     esac
 done
+
+if [ -z "${MATTERJS_VERSION}" ]; then
+    echo "Error: -v <version> is required"
+    help
+    exit 1
+fi
 
 BUNDLE_OUTPUT="${OUTPUT_DIR}/matter-clusters.js"
 

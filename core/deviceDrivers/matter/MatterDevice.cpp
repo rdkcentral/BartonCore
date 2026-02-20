@@ -183,6 +183,35 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
     return true;
 }
 
+void MatterDevice::UpdateCachedFeatureMaps()
+{
+    if (!script)
+    {
+        icDebug("No script set for device %s, skipping feature map update", deviceId.c_str());
+        return;
+    }
+
+    std::map<uint32_t, uint32_t> clusterFeatureMaps;
+    for (uint32_t clusterId : featureClusters)
+    {
+        // Find the Matter endpoint that hosts this cluster
+        chip::EndpointId chipEndpointId;
+        if (GetEndpointForCluster(clusterId, chipEndpointId))
+        {
+            uint32_t featureMap = 0;
+            if (GetClusterFeatureMap(chipEndpointId, clusterId, featureMap))
+            {
+                clusterFeatureMaps[clusterId] = featureMap;
+                icDebug(
+                    "Cached featureMap 0x%x for cluster 0x%x on endpoint %u", featureMap, clusterId, chipEndpointId);
+            }
+        }
+    }
+
+    script->SetClusterFeatureMaps(clusterFeatureMaps);
+    icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), clusterFeatureMaps.size());
+}
+
 bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
 {
     if (uri == nullptr)
@@ -218,13 +247,6 @@ bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mappe
         binding.attributePath.mAttributeId = attribute.attributeId;
         binding.attribute = attribute;
 
-        // Populate the feature map from the cache
-        uint32_t featureMapValue = 0;
-        if (GetClusterFeatureMap(endpointId, attribute.clusterId, featureMapValue))
-        {
-            binding.attribute->featureMap = featureMapValue;
-        }
-
         icDebug("Bound resource read for URI: %s (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
                 uri,
                 endpointId,
@@ -255,12 +277,6 @@ bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mappe
                     cmd.clusterId,
                     uri);
             return false;
-        }
-
-        uint32_t featureMapValue = 0;
-        if (GetClusterFeatureMap(endpointId, cmd.clusterId, featureMapValue))
-        {
-            cmd.featureMap = featureMapValue;
         }
 
         icDebug("Bound resource read for URI: %s (command: %s)", uri, cmd.name.c_str());
@@ -324,11 +340,16 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
                                       const char *uri,
                                       char **response)
 {
-    // Validate TLV buffer before processing
+    // Empty TLV structure (end-of-container marker: 0x15) for commands with no arguments
+    static const uint8_t emptyTlvStruct[] = {0x15};
+    static const size_t emptyTlvStructLen = sizeof(emptyTlvStruct);
+
+    // Use empty TLV structure if no buffer provided (common for no-arg commands)
     if (tlvBuffer == nullptr || encodedLength == 0)
     {
-        icError("Invalid TLV buffer for command at URI: %s (buffer=%p, length=%zu)", uri, tlvBuffer, encodedLength);
-        return false;
+        tlvBuffer = emptyTlvStruct;
+        encodedLength = emptyTlvStructLen;
+        icLogDebug(LOG_TAG, "No TLV buffer provided for command at URI: %s, using empty struct", uri);
     }
 
     // Create TLV reader from the encoded data
@@ -777,6 +798,9 @@ void MatterDevice::CacheCallback::OnSubscriptionEstablished(chip::SubscriptionId
 {
     icDebug("OnSubscriptionEstablished for device %s, subscription ID: %u",
                device->deviceId.c_str(), aSubscriptionId);
+
+    // Now that subscription is established, compute and cache feature maps for scripts
+    device->UpdateCachedFeatureMaps();
 }
 
 void MatterDevice::CacheCallback::OnError(CHIP_ERROR aError)

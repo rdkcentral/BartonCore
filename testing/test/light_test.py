@@ -25,8 +25,6 @@
 import logging
 from queue import Queue
 
-import pytest
-
 from gi.repository import BCore
 
 from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster

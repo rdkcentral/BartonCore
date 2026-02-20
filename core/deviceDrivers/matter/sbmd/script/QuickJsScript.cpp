@@ -228,6 +228,51 @@ QuickJsScript::~QuickJsScript()
     icLogDebug(LOG_TAG, "QuickJsScript destroyed for device %s", deviceId.c_str());
 }
 
+void QuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
+{
+    std::lock_guard<std::mutex> lock(scriptsMutex);
+    clusterFeatureMaps = maps;
+    icLogDebug(LOG_TAG, "Set %zu cluster feature maps for device %s", maps.size(), deviceId.c_str());
+}
+
+Json::Value QuickJsScript::BuildBaseArgsJson(const std::optional<std::string> &endpointId,
+                                             std::optional<uint32_t> clusterId,
+                                             const std::optional<std::string> &resourceId,
+                                             const std::optional<std::string> &input) const
+{
+    Json::Value argsJson;
+    argsJson["deviceUuid"] = deviceId;
+
+    // Add cluster feature maps so scripts can check cluster capabilities
+    Json::Value featureMapsJson(Json::objectValue);
+    for (const auto &pair : clusterFeatureMaps)
+    {
+        // Use string key for JSON compatibility (JavaScript object keys are strings)
+        featureMapsJson[std::to_string(pair.first)] = pair.second;
+    }
+    argsJson["clusterFeatureMaps"] = featureMapsJson;
+
+    // Add optional common fields
+    if (endpointId.has_value())
+    {
+        argsJson["endpointId"] = endpointId.value();
+    }
+    if (clusterId.has_value())
+    {
+        argsJson["clusterId"] = clusterId.value();
+    }
+    if (resourceId.has_value())
+    {
+        argsJson["resourceId"] = resourceId.value();
+    }
+    if (input.has_value())
+    {
+        argsJson["input"] = input.value();
+    }
+
+    return argsJson;
+}
+
 bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
@@ -318,13 +363,16 @@ bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std:
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // Clear any pending exception from previous operations that might interfere
-    JSValue pendingException = JS_GetException(ctx);
-    if (!JS_IsNull(pendingException) && !JS_IsUndefined(pendingException))
+    // Check for pending exception from previous operations - this indicates a bug
+    std::string exMsg;
+    if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
     {
-        icLogWarn(LOG_TAG, "Cleared pending exception before parsing %s JSON", sourceName.c_str());
+        icLogError(LOG_TAG,
+                   "Found unhandled exception before parsing %s JSON: %s - this is a bug",
+                   sourceName.c_str(),
+                   exMsg.c_str());
+        return false;
     }
-    JS_FreeValue(ctx, pendingException);
 
     JSValue parsed = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
     if (JS_IsException(parsed))
@@ -428,12 +476,8 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     std::string tlvBase64(base64Buffer.data(), base64Len);
 
     // Build the sbmdReadArgs JSON object with base64 TLV
-    Json::Value argsJson;
+    Json::Value argsJson = BuildBaseArgsJson(attributeInfo.resourceEndpointId.value_or(""), attributeInfo.clusterId);
     argsJson["tlvBase64"] = tlvBase64;
-    argsJson["deviceUuid"] = deviceId;
-    argsJson["clusterId"] = attributeInfo.clusterId;
-    argsJson["featureMap"] = attributeInfo.featureMap;
-    argsJson["endpointId"] = attributeInfo.resourceEndpointId.value_or("");
     argsJson["attributeId"] = attributeInfo.attributeId;
     argsJson["attributeName"] = attributeInfo.name;
     argsJson["attributeType"] = attributeInfo.type;
@@ -506,12 +550,8 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     std::string tlvBase64(base64Buffer.data(), base64Len);
 
     // Build the sbmdCommandResponseArgs JSON object with base64 TLV
-    Json::Value argsJson;
+    Json::Value argsJson = BuildBaseArgsJson(commandInfo.resourceEndpointId.value_or(""), commandInfo.clusterId);
     argsJson["tlvBase64"] = tlvBase64;
-    argsJson["deviceUuid"] = deviceId;
-    argsJson["clusterId"] = commandInfo.clusterId;
-    argsJson["featureMap"] = commandInfo.featureMap;
-    argsJson["endpointId"] = commandInfo.resourceEndpointId.value_or("");
     argsJson["commandId"] = commandInfo.commandId;
     argsJson["commandName"] = commandInfo.name;
 
@@ -607,11 +647,7 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
     }
 
     // Build the sbmdWriteArgs JSON object
-    Json::Value argsJson;
-    argsJson["input"] = inValue;
-    argsJson["deviceUuid"] = deviceId;
-    argsJson["endpointId"] = endpointId;
-    argsJson["resourceId"] = resourceId;
+    Json::Value argsJson = BuildBaseArgsJson(endpointId, std::nullopt, resourceId, inValue);
 
     // Convert Json::Value to string for parsing in QuickJS
     Json::StreamWriterBuilder writerBuilder;
@@ -715,16 +751,9 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
             }
         }
 
-        // Extract tlvBase64 (optional for invoke - defaults to empty TLV structure)
+        // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
         JsValueGuard tlvBase64Guard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "tlvBase64"));
-        std::string base64Str;
-        if (JS_IsUndefined(tlvBase64Guard.get()) || JS_IsNull(tlvBase64Guard.get()))
-        {
-            // No tlvBase64 provided - use empty TLV structure (end-of-container marker: 0x15)
-            base64Str = "FQ==";
-            icLogDebug(LOG_TAG, "No tlvBase64 provided for invoke, using empty TLV structure");
-        }
-        else
+        if (!JS_IsUndefined(tlvBase64Guard.get()) && !JS_IsNull(tlvBase64Guard.get()))
         {
             JsCStringGuard base64StrGuard(ctx, JS_ToCString(ctx, tlvBase64Guard.get()));
             if (!base64StrGuard)
@@ -732,25 +761,29 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
                 icLogError(LOG_TAG, "Failed to convert 'tlvBase64' to string");
                 return false;
             }
-            base64Str = base64StrGuard.get();
-        }
+            std::string base64Str = base64StrGuard.get();
 
-        // Decode base64 to TLV bytes
-        size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
-        if (!result.tlvBuffer.Alloc(maxDecodedLen))
-        {
-            icLogError(LOG_TAG, "Failed to allocate buffer for TLV decoding");
-            return false;
-        }
+            // Only decode if non-empty
+            if (!base64Str.empty())
+            {
+                // Decode base64 to TLV bytes
+                size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
+                if (!result.tlvBuffer.Alloc(maxDecodedLen))
+                {
+                    icLogError(LOG_TAG, "Failed to allocate buffer for TLV decoding");
+                    return false;
+                }
 
-        uint16_t decodedLen =
-            chip::Base64Decode(base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
-        if (decodedLen == UINT16_MAX)
-        {
-            icLogError(LOG_TAG, "Failed to decode base64 TLV data for invoke");
-            return false;
+                uint16_t decodedLen = chip::Base64Decode(
+                    base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
+                if (decodedLen == UINT16_MAX)
+                {
+                    icLogError(LOG_TAG, "Failed to decode base64 TLV data for invoke");
+                    return false;
+                }
+                result.tlvLength = decodedLen;
+            }
         }
-        result.tlvLength = decodedLen;
 
         icLogDebug(LOG_TAG,
                    "write mapped to invoke: cluster=0x%X, command=0x%X, tlvLen=%zu",
@@ -877,12 +910,8 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
         return false;
     }
 
-    // Build the sbmdCommandArgs JSON object (similar to write but using command args semantics)
-    Json::Value argsJson;
-    argsJson["input"] = inValue;
-    argsJson["deviceUuid"] = deviceId;
-    argsJson["endpointId"] = endpointId;
-    argsJson["resourceId"] = resourceId;
+    // Build the sbmdCommandArgs JSON object
+    Json::Value argsJson = BuildBaseArgsJson(endpointId, std::nullopt, resourceId, inValue);
 
     // Convert Json::Value to string for parsing in QuickJS
     Json::StreamWriterBuilder writerBuilder;
@@ -990,16 +1019,9 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
         }
     }
 
-    // Extract tlvBase64 (optional for invoke - defaults to empty TLV structure)
+    // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
     JsValueGuard tlvBase64Guard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "tlvBase64"));
-    std::string base64Str;
-    if (JS_IsUndefined(tlvBase64Guard.get()) || JS_IsNull(tlvBase64Guard.get()))
-    {
-        // No tlvBase64 provided - use empty TLV structure (end-of-container marker: 0x15)
-        base64Str = "FQ==";
-        icLogDebug(LOG_TAG, "No tlvBase64 provided for invoke, using empty TLV structure");
-    }
-    else
+    if (!JS_IsUndefined(tlvBase64Guard.get()) && !JS_IsNull(tlvBase64Guard.get()))
     {
         JsCStringGuard base64StrGuard(ctx, JS_ToCString(ctx, tlvBase64Guard.get()));
         if (!base64StrGuard)
@@ -1007,25 +1029,29 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
             icLogError(LOG_TAG, "Failed to convert 'tlvBase64' to string");
             return false;
         }
-        base64Str = base64StrGuard.get();
-    }
+        std::string base64Str = base64StrGuard.get();
 
-    // Decode base64 to TLV bytes
-    size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
-    if (!result.tlvBuffer.Alloc(maxDecodedLen))
-    {
-        icLogError(LOG_TAG, "Failed to allocate buffer for TLV decoding");
-        return false;
-    }
+        // Only decode if non-empty
+        if (!base64Str.empty())
+        {
+            // Decode base64 to TLV bytes
+            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
+            if (!result.tlvBuffer.Alloc(maxDecodedLen))
+            {
+                icLogError(LOG_TAG, "Failed to allocate buffer for TLV decoding");
+                return false;
+            }
 
-    uint16_t decodedLen =
-        chip::Base64Decode(base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
-    if (decodedLen == UINT16_MAX)
-    {
-        icLogError(LOG_TAG, "Failed to decode base64 TLV data for invoke");
-        return false;
+            uint16_t decodedLen = chip::Base64Decode(
+                base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
+            if (decodedLen == UINT16_MAX)
+            {
+                icLogError(LOG_TAG, "Failed to decode base64 TLV data for invoke");
+                return false;
+            }
+            result.tlvLength = decodedLen;
+        }
     }
-    result.tlvLength = decodedLen;
 
     icLogDebug(LOG_TAG,
                "execute mapped to invoke: cluster=0x%X, command=0x%X, tlvLen=%zu",

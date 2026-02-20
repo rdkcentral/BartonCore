@@ -28,6 +28,7 @@
 #pragma once
 
 #include <mutex>
+#include <string>
 
 // Forward declarations for QuickJS types
 struct JSRuntime;
@@ -104,6 +105,19 @@ namespace barton
          * @return true if the object was frozen successfully
          */
         static bool FreezeGlobalObject(const char *name);
+
+        /**
+         * Check for and clear any pending JavaScript exception.
+         *
+         * JS_GetException returns JS_NULL or JS_TAG_UNINITIALIZED when no exception
+         * is pending - this helper handles both cases correctly.
+         *
+         * @param ctx The JSContext to check
+         * @param outExceptionMsg If non-null and an exception was found, filled with
+         *        the exception message (including stack trace if available)
+         * @return true if a pending exception was found and cleared, false otherwise
+         */
+        static bool CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg = nullptr);
 
     private:
         static bool InstallBrowserShims();

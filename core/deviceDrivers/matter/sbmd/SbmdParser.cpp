@@ -324,6 +324,17 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
         meta.revision = node["revision"].as<uint32_t>();
     }
 
+    // Parse optional featureClusters
+    if (node["featureClusters"] && node["featureClusters"].IsSequence())
+    {
+        for (const auto &clusterNode : node["featureClusters"])
+        {
+            std::string clusterStr = clusterNode.as<std::string>();
+            uint32_t clusterId = ParseHexOrDecimal(clusterStr);
+            meta.featureClusters.push_back(clusterId);
+        }
+    }
+
     return true;
 }
 

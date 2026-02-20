@@ -53,7 +53,8 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          return {output: sbmdReadArgs.input};
+          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: value.toString()};
       write:
         script: |
           const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
@@ -80,7 +81,8 @@ endpoints:
               name: "OnOff"
               type: "bool"
             script: |
-              return {output: (sbmdReadArgs.input === true) ? 'true' : 'false'};
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: (value === true) ? 'true' : 'false'};
           write:
             script: |
               // On/Off commands have no arguments
@@ -102,7 +104,7 @@ endpoints:
               name: "CurrentLevel"
               type: "uint8"
             script: |
-              const level = sbmdReadArgs.input;
+              const level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               const percent = Math.round(level / 254 * 100);
               return {output: percent.toString()};
           write:

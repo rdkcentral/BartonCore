@@ -216,6 +216,14 @@ bool QuickJsRuntime::InstallBrowserShims()
     }
     JS_FreeValue(ctx_, urlResult);
 
+    // Check if polyfill installation left an exception (indicates a problem we should fix)
+    std::string exMsg;
+    if (CheckAndClearPendingException(ctx_, &exMsg))
+    {
+        icLogError(LOG_TAG, "Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
+        // Don't fail - polyfills are optional
+    }
+
     JS_FreeValue(ctx_, global);
 
     icLogDebug(LOG_TAG, "Browser shims installed (console, performance, URL)");
@@ -299,6 +307,95 @@ bool QuickJsRuntime::IsInitialized()
     return initialized_;
 }
 
+bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg)
+{
+    if (!ctx)
+    {
+        return false;
+    }
+
+    JSValue pendingEx = JS_GetException(ctx);
+    int tag = JS_VALUE_GET_TAG(pendingEx);
+
+    // JS_GetException returns JS_NULL or JS_TAG_UNINITIALIZED when no exception is pending
+    bool hasException = (tag != JS_TAG_NULL && tag != JS_TAG_UNDEFINED && tag != JS_TAG_UNINITIALIZED);
+
+    if (!hasException)
+    {
+        JS_FreeValue(ctx, pendingEx);
+        return false;
+    }
+
+    // Extract exception message if caller wants it
+    if (outExceptionMsg)
+    {
+        std::string exMsg;
+
+        // Try ToCString for string exceptions
+        if (JS_IsString(pendingEx))
+        {
+            const char *str = JS_ToCString(ctx, pendingEx);
+            if (str)
+            {
+                exMsg = str;
+                JS_FreeCString(ctx, str);
+            }
+        }
+        else if (JS_IsObject(pendingEx))
+        {
+            // Try "message" property for Error objects
+            JSValue msgVal = JS_GetPropertyStr(ctx, pendingEx, "message");
+            if (JS_IsString(msgVal))
+            {
+                const char *msgStr = JS_ToCString(ctx, msgVal);
+                if (msgStr)
+                {
+                    exMsg = msgStr;
+                    JS_FreeCString(ctx, msgStr);
+                }
+            }
+            JS_FreeValue(ctx, msgVal);
+
+            // Also try to get stack trace for debugging
+            JSValue stackVal = JS_GetPropertyStr(ctx, pendingEx, "stack");
+            if (JS_IsString(stackVal))
+            {
+                const char *stackStr = JS_ToCString(ctx, stackVal);
+                if (stackStr)
+                {
+                    if (!exMsg.empty())
+                    {
+                        exMsg += " | Stack: ";
+                    }
+                    exMsg += stackStr;
+                    JS_FreeCString(ctx, stackStr);
+                }
+            }
+            JS_FreeValue(ctx, stackVal);
+        }
+        else
+        {
+            // Try ToCString as fallback for other types
+            const char *str = JS_ToCString(ctx, pendingEx);
+            if (str)
+            {
+                exMsg = str;
+                JS_FreeCString(ctx, str);
+            }
+        }
+
+        if (exMsg.empty())
+        {
+            exMsg = "unknown exception (tag=" + std::to_string(tag) + ")";
+        }
+
+        *outExceptionMsg = std::move(exMsg);
+    }
+
+    JS_FreeValue(ctx, pendingEx);
+    return true;
+}
+
 bool QuickJsRuntime::FreezeGlobalObject(const char *name)
 {
     if (!ctx_)
@@ -348,6 +445,13 @@ bool QuickJsRuntime::FreezeGlobalObject(const char *name)
 
     bool success = JS_ToBool(ctx_, result);
     JS_FreeValue(ctx_, result);
+
+    // Check if freeze operation left an exception (indicates a problem we should fix)
+    if (CheckAndClearPendingException(ctx_, nullptr))
+    {
+        icLogError(LOG_TAG, "SbmdUtils freeze operation left a pending exception - this is a bug");
+        return false;
+    }
 
     return success;
 }

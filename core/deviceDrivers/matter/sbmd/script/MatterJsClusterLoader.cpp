@@ -28,6 +28,7 @@
 #define LOG_TAG "MatterJsClusterLoader"
 
 #include "MatterJsClusterLoader.h"
+#include "QuickJsRuntime.h"
 
 #include <string>
 
@@ -181,6 +182,13 @@ bool MatterJsClusterLoader::ExecuteBundle(JSContext *ctx, const char *bundleSour
 
     JS_FreeValue(ctx, result);
 
+    // Check if bundle execution left an exception (indicates a problem we should fix)
+    if (QuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
+    {
+        icLogError(LOG_TAG, "Bundle execution left a pending exception - this is a bug");
+        return false;
+    }
+
     // Verify that MatterClusters global was created
     JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
     JsValueGuard clustersGuard(ctx, JS_GetPropertyStr(ctx, globalGuard.get(), "MatterClusters"));
@@ -206,19 +214,29 @@ bool MatterJsClusterLoader::FreezeGlobalObject(JSContext *ctx, const char *name)
     // This provides isolation - scripts cannot pollute or modify the shared library
     const char *freezeScript = R"(
         (function() {
-            function deepFreeze(obj) {
+            function deepFreeze(obj, visited) {
                 if (obj === null || typeof obj !== 'object') return obj;
-                Object.freeze(obj);
-                Object.getOwnPropertyNames(obj).forEach(function(prop) {
-                    var val = obj[prop];
-                    if (val !== null && typeof val === 'object' && !Object.isFrozen(val)) {
-                        deepFreeze(val);
-                    }
-                });
+                if (visited.has(obj)) return obj; // Handle circular refs
+                visited.add(obj);
+                try {
+                    Object.freeze(obj);
+                    Object.getOwnPropertyNames(obj).forEach(function(prop) {
+                        try {
+                            var val = obj[prop];
+                            if (val !== null && typeof val === 'object' && !Object.isFrozen(val)) {
+                                deepFreeze(val, visited);
+                            }
+                        } catch (e) {
+                            // Ignore errors accessing individual properties (getters, etc)
+                        }
+                    });
+                } catch (e) {
+                    // Ignore errors freezing this object
+                }
                 return obj;
             }
             if (typeof %s !== 'undefined') {
-                deepFreeze(%s);
+                deepFreeze(%s, new Set());
                 return true;
             }
             return false;
@@ -244,6 +262,13 @@ bool MatterJsClusterLoader::FreezeGlobalObject(JSContext *ctx, const char *name)
 
     bool success = JS_ToBool(ctx, result);
     JS_FreeValue(ctx, result);
+
+    // Check if freeze operation left an exception (indicates a problem we should fix)
+    if (QuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
+    {
+        icLogError(LOG_TAG, "Freeze operation left a pending exception - this is a bug");
+        return false;
+    }
 
     return success;
 }

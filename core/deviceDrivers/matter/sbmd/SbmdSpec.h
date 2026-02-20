@@ -45,7 +45,6 @@ namespace barton
         std::string type;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource
-        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
 
         // Equality operator for map key usage
         bool operator==(const SbmdAttribute &other) const
@@ -88,7 +87,6 @@ namespace barton
         std::vector<SbmdArgument> args;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource
-        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
 
         // Equality operator for map key usage
         bool operator==(const SbmdCommand &other) const
@@ -172,6 +170,7 @@ namespace barton
     {
         std::vector<uint16_t> deviceTypes;
         uint32_t revision;
+        std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
     };
 
     /**

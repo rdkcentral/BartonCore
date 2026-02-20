@@ -31,9 +31,9 @@
 #include "lib/core/TLVReader.h"
 #include <platform/CHIPDeviceLayer.h>
 
+#include <map>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace barton
 {
@@ -83,6 +83,14 @@ namespace barton
 
         virtual ~SbmdScript() = default;
 
+        /**
+         * Set the cluster feature maps for this script context.
+         * These are looked up from the device cache and passed to all mapper scripts.
+         *
+         * @param maps Map of clusterId to featureMap
+         */
+        virtual void SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps) = 0;
+
         virtual bool AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                             const std::string &script) = 0;
 
@@ -92,11 +100,26 @@ namespace barton
         /**
          * Convert a Matter attribute value to a Barton resource string value.
          *
+         * Script input JSON:
+         * {
+         *     "tlvBase64": <base64-encoded TLV attribute value>,
+         *     "deviceUuid": <device UUID>,
+         *     "clusterFeatureMaps": { "<clusterId>": <featureMap>, ... },
+         *     "clusterId": <cluster ID>,
+         *     "endpointId": <endpoint ID>,
+         *     "attributeId": <attribute ID>,
+         *     "attributeName": <attribute name from spec>,
+         *     "attributeType": <attribute type from spec>
+         * }
+         *
+         * Script output JSON:
+         * {
+         *     "output": <Barton string representation of the attribute value>
+         * }
+         *
          * @param attributeInfo Information about the Matter attribute
-         * @param reader TLV reader positioned at the attribute value after having read the attribute data
-         *        from the device or cache.
-         * @param outValue will contain a Barton string representation of the attribute value as converted
-         *        by the script.
+         * @param reader TLV reader positioned at the attribute value
+         * @param outValue Will contain the Barton string representation
          * @return true if mapping was successful, false otherwise
          */
         virtual bool MapAttributeRead(const SbmdAttribute &attributeInfo,
@@ -108,10 +131,25 @@ namespace barton
          * This is optional - only needed when a command returns data that should be
          * converted to a Barton string response.
          *
+         * Script input JSON:
+         * {
+         *     "tlvBase64": <base64-encoded TLV command response>,
+         *     "deviceUuid": <device UUID>,
+         *     "clusterFeatureMaps": { "<clusterId>": <featureMap>, ... },
+         *     "clusterId": <cluster ID>,
+         *     "endpointId": <endpoint ID>,
+         *     "commandId": <command ID>,
+         *     "commandName": <command name from spec>
+         * }
+         *
+         * Script output JSON:
+         * {
+         *     "output": <Barton string representation of the command response>
+         * }
+         *
          * @param commandInfo Information about the Matter command
          * @param reader TLV reader positioned at the command response data
-         * @param outValue will contain a Barton string representation of the response as converted
-         *        by the script.
+         * @param outValue Will contain the Barton string representation
          * @return true if mapping was successful, false otherwise
          */
         virtual bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
@@ -146,10 +184,11 @@ namespace barton
          * The script returns either an 'invoke' (command) or 'write' (attribute) operation
          * with all necessary details including cluster ID, command/attribute ID, and TLV payload.
          *
-         * Script input (sbmdWriteArgs):
+         * Script input JSON:
          * {
          *     "input": <Barton string value to write>,
          *     "deviceUuid": <device UUID>,
+         *     "clusterFeatureMaps": { "<clusterId>": <featureMap>, ... },
          *     "endpointId": <endpoint ID from resource, if specified>,
          *     "resourceId": <resource identifier>
          * }
@@ -193,6 +232,26 @@ namespace barton
         /**
          * Execute an execute mapper script and get the operation to perform.
          * The script returns 'invoke' (command) operations with all details.
+         *
+         * Script input JSON:
+         * {
+         *     "input": <Barton string argument(s) for execute>,
+         *     "deviceUuid": <device UUID>,
+         *     "clusterFeatureMaps": { "<clusterId>": <featureMap>, ... },
+         *     "endpointId": <endpoint ID from resource, if specified>,
+         *     "resourceId": <resource identifier>
+         * }
+         *
+         * Script output JSON (same format as MapWrite invoke):
+         * {
+         *     "invoke": {
+         *         "endpointId": <optional endpoint ID>,
+         *         "clusterId": <cluster ID (number)>,
+         *         "commandId": <command ID (number)>,
+         *         "timedInvokeTimeoutMs": <optional timed invoke timeout>,
+         *         "tlvBase64": <optional TLV-encoded command data as base64 string>
+         *     }
+         * }
          *
          * @param resourceKey Unique key identifying the resource (endpointId:resourceId)
          * @param endpointId The endpoint ID from the resource (may be empty for device-level)

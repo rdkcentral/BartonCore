@@ -38,23 +38,40 @@ Usage:
 import argparse
 import os
 import sys
+import random
+import string
+import uuid
 
 
-def escape_for_c_string(content: str) -> tuple:
+def escape_for_c_string(content: str) -> tuple[str, str]:
     """
-    Escape a string for embedding in a C/C++ raw string literal or regular string.
+    Escape a string for embedding in a C/C++ raw string literal.
 
     We use a raw string literal R"DELIMITER(...)DELIMITER" to avoid most escaping,
     but we still need to ensure the delimiter doesn't appear in the content.
     C++ raw string delimiters are limited to 16 characters.
     """
-    # Start with a short delimiter and increment if it appears in content
-    base = "JSEMBED"
+    # Try a short base delimiter first
+    base = "JS"
     delimiter = base
     counter = 0
-    while delimiter in content:
+    
+    # Increment counter until we find a delimiter not in content or hit length limit
+    while delimiter in content and len(delimiter) < 16:
         counter += 1
         delimiter = f"{base}{counter}"
+    
+    # If we hit the length limit with base "JS", try a random delimiter
+    if delimiter in content and len(delimiter) >= 16:
+        for _ in range(100):  # Try up to 100 random delimiters
+            delimiter = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+            if delimiter not in content:
+                break
+    
+    # Final fallback: use a UUID-based delimiter (guaranteed unique)
+    if delimiter in content:
+        delimiter = str(uuid.uuid4()).replace('-', '')[:16]
+    
     return content, delimiter
 
 

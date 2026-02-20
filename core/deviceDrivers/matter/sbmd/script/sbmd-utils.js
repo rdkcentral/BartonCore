@@ -68,6 +68,94 @@
     const TAG_FULLY_QUALIFIED_8 = 0xE0;
 
     /**
+     * UTF-8 encoding/decoding utilities
+     * Needed because String.fromCharCode treats bytes as UCS-2 code units,
+     * not UTF-8 bytes. These utilities properly handle multi-byte UTF-8 sequences.
+     */
+    const Utf8 = {
+        /**
+         * Decode UTF-8 bytes to a JavaScript string
+         * @param {Uint8Array} bytes - UTF-8 encoded bytes
+         * @returns {string} Decoded string
+         */
+        decode: function(bytes) {
+            let result = '';
+            let i = 0;
+            while (i < bytes.length) {
+                const b0 = bytes[i];
+                if (b0 < 0x80) {
+                    // 1-byte sequence (ASCII)
+                    result += String.fromCharCode(b0);
+                    i += 1;
+                } else if ((b0 & 0xE0) === 0xC0) {
+                    // 2-byte sequence
+                    const b1 = bytes[i + 1];
+                    result += String.fromCharCode(((b0 & 0x1F) << 6) | (b1 & 0x3F));
+                    i += 2;
+                } else if ((b0 & 0xF0) === 0xE0) {
+                    // 3-byte sequence
+                    const b1 = bytes[i + 1];
+                    const b2 = bytes[i + 2];
+                    result += String.fromCharCode(((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F));
+                    i += 3;
+                } else if ((b0 & 0xF8) === 0xF0) {
+                    // 4-byte sequence (surrogate pair needed)
+                    const b1 = bytes[i + 1];
+                    const b2 = bytes[i + 2];
+                    const b3 = bytes[i + 3];
+                    const codePoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+                    // Convert to surrogate pair
+                    const adjusted = codePoint - 0x10000;
+                    result += String.fromCharCode(0xD800 + (adjusted >> 10), 0xDC00 + (adjusted & 0x3FF));
+                    i += 4;
+                } else {
+                    // Invalid UTF-8, skip byte
+                    result += '\uFFFD';
+                    i += 1;
+                }
+            }
+            return result;
+        },
+
+        /**
+         * Encode a JavaScript string to UTF-8 bytes
+         * @param {string} str - String to encode
+         * @returns {Uint8Array} UTF-8 encoded bytes
+         */
+        encode: function(str) {
+            const bytes = [];
+            for (let i = 0; i < str.length; i++) {
+                let codePoint = str.charCodeAt(i);
+                // Handle surrogate pairs
+                if (codePoint >= 0xD800 && codePoint <= 0xDBFF && i + 1 < str.length) {
+                    const next = str.charCodeAt(i + 1);
+                    if (next >= 0xDC00 && next <= 0xDFFF) {
+                        codePoint = 0x10000 + ((codePoint & 0x3FF) << 10) + (next & 0x3FF);
+                        i++;
+                    }
+                }
+
+                if (codePoint < 0x80) {
+                    bytes.push(codePoint);
+                } else if (codePoint < 0x800) {
+                    bytes.push(0xC0 | (codePoint >> 6));
+                    bytes.push(0x80 | (codePoint & 0x3F));
+                } else if (codePoint < 0x10000) {
+                    bytes.push(0xE0 | (codePoint >> 12));
+                    bytes.push(0x80 | ((codePoint >> 6) & 0x3F));
+                    bytes.push(0x80 | (codePoint & 0x3F));
+                } else {
+                    bytes.push(0xF0 | (codePoint >> 18));
+                    bytes.push(0x80 | ((codePoint >> 12) & 0x3F));
+                    bytes.push(0x80 | ((codePoint >> 6) & 0x3F));
+                    bytes.push(0x80 | (codePoint & 0x3F));
+                }
+            }
+            return new Uint8Array(bytes);
+        }
+    };
+
+    /**
      * Base64 encoding/decoding utilities
      */
     const Base64 = {
@@ -238,7 +326,7 @@
                 // UTF-8 string
                 const len = this.readLength(baseType - 0x0C);
                 const bytes = this.readBytes(len);
-                value = String.fromCharCode.apply(null, bytes);
+                value = Utf8.decode(bytes);
             } else if (baseType >= 0x10 && baseType <= 0x13) {
                 // Octet string
                 const len = this.readLength(baseType - 0x10);
@@ -304,8 +392,19 @@
         }
 
         writeUint(value, size) {
+            // For 1–4 byte integers, use the existing Number-based bitwise operations.
+            if (size <= 4) {
+                for (let i = 0; i < size; i++) {
+                    this.bytes.push((value >> (i * 8)) & 0xFF);
+                }
+                return;
+            }
+
+            // For larger integers (e.g., 8-byte / 64-bit), use BigInt to avoid 32-bit shift limits.
+            let v = (typeof value === 'bigint') ? value : BigInt(value);
             for (let i = 0; i < size; i++) {
-                this.bytes.push((value >> (i * 8)) & 0xFF);
+                const byte = Number((v >> BigInt(i * 8)) & 0xFFn);
+                this.bytes.push(byte & 0xFF);
             }
         }
 
@@ -361,10 +460,7 @@
             }
 
             if (typeof value === 'string') {
-                const bytes = [];
-                for (let i = 0; i < value.length; i++) {
-                    bytes.push(value.charCodeAt(i));
-                }
+                const bytes = Utf8.encode(value);
                 const lenSize = bytes.length <= 0xFF ? 0 : bytes.length <= 0xFFFF ? 1 : 2;
                 this.writeByte(tagForm | (TLV_TYPE.UTF8_STRING + lenSize));
                 if (tag !== null) this.writeByte(tag);
@@ -525,11 +621,11 @@
         },
 
         /**
-         * Create an empty struct (just end-of-container)
+         * Create an empty struct (STRUCT followed by END_CONTAINER)
          * @returns {string} Base64 encoded empty TLV struct
          */
         emptyStruct: function() {
-            return Base64.encode(new Uint8Array([TLV_TYPE.END_CONTAINER]));
+            return Base64.encode(new Uint8Array([TLV_TYPE.STRUCT, TLV_TYPE.END_CONTAINER]));
         }
     };
 

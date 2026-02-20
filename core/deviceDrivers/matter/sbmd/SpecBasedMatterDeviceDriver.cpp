@@ -73,6 +73,9 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     }
     device->SetScript(std::move(script));
 
+    // Set feature clusters from the spec for featureMap lookup
+    device->SetFeatureClusters(spec->matterMeta.featureClusters);
+
     // for each resource in the spec, add an entry to a concrete attribute or command path
     // Helper lambda to configure a single resource
     auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {

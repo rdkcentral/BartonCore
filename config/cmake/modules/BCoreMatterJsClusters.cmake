@@ -37,7 +37,7 @@ set(MATTERJS_CLUSTERS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/matterjs-clusters" CACHE P
     "Directory for the matter.js cluster bundle output")
 
 # Version of matter.js to use
-set(MATTERJS_VERSION "main" CACHE STRING
+set(MATTERJS_VERSION "v0.16.9" CACHE STRING
     "Version/tag of matter.js to build the cluster bundle from")
 
 # Path to the built bundle file

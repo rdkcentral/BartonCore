@@ -77,6 +77,21 @@ namespace barton
             script = std::move(newScript);
         }
 
+        /**
+         * Set the list of cluster IDs to get feature maps from.
+         * These are specified in the SBMD spec's matterMeta.featureClusters.
+         * If the device cache is already available, also updates the cached feature maps.
+         */
+        void SetFeatureClusters(std::vector<uint32_t> clusters)
+        {
+            featureClusters = std::move(clusters);
+            // If we already have a script and cache, update feature maps now
+            if (script && deviceDataCache)
+            {
+                UpdateCachedFeatureMaps();
+            }
+        }
+
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**
@@ -295,6 +310,12 @@ namespace barton
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
 
         /**
+         * Compute feature maps for all configured featureClusters and pass them to the script.
+         * Called when subscription is established and cluster data is available.
+         */
+        void UpdateCachedFeatureMaps();
+
+        /**
          * @brief Call to ensure a driver operation is considered failed, e.g.,
          *        when no promises have been made. This does nothing
          *        when promises have been stored in the Matter SDK for a pending
@@ -418,6 +439,7 @@ namespace barton
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
         std::unique_ptr<CacheCallback> cacheCallback;
+        std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
         std::map<std::string, ResourceBinding> resourceReadBindings;
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;

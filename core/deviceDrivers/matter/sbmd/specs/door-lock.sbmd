@@ -21,6 +21,8 @@ matterMeta:
   deviceTypes:
     - 0x000a  # Matter Door Lock device type
   revision: 1 # Device Specification revision from Matter spec that this driver complies with
+  featureClusters:
+    - 0x0101  # DoorLock cluster - for featureMap access in scripts
 
 # Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
 reporting:
@@ -96,7 +98,7 @@ endpoints:
             # Use MatterClusters LockState enum for type-safe comparison
             script: |
               const { TlvNullable, TlvEnum } = MatterClusters;
-              const { LockState } = MatterClusters.DoorLock;
+              const { LockState } = MatterClusters.DoorLock.DoorLock;
               const TlvLockState = TlvNullable(TlvEnum(LockState));
               const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
               const lockState = TlvLockState.decode(tlvBytes);
@@ -111,14 +113,19 @@ endpoints:
           execute:
             script: |
               // Use MatterClusters for type-safe TLV encoding
-              const { DoorLock, DoorLockCluster, TlvLockDoorRequest } = MatterClusters.DoorLock;
+              const { DoorLock, DoorLockCluster } = MatterClusters.DoorLock;
+              const { TlvLockDoorRequest } = DoorLock;
+
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              const featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
 
               // Build command arguments
               let tlvBase64 = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0 && sbmdCommandArgs.input[0]) {
+              const pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
                 // Convert PIN string to Uint8Array for encoding
-                const pinString = sbmdCommandArgs.input[0];
                 const pinBytes = new Uint8Array(pinString.length);
                 for (let i = 0; i < pinString.length; i++) {
                   pinBytes[i] = pinString.charCodeAt(i);
@@ -145,14 +152,19 @@ endpoints:
           execute:
             script: |
               // Use MatterClusters for type-safe TLV encoding
-              const { DoorLock, DoorLockCluster, TlvUnlockDoorRequest } = MatterClusters.DoorLock;
+              const { DoorLock, DoorLockCluster } = MatterClusters.DoorLock;
+              const { TlvUnlockDoorRequest } = DoorLock;
+
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              const featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
 
               // Build command arguments
               let tlvBase64 = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0 && sbmdCommandArgs.input[0]) {
+              const pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
                 // Convert PIN string to Uint8Array for encoding
-                const pinString = sbmdCommandArgs.input[0];
                 const pinBytes = new Uint8Array(pinString.length);
                 for (let i = 0; i < pinString.length; i++) {
                   pinBytes[i] = pinString.charCodeAt(i);

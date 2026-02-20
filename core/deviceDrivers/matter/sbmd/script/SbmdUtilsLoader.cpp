@@ -28,6 +28,7 @@
 #define LOG_TAG "SbmdUtilsLoader"
 
 #include "SbmdUtilsLoader.h"
+#include "QuickJsRuntime.h"
 
 #include <string>
 
@@ -168,6 +169,15 @@ namespace barton
         }
 
         JS_FreeValue(ctx, result);
+
+        // Check if bundle execution left an exception (indicates a problem we should fix)
+        std::string exMsg;
+        if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+        {
+            icLogError(
+                LOG_TAG, "SbmdUtils bundle execution left a pending exception: %s - this is a bug", exMsg.c_str());
+            return false;
+        }
 
         // Verify that SbmdUtils global was created
         JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));

@@ -62,6 +62,11 @@ namespace barton
 
         ~QuickJsScript() override;
 
+        /**
+         * @see SbmdScript::SetClusterFeatureMaps
+         */
+        void SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps) override;
+
         bool AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                     const std::string &script) override;
 
@@ -81,60 +86,24 @@ namespace barton
                               const std::optional<std::string> &responseScript) override;
 
         /**
-         * Convert a Matter attribute value to a Barton resource string value.
-         *
-         * The script will be executed with a JSON object named "sbmdReadArgs" containing the JSON
-         * representation of the attribute value in the following format:
-         *
-         * sbmdReadArgs = {
-         *     "input" : <attribute value (unwrapped from TlvToJson's {"value": ...} wrapper)>,
-         *     "deviceUuid" : <device UUID>,
-         *     "clusterId" : <cluster ID>,
-         *     "featureMap" : <cluster feature map>,
-         *     "endpointId" : <endpoint ID>,
-         *     "attributeId" : <attribute ID>,
-         *     "attributeName" : <attribute name>,
-         *     "attributeType" : <attribute type>
-         * }
-         *
-         * The script should return a JSON object of the following format:
-         *
-         * {"output" : <Barton string representation of the attribute value>}
-         *
-         * @see SbmdScript::MapAttributeRead
+         * QuickJS implementation passes input as global variable "sbmdReadArgs".
+         * @see SbmdScript::MapAttributeRead for JSON format.
          */
         bool MapAttributeRead(const SbmdAttribute &attributeInfo,
                               chip::TLV::TLVReader &reader,
                               std::string &outValue) override;
 
         /**
-         * Convert a Matter command response to a Barton resource string value.
-         *
-         * The script will be executed with a JSON object named "sbmdCommandResponseArgs" containing the JSON
-         * representation of the command response in the following format:
-         *
-         * sbmdCommandResponseArgs = {
-         *     "input" : <unwrapped command response value (the \"value\" field of the command response TLV JSON)>,
-         *     "deviceUuid" : <device UUID>,
-         *     "clusterId" : <cluster ID>,
-         *     "featureMap" : <cluster feature map>,
-         *     "endpointId" : <endpoint ID>,
-         *     "commandId" : <command ID>,
-         *     "commandName" : <command name>
-         * }
-         *
-         * The script should return a JSON object of the following format:
-         *
-         * {"output" : <Barton string representation of the command response>}
-         *
-         * @see SbmdScript::MapCommandExecuteResponse
+         * QuickJS implementation passes input as global variable "sbmdCommandResponseArgs".
+         * @see SbmdScript::MapCommandExecuteResponse for JSON format.
          */
         bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                        chip::TLV::TLVReader &reader,
                                        std::string &outValue) override;
 
         /**
-         * @see SbmdScript::MapWrite
+         * QuickJS implementation passes input as global variable "sbmdWriteArgs".
+         * @see SbmdScript::MapWrite for JSON format.
          */
         bool MapWrite(const std::string &resourceKey,
                       const std::string &endpointId,
@@ -143,7 +112,8 @@ namespace barton
                       ScriptWriteResult &result) override;
 
         /**
-         * @see SbmdScript::MapExecute
+         * QuickJS implementation passes input as global variable "sbmdCommandArgs".
+         * @see SbmdScript::MapExecute for JSON format.
          */
         bool MapExecute(const std::string &resourceKey,
                         const std::string &endpointId,
@@ -156,6 +126,9 @@ namespace barton
 
         // Mutex for protecting script collections (separate from QuickJS context mutex)
         mutable std::mutex scriptsMutex;
+
+        // Cached cluster feature maps, set via SetClusterFeatureMaps
+        std::map<uint32_t, uint32_t> clusterFeatureMaps;
 
         // Stored scripts for each mapper
         std::map<SbmdAttribute, std::string> attributeReadScripts;
@@ -187,6 +160,16 @@ namespace barton
          * Set a JavaScript variable from a string value.
          */
         bool SetJsVariable(const std::string &name, const std::string &value);
+
+        /**
+         * Build base args JSON with common fields.
+         * Always includes: deviceUuid, clusterFeatureMaps
+         * Optional fields added when provided: endpointId, clusterId, resourceId, input
+         */
+        Json::Value BuildBaseArgsJson(const std::optional<std::string> &endpointId = std::nullopt,
+                                      std::optional<uint32_t> clusterId = std::nullopt,
+                                      const std::optional<std::string> &resourceId = std::nullopt,
+                                      const std::optional<std::string> &input = std::nullopt) const;
     };
 
 } // namespace barton
