@@ -118,7 +118,7 @@ namespace barton
         uint32_t clusterId;
         uint32_t eventId;
         std::string name;
-        std::string type;
+        std::string type;                              // Event data type (e.g., "struct", "uint8", etc.) for script reference
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource
         uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time

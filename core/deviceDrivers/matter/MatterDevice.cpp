@@ -180,6 +180,8 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
     }
 
     // Create a copy of the TLV reader so we don't modify the original
+    // TLV readers maintain internal state (current position) that is consumed during reading,
+    // so we need a copy to avoid affecting the caller's reader state
     chip::TLV::TLVReader reader;
     reader.Init(*apData);
 
