@@ -1232,6 +1232,8 @@ bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
     }
 
     // Build the sbmdEventArgs JSON object
+    // Note: featureMap is populated at bind time from the cluster's feature map
+    // to provide scripts with information about optional cluster features
     Json::Value argsJson;
     argsJson["input"] = unwrappedValue;
     argsJson["deviceUuid"] = deviceId;

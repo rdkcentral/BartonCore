@@ -121,7 +121,7 @@ namespace barton
         std::string type;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         std::string resourceId;                        // Resource ID from the owning SbmdResource
-        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
+        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time from the cluster's feature map
 
         // Equality operator for map key usage
         bool operator==(const SbmdEvent &other) const
@@ -276,9 +276,19 @@ namespace std
         std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
         {
             // Use boost::hash_combine pattern for better hash distribution
+            // Include all fields used in operator== to maintain hash/equality contract
             std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
             std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            std::size_t h3 = evt.resourceEndpointId.has_value() 
+                ? std::hash<std::string> {}(evt.resourceEndpointId.value()) 
+                : 0;
+            std::size_t h4 = std::hash<std::string> {}(evt.resourceId);
+            
+            std::size_t seed = h1;
+            seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= h4 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            return seed;
         }
     };
 } // namespace std
