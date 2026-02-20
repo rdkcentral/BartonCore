@@ -409,7 +409,7 @@ namespace barton
                 std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
                 std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
                 std::size_t h3 = std::hash<chip::EventId> {}(path.mEventId);
-                
+
                 std::size_t seed = h1;
                 seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
                 seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
