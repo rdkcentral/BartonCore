@@ -148,7 +148,7 @@ inline constexpr const char* {variable_name} = R"{delimiter}({escaped_content}){
 /**
  * Size of the embedded bundle in bytes (excluding null terminator).
  */
-inline constexpr std::size_t {variable_name}Size = {len(js_content)};
+inline constexpr std::size_t {variable_name}Size = {len(js_content.encode('utf-8'))};
 
 }} // namespace barton
 
