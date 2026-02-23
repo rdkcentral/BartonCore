@@ -1,0 +1,1079 @@
+From ae25ef2366b64d693439beed3a17483be8d48b0b Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 12:53:53 +0000
+Subject: [PATCH 1/8] Initial plan
+
+-- 
+2.52.0
+
+
+From 5afff503c7ee3f41d51b21d1e888da3a79b25c12 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 12:59:47 +0000
+Subject: [PATCH 2/8] Add event handling infrastructure to MatterDevice and
+ SBMD
+
+- Added SbmdEvent structure to SbmdSpec.h with hash support
+- Added event mapping methods to SbmdScript interface (AddEventReadMapper, MapEventRead)
+- Implemented OnEventData in MatterDevice::CacheCallback
+- Refactored common resource update logic into UpdateResourceFromTlv helper
+- Added BindResourceEventInfo method for event binding
+- Implemented event mapping in QuickJsScript
+- Added fast O(1) event lookup using readableEventLookup hash map
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ core/deviceDrivers/matter/MatterDevice.cpp    | 163 ++++++++++++++++--
+ core/deviceDrivers/matter/MatterDevice.h      |  62 +++++++
+ core/deviceDrivers/matter/sbmd/SbmdSpec.h     |  49 ++++++
+ .../matter/sbmd/script/QuickJsScript.cpp      |  97 +++++++++++
+ .../matter/sbmd/script/QuickJsScript.h        |  35 ++++
+ .../matter/sbmd/script/SbmdScript.h           |  23 +++
+ 6 files changed, 416 insertions(+), 13 deletions(-)
+
+diff --git a/core/deviceDrivers/matter/MatterDevice.cpp b/core/deviceDrivers/matter/MatterDevice.cpp
+index 1326697..2b2e518 100644
+--- a/core/deviceDrivers/matter/MatterDevice.cpp
++++ b/core/deviceDrivers/matter/MatterDevice.cpp
+@@ -121,27 +121,83 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
+         return;
+     }
+ 
+-    icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
+-
+     // Extract the resource ID from the URI
+     // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+     const char *resourceId = strrchr(uri.c_str(), '/');
+     if (resourceId != nullptr)
+     {
+         resourceId++; // Skip the '/'
++        device->UpdateResourceFromTlv(uri, resourceId, binding.attribute->resourceEndpointId, outValue);
++    }
++    else
++    {
++        icError("Failed to extract resource ID from URI: %s", uri.c_str());
++    }
++}
+ 
+-        const char *resourceEndpointId = nullptr;
+-        if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+-        {
+-            resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+-        }
++void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEventHeader,
++                                               chip::TLV::TLVReader *apData,
++                                               const chip::app::StatusIB *apStatus)
++{
++    // Validate event path
++    if (!aEventHeader.mPath.IsValidConcreteClusterPath())
++    {
++        icError("Received event with invalid path for device %s, dropping it", device->deviceId.c_str());
++        return;
++    }
++
++    icDebug("OnEventData for device %s, endpoint %u, cluster 0x%x, event 0x%x",
++            device->deviceId.c_str(),
++            aEventHeader.mPath.mEndpointId,
++            aEventHeader.mPath.mClusterId,
++            aEventHeader.mPath.mEventId);
++
++    // Fast O(1) lookup for events
++    auto it = device->readableEventLookup.find(aEventHeader.mPath);
++    if (it == device->readableEventLookup.end())
++    {
++        // Not an event with a mapper - this is the common case
++        return;
++    }
++
++    const auto &uri = it->second.uri;
++    const auto &eventInfo = it->second.event;
+ 
+-        // Call updateResource to notify DeviceService of the change
+-        updateResource(device->deviceId.c_str(),
+-                       resourceEndpointId,
+-                       resourceId,
+-                       outValue.c_str(),
+-                       nullptr); // No additional metadata for now
++    icDebug("Found event match for URI: %s", uri.c_str());
++
++    // Check if we have a script engine
++    if (!device->script)
++    {
++        icError("No script engine available for device %s", device->deviceId.c_str());
++        return;
++    }
++
++    // Check if we have event data
++    if (apData == nullptr)
++    {
++        icError("No event data provided for device %s", device->deviceId.c_str());
++        return;
++    }
++
++    // Create a copy of the TLV reader so we don't modify the original
++    chip::TLV::TLVReader reader;
++    reader.Init(*apData);
++
++    // Execute the script to map the TLV event data to a string value
++    std::string outValue;
++    if (!device->script->MapEventRead(eventInfo, reader, outValue))
++    {
++        icError("Failed to execute event mapping script for URI: %s", uri.c_str());
++        return;
++    }
++
++    // Extract the resource ID from the URI
++    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
++    const char *resourceId = strrchr(uri.c_str(), '/');
++    if (resourceId != nullptr)
++    {
++        resourceId++; // Skip the '/'
++        device->UpdateResourceFromTlv(uri, resourceId, eventInfo.resourceEndpointId, outValue);
+     }
+     else
+     {
+@@ -183,6 +239,27 @@ bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::Clust
+     return true;
+ }
+ 
++void MatterDevice::UpdateResourceFromTlv(const std::string &uri,
++                                          const char *resourceId,
++                                          const std::optional<std::string> &resourceEndpointId,
++                                          const std::string &value)
++{
++    icDebug("Updating resource %s to value: %s", uri.c_str(), value.c_str());
++
++    const char *resourceEndpointIdPtr = nullptr;
++    if (resourceEndpointId.has_value() && !resourceEndpointId->empty())
++    {
++        resourceEndpointIdPtr = resourceEndpointId->c_str();
++    }
++
++    // Call updateResource to notify DeviceService of the change
++    updateResource(deviceId.c_str(),
++                   resourceEndpointIdPtr,
++                   resourceId,
++                   value.c_str(),
++                   nullptr); // No additional metadata for now
++}
++
+ bool MatterDevice::BindResourceInfo(const char *uri,
+                                     const std::optional<SbmdAttribute> &attribute,
+                                     const std::vector<SbmdCommand> &commands,
+@@ -320,6 +397,66 @@ bool MatterDevice::BindResourceExecuteInfo(const char *uri, const SbmdMapper &ma
+         uri, mapper.executeAttribute, commands, ResourceOperation::Execute, resourceExecuteBindings);
+ }
+ 
++bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdMapper &mapper)
++{
++    if (uri == nullptr)
++    {
++        icError("URI is null");
++        return false;
++    }
++
++    if (!mapper.event.has_value())
++    {
++        icError("No event defined in mapper for URI: %s", uri);
++        return false;
++    }
++
++    const auto &event = mapper.event.value();
++
++    // Check if we need to get the endpoint for this cluster
++    chip::EndpointId endpointId;
++    if (!GetEndpointForCluster(event.clusterId, endpointId))
++    {
++        icError("Failed to find endpoint for cluster 0x%x in event binding for URI: %s", event.clusterId, uri);
++        return false;
++    }
++
++    // Get the feature map for the cluster
++    uint32_t featureMap = 0;
++    GetClusterFeatureMap(endpointId, event.clusterId, featureMap);
++
++    // Create a copy of the event with the feature map
++    SbmdEvent eventWithFeatureMap = event;
++    eventWithFeatureMap.featureMap = featureMap;
++
++    // Add the event script mapper if we have a script
++    if (script && !mapper.eventScript.empty())
++    {
++        if (!script->AddEventReadMapper(eventWithFeatureMap, mapper.eventScript))
++        {
++            icError("Failed to add event read mapper for URI: %s", uri);
++            return false;
++        }
++    }
++
++    // Create the event path for fast lookup
++    chip::app::ConcreteEventPath eventPath(endpointId, event.clusterId, event.eventId);
++
++    // Store in the fast lookup map
++    EventReadBinding binding;
++    binding.uri = uri;
++    binding.event = eventWithFeatureMap;
++    readableEventLookup[eventPath] = binding;
++
++    icDebug("Bound event for URI: %s (endpoint=%u, cluster=0x%x, event=0x%x)",
++            uri,
++            endpointId,
++            event.clusterId,
++            event.eventId);
++
++    return true;
++}
++
+ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                       const SbmdCommand &command,
+                                       chip::EndpointId endpointId,
+diff --git a/core/deviceDrivers/matter/MatterDevice.h b/core/deviceDrivers/matter/MatterDevice.h
+index 88d901a..303d142 100644
+--- a/core/deviceDrivers/matter/MatterDevice.h
++++ b/core/deviceDrivers/matter/MatterDevice.h
+@@ -146,6 +146,16 @@ namespace barton
+          */
+         bool BindResourceExecuteInfo(const char *uri, const SbmdMapper &mapper);
+ 
++        /**
++         * Bind a resource URI for event updates.
++         * Called when an event from the device should update a resource.
++         *
++         * @param uri The resource URI
++         * @param mapper The mapper containing event configuration
++         * @return True if binding was successful, false otherwise.
++         */
++        bool BindResourceEventInfo(const char *uri, const SbmdMapper &mapper);
++
+         /**
+          * Handle a resource read request by looking up the binding and executing the script.
+          * If the related attribute data is in the cache, this is a synchronous operation.
+@@ -284,6 +294,20 @@ namespace barton
+          */
+         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
+ 
++        /**
++         * Common helper to update a resource from TLV data using a script mapper.
++         * Refactored from OnAttributeChanged to be shared with OnEventData.
++         *
++         * @param uri The resource URI to update
++         * @param resourceId The resource ID extracted from the URI
++         * @param resourceEndpointId Optional resource endpoint ID
++         * @param value The string value to update the resource to
++         */
++        void UpdateResourceFromTlv(const std::string &uri,
++                                    const char *resourceId,
++                                    const std::optional<std::string> &resourceEndpointId,
++                                    const std::string &value);
++
+         /**
+          * @brief Call to ensure a driver operation is considered failed, e.g.,
+          *        when no promises have been made. This does nothing
+@@ -317,6 +341,9 @@ namespace barton
+             void OnReportEnd() override;
+             void OnAttributeChanged(chip::app::ClusterStateCache *cache,
+                                     const chip::app::ConcreteAttributePath &aPath) override;
++            void OnEventData(const chip::app::EventHeader &aEventHeader,
++                             chip::TLV::TLVReader *apData,
++                             const chip::app::StatusIB *apStatus) override;
+             void OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId) override;
+             void OnError(CHIP_ERROR aError) override;
+             void OnDeallocatePaths(chip::app::ReadPrepareParams &&aReadPrepareParams) override;
+@@ -373,6 +400,36 @@ namespace barton
+             ResourceBinding binding;
+         };
+ 
++        // Hash function for ConcreteEventPath to enable fast lookup
++        struct EventPathHash
++        {
++            std::size_t operator()(const chip::app::ConcreteEventPath &path) const
++            {
++                std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
++                std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
++                std::size_t h3 = std::hash<chip::EventId> {}(path.mEventId);
++                return h1 ^ (h2 << 1) ^ (h3 << 2);
++            }
++        };
++
++        // Equality function for ConcreteEventPath
++        struct EventPathEqual
++        {
++            bool operator()(const chip::app::ConcreteEventPath &lhs,
++                            const chip::app::ConcreteEventPath &rhs) const
++            {
++                return lhs.mEndpointId == rhs.mEndpointId && lhs.mClusterId == rhs.mClusterId &&
++                       lhs.mEventId == rhs.mEventId;
++            }
++        };
++
++        // Structure to hold URI and event info for fast event lookup
++        struct EventReadBinding
++        {
++            std::string uri;
++            SbmdEvent event;
++        };
++
+         enum class ResourceOperation
+         {
+             Read,
+@@ -434,6 +491,11 @@ namespace barton
+                            AttributeReadBinding,
+                            AttributePathHash,
+                            AttributePathEqual> readableAttributeLookup;
++        // Fast O(1) lookup for events in OnEventData callback
++        std::unordered_map<chip::app::ConcreteEventPath,
++                           EventReadBinding,
++                           EventPathHash,
++                           EventPathEqual> readableEventLookup;
+ 
+         // Context for tracking active write operations
+         struct WriteContext
+diff --git a/core/deviceDrivers/matter/sbmd/SbmdSpec.h b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+index 1b5a31d..07e3d25 100644
+--- a/core/deviceDrivers/matter/sbmd/SbmdSpec.h
++++ b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+@@ -110,6 +110,39 @@ namespace barton
+         }
+     };
+ 
++    /**
++     * Represents a Matter cluster event
++     */
++    struct SbmdEvent
++    {
++        uint32_t clusterId;
++        uint32_t eventId;
++        std::string name;
++        std::string type;
++        std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
++        std::string resourceId;                        // Resource ID from the owning SbmdResource
++        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
++
++        // Equality operator for map key usage
++        bool operator==(const SbmdEvent &other) const
++        {
++            return clusterId == other.clusterId && eventId == other.eventId &&
++                   resourceEndpointId == other.resourceEndpointId && resourceId == other.resourceId;
++        }
++
++        // Less-than operator for std::map usage
++        bool operator<(const SbmdEvent &other) const
++        {
++            if (clusterId != other.clusterId)
++                return clusterId < other.clusterId;
++            if (eventId != other.eventId)
++                return eventId < other.eventId;
++            if (resourceEndpointId != other.resourceEndpointId)
++                return resourceEndpointId < other.resourceEndpointId;
++            return resourceId < other.resourceId;
++        }
++    };
++
+     /**
+      * Represents a mapper configuration for a resource.
+      * Each mapper type (read, write, execute) must have EITHER an attribute OR command(s).
+@@ -136,6 +169,10 @@ namespace barton
+         std::optional<SbmdCommand> executeCommand;
+         std::string executeScript;
+         std::optional<std::string> executeResponseScript;
++
++        // Event mapping - for updating resources based on events
++        std::optional<SbmdEvent> event;
++        std::string eventScript;
+     };
+ 
+     /**
+@@ -232,4 +269,16 @@ namespace std
+             return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+         }
+     };
++
++    template<>
++    struct hash<barton::SbmdEvent>
++    {
++        std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
++        {
++            // Use boost::hash_combine pattern for better hash distribution
++            std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
++            std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
++            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
++        }
++    };
+ } // namespace std
+diff --git a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+index 950e25c..096d646 100644
+--- a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
++++ b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+@@ -1172,4 +1172,101 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
+     return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
+ }
+ 
++bool QuickJsScript::AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script)
++{
++    std::lock_guard<std::mutex> lock(qjsMtx);
++    eventReadScripts[eventInfo] = script;
++    icLogDebug(LOG_TAG, "Added event read mapper for event %s (cluster 0x%x, event 0x%x)",
++               eventInfo.name.c_str(), eventInfo.clusterId, eventInfo.eventId);
++    return true;
++}
++
++bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
++                                  chip::TLV::TLVReader &reader,
++                                  std::string &outValue)
++{
++    std::lock_guard<std::mutex> lock(qjsMtx);
++
++    // Update stack top for cross-thread usage - QuickJS needs this when the
++    // runtime is called from a different thread than where it was created
++    JS_UpdateStackTop(runtime);
++
++    auto it = eventReadScripts.find(eventInfo);
++    if (it == eventReadScripts.end())
++    {
++        icLogError(LOG_TAG, "No event read mapper found for event %s", eventInfo.name.c_str());
++        return false;
++    }
++
++    // Convert TLV data to JSON
++    std::string eventDataJson;
++    if (!TlvToJson(reader, eventDataJson))
++    {
++        icLogError(LOG_TAG, "Failed to convert event TLV to JSON for event %s", eventInfo.name.c_str());
++        return false;
++    }
++
++    icLogDebug(LOG_TAG, "Event data JSON for %s: %s", eventInfo.name.c_str(), eventDataJson.c_str());
++
++    // Parse the JSON so we can unwrap the "value" field
++    Json::CharReaderBuilder readerBuilder;
++    Json::Value eventJson;
++    std::string parseErrors;
++    std::istringstream jsonStream(eventDataJson);
++    if (!Json::parseFromStream(readerBuilder, jsonStream, &eventJson, &parseErrors))
++    {
++        icLogError(LOG_TAG, "Failed to parse event JSON for %s: %s", eventInfo.name.c_str(), parseErrors.c_str());
++        return false;
++    }
++
++    // Extract the "value" field (TlvToJson wraps the data in {"value": ...})
++    Json::Value unwrappedValue;
++    if (eventJson.isMember("value"))
++    {
++        unwrappedValue = eventJson["value"];
++    }
++    else
++    {
++        icLogError(LOG_TAG, "Event JSON missing 'value' field for %s", eventInfo.name.c_str());
++        return false;
++    }
++
++    // Build the sbmdEventArgs JSON object
++    Json::Value argsJson;
++    argsJson["input"] = unwrappedValue;
++    argsJson["deviceUuid"] = deviceId;
++    argsJson["clusterId"] = eventInfo.clusterId;
++    argsJson["featureMap"] = eventInfo.featureMap;
++    argsJson["eventId"] = eventInfo.eventId;
++    argsJson["eventName"] = eventInfo.name;
++    argsJson["eventType"] = eventInfo.type;
++
++    // Convert Json::Value to string for parsing in QuickJS
++    Json::StreamWriterBuilder writerBuilder;
++    writerBuilder["indentation"] = "";
++    std::string jsonString = Json::writeString(writerBuilder, argsJson);
++
++    icLogDebug(LOG_TAG, "sbmdEventArgs JSON for %s: %s", eventInfo.name.c_str(), jsonString.c_str());
++
++    // Parse JSON string to JSValue
++    JSValue argJsonRaw;
++    if (!ParseJsonToJSValue(jsonString, "sbmdEventArgs", argJsonRaw))
++    {
++        return false;
++    }
++    JsValueGuard argJsonGuard(ctx, argJsonRaw);
++
++    JSValue outJson;
++    if (!ExecuteScript(it->second, "sbmdEventArgs", argJsonGuard.get(), outJson))
++    {
++        icLogError(LOG_TAG, "Failed to execute event read mapping script for %s", eventInfo.name.c_str());
++        return false;
++    }
++
++    // Take ownership of script result for cleanup
++    JsValueGuard resultGuard(ctx, outJson);
++
++    return ExtractScriptOutputAsString(resultGuard.release(), outValue);
++}
++
+ } // namespace barton
+diff --git a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
+index 6aabc6c..3b83979 100644
+--- a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
++++ b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
+@@ -222,6 +222,40 @@ namespace barton
+                              chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                              size_t &encodedLength) override;
+ 
++        /**
++         * Add an event mapper for reading event data.
++         *
++         * @see SbmdScript::AddEventReadMapper
++         */
++        bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) override;
++
++        /**
++         * Convert a Matter event value to a Barton resource string value.
++         *
++         * The script will be executed with a JSON object named "sbmdEventArgs" containing the JSON
++         * representation of the event data in the following format:
++         *
++         * sbmdEventArgs = {
++         *     "input" : <event data (unwrapped from TlvToJson's {"value": ...} wrapper)>,
++         *     "deviceUuid" : <device UUID>,
++         *     "clusterId" : <cluster ID>,
++         *     "featureMap" : <cluster feature map>,
++         *     "endpointId" : <endpoint ID>,
++         *     "eventId" : <event ID>,
++         *     "eventName" : <event name>,
++         *     "eventType" : <event type>
++         * }
++         *
++         * The script should return a JSON object of the following format:
++         *
++         * {"output" : <Barton string representation of the event data>}
++         *
++         * @see SbmdScript::MapEventRead
++         */
++        bool MapEventRead(const SbmdEvent &eventInfo,
++                          chip::TLV::TLVReader &reader,
++                          std::string &outValue) override;
++
+     private:
+         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
+ 
+@@ -235,6 +269,7 @@ namespace barton
+         std::map<SbmdCommand, std::string> commandExecuteScripts;
+         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
+         std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
++        std::map<SbmdEvent, std::string> eventReadScripts;
+ 
+         /**
+          * Generate a deterministic key from a commands vector for script lookup.
+diff --git a/core/deviceDrivers/matter/sbmd/script/SbmdScript.h b/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
+index ea74efe..107bad7 100644
+--- a/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
++++ b/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
+@@ -154,6 +154,29 @@ namespace barton
+                                      chip::Platform::ScopedMemoryBuffer<uint8_t> &buffer,
+                                      size_t &encodedLength) = 0;
+ 
++        /**
++         * Add an event mapper for reading event data.
++         * The script will be used when an event is received from the device.
++         *
++         * @param eventInfo Information about the Matter event
++         * @param script The JavaScript script for the mapper
++         * @return true if the mapper was added successfully, false otherwise
++         */
++        virtual bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) = 0;
++
++        /**
++         * Convert a Matter event value to a Barton resource string value.
++         *
++         * @param eventInfo Information about the Matter event
++         * @param reader TLV reader positioned at the event data after having read it from the device
++         * @param outValue will contain a Barton string representation of the event data as converted
++         *        by the script.
++         * @return true if mapping was successful, false otherwise
++         */
++        virtual bool MapEventRead(const SbmdEvent &eventInfo,
++                                  chip::TLV::TLVReader &reader,
++                                  std::string &outValue) = 0;
++
+     protected:
+         std::string deviceId;
+     };
+-- 
+2.52.0
+
+
+From 2112158efc67c2d376120014a7ec711f5346a247 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:05:26 +0000
+Subject: [PATCH 3/8] Fix code review issues: improve hash functions and
+ documentation
+
+- Fixed SbmdEvent hash to include all fields used in operator== (resourceEndpointId, resourceId)
+- Improved EventPathHash to use consistent boost::hash_combine pattern
+- Added documentation clarifying featureMap is populated at bind time
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ core/deviceDrivers/matter/MatterDevice.h           |  7 ++++++-
+ core/deviceDrivers/matter/sbmd/SbmdSpec.h          | 14 ++++++++++++--
+ .../matter/sbmd/script/QuickJsScript.cpp           |  2 ++
+ 3 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/core/deviceDrivers/matter/MatterDevice.h b/core/deviceDrivers/matter/MatterDevice.h
+index 303d142..8056e92 100644
+--- a/core/deviceDrivers/matter/MatterDevice.h
++++ b/core/deviceDrivers/matter/MatterDevice.h
+@@ -405,10 +405,15 @@ namespace barton
+         {
+             std::size_t operator()(const chip::app::ConcreteEventPath &path) const
+             {
++                // Use boost::hash_combine pattern for consistency and better hash distribution
+                 std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
+                 std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
+                 std::size_t h3 = std::hash<chip::EventId> {}(path.mEventId);
+-                return h1 ^ (h2 << 1) ^ (h3 << 2);
++                
++                std::size_t seed = h1;
++                seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
++                seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
++                return seed;
+             }
+         };
+ 
+diff --git a/core/deviceDrivers/matter/sbmd/SbmdSpec.h b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+index 07e3d25..66ef793 100644
+--- a/core/deviceDrivers/matter/sbmd/SbmdSpec.h
++++ b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+@@ -121,7 +121,7 @@ namespace barton
+         std::string type;
+         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
+         std::string resourceId;                        // Resource ID from the owning SbmdResource
+-        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
++        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time from the cluster's feature map
+ 
+         // Equality operator for map key usage
+         bool operator==(const SbmdEvent &other) const
+@@ -276,9 +276,19 @@ namespace std
+         std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
+         {
+             // Use boost::hash_combine pattern for better hash distribution
++            // Include all fields used in operator== to maintain hash/equality contract
+             std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
+             std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
+-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
++            std::size_t h3 = evt.resourceEndpointId.has_value() 
++                ? std::hash<std::string> {}(evt.resourceEndpointId.value()) 
++                : 0;
++            std::size_t h4 = std::hash<std::string> {}(evt.resourceId);
++            
++            std::size_t seed = h1;
++            seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
++            seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
++            seed ^= h4 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
++            return seed;
+         }
+     };
+ } // namespace std
+diff --git a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+index 096d646..62bf118 100644
+--- a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
++++ b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+@@ -1232,6 +1232,8 @@ bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
+     }
+ 
+     // Build the sbmdEventArgs JSON object
++    // Note: featureMap is populated at bind time from the cluster's feature map
++    // to provide scripts with information about optional cluster features
+     Json::Value argsJson;
+     argsJson["input"] = unwrappedValue;
+     argsJson["deviceUuid"] = deviceId;
+-- 
+2.52.0
+
+
+From e46775c588dd7d58e0aea4c3b94a8dd414001b79 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:06:46 +0000
+Subject: [PATCH 4/8] Add .gch files to .gitignore to prevent precompiled
+ headers from being committed
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ .gitignore | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/.gitignore b/.gitignore
+index d6315b6..fb91e74 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,6 +5,7 @@ cmake_install.cmake
+ build
+ .cache
+ _codeql_detected_source_root
++*.gch
+ 
+ # Byte-compiled / optimized / DLL files
+ __pycache__/
+-- 
+2.52.0
+
+
+From 247ed13a99766c90bed6b65dd67859f7ff82d111 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:07:08 +0000
+Subject: [PATCH 5/8] Integrate event binding into SpecBasedMatterDeviceDriver
+
+- Added event binding logic to SpecBasedMatterDeviceDriver
+- Events are now automatically bound when mapper.event is present in SBMD spec
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ .../matter/sbmd/SpecBasedMatterDeviceDriver.cpp           | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp b/core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp
+index 71cf4c1..02463d2 100644
+--- a/core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp
++++ b/core/deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.cpp
+@@ -115,6 +115,14 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
+                 return false;
+             }
+         }
++        if (sbmdResource.mapper.event.has_value())
++        {
++            if (!device->BindResourceEventInfo(uri.c_str(), sbmdResource.mapper))
++            {
++                icError("  Failed to bind event script for resource %s", sbmdResource.id.c_str());
++                return false;
++            }
++        }
+         return true;
+     };
+ 
+-- 
+2.52.0
+
+
+From 7450d79e8aa4459e50c6f411852d2a91429c0fae Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:08:19 +0000
+Subject: [PATCH 6/8] Address final code review comments
+
+- Simplified redundant comment about featureMap
+- Improved readability of ternary expression in hash function
+- Fixed trailing whitespace in EventPathHash
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ core/deviceDrivers/matter/MatterDevice.h  |  2 +-
+ core/deviceDrivers/matter/sbmd/SbmdSpec.h | 12 +++++++-----
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/core/deviceDrivers/matter/MatterDevice.h b/core/deviceDrivers/matter/MatterDevice.h
+index 8056e92..a46ad9c 100644
+--- a/core/deviceDrivers/matter/MatterDevice.h
++++ b/core/deviceDrivers/matter/MatterDevice.h
+@@ -409,7 +409,7 @@ namespace barton
+                 std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
+                 std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
+                 std::size_t h3 = std::hash<chip::EventId> {}(path.mEventId);
+-                
++
+                 std::size_t seed = h1;
+                 seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                 seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+diff --git a/core/deviceDrivers/matter/sbmd/SbmdSpec.h b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+index 66ef793..06a5fa8 100644
+--- a/core/deviceDrivers/matter/sbmd/SbmdSpec.h
++++ b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+@@ -121,7 +121,7 @@ namespace barton
+         std::string type;
+         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
+         std::string resourceId;                        // Resource ID from the owning SbmdResource
+-        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time from the cluster's feature map
++        uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
+ 
+         // Equality operator for map key usage
+         bool operator==(const SbmdEvent &other) const
+@@ -279,11 +279,13 @@ namespace std
+             // Include all fields used in operator== to maintain hash/equality contract
+             std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
+             std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
+-            std::size_t h3 = evt.resourceEndpointId.has_value() 
+-                ? std::hash<std::string> {}(evt.resourceEndpointId.value()) 
+-                : 0;
++            std::size_t h3 = 0;
++            if (evt.resourceEndpointId.has_value())
++            {
++                h3 = std::hash<std::string> {}(evt.resourceEndpointId.value());
++            }
+             std::size_t h4 = std::hash<std::string> {}(evt.resourceId);
+-            
++
+             std::size_t seed = h1;
+             seed ^= h2 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+             seed ^= h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+-- 
+2.52.0
+
+
+From 2500755fac6ab13485b4b36365fcbb5f4c3324c4 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:09:11 +0000
+Subject: [PATCH 7/8] Improve documentation for event type and TLV reader
+ copying
+
+- Clarified that 'type' field in SbmdEvent represents event data type
+- Added explanation for why TLV reader copy is necessary
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ core/deviceDrivers/matter/MatterDevice.cpp | 2 ++
+ core/deviceDrivers/matter/sbmd/SbmdSpec.h  | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/core/deviceDrivers/matter/MatterDevice.cpp b/core/deviceDrivers/matter/MatterDevice.cpp
+index 2b2e518..5bf9832 100644
+--- a/core/deviceDrivers/matter/MatterDevice.cpp
++++ b/core/deviceDrivers/matter/MatterDevice.cpp
+@@ -180,6 +180,8 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
+     }
+ 
+     // Create a copy of the TLV reader so we don't modify the original
++    // TLV readers maintain internal state (current position) that is consumed during reading,
++    // so we need a copy to avoid affecting the caller's reader state
+     chip::TLV::TLVReader reader;
+     reader.Init(*apData);
+ 
+diff --git a/core/deviceDrivers/matter/sbmd/SbmdSpec.h b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+index 06a5fa8..c8b00c0 100644
+--- a/core/deviceDrivers/matter/sbmd/SbmdSpec.h
++++ b/core/deviceDrivers/matter/sbmd/SbmdSpec.h
+@@ -118,7 +118,7 @@ namespace barton
+         uint32_t clusterId;
+         uint32_t eventId;
+         std::string name;
+-        std::string type;
++        std::string type;                              // Event data type (e.g., "struct", "uint8", etc.) for script reference
+         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
+         std::string resourceId;                        // Resource ID from the owning SbmdResource
+         uint32_t featureMap = 0;                       // Feature map of the cluster, populated at bind time
+-- 
+2.52.0
+
+
+From 42c76ba4a7a0ba545f3b6777ab08616c522a1aa1 Mon Sep 17 00:00:00 2001
+From: "copilot-swe-agent[bot]" <198982749+Copilot@users.noreply.github.com>
+Date: Fri, 20 Feb 2026 13:38:05 +0000
+Subject: [PATCH 8/8] Rename event methods per feedback
+
+- Renamed AddEventReadMapper to AddEventMapper
+- Renamed MapEventRead to MapEvent
+- Renamed EventReadBinding to EventBinding
+- Renamed eventReadScripts to eventScripts
+- Renamed readableEventLookup to eventLookup
+
+Updated method names to be simpler as requested by @tleacmcsa
+
+Co-authored-by: tleacmcsa <35579828+tleacmcsa@users.noreply.github.com>
+---
+ core/deviceDrivers/matter/MatterDevice.cpp     | 14 +++++++-------
+ core/deviceDrivers/matter/MatterDevice.h       |  6 +++---
+ .../matter/sbmd/script/QuickJsScript.cpp       | 18 +++++++++---------
+ .../matter/sbmd/script/QuickJsScript.h         | 16 ++++++++--------
+ .../matter/sbmd/script/SbmdScript.h            | 10 +++++-----
+ 5 files changed, 32 insertions(+), 32 deletions(-)
+
+diff --git a/core/deviceDrivers/matter/MatterDevice.cpp b/core/deviceDrivers/matter/MatterDevice.cpp
+index 5bf9832..23c05d7 100644
+--- a/core/deviceDrivers/matter/MatterDevice.cpp
++++ b/core/deviceDrivers/matter/MatterDevice.cpp
+@@ -153,8 +153,8 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
+             aEventHeader.mPath.mEventId);
+ 
+     // Fast O(1) lookup for events
+-    auto it = device->readableEventLookup.find(aEventHeader.mPath);
+-    if (it == device->readableEventLookup.end())
++    auto it = device->eventLookup.find(aEventHeader.mPath);
++    if (it == device->eventLookup.end())
+     {
+         // Not an event with a mapper - this is the common case
+         return;
+@@ -187,7 +187,7 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
+ 
+     // Execute the script to map the TLV event data to a string value
+     std::string outValue;
+-    if (!device->script->MapEventRead(eventInfo, reader, outValue))
++    if (!device->script->MapEvent(eventInfo, reader, outValue))
+     {
+         icError("Failed to execute event mapping script for URI: %s", uri.c_str());
+         return;
+@@ -434,9 +434,9 @@ bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdMapper &mapp
+     // Add the event script mapper if we have a script
+     if (script && !mapper.eventScript.empty())
+     {
+-        if (!script->AddEventReadMapper(eventWithFeatureMap, mapper.eventScript))
++        if (!script->AddEventMapper(eventWithFeatureMap, mapper.eventScript))
+         {
+-            icError("Failed to add event read mapper for URI: %s", uri);
++            icError("Failed to add event mapper for URI: %s", uri);
+             return false;
+         }
+     }
+@@ -445,10 +445,10 @@ bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdMapper &mapp
+     chip::app::ConcreteEventPath eventPath(endpointId, event.clusterId, event.eventId);
+ 
+     // Store in the fast lookup map
+-    EventReadBinding binding;
++    EventBinding binding;
+     binding.uri = uri;
+     binding.event = eventWithFeatureMap;
+-    readableEventLookup[eventPath] = binding;
++    eventLookup[eventPath] = binding;
+ 
+     icDebug("Bound event for URI: %s (endpoint=%u, cluster=0x%x, event=0x%x)",
+             uri,
+diff --git a/core/deviceDrivers/matter/MatterDevice.h b/core/deviceDrivers/matter/MatterDevice.h
+index a46ad9c..d6018a0 100644
+--- a/core/deviceDrivers/matter/MatterDevice.h
++++ b/core/deviceDrivers/matter/MatterDevice.h
+@@ -429,7 +429,7 @@ namespace barton
+         };
+ 
+         // Structure to hold URI and event info for fast event lookup
+-        struct EventReadBinding
++        struct EventBinding
+         {
+             std::string uri;
+             SbmdEvent event;
+@@ -498,9 +498,9 @@ namespace barton
+                            AttributePathEqual> readableAttributeLookup;
+         // Fast O(1) lookup for events in OnEventData callback
+         std::unordered_map<chip::app::ConcreteEventPath,
+-                           EventReadBinding,
++                           EventBinding,
+                            EventPathHash,
+-                           EventPathEqual> readableEventLookup;
++                           EventPathEqual> eventLookup;
+ 
+         // Context for tracking active write operations
+         struct WriteContext
+diff --git a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+index 62bf118..8ae0386 100644
+--- a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
++++ b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp
+@@ -1172,18 +1172,18 @@ bool QuickJsScript::MapWriteCommand(const std::vector<SbmdCommand> &availableCom
+     return EncodeJsonToTlv(tlvFormattedJson, buffer, encodedLength);
+ }
+ 
+-bool QuickJsScript::AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script)
++bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
+ {
+     std::lock_guard<std::mutex> lock(qjsMtx);
+-    eventReadScripts[eventInfo] = script;
+-    icLogDebug(LOG_TAG, "Added event read mapper for event %s (cluster 0x%x, event 0x%x)",
++    eventScripts[eventInfo] = script;
++    icLogDebug(LOG_TAG, "Added event mapper for event %s (cluster 0x%x, event 0x%x)",
+                eventInfo.name.c_str(), eventInfo.clusterId, eventInfo.eventId);
+     return true;
+ }
+ 
+-bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
+-                                  chip::TLV::TLVReader &reader,
+-                                  std::string &outValue)
++bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
++                              chip::TLV::TLVReader &reader,
++                              std::string &outValue)
+ {
+     std::lock_guard<std::mutex> lock(qjsMtx);
+ 
+@@ -1191,10 +1191,10 @@ bool QuickJsScript::MapEventRead(const SbmdEvent &eventInfo,
+     // runtime is called from a different thread than where it was created
+     JS_UpdateStackTop(runtime);
+ 
+-    auto it = eventReadScripts.find(eventInfo);
+-    if (it == eventReadScripts.end())
++    auto it = eventScripts.find(eventInfo);
++    if (it == eventScripts.end())
+     {
+-        icLogError(LOG_TAG, "No event read mapper found for event %s", eventInfo.name.c_str());
++        icLogError(LOG_TAG, "No event mapper found for event %s", eventInfo.name.c_str());
+         return false;
+     }
+ 
+diff --git a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
+index 3b83979..a22defd 100644
+--- a/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
++++ b/core/deviceDrivers/matter/sbmd/script/QuickJsScript.h
+@@ -223,11 +223,11 @@ namespace barton
+                              size_t &encodedLength) override;
+ 
+         /**
+-         * Add an event mapper for reading event data.
++         * Add an event mapper.
+          *
+-         * @see SbmdScript::AddEventReadMapper
++         * @see SbmdScript::AddEventMapper
+          */
+-        bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) override;
++        bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) override;
+ 
+         /**
+          * Convert a Matter event value to a Barton resource string value.
+@@ -250,11 +250,11 @@ namespace barton
+          *
+          * {"output" : <Barton string representation of the event data>}
+          *
+-         * @see SbmdScript::MapEventRead
++         * @see SbmdScript::MapEvent
+          */
+-        bool MapEventRead(const SbmdEvent &eventInfo,
+-                          chip::TLV::TLVReader &reader,
+-                          std::string &outValue) override;
++        bool MapEvent(const SbmdEvent &eventInfo,
++                      chip::TLV::TLVReader &reader,
++                      std::string &outValue) override;
+ 
+     private:
+         explicit QuickJsScript(const std::string &deviceId, JSRuntime *runtime, JSContext *ctx);
+@@ -269,7 +269,7 @@ namespace barton
+         std::map<SbmdCommand, std::string> commandExecuteScripts;
+         std::map<SbmdCommand, std::string> commandExecuteResponseScripts;
+         std::map<std::string, std::string> writeCommandsScripts; // commands key -> script
+-        std::map<SbmdEvent, std::string> eventReadScripts;
++        std::map<SbmdEvent, std::string> eventScripts;
+ 
+         /**
+          * Generate a deterministic key from a commands vector for script lookup.
+diff --git a/core/deviceDrivers/matter/sbmd/script/SbmdScript.h b/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
+index 107bad7..1a66e58 100644
+--- a/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
++++ b/core/deviceDrivers/matter/sbmd/script/SbmdScript.h
+@@ -155,14 +155,14 @@ namespace barton
+                                      size_t &encodedLength) = 0;
+ 
+         /**
+-         * Add an event mapper for reading event data.
++         * Add an event mapper.
+          * The script will be used when an event is received from the device.
+          *
+          * @param eventInfo Information about the Matter event
+          * @param script The JavaScript script for the mapper
+          * @return true if the mapper was added successfully, false otherwise
+          */
+-        virtual bool AddEventReadMapper(const SbmdEvent &eventInfo, const std::string &script) = 0;
++        virtual bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) = 0;
+ 
+         /**
+          * Convert a Matter event value to a Barton resource string value.
+@@ -173,9 +173,9 @@ namespace barton
+          *        by the script.
+          * @return true if mapping was successful, false otherwise
+          */
+-        virtual bool MapEventRead(const SbmdEvent &eventInfo,
+-                                  chip::TLV::TLVReader &reader,
+-                                  std::string &outValue) = 0;
++        virtual bool MapEvent(const SbmdEvent &eventInfo,
++                              chip::TLV::TLVReader &reader,
++                              std::string &outValue) = 0;
+ 
+     protected:
+         std::string deviceId;
+-- 
+2.52.0
+
