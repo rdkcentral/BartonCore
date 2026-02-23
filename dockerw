@@ -38,7 +38,7 @@ COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 
-while getopts ":ne:t:d" opt; do
+while getopts ":ne:t:dH" opt; do
     case ${opt} in
     n) # process option n
         COMPOSE_INTERACTIVE_FLAGS="--no-TTY"
@@ -48,6 +48,9 @@ while getopts ":ne:t:d" opt; do
         ;;
     d) # add /dev volume mapping
         DEV_VOL="-v /dev:/dev"
+        ;;
+    H) # use host networking (useful for Matter device access)
+        HOST_NETWORK="--network host"
         ;;
     esac
 done
@@ -74,6 +77,7 @@ docker compose -f "${COMPOSE_FILE}" run \
     --rm \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
+    ${HOST_NETWORK} \
     --workdir "${DIR}" \
     ${VOLUMES_ARGS} \
     ${EXTRA_ENV} \
