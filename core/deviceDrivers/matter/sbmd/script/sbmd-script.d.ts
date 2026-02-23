@@ -23,11 +23,12 @@ interface SbmdBaseContext {
     /** Device UUID */
     deviceUuid: string;
 
-    /** Matter cluster ID */
-    clusterId: number;
-
-    /** Cluster feature map (bitmask indicating enabled features) */
-    featureMap: number;
+    /**
+     * Cluster feature maps keyed by cluster ID (as string).
+     * Use to check cluster capabilities before encoding.
+     * Clusters listed in matterMeta.featureClusters are available here.
+     */
+    clusterFeatureMaps: Record<string, number>;
 
     /** Endpoint ID (empty string for device-level resources) */
     endpointId: string;
@@ -44,29 +45,27 @@ interface SbmdBaseContext {
  *
  * @example
  * // Boolean passthrough
- * return { output: sbmdReadArgs.input };
+ * var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+ * return { output: val ? 'true' : 'false' };
  *
  * @example
  * // Enum to boolean conversion (Door Lock state)
  * // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
- * return { output: sbmdReadArgs.input === 1 };
+ * var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+ * return { output: lockState === 1 ? 'true' : 'false' };
  *
  * @example
  * // Percentage conversion (Level Control 0-254 to 0-100)
- * var percent = Math.round(sbmdReadArgs.input / 254 * 100);
+ * var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+ * var percent = Math.round(level / 254 * 100);
  * return { output: percent.toString() };
  */
 interface SbmdReadArgs extends SbmdBaseContext {
-    /**
-     * Attribute value converted from Matter TLV to JSON.
-     * Type depends on the Matter attribute type:
-     * - boolean for bool attributes
-     * - number for integer/enum attributes
-     * - string for char_string attributes
-     * - object for struct attributes
-     * - array for list attributes
-     */
-    input: any;
+    /** Base64-encoded TLV data from Matter attribute */
+    tlvBase64: string;
+
+    /** Matter cluster ID */
+    clusterId: number;
 
     /** Matter attribute ID */
     attributeId: number;
@@ -174,60 +173,69 @@ interface SbmdWriteResult {
 /**
  * Input object for command execute mapper scripts.
  *
+ * Execute mappers are script-only. The script determines the full Matter command
+ * to invoke and returns an `invoke` result with pre-encoded TLV.
+ *
  * Available as global variable: `sbmdCommandArgs`
  *
  * @example
- * // Command with no arguments
- * return { output: null };
+ * // No-argument command (Toggle)
+ * return SbmdUtils.Response.invoke(6, 2);
  *
  * @example
- * // Lock/Unlock with optional PIN
- * var result = null;
- * if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
- *     sbmdCommandArgs.input.length > 0) {
- *     // Convert PIN string to byte array
- *     result = [];
- *     for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
- *         result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+ * // Lock with optional PIN using clusterFeatureMaps
+ * const featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
+ * var args = { PINCode: null };
+ * if (((featureMap & 0x81) === 0x81) && sbmdCommandArgs.input.length > 0) {
+ *     var pinBytes = [];
+ *     for (let i = 0; i < sbmdCommandArgs.input.length; i++) {
+ *         pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
  *     }
+ *     args.PINCode = pinBytes;
  * }
- * return { output: result };
- *
- * @example
- * // Command with timeout argument
- * const secs = parseInt(sbmdCommandArgs.input[0], 10);
- * return { output: secs };
+ * const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
+ * return SbmdUtils.Response.invoke(257, 0, tlvBase64, {timedInvokeTimeoutMs: 10000});
  */
-interface SbmdCommandArgs extends SbmdBaseContext {
-    /** Array of Barton argument strings */
-    input: string[];
+interface SbmdCommandArgs {
+    /** Barton argument string */
+    input: string;
 
-    /** Matter command ID */
-    commandId: number;
+    /** Device UUID */
+    deviceUuid: string;
 
-    /** Command name from the SBMD spec */
-    commandName: string;
+    /** Barton endpoint ID */
+    endpointId: string;
+
+    /** Barton resource ID */
+    resourceId: string;
+
+    /**
+     * Cluster feature maps keyed by cluster ID (as string).
+     * Use to check cluster capabilities before encoding.
+     */
+    clusterFeatureMaps: Record<string, number>;
 }
 
 /**
  * Output object for command execute mapper scripts.
  *
+ * Must return an `invoke` operation with pre-encoded TLV.
+ * Use `SbmdUtils.Response.invoke()` helper.
+ *
  * @example
- * return { output: null };           // No arguments
- * return { output: 30 };             // Single argument
- * return { output: [0x31, 0x32] };   // Byte array
- * return { output: { Level: 127, TransitionTime: 10 } }; // Named args
+ * return { invoke: { clusterId: 6, commandId: 2 } };
+ *
+ * @example
+ * return { invoke: { clusterId: 257, commandId: 0, tlvBase64: "...", timedInvokeTimeoutMs: 10000 } };
  */
 interface SbmdCommandResult {
-    /**
-     * Command arguments to encode as TLV.
-     * Can be:
-     * - null: Command with no arguments
-     * - single value: Command with one argument
-     * - object: Command with multiple named arguments
-     * - array of numbers: For octet string arguments (byte array)
-     */
-    output: any;
+    invoke: {
+        clusterId: number;
+        commandId: number;
+        tlvBase64?: string;
+        endpointId?: string;
+        timedInvokeTimeoutMs?: number;
+    };
 }
 
 // =============================================================================
@@ -242,19 +250,21 @@ interface SbmdCommandResult {
  * Available as global variable: `sbmdCommandResponseArgs`
  *
  * @example
- * // Return response value directly
- * return { output: sbmdCommandResponseArgs.input };
+ * // Decode TLV response and return a field
+ * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
+ * return { output: resp.userName || "" };
  *
  * @example
- * // Convert struct response to JSON string
- * return { output: JSON.stringify(sbmdCommandResponseArgs.input) };
+ * // Return decoded response as JSON string
+ * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
+ * return { output: JSON.stringify(resp) };
  */
 interface SbmdCommandResponseArgs extends SbmdBaseContext {
-    /**
-     * Command response converted from Matter TLV to JSON.
-     * Type depends on the command response definition.
-     */
-    input: any;
+    /** Base64-encoded TLV response data */
+    tlvBase64: string;
+
+    /** Matter cluster ID */
+    clusterId: number;
 
     /** Matter command ID */
     commandId: number;

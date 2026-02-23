@@ -26,6 +26,7 @@
 //
 
 #define LOG_TAG "MatterJsClusterLoader"
+#define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "MatterJsClusterLoader.h"
 #include "QuickJsRuntime.h"
@@ -99,12 +100,12 @@ namespace barton
 bool MatterJsClusterLoader::LoadBundle(JSContext *ctx)
 {
 #ifndef BARTON_CONFIG_MATTER_USE_MATTERJS
-    icLogInfo(LOG_TAG, "matter.js integration disabled at build time (BCORE_MATTER_USE_MATTERJS=OFF)");
+    icInfo("matter.js integration disabled at build time (BCORE_MATTER_USE_MATTERJS=OFF)");
     return false;
 #else
     if (!ctx)
     {
-        icLogError(LOG_TAG, "Cannot load bundle: null context");
+        icError("Cannot load bundle: null context");
         return false;
     }
 
@@ -112,18 +113,18 @@ bool MatterJsClusterLoader::LoadBundle(JSContext *ctx)
     if (LoadFromEmbedded(ctx))
     {
         source_ = "embedded";
-        icLogInfo(LOG_TAG, "matter.js cluster bundle loaded from embedded source");
+        icInfo("matter.js cluster bundle loaded from embedded source");
 
         // Freeze MatterClusters to prevent script modifications
         if (FreezeGlobalObject(ctx, "MatterClusters"))
         {
-            icLogDebug(LOG_TAG, "MatterClusters frozen for script isolation");
+            icDebug("MatterClusters frozen for script isolation");
         }
 
         return true;
     }
 
-    icLogWarn(LOG_TAG, "matter.js cluster bundle not available (not compiled in)");
+    icWarn("matter.js cluster bundle not available (not compiled in)");
     return false;
 #endif
 }
@@ -145,11 +146,11 @@ const char *MatterJsClusterLoader::GetSource()
 bool MatterJsClusterLoader::LoadFromEmbedded(JSContext *ctx)
 {
 #if HAS_EMBEDDED_BUNDLE
-    icLogDebug(LOG_TAG, "Attempting to load matter.js cluster bundle from embedded source...");
+    icDebug("Attempting to load matter.js cluster bundle from embedded source...");
     return ExecuteBundle(ctx, kMatterJsClustersBundle, kMatterJsClustersBundleSize);
 #else
     (void) ctx;
-    icLogDebug(LOG_TAG, "Embedded matter.js cluster bundle not available");
+    icDebug("Embedded matter.js cluster bundle not available");
     return false;
 #endif
 }
@@ -158,24 +159,24 @@ bool MatterJsClusterLoader::ExecuteBundle(JSContext *ctx, const char *bundleSour
 {
     if (!ctx)
     {
-        icLogError(LOG_TAG, "Context not initialized");
+        icError("Context not initialized");
         return false;
     }
 
     if (!bundleSource || length == 0)
     {
-        icLogError(LOG_TAG, "Empty or null bundle source");
+        icError("Empty or null bundle source");
         return false;
     }
 
-    icLogDebug(LOG_TAG, "Executing matter.js cluster bundle (%zu bytes)...", length);
+    icDebug("Executing matter.js cluster bundle (%zu bytes)...", length);
 
     // Execute the bundle script
     JSValue result = JS_Eval(ctx, bundleSource, length, "<matter-clusters-bundle>", JS_EVAL_TYPE_GLOBAL);
 
     if (JS_IsException(result))
     {
-        icLogError(LOG_TAG, "Failed to execute matter.js cluster bundle: %s", GetExceptionString(ctx).c_str());
+        icError("Failed to execute matter.js cluster bundle: %s", GetExceptionString(ctx).c_str());
         JS_FreeValue(ctx, result);
         return false;
     }
@@ -185,7 +186,7 @@ bool MatterJsClusterLoader::ExecuteBundle(JSContext *ctx, const char *bundleSour
     // Check if bundle execution left an exception (indicates a problem we should fix)
     if (QuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
     {
-        icLogError(LOG_TAG, "Bundle execution left a pending exception - this is a bug");
+        icError("Bundle execution left a pending exception - this is a bug");
         return false;
     }
 
@@ -195,11 +196,11 @@ bool MatterJsClusterLoader::ExecuteBundle(JSContext *ctx, const char *bundleSour
 
     if (JS_IsUndefined(clustersGuard.get()))
     {
-        icLogError(LOG_TAG, "matter.js cluster bundle did not create expected 'MatterClusters' global");
+        icError("matter.js cluster bundle did not create expected 'MatterClusters' global");
         return false;
     }
 
-    icLogDebug(LOG_TAG, "matter.js cluster bundle executed successfully - MatterClusters global is available");
+    icDebug("matter.js cluster bundle executed successfully - MatterClusters global is available");
     return true;
 }
 
@@ -255,7 +256,7 @@ bool MatterJsClusterLoader::FreezeGlobalObject(JSContext *ctx, const char *name)
 
     if (JS_IsException(result))
     {
-        icLogWarn(LOG_TAG, "Failed to freeze %s: %s", name, GetExceptionString(ctx).c_str());
+        icWarn("Failed to freeze %s: %s", name, GetExceptionString(ctx).c_str());
         JS_FreeValue(ctx, result);
         return false;
     }
@@ -266,7 +267,7 @@ bool MatterJsClusterLoader::FreezeGlobalObject(JSContext *ctx, const char *name)
     // Check if freeze operation left an exception (indicates a problem we should fix)
     if (QuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
     {
-        icLogError(LOG_TAG, "Freeze operation left a pending exception - this is a bug");
+        icError("Freeze operation left a pending exception - this is a bug");
         return false;
     }
 

@@ -355,7 +355,7 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     {
         tlvBuffer = emptyTlvStruct;
         encodedLength = emptyTlvStructLen;
-        icLogDebug(LOG_TAG, "No TLV buffer provided for command at URI: %s, using empty struct", uri);
+        icDebug("No TLV buffer provided for command at URI: %s, using empty struct", uri);
     }
 
     // Create TLV reader from the encoded data

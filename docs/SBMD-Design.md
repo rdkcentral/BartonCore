@@ -416,7 +416,7 @@ sbmdReadArgs = {
     tlvBase64: "...",          // Base64-encoded TLV data from Matter attribute
     deviceUuid: "uuid-string", // Device UUID
     clusterId: 6,              // Cluster ID (number)
-    featureMap: 0,             // Cluster feature map (number)
+    clusterFeatureMaps: {"6": 0}, // Feature maps keyed by cluster ID string
     endpointId: "1",           // Endpoint ID (string, may be empty for device resources)
     attributeId: 0,            // Attribute ID (number)
     attributeName: "OnOff",    // Attribute name from spec
@@ -465,10 +465,11 @@ to perform and returns it as a structured JSON object.
 
 ```javascript
 sbmdWriteArgs = {
-    input: "value",           // Barton string value to write
-    deviceUuid: "uuid-string",// Device UUID
-    featureMap: 0,            // Cluster feature map (number, from read attribute binding)
-    endpointId: "1"           // Endpoint ID (string)
+    input: "value",            // Barton string value to write
+    deviceUuid: "uuid-string", // Device UUID
+    clusterFeatureMaps: {"6": 0}, // Feature maps keyed by cluster ID string
+    endpointId: "1",           // Endpoint ID (string)
+    resourceId: "res-id"       // Barton resource ID
 }
 ```
 
@@ -560,10 +561,11 @@ to invoke and returns it as a structured JSON object.
 
 ```javascript
 sbmdCommandArgs = {
-    input: ["arg1", "arg2"],  // Array of Barton argument strings
-    deviceUuid: "uuid-string",// Device UUID
-    featureMap: 129,          // Cluster feature map (from read attribute binding)
-    endpointId: "1"           // Endpoint ID (string)
+    input: "value",            // Barton argument string
+    deviceUuid: "uuid-string", // Device UUID
+    clusterFeatureMaps: {"257": 129}, // Feature maps keyed by cluster ID string
+    endpointId: "1",           // Endpoint ID (string)
+    resourceId: "res-id"       // Barton resource ID
 }
 ```
 
@@ -598,12 +600,13 @@ return {
 ```javascript
 var args = { PINCode: null };
 // Check if COTA (0x80) and PIN (0x01) features are both enabled
-if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
+const featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
+if (((featureMap & 0x81) === 0x81) &&
     sbmdCommandArgs.input.length > 0) {
   // Convert PIN string to byte array
   var pinBytes = [];
-  for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-    pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
+  for (let i = 0; i < sbmdCommandArgs.input.length; i++) {
+    pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
   }
   args.PINCode = pinBytes;
 }
@@ -630,7 +633,7 @@ sbmdCommandResponseArgs = {
     tlvBase64: "...",          // Base64-encoded TLV response data
     deviceUuid: "uuid-string", // Device UUID
     clusterId: 257,            // Cluster ID (number)
-    featureMap: 129,           // Cluster feature map (number)
+    clusterFeatureMaps: {"257": 129}, // Feature maps keyed by cluster ID string
     endpointId: "1",           // Endpoint ID (string)
     commandId: 0,              // Command ID (number)
     commandName: "LockDoor"    // Command name from spec

@@ -26,6 +26,7 @@
 //
 
 #define LOG_TAG "QuickJsRuntime"
+#define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "QuickJsRuntime.h"
 
@@ -102,7 +103,7 @@ namespace
     }
 
     /**
-     * Native console.log implementation that forwards to icLogDebug.
+     * Native console.log implementation that forwards to icDebug.
      */
     JSValue ConsoleLog(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
     {
@@ -118,12 +119,12 @@ namespace
                 JS_FreeCString(ctx, str);
             }
         }
-        icLogDebug(LOG_TAG, "[JS] %s", message.c_str());
+        icDebug("[JS] %s", message.c_str());
         return JS_UNDEFINED;
     }
 
     /**
-     * Native console.warn implementation that forwards to icLogWarn.
+     * Native console.warn implementation that forwards to icWarn.
      */
     JSValue ConsoleWarn(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
     {
@@ -139,12 +140,12 @@ namespace
                 JS_FreeCString(ctx, str);
             }
         }
-        icLogWarn(LOG_TAG, "[JS] %s", message.c_str());
+        icWarn("[JS] %s", message.c_str());
         return JS_UNDEFINED;
     }
 
     /**
-     * Native console.error implementation that forwards to icLogError.
+     * Native console.error implementation that forwards to icError.
      */
     JSValue ConsoleError(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
     {
@@ -160,7 +161,7 @@ namespace
                 JS_FreeCString(ctx, str);
             }
         }
-        icLogError(LOG_TAG, "[JS] %s", message.c_str());
+        icError("[JS] %s", message.c_str());
         return JS_UNDEFINED;
     }
 
@@ -212,7 +213,7 @@ bool QuickJsRuntime::InstallBrowserShims()
     JSValue urlResult = JS_Eval(ctx_, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(urlResult))
     {
-        icLogWarn(LOG_TAG, "Failed to install URL polyfill: %s", GetExceptionString(ctx_).c_str());
+        icWarn("Failed to install URL polyfill: %s", GetExceptionString(ctx_).c_str());
     }
     JS_FreeValue(ctx_, urlResult);
 
@@ -220,13 +221,13 @@ bool QuickJsRuntime::InstallBrowserShims()
     std::string exMsg;
     if (CheckAndClearPendingException(ctx_, &exMsg))
     {
-        icLogError(LOG_TAG, "Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
+        icError("Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
         // Don't fail - polyfills are optional
     }
 
     JS_FreeValue(ctx_, global);
 
-    icLogDebug(LOG_TAG, "Browser shims installed (console, performance, URL)");
+    icDebug("Browser shims installed (console, performance, URL)");
     return true;
 }
 
@@ -234,23 +235,23 @@ bool QuickJsRuntime::Initialize()
 {
     if (initialized_)
     {
-        icLogDebug(LOG_TAG, "Shared QuickJS runtime already initialized");
+        icDebug("Shared QuickJS runtime already initialized");
         return true;
     }
 
-    icLogInfo(LOG_TAG, "Initializing shared QuickJS runtime for SBMD scripts...");
+    icInfo("Initializing shared QuickJS runtime for SBMD scripts...");
 
     runtime_ = JS_NewRuntime();
     if (!runtime_)
     {
-        icLogError(LOG_TAG, "Failed to create shared QuickJS runtime");
+        icError("Failed to create shared QuickJS runtime");
         return false;
     }
 
     ctx_ = JS_NewContext(runtime_);
     if (!ctx_)
     {
-        icLogError(LOG_TAG, "Failed to create shared QuickJS context");
+        icError("Failed to create shared QuickJS context");
         JS_FreeRuntime(runtime_);
         runtime_ = nullptr;
         return false;
@@ -259,11 +260,11 @@ bool QuickJsRuntime::Initialize()
     // Install browser shims (console, performance, URL)
     if (!InstallBrowserShims())
     {
-        icLogWarn(LOG_TAG, "Failed to install browser shims - some JS libraries may not work");
+        icWarn("Failed to install browser shims - some JS libraries may not work");
     }
 
     initialized_ = true;
-    icLogInfo(LOG_TAG, "Shared QuickJS runtime initialized successfully");
+    icInfo("Shared QuickJS runtime initialized successfully");
     return true;
 }
 
@@ -274,7 +275,7 @@ void QuickJsRuntime::Shutdown()
         return;
     }
 
-    icLogInfo(LOG_TAG, "Shutting down shared QuickJS runtime...");
+    icInfo("Shutting down shared QuickJS runtime...");
 
     if (ctx_)
     {
@@ -289,7 +290,7 @@ void QuickJsRuntime::Shutdown()
     }
 
     initialized_ = false;
-    icLogInfo(LOG_TAG, "Shared QuickJS runtime shutdown complete");
+    icInfo("Shared QuickJS runtime shutdown complete");
 }
 
 JSContext *QuickJsRuntime::GetSharedContext()
@@ -438,7 +439,7 @@ bool QuickJsRuntime::FreezeGlobalObject(const char *name)
 
     if (JS_IsException(result))
     {
-        icLogWarn(LOG_TAG, "Failed to freeze %s: %s", name, GetExceptionString(ctx_).c_str());
+        icWarn("Failed to freeze %s: %s", name, GetExceptionString(ctx_).c_str());
         JS_FreeValue(ctx_, result);
         return false;
     }
@@ -449,7 +450,7 @@ bool QuickJsRuntime::FreezeGlobalObject(const char *name)
     // Check if freeze operation left an exception (indicates a problem we should fix)
     if (CheckAndClearPendingException(ctx_, nullptr))
     {
-        icLogError(LOG_TAG, "SbmdUtils freeze operation left a pending exception - this is a bug");
+        icError("SbmdUtils freeze operation left a pending exception - this is a bug");
         return false;
     }
 

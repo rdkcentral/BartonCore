@@ -26,6 +26,7 @@
 //
 
 #define LOG_TAG "SbmdUtilsLoader"
+#define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdUtilsLoader.h"
 #include "QuickJsRuntime.h"
@@ -100,7 +101,7 @@ namespace barton
     {
         if (!ctx)
         {
-            icLogError(LOG_TAG, "Cannot load bundle: null context");
+            icError("Cannot load bundle: null context");
             return false;
         }
 
@@ -108,11 +109,11 @@ namespace barton
         if (LoadFromEmbedded(ctx))
         {
             source_ = "embedded";
-            icLogInfo(LOG_TAG, "SBMD utilities loaded from embedded");
+            icInfo("SBMD utilities loaded from embedded");
             return true;
         }
 
-        icLogError(LOG_TAG, "SBMD utilities bundle not available (not compiled in)");
+        icError("SBMD utilities bundle not available (not compiled in)");
         return false;
     }
 
@@ -133,11 +134,11 @@ namespace barton
     bool SbmdUtilsLoader::LoadFromEmbedded(JSContext *ctx)
     {
 #if HAS_EMBEDDED_UTILS
-        icLogDebug(LOG_TAG, "Attempting to load SBMD utilities bundle from embedded source...");
+        icDebug("Attempting to load SBMD utilities bundle from embedded source...");
         return ExecuteBundle(ctx, kSbmdUtilsBundle, kSbmdUtilsBundleSize);
 #else
         (void) ctx;
-        icLogDebug(LOG_TAG, "Embedded SBMD utilities bundle not available");
+        icDebug("Embedded SBMD utilities bundle not available");
         return false;
 #endif
     }
@@ -146,24 +147,24 @@ namespace barton
     {
         if (!ctx)
         {
-            icLogError(LOG_TAG, "Context not initialized");
+            icError("Context not initialized");
             return false;
         }
 
         if (!bundleSource || length == 0)
         {
-            icLogError(LOG_TAG, "Empty or null bundle source");
+            icError("Empty or null bundle source");
             return false;
         }
 
-        icLogDebug(LOG_TAG, "Executing SBMD utilities bundle (%zu bytes)...", length);
+        icDebug("Executing SBMD utilities bundle (%zu bytes)...", length);
 
         // Execute the bundle script
         JSValue result = JS_Eval(ctx, bundleSource, length, "<sbmd-utils-bundle>", JS_EVAL_TYPE_GLOBAL);
 
         if (JS_IsException(result))
         {
-            icLogError(LOG_TAG, "Failed to execute SBMD utilities bundle: %s", GetExceptionString(ctx).c_str());
+            icError("Failed to execute SBMD utilities bundle: %s", GetExceptionString(ctx).c_str());
             JS_FreeValue(ctx, result);
             return false;
         }
@@ -174,8 +175,7 @@ namespace barton
         std::string exMsg;
         if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
         {
-            icLogError(
-                LOG_TAG, "SbmdUtils bundle execution left a pending exception: %s - this is a bug", exMsg.c_str());
+            icError("SbmdUtils bundle execution left a pending exception: %s - this is a bug", exMsg.c_str());
             return false;
         }
 
@@ -185,11 +185,11 @@ namespace barton
 
         if (JS_IsUndefined(utilsGuard.get()))
         {
-            icLogError(LOG_TAG, "SBMD utilities bundle did not create expected 'SbmdUtils' global");
+            icError("SBMD utilities bundle did not create expected 'SbmdUtils' global");
             return false;
         }
 
-        icLogDebug(LOG_TAG, "SBMD utilities bundle executed successfully - SbmdUtils global is available");
+        icDebug("SBMD utilities bundle executed successfully - SbmdUtils global is available");
         return true;
     }
 
