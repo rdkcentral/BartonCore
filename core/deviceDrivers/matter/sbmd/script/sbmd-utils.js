@@ -242,24 +242,48 @@
         }
 
         readUint(size) {
-            let value = 0;
-            for (let i = 0; i < size; i++) {
-                value |= this.readByte() << (i * 8);
+            // For values up to 4 bytes, use Number with bitwise operations as before.
+            if (size <= 4) {
+                let value = 0;
+                for (let i = 0; i < size; i++) {
+                    value |= this.readByte() << (i * 8);
+                }
+                // Handle unsigned values that exceed 31-bit range
+                if (size === 4 && value < 0) {
+                    value = value >>> 0;  // Convert to unsigned
+                }
+                return value;
             }
-            // Handle unsigned values that exceed 31-bit range
-            if (size === 4 && value < 0) {
-                value = value >>> 0;  // Convert to unsigned
+
+            // For values larger than 4 bytes, use BigInt to avoid 32-bit overflow.
+            let value = 0n;
+            for (let i = 0; i < size; i++) {
+                const byte = this.readByte();
+                value |= BigInt(byte) << (BigInt(i) * 8n);
             }
             return value;
         }
 
         readInt(size) {
             let value = this.readUint(size);
-            // Sign extend if necessary
-            const signBit = 1 << (size * 8 - 1);
-            if (value & signBit) {
+
+            // If value is a Number (sizes up to 4 bytes), use existing 32-bit logic.
+            if (typeof value === 'number') {
+                // Sign extend if necessary
+                const signBit = 1 << (size * 8 - 1);
+                if (value & signBit) {
+                    // Negative number - sign extend
+                    value = value - (1 << (size * 8));
+                }
+                return value;
+            }
+
+            // For BigInt values (sizes greater than 4 bytes), perform sign extension using BigInt.
+            const bitCount = BigInt(size * 8);
+            const signBit = 1n << (bitCount - 1n);
+            if ((value & signBit) !== 0n) {
                 // Negative number - sign extend
-                value = value - (1 << (size * 8));
+                value = value - (1n << bitCount);
             }
             return value;
         }
