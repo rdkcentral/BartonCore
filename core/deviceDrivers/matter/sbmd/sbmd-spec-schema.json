@@ -23,7 +23,7 @@
     },
     "scriptType": {
       "type": "string",
-      "description": "Script type: 'JavaScript' for legacy JSON/TLV conversion, 'JavaScript+matterjs' for matter.js TLV encoding",
+      "description": "Script type: 'JavaScript' for base64 TLV passed to/from scripts via SbmdUtils, 'JavaScript+matterjs' for matter.js-based TLV encoding/decoding",
       "enum": ["JavaScript", "JavaScript+matterjs"]
     },
     "bartonMeta": {
@@ -220,35 +220,15 @@
     },
     "writeMapper": {
       "type": "object",
-      "description": "Write mapper configuration",
+      "description": "Write mapper configuration (script-only). The script returns the full operation as {write: {clusterId, attributeId, tlvBase64}} or {invoke: {clusterId, commandId, tlvBase64, ...}}.",
       "required": ["script"],
       "properties": {
-        "attribute": {
-          "$ref": "#/$defs/attribute"
-        },
-        "command": {
-          "$ref": "#/$defs/command"
-        },
-        "commands": {
-          "type": "array",
-          "description": "Multiple commands (script selects which to execute)",
-          "items": {
-            "$ref": "#/$defs/command"
-          },
-          "minItems": 1
-        },
         "script": {
           "type": "string",
-          "description": "JavaScript mapper script",
+          "description": "JavaScript mapper script that returns a write or invoke operation",
           "minLength": 1
         }
       },
-      "oneOf": [
-        {"required": ["attribute"]},
-        {"required": ["command"]},
-        {"required": ["commands"]},
-        {"not": {"anyOf": [{"required": ["attribute"]}, {"required": ["command"]}, {"required": ["commands"]}]}}
-      ],
       "additionalProperties": false
     },
     "executeMapper": {

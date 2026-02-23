@@ -346,8 +346,8 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
                                       const char *uri,
                                       char **response)
 {
-    // Empty TLV structure (end-of-container marker: 0x15) for commands with no arguments
-    static const uint8_t emptyTlvStruct[] = {0x15};
+    // Empty TLV structure (STRUCT start: 0x15, END_CONTAINER: 0x18) for commands with no arguments
+    static const uint8_t emptyTlvStruct[] = {0x15, 0x18};
     static const size_t emptyTlvStructLen = sizeof(emptyTlvStruct);
 
     // Use empty TLV structure if no buffer provided (common for no-arg commands)
@@ -632,19 +632,16 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
         }
         else if (result.type == ScriptWriteResult::OperationType::Write)
         {
-            // Create TLV reader from the result
+            // Create TLV reader positioned at the attribute value element.
+            // Scripts produce the raw pre-encoded TLV value (e.g. a uint16,
+            // enum, or struct) via SbmdUtils.Tlv.encode(). We just need to
+            // advance the reader to the first (and only) element so that
+            // PutPreencodedAttribute can consume it directly.
             chip::TLV::TLVReader reader;
             reader.Init(result.tlvBuffer.Get(), result.tlvLength);
-            if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+            if (reader.Next() != CHIP_NO_ERROR)
             {
-                icError("Invalid TLV structure from write script for URI: %s", resource->uri);
-                FailOperation(promises);
-                return;
-            }
-            chip::TLV::TLVType containerType;
-            if (reader.EnterContainer(containerType) != CHIP_NO_ERROR || reader.Next() != CHIP_NO_ERROR)
-            {
-                icError("Failed to navigate TLV structure from write script for URI: %s", resource->uri);
+                icError("Empty or invalid TLV from write script for URI: %s", resource->uri);
                 FailOperation(promises);
                 return;
             }

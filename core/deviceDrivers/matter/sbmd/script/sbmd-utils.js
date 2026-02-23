@@ -661,7 +661,8 @@
          * Create an invoke (command) response
          * @param {number} clusterId - Matter cluster ID
          * @param {number} commandId - Matter command ID
-         * @param {string} [tlvBase64] - Optional base64 TLV payload (defaults to empty struct)
+         * @param {string} [tlvBase64] - Optional base64 TLV payload for command arguments.
+         *   Omit for no-argument commands (e.g. On, Off, Toggle).
          * @param {Object} [options] - Optional settings: endpointId, timedInvokeTimeoutMs
          * @returns {Object} Invoke response object
          */

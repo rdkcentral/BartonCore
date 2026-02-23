@@ -94,129 +94,77 @@ interface SbmdReadResult {
 }
 
 // =============================================================================
-// Write Mapper Interface (Attribute Write)
+// Write Mapper Interface
 // =============================================================================
 
 /**
- * Input object for attribute write mapper scripts.
+ * Input object for write mapper scripts.
+ *
+ * Write mappers are script-only. The script determines the full Matter operation
+ * and returns either a `write` (attribute) or `invoke` (command) result with
+ * pre-encoded TLV.
  *
  * Available as global variable: `sbmdWriteArgs`
  *
  * @example
- * // Boolean string to boolean
- * return { output: sbmdWriteArgs.input === 'true' };
- *
- * @example
- * // String to integer
+ * // Attribute write - encode value as TLV
  * const secs = parseInt(sbmdWriteArgs.input, 10);
- * return { output: secs };
+ * const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+ * return SbmdUtils.Response.write(3, 0, tlvBase64);
  *
  * @example
- * // Percentage to level (0-100 to 0-254)
- * var percent = parseInt(sbmdWriteArgs.input, 10);
- * var level = Math.round(percent / 100 * 254);
- * return { output: level };
+ * // Command invocation - On/Off
+ * const isOn = sbmdWriteArgs.input === 'true';
+ * return SbmdUtils.Response.invoke(6, isOn ? 1 : 0);
  */
-interface SbmdWriteArgs extends SbmdBaseContext {
-    /** Barton resource string value to write */
-    input: string;
-
-    /** Matter attribute ID */
-    attributeId: number;
-
-    /** Attribute name from the SBMD spec */
-    attributeName: string;
-
-    /** Matter attribute type (e.g., "bool", "uint8", "int16") */
-    attributeType: string;
-}
-
-/**
- * Output object for attribute write mapper scripts.
- *
- * @example
- * return { output: true };      // Boolean attribute
- * return { output: 127 };       // Integer attribute
- * return { output: "hello" };   // String attribute
- */
-interface SbmdWriteResult {
-    /**
-     * Value to write to the Matter attribute.
-     * Must match the expected Matter type (will be TLV-encoded).
-     */
-    output: any;
-}
-
-// =============================================================================
-// Write Command Mapper Interface
-// =============================================================================
-
-/**
- * Input object for write-command mapper scripts.
- *
- * Used when a resource write maps to one or more Matter commands
- * instead of an attribute write. When multiple commands are available,
- * the script must select which command to execute.
- *
- * Available as global variable: `sbmdWriteArgs`
- *
- * @example
- * // Single command (auto-selected, no 'command' field needed)
- * return { output: { Level: 127, TransitionTime: 0 } };
- *
- * @example
- * // Multiple commands - select based on input value
- * var isOn = sbmdWriteArgs.input === 'true';
- * return {
- *     output: null,
- *     command: isOn ? 'On' : 'Off'
- * };
- */
-interface SbmdWriteCommandArgs {
+interface SbmdWriteArgs {
     /** Barton resource string value to write */
     input: string;
 
     /** Device UUID */
     deviceUuid: string;
 
+    /** Barton endpoint ID */
+    endpointId: string;
+
+    /** Barton resource ID */
+    resourceId: string;
+
     /**
-     * Array of available command names.
-     * When there is only one command, it is auto-selected and
-     * the script does not need to return a 'command' field.
-     * When multiple commands exist, the script must return which
-     * command to execute in the 'command' field.
+     * Cluster feature maps keyed by cluster ID (as string).
+     * Use to check cluster capabilities before encoding.
      */
-    commands: string[];
+    clusterFeatureMaps: Record<string, number>;
 }
 
 /**
- * Output object for write-command mapper scripts.
+ * Output object for write mapper scripts.
+ *
+ * Must return either an `invoke` or `write` operation with pre-encoded TLV.
+ * Use `SbmdUtils.Response.write()` or `SbmdUtils.Response.invoke()` helpers.
  *
  * @example
- * // Single command - just provide output args
- * return { output: { Level: 127, TransitionTime: 0 } };
+ * // Attribute write
+ * return { write: { clusterId: 3, attributeId: 0, tlvBase64: "..." } };
  *
  * @example
- * // Multiple commands - must specify which command
- * return { output: null, command: 'On' };
+ * // Command invocation
+ * return { invoke: { clusterId: 6, commandId: 1 } };
  */
-interface SbmdWriteCommandResult {
-    /**
-     * Command arguments to encode as TLV.
-     * Can be:
-     * - null: Command with no arguments
-     * - single value: Command with one argument
-     * - object: Command with named arguments
-     * - array of bytes: For octet string arguments
-     */
-    output: any;
-
-    /**
-     * Name of the command to execute.
-     * Required when multiple commands are available.
-     * Optional (ignored) when only one command is available.
-     */
-    command?: string;
+interface SbmdWriteResult {
+    write?: {
+        clusterId: number;
+        attributeId: number;
+        tlvBase64: string;
+        endpointId?: string;
+    };
+    invoke?: {
+        clusterId: number;
+        commandId: number;
+        tlvBase64?: string;
+        endpointId?: string;
+        timedInvokeTimeoutMs?: number;
+    };
 }
 
 // =============================================================================
@@ -339,6 +287,6 @@ interface SbmdCommandResponseResult {
  * The specific variable depends on the script type.
  */
 declare var sbmdReadArgs: SbmdReadArgs;
-declare var sbmdWriteArgs: SbmdWriteArgs | SbmdWriteCommandArgs;
+declare var sbmdWriteArgs: SbmdWriteArgs;
 declare var sbmdCommandArgs: SbmdCommandArgs;
 declare var sbmdCommandResponseArgs: SbmdCommandResponseArgs;

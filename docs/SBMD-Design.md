@@ -287,7 +287,8 @@ mapper:
       name: "LockState"       # Attribute name (for documentation)
       type: "enum8"           # Matter data type
     script: |
-      return {output: sbmdReadArgs.input === 1};
+      var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+      return {output: lockState === 1 ? 'true' : 'false'};
 ```
 
 #### Write Mapper
@@ -300,9 +301,10 @@ must return the full operation details. The script can return either a `write` o
 mapper:
   write:
     script: |
-      // Return a write operation with attribute details
+      // Encode the value as TLV and return a write operation
       const secs = parseInt(sbmdWriteArgs.input, 10);
-      return {write: {clusterId: 3, attributeId: 0, value: secs}};
+      const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+      return SbmdUtils.Response.write(3, 0, tlvBase64);
 ```
 
 Or invoke a command:
@@ -311,8 +313,9 @@ Or invoke a command:
 mapper:
   write:
     script: |
-      // Return an invoke operation with command details
-      return {invoke: {clusterId: 6, commandId: sbmdWriteArgs.input ? 1 : 0, args: {}}};
+      // Write to On/Off resource invokes On or Off command
+      const isOn = sbmdWriteArgs.input === 'true';
+      return SbmdUtils.Response.invoke(6, isOn ? 1 : 0);
 ```
 
 ### 4.2 Command Mapping
@@ -327,20 +330,19 @@ mapper:
   execute:
     script: |
       // Build PINCode bytes if credential service is supported
-      var pinCode = null;
+      var args = { PINCode: null };
       if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
           sbmdCommandArgs.input.length > 0) {
-        pinCode = [];
+        var pinBytes = [];
         for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-          pinCode.push(sbmdCommandArgs.input[0].charCodeAt(i));
+          pinBytes.push(sbmdCommandArgs.input[0].charCodeAt(i));
         }
+        args.PINCode = pinBytes;
       }
-      return {invoke: {
-        clusterId: 257,
-        commandId: 0,
-        timedInvokeTimeoutMs: 10000,
-        args: {PINCode: pinCode}
-      }};
+      const tlvBase64 = SbmdUtils.Tlv.encodeStruct(
+          args, {PINCode: {tag: 0, type: 'octstr'}});
+      return SbmdUtils.Response.invoke(257, 0, tlvBase64,
+          {timedInvokeTimeoutMs: 10000});
 ```
 
 #### Execute Response Mapper (scriptResponse)
@@ -353,15 +355,14 @@ string that can be returned to the caller:
 mapper:
   execute:
     script: |
-      // Return invoke with user index from input
-      return {invoke: {
-        clusterId: 257,
-        commandId: 3,
-        args: {userIndex: parseInt(sbmdCommandArgs.input[0], 10)}
-      }};
+      // Encode user index as TLV and invoke GetUser
+      const userIndex = parseInt(sbmdCommandArgs.input[0], 10);
+      const tlvBase64 = SbmdUtils.Tlv.encodeStruct(
+          {userIndex: userIndex}, {userIndex: {tag: 0, type: 'uint16'}});
+      return SbmdUtils.Response.invoke(257, 3, tlvBase64);
     scriptResponse: |
-      // Convert GetUserResponse to Barton string
-      var user = sbmdCommandResponseArgs.input;
+      // Decode GetUserResponse TLV and return userName
+      var user = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
       if (user.userName) {
         return {output: user.userName};
       }
