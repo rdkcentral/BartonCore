@@ -151,6 +151,12 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
 
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)
 {
+    if (!deviceDataCache)
+    {
+        icDebug("No device data cache set for device %s", deviceId.c_str());
+        return false;
+    }
+
     for (auto &entry : deviceDataCache->GetEndpointIds())
     {
         if (deviceDataCache->EndpointHasServerCluster(entry, clusterId))

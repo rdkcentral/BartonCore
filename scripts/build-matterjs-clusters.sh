@@ -26,17 +26,13 @@
 #
 # Build script to create a QuickJS-compatible bundle of the matter.js cluster
 # library for TLV encoding/decoding in SBMD drivers.
-#
-# See: GitHub: tpisto/pasm/helpers.js
-# Copyright (c) 2012 Tommi Pisto
-# Licensed under the MIT License
 
 set -e
 
 help() {
-    echo "Usage: $0 -v <version> [-o <output_dir>] [-h]"
-    echo "  -v  matter.js version/tag to use (required)"
+    echo "Usage: $0 [-o <output_dir>] [-v <version>] [-h]"
     echo "  -o  Output directory for the bundled JavaScript (default: build/matterjs-clusters)"
+    echo "  -v  matter.js version/tag to use (default: main)"
     echo "  -h  Display help"
 }
 
@@ -45,7 +41,7 @@ PROJECT_ROOT=$(realpath "${MY_DIR}/..")
 BUILD_DIR=${PROJECT_ROOT}/build
 OUTPUT_DIR=${BUILD_DIR}/matterjs-clusters
 MATTERJS_BUILD_DIR=${BUILD_DIR}/matterjs-src
-MATTERJS_VERSION=""
+MATTERJS_VERSION="main"
 
 while getopts ":ho:v:" option; do
     case $option in
@@ -66,12 +62,6 @@ while getopts ":ho:v:" option; do
         ;;
     esac
 done
-
-if [ -z "${MATTERJS_VERSION}" ]; then
-    echo "Error: -v <version> is required"
-    help
-    exit 1
-fi
 
 BUNDLE_OUTPUT="${OUTPUT_DIR}/matter-clusters.js"
 
@@ -203,6 +193,10 @@ export * as Descriptor from "./packages/types/src/clusters/descriptor";
 export * as SmokeCoAlarm from "./packages/types/src/clusters/smoke-co-alarm";
 export * as Switch from "./packages/types/src/clusters/switch";
 export * as ModeSelect from "./packages/types/src/clusters/mode-select";
+export * as AirQuality from "./packages/types/src/clusters/air-quality";
+export * as CarbonDioxideConcentrationMeasurement from "./packages/types/src/clusters/carbon-dioxide-concentration-measurement";
+export * as Pm25ConcentrationMeasurement from "./packages/types/src/clusters/pm25-concentration-measurement";
+export * as TotalVolatileOrganicCompoundsConcentrationMeasurement from "./packages/types/src/clusters/total-volatile-organic-compounds-concentration-measurement";
 ENTRY_EOF
 
 # Create QuickJS polyfills
@@ -215,6 +209,9 @@ cat > "${POLYFILL_FILE}" << 'POLYFILL_EOF'
 // TextEncoder polyfill
 if (typeof globalThis.TextEncoder === 'undefined') {
     globalThis.TextEncoder = class TextEncoder {
+// See: GitHub: tpisto/pasm/helpers.js
+// Copyright (c) 2012 Tommi Pisto
+// Licensed under the MIT License
         encode(str) {
             const utf8 = [];
             for (let i = 0; i < str.length; i++) {
