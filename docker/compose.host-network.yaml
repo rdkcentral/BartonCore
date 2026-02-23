@@ -40,13 +40,10 @@
 #       ]
 #
 # NOTE: Per the Compose Spec, network_mode takes precedence over networks.
-#       The barton-ip6net network from the base compose file is ignored when
-#       this override is active.
 #
+#       Any networks configured for these services in the base compose file
+#       will be ignored when this override is active.
 
 services:
-    barton:
-        network_mode: host
-
     devcontainer:
         network_mode: host

@@ -37,8 +37,9 @@ fi
 COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
+HOST_NETWORK=""
 
-while getopts ":ne:t:dH" opt; do
+while getopts ":ne:dH" opt; do
     case ${opt} in
     n) # process option n
         COMPOSE_INTERACTIVE_FLAGS="--no-TTY"
