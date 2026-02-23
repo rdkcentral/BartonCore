@@ -35,6 +35,70 @@ file is a central place to manage test dependencies and configurations,
 making it easier to maintain and scale the test suite.
 """
 
+import logging
+import os
+import re
+
+import pytest
+
+logger = logging.getLogger(__name__)
+
+
+def _get_cmake_cache_path() -> str:
+    """Get the path to CMakeCache.txt in the build directory."""
+    # Try common build directory locations relative to the project root
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(project_root, "build", "CMakeCache.txt")
+
+
+def _is_matterjs_enabled() -> bool:
+    """Check if BCORE_MATTER_USE_MATTERJS is enabled in CMakeCache.txt."""
+    cache_path = _get_cmake_cache_path()
+    if not os.path.exists(cache_path):
+        logger.warning(
+            f"CMakeCache.txt not found at {cache_path}, assuming matterjs is enabled"
+        )
+        return True
+
+    try:
+        with open(cache_path, "r") as f:
+            for line in f:
+                match = re.match(r"^BCORE_MATTER_USE_MATTERJS:BOOL=(.+)$", line.strip())
+                if match:
+                    value = match.group(1).upper()
+                    enabled = value in ("ON", "TRUE", "1", "YES")
+                    logger.debug(
+                        f"BCORE_MATTER_USE_MATTERJS={value} (enabled={enabled})"
+                    )
+                    return enabled
+    except Exception as e:
+        logger.warning(
+            f"Error reading CMakeCache.txt: {e}, assuming matterjs is enabled"
+        )
+        return True
+
+    # If not found, assume enabled (default)
+    return True
+
+
+# Cache the result to avoid reading the file multiple times
+_matterjs_enabled = None
+
+
+def is_matterjs_enabled() -> bool:
+    """Check if matter.js integration is enabled (cached)."""
+    global _matterjs_enabled
+    if _matterjs_enabled is None:
+        _matterjs_enabled = _is_matterjs_enabled()
+    return _matterjs_enabled
+
+
+# Skip marker for tests that require matter.js
+requires_matterjs = pytest.mark.skipif(
+    not is_matterjs_enabled(),
+    reason="Test requires matter.js integration (BCORE_MATTER_USE_MATTERJS=ON)",
+)
+
 # The following list of plugins are automatically loaded by pytest when running tests.
 # Any fixtures defined within these modules are automatically available to all test modules.
 pytest_plugins = [

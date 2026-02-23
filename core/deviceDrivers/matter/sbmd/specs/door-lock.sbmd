@@ -1,5 +1,6 @@
 # Door Lock SBMD Specification
 # Maps Matter Door Lock device type to Barton doorLock device class
+# Uses MatterClusters (matter.js) for TLV encoding
 
 # SBMD schema version 1.0
 schemaVersion: "1.0"
@@ -8,7 +9,7 @@ driverVersion: "1.0"
 # Human-readable driver name
 name: "Door Lock"
 # Script type (currently only JavaScript is supported)
-scriptType: "JavaScript"
+scriptType: "JavaScript+matterjs"
 
 # Barton device class mapping
 bartonMeta:
@@ -20,6 +21,8 @@ matterMeta:
   deviceTypes:
     - 0x000a  # Matter Door Lock device type
   revision: 1 # Device Specification revision from Matter spec that this driver complies with
+  featureClusters:
+    - 0x0101  # DoorLock cluster - for featureMap access in scripts
 
 # Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
 reporting:
@@ -43,22 +46,31 @@ resources:
           name: "IdentifyTime"
           type: "uint16"           # Unsigned 16-bit integer
 
-        # Passthrough: attribute value directly becomes Barton string
+        # Use MatterClusters for type-safe TLV decoding
         script: |
-          return {output: sbmdReadArgs.input};
+          const { TlvUInt16 } = MatterClusters;
+          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+          const value = TlvUInt16.decode(tlvBytes);
+          return {output: value.toString()};
 
       # Write mapper: Barton seconds string -> Matter Identify attribute
+      # Script returns full operation details - no metadata needed
       write:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"           # Unsigned 16-bit integer
-
-        # Convert Barton string to integer for Matter
         script: |
-          const secs = parseInt(sbmdWriteArgs.input, 10);
-          return {output: secs};
+          // Use MatterClusters for type-safe TLV encoding of attribute write
+          const { TlvUInt16, Identify: { IdentifyCluster } } = MatterClusters;
+
+          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+
+          // Encode uint16 value to TLV and return as attribute write
+          const tlvBytes = TlvUInt16.encode(secs);
+          return {
+            write: {
+              clusterId: IdentifyCluster.id,
+              attributeId: IdentifyCluster.attributes.identifyTime.id,
+              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
+            }
+          };
 
 # Barton endpoints (logical groupings of resources)
 endpoints:
@@ -82,65 +94,90 @@ endpoints:
               attributeId: "0x0000"    # LockState attribute
               name: "LockState"
               type: "enum8"            # 8-bit enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked
+
+            # Use MatterClusters LockState enum for type-safe comparison
             script: |
-              return {output: sbmdReadArgs.input === 1};
+              const { TlvNullable, TlvEnum } = MatterClusters;
+              const { LockState } = MatterClusters.DoorLock.DoorLock;
+              const TlvLockState = TlvNullable(TlvEnum(LockState));
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const lockState = TlvLockState.decode(tlvBytes);
+              return {output: lockState === LockState.Locked ? 'true' : 'false'};
 
       # Lock function resource - locks the door
       - id: "lock"
         type: "function"
         mapper:
           # Execute mapper: Barton lock function -> Matter LockDoor command
+          # Script returns full operation details - no metadata needed
           execute:
-            command:
-              clusterId: "0x0101"              # Door Lock cluster
-              commandId: "0x00"                # LockDoor command
-              name: "LockDoor"
-              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
-              args:
-                - name: "PINCode"              # Optional PIN code argument
-                  type: "octstr"               # Octet string (byte array)
-
-            # Goal: Convert optional PIN code string to byte array for Matter command
-            # Step 1: Check if both COTA (0x80) and PIN (0x01) features are enabled
-            # Step 2: Convert PIN string to byte array
-            # Step 3: return byte array in JSON return object's output element
             script: |
-              var result = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                result = [];
-                for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+              // Use MatterClusters for type-safe TLV encoding
+              const { DoorLock, DoorLockCluster } = MatterClusters.DoorLock;
+              const { TlvLockDoorRequest } = DoorLock;
+
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              const featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
+
+              // Build command arguments
+              let tlvBase64 = null;
+              const pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
+                // Convert PIN string to Uint8Array for encoding
+                const pinBytes = new Uint8Array(pinString.length);
+                for (let i = 0; i < pinString.length; i++) {
+                  pinBytes[i] = pinString.charCodeAt(i);
                 }
+                const tlvBytes = TlvLockDoorRequest.encode({ pinCode: pinBytes });
+                tlvBase64 = btoa(String.fromCharCode.apply(null, tlvBytes));
               }
-              return {output: result};
+
+              return {
+                invoke: {
+                  clusterId: DoorLockCluster.id,
+                  commandId: DoorLock.Base.commands.lockDoor.requestId,
+                  tlvBase64: tlvBase64,
+                  timedInvokeTimeoutMs: 10000
+                }
+              };
 
       # Unlock function resource - unlocks the door
       - id: "unlock"
         type: "function"
         mapper:
           # Execute mapper: Barton unlock function -> Matter UnlockDoor command
+          # Script returns full operation details - no metadata needed
           execute:
-            command:
-              clusterId: "0x0101"              # Door Lock cluster
-              commandId: "0x01"                # UnlockDoor command
-              name: "UnlockDoor"
-              timedInvokeTimeoutMs: 10000      # Timeout for timed invoke (required for locks)
-              args:
-                - name: "PINCode"              # Optional PIN code argument
-                  type: "octstr"               # Octet string (byte array)
-
-            # Goal: Convert optional PIN code string to byte array for Matter command
-            # Step 1: Check if both COTA (0x80) and PIN (0x01) features are enabled
-            # Step 2: Convert PIN string to byte array
-            # Step 3: return byte array in JSON return object's output element
             script: |
-              var result = null;
-              if (((sbmdCommandArgs.featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                result = [];
-                for (let i = 0; i < sbmdCommandArgs.input[0].length; i++) {
-                  result.push(sbmdCommandArgs.input[0].charCodeAt(i));
+              // Use MatterClusters for type-safe TLV encoding
+              const { DoorLock, DoorLockCluster } = MatterClusters.DoorLock;
+              const { TlvUnlockDoorRequest } = DoorLock;
+
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              const featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
+
+              // Build command arguments
+              let tlvBase64 = null;
+              const pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
+                // Convert PIN string to Uint8Array for encoding
+                const pinBytes = new Uint8Array(pinString.length);
+                for (let i = 0; i < pinString.length; i++) {
+                  pinBytes[i] = pinString.charCodeAt(i);
                 }
+                const tlvBytes = TlvUnlockDoorRequest.encode({ pinCode: pinBytes });
+                tlvBase64 = btoa(String.fromCharCode.apply(null, tlvBytes));
               }
-              return {output: result};
+
+              return {
+                invoke: {
+                  clusterId: DoorLockCluster.id,
+                  commandId: DoorLock.Base.commands.unlockDoor.requestId,
+                  tlvBase64: tlvBase64,
+                  timedInvokeTimeoutMs: 10000
+                }
+              };
