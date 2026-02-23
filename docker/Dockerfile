@@ -314,7 +314,8 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     cp out/linux-x64-chip-tool/chip-tool /usr/local/bin && \
     rm -rf out && \
     cd /tmp && \
-    rm -rf /tmp/matter
+    rm -rf /tmp/matter && \
+    rm -rf /root/.cipd-cache-dir
 SHELL ["/bin/sh", "-c"]
 
 # Download, build, and install quickjs, which needs our custom CMakeLists.txt
