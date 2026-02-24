@@ -72,8 +72,8 @@ include(CMakeParseArguments)
 
 # Check prereqs
 find_program( GCOV_PATH gcov )
-find_program( LCOV_PATH  NAMES lcov lcov.bat lcov.exe lcov.perl PATHS ${CROSS_OUTPUT}/bin)
-find_program( GENHTML_PATH NAMES genhtml genhtml.perl genhtml.bat PATHS ${CROSS_OUTPUT}/bin)
+find_program( LCOV_PATH  NAMES lcov lcov.bat lcov.exe lcov.perl PATHS ${CMAKE_PREFIX_PATH}/bin)
+find_program( GENHTML_PATH NAMES genhtml genhtml.perl genhtml.bat PATHS ${CMAKE_PREFIX_PATH}/bin)
 find_program( SIMPLE_PYTHON_EXECUTABLE python3 )
 find_program(LCOV_COBERTURA_PATH lcov_cobertura.py PATHS ${CMAKE_MODULE_PATH})
 find_program( CPP_FILT_PATH c++filt)
