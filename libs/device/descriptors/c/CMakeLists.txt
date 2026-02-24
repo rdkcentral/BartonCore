@@ -38,12 +38,6 @@ bcore_find_include(
     ""
 )
 
-# setup include paths
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${LIBXML2_INCLUDE_DIR}
-)
-
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
 
@@ -51,7 +45,7 @@ add_library(xhDeviceDescriptors STATIC ${SOURCES})
 target_link_libraries(xhDeviceDescriptors BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhXmlHelper)
 
 # export our 'public' folder so others can include our headers
-target_include_directories(xhDeviceDescriptors PUBLIC public PRIVATE)
+target_include_directories(xhDeviceDescriptors PUBLIC public PRIVATE ${LIBXML2_INCLUDE_DIR})
 
 bcore_configure_glib()
 
