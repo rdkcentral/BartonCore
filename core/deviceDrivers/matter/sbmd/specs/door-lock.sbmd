@@ -87,22 +87,29 @@ endpoints:
           - "dynamic"     # Value can change asynchronously (via device button, etc.)
           - "emitEvents"  # Changes generate events to subscribers
         mapper:
-          # Read mapper: Matter LockState enum -> Barton boolean
-          read:
-            attribute:
+          # Event mapper: Matter LockOperation event -> Barton boolean
+          event:
+            event:
               clusterId: "0x0101"      # Door Lock cluster
-              attributeId: "0x0000"    # LockState attribute
-              name: "LockState"
-              type: "enum8"            # 8-bit enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked
+              eventId: "0x0002"        # LockOperation event
+              name: "LockOperation"
 
-            # Use MatterClusters LockState enum for type-safe comparison
+            # LockOperation event data contains lockOperationType:
+            #   1 = Lock, 2 = Unlock, 3 = NonAccessUserEvent, 4 = ForcedUserEvent, 5 = Unlatch
             script: |
-              const { TlvNullable, TlvEnum } = MatterClusters;
-              const { LockState } = MatterClusters.DoorLock.DoorLock;
-              const TlvLockState = TlvNullable(TlvEnum(LockState));
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const lockState = TlvLockState.decode(tlvBytes);
-              return {output: lockState === LockState.Locked ? 'true' : 'false'};
+              const { TlvObject, TlvField, TlvEnum, TlvUInt8, TlvNullable, TlvOptional } = MatterClusters;
+              const { DoorLock } = MatterClusters.DoorLock;
+              const { LockOperationType } = DoorLock;
+
+              // Define TLV schema for LockOperationEvent fields we care about
+              const TlvLockOperationEvent = TlvObject({
+                lockOperationType: TlvField(0, TlvEnum(LockOperationType)),
+              });
+
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdEventArgs.tlvBase64);
+              const eventData = TlvLockOperationEvent.decode(tlvBytes);
+              const isLocked = eventData.lockOperationType === LockOperationType.Lock;
+              return { output: isLocked ? 'true' : 'false' };
 
       # Lock function resource - locks the door
       - id: "lock"

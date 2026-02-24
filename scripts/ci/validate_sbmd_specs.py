@@ -222,6 +222,15 @@ def extract_scripts_from_resource(resource: dict, endpoint_id: str = None) -> li
                 f"{location_prefix}.mapper.execute.scriptResponse"
             ))
 
+    # Event mapper
+    event_mapper = mapper.get('event')
+    if event_mapper and event_mapper.get('script'):
+        scripts.append((
+            event_mapper['script'],
+            'event',
+            f"{location_prefix}.mapper.event.script"
+        ))
+
     return scripts
 
 

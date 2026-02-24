@@ -289,6 +289,53 @@ interface SbmdCommandResponseResult {
 }
 
 // =============================================================================
+// Event Mapper Interface
+// =============================================================================
+
+/**
+ * Input object for event mapper scripts.
+ *
+ * Event mappers process Matter device events (e.g., LockOperation)
+ * and produce a resource value.
+ *
+ * Available as global variable: `sbmdEventArgs`
+ *
+ * @example
+ * // DoorLock LockOperation event
+ * const { TlvField, TlvUInt8 } = MatterClusters;
+ * const tlvBytes = SbmdUtils.Base64.decode(sbmdEventArgs.tlvBase64);
+ * // Extract lockOperationType field to determine lock state
+ * return { output: lockOperationType === 1 ? 'true' : 'false' };
+ */
+interface SbmdEventArgs extends SbmdBaseContext {
+    /** Base64-encoded TLV data from Matter event */
+    tlvBase64: string;
+
+    /** Matter cluster ID */
+    clusterId: number;
+
+    /** Matter event ID */
+    eventId: number;
+
+    /** Event name from the SBMD spec */
+    eventName: string;
+}
+
+/**
+ * Output object for event mapper scripts.
+ *
+ * @example
+ * return { output: "true" };
+ */
+interface SbmdEventResult {
+    /**
+     * Value for the Barton resource.
+     * Will be converted to a string for the resource value.
+     */
+    output: string | number | boolean;
+}
+
+// =============================================================================
 // Global Variable Declarations
 // =============================================================================
 
@@ -300,3 +347,4 @@ declare var sbmdReadArgs: SbmdReadArgs;
 declare var sbmdWriteArgs: SbmdWriteArgs;
 declare var sbmdCommandArgs: SbmdCommandArgs;
 declare var sbmdCommandResponseArgs: SbmdCommandResponseArgs;
+declare var sbmdEventArgs: SbmdEventArgs;

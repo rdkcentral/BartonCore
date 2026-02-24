@@ -76,8 +76,11 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // Set feature clusters from the spec for featureMap lookup
     device->SetFeatureClusters(spec->matterMeta.featureClusters);
 
-    // for each resource in the spec, add an entry to a concrete attribute or command path
-    // Helper lambda to configure a single resource
+    // for each resource in the spec, configure mapper bindings.
+    // Note: resource modes ("read", "dynamic", "emitEvents") describe client-facing capabilities
+    // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
+    // is populated: read mappers query the device, event mappers update the value from events.
+    // A resource can be readable without a read mapper if its value is populated by events.
     auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
@@ -243,11 +246,17 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
             resourceMode |= RESOURCE_MODE_EXECUTABLE;
         }
 
-        // Use CACHING_POLICY_ALWAYS only if there's a read attribute mapper since we will have
-        // an attribute cache kept up to date via subscriptions.
+        // Use CACHING_POLICY_ALWAYS when the resource value is kept up to date
+        // automatically — either via attribute subscription or event mapper updates.
+        // With CACHING_POLICY_ALWAYS, the device service returns the stored value on read
+        // without calling the driver's readResource callback.
+        // Note: resource modes ("read", "dynamic", etc.) describe client-facing capabilities,
+        // while mappers describe how the value is populated (attribute read, event, etc.).
         ResourceCachingPolicy cachingPolicy =
-            (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ? CACHING_POLICY_ALWAYS
-                                                                                           : CACHING_POLICY_NEVER;
+            (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ||
+            sbmdResource.mapper.event.has_value()
+                ? CACHING_POLICY_ALWAYS
+                : CACHING_POLICY_NEVER;
 
         result &=
             createDeviceResource(
@@ -281,11 +290,15 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
                 resourceMode |= RESOURCE_MODE_EXECUTABLE;
             }
 
-            // Use CACHING_POLICY_ALWAYS only if there's a read attribute mapper since we will have
-            // an attribute cache kept up to date via subscriptions.
+            // Use CACHING_POLICY_ALWAYS when the resource value is kept up to date
+            // automatically — either via attribute subscription or event mapper updates.
+            // With CACHING_POLICY_ALWAYS, the device service returns the stored value on read
+            // without calling the driver's readResource callback.
             ResourceCachingPolicy cachingPolicy =
-                (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ? CACHING_POLICY_ALWAYS
-                                                                                               : CACHING_POLICY_NEVER;
+                (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ||
+                sbmdResource.mapper.event.has_value()
+                    ? CACHING_POLICY_ALWAYS
+                    : CACHING_POLICY_NEVER;
 
             result &= createEndpointResource(endpoint,
                                              sbmdResource.id.c_str(),

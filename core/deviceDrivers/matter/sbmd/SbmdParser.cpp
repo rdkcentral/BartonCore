@@ -88,6 +88,16 @@ namespace barton
                 }
             }
 
+            // Validate event mapper
+            if (mapper.event.has_value())
+            {
+                if (mapper.eventScript.empty())
+                {
+                    icError("Resource %s has event mapper but eventScript is empty", resourceId.c_str());
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -126,6 +136,12 @@ namespace barton
             {
                 setAttrIds(resource.mapper.readAttribute);
                 setCmdIds(resource.mapper.readCommand);
+            }
+
+            if (resource.mapper.event.has_value())
+            {
+                resource.mapper.event.value().resourceEndpointId = endpointId;
+                resource.mapper.event.value().resourceId = resource.id;
             }
             // Note: Write and execute mappers are script-only, no metadata to set IDs on
         }
@@ -532,6 +548,28 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         }
     }
 
+    // Parse event mapping
+    if (node["event"])
+    {
+        const YAML::Node &eventNode = node["event"];
+
+        if (eventNode["event"])
+        {
+            SbmdEvent evt;
+            if (!ParseEvent(eventNode["event"], evt))
+            {
+                icError("Failed to parse event");
+                return false;
+            }
+            mapper.event = evt;
+        }
+
+        if (eventNode["script"])
+        {
+            mapper.eventScript = eventNode["script"].as<std::string>();
+        }
+    }
+
     return true;
 }
 
@@ -630,6 +668,34 @@ bool SbmdParser::ParseCommand(const YAML::Node &node, SbmdCommand &command)
             }
             command.args.push_back(arg);
         }
+    }
+
+    return true;
+}
+
+bool SbmdParser::ParseEvent(const YAML::Node &node, SbmdEvent &event)
+{
+    if (!node.IsMap())
+    {
+        icError("event is not a map");
+        return false;
+    }
+
+    if (node["clusterId"])
+    {
+        std::string clusterId = node["clusterId"].as<std::string>();
+        event.clusterId = ParseHexOrDecimal(clusterId);
+    }
+
+    if (node["eventId"])
+    {
+        std::string eventId = node["eventId"].as<std::string>();
+        event.eventId = ParseHexOrDecimal(eventId);
+    }
+
+    if (node["name"])
+    {
+        event.name = node["name"].as<std::string>();
     }
 
     return true;
