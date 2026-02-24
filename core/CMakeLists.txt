@@ -278,8 +278,8 @@ bcore_find_include(
 
 # add library dependencies for this binary
 set(bCoreLinkLibraries bCoreConfig xhDeviceDescriptors
-        xhConfig xhUrlHelper xhConcurrent xhXmlHelper xhJsonHelper
-        xhDeviceHelper xhXmlHelper xhCrypto xhTime xhUtil xhTypes xhLog
+        BartonCommon::xhConfig BartonCommon::xhUrlHelper BartonCommon::xhConcurrent BartonCommon::xhXmlHelper BartonCommon::xhJsonHelper
+        BartonCommon::xhDeviceHelper BartonCommon::xhXmlHelper xhCrypto BartonCommon::xhTime BartonCommon::xhUtil BartonCommon::xhTypes BartonCommon::xhLog
         ${XTRA_LIBS} cjson uuid curl xml2 z m mbedcrypto ${BCORE_LINK_LIBRARIES})
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src

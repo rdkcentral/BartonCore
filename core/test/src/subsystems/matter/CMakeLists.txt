@@ -44,7 +44,7 @@ pkg_check_modules(OPENSSL REQUIRED openssl)
 # tests that validate classes meant to make some deficient SDK classes more usable.
 # Add more executables for truly isolated units that don't link to other libraries.
 bcore_add_cpp_test(NAME testMatterSDKTooling
-                LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto xhLog xhUtil xhDeviceDescriptors xhConfig
+                LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock crypto BartonCommon::xhLog BartonCommon::xhUtil xhDeviceDescriptors BartonCommon::xhConfig
                 INCLUDES ${BARTON_PRIVATE_INCLUDES}
                          ${CMAKE_BINARY_DIR}/matter-install/include/matter
                          ${PROJECT_SOURCE_DIR}/api/c/public

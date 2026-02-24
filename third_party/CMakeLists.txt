@@ -27,6 +27,11 @@
 
 if (BCORE_BUILD_THIRD_PARTY_BARTON_COMMON)
     add_subdirectory(barton_common)
+else()
+    # When not building BartonCommon as a third-party dependency, find it via
+    # CMake package config. This allows external repositories to build
+    # BartonCommon separately and have BartonCore discover it via CMAKE_PREFIX_PATH.
+    find_package(BartonCommon REQUIRED)
 endif()
 
 # TODO: Integrate matter more strongly with CMake.

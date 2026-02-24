@@ -30,7 +30,17 @@ include(FetchContent)
 FetchContent_Declare(
     BartonCommon
     GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon
-    GIT_TAG 0.1.1
+    GIT_TAG cleith/dev/improveBuilding
 )
 
-FetchContent_MakeAvailable(BartonCommon)
+# Use FetchContent_Populate + add_subdirectory with EXCLUDE_FROM_ALL to prevent
+# BartonCommon's install() rules from being included in BartonCore's install target.
+# This allows BartonCommon targets to be available for linking without installing
+# BartonCommon headers/libraries when installing BartonCore.
+#
+# NOTE: EXCLUDE_FROM_ALL available to FetchContent_Declare in CMake 3.28+.
+FetchContent_GetProperties(BartonCommon)
+if(NOT bartoncommon_POPULATED)
+    FetchContent_Populate(BartonCommon)
+    add_subdirectory(${bartoncommon_SOURCE_DIR} ${bartoncommon_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
