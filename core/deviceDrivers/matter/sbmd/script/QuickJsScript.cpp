@@ -1056,4 +1056,130 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     return true;
 }
 
+bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
+{
+    std::lock_guard<std::mutex> lock(scriptsMutex);
+
+    if (script.empty())
+    {
+        icError("Cannot add event mapper: empty script for cluster 0x%X, event 0x%X",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
+    }
+
+    eventScripts[eventInfo] = script;
+    icDebug("Added event mapper for cluster 0x%X, event 0x%X",
+            eventInfo.clusterId,
+            eventInfo.eventId);
+    return true;
+}
+
+bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
+                             chip::TLV::TLVReader &reader,
+                             std::string &outValue)
+{
+    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
+    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+
+    // Update stack top for cross-thread usage
+    JS_UpdateStackTop(JS_GetRuntime(ctx));
+
+    auto it = eventScripts.find(eventInfo);
+    if (it == eventScripts.end())
+    {
+        icError("No event mapper found for cluster 0x%X, event 0x%X",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
+    }
+
+    // Build the sbmdEventArgs JSON object
+    Json::Value argsJson = BuildBaseArgsJson(eventInfo.resourceEndpointId.value_or(""), eventInfo.clusterId);
+    argsJson["eventId"] = eventInfo.eventId;
+    argsJson["eventName"] = eventInfo.name;
+
+    // Convert TLV to base64 for script to use
+    // Make a copy of the reader since encoding may consume it
+    chip::TLV::TLVReader readerCopy;
+    readerCopy.Init(reader);
+
+    // Get the size needed for encoding
+    chip::TLV::TLVReader sizingReader;
+    sizingReader.Init(reader);
+    uint32_t tlvLen;
+    CHIP_ERROR err = sizingReader.GetLengthRead();
+    if (err != CHIP_NO_ERROR)
+    {
+        // Fall back to remaining length
+        tlvLen = sizingReader.GetRemainingLength();
+    }
+    else
+    {
+        tlvLen = sizingReader.GetRemainingLength();
+    }
+
+    // Use a reasonable buffer size
+    if (tlvLen == 0)
+    {
+        tlvLen = 256;
+    }
+
+    chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
+    if (!tlvBuffer.Calloc(tlvLen))
+    {
+        icError("Failed to allocate TLV buffer for event 0x%X", eventInfo.eventId);
+        return false;
+    }
+
+    // Write the TLV data to buffer
+    chip::TLV::TLVWriter writer;
+    writer.Init(tlvBuffer.Get(), tlvLen);
+
+    err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to copy event TLV data: %s", chip::ErrorStr(err));
+        return false;
+    }
+
+    uint32_t encodedLen = writer.GetLengthWritten();
+
+    // Encode to base64
+    size_t base64Size = ((encodedLen + 2) / 3) * 4 + 1;
+    std::unique_ptr<char[]> base64Buffer(new char[base64Size]);
+    uint16_t base64Len = chip::Base64Encode(tlvBuffer.Get(), static_cast<uint16_t>(encodedLen), base64Buffer.get());
+    base64Buffer[base64Len] = '\0';
+
+    argsJson["tlvBase64"] = std::string(base64Buffer.get());
+
+    // Convert Json::Value to string for parsing in QuickJS
+    Json::StreamWriterBuilder writerBuilder;
+    writerBuilder["indentation"] = "";
+    std::string jsonString = Json::writeString(writerBuilder, argsJson);
+
+    icDebug("sbmdEventArgs JSON: %s", jsonString.c_str());
+
+    // Parse JSON string to JSValue
+    JSValue argJsonRaw;
+    if (!ParseJsonToJSValue(jsonString, "sbmdEventArgs", argJsonRaw))
+    {
+        return false;
+    }
+    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+
+    // Execute the mapper script
+    JSValue outJson;
+    if (!ExecuteScript(it->second, "sbmdEventArgs", argJsonGuard.get(), outJson))
+    {
+        icError("Failed to execute event mapper script for cluster 0x%X, event 0x%X",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
+    }
+
+    // Extract and return the "output" field
+    return ExtractScriptOutputAsString(outJson, outValue);
+}
+
 } // namespace barton

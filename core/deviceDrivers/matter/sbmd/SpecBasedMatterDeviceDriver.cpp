@@ -123,6 +123,15 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 return false;
             }
         }
+        if (sbmdResource.mapper.event.has_value())
+        {
+            // Event mappers - bind event to resource for automatic updates
+            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value()))
+            {
+                icError("  Failed to bind event for resource %s", sbmdResource.id.c_str());
+                return false;
+            }
+        }
         return true;
     };
 
@@ -202,6 +211,11 @@ void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const S
         // Execute mappers are script-only - script returns full operation details (invoke)
         std::string resourceKey = resource.resourceEndpointId.value_or("") + ":" + resource.id;
         script.AddExecuteMapper(resourceKey, resource.mapper.executeScript, resource.mapper.executeResponseScript);
+    }
+    if (resource.mapper.event.has_value() && !resource.mapper.eventScript.empty())
+    {
+        // Event mappers convert event TLV to resource values
+        script.AddEventMapper(resource.mapper.event.value(), resource.mapper.eventScript);
     }
 }
 

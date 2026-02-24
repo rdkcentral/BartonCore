@@ -266,6 +266,44 @@ namespace barton
                                 const std::string &inValue,
                                 ScriptWriteResult &result) = 0;
 
+        /**
+         * Add an event mapper script for the specified event.
+         * The script converts event TLV data to a Barton resource string value.
+         *
+         * @param eventInfo Information about the Matter event
+         * @param script The JavaScript script for the mapper
+         * @return true if the mapper was added successfully, false otherwise
+         */
+        virtual bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) = 0;
+
+        /**
+         * Convert a Matter event TLV to a Barton resource string value.
+         *
+         * Script input JSON:
+         * {
+         *     "tlvBase64": <base64-encoded TLV event data>,
+         *     "deviceUuid": <device UUID>,
+         *     "clusterFeatureMaps": { "<clusterId>": <featureMap>, ... },
+         *     "clusterId": <cluster ID>,
+         *     "endpointId": <endpoint ID>,
+         *     "eventId": <event ID>,
+         *     "eventName": <event name from spec>
+         * }
+         *
+         * Script output JSON:
+         * {
+         *     "output": <Barton string representation of the event data>
+         * }
+         *
+         * @param eventInfo Information about the Matter event
+         * @param reader TLV reader positioned at the event data
+         * @param outValue Will contain the Barton string representation
+         * @return true if mapping was successful, false otherwise
+         */
+        virtual bool MapEvent(const SbmdEvent &eventInfo,
+                              chip::TLV::TLVReader &reader,
+                              std::string &outValue) = 0;
+
     protected:
         std::string deviceId;
     };

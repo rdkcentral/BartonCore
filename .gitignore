@@ -6,6 +6,9 @@ build
 .cache
 _codeql_detected_source_root
 
+# Precompiled headers
+*.gch
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

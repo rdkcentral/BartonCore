@@ -149,6 +149,91 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
     }
 }
 
+void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEventHeader,
+                                              chip::TLV::TLVReader *apData,
+                                              const chip::app::StatusIB *apStatus)
+{
+    if (apStatus != nullptr)
+    {
+        icDebug("OnEventData status for device %s: 0x%x",
+                device->deviceId.c_str(),
+                apStatus->mStatus);
+        return;
+    }
+
+    if (apData == nullptr)
+    {
+        icDebug("OnEventData with null data for device %s", device->deviceId.c_str());
+        return;
+    }
+
+    icDebug("OnEventData for device %s, endpoint %u, cluster 0x%x, event 0x%x",
+            device->deviceId.c_str(),
+            aEventHeader.mPath.mEndpointId,
+            aEventHeader.mPath.mClusterId,
+            aEventHeader.mPath.mEventId);
+
+    // Fast O(1) lookup for events
+    EventPath eventPath {aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId, aEventHeader.mPath.mEventId};
+    auto it = device->eventLookup.find(eventPath);
+    if (it == device->eventLookup.end())
+    {
+        // Not an event we're interested in
+        return;
+    }
+
+    const auto &uri = it->second.uri;
+    const auto &event = it->second.event;
+
+    icDebug("Found event match for URI: %s", uri.c_str());
+
+    // Check if we have a script engine
+    if (!device->script)
+    {
+        icError("No script engine available for device %s", device->deviceId.c_str());
+        return;
+    }
+
+    // Make a copy of the TLV reader since MapEvent may consume it
+    chip::TLV::TLVReader readerCopy;
+    readerCopy.Init(*apData);
+
+    // Execute the script to map the event TLV data to a string value
+    std::string outValue;
+    if (!device->script->MapEvent(event, readerCopy, outValue))
+    {
+        icError("Failed to execute event mapping script for URI: %s", uri.c_str());
+        return;
+    }
+
+    icDebug("Updating resource %s from event to value: %s", uri.c_str(), outValue.c_str());
+
+    // Extract the resource ID from the URI
+    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+    const char *resourceId = strrchr(uri.c_str(), '/');
+    if (resourceId != nullptr)
+    {
+        resourceId++; // Skip the '/'
+
+        const char *resourceEndpointId = nullptr;
+        if (event.resourceEndpointId.has_value() && !event.resourceEndpointId->empty())
+        {
+            resourceEndpointId = event.resourceEndpointId->c_str();
+        }
+
+        // Call updateResource to notify DeviceService of the change
+        updateResource(device->deviceId.c_str(),
+                       resourceEndpointId,
+                       resourceId,
+                       outValue.c_str(),
+                       nullptr); // No additional metadata for now
+    }
+    else
+    {
+        icError("Failed to extract resource ID from URI: %s", uri.c_str());
+    }
+}
+
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)
 {
     if (!deviceDataCache)
@@ -333,6 +418,38 @@ bool MatterDevice::BindExecuteInfo(const char *uri,
 
     resourceExecuteBindings[uri] = binding;
     icDebug("Bound execute for URI %s (resourceKey=%s)", uri, resourceKey.c_str());
+    return true;
+}
+
+bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdEvent &event)
+{
+    if (uri == nullptr)
+    {
+        icError("URI is null for event binding");
+        return false;
+    }
+
+    // Find the endpoint for this event's cluster
+    chip::EndpointId endpointId;
+    if (!GetEndpointForCluster(event.clusterId, endpointId))
+    {
+        icError("Could not find endpoint for cluster 0x%X for URI %s", event.clusterId, uri);
+        return false;
+    }
+
+    // Create event binding and add to lookup
+    EventPath eventPath {endpointId, static_cast<chip::ClusterId>(event.clusterId), static_cast<chip::EventId>(event.eventId)};
+    EventBinding eventBinding;
+    eventBinding.uri = uri;
+    eventBinding.event = event;
+
+    eventLookup[eventPath] = std::move(eventBinding);
+
+    icDebug("Bound event for URI %s (cluster=0x%X, event=0x%X, endpoint=%u)",
+            uri,
+            event.clusterId,
+            event.eventId,
+            endpointId);
     return true;
 }
 
