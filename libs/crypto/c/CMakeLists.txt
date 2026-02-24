@@ -41,7 +41,7 @@ file(GLOB SOURCES "src/*.c")
 
 # build as shared library
 add_library(xhCrypto STATIC ${SOURCES})
-target_link_libraries(xhCrypto ssl crypto xhTypes xhUtil xhConcurrent)
+target_link_libraries(xhCrypto ssl crypto BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent)
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhCrypto PUBLIC public)
