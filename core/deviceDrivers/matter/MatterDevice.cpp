@@ -121,10 +121,12 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         return;
     }
 
-    icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
-
     // Extract the resource ID from the URI
-    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+    // URI format: /{ep|d}/{deviceUuid}[/ep/{endpointId}]/r/{resourceId}
+    // Examples:
+    //   Device-level resource: /d/{deviceUuid}/r/{resourceId}
+    //   Endpoint-level resource: /d/{deviceUuid}/ep/{endpointId}/r/{resourceId}
+    // We extract the resourceId as the last path segment after the final '/'
     const char *resourceId = strrchr(uri.c_str(), '/');
     if (resourceId != nullptr)
     {
@@ -137,15 +139,23 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         }
 
         // Call updateResource to notify DeviceService of the change
+        // Note: updateResource returns void so we cannot detect failures
         updateResource(device->deviceId.c_str(),
                        resourceEndpointId,
                        resourceId,
                        outValue.c_str(),
                        nullptr); // No additional metadata for now
+
+        icDebug("Resource update requested for %s: value=%s (device=%s, endpoint=%s, resource=%s)",
+                uri.c_str(),
+                outValue.c_str(),
+                device->deviceId.c_str(),
+                resourceEndpointId ? resourceEndpointId : "(device-level)",
+                resourceId);
     }
     else
     {
-        icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        icError("Failed to extract resource ID from URI: %s - URI must end with /{resourceId}", uri.c_str());
     }
 }
 
@@ -206,10 +216,12 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
         return;
     }
 
-    icDebug("Updating resource %s from event to value: %s", uri.c_str(), outValue.c_str());
-
     // Extract the resource ID from the URI
-    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+    // URI format: /{ep|d}/{deviceUuid}[/ep/{endpointId}]/r/{resourceId}
+    // Examples:
+    //   Device-level resource: /d/{deviceUuid}/r/{resourceId}
+    //   Endpoint-level resource: /d/{deviceUuid}/ep/{endpointId}/r/{resourceId}
+    // We extract the resourceId as the last path segment after the final '/'
     const char *resourceId = strrchr(uri.c_str(), '/');
     if (resourceId != nullptr)
     {
@@ -222,15 +234,23 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
         }
 
         // Call updateResource to notify DeviceService of the change
+        // Note: updateResource returns void so we cannot detect failures
         updateResource(device->deviceId.c_str(),
                        resourceEndpointId,
                        resourceId,
                        outValue.c_str(),
                        nullptr); // No additional metadata for now
+
+        icDebug("Resource update from event requested for %s: value=%s (device=%s, endpoint=%s, resource=%s)",
+                uri.c_str(),
+                outValue.c_str(),
+                device->deviceId.c_str(),
+                resourceEndpointId ? resourceEndpointId : "(device-level)",
+                resourceId);
     }
     else
     {
-        icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        icError("Failed to extract resource ID from URI: %s - URI must end with /{resourceId}", uri.c_str());
     }
 }
 

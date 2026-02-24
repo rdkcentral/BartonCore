@@ -135,7 +135,12 @@ namespace barton
          * Bind a resource URI for read operations.
          * Can bind either an attribute or command based on what's in the mapper.
          *
-         * @param uri The resource URI
+         * URI format: /{ep|d}/{deviceUuid}[/ep/{endpointId}]/r/{resourceId}
+         * Examples:
+         *   - Device-level resource: /d/{deviceUuid}/r/{resourceId}
+         *   - Endpoint-level resource: /d/{deviceUuid}/ep/{endpointId}/r/{resourceId}
+         *
+         * @param uri The resource URI (must end with /{resourceId})
          * @param mapper The mapper containing read configuration
          * @return True if binding was successful, false otherwise.
          */
@@ -176,8 +181,13 @@ namespace barton
          * When the specified event is received, the event mapper script will convert
          * the event data to a resource value and update the resource.
          *
-         * @param uri The resource URI
-         * @param event The event information
+         * URI format: /{ep|d}/{deviceUuid}[/ep/{endpointId}]/r/{resourceId}
+         * Examples:
+         *   - Device-level resource: /d/{deviceUuid}/r/{resourceId}
+         *   - Endpoint-level resource: /d/{deviceUuid}/ep/{endpointId}/r/{resourceId}
+         *
+         * @param uri The resource URI (must end with /{resourceId})
+         * @param event The event information including cluster/event IDs
          * @return True if binding was successful, false otherwise.
          */
         bool BindResourceEventInfo(const char *uri, const SbmdEvent &event);
