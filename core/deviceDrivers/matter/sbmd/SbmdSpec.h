@@ -245,15 +245,26 @@ namespace barton
 // Hash function for SbmdAttribute to support std::unordered_map
 namespace std
 {
+    namespace
+    {
+        // boost::hash_combine pattern for combining hash values
+        inline void hash_combine(std::size_t &seed, std::size_t value)
+        {
+            seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+    } // namespace
+
     template<>
     struct hash<barton::SbmdAttribute>
     {
         std::size_t operator()(const barton::SbmdAttribute &attr) const noexcept
         {
-            // Use boost::hash_combine pattern for better hash distribution
-            std::size_t h1 = std::hash<uint32_t> {}(attr.clusterId);
-            std::size_t h2 = std::hash<uint32_t> {}(attr.attributeId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(attr.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(attr.attributeId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(attr.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(attr.resourceId));
+            return seed;
         }
     };
 
@@ -262,10 +273,12 @@ namespace std
     {
         std::size_t operator()(const barton::SbmdCommand &cmd) const noexcept
         {
-            // Use boost::hash_combine pattern for better hash distribution
-            std::size_t h1 = std::hash<uint32_t> {}(cmd.clusterId);
-            std::size_t h2 = std::hash<uint32_t> {}(cmd.commandId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(cmd.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(cmd.commandId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(cmd.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(cmd.resourceId));
+            return seed;
         }
     };
 
@@ -274,10 +287,12 @@ namespace std
     {
         std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
         {
-            // Use boost::hash_combine pattern for better hash distribution
-            std::size_t h1 = std::hash<uint32_t> {}(evt.clusterId);
-            std::size_t h2 = std::hash<uint32_t> {}(evt.eventId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(evt.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(evt.eventId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(evt.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(evt.resourceId));
+            return seed;
         }
     };
 } // namespace std

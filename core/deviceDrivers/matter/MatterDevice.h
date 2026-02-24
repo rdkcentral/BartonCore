@@ -399,10 +399,11 @@ namespace barton
         {
             std::size_t operator()(const chip::app::ConcreteAttributePath &path) const
             {
-                std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
-                std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
-                std::size_t h3 = std::hash<chip::AttributeId> {}(path.mAttributeId);
-                return h1 ^ (h2 << 1) ^ (h3 << 2);
+                std::size_t result = std::hash<chip::EndpointId> {}(path.mEndpointId);
+                result ^= std::hash<chip::ClusterId> {}(path.mClusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                result ^=
+                    std::hash<chip::AttributeId> {}(path.mAttributeId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                return result;
             }
         };
 
@@ -442,10 +443,10 @@ namespace barton
         {
             std::size_t operator()(const EventPath &path) const
             {
-                std::size_t h1 = std::hash<chip::EndpointId> {}(path.endpointId);
-                std::size_t h2 = std::hash<chip::ClusterId> {}(path.clusterId);
-                std::size_t h3 = std::hash<chip::EventId> {}(path.eventId);
-                return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2)) ^ (h3 << 2);
+                std::size_t result = std::hash<chip::EndpointId> {}(path.endpointId);
+                result ^= std::hash<chip::ClusterId> {}(path.clusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                result ^= std::hash<chip::EventId> {}(path.eventId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                return result;
             }
         };
 

@@ -466,6 +466,12 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
 
     size_t tlvLength = writer.GetLengthWritten();
 
+    if (tlvLength > UINT16_MAX)
+    {
+        icError("Attribute TLV data too large for base64 encoding: %zu bytes", tlvLength);
+        return false;
+    }
+
     // Base64 encode the TLV bytes
     size_t base64MaxLen = BASE64_ENCODED_LEN(tlvLength);
     std::vector<char> base64Buffer(base64MaxLen + 1);
@@ -539,6 +545,12 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     }
 
     size_t tlvLength = writer.GetLengthWritten();
+
+    if (tlvLength > UINT16_MAX)
+    {
+        icError("Command response TLV data too large for base64 encoding: %zu bytes", tlvLength);
+        return false;
+    }
 
     // Base64 encode the TLV bytes
     size_t base64MaxLen = BASE64_ENCODED_LEN(tlvLength);
@@ -1134,6 +1146,12 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
     }
 
     uint32_t encodedLen = writer.GetLengthWritten();
+
+    if (encodedLen > UINT16_MAX)
+    {
+        icError("Event TLV data too large for base64 encoding: %u bytes", encodedLen);
+        return false;
+    }
 
     // Encode to base64
     size_t base64Size = ((encodedLen + 2) / 3) * 4 + 1;
