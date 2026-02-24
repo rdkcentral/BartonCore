@@ -1107,17 +1107,7 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
     // Get the size needed for encoding
     chip::TLV::TLVReader sizingReader;
     sizingReader.Init(reader);
-    uint32_t tlvLen;
-    CHIP_ERROR err = sizingReader.GetLengthRead();
-    if (err != CHIP_NO_ERROR)
-    {
-        // Fall back to remaining length
-        tlvLen = sizingReader.GetRemainingLength();
-    }
-    else
-    {
-        tlvLen = sizingReader.GetRemainingLength();
-    }
+    uint32_t tlvLen = sizingReader.GetRemainingLength();
 
     // Use a reasonable buffer size
     if (tlvLen == 0)
@@ -1136,7 +1126,7 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
     chip::TLV::TLVWriter writer;
     writer.Init(tlvBuffer.Get(), tlvLen);
 
-    err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+    CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
     if (err != CHIP_NO_ERROR)
     {
         icError("Failed to copy event TLV data: %s", chip::ErrorStr(err));
