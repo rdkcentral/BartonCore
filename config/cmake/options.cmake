@@ -171,6 +171,10 @@ bcore_option(NAME BCORE_MATTER_USE_MATTERJS
            DEFINITION BARTON_CONFIG_MATTER_USE_MATTERJS
            DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding"
            ENABLE)
+bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
+           DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
+           DESCRIPTION "Enable validation of SBMD schemas"
+           ENABLE)
 bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
