@@ -109,6 +109,37 @@ namespace barton
     };
 
     /**
+     * Represents a Matter cluster event for subscription and event handling.
+     */
+    struct SbmdEvent
+    {
+        uint32_t clusterId;
+        uint32_t eventId;
+        std::string name;
+        std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
+        std::string resourceId;                        // Resource ID from the owning SbmdResource
+
+        // Equality operator for map key usage
+        bool operator==(const SbmdEvent &other) const
+        {
+            return clusterId == other.clusterId && eventId == other.eventId &&
+                   resourceEndpointId == other.resourceEndpointId && resourceId == other.resourceId;
+        }
+
+        // Less-than operator for std::map usage
+        bool operator<(const SbmdEvent &other) const
+        {
+            if (clusterId != other.clusterId)
+                return clusterId < other.clusterId;
+            if (eventId != other.eventId)
+                return eventId < other.eventId;
+            if (resourceEndpointId != other.resourceEndpointId)
+                return resourceEndpointId < other.resourceEndpointId;
+            return resourceId < other.resourceId;
+        }
+    };
+
+    /**
      * Represents a mapper configuration for a resource.
      * Read mappers use attribute or command metadata to know what to read.
      * Write and execute mappers are script-only - the script returns full operation details.
@@ -129,6 +160,10 @@ namespace barton
         bool hasExecute = false;
         std::string executeScript;
         std::optional<std::string> executeResponseScript;
+
+        // Event mapping - for handling Matter events that update the resource
+        std::optional<SbmdEvent> event;
+        std::string eventScript;
     };
 
     /**
@@ -210,15 +245,26 @@ namespace barton
 // Hash function for SbmdAttribute to support std::unordered_map
 namespace std
 {
+    namespace
+    {
+        // boost::hash_combine pattern for combining hash values
+        inline void hash_combine(std::size_t &seed, std::size_t value)
+        {
+            seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+    } // namespace
+
     template<>
     struct hash<barton::SbmdAttribute>
     {
         std::size_t operator()(const barton::SbmdAttribute &attr) const noexcept
         {
-            // Use boost::hash_combine pattern for better hash distribution
-            std::size_t h1 = std::hash<uint32_t> {}(attr.clusterId);
-            std::size_t h2 = std::hash<uint32_t> {}(attr.attributeId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(attr.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(attr.attributeId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(attr.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(attr.resourceId));
+            return seed;
         }
     };
 
@@ -227,10 +273,26 @@ namespace std
     {
         std::size_t operator()(const barton::SbmdCommand &cmd) const noexcept
         {
-            // Use boost::hash_combine pattern for better hash distribution
-            std::size_t h1 = std::hash<uint32_t> {}(cmd.clusterId);
-            std::size_t h2 = std::hash<uint32_t> {}(cmd.commandId);
-            return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(cmd.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(cmd.commandId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(cmd.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(cmd.resourceId));
+            return seed;
+        }
+    };
+
+    template<>
+    struct hash<barton::SbmdEvent>
+    {
+        std::size_t operator()(const barton::SbmdEvent &evt) const noexcept
+        {
+            // Hash all fields used in operator==
+            std::size_t seed = std::hash<uint32_t> {}(evt.clusterId);
+            hash_combine(seed, std::hash<uint32_t> {}(evt.eventId));
+            hash_combine(seed, std::hash<std::optional<std::string>> {}(evt.resourceEndpointId));
+            hash_combine(seed, std::hash<std::string> {}(evt.resourceId));
+            return seed;
         }
     };
 } // namespace std

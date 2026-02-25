@@ -121,6 +121,19 @@ namespace barton
                         const std::string &inValue,
                         ScriptWriteResult &result) override;
 
+        /**
+         * @see SbmdScript::AddEventMapper
+         */
+        bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) override;
+
+        /**
+         * QuickJS implementation passes input as global variable "sbmdEventArgs".
+         * @see SbmdScript::MapEvent for JSON format.
+         */
+        bool MapEvent(const SbmdEvent &eventInfo,
+                      chip::TLV::TLVReader &reader,
+                      std::string &outValue) override;
+
     private:
         explicit QuickJsScript(const std::string &deviceId);
 
@@ -136,6 +149,7 @@ namespace barton
         std::map<std::string, std::string> writeScripts;           // resourceKey -> script
         std::map<std::string, std::string> executeScripts;         // resourceKey -> script
         std::map<std::string, std::string> executeResponseScripts; // resourceKey -> response script
+        std::map<SbmdEvent, std::string> eventScripts;             // event -> script
 
         /**
          * Execute a script.

@@ -188,6 +188,9 @@
         },
         "execute": {
           "$ref": "#/$defs/executeMapper"
+        },
+        "event": {
+          "$ref": "#/$defs/eventMapper"
         }
       },
       "additionalProperties": false
@@ -247,6 +250,43 @@
         "scriptResponse": {
           "type": "string",
           "description": "JavaScript script for processing command response",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "eventMapper": {
+      "type": "object",
+      "description": "Event mapper configuration for handling Matter events that update the resource",
+      "required": ["event", "script"],
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/event"
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script for processing event TLV data",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "description": "Matter cluster event definition",
+      "required": ["clusterId", "eventId", "name"],
+      "properties": {
+        "clusterId": {
+          "type": ["integer", "string"],
+          "description": "Matter cluster ID (hex or decimal)"
+        },
+        "eventId": {
+          "type": ["integer", "string"],
+          "description": "Matter event ID (hex or decimal)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Event name",
           "minLength": 1
         }
       },

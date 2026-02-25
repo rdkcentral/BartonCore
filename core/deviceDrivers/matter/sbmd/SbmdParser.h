@@ -71,6 +71,7 @@ namespace barton
         static bool ParseMapper(const YAML::Node &node, SbmdMapper &mapper);
         static bool ParseAttribute(const YAML::Node &node, SbmdAttribute &attribute);
         static bool ParseCommand(const YAML::Node &node, SbmdCommand &command);
+        static bool ParseEvent(const YAML::Node &node, SbmdEvent &event);
 
         // Utility methods
         static uint32_t ParseHexOrDecimal(const std::string &value);

@@ -184,6 +184,21 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_int_equal((int) spec->endpoints.size(), 1);
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
     assert_string_equal(spec->endpoints[0].profile.c_str(), "doorLock");
+
+    // Verify locked resource uses event mapper (LockOperation)
+    assert_true(spec->endpoints[0].resources.size() >= 1);
+    auto &locked = spec->endpoints[0].resources[0];
+    assert_string_equal(locked.id.c_str(), "locked");
+    assert_false(locked.mapper.hasRead);
+    assert_true(locked.mapper.event.has_value());
+    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
+    assert_string_equal(locked.mapper.event->name.c_str(), "LockOperation");
+    assert_false(locked.mapper.eventScript.empty());
+    // Event should have endpoint ID set
+    assert_true(locked.mapper.event->resourceEndpointId.has_value());
+    assert_string_equal(locked.mapper.event->resourceEndpointId.value().c_str(), "1");
+    assert_string_equal(locked.mapper.event->resourceId.c_str(), "locked");
 }
 
 static void test_sbmdParserLightFile(void **state)

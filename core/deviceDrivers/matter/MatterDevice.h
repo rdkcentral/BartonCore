@@ -172,6 +172,17 @@ namespace barton
                              const std::string &resourceId);
 
         /**
+         * Bind a resource URI for event-driven updates.
+         * When the specified event is received, the event mapper script will convert
+         * the event data to a resource value and update the resource.
+         *
+         * @param uri The resource URI
+         * @param event The event information
+         * @return True if binding was successful, false otherwise.
+         */
+        bool BindResourceEventInfo(const char *uri, const SbmdEvent &event);
+
+        /**
          * Handle a resource read request by looking up the binding and executing the script.
          * If the related attribute data is in the cache, this is a synchronous operation.
          * Otherwise, it may involve an asynchronous read from the device [NOT YET IMPLEMENTED].
@@ -348,6 +359,9 @@ namespace barton
             void OnReportEnd() override;
             void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                     const chip::app::ConcreteAttributePath &aPath) override;
+            void OnEventData(const chip::app::EventHeader &aEventHeader,
+                             chip::TLV::TLVReader *apData,
+                             const chip::app::StatusIB *apStatus) override;
             void OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId) override;
             void OnError(CHIP_ERROR aError) override;
             void OnDeallocatePaths(chip::app::ReadPrepareParams &&aReadPrepareParams) override;
@@ -385,10 +399,11 @@ namespace barton
         {
             std::size_t operator()(const chip::app::ConcreteAttributePath &path) const
             {
-                std::size_t h1 = std::hash<chip::EndpointId> {}(path.mEndpointId);
-                std::size_t h2 = std::hash<chip::ClusterId> {}(path.mClusterId);
-                std::size_t h3 = std::hash<chip::AttributeId> {}(path.mAttributeId);
-                return h1 ^ (h2 << 1) ^ (h3 << 2);
+                std::size_t result = std::hash<chip::EndpointId> {}(path.mEndpointId);
+                result ^= std::hash<chip::ClusterId> {}(path.mClusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                result ^=
+                    std::hash<chip::AttributeId> {}(path.mAttributeId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                return result;
             }
         };
 
@@ -408,6 +423,38 @@ namespace barton
         {
             std::string uri;
             ResourceBinding binding;
+        };
+
+        // EventPath structure for event lookup
+        struct EventPath
+        {
+            chip::EndpointId endpointId;
+            chip::ClusterId clusterId;
+            chip::EventId eventId;
+
+            bool operator==(const EventPath &other) const
+            {
+                return endpointId == other.endpointId && clusterId == other.clusterId && eventId == other.eventId;
+            }
+        };
+
+        // Hash function for EventPath to enable fast lookup
+        struct EventPathHash
+        {
+            std::size_t operator()(const EventPath &path) const
+            {
+                std::size_t result = std::hash<chip::EndpointId> {}(path.endpointId);
+                result ^= std::hash<chip::ClusterId> {}(path.clusterId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                result ^= std::hash<chip::EventId> {}(path.eventId) + 0x9e3779b9 + (result << 6) + (result >> 2);
+                return result;
+            }
+        };
+
+        // Structure to hold URI and binding info for fast event lookup
+        struct EventBinding
+        {
+            std::string uri;
+            SbmdEvent event;
         };
 
         /**
@@ -448,6 +495,8 @@ namespace barton
                            AttributeReadBinding,
                            AttributePathHash,
                            AttributePathEqual> readableAttributeLookup;
+        // Fast O(1) lookup for events in OnEventData callback
+        std::unordered_map<EventPath, EventBinding, EventPathHash> eventLookup;
 
         // Context for tracking active write operations
         struct WriteContext

@@ -157,6 +157,11 @@ def generate_stubs(dts_content: str) -> dict:
             'interface': 'SbmdCommandResponseArgs',
             'variable': 'sbmdCommandResponseArgs',
             'extends_base': True
+        },
+        'event': {
+            'interface': 'SbmdEventArgs',
+            'variable': 'sbmdEventArgs',
+            'extends_base': True
         }
     }
 
