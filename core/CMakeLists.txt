@@ -391,7 +391,7 @@ if (BCORE_GEN_GIR)
 
     add_custom_command(
         TARGET BartonCore POST_BUILD
-        COMMAND env LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
+        COMMAND env LSAN_OPTIONS=detect_leaks=0 LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
 

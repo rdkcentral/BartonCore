@@ -170,6 +170,11 @@
             "enum": ["read", "write", "dynamic", "emitEvents"]
           }
         },
+        "optional": {
+          "type": "boolean",
+          "description": "If true, failure to add/configure this resource does not block commissioning. Defaults to false.",
+          "default": false
+        },
         "mapper": {
           "$ref": "#/$defs/mapper"
         }
