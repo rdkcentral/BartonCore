@@ -91,6 +91,7 @@ endpoints:
 
       - id: "currentLevel"
         type: "com.icontrol.lightLevel"
+        optional: true
         modes:
           - "read"
           - "write"
