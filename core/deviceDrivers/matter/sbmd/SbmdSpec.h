@@ -174,6 +174,7 @@ namespace barton
         std::string id;
         std::string type;                    // "boolean", "string", "number", "function", etc.
         std::vector<std::string> modes;      // "read", "write", "dynamic", "emitEvents", etc.
+        bool optional = false;               // If true, failure to configure this resource does not block commissioning
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         SbmdMapper mapper;
     };
