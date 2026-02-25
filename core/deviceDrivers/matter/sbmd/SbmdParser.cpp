@@ -398,6 +398,11 @@ bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
         resource.modes = ParseStringArray(node["modes"]);
     }
 
+    if (node["optional"])
+    {
+        resource.optional = node["optional"].as<bool>();
+    }
+
     if (node["mapper"])
     {
         if (!ParseMapper(node["mapper"], resource.mapper))

@@ -243,6 +243,7 @@ static void test_sbmdParserLightFile(void **state)
     // isOn resource maps to OnOff cluster - uses MatterJs script-only approach
     auto &isOn = spec->endpoints[0].resources[0];
     assert_string_equal(isOn.id.c_str(), "isOn");
+    assert_false(isOn.optional);
     assert_true(isOn.mapper.hasRead);
     assert_true(isOn.mapper.hasWrite);
     assert_true(isOn.mapper.readAttribute.has_value());
@@ -254,6 +255,7 @@ static void test_sbmdParserLightFile(void **state)
     // currentLevel resource maps to LevelControl cluster - uses MatterJs script-only approach
     auto &currentLevel = spec->endpoints[0].resources[1];
     assert_string_equal(currentLevel.id.c_str(), "currentLevel");
+    assert_true(currentLevel.optional);
     assert_true(currentLevel.mapper.hasRead);
     assert_true(currentLevel.mapper.hasWrite);
     assert_true(currentLevel.mapper.readAttribute.has_value());
@@ -261,6 +263,94 @@ static void test_sbmdParserLightFile(void **state)
     assert_int_equal((int) currentLevel.mapper.readAttribute->attributeId, 0x0000);
     // Write uses script-only approach
     assert_false(currentLevel.mapper.writeScript.empty());
+}
+
+static void test_sbmdParserOptionalResource(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources:
+  - id: "requiredResource"
+    type: "boolean"
+    modes: ["read"]
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0001"
+          attributeId: "0x0002"
+          name: "TestAttr"
+          type: "bool"
+        script: "return value;"
+  - id: "optionalResource"
+    type: "boolean"
+    optional: true
+    modes: ["read"]
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"
+          attributeId: "0x0004"
+          name: "TestAttr2"
+          type: "bool"
+        script: "return value;"
+endpoints:
+  - id: "ep1"
+    profile: "sensor"
+    profileVersion: 3
+    resources:
+      - id: "epRequired"
+        type: "boolean"
+        modes: ["read"]
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0005"
+              attributeId: "0x0006"
+              name: "TestAttr3"
+              type: "bool"
+            script: "return value;"
+      - id: "epOptional"
+        type: "boolean"
+        optional: true
+        modes: ["read"]
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0007"
+              attributeId: "0x0008"
+              name: "TestAttr4"
+              type: "bool"
+            script: "return value;"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    // Verify top-level resources
+    assert_int_equal((int) spec->resources.size(), 2);
+    assert_string_equal(spec->resources[0].id.c_str(), "requiredResource");
+    assert_false(spec->resources[0].optional);
+    assert_string_equal(spec->resources[1].id.c_str(), "optionalResource");
+    assert_true(spec->resources[1].optional);
+
+    // Verify endpoint resources
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
+    assert_string_equal(spec->endpoints[0].resources[0].id.c_str(), "epRequired");
+    assert_false(spec->endpoints[0].resources[0].optional);
+    assert_string_equal(spec->endpoints[0].resources[1].id.c_str(), "epOptional");
+    assert_true(spec->endpoints[0].resources[1].optional);
 }
 
 static void test_sbmdParserResourceIdFields(void **state)
@@ -744,6 +834,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserEndpointWithStringIds),
         cmocka_unit_test(test_sbmdParserDoorLockFile),
         cmocka_unit_test(test_sbmdParserLightFile),
+        cmocka_unit_test(test_sbmdParserOptionalResource),
         cmocka_unit_test(test_sbmdParserResourceIdFields),
         // Negative tests - error handling
         cmocka_unit_test(test_sbmdParserInvalidYamlSyntax),

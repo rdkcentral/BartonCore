@@ -27,10 +27,12 @@
 
 #pragma once
 
-#include "../MatterDeviceDriver.h"
 #include "../MatterDevice.h"
+#include "../MatterDeviceDriver.h"
 #include "SbmdSpec.h"
 #include <memory>
+#include <set>
+#include <string>
 
 namespace barton
 {
@@ -89,5 +91,14 @@ namespace barton
         void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
 
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
+
+        /**
+         * Build a key for identifying a resource, combining endpoint ID and resource ID.
+         * For device-level resources, the endpoint ID portion is empty.
+         */
+        static std::string MakeResourceKey(const SbmdResource &resource);
+
+        /** Set of resource keys (endpointId:resourceId) for optional resources that failed configuration */
+        std::set<std::string> skippedOptionalResources;
     };
 } // namespace barton

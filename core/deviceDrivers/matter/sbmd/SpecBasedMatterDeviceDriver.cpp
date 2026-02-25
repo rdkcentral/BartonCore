@@ -143,7 +143,17 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     {
         if (!configureResource(resource))
         {
-            return false;
+            if (resource.optional)
+            {
+                icWarn("Optional resource %s failed to configure for device %s, skipping",
+                       resource.id.c_str(),
+                       device->GetDeviceId().c_str());
+                skippedOptionalResources.insert(MakeResourceKey(resource));
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 
@@ -154,7 +164,17 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         {
             if (!configureResource(resource))
             {
-                return false;
+                if (resource.optional)
+                {
+                    icWarn("Optional resource %s failed to configure for device %s, skipping",
+                           resource.id.c_str(),
+                           device->GetDeviceId().c_str());
+                    skippedOptionalResources.insert(MakeResourceKey(resource));
+                }
+                else
+                {
+                    return false;
+                }
             }
         }
     }
@@ -238,6 +258,10 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
     // register device resources
     for (auto &sbmdResource : spec->resources)
     {
+        if (skippedOptionalResources.count(MakeResourceKey(sbmdResource)))
+        {
+            continue;
+        }
         uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
 
         // if an executable mapper was provided, we need to make sure the resource is executable
@@ -282,6 +306,11 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
         endpoint->profileVersion = sbmdEndpoint.profileVersion;
         for (auto &sbmdResource : sbmdEndpoint.resources)
         {
+            if (skippedOptionalResources.count(MakeResourceKey(sbmdResource)))
+            {
+                continue;
+            }
+
             uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
 
             // if an executable mapper was provided, we need to make sure the resource is executable
@@ -417,4 +446,9 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
     }
 
     return bitmask;
+}
+
+std::string SpecBasedMatterDeviceDriver::MakeResourceKey(const SbmdResource &resource)
+{
+    return resource.resourceEndpointId.value_or("") + ":" + resource.id;
 }
