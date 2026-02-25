@@ -146,7 +146,6 @@ endpoints:
               return {output: percent.toString()};
 
       # CO2 concentration - parts per million (ppm)
-      # Note: Requires CarbonDioxideConcentrationMeasurement cluster export in matter.js bundle
       - id: "co2Concentration"
         type: "com.icontrol.co2"
         modes:
