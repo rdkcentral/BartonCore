@@ -81,7 +81,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
     // is populated: read mappers query the device, event mappers update the value from events.
     // A resource can be readable without a read mapper if its value is populated by events.
-    auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
+    auto configureResource = [&device](const SbmdResource &sbmdResource,
+                                       std::optional<chip::EndpointId> matterEndpointHint = std::nullopt) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
@@ -99,7 +100,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         // a resource can have different mappers for read, write, and execute
         if (sbmdResource.mapper.hasRead)
         {
-            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper))
+            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper, matterEndpointHint))
             {
                 icError("  Failed to bind read script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -129,7 +130,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         if (sbmdResource.mapper.event.has_value())
         {
             // Event mappers - bind event to resource for automatic updates
-            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value()))
+            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value(), matterEndpointHint))
             {
                 icError("  Failed to bind event for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -157,12 +158,64 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         }
     }
 
-    // Configure endpoint-level resources
+    // Configure endpoint-level resources.
+    // For each SBMD endpoint, resolve the Nth Matter endpoint that hosts the relevant cluster
+    // (determined by matterEndpointIndex). If the device doesn't have enough endpoints,
+    // skip the entire SBMD endpoint and mark all its resources as skipped.
     for (const auto &endpoint : spec->endpoints)
     {
+        // Determine the cluster ID to use for endpoint resolution from the first resource
+        // that has a read attribute or event mapper
+        std::optional<uint32_t> resolveClusterId;
         for (const auto &resource : endpoint.resources)
         {
-            if (!configureResource(resource))
+            if (resource.mapper.readAttribute.has_value())
+            {
+                resolveClusterId = resource.mapper.readAttribute->clusterId;
+                break;
+            }
+            if (resource.mapper.event.has_value())
+            {
+                resolveClusterId = resource.mapper.event->clusterId;
+                break;
+            }
+        }
+
+        // Pre-resolve the Matter endpoint for this SBMD endpoint
+        std::optional<chip::EndpointId> matterEndpointHint;
+        if (resolveClusterId.has_value())
+        {
+            chip::EndpointId resolvedEndpoint;
+            if (device->GetNthEndpointForCluster(
+                    resolveClusterId.value(), endpoint.matterEndpointIndex, resolvedEndpoint))
+            {
+                matterEndpointHint = resolvedEndpoint;
+                icDebug("SBMD endpoint '%s' (index %u) resolved to Matter endpoint %u",
+                        endpoint.id.c_str(),
+                        endpoint.matterEndpointIndex,
+                        resolvedEndpoint);
+            }
+            else
+            {
+                icWarn("SBMD endpoint '%s' (index %u): device %s does not have enough endpoints with cluster 0x%x, "
+                       "skipping",
+                       endpoint.id.c_str(),
+                       endpoint.matterEndpointIndex,
+                       device->GetDeviceId().c_str(),
+                       resolveClusterId.value());
+
+                // Mark all resources in this endpoint as skipped
+                for (const auto &resource : endpoint.resources)
+                {
+                    skippedEndpoints[device->GetDeviceId()].insert(endpoint.id);
+                }
+                continue;
+            }
+        }
+
+        for (const auto &resource : endpoint.resources)
+        {
+            if (!configureResource(resource, matterEndpointHint))
             {
                 if (resource.optional)
                 {
@@ -258,6 +311,9 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
     auto skipIt = skippedOptionalResources.find(device->uuid);
     const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
 
+    auto skipEpIt = skippedEndpoints.find(device->uuid);
+    const auto *skippedEps = (skipEpIt != skippedEndpoints.end()) ? &skipEpIt->second : nullptr;
+
     // register device resources
     for (auto &sbmdResource : spec->resources)
     {
@@ -294,6 +350,12 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
     // register endpoint resources
     for (auto &sbmdEndpoint : spec->endpoints)
     {
+        // Skip endpoints that were not present on the device (e.g., single-button switch)
+        if (skippedEps && skippedEps->count(sbmdEndpoint.id))
+        {
+            continue;
+        }
+
         icDeviceEndpoint *endpoint =
             createEndpoint(device, sbmdEndpoint.id.c_str(), sbmdEndpoint.profile.c_str(), true);
 

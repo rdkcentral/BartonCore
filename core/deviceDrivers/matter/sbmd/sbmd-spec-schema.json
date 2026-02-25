@@ -137,6 +137,12 @@
           "description": "Profile version",
           "minimum": 0
         },
+        "matterEndpointIndex": {
+          "type": "integer",
+          "description": "0-based index selecting the Nth Matter endpoint that hosts the clusters used by this endpoint's resources. Defaults to 0 (the first matching endpoint). Endpoints whose index exceeds the device's actual endpoint count are skipped.",
+          "default": 0,
+          "minimum": 0
+        },
         "resources": {
           "type": "array",
           "description": "Resources on this endpoint",

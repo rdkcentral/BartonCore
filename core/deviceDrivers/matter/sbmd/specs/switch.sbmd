@@ -1,0 +1,117 @@
+# Switch SBMD Specification
+# Maps Matter Generic Switch device type to Barton switch device class
+# Supports devices with 1 or 2 Generic Switch endpoints (e.g., single or dual button)
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Switch"
+# Script type (currently only JavaScript is supported)
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "switch"
+  deviceClassVersion: 0
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x000f  # Generic Switch
+  revision: 1
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+# Device-level resources (not associated with a specific endpoint)
+resources:
+  - id: "identifySeconds"
+    type: "com.icontrol.seconds"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          return {output: value.toString()};
+      write:
+        script: |
+          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
+
+endpoints:
+  # First Generic Switch endpoint (Barton endpoint "1", maps to 1st Matter Generic Switch endpoint)
+  - id: "1"
+    profile: "switch"
+    profileVersion: 0
+    matterEndpointIndex: 0
+    resources:
+      - id: "pressed"
+        type: "boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x003b"      # Switch cluster
+              attributeId: "0x0001"    # CurrentPosition attribute
+              name: "CurrentPosition"
+              type: "uint8"
+            script: |
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: (value !== 0) ? 'true' : 'false'};
+          event:
+            event:
+              clusterId: "0x003b"      # Switch cluster
+              eventId: "0x0001"        # InitialPress event
+              name: "InitialPress"
+            script: |
+              // InitialPress event field 0 = NewPosition (uint8)
+              const value = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+              return {output: 'true'};
+
+  # Second Generic Switch endpoint (Barton endpoint "2", maps to 2nd Matter Generic Switch endpoint)
+  # Skipped automatically if the device only has one Generic Switch endpoint
+  - id: "2"
+    profile: "switch"
+    profileVersion: 0
+    matterEndpointIndex: 1
+    resources:
+      - id: "pressed"
+        type: "boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x003b"      # Switch cluster
+              attributeId: "0x0001"    # CurrentPosition attribute
+              name: "CurrentPosition"
+              type: "uint8"
+            script: |
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: (value !== 0) ? 'true' : 'false'};
+          event:
+            event:
+              clusterId: "0x003b"      # Switch cluster
+              eventId: "0x0001"        # InitialPress event
+              name: "InitialPress"
+            script: |
+              // InitialPress event field 0 = NewPosition (uint8)
+              const value = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+              return {output: 'true'};

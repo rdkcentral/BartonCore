@@ -102,5 +102,9 @@ namespace barton
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
          * configuration */
         std::map<std::string, std::set<std::string>> skippedOptionalResources;
+
+        /** Map of device ID to set of SBMD endpoint IDs that were skipped because the device
+         *  did not have enough Matter endpoints (e.g., a single-button switch missing endpoint index 1) */
+        std::map<std::string, std::set<std::string>> skippedEndpoints;
     };
 } // namespace barton

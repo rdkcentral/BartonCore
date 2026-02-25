@@ -187,6 +187,7 @@ namespace barton
         std::string id;
         std::string profile;
         uint32_t profileVersion;
+        uint8_t matterEndpointIndex = 0; // Index (0-based) of the Nth Matter endpoint with the relevant cluster
         std::vector<SbmdResource> resources;
     };
 

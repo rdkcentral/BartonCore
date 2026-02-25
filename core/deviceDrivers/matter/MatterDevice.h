@@ -132,14 +132,28 @@ namespace barton
         bool GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId);
 
         /**
+         * Get the Nth endpoint that hosts a given cluster (0-based index).
+         * Useful for devices with multiple endpoints hosting the same cluster.
+         *
+         * @param clusterId The cluster ID to find.
+         * @param index The 0-based index (0 = first, 1 = second, etc.).
+         * @param[out] outEndpointId The endpoint ID that hosts the cluster.
+         * @return True if found, false otherwise.
+         */
+        bool GetNthEndpointForCluster(chip::ClusterId clusterId, uint8_t index, chip::EndpointId &outEndpointId);
+
+        /**
          * Bind a resource URI for read operations.
          * Can bind either an attribute or command based on what's in the mapper.
          *
          * @param uri The resource URI
          * @param mapper The mapper containing read configuration
+         * @param matterEndpointHint If set, use this Matter endpoint instead of auto-resolving
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceReadInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindResourceReadInfo(const char *uri,
+                                  const SbmdMapper &mapper,
+                                  std::optional<chip::EndpointId> matterEndpointHint = std::nullopt);
 
         /**
          * Bind a resource URI for write operations.
@@ -178,9 +192,12 @@ namespace barton
          *
          * @param uri The resource URI
          * @param event The event information
+         * @param matterEndpointHint If set, use this Matter endpoint instead of auto-resolving
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceEventInfo(const char *uri, const SbmdEvent &event);
+        bool BindResourceEventInfo(const char *uri,
+                                   const SbmdEvent &event,
+                                   std::optional<chip::EndpointId> matterEndpointHint = std::nullopt);
 
         /**
          * Handle a resource read request by looking up the binding and executing the script.

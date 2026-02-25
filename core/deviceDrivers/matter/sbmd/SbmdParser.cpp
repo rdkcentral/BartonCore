@@ -444,6 +444,11 @@ bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint)
         endpoint.profileVersion = node["profileVersion"].as<uint32_t>();
     }
 
+    if (node["matterEndpointIndex"])
+    {
+        endpoint.matterEndpointIndex = node["matterEndpointIndex"].as<uint8_t>();
+    }
+
     if (node["resources"] && node["resources"].IsSequence())
     {
         for (const auto &resourceNode : node["resources"])
