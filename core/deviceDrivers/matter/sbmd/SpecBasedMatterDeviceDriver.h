@@ -30,6 +30,7 @@
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
 #include "SbmdSpec.h"
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -98,7 +99,8 @@ namespace barton
          */
         static std::string MakeResourceKey(const SbmdResource &resource);
 
-        /** Set of resource keys (endpointId:resourceId) for optional resources that failed configuration */
-        std::set<std::string> skippedOptionalResources;
+        /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
+         * configuration */
+        std::map<std::string, std::set<std::string>> skippedOptionalResources;
     };
 } // namespace barton

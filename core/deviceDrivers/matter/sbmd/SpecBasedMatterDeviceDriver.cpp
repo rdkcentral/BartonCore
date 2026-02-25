@@ -148,7 +148,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 icWarn("Optional resource %s failed to configure for device %s, skipping",
                        resource.id.c_str(),
                        device->GetDeviceId().c_str());
-                skippedOptionalResources.insert(MakeResourceKey(resource));
+                skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
             }
             else
             {
@@ -169,7 +169,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                     icWarn("Optional resource %s failed to configure for device %s, skipping",
                            resource.id.c_str(),
                            device->GetDeviceId().c_str());
-                    skippedOptionalResources.insert(MakeResourceKey(resource));
+                    skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
                 }
                 else
                 {
@@ -255,10 +255,13 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
 
     icDebug();
 
+    auto skipIt = skippedOptionalResources.find(device->uuid);
+    const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
+
     // register device resources
     for (auto &sbmdResource : spec->resources)
     {
-        if (skippedOptionalResources.count(MakeResourceKey(sbmdResource)))
+        if (skipped && skipped->count(MakeResourceKey(sbmdResource)))
         {
             continue;
         }
@@ -306,7 +309,7 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
         endpoint->profileVersion = sbmdEndpoint.profileVersion;
         for (auto &sbmdResource : sbmdEndpoint.resources)
         {
-            if (skippedOptionalResources.count(MakeResourceKey(sbmdResource)))
+            if (skipped && skipped->count(MakeResourceKey(sbmdResource)))
             {
                 continue;
             }
