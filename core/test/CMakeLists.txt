@@ -154,7 +154,9 @@ if (BCORE_MATTER)
         LINK_LIBRARIES BartonCoreStatic yaml-cpp
     )
 
-    target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+    if (TARGET sbmdParserTest)
+        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+    endif()
 
     bcore_add_cpp_test(
         NAME testQuickJsScript
