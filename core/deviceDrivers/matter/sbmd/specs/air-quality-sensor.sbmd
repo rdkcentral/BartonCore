@@ -178,6 +178,7 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        optional: true
         mapper:
           read:
             attribute:
