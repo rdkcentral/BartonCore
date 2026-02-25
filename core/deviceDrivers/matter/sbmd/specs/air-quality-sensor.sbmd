@@ -1,5 +1,5 @@
 # Air Quality Sensor SBMD Specification
-# Maps Matter Air Quality Sensor device type to Barton sensor device class
+# Maps Matter Air Quality Sensor device type to Barton "airQualitySensor" device class
 # Uses MatterClusters (matter.js) for TLV encoding
 
 # SBMD schema version 1.0
