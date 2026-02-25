@@ -1,0 +1,49 @@
+# Water Leak Detector SBMD Specification
+# Maps Matter Water Leak Detector device type to Barton sensor device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Water Leak Detector"
+# Script type (matter.js not used/needed due to simplicity)
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0043  # Water Leak Detector
+  revision: 1
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 2
+    resources:
+      - id: "faulted"
+        type: "com.icontrol.boolean"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0045"      # Boolean State cluster
+              attributeId: "0x0000"    # StateValue attribute
+              name: "StateValue"
+              type: "bool"
+            script: |
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: (value === true) ? 'true' : 'false'};
