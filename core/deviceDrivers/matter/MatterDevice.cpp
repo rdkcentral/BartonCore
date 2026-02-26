@@ -157,7 +157,7 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
     {
         icDebug("OnEventData status for device %s: 0x%x",
                 device->deviceId.c_str(),
-                apStatus->mStatus);
+                static_cast<unsigned>(apStatus->mStatus));
         return;
     }
 
