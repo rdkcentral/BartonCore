@@ -72,7 +72,7 @@ endpoints:
       # Air quality level - overall air quality classification
       # Maps Matter AirQualityEnum to string representation
       - id: "airQuality"
-        type: "string"
+        type: "com.icontrol.airQuality"
         modes:
           - "read"
           - "dynamic"
@@ -97,6 +97,7 @@ endpoints:
       # Temperature measurement - in degrees Celsius (hundredths)
       - id: "temperature"
         type: "com.icontrol.temperature"
+        optional: true
         modes:
           - "read"
           - "dynamic"
@@ -122,6 +123,7 @@ endpoints:
       # Relative humidity measurement - percentage (hundredths)
       - id: "humidity"
         type: "com.icontrol.humidity"
+        optional: true
         modes:
           - "read"
           - "dynamic"
@@ -149,6 +151,7 @@ endpoints:
       # CO2 concentration - parts per million (ppm)
       - id: "co2Concentration"
         type: "com.icontrol.co2"
+        optional: true
         modes:
           - "read"
           - "dynamic"
@@ -175,6 +178,7 @@ endpoints:
       # Note: Requires Pm25ConcentrationMeasurement cluster export in matter.js bundle
       - id: "pm25Concentration"
         type: "com.icontrol.ugm3"
+        optional: true
         modes:
           - "read"
           - "dynamic"
