@@ -120,7 +120,7 @@ endpoints:
               // Matter temperature is in hundredths of degrees C (e.g. 23°C = 2300)
               return {output: value.toString()};
 
-      # Relative humidity measurement - percentage (hundredths)
+      # Relative humidity measurement - percentage
       - id: "humidity"
         type: "com.icontrol.humidity"
         optional: true
