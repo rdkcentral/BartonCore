@@ -34,3 +34,12 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(BartonCommon)
+
+# Disable slow unit tests which were imported from a legacy project and slated for replacement
+set_tests_properties(
+    testThreadPool
+    testDelayedTask
+    testRepeatingTask
+    DIRECTORY "${bartoncommon_SOURCE_DIR}/libs/concurrent/c"
+    PROPERTIES DISABLED TRUE
+)
