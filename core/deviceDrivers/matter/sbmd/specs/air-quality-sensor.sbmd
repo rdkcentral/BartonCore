@@ -1,0 +1,201 @@
+# Air Quality Sensor SBMD Specification
+# Maps Matter Air Quality Sensor device type to Barton "airQualitySensor" device class
+# Uses MatterClusters (matter.js) for TLV encoding
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Air Quality Sensor"
+# Script type - uses matter.js for TLV encoding
+scriptType: "JavaScript+matterjs"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "airQualitySensor"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x002c  # Matter Air Quality Sensor device type
+  revision: 1 # Device Specification revision from Matter spec
+  featureClusters:
+    - 0x005b  # Air Quality cluster - for featureMap access in scripts
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+# Device-level resources (not associated with a specific endpoint)
+resources:
+  # Identify timer resource - controls device identification duration
+  - id: "identifySeconds"
+    type: "com.icontrol.seconds"
+    modes:
+      - "read"
+      - "write"
+    mapper:
+      read:
+        attribute:
+          clusterId: "0x0003"      # Identify cluster
+          attributeId: "0x0000"    # IdentifyTime attribute
+          name: "IdentifyTime"
+          type: "uint16"
+        script: |
+          const { TlvUInt16 } = MatterClusters;
+          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+          const value = TlvUInt16.decode(tlvBytes);
+          return {output: value.toString()};
+
+      write:
+        script: |
+          const { TlvUInt16, Identify: { IdentifyCluster } } = MatterClusters;
+          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          const tlvBytes = TlvUInt16.encode(secs);
+          return {
+            write: {
+              clusterId: IdentifyCluster.id,
+              attributeId: IdentifyCluster.attributes.identifyTime.id,
+              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
+            }
+          };
+
+# Barton endpoints
+endpoints:
+  - id: "1"
+    profile: "airQualitySensor"
+    profileVersion: 1
+    resources:
+      # Air quality level - overall air quality classification
+      # Maps Matter AirQualityEnum to string representation
+      - id: "airQuality"
+        type: "com.icontrol.airQuality"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x005b"      # Air Quality cluster
+              attributeId: "0x0000"    # AirQuality attribute
+              name: "AirQuality"
+              type: "enum8"            # AirQualityEnum: 0=Unknown, 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=VeryPoor, 6=ExtremelyPoor
+            script: |
+              const { TlvEnum } = MatterClusters;
+              const { AirQuality: { AirQualityCluster } } = MatterClusters;
+              const AirQualityEnum = AirQualityCluster.attributes.airQuality.schema.type;
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const value = TlvEnum(AirQualityEnum).decode(tlvBytes);
+              // Map enum values to human-readable strings
+              const levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
+              return {output: levels[value] || 'unknown'};
+
+      # Temperature measurement - in degrees Celsius (hundredths)
+      - id: "temperature"
+        type: "com.icontrol.temperature"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0402"      # Temperature Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "int16"            # Temperature in hundredths of degrees Celsius
+            script: |
+              const { TlvNullable, TlvInt16 } = MatterClusters;
+              const TlvMeasuredValue = TlvNullable(TlvInt16);
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const value = TlvMeasuredValue.decode(tlvBytes);
+              if (value === null) {
+                return {output: null};
+              }
+              // Matter temperature is in hundredths of degrees C (e.g. 23°C = 2300)
+              return {output: value.toString()};
+
+      # Relative humidity measurement - percentage
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0405"      # Relative Humidity Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "uint16"           # Humidity in hundredths of percent
+            script: |
+              const { TlvNullable, TlvUInt16 } = MatterClusters;
+              const TlvMeasuredValue = TlvNullable(TlvUInt16);
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const value = TlvMeasuredValue.decode(tlvBytes);
+              if (value === null) {
+                return {output: null};
+              }
+              // Matter humidity is in hundredths of percent, convert to whole percent
+              const percent = Math.round(value / 100);
+              return {output: percent.toString()};
+
+      # CO2 concentration - parts per million (ppm)
+      - id: "co2Concentration"
+        type: "com.icontrol.co2"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x040d"      # Carbon Dioxide Concentration Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "float"            # Concentration in ppm (single-precision float)
+            script: |
+              const { TlvNullable, TlvFloat } = MatterClusters;
+              const TlvMeasuredValue = TlvNullable(TlvFloat);
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const value = TlvMeasuredValue.decode(tlvBytes);
+              if (value === null) {
+                return {output: null};
+              }
+              // Round to whole ppm
+              return {output: Math.round(value).toString()};
+
+      # PM2.5 concentration - micrograms per cubic meter (μg/m³)
+      # Note: Requires Pm25ConcentrationMeasurement cluster export in matter.js bundle
+      - id: "pm25Concentration"
+        type: "com.icontrol.ugm3"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x042a"      # PM2.5 Concentration Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "float"            # Concentration in μg/m³ (single-precision float)
+            script: |
+              const { TlvNullable, TlvFloat } = MatterClusters;
+              const TlvMeasuredValue = TlvNullable(TlvFloat);
+              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              const value = TlvMeasuredValue.decode(tlvBytes);
+              if (value === null) {
+                return {output: null};
+              }
+              // Round to 1 decimal place
+              return {output: value.toFixed(1)};
