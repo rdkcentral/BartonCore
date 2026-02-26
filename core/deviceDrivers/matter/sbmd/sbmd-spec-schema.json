@@ -167,7 +167,7 @@
           "description": "Resource modes",
           "items": {
             "type": "string",
-            "enum": ["read", "write", "dynamic", "emitEvents"]
+            "enum": ["read", "write", "execute", "dynamic", "emitEvents", "lazySaveNext", "sensitive"]
           }
         },
         "optional": {

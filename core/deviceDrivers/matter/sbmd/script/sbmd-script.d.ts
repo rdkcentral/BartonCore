@@ -9,7 +9,7 @@
  * a result object with the expected structure.
  *
  * @file sbmd-script.d.ts
- * @see docs/SBMD-Design.md for detailed documentation
+ * @see docs/SBMD.md for detailed documentation
  */
 
 // =============================================================================
