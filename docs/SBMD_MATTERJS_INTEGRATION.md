@@ -113,7 +113,7 @@ return {
     invoke: {
         clusterId: 0x0008,
         commandId: 0x0000,  // MoveToLevel
-        tlvBase64: btoa(String.fromCharCode(...tlvBytes))
+        tlvBase64: SbmdUtils.Base64.encode(tlvBytes)
     }
 };
 ```
@@ -165,7 +165,7 @@ return {
     invoke: {
         clusterId: 0x0008,  // LevelControl
         commandId: 0x0004,  // MoveToLevelWithOnOff
-        tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
+        tlvBase64: SbmdUtils.Base64.encode(tlvBytes)
     }
 };
 ```
