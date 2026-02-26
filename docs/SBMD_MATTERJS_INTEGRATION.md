@@ -111,8 +111,8 @@ const tlvBytes = TlvMoveToLevelRequest.encode(commandData);
 // Return invoke operation with base64-encoded TLV
 return {
     invoke: {
-        clusterId: 8,
-        commandId: 0,  // MoveToLevel
+        clusterId: 0x0008,
+        commandId: 0x0000,  // MoveToLevel
         tlvBase64: btoa(String.fromCharCode(...tlvBytes))
     }
 };
@@ -123,8 +123,8 @@ return {
 Convert binary TLV to JavaScript objects:
 
 ```javascript
-// Receive TLV bytes (as Uint8Array or from base64)
-const tlvBytes = new Uint8Array(atob(sbmdReadArgs.tlvBase64).split('').map(c => c.charCodeAt(0)));
+// Receive TLV bytes from base64 using SbmdUtils
+const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
 
 // Decode to JavaScript object
 const TlvMoveToLevelRequest = MatterClusters.LevelControl.LevelControl.TlvMoveToLevelRequest;
@@ -163,8 +163,8 @@ const tlvBytes = TlvMoveToLevelWithOnOffRequest.encode(commandData);
 // Return invoke operation with base64-encoded TLV
 return {
     invoke: {
-        clusterId: 8,       // LevelControl
-        commandId: 4,       // MoveToLevelWithOnOff
+        clusterId: 0x0008,  // LevelControl
+        commandId: 0x0004,  // MoveToLevelWithOnOff
         tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
     }
 };
