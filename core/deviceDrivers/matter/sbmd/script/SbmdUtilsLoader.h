@@ -28,9 +28,7 @@
 #pragma once
 
 #include <cstddef>
-
-// Forward declarations for QuickJS types
-struct JSContext;
+#include <quickjs/quickjs.h>
 
 namespace barton
 {
