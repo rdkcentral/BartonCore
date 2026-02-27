@@ -31,10 +31,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
-
-// Forward declarations for QuickJS types
-struct JSContext;
-struct JSValue;
+#include <quickjs/quickjs.h>
 
 // Forward declaration for JsonCpp
 namespace Json

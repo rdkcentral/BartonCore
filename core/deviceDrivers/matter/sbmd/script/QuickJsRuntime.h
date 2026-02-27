@@ -28,11 +28,8 @@
 #pragma once
 
 #include <mutex>
+#include <quickjs/quickjs.h>
 #include <string>
-
-// Forward declarations for QuickJS types
-struct JSRuntime;
-struct JSContext;
 
 namespace barton
 {
