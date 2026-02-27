@@ -53,12 +53,12 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+          var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
           return {output: value.toString()};
       write:
         script: |
-          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          var tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
           return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 endpoints:
@@ -81,12 +81,12 @@ endpoints:
               name: "OnOff"
               type: "bool"
             script: |
-              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               return {output: (value === true) ? 'true' : 'false'};
           write:
             script: |
               // On/Off commands have no arguments
-              const commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
+              var commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
               return SbmdUtils.Response.invoke(0x0006, commandId);
 
       - id: "currentLevel"
@@ -105,31 +105,31 @@ endpoints:
               name: "CurrentLevel"
               type: "uint8"
             script: |
-              const level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              const percent = Math.round(level / 254 * 100);
+              var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var percent = Math.round(level / 254 * 100);
               return {output: percent.toString()};
           write:
             script: |
-              let percent = parseInt(sbmdWriteArgs.input, 10);
+              var percent = parseInt(sbmdWriteArgs.input, 10);
               if (isNaN(percent)) percent = 0;
               if (percent < 0) percent = 0;
               if (percent > 100) percent = 100;
 
               // Convert percentage (0-100) to Matter level (0-254)
-              const level = Math.round(percent / 100 * 254);
+              var level = Math.round(percent / 100 * 254);
 
               // Encode MoveToLevelWithOnOff command args as TLV struct
-              const args = {
+              var args = {
                 Level: level,
                 TransitionTime: 0,
                 OptionsMask: 0,
                 OptionsOverride: 0
               };
-              const schema = {
+              var schema = {
                 Level: {tag: 0, type: 'uint8'},
                 TransitionTime: {tag: 1, type: 'uint16'},
                 OptionsMask: {tag: 2, type: 'uint8'},
                 OptionsOverride: {tag: 3, type: 'uint8'}
               };
-              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
+              var tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
               return SbmdUtils.Response.invoke(0x0008, 0x0004, tlvBase64);

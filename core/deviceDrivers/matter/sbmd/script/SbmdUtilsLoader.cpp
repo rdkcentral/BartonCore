@@ -35,7 +35,7 @@
 
 extern "C" {
 #include <icLog/logging.h>
-#include <quickjs/quickjs.h>
+#include <mquickjs/mquickjs.h>
 }
 
 // Try to include the embedded bundle header if it was generated
@@ -55,42 +55,16 @@ namespace barton
     namespace
     {
         /**
-         * RAII wrapper for QuickJS JSValue.
-         */
-        class JsValueGuard
-        {
-        public:
-            JsValueGuard(JSContext *ctx, JSValue value) : ctx_(ctx), value_(value) {}
-            ~JsValueGuard()
-            {
-                if (ctx_)
-                {
-                    JS_FreeValue(ctx_, value_);
-                }
-            }
-
-            JsValueGuard(const JsValueGuard &) = delete;
-            JsValueGuard &operator=(const JsValueGuard &) = delete;
-
-            JSValue get() const { return value_; }
-
-        private:
-            JSContext *ctx_;
-            JSValue value_;
-        };
-
-        /**
-         * Extract QuickJS exception as a string.
+         * Extract mquickjs exception as a string.
          */
         std::string GetExceptionString(JSContext *ctx)
         {
-            JsValueGuard exceptionGuard(ctx, JS_GetException(ctx));
-            const char *str = JS_ToCString(ctx, exceptionGuard.get());
+            JSValue ex = JS_GetException(ctx);
+            JSCStringBuf buf;
+            const char *str = JS_ToCString(ctx, ex, &buf);
             if (str)
             {
-                std::string result(str);
-                JS_FreeCString(ctx, str);
-                return result;
+                return std::string(str);
             }
             return "unknown error";
         }
@@ -159,17 +133,14 @@ namespace barton
 
         icDebug("Executing SBMD utilities bundle (%zu bytes)...", length);
 
-        // Execute the bundle script
-        JSValue result = JS_Eval(ctx, bundleSource, length, "<sbmd-utils-bundle>", JS_EVAL_TYPE_GLOBAL);
+        // Execute the bundle script (mquickjs: use JS_EVAL_REPL for default eval flags)
+        JSValue result = JS_Eval(ctx, bundleSource, length, "<sbmd-utils-bundle>", JS_EVAL_REPL);
 
         if (JS_IsException(result))
         {
             icError("Failed to execute SBMD utilities bundle: %s", GetExceptionString(ctx).c_str());
-            JS_FreeValue(ctx, result);
             return false;
         }
-
-        JS_FreeValue(ctx, result);
 
         // Check if bundle execution left an exception (indicates a problem we should fix)
         std::string exMsg;
@@ -180,10 +151,10 @@ namespace barton
         }
 
         // Verify that SbmdUtils global was created
-        JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
-        JsValueGuard utilsGuard(ctx, JS_GetPropertyStr(ctx, globalGuard.get(), "SbmdUtils"));
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue utils = JS_GetPropertyStr(ctx, global, "SbmdUtils");
 
-        if (JS_IsUndefined(utilsGuard.get()))
+        if (JS_IsUndefined(utils))
         {
             icError("SBMD utilities bundle did not create expected 'SbmdUtils' global");
             return false;

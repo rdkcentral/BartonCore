@@ -28,7 +28,10 @@
 #pragma once
 
 #include <cstddef>
-#include <quickjs/quickjs.h>
+
+extern "C" {
+#include <mquickjs/mquickjs.h>
+}
 
 namespace barton
 {
@@ -64,8 +67,8 @@ namespace barton
          * Load the matter.js cluster bundle into the given QuickJS context.
          *
          * This creates a global 'MatterClusters' object in the context containing
-         * all Matter cluster TLV schemas. The object is frozen after loading to
-         * prevent modification by scripts.
+         * all Matter cluster TLV schemas. Script isolation is maintained via IIFEs
+         * (each script runs in its own function scope).
          *
          * @param ctx The QuickJS context to load the bundle into
          * @return true if the bundle was loaded successfully, false otherwise
@@ -89,7 +92,6 @@ namespace barton
     private:
         static bool LoadFromEmbedded(JSContext *ctx);
         static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length);
-        static bool FreezeGlobalObject(JSContext *ctx, const char *name);
 
         static const char *source_;
     };

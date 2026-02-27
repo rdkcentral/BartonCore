@@ -86,7 +86,7 @@ if (BCORE_MATTER)
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
-    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/script/*.cpp")
+    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/script/*.cpp" "deviceDrivers/matter/sbmd/script/*.c")
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
@@ -148,7 +148,7 @@ if (BCORE_MATTER)
     pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
     link_directories(${YAMLCPP_LIBRARY_DIRS})
     list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
-    list(APPEND XTRA_LIBS yaml-cpp quickjs)
+    list(APPEND XTRA_LIBS yaml-cpp mquickjs)
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation

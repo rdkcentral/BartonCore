@@ -28,7 +28,10 @@
 #pragma once
 
 #include <cstddef>
-#include <quickjs/quickjs.h>
+
+extern "C" {
+#include <mquickjs/mquickjs.h>
+}
 
 namespace barton
 {

@@ -37,7 +37,7 @@
     'use strict';
 
     // Matter TLV element types (from Matter spec)
-    const TLV_TYPE = {
+    var TLV_TYPE = {
         SIGNED_INT: 0x00,      // 0x00-0x03 based on size
         UNSIGNED_INT: 0x04,    // 0x04-0x07 based on size
         BOOL_FALSE: 0x08,
@@ -54,58 +54,58 @@
     };
 
     // Control byte masks
-    const CONTROL_ELEMENT_TYPE_MASK = 0x1F;
-    const CONTROL_TAG_FORM_MASK = 0xE0;
+    var CONTROL_ELEMENT_TYPE_MASK = 0x1F;
+    var CONTROL_TAG_FORM_MASK = 0xE0;
 
     // Tag forms
-    const TAG_ANONYMOUS = 0x00;
-    const TAG_CONTEXT = 0x20;
-    const TAG_COMMON_PROFILE_2 = 0x40;
-    const TAG_COMMON_PROFILE_4 = 0x60;
-    const TAG_IMPLICIT_PROFILE_2 = 0x80;
-    const TAG_IMPLICIT_PROFILE_4 = 0xA0;
-    const TAG_FULLY_QUALIFIED_6 = 0xC0;
-    const TAG_FULLY_QUALIFIED_8 = 0xE0;
+    var TAG_ANONYMOUS = 0x00;
+    var TAG_CONTEXT = 0x20;
+    var TAG_COMMON_PROFILE_2 = 0x40;
+    var TAG_COMMON_PROFILE_4 = 0x60;
+    var TAG_IMPLICIT_PROFILE_2 = 0x80;
+    var TAG_IMPLICIT_PROFILE_4 = 0xA0;
+    var TAG_FULLY_QUALIFIED_6 = 0xC0;
+    var TAG_FULLY_QUALIFIED_8 = 0xE0;
 
     /**
      * UTF-8 encoding/decoding utilities
      * Needed because String.fromCharCode treats bytes as UCS-2 code units,
      * not UTF-8 bytes. These utilities properly handle multi-byte UTF-8 sequences.
      */
-    const Utf8 = {
+    var Utf8 = {
         /**
          * Decode UTF-8 bytes to a JavaScript string
          * @param {Uint8Array} bytes - UTF-8 encoded bytes
          * @returns {string} Decoded string
          */
         decode: function(bytes) {
-            let result = '';
-            let i = 0;
+            var result = '';
+            var i = 0;
             while (i < bytes.length) {
-                const b0 = bytes[i];
+                var b0 = bytes[i];
                 if (b0 < 0x80) {
                     // 1-byte sequence (ASCII)
                     result += String.fromCharCode(b0);
                     i += 1;
                 } else if ((b0 & 0xE0) === 0xC0) {
                     // 2-byte sequence
-                    const b1 = bytes[i + 1];
+                    var b1 = bytes[i + 1];
                     result += String.fromCharCode(((b0 & 0x1F) << 6) | (b1 & 0x3F));
                     i += 2;
                 } else if ((b0 & 0xF0) === 0xE0) {
                     // 3-byte sequence
-                    const b1 = bytes[i + 1];
-                    const b2 = bytes[i + 2];
-                    result += String.fromCharCode(((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F));
+                    var b1_3 = bytes[i + 1];
+                    var b2_3 = bytes[i + 2];
+                    result += String.fromCharCode(((b0 & 0x0F) << 12) | ((b1_3 & 0x3F) << 6) | (b2_3 & 0x3F));
                     i += 3;
                 } else if ((b0 & 0xF8) === 0xF0) {
                     // 4-byte sequence (surrogate pair needed)
-                    const b1 = bytes[i + 1];
-                    const b2 = bytes[i + 2];
-                    const b3 = bytes[i + 3];
-                    const codePoint = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+                    var b1_4 = bytes[i + 1];
+                    var b2_4 = bytes[i + 2];
+                    var b3_4 = bytes[i + 3];
+                    var codePoint = ((b0 & 0x07) << 18) | ((b1_4 & 0x3F) << 12) | ((b2_4 & 0x3F) << 6) | (b3_4 & 0x3F);
                     // Convert to surrogate pair
-                    const adjusted = codePoint - 0x10000;
+                    var adjusted = codePoint - 0x10000;
                     result += String.fromCharCode(0xD800 + (adjusted >> 10), 0xDC00 + (adjusted & 0x3FF));
                     i += 4;
                 } else {
@@ -123,12 +123,12 @@
          * @returns {Uint8Array} UTF-8 encoded bytes
          */
         encode: function(str) {
-            const bytes = [];
-            for (let i = 0; i < str.length; i++) {
-                let codePoint = str.charCodeAt(i);
+            var bytes = [];
+            for (var i = 0; i < str.length; i++) {
+                var codePoint = str.charCodeAt(i);
                 // Handle surrogate pairs
                 if (codePoint >= 0xD800 && codePoint <= 0xDBFF && i + 1 < str.length) {
-                    const next = str.charCodeAt(i + 1);
+                    var next = str.charCodeAt(i + 1);
                     if (next >= 0xDC00 && next <= 0xDFFF) {
                         codePoint = 0x10000 + ((codePoint & 0x3FF) << 10) + (next & 0x3FF);
                         i++;
@@ -158,7 +158,7 @@
     /**
      * Base64 encoding/decoding utilities
      */
-    const Base64 = {
+    var Base64 = {
         /**
          * Decode a base64 string to a Uint8Array
          * @param {string} base64 - Base64 encoded string
@@ -166,15 +166,16 @@
          */
         decode: function(base64) {
             // Handle padding
-            const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-            const bytes = [];
+            var padding = (base64.length >= 2 && base64.substring(base64.length - 2) === '==') ? 2 :
+                           (base64.length >= 1 && base64.substring(base64.length - 1) === '=') ? 1 : 0;
+            var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+            var bytes = [];
 
-            for (let i = 0; i < base64.length; i += 4) {
-                const c0 = chars.indexOf(base64[i]);
-                const c1 = chars.indexOf(base64[i + 1]);
-                const c2 = base64[i + 2] === '=' ? 0 : chars.indexOf(base64[i + 2]);
-                const c3 = base64[i + 3] === '=' ? 0 : chars.indexOf(base64[i + 3]);
+            for (var i = 0; i < base64.length; i += 4) {
+                var c0 = chars.indexOf(base64[i]);
+                var c1 = chars.indexOf(base64[i + 1]);
+                var c2 = base64[i + 2] === '=' ? 0 : chars.indexOf(base64[i + 2]);
+                var c3 = base64[i + 3] === '=' ? 0 : chars.indexOf(base64[i + 3]);
 
                 bytes.push((c0 << 2) | (c1 >> 4));
                 if (base64[i + 2] !== '=') {
@@ -194,13 +195,13 @@
          * @returns {string} Base64 encoded string
          */
         encode: function(bytes) {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-            let result = '';
+            var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+            var result = '';
 
-            for (let i = 0; i < bytes.length; i += 3) {
-                const b0 = bytes[i];
-                const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
-                const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+            for (var i = 0; i < bytes.length; i += 3) {
+                var b0 = bytes[i];
+                var b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+                var b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
 
                 result += chars[b0 >> 2];
                 result += chars[((b0 & 0x03) << 4) | (b1 >> 4)];
@@ -214,393 +215,408 @@
 
     /**
      * TLV Reader - reads TLV encoded data
+     * @param {Uint8Array|Array} bytes - TLV encoded bytes
      */
-    class TlvReader {
-        constructor(bytes) {
-            this.bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-            this.offset = 0;
-        }
-
-        hasMore() {
-            return this.offset < this.bytes.length;
-        }
-
-        readByte() {
-            if (this.offset >= this.bytes.length) {
-                throw new Error('Unexpected end of TLV data');
-            }
-            return this.bytes[this.offset++];
-        }
-
-        readBytes(count) {
-            if (this.offset + count > this.bytes.length) {
-                throw new Error('Unexpected end of TLV data');
-            }
-            const result = this.bytes.slice(this.offset, this.offset + count);
-            this.offset += count;
-            return result;
-        }
-
-        readUint(size) {
-            // For values up to 4 bytes, use Number with bitwise operations as before.
-            if (size <= 4) {
-                let value = 0;
-                for (let i = 0; i < size; i++) {
-                    value |= this.readByte() << (i * 8);
-                }
-                // Handle unsigned values that exceed 31-bit range
-                if (size === 4 && value < 0) {
-                    value = value >>> 0;  // Convert to unsigned
-                }
-                return value;
-            }
-
-            // For values larger than 4 bytes, use BigInt to avoid 32-bit overflow.
-            let value = 0n;
-            for (let i = 0; i < size; i++) {
-                const byte = this.readByte();
-                value |= BigInt(byte) << (BigInt(i) * 8n);
-            }
-            return value;
-        }
-
-        readInt(size) {
-            let value = this.readUint(size);
-
-            // If value is a Number (sizes up to 4 bytes), use existing 32-bit logic.
-            if (typeof value === 'number') {
-                // Sign extend if necessary
-                const signBit = 1 << (size * 8 - 1);
-                if (value & signBit) {
-                    // Negative number - sign extend
-                    value = value - (1 << (size * 8));
-                }
-                return value;
-            }
-
-            // For BigInt values (sizes greater than 4 bytes), perform sign extension using BigInt.
-            const bitCount = BigInt(size * 8);
-            const signBit = 1n << (bitCount - 1n);
-            if ((value & signBit) !== 0n) {
-                // Negative number - sign extend
-                value = value - (1n << bitCount);
-            }
-            return value;
-        }
-
-        readLength(sizeIndicator) {
-            if (sizeIndicator === 0) return this.readByte();
-            if (sizeIndicator === 1) return this.readUint(2);
-            if (sizeIndicator === 2) return this.readUint(4);
-            throw new Error('Invalid length indicator: ' + sizeIndicator);
-        }
-
-        /**
-         * Read a single TLV element
-         * @returns {{tag: number|null, value: any, type: number}}
-         */
-        readElement() {
-            const control = this.readByte();
-            const elementType = control & CONTROL_ELEMENT_TYPE_MASK;
-            const tagForm = control & CONTROL_TAG_FORM_MASK;
-
-            // Read tag if present
-            let tag = null;
-            if (tagForm === TAG_CONTEXT) {
-                tag = this.readByte();
-            } else if (tagForm === TAG_COMMON_PROFILE_2 || tagForm === TAG_IMPLICIT_PROFILE_2) {
-                tag = this.readUint(2);
-            } else if (tagForm === TAG_COMMON_PROFILE_4 || tagForm === TAG_IMPLICIT_PROFILE_4) {
-                tag = this.readUint(4);
-            } else if (tagForm === TAG_FULLY_QUALIFIED_6) {
-                this.readUint(2); // vendor
-                this.readUint(2); // profile
-                tag = this.readUint(2);
-            } else if (tagForm === TAG_FULLY_QUALIFIED_8) {
-                this.readUint(2); // vendor
-                this.readUint(2); // profile
-                tag = this.readUint(4);
-            }
-
-            // Read value based on element type
-            let value;
-            const baseType = elementType;
-
-            if (baseType >= 0x00 && baseType <= 0x03) {
-                // Signed integer (1, 2, 4, 8 bytes)
-                const size = 1 << (baseType - 0x00);
-                value = this.readInt(size);
-            } else if (baseType >= 0x04 && baseType <= 0x07) {
-                // Unsigned integer (1, 2, 4, 8 bytes)
-                const size = 1 << (baseType - 0x04);
-                value = this.readUint(size);
-            } else if (baseType === TLV_TYPE.BOOL_FALSE) {
-                value = false;
-            } else if (baseType === TLV_TYPE.BOOL_TRUE) {
-                value = true;
-            } else if (baseType === TLV_TYPE.FLOAT) {
-                const bytes = this.readBytes(4);
-                const view = new DataView(bytes.buffer, bytes.byteOffset, 4);
-                value = view.getFloat32(0, true);
-            } else if (baseType === TLV_TYPE.DOUBLE) {
-                const bytes = this.readBytes(8);
-                const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
-                value = view.getFloat64(0, true);
-            } else if (baseType >= 0x0C && baseType <= 0x0F) {
-                // UTF-8 string
-                const len = this.readLength(baseType - 0x0C);
-                const bytes = this.readBytes(len);
-                value = Utf8.decode(bytes);
-            } else if (baseType >= 0x10 && baseType <= 0x13) {
-                // Octet string
-                const len = this.readLength(baseType - 0x10);
-                value = this.readBytes(len);
-            } else if (baseType === TLV_TYPE.NULL) {
-                value = null;
-            } else if (baseType === TLV_TYPE.STRUCT) {
-                value = this.readContainer('struct');
-            } else if (baseType === TLV_TYPE.ARRAY) {
-                value = this.readContainer('array');
-            } else if (baseType === TLV_TYPE.LIST) {
-                value = this.readContainer('list');
-            } else if (baseType === TLV_TYPE.END_CONTAINER) {
-                return { type: 'end' };
-            } else {
-                throw new Error('Unknown TLV element type: 0x' + baseType.toString(16));
-            }
-
-            return { tag, value, type: elementType };
-        }
-
-        readContainer(containerType) {
-            const elements = [];
-            while (this.hasMore()) {
-                const element = this.readElement();
-                if (element.type === 'end') break;
-                elements.push(element);
-            }
-
-            if (containerType === 'array') {
-                // Arrays contain anonymous elements
-                return elements.map(e => e.value);
-            } else if (containerType === 'struct') {
-                // Structs have context-tagged elements, convert to object
-                const obj = {};
-                for (const e of elements) {
-                    if (e.tag !== null) {
-                        obj[e.tag] = e.value;
-                    }
-                }
-                return obj;
-            }
-            return elements;
-        }
+    function TlvReader(bytes) {
+        this.bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        this.offset = 0;
     }
+
+    TlvReader.prototype.hasMore = function() {
+        return this.offset < this.bytes.length;
+    };
+
+    TlvReader.prototype.readByte = function() {
+        if (this.offset >= this.bytes.length) {
+            throw new Error('Unexpected end of TLV data');
+        }
+        return this.bytes[this.offset++];
+    };
+
+    TlvReader.prototype.readBytes = function(count) {
+        if (this.offset + count > this.bytes.length) {
+            throw new Error('Unexpected end of TLV data');
+        }
+        // Manual copy into a new ArrayBuffer (Uint8Array.slice not available in mquickjs)
+        var buf = new ArrayBuffer(count);
+        var result = new Uint8Array(buf);
+        for (var i = 0; i < count; i++) {
+            result[i] = this.bytes[this.offset + i];
+        }
+        this.offset += count;
+        return result;
+    };
+
+    TlvReader.prototype.readUint = function(size) {
+        // For values up to 4 bytes, use Number with bitwise operations.
+        if (size <= 4) {
+            var value = 0;
+            for (var i = 0; i < size; i++) {
+                value = value | (this.readByte() << (i * 8));
+            }
+            // Handle unsigned values that exceed 31-bit range
+            if (size === 4 && value < 0) {
+                value = value >>> 0;  // Convert to unsigned
+            }
+            return value;
+        }
+
+        // For 8-byte unsigned integers: read as two 32-bit halves and combine.
+        // Values that exceed Number safe integer range (53 bits) will be approximate.
+        var low = this.readUint(4);
+        var high = this.readUint(4);
+        return high * 4294967296 + low;
+    };
+
+    TlvReader.prototype.readInt = function(size) {
+        // For sizes up to 4 bytes, use existing 32-bit logic.
+        if (size <= 4) {
+            var value = this.readUint(size);
+            // Sign extend if necessary
+            var signBit = 1 << (size * 8 - 1);
+            if (value & signBit) {
+                // Negative number - sign extend
+                value = value - (1 << (size * 8));
+            }
+            return value;
+        }
+
+        // For 8-byte signed integers: read as two 32-bit halves with sign extension.
+        var low = this.readUint(4);
+        var high = this.readUint(4);
+        // Treat high as signed 32-bit for sign extension
+        var signedHigh = high | 0;
+        return signedHigh * 4294967296 + low;
+    };
+
+    TlvReader.prototype.readLength = function(sizeIndicator) {
+        if (sizeIndicator === 0) return this.readByte();
+        if (sizeIndicator === 1) return this.readUint(2);
+        if (sizeIndicator === 2) return this.readUint(4);
+        throw new Error('Invalid length indicator: ' + sizeIndicator);
+    };
+
+    /**
+     * Read a single TLV element
+     * @returns {{tag: number|null, value: any, type: number}}
+     */
+    TlvReader.prototype.readElement = function() {
+        var control = this.readByte();
+        var elementType = control & CONTROL_ELEMENT_TYPE_MASK;
+        var tagForm = control & CONTROL_TAG_FORM_MASK;
+
+        // Read tag if present
+        var tag = null;
+        if (tagForm === TAG_CONTEXT) {
+            tag = this.readByte();
+        } else if (tagForm === TAG_COMMON_PROFILE_2 || tagForm === TAG_IMPLICIT_PROFILE_2) {
+            tag = this.readUint(2);
+        } else if (tagForm === TAG_COMMON_PROFILE_4 || tagForm === TAG_IMPLICIT_PROFILE_4) {
+            tag = this.readUint(4);
+        } else if (tagForm === TAG_FULLY_QUALIFIED_6) {
+            this.readUint(2); // vendor
+            this.readUint(2); // profile
+            tag = this.readUint(2);
+        } else if (tagForm === TAG_FULLY_QUALIFIED_8) {
+            this.readUint(2); // vendor
+            this.readUint(2); // profile
+            tag = this.readUint(4);
+        }
+
+        // Read value based on element type
+        var value;
+        var baseType = elementType;
+
+        if (baseType >= 0x00 && baseType <= 0x03) {
+            // Signed integer (1, 2, 4, 8 bytes)
+            var intSize = 1 << (baseType - 0x00);
+            value = this.readInt(intSize);
+        } else if (baseType >= 0x04 && baseType <= 0x07) {
+            // Unsigned integer (1, 2, 4, 8 bytes)
+            var uintSize = 1 << (baseType - 0x04);
+            value = this.readUint(uintSize);
+        } else if (baseType === TLV_TYPE.BOOL_FALSE) {
+            value = false;
+        } else if (baseType === TLV_TYPE.BOOL_TRUE) {
+            value = true;
+        } else if (baseType === TLV_TYPE.FLOAT) {
+            // Read float32: copy bytes into a fresh ArrayBuffer, overlay Float32Array
+            var floatBytes = this.readBytes(4);
+            value = new Float32Array(floatBytes.buffer)[0];
+        } else if (baseType === TLV_TYPE.DOUBLE) {
+            // Read float64: copy bytes into a fresh ArrayBuffer, overlay Float64Array
+            var doubleBytes = this.readBytes(8);
+            value = new Float64Array(doubleBytes.buffer)[0];
+        } else if (baseType >= 0x0C && baseType <= 0x0F) {
+            // UTF-8 string
+            var strLen = this.readLength(baseType - 0x0C);
+            var strBytes = this.readBytes(strLen);
+            value = Utf8.decode(strBytes);
+        } else if (baseType >= 0x10 && baseType <= 0x13) {
+            // Octet string
+            var octLen = this.readLength(baseType - 0x10);
+            value = this.readBytes(octLen);
+        } else if (baseType === TLV_TYPE.NULL) {
+            value = null;
+        } else if (baseType === TLV_TYPE.STRUCT) {
+            value = this.readContainer('struct');
+        } else if (baseType === TLV_TYPE.ARRAY) {
+            value = this.readContainer('array');
+        } else if (baseType === TLV_TYPE.LIST) {
+            value = this.readContainer('list');
+        } else if (baseType === TLV_TYPE.END_CONTAINER) {
+            return { type: 'end' };
+        } else {
+            throw new Error('Unknown TLV element type: 0x' + baseType.toString(16));
+        }
+
+        return { tag: tag, value: value, type: elementType };
+    };
+
+    TlvReader.prototype.readContainer = function(containerType) {
+        var elements = [];
+        while (this.hasMore()) {
+            var element = this.readElement();
+            if (element.type === 'end') break;
+            elements.push(element);
+        }
+
+        if (containerType === 'array') {
+            // Arrays contain anonymous elements
+            return elements.map(function(e) { return e.value; });
+        } else if (containerType === 'struct') {
+            // Structs have context-tagged elements, convert to object
+            var obj = {};
+            for (var i = 0; i < elements.length; i++) {
+                var e = elements[i];
+                if (e.tag !== null) {
+                    obj[e.tag] = e.value;
+                }
+            }
+            return obj;
+        }
+        return elements;
+    };
 
     /**
      * TLV Writer - writes TLV encoded data
      */
-    class TlvWriter {
-        constructor() {
-            this.bytes = [];
+    function TlvWriter() {
+        this.bytes = [];
+    }
+
+    TlvWriter.prototype.writeByte = function(b) {
+        this.bytes.push(b & 0xFF);
+    };
+
+    TlvWriter.prototype.writeBytes = function(bytes) {
+        for (var i = 0; i < bytes.length; i++) {
+            this.bytes.push(bytes[i] & 0xFF);
         }
+    };
 
-        writeByte(b) {
-            this.bytes.push(b & 0xFF);
-        }
-
-        writeBytes(bytes) {
-            for (let i = 0; i < bytes.length; i++) {
-                this.bytes.push(bytes[i] & 0xFF);
-            }
-        }
-
-        writeUint(value, size) {
-            // For 1–4 byte integers, use the existing Number-based bitwise operations.
-            if (size <= 4) {
-                for (let i = 0; i < size; i++) {
-                    this.bytes.push((value >> (i * 8)) & 0xFF);
-                }
-                return;
-            }
-
-            // For larger integers (e.g., 8-byte / 64-bit), use BigInt to avoid 32-bit shift limits.
-            let v = (typeof value === 'bigint') ? value : BigInt(value);
-            for (let i = 0; i < size; i++) {
-                const byte = Number((v >> BigInt(i * 8)) & 0xFFn);
-                this.bytes.push(byte & 0xFF);
-            }
-        }
-
-        writeLength(len) {
-            if (len <= 0xFF) {
-                return 0; // length encoded as 1 byte in writeElement
-            } else if (len <= 0xFFFF) {
-                return 1;
-            }
-            return 2;
-        }
-
-        /**
-         * Write a TLV element
-         * @param {number|null} tag - Context tag (or null for anonymous)
-         * @param {any} value - Value to encode
-         * @param {string} type - Matter type name (optional, for explicit typing)
-         */
-        writeElement(tag, value, type) {
-            const tagForm = tag === null ? TAG_ANONYMOUS : TAG_CONTEXT;
-
-            if (value === null || value === undefined) {
-                this.writeByte(tagForm | TLV_TYPE.NULL);
-                if (tag !== null) this.writeByte(tag);
-                return;
-            }
-
-            if (typeof value === 'boolean') {
-                this.writeByte(tagForm | (value ? TLV_TYPE.BOOL_TRUE : TLV_TYPE.BOOL_FALSE));
-                if (tag !== null) this.writeByte(tag);
-                return;
-            }
-
-            if (typeof value === 'number') {
-                if (Number.isInteger(value)) {
-                    // Determine size needed
-                    if (type && type.startsWith('int')) {
-                        // Signed integer
-                        this.writeSignedInt(tagForm, tag, value, type);
-                    } else {
-                        // Default to unsigned
-                        this.writeUnsignedInt(tagForm, tag, value, type);
-                    }
-                } else {
-                    // Float - use double for precision
-                    this.writeByte(tagForm | TLV_TYPE.DOUBLE);
-                    if (tag !== null) this.writeByte(tag);
-                    const buf = new ArrayBuffer(8);
-                    new DataView(buf).setFloat64(0, value, true);
-                    this.writeBytes(new Uint8Array(buf));
-                }
-                return;
-            }
-
-            if (typeof value === 'string') {
-                const bytes = Utf8.encode(value);
-                const lenSize = bytes.length <= 0xFF ? 0 : bytes.length <= 0xFFFF ? 1 : 2;
-                this.writeByte(tagForm | (TLV_TYPE.UTF8_STRING + lenSize));
-                if (tag !== null) this.writeByte(tag);
-                if (lenSize === 0) this.writeByte(bytes.length);
-                else if (lenSize === 1) this.writeUint(bytes.length, 2);
-                else this.writeUint(bytes.length, 4);
-                this.writeBytes(bytes);
-                return;
-            }
-
-            if (value instanceof Uint8Array || Array.isArray(value) && type === 'octstr') {
-                const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-                const lenSize = bytes.length <= 0xFF ? 0 : bytes.length <= 0xFFFF ? 1 : 2;
-                this.writeByte(tagForm | (TLV_TYPE.OCTET_STRING + lenSize));
-                if (tag !== null) this.writeByte(tag);
-                if (lenSize === 0) this.writeByte(bytes.length);
-                else if (lenSize === 1) this.writeUint(bytes.length, 2);
-                else this.writeUint(bytes.length, 4);
-                this.writeBytes(bytes);
-                return;
-            }
-
-            if (Array.isArray(value)) {
-                this.writeByte(tagForm | TLV_TYPE.ARRAY);
-                if (tag !== null) this.writeByte(tag);
-                for (const item of value) {
-                    this.writeElement(null, item);
-                }
-                this.writeByte(TLV_TYPE.END_CONTAINER);
-                return;
-            }
-
-            if (typeof value === 'object') {
-                this.writeByte(tagForm | TLV_TYPE.STRUCT);
-                if (tag !== null) this.writeByte(tag);
-                for (const [k, v] of Object.entries(value)) {
-                    const fieldTag = parseInt(k, 10);
-                    if (!isNaN(fieldTag)) {
-                        this.writeElement(fieldTag, v);
-                    }
-                }
-                this.writeByte(TLV_TYPE.END_CONTAINER);
-                return;
-            }
-
-            throw new Error('Unsupported value type: ' + typeof value);
-        }
-
-        writeSignedInt(tagForm, tag, value, type) {
-            let size;
-            if (type === 'int8' || (value >= -128 && value <= 127)) {
-                size = 1;
-                this.writeByte(tagForm | 0x00);
-            } else if (type === 'int16' || (value >= -32768 && value <= 32767)) {
-                size = 2;
-                this.writeByte(tagForm | 0x01);
-            } else if (type === 'int32' || (value >= -2147483648 && value <= 2147483647)) {
-                size = 4;
-                this.writeByte(tagForm | 0x02);
-            } else {
-                size = 8;
-                this.writeByte(tagForm | 0x03);
-            }
-            if (tag !== null) this.writeByte(tag);
-            // Write in little-endian
-            for (let i = 0; i < size; i++) {
+    TlvWriter.prototype.writeUint = function(value, size) {
+        // For 1-4 byte integers, use Number-based bitwise operations.
+        if (size <= 4) {
+            for (var i = 0; i < size; i++) {
                 this.bytes.push((value >> (i * 8)) & 0xFF);
             }
+            return;
         }
 
-        writeUnsignedInt(tagForm, tag, value, type) {
-            let size;
-            if (type === 'uint8' || type === 'enum8' || type === 'percent' ||
-                (value >= 0 && value <= 0xFF && !type)) {
-                size = 1;
-                this.writeByte(tagForm | 0x04);
-            } else if (type === 'uint16' || type === 'enum16' || type === 'percent100ths' ||
-                       (value >= 0 && value <= 0xFFFF && !type)) {
-                size = 2;
-                this.writeByte(tagForm | 0x05);
-            } else if (type === 'uint32' || (value >= 0 && value <= 0xFFFFFFFF && !type)) {
-                size = 4;
-                this.writeByte(tagForm | 0x06);
-            } else {
-                size = 8;
-                this.writeByte(tagForm | 0x07);
-            }
+        // For 8-byte integers, split into two 32-bit halves.
+        var high = Math.floor(value / 4294967296);
+        var low = value - high * 4294967296;
+        for (var i = 0; i < 4; i++) {
+            this.bytes.push((low >> (i * 8)) & 0xFF);
+        }
+        for (var i = 0; i < 4; i++) {
+            this.bytes.push((high >> (i * 8)) & 0xFF);
+        }
+    };
+
+    TlvWriter.prototype.writeLength = function(len) {
+        if (len <= 0xFF) {
+            return 0; // length encoded as 1 byte in writeElement
+        } else if (len <= 0xFFFF) {
+            return 1;
+        }
+        return 2;
+    };
+
+    /**
+     * Write a TLV element
+     * @param {number|null} tag - Context tag (or null for anonymous)
+     * @param {any} value - Value to encode
+     * @param {string} type - Matter type name (optional, for explicit typing)
+     */
+    TlvWriter.prototype.writeElement = function(tag, value, type) {
+        var tagForm = tag === null ? TAG_ANONYMOUS : TAG_CONTEXT;
+
+        if (value === null || value === undefined) {
+            this.writeByte(tagForm | TLV_TYPE.NULL);
             if (tag !== null) this.writeByte(tag);
-            this.writeUint(value, size);
+            return;
         }
 
-        toBytes() {
-            return new Uint8Array(this.bytes);
+        if (typeof value === 'boolean') {
+            this.writeByte(tagForm | (value ? TLV_TYPE.BOOL_TRUE : TLV_TYPE.BOOL_FALSE));
+            if (tag !== null) this.writeByte(tag);
+            return;
         }
 
-        toBase64() {
-            return Base64.encode(this.toBytes());
+        if (typeof value === 'number') {
+            if (typeof value === 'number' && value === Math.floor(value)) {
+                // Determine size needed
+                if (type && type.substring(0, 3) === 'int') {
+                    // Signed integer
+                    this.writeSignedInt(tagForm, tag, value, type);
+                } else {
+                    // Default to unsigned
+                    this.writeUnsignedInt(tagForm, tag, value, type);
+                }
+            } else {
+                // Float - use double for precision
+                this.writeByte(tagForm | TLV_TYPE.DOUBLE);
+                if (tag !== null) this.writeByte(tag);
+                var f64 = new Float64Array(1);
+                f64[0] = value;
+                this.writeBytes(new Uint8Array(f64.buffer));
+            }
+            return;
         }
-    }
+
+        if (typeof value === 'string') {
+            var strBytes = Utf8.encode(value);
+            var strLenSize = strBytes.length <= 0xFF ? 0 : strBytes.length <= 0xFFFF ? 1 : 2;
+            this.writeByte(tagForm | (TLV_TYPE.UTF8_STRING + strLenSize));
+            if (tag !== null) this.writeByte(tag);
+            if (strLenSize === 0) this.writeByte(strBytes.length);
+            else if (strLenSize === 1) this.writeUint(strBytes.length, 2);
+            else this.writeUint(strBytes.length, 4);
+            this.writeBytes(strBytes);
+            return;
+        }
+
+        if (value instanceof Uint8Array || (Array.isArray(value) && type === 'octstr')) {
+            var octBytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+            var octLenSize = octBytes.length <= 0xFF ? 0 : octBytes.length <= 0xFFFF ? 1 : 2;
+            this.writeByte(tagForm | (TLV_TYPE.OCTET_STRING + octLenSize));
+            if (tag !== null) this.writeByte(tag);
+            if (octLenSize === 0) this.writeByte(octBytes.length);
+            else if (octLenSize === 1) this.writeUint(octBytes.length, 2);
+            else this.writeUint(octBytes.length, 4);
+            this.writeBytes(octBytes);
+            return;
+        }
+
+        if (Array.isArray(value)) {
+            this.writeByte(tagForm | TLV_TYPE.ARRAY);
+            if (tag !== null) this.writeByte(tag);
+            for (var i = 0; i < value.length; i++) {
+                this.writeElement(null, value[i]);
+            }
+            this.writeByte(TLV_TYPE.END_CONTAINER);
+            return;
+        }
+
+        if (typeof value === 'object') {
+            this.writeByte(tagForm | TLV_TYPE.STRUCT);
+            if (tag !== null) this.writeByte(tag);
+            var keys = Object.keys(value);
+            for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                var fieldTag = parseInt(k, 10);
+                if (!isNaN(fieldTag)) {
+                    this.writeElement(fieldTag, value[k]);
+                }
+            }
+            this.writeByte(TLV_TYPE.END_CONTAINER);
+            return;
+        }
+
+        throw new Error('Unsupported value type: ' + typeof value);
+    };
+
+    TlvWriter.prototype.writeSignedInt = function(tagForm, tag, value, type) {
+        var size;
+        if (type === 'int8' || (value >= -128 && value <= 127)) {
+            size = 1;
+            this.writeByte(tagForm | 0x00);
+        } else if (type === 'int16' || (value >= -32768 && value <= 32767)) {
+            size = 2;
+            this.writeByte(tagForm | 0x01);
+        } else if (type === 'int32' || (value >= -2147483648 && value <= 2147483647)) {
+            size = 4;
+            this.writeByte(tagForm | 0x02);
+        } else {
+            size = 8;
+            this.writeByte(tagForm | 0x03);
+        }
+        if (tag !== null) this.writeByte(tag);
+        // Write in little-endian
+        if (size <= 4) {
+            for (var i = 0; i < size; i++) {
+                this.bytes.push((value >> (i * 8)) & 0xFF);
+            }
+        } else {
+            // 8-byte signed: split into two 32-bit halves
+            var high = Math.floor(value / 4294967296);
+            var low = value - high * 4294967296;
+            for (var i = 0; i < 4; i++) {
+                this.bytes.push((low >> (i * 8)) & 0xFF);
+            }
+            for (var i = 0; i < 4; i++) {
+                this.bytes.push((high >> (i * 8)) & 0xFF);
+            }
+        }
+    };
+
+    TlvWriter.prototype.writeUnsignedInt = function(tagForm, tag, value, type) {
+        var size;
+        if (type === 'uint8' || type === 'enum8' || type === 'percent' ||
+            (value >= 0 && value <= 0xFF && !type)) {
+            size = 1;
+            this.writeByte(tagForm | 0x04);
+        } else if (type === 'uint16' || type === 'enum16' || type === 'percent100ths' ||
+                   (value >= 0 && value <= 0xFFFF && !type)) {
+            size = 2;
+            this.writeByte(tagForm | 0x05);
+        } else if (type === 'uint32' || (value >= 0 && value <= 0xFFFFFFFF && !type)) {
+            size = 4;
+            this.writeByte(tagForm | 0x06);
+        } else {
+            size = 8;
+            this.writeByte(tagForm | 0x07);
+        }
+        if (tag !== null) this.writeByte(tag);
+        this.writeUint(value, size);
+    };
+
+    TlvWriter.prototype.toBytes = function() {
+        return new Uint8Array(this.bytes);
+    };
+
+    TlvWriter.prototype.toBase64 = function() {
+        return Base64.encode(this.toBytes());
+    };
 
     /**
      * TLV utilities namespace
      */
-    const Tlv = {
+    var Tlv = {
         /**
          * Decode a base64 TLV string to a JavaScript value
          * @param {string} base64 - Base64 encoded TLV data
          * @returns {any} Decoded value
          */
         decode: function(base64) {
-            const bytes = Base64.decode(base64);
-            const reader = new TlvReader(bytes);
+            var bytes = Base64.decode(base64);
+            var reader = new TlvReader(bytes);
             if (!reader.hasMore()) {
                 return null;
             }
-            const element = reader.readElement();
+            var element = reader.readElement();
             return element.value;
         },
 
@@ -621,7 +637,7 @@
          * @returns {string} Base64 encoded TLV
          */
         encode: function(value, type) {
-            const writer = new TlvWriter();
+            var writer = new TlvWriter();
             writer.writeElement(null, value, type);
             return writer.toBase64();
         },
@@ -633,9 +649,12 @@
          * @returns {string} Base64 encoded TLV
          */
         encodeStruct: function(value, schema) {
-            const writer = new TlvWriter();
+            var writer = new TlvWriter();
             writer.writeByte(TLV_TYPE.STRUCT);
-            for (const [name, fieldInfo] of Object.entries(schema)) {
+            var names = Object.keys(schema);
+            for (var i = 0; i < names.length; i++) {
+                var name = names[i];
+                var fieldInfo = schema[name];
                 if (value[name] !== undefined) {
                     writer.writeElement(fieldInfo.tag, value[name], fieldInfo.type);
                 }
@@ -656,7 +675,7 @@
     /**
      * Response helpers for SBMD scripts
      */
-    const Response = {
+    var Response = {
         /**
          * Create an invoke (command) response
          * @param {number} clusterId - Matter cluster ID
@@ -667,7 +686,7 @@
          * @returns {Object} Invoke response object
          */
         invoke: function(clusterId, commandId, tlvBase64, options) {
-            const result = {
+            var result = {
                 invoke: {
                     clusterId: clusterId,
                     commandId: commandId
@@ -699,7 +718,7 @@
          * @returns {Object} Write response object
          */
         write: function(clusterId, attributeId, tlvBase64, options) {
-            const result = {
+            var result = {
                 write: {
                     clusterId: clusterId,
                     attributeId: attributeId,
@@ -715,12 +734,16 @@
         }
     };
 
-    // Export the SbmdUtils object
-    globalThis.SbmdUtils = Object.freeze({
-        Base64: Object.freeze(Base64),
-        Tlv: Object.freeze(Tlv),
-        Response: Object.freeze(Response),
-        TLV_TYPE: Object.freeze(TLV_TYPE)
-    });
+    // Export the SbmdUtils object to globalThis
+    globalThis.SbmdUtils = {
+        Base64: Base64,
+        Tlv: Tlv,
+        Response: Response,
+        TLV_TYPE: TLV_TYPE
+    };
 
 })(globalThis);
+
+// Export as a top-level var so mquickjs makes it visible as a global variable.
+// (mquickjs: properties set directly on globalThis are NOT visible as global vars)
+var SbmdUtils = globalThis.SbmdUtils;

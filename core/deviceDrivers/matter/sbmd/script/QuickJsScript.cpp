@@ -35,7 +35,7 @@
 #include "QuickJsScript.h"
 #include "SbmdUtilsLoader.h"
 #include <cstring>
-#include <json/json.h>
+
 #include <lib/core/CHIPError.h>
 #include <lib/core/TLVWriter.h>
 #include <lib/support/Base64.h>
@@ -50,7 +50,7 @@
 
 extern "C" {
 #include <icLog/logging.h>
-#include <quickjs/quickjs.h>
+#include <mquickjs/mquickjs.h>
 }
 
 namespace barton
@@ -59,123 +59,36 @@ namespace barton
     namespace
     {
         /**
-         * RAII wrapper for QuickJS JSValue.
-         * Automatically frees the JSValue when the guard goes out of scope.
-         */
-        class JsValueGuard
-        {
-        public:
-            JsValueGuard(JSContext *ctx, JSValue value) : ctx_(ctx), value_(value) {}
-            ~JsValueGuard()
-            {
-                if (ctx_)
-                {
-                    JS_FreeValue(ctx_, value_);
-                }
-            }
-
-            // Non-copyable
-            JsValueGuard(const JsValueGuard &) = delete;
-            JsValueGuard &operator=(const JsValueGuard &) = delete;
-
-            // Movable
-            JsValueGuard(JsValueGuard &&other) noexcept : ctx_(other.ctx_), value_(other.value_)
-            {
-                other.ctx_ = nullptr;
-            }
-
-            JsValueGuard &operator=(JsValueGuard &&other) noexcept
-            {
-                if (this != &other)
-                {
-                    if (ctx_)
-                    {
-                        JS_FreeValue(ctx_, value_);
-                    }
-                    ctx_ = other.ctx_;
-                    value_ = other.value_;
-                    other.ctx_ = nullptr;
-                }
-                return *this;
-            }
-
-            JSValue get() const { return value_; }
-            JSValue *ptr() { return &value_; }
-
-            // Release ownership without freeing (for returning values to caller)
-            JSValue release()
-            {
-                ctx_ = nullptr;
-                return value_;
-            }
-
-        private:
-            JSContext *ctx_;
-            JSValue value_;
-        };
-
-        /**
-         * RAII wrapper for QuickJS C strings.
-         * Automatically frees the string when the guard goes out of scope.
-         */
-        class JsCStringGuard
-        {
-        public:
-            JsCStringGuard(JSContext *ctx, const char *str) : ctx_(ctx), str_(str) {}
-            ~JsCStringGuard()
-            {
-                if (ctx_ && str_)
-                {
-                    JS_FreeCString(ctx_, str_);
-                }
-            }
-
-            // Non-copyable
-            JsCStringGuard(const JsCStringGuard &) = delete;
-            JsCStringGuard &operator=(const JsCStringGuard &) = delete;
-
-            // Movable
-            JsCStringGuard(JsCStringGuard &&other) noexcept : ctx_(other.ctx_), str_(other.str_)
-            {
-                other.ctx_ = nullptr;
-                other.str_ = nullptr;
-            }
-
-            const char *get() const { return str_; }
-            explicit operator bool() const { return str_ != nullptr; }
-
-        private:
-            JSContext *ctx_;
-            const char *str_;
-        };
-
-        /**
-         * Extracts the current QuickJS exception as a string.
+         * Extracts the current mquickjs exception as a string.
          * Clears the exception from the context.
-         * @param ctx The QuickJS context
+         * @param ctx The mquickjs context
          * @return The exception message, or "unknown error" if unavailable
          */
         std::string GetExceptionString(JSContext *ctx)
         {
-            JsValueGuard exceptionGuard(ctx, JS_GetException(ctx));
+            JSValue ex = JS_GetException(ctx);
 
             // First try direct string conversion (works for string exceptions)
-            JsCStringGuard strGuard(ctx, JS_ToCString(ctx, exceptionGuard.get()));
-            if (strGuard)
             {
-                return strGuard.get();
+                JSCStringBuf buf;
+                const char *str = JS_ToCString(ctx, ex, &buf);
+                if (str)
+                {
+                    return std::string(str);
+                }
             }
 
             // If that fails, try to get the "message" property (for Error objects)
-            if (JS_IsObject(exceptionGuard.get()))
+            if (JS_IsPtr(ex))
             {
-                JsValueGuard msgGuard(ctx, JS_GetPropertyStr(ctx, exceptionGuard.get(), "message"));
-                if (!JS_IsUndefined(msgGuard.get()))
+                JSValue msgVal = JS_GetPropertyStr(ctx, ex, "message");
+                if (!JS_IsUndefined(msgVal))
                 {
-                    JsCStringGuard msgStrGuard(ctx, JS_ToCString(ctx, msgGuard.get()));
-                    if (msgStrGuard)
+                    JSCStringBuf buf;
+                    const char *msgStr = JS_ToCString(ctx, msgVal, &buf);
+                    if (msgStr)
                     {
-                        return msgStrGuard.get();
+                        return std::string(msgStr);
                     }
                 }
             }
@@ -190,9 +103,9 @@ namespace barton
         // Ensure the shared runtime is initialized
         if (!QuickJsRuntime::IsInitialized())
         {
-            if (!QuickJsRuntime::Initialize())
+            if (!QuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
             {
-                icError("Failed to initialize shared QuickJS runtime");
+                icError("Failed to initialize shared mquickjs context");
                 return nullptr;
             }
             // Load SBMD utilities bundle into the shared context (required)
@@ -215,7 +128,7 @@ namespace barton
             }
         }
 
-        icDebug("QuickJsScript created for device %s (using shared runtime)", deviceId.c_str());
+        icDebug("QuickJsScript created for device %s (using shared mquickjs context)", deviceId.c_str());
         return std::unique_ptr<QuickJsScript>(new QuickJsScript(deviceId));
     }
 
@@ -236,42 +149,44 @@ void QuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &ma
     icDebug("Set %zu cluster feature maps for device %s", maps.size(), deviceId.c_str());
 }
 
-Json::Value QuickJsScript::BuildBaseArgsJson(const std::optional<std::string> &endpointId,
-                                             std::optional<uint32_t> clusterId,
-                                             const std::optional<std::string> &resourceId,
-                                             const std::optional<std::string> &input) const
+JSValue QuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpointId,
+                                     std::optional<uint32_t> clusterId,
+                                     const std::optional<std::string> &resourceId,
+                                     const std::optional<std::string> &input) const
 {
-    Json::Value argsJson;
-    argsJson["deviceUuid"] = deviceId;
+    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+
+    JSValue args = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, args, "deviceUuid", JS_NewString(ctx, deviceId.c_str()));
 
     // Add cluster feature maps so scripts can check cluster capabilities
-    Json::Value featureMapsJson(Json::objectValue);
+    JSValue featureMaps = JS_NewObject(ctx);
     for (const auto &pair : clusterFeatureMaps)
     {
-        // Use string key for JSON compatibility (JavaScript object keys are strings)
-        featureMapsJson[std::to_string(pair.first)] = pair.second;
+        // Use string key (JavaScript object keys are strings)
+        JS_SetPropertyStr(ctx, featureMaps, std::to_string(pair.first).c_str(), JS_NewUint32(ctx, pair.second));
     }
-    argsJson["clusterFeatureMaps"] = featureMapsJson;
+    JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
 
     // Add optional common fields
     if (endpointId.has_value())
     {
-        argsJson["endpointId"] = endpointId.value();
+        JS_SetPropertyStr(ctx, args, "endpointId", JS_NewString(ctx, endpointId.value().c_str()));
     }
     if (clusterId.has_value())
     {
-        argsJson["clusterId"] = clusterId.value();
+        JS_SetPropertyStr(ctx, args, "clusterId", JS_NewUint32(ctx, clusterId.value()));
     }
     if (resourceId.has_value())
     {
-        argsJson["resourceId"] = resourceId.value();
+        JS_SetPropertyStr(ctx, args, "resourceId", JS_NewString(ctx, resourceId.value().c_str()));
     }
     if (input.has_value())
     {
-        argsJson["input"] = input.value();
+        JS_SetPropertyStr(ctx, args, "input", JS_NewString(ctx, input.value().c_str()));
     }
 
-    return argsJson;
+    return args;
 }
 
 bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
@@ -317,7 +232,7 @@ bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandIn
 // Requires QuickJsRuntime::GetMutex() to be held by caller.
 bool QuickJsScript::ExecuteScript(const std::string &script,
                                   const std::string &argumentName,
-                                  const JSValue &argumentJson,
+                                  JSValue jsonArg,
                                   JSValue &outJson)
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
@@ -328,58 +243,47 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
         return false;
     }
 
-    // Set the JSON object as a global variable (duplicate value to maintain ownership)
-    // NOTE: JS_SetPropertyStr consumes the reference to argVal on success or failure,
-    // so we don't need to free argVal here
-    JSValue argVal = JS_DupValue(ctx, argumentJson);
-    JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
-    if (JS_SetPropertyStr(ctx, globalGuard.get(), argumentName.c_str(), argVal) < 0)
+    // Check for pending exception from previous operations
+    std::string exMsg;
+    if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
     {
-        icError("Failed to set argument variable '%s': %s", argumentName.c_str(), GetExceptionString(ctx).c_str());
+        icError("Found unhandled exception before script execution: %s - this is a bug", exMsg.c_str());
         return false;
     }
 
-    // Wrap the script body in a function and execute it
-    std::string wrappedScript = "(function() { " + script + " })()";
+    // mquickjs restriction: properties set directly on the global object are NOT
+    // visible as global variables in executing scripts. To pass arguments, we
+    // wrap the script in an IIFE and call it with the parsed JSON via JS_PushArg/JS_Call.
+    std::string wrappedScript = "(function(" + argumentName + ") { " + script + " })";
 
-    icDebug("Executing script: %s", wrappedScript.c_str());
+    icDebug("Executing script with %s arg", argumentName.c_str());
 
-    // Execute the script
-    JsValueGuard scriptResultGuard(
-        ctx, JS_Eval(ctx, wrappedScript.c_str(), wrappedScript.length(), "<sbmd_script>", JS_EVAL_TYPE_GLOBAL));
-    if (JS_IsException(scriptResultGuard.get()))
+    // Compile the IIFE wrapper (JS_EVAL_RETVAL to get the function value)
+    JSValue func = JS_Eval(ctx, wrappedScript.c_str(), wrappedScript.length(), "<sbmd_script>", JS_EVAL_RETVAL);
+    if (JS_IsException(func))
+    {
+        icError("Script compilation failed: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
+
+    // Call the function with the parsed JSON argument (stack order: arg, func, this)
+    if (JS_StackCheck(ctx, 3))
+    {
+        icError("Stack overflow before script call");
+        return false;
+    }
+    JS_PushArg(ctx, jsonArg);
+    JS_PushArg(ctx, func);
+    JS_PushArg(ctx, JS_NULL);
+    JSValue scriptResult = JS_Call(ctx, 1);
+    if (JS_IsException(scriptResult))
     {
         icError("Script execution failed: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    outJson = scriptResultGuard.release();
+    outJson = scriptResult;
     icDebug("Script executed successfully");
-    return true;
-}
-
-// Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
-{
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
-
-    // Check for pending exception from previous operations - this indicates a bug
-    std::string exMsg;
-    if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
-    {
-        icError(
-            "Found unhandled exception before parsing %s JSON: %s - this is a bug", sourceName.c_str(), exMsg.c_str());
-        return false;
-    }
-
-    JSValue parsed = JS_ParseJSON(ctx, jsonString.c_str(), jsonString.length(), sourceName.c_str());
-    if (JS_IsException(parsed))
-    {
-        icError("Failed to parse %s JSON: %s", sourceName.c_str(), GetExceptionString(ctx).c_str());
-        JS_FreeValue(ctx, parsed);
-        return false;
-    }
-    outValue = parsed;
     return true;
 }
 
@@ -388,25 +292,23 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // Take ownership of scriptResult for automatic cleanup
-    JsValueGuard scriptResultGuard(ctx, scriptResult);
-
     // Extract the "output" field from the result JSON object
-    JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, scriptResultGuard.get(), "output"));
-    if (JS_IsUndefined(outputValGuard.get()))
+    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
+    if (JS_IsUndefined(outputVal))
     {
         icError("Script result missing 'output' field");
         return false;
     }
 
-    JsCStringGuard resultStrGuard(ctx, JS_ToCString(ctx, outputValGuard.get()));
-    if (!resultStrGuard)
+    JSCStringBuf buf;
+    const char *resultStr = JS_ToCString(ctx, outputVal, &buf);
+    if (!resultStr)
     {
         icError("Failed to convert output value to string: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    outValue = resultStrGuard.get();
+    outValue = resultStr;
     icDebug("Script output string: %s", outValue.c_str());
     return true;
 }
@@ -416,12 +318,11 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // NOTE: JS_SetPropertyStr consumes the reference to jsValue (on success or failure),
-    // so jsValue must NOT be freed manually after this call, and is not wrapped in a guard.
     JSValue jsValue = JS_NewString(ctx, value.c_str());
-    JsValueGuard globalGuard(ctx, JS_GetGlobalObject(ctx));
+    JSValue global = JS_GetGlobalObject(ctx);
 
-    bool success = JS_SetPropertyStr(ctx, globalGuard.get(), name.c_str(), jsValue) >= 0;
+    JSValue result = JS_SetPropertyStr(ctx, global, name.c_str(), jsValue);
+    bool success = !JS_IsException(result);
     if (!success)
     {
         icError("Failed to set JS variable '%s': %s", name.c_str(), GetExceptionString(ctx).c_str());
@@ -436,10 +337,6 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
 {
     std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
-
-    // Update stack top for cross-thread usage - QuickJS needs this when the
-    // runtime is called from a different thread than where it was created
-    JS_UpdateStackTop(JS_GetRuntime(ctx));
 
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
@@ -479,30 +376,15 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     base64Buffer[base64Len] = '\0';
     std::string tlvBase64(base64Buffer.data(), base64Len);
 
-    // Build the sbmdReadArgs JSON object with base64 TLV
-    Json::Value argsJson = BuildBaseArgsJson(attributeInfo.resourceEndpointId.value_or(""), attributeInfo.clusterId);
-    argsJson["tlvBase64"] = tlvBase64;
-    argsJson["attributeId"] = attributeInfo.attributeId;
-    argsJson["attributeName"] = attributeInfo.name;
-    argsJson["attributeType"] = attributeInfo.type;
-
-    // Convert Json::Value to string for parsing in QuickJS
-    Json::StreamWriterBuilder writerBuilder;
-    writerBuilder["indentation"] = "";
-    std::string jsonString = Json::writeString(writerBuilder, argsJson);
-
-    icDebug("sbmdReadArgs JSON: %s", jsonString.c_str());
-
-    // Parse JSON string to JSValue
-    JSValue argJsonRaw;
-    if (!ParseJsonToJSValue(jsonString, "sbmdReadArgs", argJsonRaw))
-    {
-        return false;
-    }
-    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+    // Build the sbmdReadArgs object with base64 TLV
+    JSValue jsonArg = BuildBaseArgs(attributeInfo.resourceEndpointId.value_or(""), attributeInfo.clusterId);
+    JS_SetPropertyStr(ctx, jsonArg, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+    JS_SetPropertyStr(ctx, jsonArg, "attributeId", JS_NewUint32(ctx, attributeInfo.attributeId));
+    JS_SetPropertyStr(ctx, jsonArg, "attributeName", JS_NewString(ctx, attributeInfo.name.c_str()));
+    JS_SetPropertyStr(ctx, jsonArg, "attributeType", JS_NewString(ctx, attributeInfo.type.c_str()));
 
     JSValue outJson;
-    if (!ExecuteScript(it->second, "sbmdReadArgs", argJsonGuard.get(), outJson))
+    if (!ExecuteScript(it->second, "sbmdReadArgs", jsonArg, outJson))
     {
         return false;
     }
@@ -516,10 +398,6 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
 {
     std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
-
-    // Update stack top for cross-thread usage - QuickJS needs this when the
-    // runtime is called from a different thread than where it was created
-    JS_UpdateStackTop(JS_GetRuntime(ctx));
 
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
@@ -559,29 +437,14 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     base64Buffer[base64Len] = '\0';
     std::string tlvBase64(base64Buffer.data(), base64Len);
 
-    // Build the sbmdCommandResponseArgs JSON object with base64 TLV
-    Json::Value argsJson = BuildBaseArgsJson(commandInfo.resourceEndpointId.value_or(""), commandInfo.clusterId);
-    argsJson["tlvBase64"] = tlvBase64;
-    argsJson["commandId"] = commandInfo.commandId;
-    argsJson["commandName"] = commandInfo.name;
-
-    // Convert Json::Value to string for parsing in QuickJS
-    Json::StreamWriterBuilder writerBuilder;
-    writerBuilder["indentation"] = "";
-    std::string jsonString = Json::writeString(writerBuilder, argsJson);
-
-    icDebug("sbmdCommandResponseArgs JSON: %s", jsonString.c_str());
-
-    // Parse JSON string to JSValue
-    JSValue argJsonRaw;
-    if (!ParseJsonToJSValue(jsonString, "sbmdCommandResponseArgs", argJsonRaw))
-    {
-        return false;
-    }
-    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+    // Build the sbmdCommandResponseArgs object with base64 TLV
+    JSValue jsonArg = BuildBaseArgs(commandInfo.resourceEndpointId.value_or(""), commandInfo.clusterId);
+    JS_SetPropertyStr(ctx, jsonArg, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+    JS_SetPropertyStr(ctx, jsonArg, "commandId", JS_NewUint32(ctx, commandInfo.commandId));
+    JS_SetPropertyStr(ctx, jsonArg, "commandName", JS_NewString(ctx, commandInfo.name.c_str()));
 
     JSValue outJson;
-    if (!ExecuteScript(it->second, "sbmdCommandResponseArgs", argJsonGuard.get(), outJson))
+    if (!ExecuteScript(it->second, "sbmdCommandResponseArgs", jsonArg, outJson))
     {
         return false;
     }
@@ -646,9 +509,6 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
     std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // Update stack top for cross-thread usage
-    JS_UpdateStackTop(JS_GetRuntime(ctx));
-
     auto it = writeScripts.find(resourceKey);
     if (it == writeScripts.end())
     {
@@ -656,68 +516,50 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
         return false;
     }
 
-    // Build the sbmdWriteArgs JSON object
-    Json::Value argsJson = BuildBaseArgsJson(endpointId, std::nullopt, resourceId, inValue);
-
-    // Convert Json::Value to string for parsing in QuickJS
-    Json::StreamWriterBuilder writerBuilder;
-    writerBuilder["indentation"] = "";
-    std::string jsonString = Json::writeString(writerBuilder, argsJson);
-
-    icDebug("sbmdWriteArgs JSON for write: %s", jsonString.c_str());
-
-    // Parse JSON string to JSValue
-    JSValue argJsonRaw;
-    if (!ParseJsonToJSValue(jsonString, "sbmdWriteArgs", argJsonRaw))
-    {
-        return false;
-    }
-    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+    // Build the sbmdWriteArgs object
+    JSValue jsonArg = BuildBaseArgs(endpointId, std::nullopt, resourceId, inValue);
 
     JSValue outJson;
-    if (!ExecuteScript(it->second, "sbmdWriteArgs", argJsonGuard.get(), outJson))
+    if (!ExecuteScript(it->second, "sbmdWriteArgs", jsonArg, outJson))
     {
         icError("Failed to execute write script for resource %s", resourceKey.c_str());
         return false;
     }
 
-    // Take ownership of script result for cleanup
-    JsValueGuard resultGuard(ctx, outJson);
-
     // Validate that the script result is a non-null object
-    if (JS_IsException(resultGuard.get()))
+    if (JS_IsException(outJson))
     {
         icError("Script execution returned an exception: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    if (JS_IsNull(resultGuard.get()) || JS_IsUndefined(resultGuard.get()) || !JS_IsObject(resultGuard.get()))
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson))
     {
         icError("Script result is not an object; expected 'invoke' or 'write' object");
         return false;
     }
 
     // Check for 'invoke' operation (command invocation)
-    JsValueGuard invokeGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "invoke"));
-    if (!JS_IsUndefined(invokeGuard.get()) && !JS_IsNull(invokeGuard.get()))
+    JSValue invokeVal = JS_GetPropertyStr(ctx, outJson, "invoke");
+    if (!JS_IsUndefined(invokeVal) && !JS_IsNull(invokeVal))
     {
         result.type = ScriptWriteResult::OperationType::Invoke;
 
-        if (!JS_IsObject(invokeGuard.get()))
+        if (!JS_IsPtr(invokeVal))
         {
             icError("'invoke' field must be an object");
             return false;
         }
 
         // Extract clusterId (required)
-        JsValueGuard clusterIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "clusterId"));
-        if (JS_IsUndefined(clusterIdGuard.get()))
+        JSValue clusterIdVal = JS_GetPropertyStr(ctx, invokeVal, "clusterId");
+        if (JS_IsUndefined(clusterIdVal))
         {
             icError("'invoke' missing required 'clusterId' field");
             return false;
         }
         uint32_t clusterId;
-        if (JS_ToUint32(ctx, &clusterId, clusterIdGuard.get()) < 0)
+        if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
         {
             icError("Failed to convert 'clusterId' to number");
             return false;
@@ -725,14 +567,14 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
         result.clusterId = static_cast<chip::ClusterId>(clusterId);
 
         // Extract commandId (required)
-        JsValueGuard commandIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "commandId"));
-        if (JS_IsUndefined(commandIdGuard.get()))
+        JSValue commandIdVal = JS_GetPropertyStr(ctx, invokeVal, "commandId");
+        if (JS_IsUndefined(commandIdVal))
         {
             icError("'invoke' missing required 'commandId' field");
             return false;
         }
         uint32_t commandId;
-        if (JS_ToUint32(ctx, &commandId, commandIdGuard.get()) < 0)
+        if (JS_ToUint32(ctx, &commandId, commandIdVal) < 0)
         {
             icError("Failed to convert 'commandId' to number");
             return false;
@@ -740,44 +582,45 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
         result.commandId = static_cast<chip::CommandId>(commandId);
 
         // Extract optional endpointId
-        JsValueGuard epIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "endpointId"));
-        if (!JS_IsUndefined(epIdGuard.get()) && !JS_IsNull(epIdGuard.get()))
+        JSValue epIdVal = JS_GetPropertyStr(ctx, invokeVal, "endpointId");
+        if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
         {
             uint32_t epId;
-            if (JS_ToUint32(ctx, &epId, epIdGuard.get()) >= 0)
+            if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
             {
                 result.endpointId = static_cast<chip::EndpointId>(epId);
             }
         }
 
         // Extract optional timedInvokeTimeoutMs
-        JsValueGuard timedGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "timedInvokeTimeoutMs"));
-        if (!JS_IsUndefined(timedGuard.get()) && !JS_IsNull(timedGuard.get()))
+        JSValue timedVal = JS_GetPropertyStr(ctx, invokeVal, "timedInvokeTimeoutMs");
+        if (!JS_IsUndefined(timedVal) && !JS_IsNull(timedVal))
         {
             uint32_t timedMs;
-            if (JS_ToUint32(ctx, &timedMs, timedGuard.get()) >= 0)
+            if (JS_ToUint32(ctx, &timedMs, timedVal) >= 0)
             {
                 result.timedInvokeTimeoutMs = static_cast<uint16_t>(timedMs);
             }
         }
 
         // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
-        JsValueGuard tlvBase64Guard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "tlvBase64"));
-        if (!JS_IsUndefined(tlvBase64Guard.get()) && !JS_IsNull(tlvBase64Guard.get()))
+        JSValue tlvBase64Val = JS_GetPropertyStr(ctx, invokeVal, "tlvBase64");
+        if (!JS_IsUndefined(tlvBase64Val) && !JS_IsNull(tlvBase64Val))
         {
-            JsCStringGuard base64StrGuard(ctx, JS_ToCString(ctx, tlvBase64Guard.get()));
-            if (!base64StrGuard)
+            JSCStringBuf buf;
+            const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
+            if (!base64Str)
             {
                 icError("Failed to convert 'tlvBase64' to string");
                 return false;
             }
-            std::string base64Str = base64StrGuard.get();
+            std::string base64String(base64Str);
 
             // Only decode if non-empty
-            if (!base64Str.empty())
+            if (!base64String.empty())
             {
                 // Decode base64 to TLV bytes
-                size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
+                size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
                 if (!result.tlvBuffer.Alloc(maxDecodedLen))
                 {
                     icError("Failed to allocate buffer for TLV decoding");
@@ -785,7 +628,7 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
                 }
 
                 uint16_t decodedLen = chip::Base64Decode(
-                    base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
+                    base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
                 if (decodedLen == UINT16_MAX)
                 {
                     icError("Failed to decode base64 TLV data for invoke");
@@ -803,26 +646,26 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
     }
 
     // Check for 'write' operation (attribute write)
-    JsValueGuard writeGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "write"));
-    if (!JS_IsUndefined(writeGuard.get()) && !JS_IsNull(writeGuard.get()))
+    JSValue writeVal = JS_GetPropertyStr(ctx, outJson, "write");
+    if (!JS_IsUndefined(writeVal) && !JS_IsNull(writeVal))
     {
         result.type = ScriptWriteResult::OperationType::Write;
 
-        if (!JS_IsObject(writeGuard.get()))
+        if (!JS_IsPtr(writeVal))
         {
             icError("'write' field must be an object");
             return false;
         }
 
         // Extract clusterId (required)
-        JsValueGuard clusterIdGuard(ctx, JS_GetPropertyStr(ctx, writeGuard.get(), "clusterId"));
-        if (JS_IsUndefined(clusterIdGuard.get()))
+        JSValue clusterIdVal = JS_GetPropertyStr(ctx, writeVal, "clusterId");
+        if (JS_IsUndefined(clusterIdVal))
         {
             icError("'write' missing required 'clusterId' field");
             return false;
         }
         uint32_t clusterId;
-        if (JS_ToUint32(ctx, &clusterId, clusterIdGuard.get()) < 0)
+        if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
         {
             icError("Failed to convert 'clusterId' to number");
             return false;
@@ -830,14 +673,14 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
         result.clusterId = static_cast<chip::ClusterId>(clusterId);
 
         // Extract attributeId (required)
-        JsValueGuard attrIdGuard(ctx, JS_GetPropertyStr(ctx, writeGuard.get(), "attributeId"));
-        if (JS_IsUndefined(attrIdGuard.get()))
+        JSValue attrIdVal = JS_GetPropertyStr(ctx, writeVal, "attributeId");
+        if (JS_IsUndefined(attrIdVal))
         {
             icError("'write' missing required 'attributeId' field");
             return false;
         }
         uint32_t attrId;
-        if (JS_ToUint32(ctx, &attrId, attrIdGuard.get()) < 0)
+        if (JS_ToUint32(ctx, &attrId, attrIdVal) < 0)
         {
             icError("Failed to convert 'attributeId' to number");
             return false;
@@ -845,42 +688,43 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
         result.attributeId = static_cast<chip::AttributeId>(attrId);
 
         // Extract optional endpointId
-        JsValueGuard epIdGuard(ctx, JS_GetPropertyStr(ctx, writeGuard.get(), "endpointId"));
-        if (!JS_IsUndefined(epIdGuard.get()) && !JS_IsNull(epIdGuard.get()))
+        JSValue epIdVal = JS_GetPropertyStr(ctx, writeVal, "endpointId");
+        if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
         {
             uint32_t epId;
-            if (JS_ToUint32(ctx, &epId, epIdGuard.get()) >= 0)
+            if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
             {
                 result.endpointId = static_cast<chip::EndpointId>(epId);
             }
         }
 
         // Extract tlvBase64 (required)
-        JsValueGuard tlvBase64Guard(ctx, JS_GetPropertyStr(ctx, writeGuard.get(), "tlvBase64"));
-        if (JS_IsUndefined(tlvBase64Guard.get()) || JS_IsNull(tlvBase64Guard.get()))
+        JSValue tlvBase64Val = JS_GetPropertyStr(ctx, writeVal, "tlvBase64");
+        if (JS_IsUndefined(tlvBase64Val) || JS_IsNull(tlvBase64Val))
         {
             icError("'write' missing required 'tlvBase64' field");
             return false;
         }
 
-        JsCStringGuard base64StrGuard(ctx, JS_ToCString(ctx, tlvBase64Guard.get()));
-        if (!base64StrGuard)
+        JSCStringBuf buf;
+        const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
+        if (!base64Str)
         {
             icError("Failed to convert 'tlvBase64' to string");
             return false;
         }
 
         // Decode base64 to TLV bytes
-        std::string base64Str = base64StrGuard.get();
-        size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
+        std::string base64String(base64Str);
+        size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
         if (!result.tlvBuffer.Alloc(maxDecodedLen))
         {
             icError("Failed to allocate buffer for TLV decoding");
             return false;
         }
 
-        uint16_t decodedLen =
-            chip::Base64Decode(base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
+        uint16_t decodedLen = chip::Base64Decode(
+            base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
         if (decodedLen == UINT16_MAX)
         {
             icError("Failed to decode base64 TLV data for write");
@@ -908,9 +752,6 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // Update stack top for cross-thread usage
-    JS_UpdateStackTop(JS_GetRuntime(ctx));
-
     auto it = executeScripts.find(resourceKey);
     if (it == executeScripts.end())
     {
@@ -918,50 +759,32 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
         return false;
     }
 
-    // Build the sbmdCommandArgs JSON object
-    Json::Value argsJson = BuildBaseArgsJson(endpointId, std::nullopt, resourceId, inValue);
-
-    // Convert Json::Value to string for parsing in QuickJS
-    Json::StreamWriterBuilder writerBuilder;
-    writerBuilder["indentation"] = "";
-    std::string jsonString = Json::writeString(writerBuilder, argsJson);
-
-    icDebug("sbmdCommandArgs JSON for execute: %s", jsonString.c_str());
-
-    // Parse JSON string to JSValue
-    JSValue argJsonRaw;
-    if (!ParseJsonToJSValue(jsonString, "sbmdCommandArgs", argJsonRaw))
-    {
-        return false;
-    }
-    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+    // Build the sbmdCommandArgs object
+    JSValue jsonArg = BuildBaseArgs(endpointId, std::nullopt, resourceId, inValue);
 
     JSValue outJson;
-    if (!ExecuteScript(it->second, "sbmdCommandArgs", argJsonGuard.get(), outJson))
+    if (!ExecuteScript(it->second, "sbmdCommandArgs", jsonArg, outJson))
     {
         icError("Failed to execute script for resource %s", resourceKey.c_str());
         return false;
     }
 
-    // Take ownership of script result for cleanup
-    JsValueGuard resultGuard(ctx, outJson);
-
     // Validate that the script result is a non-null object
-    if (JS_IsException(resultGuard.get()))
+    if (JS_IsException(outJson))
     {
         icError("Script execution returned an exception: %s", GetExceptionString(ctx).c_str());
         return false;
     }
 
-    if (JS_IsNull(resultGuard.get()) || JS_IsUndefined(resultGuard.get()) || !JS_IsObject(resultGuard.get()))
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson))
     {
         icError("Script result is not an object; expected 'invoke' object");
         return false;
     }
 
     // Check for 'invoke' operation (command invocation) - the only valid operation for execute
-    JsValueGuard invokeGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "invoke"));
-    if (JS_IsUndefined(invokeGuard.get()) || JS_IsNull(invokeGuard.get()))
+    JSValue invokeVal = JS_GetPropertyStr(ctx, outJson, "invoke");
+    if (JS_IsUndefined(invokeVal) || JS_IsNull(invokeVal))
     {
         icError("Execute script result missing required 'invoke' field");
         return false;
@@ -969,21 +792,21 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
 
     result.type = ScriptWriteResult::OperationType::Invoke;
 
-    if (!JS_IsObject(invokeGuard.get()))
+    if (!JS_IsPtr(invokeVal))
     {
         icError("'invoke' field must be an object");
         return false;
     }
 
     // Extract clusterId (required)
-    JsValueGuard clusterIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "clusterId"));
-    if (JS_IsUndefined(clusterIdGuard.get()))
+    JSValue clusterIdVal = JS_GetPropertyStr(ctx, invokeVal, "clusterId");
+    if (JS_IsUndefined(clusterIdVal))
     {
         icError("'invoke' missing required 'clusterId' field");
         return false;
     }
     uint32_t clusterId;
-    if (JS_ToUint32(ctx, &clusterId, clusterIdGuard.get()) < 0)
+    if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
     {
         icError("Failed to convert 'clusterId' to number");
         return false;
@@ -991,14 +814,14 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     result.clusterId = static_cast<chip::ClusterId>(clusterId);
 
     // Extract commandId (required)
-    JsValueGuard commandIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "commandId"));
-    if (JS_IsUndefined(commandIdGuard.get()))
+    JSValue commandIdVal = JS_GetPropertyStr(ctx, invokeVal, "commandId");
+    if (JS_IsUndefined(commandIdVal))
     {
         icError("'invoke' missing required 'commandId' field");
         return false;
     }
     uint32_t commandId;
-    if (JS_ToUint32(ctx, &commandId, commandIdGuard.get()) < 0)
+    if (JS_ToUint32(ctx, &commandId, commandIdVal) < 0)
     {
         icError("Failed to convert 'commandId' to number");
         return false;
@@ -1006,44 +829,45 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     result.commandId = static_cast<chip::CommandId>(commandId);
 
     // Extract optional endpointId
-    JsValueGuard epIdGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "endpointId"));
-    if (!JS_IsUndefined(epIdGuard.get()) && !JS_IsNull(epIdGuard.get()))
+    JSValue epIdVal = JS_GetPropertyStr(ctx, invokeVal, "endpointId");
+    if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
     {
         uint32_t epId;
-        if (JS_ToUint32(ctx, &epId, epIdGuard.get()) >= 0)
+        if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
         {
             result.endpointId = static_cast<chip::EndpointId>(epId);
         }
     }
 
     // Extract optional timedInvokeTimeoutMs
-    JsValueGuard timedGuard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "timedInvokeTimeoutMs"));
-    if (!JS_IsUndefined(timedGuard.get()) && !JS_IsNull(timedGuard.get()))
+    JSValue timedVal = JS_GetPropertyStr(ctx, invokeVal, "timedInvokeTimeoutMs");
+    if (!JS_IsUndefined(timedVal) && !JS_IsNull(timedVal))
     {
         uint32_t timedMs;
-        if (JS_ToUint32(ctx, &timedMs, timedGuard.get()) >= 0)
+        if (JS_ToUint32(ctx, &timedMs, timedVal) >= 0)
         {
             result.timedInvokeTimeoutMs = static_cast<uint16_t>(timedMs);
         }
     }
 
     // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
-    JsValueGuard tlvBase64Guard(ctx, JS_GetPropertyStr(ctx, invokeGuard.get(), "tlvBase64"));
-    if (!JS_IsUndefined(tlvBase64Guard.get()) && !JS_IsNull(tlvBase64Guard.get()))
+    JSValue tlvBase64Val = JS_GetPropertyStr(ctx, invokeVal, "tlvBase64");
+    if (!JS_IsUndefined(tlvBase64Val) && !JS_IsNull(tlvBase64Val))
     {
-        JsCStringGuard base64StrGuard(ctx, JS_ToCString(ctx, tlvBase64Guard.get()));
-        if (!base64StrGuard)
+        JSCStringBuf buf;
+        const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
+        if (!base64Str)
         {
             icError("Failed to convert 'tlvBase64' to string");
             return false;
         }
-        std::string base64Str = base64StrGuard.get();
+        std::string base64String(base64Str);
 
         // Only decode if non-empty
-        if (!base64Str.empty())
+        if (!base64String.empty())
         {
             // Decode base64 to TLV bytes
-            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
+            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
             if (!result.tlvBuffer.Alloc(maxDecodedLen))
             {
                 icError("Failed to allocate buffer for TLV decoding");
@@ -1051,7 +875,7 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
             }
 
             uint16_t decodedLen = chip::Base64Decode(
-                base64Str.c_str(), static_cast<uint16_t>(base64Str.length()), result.tlvBuffer.Get());
+                base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
             if (decodedLen == UINT16_MAX)
             {
                 icError("Failed to decode base64 TLV data for invoke");
@@ -1094,9 +918,6 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
     std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
-    // Update stack top for cross-thread usage
-    JS_UpdateStackTop(JS_GetRuntime(ctx));
-
     auto it = eventScripts.find(eventInfo);
     if (it == eventScripts.end())
     {
@@ -1106,10 +927,10 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    // Build the sbmdEventArgs JSON object
-    Json::Value argsJson = BuildBaseArgsJson(eventInfo.resourceEndpointId.value_or(""), eventInfo.clusterId);
-    argsJson["eventId"] = eventInfo.eventId;
-    argsJson["eventName"] = eventInfo.name;
+    // Build the sbmdEventArgs object
+    JSValue jsonArg = BuildBaseArgs(eventInfo.resourceEndpointId.value_or(""), eventInfo.clusterId);
+    JS_SetPropertyStr(ctx, jsonArg, "eventId", JS_NewUint32(ctx, eventInfo.eventId));
+    JS_SetPropertyStr(ctx, jsonArg, "eventName", JS_NewString(ctx, eventInfo.name.c_str()));
 
     // Convert TLV to base64 for script to use
     // Make a copy of the reader since encoding may consume it
@@ -1159,26 +980,11 @@ bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
     uint16_t base64Len = chip::Base64Encode(tlvBuffer.Get(), static_cast<uint16_t>(encodedLen), base64Buffer.get());
     base64Buffer[base64Len] = '\0';
 
-    argsJson["tlvBase64"] = std::string(base64Buffer.get());
-
-    // Convert Json::Value to string for parsing in QuickJS
-    Json::StreamWriterBuilder writerBuilder;
-    writerBuilder["indentation"] = "";
-    std::string jsonString = Json::writeString(writerBuilder, argsJson);
-
-    icDebug("sbmdEventArgs JSON: %s", jsonString.c_str());
-
-    // Parse JSON string to JSValue
-    JSValue argJsonRaw;
-    if (!ParseJsonToJSValue(jsonString, "sbmdEventArgs", argJsonRaw))
-    {
-        return false;
-    }
-    JsValueGuard argJsonGuard(ctx, argJsonRaw);
+    JS_SetPropertyStr(ctx, jsonArg, "tlvBase64", JS_NewStringLen(ctx, base64Buffer.get(), base64Len));
 
     // Execute the mapper script
     JSValue outJson;
-    if (!ExecuteScript(it->second, "sbmdEventArgs", argJsonGuard.get(), outJson))
+    if (!ExecuteScript(it->second, "sbmdEventArgs", jsonArg, outJson))
     {
         icError("Failed to execute event mapper script for cluster 0x%X, event 0x%X",
                 eventInfo.clusterId,

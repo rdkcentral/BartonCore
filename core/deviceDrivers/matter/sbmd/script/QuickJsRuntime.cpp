@@ -30,282 +30,153 @@
 
 #include "QuickJsRuntime.h"
 
-#include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
 extern "C" {
 #include <icLog/logging.h>
-#include <quickjs/quickjs.h>
+#include <mquickjs/mquickjs.h>
+
+// The js_stdlib variable is defined in MQuickJsStdlib.c (compiled as C)
+// and provides the mquickjs standard library (console, performance, JSON, etc.)
+extern const JSSTDLibraryDef js_stdlib;
 }
 
 namespace barton
 {
 
 // Static member initialization
-JSRuntime *QuickJsRuntime::runtime_ = nullptr;
-JSContext *QuickJsRuntime::ctx_ = nullptr;
-std::mutex QuickJsRuntime::mutex_;
-bool QuickJsRuntime::initialized_ = false;
+uint8_t *QuickJsRuntime::memBuffer = nullptr;
+size_t QuickJsRuntime::memSize = 0;
+JSContext *QuickJsRuntime::ctx = nullptr;
+std::mutex QuickJsRuntime::mutex;
+bool QuickJsRuntime::initialized = false;
 
 namespace
 {
     /**
-     * RAII wrapper for QuickJS JSValue.
-     */
-    class JsValueGuard
-    {
-    public:
-        JsValueGuard(JSContext *ctx, JSValue value) : ctx_(ctx), value_(value) {}
-        ~JsValueGuard()
-        {
-            if (ctx_)
-            {
-                JS_FreeValue(ctx_, value_);
-            }
-        }
-
-        JsValueGuard(const JsValueGuard &) = delete;
-        JsValueGuard &operator=(const JsValueGuard &) = delete;
-
-        JSValue get() const { return value_; }
-
-    private:
-        JSContext *ctx_;
-        JSValue value_;
-    };
-
-    /**
-     * Extract QuickJS exception as a string.
+     * Extract mquickjs exception as a string.
      */
     std::string GetExceptionString(JSContext *ctx)
     {
-        JsValueGuard exceptionGuard(ctx, JS_GetException(ctx));
-        const char *str = JS_ToCString(ctx, exceptionGuard.get());
+        JSValue ex = JS_GetException(ctx);
+
+        JSCStringBuf buf;
+        const char *str = JS_ToCString(ctx, ex, &buf);
         if (str)
         {
-            std::string result(str);
-            JS_FreeCString(ctx, str);
-            return result;
+            return std::string(str);
         }
         return "unknown error";
     }
 
-    /**
-     * Native performance.now() implementation using high-resolution clock.
-     */
-    JSValue PerformanceNow(JSContext *ctx, JSValueConst /*this_val*/, int /*argc*/, JSValueConst * /*argv*/)
-    {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto duration = now.time_since_epoch();
-        auto millis = std::chrono::duration_cast<std::chrono::microseconds>(duration).count() / 1000.0;
-        return JS_NewFloat64(ctx, millis);
-    }
-
-    /**
-     * Native console.log implementation that forwards to icDebug.
-     */
-    JSValue ConsoleLog(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
-    {
-        std::string message;
-        for (int i = 0; i < argc; i++)
-        {
-            const char *str = JS_ToCString(ctx, argv[i]);
-            if (str)
-            {
-                if (i > 0)
-                    message += " ";
-                message += str;
-                JS_FreeCString(ctx, str);
-            }
-        }
-        icDebug("[JS] %s", message.c_str());
-        return JS_UNDEFINED;
-    }
-
-    /**
-     * Native console.warn implementation that forwards to icWarn.
-     */
-    JSValue ConsoleWarn(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
-    {
-        std::string message;
-        for (int i = 0; i < argc; i++)
-        {
-            const char *str = JS_ToCString(ctx, argv[i]);
-            if (str)
-            {
-                if (i > 0)
-                    message += " ";
-                message += str;
-                JS_FreeCString(ctx, str);
-            }
-        }
-        icWarn("[JS] %s", message.c_str());
-        return JS_UNDEFINED;
-    }
-
-    /**
-     * Native console.error implementation that forwards to icError.
-     */
-    JSValue ConsoleError(JSContext *ctx, JSValueConst /*this_val*/, int argc, JSValueConst *argv)
-    {
-        std::string message;
-        for (int i = 0; i < argc; i++)
-        {
-            const char *str = JS_ToCString(ctx, argv[i]);
-            if (str)
-            {
-                if (i > 0)
-                    message += " ";
-                message += str;
-                JS_FreeCString(ctx, str);
-            }
-        }
-        icError("[JS] %s", message.c_str());
-        return JS_UNDEFINED;
-    }
-
 } // anonymous namespace
 
-bool QuickJsRuntime::InstallBrowserShims()
+bool QuickJsRuntime::Initialize(size_t memorySize)
 {
-    if (!ctx_)
+    if (initialized)
     {
-        return false;
-    }
-
-    // Create console object
-    JSValue global = JS_GetGlobalObject(ctx_);
-    JSValue console = JS_NewObject(ctx_);
-
-    // Add console methods
-    JS_SetPropertyStr(ctx_, console, "log", JS_NewCFunction(ctx_, ConsoleLog, "log", 1));
-    JS_SetPropertyStr(ctx_, console, "debug", JS_NewCFunction(ctx_, ConsoleLog, "debug", 1));
-    JS_SetPropertyStr(ctx_, console, "info", JS_NewCFunction(ctx_, ConsoleLog, "info", 1));
-    JS_SetPropertyStr(ctx_, console, "warn", JS_NewCFunction(ctx_, ConsoleWarn, "warn", 1));
-    JS_SetPropertyStr(ctx_, console, "error", JS_NewCFunction(ctx_, ConsoleError, "error", 1));
-
-    // Set console on global object
-    JS_SetPropertyStr(ctx_, global, "console", console);
-
-    // Create performance object with now() method
-    JSValue performance = JS_NewObject(ctx_);
-    JS_SetPropertyStr(ctx_, performance, "now", JS_NewCFunction(ctx_, PerformanceNow, "now", 0));
-    JS_SetPropertyStr(ctx_, global, "performance", performance);
-
-    // Install minimal URL class polyfill (required by some JS libraries)
-    const char *urlPolyfill = R"(
-        globalThis.URL = class URL {
-            constructor(url, base) {
-                this.href = url;
-                this.protocol = '';
-                this.host = '';
-                this.hostname = '';
-                this.port = '';
-                this.pathname = url;
-                this.search = '';
-                this.hash = '';
-                this.origin = '';
-            }
-            toString() { return this.href; }
-        };
-    )";
-    JSValue urlResult = JS_Eval(ctx_, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_TYPE_GLOBAL);
-    if (JS_IsException(urlResult))
-    {
-        icWarn("Failed to install URL polyfill: %s", GetExceptionString(ctx_).c_str());
-    }
-    JS_FreeValue(ctx_, urlResult);
-
-    // Check if polyfill installation left an exception (indicates a problem we should fix)
-    std::string exMsg;
-    if (CheckAndClearPendingException(ctx_, &exMsg))
-    {
-        icError("Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
-        // Don't fail - polyfills are optional
-    }
-
-    JS_FreeValue(ctx_, global);
-
-    icDebug("Browser shims installed (console, performance, URL)");
-    return true;
-}
-
-bool QuickJsRuntime::Initialize()
-{
-    if (initialized_)
-    {
-        icDebug("Shared QuickJS runtime already initialized");
+        icDebug("Shared mquickjs context already initialized");
         return true;
     }
 
-    icInfo("Initializing shared QuickJS runtime for SBMD scripts...");
+    icInfo("Initializing shared mquickjs context for SBMD scripts (%zu bytes)...", memorySize);
 
-    runtime_ = JS_NewRuntime();
-    if (!runtime_)
+    // Allocate the memory buffer for the mquickjs context
+    memBuffer = static_cast<uint8_t *>(malloc(memorySize));
+    if (!memBuffer)
     {
-        icError("Failed to create shared QuickJS runtime");
+        icError("Failed to allocate %zu bytes for mquickjs context", memorySize);
+        return false;
+    }
+    memSize = memorySize;
+
+    // Create the context with pre-allocated memory and default stdlib
+    ctx = JS_NewContext(memBuffer, memSize, &js_stdlib);
+    if (!ctx)
+    {
+        icError("Failed to create shared mquickjs context");
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
         return false;
     }
 
-    ctx_ = JS_NewContext(runtime_);
-    if (!ctx_)
+    // Install URL polyfill (required by some JS libraries)
+    // Use JS_EVAL_REPL so var declarations persist as global variables
+    const char *urlPolyfill = R"(
+        var URL = function URL(url, base) {
+            this.href = url;
+            this.protocol = '';
+            this.host = '';
+            this.hostname = '';
+            this.port = '';
+            this.pathname = url;
+            this.search = '';
+            this.hash = '';
+            this.origin = '';
+        };
+        URL.prototype.toString = function() { return this.href; };
+        globalThis.URL = URL;
+    )";
+    JSValue urlResult = JS_Eval(ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL);
+    if (JS_IsException(urlResult))
     {
-        icError("Failed to create shared QuickJS context");
-        JS_FreeRuntime(runtime_);
-        runtime_ = nullptr;
-        return false;
+        icWarn("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
     }
 
-    // Install browser shims (console, performance, URL)
-    if (!InstallBrowserShims())
+    // Check if polyfill installation left an exception
+    std::string exMsg;
+    if (CheckAndClearPendingException(ctx, &exMsg))
     {
-        icWarn("Failed to install browser shims - some JS libraries may not work");
+        icError("Polyfill installation left a pending exception: %s - this is a bug", exMsg.c_str());
     }
 
-    initialized_ = true;
-    icInfo("Shared QuickJS runtime initialized successfully");
+    initialized = true;
+    icInfo("Shared mquickjs context initialized successfully");
     return true;
 }
 
 void QuickJsRuntime::Shutdown()
 {
-    if (!initialized_)
+    if (!initialized)
     {
         return;
     }
 
-    icInfo("Shutting down shared QuickJS runtime...");
+    icInfo("Shutting down shared mquickjs context...");
 
-    if (ctx_)
+    if (ctx)
     {
-        JS_FreeContext(ctx_);
-        ctx_ = nullptr;
+        JS_FreeContext(ctx);
+        ctx = nullptr;
     }
 
-    if (runtime_)
+    if (memBuffer)
     {
-        JS_FreeRuntime(runtime_);
-        runtime_ = nullptr;
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
     }
 
-    initialized_ = false;
-    icInfo("Shared QuickJS runtime shutdown complete");
+    initialized = false;
+    icInfo("Shared mquickjs context shutdown complete");
 }
 
 JSContext *QuickJsRuntime::GetSharedContext()
 {
-    return ctx_;
+    return ctx;
 }
 
 std::mutex &QuickJsRuntime::GetMutex()
 {
-    return mutex_;
+    return mutex;
 }
 
 bool QuickJsRuntime::IsInitialized()
 {
-    return initialized_;
+    return initialized;
 }
 
 bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg)
@@ -316,14 +187,12 @@ bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *
     }
 
     JSValue pendingEx = JS_GetException(ctx);
-    int tag = JS_VALUE_GET_TAG(pendingEx);
 
-    // JS_GetException returns JS_NULL or JS_TAG_UNINITIALIZED when no exception is pending
-    bool hasException = (tag != JS_TAG_NULL && tag != JS_TAG_UNDEFINED && tag != JS_TAG_UNINITIALIZED);
+    // JS_GetException returns JS_NULL or JS_UNDEFINED when no exception is pending
+    bool hasException = !JS_IsNull(pendingEx) && !JS_IsUndefined(pendingEx) && !JS_IsUninitialized(pendingEx);
 
     if (!hasException)
     {
-        JS_FreeValue(ctx, pendingEx);
         return false;
     }
 
@@ -333,35 +202,35 @@ bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *
         std::string exMsg;
 
         // Try ToCString for string exceptions
-        if (JS_IsString(pendingEx))
+        if (JS_IsString(ctx, pendingEx))
         {
-            const char *str = JS_ToCString(ctx, pendingEx);
+            JSCStringBuf buf;
+            const char *str = JS_ToCString(ctx, pendingEx, &buf);
             if (str)
             {
                 exMsg = str;
-                JS_FreeCString(ctx, str);
             }
         }
-        else if (JS_IsObject(pendingEx))
+        else if (JS_IsPtr(pendingEx))
         {
             // Try "message" property for Error objects
             JSValue msgVal = JS_GetPropertyStr(ctx, pendingEx, "message");
-            if (JS_IsString(msgVal))
+            if (JS_IsString(ctx, msgVal))
             {
-                const char *msgStr = JS_ToCString(ctx, msgVal);
+                JSCStringBuf buf;
+                const char *msgStr = JS_ToCString(ctx, msgVal, &buf);
                 if (msgStr)
                 {
                     exMsg = msgStr;
-                    JS_FreeCString(ctx, msgStr);
                 }
             }
-            JS_FreeValue(ctx, msgVal);
 
             // Also try to get stack trace for debugging
             JSValue stackVal = JS_GetPropertyStr(ctx, pendingEx, "stack");
-            if (JS_IsString(stackVal))
+            if (JS_IsString(ctx, stackVal))
             {
-                const char *stackStr = JS_ToCString(ctx, stackVal);
+                JSCStringBuf buf;
+                const char *stackStr = JS_ToCString(ctx, stackVal, &buf);
                 if (stackStr)
                 {
                     if (!exMsg.empty())
@@ -369,92 +238,29 @@ bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *
                         exMsg += " | Stack: ";
                     }
                     exMsg += stackStr;
-                    JS_FreeCString(ctx, stackStr);
                 }
             }
-            JS_FreeValue(ctx, stackVal);
         }
         else
         {
             // Try ToCString as fallback for other types
-            const char *str = JS_ToCString(ctx, pendingEx);
+            JSCStringBuf buf;
+            const char *str = JS_ToCString(ctx, pendingEx, &buf);
             if (str)
             {
                 exMsg = str;
-                JS_FreeCString(ctx, str);
             }
         }
 
         if (exMsg.empty())
         {
-            exMsg = "unknown exception (tag=" + std::to_string(tag) + ")";
+            exMsg = "unknown exception";
         }
 
         *outExceptionMsg = std::move(exMsg);
     }
 
-    JS_FreeValue(ctx, pendingEx);
     return true;
-}
-
-bool QuickJsRuntime::FreezeGlobalObject(const char *name)
-{
-    if (!ctx_)
-    {
-        return false;
-    }
-
-    // Deep freeze the object to prevent any modifications by scripts
-    // This provides isolation - scripts cannot pollute or modify shared libraries
-    const char *freezeScript = R"(
-        (function() {
-            function deepFreeze(obj) {
-                if (obj === null || typeof obj !== 'object') return obj;
-                Object.freeze(obj);
-                Object.getOwnPropertyNames(obj).forEach(function(prop) {
-                    var val = obj[prop];
-                    if (val !== null && typeof val === 'object' && !Object.isFrozen(val)) {
-                        deepFreeze(val);
-                    }
-                });
-                return obj;
-            }
-            if (typeof %s !== 'undefined') {
-                deepFreeze(%s);
-                return true;
-            }
-            return false;
-        })()
-    )";
-
-    // Format the script with the object name (simple string replacement)
-    std::string script = freezeScript;
-    size_t pos;
-    while ((pos = script.find("%s")) != std::string::npos)
-    {
-        script.replace(pos, 2, name);
-    }
-
-    JSValue result = JS_Eval(ctx_, script.c_str(), script.length(), "<freeze>", JS_EVAL_TYPE_GLOBAL);
-
-    if (JS_IsException(result))
-    {
-        icWarn("Failed to freeze %s: %s", name, GetExceptionString(ctx_).c_str());
-        JS_FreeValue(ctx_, result);
-        return false;
-    }
-
-    bool success = JS_ToBool(ctx_, result);
-    JS_FreeValue(ctx_, result);
-
-    // Check if freeze operation left an exception (indicates a problem we should fix)
-    if (CheckAndClearPendingException(ctx_, nullptr))
-    {
-        icError("SbmdUtils freeze operation left a pending exception - this is a bug");
-        return false;
-    }
-
-    return success;
 }
 
 } // namespace barton

@@ -165,12 +165,17 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/MatterJsClusterLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/SbmdUtilsLoader.cpp
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock quickjs jsoncpp BartonCommon::xhLog
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/MQuickJsStdlib.c
+        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock mquickjs jsoncpp BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core
                  ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd
     )
+
+    if (TARGET testQuickJsScript)
+        target_link_libraries(testQuickJsScript bCoreConfig)
+    endif()
 
     if (BUILD_TESTING)
         bcore_configure_glib()

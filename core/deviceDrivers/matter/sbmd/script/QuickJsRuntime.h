@@ -27,20 +27,30 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
-#include <quickjs/quickjs.h>
 #include <string>
+
+extern "C" {
+#include <mquickjs/mquickjs.h>
+}
 
 namespace barton
 {
     /**
-     * Singleton manager for the shared QuickJS runtime and context used by SBMD scripts.
+     * Singleton manager for the shared mquickjs context used by SBMD scripts.
      *
-     * This class provides a single, shared QuickJS runtime and context for all SBMD
+     * This class provides a single, shared mquickjs context for all SBMD
      * device scripts. This approach:
      * - Provides thread-safe access via a shared mutex
      * - Isolates scripts by wrapping them in IIFEs (no persistent state between scripts)
-     * - Installs browser shims (console, performance, URL) needed for JavaScript libraries
+     * - Uses the mquickjs default stdlib which provides console.log, performance.now, etc.
+     *
+     * Memory Model:
+     * mquickjs uses a pre-allocated memory buffer. The context, all JavaScript objects,
+     * and GC state live within this buffer. The buffer size is set at initialization
+     * and cannot grow.
      *
      * Thread Safety:
      * All script execution must be protected by acquiring the mutex via GetMutex().
@@ -51,18 +61,19 @@ namespace barton
     {
     public:
         /**
-         * Initialize the shared QuickJS runtime and context.
+         * Initialize the shared mquickjs context.
          *
          * This must be called once during application startup before any
-         * SBMD scripts are executed. It creates the runtime, context, and
-         * installs browser shims.
+         * SBMD scripts are executed. It allocates the memory buffer and
+         * creates the JS context with the default stdlib.
          *
+         * @param memorySize Size in bytes of the pre-allocated memory buffer
          * @return true if initialization succeeded, false otherwise
          */
-        static bool Initialize();
+        static bool Initialize(size_t memorySize);
 
         /**
-         * Shutdown the shared QuickJS runtime and context.
+         * Shutdown the shared mquickjs context.
          *
          * This should be called during application shutdown to free resources.
          * After calling this, Initialize() must be called again before using
@@ -71,7 +82,7 @@ namespace barton
         static void Shutdown();
 
         /**
-         * Get the shared QuickJS context.
+         * Get the shared mquickjs context.
          *
          * @return The shared JSContext, or nullptr if not initialized
          */
@@ -95,19 +106,7 @@ namespace barton
         static bool IsInitialized();
 
         /**
-         * Deep freeze a global object to prevent modifications by scripts.
-         * This provides isolation - scripts cannot pollute or modify shared libraries.
-         *
-         * @param name The name of the global object to freeze
-         * @return true if the object was frozen successfully
-         */
-        static bool FreezeGlobalObject(const char *name);
-
-        /**
          * Check for and clear any pending JavaScript exception.
-         *
-         * JS_GetException returns JS_NULL or JS_TAG_UNINITIALIZED when no exception
-         * is pending - this helper handles both cases correctly.
          *
          * @param ctx The JSContext to check
          * @param outExceptionMsg If non-null and an exception was found, filled with
@@ -117,12 +116,11 @@ namespace barton
         static bool CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg = nullptr);
 
     private:
-        static bool InstallBrowserShims();
-
-        static JSRuntime *runtime_;
-        static JSContext *ctx_;
-        static std::mutex mutex_;
-        static bool initialized_;
+        static uint8_t *memBuffer;
+        static size_t memSize;
+        static JSContext *ctx;
+        static std::mutex mutex;
+        static bool initialized;
     };
 
 } // namespace barton

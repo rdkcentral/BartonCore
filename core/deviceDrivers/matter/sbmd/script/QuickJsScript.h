@@ -28,15 +28,13 @@
 #pragma once
 
 #include "SbmdScript.h"
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <quickjs/quickjs.h>
 
-// Forward declaration for JsonCpp
-namespace Json
-{
-    class Value;
+extern "C" {
+#include <mquickjs/mquickjs.h>
 }
 
 namespace barton
@@ -149,17 +147,10 @@ namespace barton
         std::map<SbmdEvent, std::string> eventScripts;             // event -> script
 
         /**
-         * Execute a script.
+         * Execute a script with a JSValue argument passed via IIFE parameter.
          */
-        bool ExecuteScript(const std::string &script,
-                           const std::string &argumentName,
-                           const JSValue &argumentJson,
-                           JSValue &outJson);
-
-        /**
-         * Parse a JSON string into a QuickJS JSValue.
-         */
-        bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
+        bool
+        ExecuteScript(const std::string &script, const std::string &argumentName, JSValue jsonArg, JSValue &outJson);
 
         /**
          * Extract the "output" field from a script result as a string.
@@ -173,14 +164,14 @@ namespace barton
         bool SetJsVariable(const std::string &name, const std::string &value);
 
         /**
-         * Build base args JSON with common fields.
+         * Build base args as a mquickjs object with common fields.
          * Always includes: deviceUuid, clusterFeatureMaps
          * Optional fields added when provided: endpointId, clusterId, resourceId, input
          */
-        Json::Value BuildBaseArgsJson(const std::optional<std::string> &endpointId = std::nullopt,
-                                      std::optional<uint32_t> clusterId = std::nullopt,
-                                      const std::optional<std::string> &resourceId = std::nullopt,
-                                      const std::optional<std::string> &input = std::nullopt) const;
+        JSValue BuildBaseArgs(const std::optional<std::string> &endpointId = std::nullopt,
+                              std::optional<uint32_t> clusterId = std::nullopt,
+                              const std::optional<std::string> &resourceId = std::nullopt,
+                              const std::optional<std::string> &input = std::nullopt) const;
     };
 
 } // namespace barton
