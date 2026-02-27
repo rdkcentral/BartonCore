@@ -318,18 +318,17 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     rm -rf /root/.cipd-cache-dir
 SHELL ["/bin/sh", "-c"]
 
-# Download, build, and install quickjs, which needs our custom CMakeLists.txt
+# Download, build, and install quickjs-ng
 RUN cd /tmp && \
-    wget https://bellard.org/quickjs/quickjs-2025-09-13-2.tar.xz && \
-    tar -xvf quickjs-2025-09-13-2.tar.xz && \
-    cd quickjs-2025-09-13 && \
-    cp /tmp/patches/quickjs/CMakeLists.txt . && \
+    git clone --depth 1 --branch v0.12.1 https://github.com/quickjs-ng/quickjs.git quickjs-ng && \
+    cd quickjs-ng && \
     mkdir build && \
     cd build && \
-    cmake .. && \
+    cmake -DBUILD_SHARED_LIBS=ON .. && \
     make && \
     make install && \
-    rm -rf /tmp/quickjs-2025-09-13-2.tar.xz /tmp/quickjs-2025-09-13
+    ldconfig && \
+    rm -rf /tmp/quickjs-ng
 
 # Clean up our patches
 RUN rm -rf /tmp/patches

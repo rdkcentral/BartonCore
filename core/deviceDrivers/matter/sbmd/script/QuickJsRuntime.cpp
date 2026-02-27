@@ -36,7 +36,7 @@
 
 extern "C" {
 #include <icLog/logging.h>
-#include <quickjs/quickjs.h>
+#include <quickjs.h>
 }
 
 namespace barton

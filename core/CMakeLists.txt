@@ -146,7 +146,7 @@ if (BCORE_MATTER)
     pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
     link_directories(${YAMLCPP_LIBRARY_DIRS})
     list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
-    list(APPEND XTRA_LIBS yaml-cpp quickjs)
+    list(APPEND XTRA_LIBS yaml-cpp qjs)
 
     # SBMD specification validation
     # Validates all .sbmd files against the JSON schema during build

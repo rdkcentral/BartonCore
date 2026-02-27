@@ -140,10 +140,10 @@ def validate_js_syntax(script: str, stub_type: str, location: str, qjsc_path: st
             temp_path = f.name
 
         # Use qjsc to validate syntax by attempting compilation (parse/compile only, no execution)
-        # The -c flag compiles to C code; output is discarded via os.devnull
+        # Default output is C code; output is discarded via os.devnull
         # qjsc will exit with error if there are syntax errors during parsing
         result = subprocess.run(
-            [qjsc_path, '-c', '-o', os.devnull, temp_path],
+            [qjsc_path, '-o', os.devnull, temp_path],
             capture_output=True,
             text=True,
             timeout=5
