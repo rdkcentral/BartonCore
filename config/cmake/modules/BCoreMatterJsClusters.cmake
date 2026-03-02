@@ -56,18 +56,16 @@ function(bcore_matterjs_build_clusters)
     # Check if matter.js integration is enabled
     if(NOT BCORE_MATTER_USE_MATTERJS)
         message(STATUS "matter.js integration disabled (BCORE_MATTER_USE_MATTERJS=OFF)")
-        set(BCORE_HAS_MATTERJS_CLUSTERS FALSE CACHE BOOL "matter.js cluster bundle is available" FORCE)
         return()
     endif()
 
     set(BUILD_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/build-matterjs-clusters.sh")
 
-    # Check if npm is available
+    # npm is required to build the matter.js cluster bundle
     find_program(NPM_EXECUTABLE npm)
     if(NOT NPM_EXECUTABLE)
-        message(WARNING "npm not found - matter.js cluster bundle will not be built. "
-                        "SBMD drivers will use legacy JSON/TLV conversion.")
-        return()
+        message(FATAL_ERROR "npm not found but BCORE_MATTER_USE_MATTERJS is enabled. "
+                            "Install npm or set BCORE_MATTER_USE_MATTERJS=OFF.")
     endif()
 
     # Create custom command to build the bundle
@@ -83,9 +81,6 @@ function(bcore_matterjs_build_clusters)
     add_custom_target(matterjs_clusters
         DEPENDS "${MATTERJS_CLUSTERS_BUNDLE}"
     )
-
-    # Set a compile definition indicating the bundle is available
-    set(BCORE_HAS_MATTERJS_CLUSTERS TRUE CACHE BOOL "matter.js cluster bundle is available" FORCE)
 
     message(STATUS "matter.js cluster bundle will be built to: ${MATTERJS_CLUSTERS_BUNDLE}")
 endfunction()

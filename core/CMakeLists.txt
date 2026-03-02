@@ -185,7 +185,7 @@ if (BCORE_MATTER)
     bcore_matterjs_build_clusters()
 
     # Conditionally generate embedded header from the bundle
-    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+    if(BCORE_MATTER_USE_MATTERJS)
         # Get the path to the bundle for embedding
         bcore_matterjs_get_bundle_path(OUTPUT MATTERJS_BUNDLE_PATH)
 
@@ -220,7 +220,7 @@ if (BCORE_MATTER)
 
     # Add header generation as a source dependency
     # Include matterjs header only if enabled
-    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+    if(BCORE_MATTER_USE_MATTERJS)
         add_custom_target(generate_matterjs_header
             DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
         )
