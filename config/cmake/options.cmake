@@ -241,7 +241,8 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 bcore_string_option(NAME BCORE_MATTER_SBMD_SPECS_DIR
                     DEFINITION BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
-                    DESCRIPTION "Directory containing SBMD spec files at runtime. Defaults to the install destination.")
+                    DESCRIPTION "Directory containing SBMD spec files at runtime. Defaults to the install destination."
+                    VALUE "${CMAKE_INSTALL_PREFIX}/sbmd-specs")
 
 bcore_string_option(NAME BCORE_LINK_LIBRARIES
                   DEFINITION BARTON_CONFIG_LINK_LIBRARIES
