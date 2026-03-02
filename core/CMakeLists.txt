@@ -324,6 +324,37 @@ target_include_directories(BartonCore PRIVATE
 set_target_properties(BartonCore PROPERTIES VERSION ${BARTON_CORE_SO_VERSION} SOVERSION ${BARTON_CORE_MAJOR_VERSION})
 install(TARGETS BartonCore DESTINATION lib)
 
+# Install SBMD driver specification files
+# When matter.js is enabled, install all .sbmd files.
+# When matter.js is disabled, install only specs that don't require matter.js
+# (i.e., those with scriptType: "JavaScript" rather than "JavaScript+matterjs").
+if (BCORE_MATTER)
+    set(SBMD_INSTALL_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
+    set(SBMD_INSTALL_DEST "sbmd-specs")
+
+    file(GLOB ALL_SBMD_FILES "${SBMD_INSTALL_SPECS_DIR}/*.sbmd")
+
+    if (BCORE_MATTER_USE_MATTERJS)
+        install(FILES ${ALL_SBMD_FILES} DESTINATION ${SBMD_INSTALL_DEST})
+    else()
+        # Filter out .sbmd files that require matter.js (scriptType: "JavaScript+matterjs")
+        foreach(SBMD_FILE ${ALL_SBMD_FILES})
+            file(READ "${SBMD_FILE}" SBMD_CONTENT)
+            string(FIND "${SBMD_CONTENT}" "JavaScript+matterjs" MATTERJS_POS)
+            if (MATTERJS_POS EQUAL -1)
+                list(APPEND SBMD_NON_MATTERJS_FILES "${SBMD_FILE}")
+            else()
+                get_filename_component(SBMD_FNAME "${SBMD_FILE}" NAME)
+                message(STATUS "Skipping matter.js-dependent SBMD spec: ${SBMD_FNAME}")
+            endif()
+        endforeach()
+
+        if (SBMD_NON_MATTERJS_FILES)
+            install(FILES ${SBMD_NON_MATTERJS_FILES} DESTINATION ${SBMD_INSTALL_DEST})
+        endif()
+    endif()
+endif()
+
 # If specified, generate GIR and typelib. Clients need to ensure that the GIR and/or typelib
 # file is installed, as well is libBartonCore.so. Additionally,
 # if libBartonCore.so is compiled with sanitizer, clients need to set
