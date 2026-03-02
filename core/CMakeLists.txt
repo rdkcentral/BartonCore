@@ -340,7 +340,8 @@ if (BCORE_MATTER)
         set(SBMD_DEFAULT_DIR "${BCORE_MATTER_SBMD_SPECS_DIR}")
     else()
         set(SBMD_DEFAULT_DIR "${CMAKE_INSTALL_PREFIX}/${SBMD_INSTALL_DEST}")
-        # Populate the option so bcore_string_option emits the compile definition
+        # Populate the cache option to keep it in sync with the runtime/install default;
+        # the compile-time default is provided by the target_compile_definitions() call below.
         set(BCORE_MATTER_SBMD_SPECS_DIR "${SBMD_DEFAULT_DIR}" CACHE STRING
             "Directory containing SBMD spec files at runtime. Defaults to the install destination." FORCE)
         target_compile_definitions(bCoreConfig INTERFACE "BARTON_CONFIG_MATTER_SBMD_SPECS_DIR=\"${SBMD_DEFAULT_DIR}\"")
