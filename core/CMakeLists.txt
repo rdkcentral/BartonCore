@@ -336,7 +336,7 @@ if (BCORE_MATTER)
     # SbmdFactory can fall back to it when no directory is configured at runtime.
     set(SBMD_INSTALL_DEST "sbmd-specs")
 
-    file(GLOB CONFIGURE_DEPENDS ALL_SBMD_FILES "${SBMD_SPECS_DIR}/*.sbmd")
+    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_INSTALL_SPECS_DIR}/*.sbmd")
 
     if (BCORE_MATTER_USE_MATTERJS)
         install(FILES ${ALL_SBMD_FILES} DESTINATION ${SBMD_INSTALL_DEST})
