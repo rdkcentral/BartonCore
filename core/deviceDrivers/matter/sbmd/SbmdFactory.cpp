@@ -54,6 +54,7 @@ bool SbmdFactory::RegisterDrivers()
                BARTON_CONFIG_MATTER_SBMD_SPECS_DIR);
 
         // Transfer ownership to sbmdDir so g_autofree handles cleanup
+        g_clear_pointer(&sbmdDir, g_free);
         sbmdDir = g_strdup(BARTON_CONFIG_MATTER_SBMD_SPECS_DIR);
 #else
         icError("SBMD directory not configured. Set the SBMD directory using the '%s' property on the initialize "
