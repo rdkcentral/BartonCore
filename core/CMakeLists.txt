@@ -334,10 +334,9 @@ if (BCORE_MATTER)
 
     # Provide the default SBMD install directory as a compile definition so
     # SbmdFactory can fall back to it when no directory is configured at runtime.
-    set(SBMD_DEFAULT_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${SBMD_INSTALL_DEST}")
-    target_compile_definitions(bCoreObject PRIVATE BARTON_DEFAULT_SBMD_DIR="${SBMD_DEFAULT_INSTALL_DIR}")
+    set(SBMD_INSTALL_DEST "sbmd-specs")
 
-    file(GLOB ALL_SBMD_FILES "${SBMD_INSTALL_SPECS_DIR}/*.sbmd")
+    file(GLOB CONFIGURE_DEPENDS ALL_SBMD_FILES "${SBMD_SPECS_DIR}/*.sbmd")
 
     if (BCORE_MATTER_USE_MATTERJS)
         install(FILES ${ALL_SBMD_FILES} DESTINATION ${SBMD_INSTALL_DEST})
