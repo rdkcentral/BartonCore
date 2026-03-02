@@ -48,9 +48,12 @@ bool SbmdFactory::RegisterDrivers()
     g_autofree gchar *sbmdDir = deviceServiceConfigurationGetSbmdDir();
     if (sbmdDir == nullptr || sbmdDir[0] == '\0')
     {
-        icError("SBMD directory not configured. Set the SBMD directory using the '%s' property on the initialize params container.",
-                B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR]);
-        return false;
+        icWarn("SBMD directory not configured via '%s' property. Falling back to default: %s",
+               B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR],
+               BARTON_DEFAULT_SBMD_DIR);
+
+        // Transfer ownership to sbmdDir so g_autofree handles cleanup
+        sbmdDir = g_strdup(BARTON_DEFAULT_SBMD_DIR);
     }
 
     std::error_code ec;
@@ -108,7 +111,7 @@ bool SbmdFactory::RegisterDrivers()
                     if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
                     {
                         icError("FATAL: Failed to register SBMD driver from: %s. "
-                                "This is a fatal error. Matter subsystem will not be ready.", 
+                                "This is a fatal error. Matter subsystem will not be ready.",
                                 entry.path().c_str());
                         allRegistered = false;
                         continue;

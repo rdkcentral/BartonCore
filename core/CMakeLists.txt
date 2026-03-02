@@ -332,6 +332,11 @@ if (BCORE_MATTER)
     set(SBMD_INSTALL_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
     set(SBMD_INSTALL_DEST "sbmd-specs")
 
+    # Provide the default SBMD install directory as a compile definition so
+    # SbmdFactory can fall back to it when no directory is configured at runtime.
+    set(SBMD_DEFAULT_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/${SBMD_INSTALL_DEST}")
+    target_compile_definitions(bCoreObject PRIVATE BARTON_DEFAULT_SBMD_DIR="${SBMD_DEFAULT_INSTALL_DIR}")
+
     file(GLOB ALL_SBMD_FILES "${SBMD_INSTALL_SPECS_DIR}/*.sbmd")
 
     if (BCORE_MATTER_USE_MATTERJS)
