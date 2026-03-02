@@ -332,9 +332,19 @@ if (BCORE_MATTER)
     set(SBMD_INSTALL_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
     set(SBMD_INSTALL_DEST "sbmd-specs")
 
-    # Provide the default SBMD install directory as a compile definition so
-    # SbmdFactory can fall back to it when no directory is configured at runtime.
-    set(SBMD_INSTALL_DEST "sbmd-specs")
+    # If the user provided BCORE_MATTER_SBMD_SPECS_DIR, use that as both the
+    # install destination and the runtime default. Otherwise fall back to the
+    # default install path (CMAKE_INSTALL_PREFIX/sbmd-specs).
+    if (BCORE_MATTER_SBMD_SPECS_DIR)
+        set(SBMD_INSTALL_DEST "${BCORE_MATTER_SBMD_SPECS_DIR}")
+        set(SBMD_DEFAULT_DIR "${BCORE_MATTER_SBMD_SPECS_DIR}")
+    else()
+        set(SBMD_DEFAULT_DIR "${CMAKE_INSTALL_PREFIX}/${SBMD_INSTALL_DEST}")
+        # Populate the option so bcore_string_option emits the compile definition
+        set(BCORE_MATTER_SBMD_SPECS_DIR "${SBMD_DEFAULT_DIR}" CACHE STRING
+            "Directory containing SBMD spec files at runtime. Defaults to the install destination." FORCE)
+        target_compile_definitions(bCoreConfig INTERFACE "BARTON_CONFIG_MATTER_SBMD_SPECS_DIR=\"${SBMD_DEFAULT_DIR}\"")
+    endif()
 
     file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_INSTALL_SPECS_DIR}/*.sbmd")
 
@@ -344,7 +354,7 @@ if (BCORE_MATTER)
         # Filter out .sbmd files that require matter.js (scriptType: "JavaScript+matterjs")
         foreach(SBMD_FILE ${ALL_SBMD_FILES})
             file(READ "${SBMD_FILE}" SBMD_CONTENT)
-            string(FIND "${SBMD_CONTENT}" "JavaScript+matterjs" MATTERJS_POS)
+            string(FIND "${SBMD_CONTENT}" "scriptType: \"JavaScript+matterjs\"" MATTERJS_POS)
             if (MATTERJS_POS EQUAL -1)
                 list(APPEND SBMD_NON_MATTERJS_FILES "${SBMD_FILE}")
             else()
