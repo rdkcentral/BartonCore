@@ -94,7 +94,8 @@
                 // Build and Project Management
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
-                "doi.fileheadercomment"                  // File header comment generator
+                "doi.fileheadercomment",                 // File header comment generator
+                "codder13.openspec"                      // Openspec support
             ],
 
             "settings":
