@@ -50,6 +50,10 @@
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
 
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {}
+    },
+
     "customizations":
     {
         "vscode":
