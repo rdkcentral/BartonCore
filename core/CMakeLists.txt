@@ -71,6 +71,8 @@ if (BCORE_ZIGBEE)
 
 endif() #BARTON_CONFIG_ZIGBEE
 
+set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
+
 if (BCORE_MATTER)
     include(BCoreMatterHelper)
     include(BCoreMatterJsClusters)
@@ -152,7 +154,6 @@ if (BCORE_MATTER)
         # SBMD specification validation
         # Validates all .sbmd files against the JSON schema during build
         set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
-        set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
         set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts")
         set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
