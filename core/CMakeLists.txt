@@ -185,7 +185,7 @@ if (BCORE_MATTER)
     bcore_matterjs_build_clusters()
 
     # Conditionally generate embedded header from the bundle
-    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+    if(BCORE_MATTER_USE_MATTERJS)
         # Get the path to the bundle for embedding
         bcore_matterjs_get_bundle_path(OUTPUT MATTERJS_BUNDLE_PATH)
 
@@ -220,7 +220,7 @@ if (BCORE_MATTER)
 
     # Add header generation as a source dependency
     # Include matterjs header only if enabled
-    if(BCORE_MATTER_USE_MATTERJS AND BCORE_HAS_MATTERJS_CLUSTERS)
+    if(BCORE_MATTER_USE_MATTERJS)
         add_custom_target(generate_matterjs_header
             DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
         )
@@ -323,6 +323,34 @@ target_include_directories(BartonCore PRIVATE
 
 set_target_properties(BartonCore PROPERTIES VERSION ${BARTON_CORE_SO_VERSION} SOVERSION ${BARTON_CORE_MAJOR_VERSION})
 install(TARGETS BartonCore DESTINATION lib)
+
+# Install SBMD driver specification files, categorized by script type.
+# Plain JavaScript specs are always installed; matter.js-dependent specs
+# are only installed when BCORE_MATTER_USE_MATTERJS is enabled.
+if (BCORE_MATTER)
+    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
+
+    # Categorize SBMD specs by their script type
+    foreach(SBMD_FILE ${ALL_SBMD_FILES})
+        file(READ "${SBMD_FILE}" SBMD_CONTENT)
+        string(FIND "${SBMD_CONTENT}" "scriptType: \"JavaScript+matterjs\"" _pos)
+        if (_pos EQUAL -1)
+            list(APPEND SBMD_JS_FILES "${SBMD_FILE}")
+        else()
+            list(APPEND SBMD_MATTERJS_FILES "${SBMD_FILE}")
+        endif()
+    endforeach()
+
+    # Always install plain JavaScript SBMD specs
+    if (SBMD_JS_FILES)
+        install(FILES ${SBMD_JS_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    endif()
+
+    # Install matter.js-dependent specs only when matter.js is enabled
+    if (BCORE_MATTER_USE_MATTERJS AND SBMD_MATTERJS_FILES)
+        install(FILES ${SBMD_MATTERJS_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    endif()
+endif()
 
 # If specified, generate GIR and typelib. Clients need to ensure that the GIR and/or typelib
 # file is installed, as well is libBartonCore.so. Additionally,
