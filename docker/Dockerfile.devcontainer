@@ -40,3 +40,6 @@ ARG BUILDER_GID=""
 ARG BUILDER_UID=""
 
 RUN /setupUser.sh $BUILDER_UID $BUILDER_GID $BUILDER_USER
+
+ENV OPENSPEC_TELEMETRY=0
+RUN npm install -g @fission-ai/openspec@latest

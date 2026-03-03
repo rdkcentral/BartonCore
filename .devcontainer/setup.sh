@@ -50,5 +50,3 @@ if [ -f "$PYTHON_ENV_FILE" ]; then
 else
     echo "$LD_PRELOAD_LINE" > "$PYTHON_ENV_FILE"
 fi
-
-sudo npm install -g @fission-ai/openspec@latest
