@@ -13,3 +13,8 @@ _codeql_detected_source_root
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# These came with openspec
+.github/prompts
+.github/skills
+openspec
