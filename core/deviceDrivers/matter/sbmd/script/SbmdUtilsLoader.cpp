@@ -35,7 +35,7 @@
 
 extern "C" {
 #include <icLog/logging.h>
-#include <quickjs/quickjs.h>
+#include <quickjs.h>
 }
 
 // Try to include the embedded bundle header if it was generated
