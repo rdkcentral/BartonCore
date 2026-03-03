@@ -95,7 +95,7 @@
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
                 "doi.fileheadercomment",                 // File header comment generator
-                "codder13.openspec"                      // Openspec support
+                "atman-dev.openspec-for-copilot"         // Openspec support
             ],
 
             "settings":
