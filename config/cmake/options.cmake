@@ -171,6 +171,10 @@ bcore_option(NAME BCORE_MATTER_USE_MATTERJS
            DEFINITION BARTON_CONFIG_MATTER_USE_MATTERJS
            DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding"
            ENABLE)
+bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
+           DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
+           DESCRIPTION "Enable validation of SBMD schemas"
+           ENABLE)
 bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DEFINITION BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
@@ -238,6 +242,11 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DEFINITION BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DESCRIPTION "Name of the Matter BLE controller device."
                     VALUE "Matter-Controller")
+
+bcore_string_option(NAME BCORE_MATTER_SBMD_SPECS_DIR
+                    DEFINITION BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
+                    DESCRIPTION "Directory containing SBMD spec files at runtime. Defaults to the install destination."
+                    VALUE "${CMAKE_INSTALL_PREFIX}/sbmd-specs")
 
 bcore_string_option(NAME BCORE_LINK_LIBRARIES
                   DEFINITION BARTON_CONFIG_LINK_LIBRARIES

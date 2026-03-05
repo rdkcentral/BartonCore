@@ -29,18 +29,11 @@
 #
 #--------------------------------------------------------------------------------------
 
-
-# setup include paths
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${CROSS_OUTPUT}/include     # 3rd Party
-)
-
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
 
 add_library(zhal STATIC ${SOURCES})
-target_link_libraries(zhal xhLog xhTypes xhUtil xhConcurrent cjson xhJsonHelper m ${CONFIG_LDFLAG})
+target_link_libraries(zhal BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil BartonCommon::xhConcurrent cjson BartonCommon::xhJsonHelper m ${CONFIG_LDFLAG})
 
 # export our 'public' folder so others can include our headers
 target_include_directories(zhal PUBLIC public)
