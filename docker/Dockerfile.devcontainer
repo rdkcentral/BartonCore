@@ -40,3 +40,11 @@ ARG BUILDER_GID=""
 ARG BUILDER_UID=""
 
 RUN /setupUser.sh $BUILDER_UID $BUILDER_GID $BUILDER_USER
+
+# Install Node.js (required for openspec)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV OPENSPEC_TELEMETRY=0
+RUN npm install -g @fission-ai/openspec@v1.2.0

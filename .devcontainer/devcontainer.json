@@ -50,6 +50,10 @@
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
 
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {}
+    },
+
     "customizations":
     {
         "vscode":
@@ -90,7 +94,8 @@
                 // Build and Project Management
                 "npclaudiu.vscode-gn",                   // Ninja build system support
 
-                "doi.fileheadercomment"                  // File header comment generator
+                "doi.fileheadercomment",                 // File header comment generator
+                "atman-dev.openspec-for-copilot"         // Openspec support
             ],
 
             "settings":

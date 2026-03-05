@@ -1,0 +1,105 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Created by Thomas Lea on 3/3/2026.
+#
+
+schema: spec-driven
+
+context: |
+  # BartonCore — IoT Device Service Framework
+
+  ## Domain
+  BartonCore is a C/C++ library for local IoT device management. It provides a unified,
+  protocol-agnostic API and resource data model for discovering, commissioning, configuring,
+  monitoring, and controlling smart home devices across Matter, Zigbee, Thread, and IP protocols.
+
+  Clients (reference apps, cloud services, UIs) interact with devices through a URI-based resource
+  model that abstracts the underlying technology. When new device support is added, clients gain
+  functionality without code changes.
+
+  ## Tech Stack
+  - Languages: C99, C++17, Python (tests), JavaScript (SBMD scripts)
+  - Build: CMake (3.16.5+), Docker
+  - Object system: GObject with GObject Introspection (GIR namespace: BCore)
+  - Testing: CMocka (C), Google Test/Mock (C++), pytest (Python integration)
+  - Embedded JS: QuickJS (for SBMD spec scripts)
+  - Key deps: GLib/GIO 2.62+, libcurl, OpenSSL 1.1.1, libxml2, yaml-cpp, mbedcrypto, Matter SDK
+  - Formatting: clang-format (LLVM-based, Allman braces, 4-space indent)
+  - License: Apache-2.0
+
+  ## Architecture (key layers)
+  - Public API (api/c/public/): GObject-based C API — BCoreClient, BCoreDevice, BCoreEndpoint,
+    BCoreResource, BCoreEvent hierarchy, provider interfaces, DeviceDriver struct
+  - Core service (core/src/): deviceService orchestrator, driverManager, subsystemManager,
+    communicationWatchdog, JSON file-based database, event producer/handler
+  - Device drivers (core/deviceDrivers/): Native C drivers for Zigbee devices (8 drivers),
+    SBMD declarative YAML specs for Matter devices (5 specs), philipsHue IP driver
+  - Subsystems (core/src/subsystems/): Matter (C++, wraps CHIP SDK), Zigbee (via ZHAL HAL),
+    Thread (OTBR D-Bus integration)
+  - Libraries (libs/): crypto, device model types
+  - Reference app (reference/): Interactive CLI demonstrating the API
+  - Third-party (third_party/): BartonCommon (icLinkedList, icHashMap, etc.), Matter SDK
+
+  ## Key Design Patterns
+  - URI-based resource model: /deviceId/ep/N/r/resourceName — all values are string-serialized
+  - Device Classes (light, sensor, doorLock, etc.) define mandatory/optional endpoint profiles
+  - Pluggable subsystems via constructor-based pre-registration
+  - SBMD (Spec-Based Matter Drivers): declarative YAML + embedded JS for protocol mapping
+    without writing C code — specs in core/deviceDrivers/matter/sbmd/specs/
+  - File-based persistence: one JSON file per device under a configurable storage directory
+  - Dependency injection via GObject interfaces (TokenProvider, NetworkCredentialsProvider,
+    PropertyProvider)
+  - Modular build: everything optional via CMake flags (BCORE_ZIGBEE, BCORE_MATTER, BCORE_THREAD, etc.)
+
+  ## Conventions
+  - Conventional commits (Angular-style): feat, fix, refactor, test, docs, build, chore, ci, app
+  - All C/C++ files require Apache-2.0 copyright header
+  - clang-format enforced via pre-commit hooks (Allman braces, 120 col, 4-space tabs)
+  - GObject naming: B_CORE_ prefix for types, b_core_ for functions
+  - Internal C naming: camelCase functions, icLinkedList/icHashMap from BartonCommon
+  - C++ naming: PascalCase classes, camelCase methods
+  - Test naming: test files prefixed with test or suffixed with Test/test
+
+rules:
+  proposal:
+    - Always include a "Non-goals" section to clarify scope boundaries
+    - Reference affected layers explicitly (API, core, drivers, subsystems, etc.)
+    - Note which CMake feature flags are relevant
+  design:
+    - Include ASCII architecture diagrams showing how changes fit into existing layers
+    - Call out thread safety considerations (GLib main loop, Matter event loop, pthread mutexes)
+    - Note GObject API implications (signals, properties, GIR compatibility)
+    - Address backward compatibility for the public API
+  specs:
+    - Specify resource URIs, types, and modes for any new device functionality
+    - For Matter features, specify cluster IDs, attribute IDs, and TLV types
+    - For SBMD specs, include the complete mapper scripts
+    - Define expected GObject signals/events for new functionality
+  tasks:
+    - Break tasks into chunks of max 4 hours
+    - Separate API changes from implementation changes
+    - Include a testing task for each implementation task
+    - Unit tests before integration tests
+    - Note if a task requires Docker or hardware
