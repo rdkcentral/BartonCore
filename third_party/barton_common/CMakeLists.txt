@@ -28,7 +28,7 @@
 include(FetchContent)
 
 set(BARTON_COMMON_GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon)
-set(BARTON_COMMON_GIT_TAG 0.1.2)
+set(BARTON_COMMON_GIT_TAG 0.1.3)
 
 FetchContent_Declare(
     BartonCommon
