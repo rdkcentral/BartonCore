@@ -62,7 +62,7 @@ bcore_add_cmocka_test(
         storageRestoreNamespace
         simpleProtectConfigData
         simpleUnprotectConfigData
-    LINK_LIBRARIES BartonCoreStatic xhDeviceHelper
+    LINK_LIBRARIES BartonCoreStatic BartonCommon::xhDeviceHelper
     INCLUDES ${BARTON_PRIVATE_INCLUDES} ${PRIVATE_API_INCLUDES}
 )
 
@@ -123,7 +123,7 @@ bcore_add_cmocka_test(
         src/commFailTest.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/deviceServiceCommFail.c
     LINK_LIBRARIES
-        xhTypes
+        BartonCommon::xhTypes
         #glib-2 applied by configure_glib
 )
 
@@ -154,7 +154,9 @@ if (BCORE_MATTER)
         LINK_LIBRARIES BartonCoreStatic yaml-cpp
     )
 
-    target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+    if (TARGET sbmdParserTest)
+        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+    endif()
 
     bcore_add_cpp_test(
         NAME testQuickJsScript
@@ -163,7 +165,7 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/MatterJsClusterLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/SbmdUtilsLoader.cpp
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock quickjs jsoncpp xhLog
+        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock quickjs jsoncpp BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core

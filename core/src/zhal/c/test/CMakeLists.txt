@@ -34,12 +34,6 @@
 # not during a cross-compile session).  should be built as part of
 # the 'make manualTest' command
 
-# setup include paths
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CROSS_OUTPUT}/include         # 3rd Party
-)
-
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
 
@@ -48,3 +42,4 @@ add_executable(testZhalLib EXCLUDE_FROM_ALL ${SOURCES})
 
 # add library dependencies for this test-binary
 target_link_libraries(testZhalLib zhal pthread)
+target_include_directories(testZhalLib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -71,6 +71,8 @@ if (BCORE_ZIGBEE)
 
 endif() #BARTON_CONFIG_ZIGBEE
 
+set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
+
 if (BCORE_MATTER)
     include(BCoreMatterHelper)
     include(BCoreMatterJsClusters)
@@ -148,37 +150,38 @@ if (BCORE_MATTER)
     list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
     list(APPEND XTRA_LIBS yaml-cpp quickjs)
 
-    # SBMD specification validation
-    # Validates all .sbmd files against the JSON schema during build
-    set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
-    set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs")
-    set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts")
-    set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
-    set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
-    set(SBMD_STUBS_FILE "${CMAKE_BINARY_DIR}/sbmd-stubs.json")
+    if (BCORE_MATTER_VALIDATE_SCHEMAS)
+        # SBMD specification validation
+        # Validates all .sbmd files against the JSON schema during build
+        set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
+        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts")
+        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
+        set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
+        set(SBMD_STUBS_FILE "${CMAKE_BINARY_DIR}/sbmd-stubs.json")
 
-    # Find Python3
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        # Find Python3
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-    # Collect all .sbmd files for dependency tracking
-    file(GLOB CONFIGURE_DEPENDS SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
+        # Collect all .sbmd files for dependency tracking
+        file(GLOB CONFIGURE_DEPENDS SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
 
-    # Generate stubs from .d.ts file
-    add_custom_command(
-        OUTPUT ${SBMD_STUBS_FILE}
-        COMMAND ${Python3_EXECUTABLE} ${SBMD_STUB_GENERATOR} ${SBMD_DTS_FILE} ${SBMD_STUBS_FILE}
-        DEPENDS ${SBMD_DTS_FILE} ${SBMD_STUB_GENERATOR}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Generating SBMD stubs from TypeScript definitions..."
-    )
+        # Generate stubs from .d.ts file
+        add_custom_command(
+            OUTPUT ${SBMD_STUBS_FILE}
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_STUB_GENERATOR} ${SBMD_DTS_FILE} ${SBMD_STUBS_FILE}
+            DEPENDS ${SBMD_DTS_FILE} ${SBMD_STUB_GENERATOR}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Generating SBMD stubs from TypeScript definitions..."
+        )
 
-    # Create a custom target that validates SBMD specs
-    add_custom_target(validate_sbmd_specs ALL
-        COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPECS_DIR} --stubs ${SBMD_STUBS_FILE}
-        DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        COMMENT "Validating SBMD specification files against schema..."
-    )
+        # Create a custom target that validates SBMD specs
+        add_custom_target(validate_sbmd_specs ALL
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPECS_DIR} --stubs ${SBMD_STUBS_FILE}
+            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Validating SBMD specification files against schema..."
+        )
+    endif()
 
     # Build matter.js cluster bundle for QuickJS SBMD runtime
     # This bundle provides TLV encoding/decoding for SBMD scripts
@@ -278,8 +281,8 @@ bcore_find_include(
 
 # add library dependencies for this binary
 set(bCoreLinkLibraries bCoreConfig xhDeviceDescriptors
-        xhConfig xhUrlHelper xhConcurrent xhXmlHelper xhJsonHelper
-        xhDeviceHelper xhXmlHelper xhCrypto xhTime xhUtil xhTypes xhLog
+        BartonCommon::xhConfig BartonCommon::xhUrlHelper BartonCommon::xhConcurrent BartonCommon::xhXmlHelper BartonCommon::xhJsonHelper
+        BartonCommon::xhDeviceHelper BartonCommon::xhXmlHelper xhCrypto BartonCommon::xhTime BartonCommon::xhUtil BartonCommon::xhTypes BartonCommon::xhLog
         ${XTRA_LIBS} cjson uuid curl xml2 z m mbedcrypto ${BCORE_LINK_LIBRARIES})
 
 set(BARTON_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src

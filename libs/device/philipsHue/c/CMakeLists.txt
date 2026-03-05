@@ -31,17 +31,11 @@
 
 # NOTE: should only be built if BARTON_CONFIG_PHILIPS_HUE is set
 
-# setup include paths
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
-        ${CROSS_OUTPUT}/include     # 3rd Party
-)
-
 # define source files (using wildcard)
 file(GLOB SOURCES "src/*.c")
 
 add_library(xhPhilipsHue STATIC ${SOURCES})
-target_link_libraries(xhPhilipsHue xhLog xhTypes xhUtil xhSsdp curl cjson m)
+target_link_libraries(xhPhilipsHue BartonCommon::xhLog BartonCommon::xhTypes BartonCommon::xhUtil xhSsdp curl cjson m)
 
 # export our 'public' folder so others can include our headers
 target_include_directories(xhPhilipsHue PUBLIC public)

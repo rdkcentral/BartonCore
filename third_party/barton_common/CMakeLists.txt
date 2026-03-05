@@ -27,10 +27,25 @@
 
 include(FetchContent)
 
+set(BARTON_COMMON_GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon)
+set(BARTON_COMMON_GIT_TAG 0.1.2)
+
 FetchContent_Declare(
     BartonCommon
-    GIT_REPOSITORY https://github.com/rdkcentral/BartonCommon
-    GIT_TAG 0.1.1
+    GIT_REPOSITORY ${BARTON_COMMON_GIT_REPOSITORY}
+    GIT_TAG ${BARTON_COMMON_GIT_TAG}
 )
 
-FetchContent_MakeAvailable(BartonCommon)
+# Use CMAKE_SKIP_INSTALL_RULES to prevent BartonCommon's install() rules from being
+# included in BartonCore's install target, while still building all targets (including tests).
+FetchContent_GetProperties(BartonCommon)
+if(NOT bartoncommon_POPULATED)
+    FetchContent_Populate(BartonCommon)
+    set(BARTONCORE_SAVED_CMAKE_SKIP_INSTALL_RULES ${CMAKE_SKIP_INSTALL_RULES})
+    set(CMAKE_SKIP_INSTALL_RULES ON)
+    add_subdirectory(${bartoncommon_SOURCE_DIR} ${bartoncommon_BINARY_DIR})
+    set(CMAKE_SKIP_INSTALL_RULES ${BARTONCORE_SAVED_CMAKE_SKIP_INSTALL_RULES})
+    # CMAKE_SKIP_INSTALL_RULES prevents cmake_install.cmake from being generated,
+    # but the parent's cmake_install.cmake still tries to include it. Create an empty one.
+    file(WRITE ${bartoncommon_BINARY_DIR}/cmake_install.cmake "")
+endif()
