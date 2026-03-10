@@ -152,6 +152,30 @@ bcore_add_cmocka_test(
     INCLUDES ${BARTON_PRIVATE_INCLUDES}
 )
 
+if (BCORE_OBSERVABILITY)
+    include(BCoreAddCppTest)
+
+    bcore_add_cpp_test(
+        NAME testObservabilityTracing
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityTracingTest.cpp
+        LIBS BartonCoreStatic opentelemetry_exporter_in_memory opentelemetry_trace opentelemetry_resources opentelemetry_common
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+    )
+    # Fix static link ordering: gmock_main -> gmock -> gtest
+    if(TARGET testObservabilityTracing)
+        set_property(TARGET testObservabilityTracing PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_exporter_in_memory opentelemetry_trace opentelemetry_resources opentelemetry_common)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testObservabilityInit
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityInitTest.cpp
+        LIBS BartonCoreStatic opentelemetry_trace opentelemetry_metrics opentelemetry_logs opentelemetry_resources opentelemetry_common opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_metric opentelemetry_exporter_otlp_http_log opentelemetry_otlp_recordable opentelemetry_http_client_curl
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+    )
+    if(TARGET testObservabilityInit)
+        set_property(TARGET testObservabilityInit PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_trace opentelemetry_metrics opentelemetry_logs opentelemetry_resources opentelemetry_common opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_metric opentelemetry_exporter_otlp_http_log opentelemetry_otlp_recordable opentelemetry_http_client_curl)
+    endif()
+
 if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
