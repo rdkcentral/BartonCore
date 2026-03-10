@@ -186,6 +186,17 @@ if (BCORE_OBSERVABILITY)
         set_property(TARGET testObservabilityMetrics PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_metrics opentelemetry_resources opentelemetry_common)
     endif()
 
+    bcore_add_cpp_test(
+        NAME testObservabilityLogBridge
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityLogBridgeTest.cpp
+        LIBS BartonCoreStatic opentelemetry_logs opentelemetry_trace opentelemetry_exporter_in_memory opentelemetry_resources opentelemetry_common
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+    )
+    if(TARGET testObservabilityLogBridge)
+        set_property(TARGET testObservabilityLogBridge PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_logs opentelemetry_trace opentelemetry_exporter_in_memory opentelemetry_resources opentelemetry_common)
+    endif()
+endif()
+
 if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
