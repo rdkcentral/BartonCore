@@ -66,13 +66,21 @@
 #include <resourceTypes.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
-#include <subsystems/zigbee/zigbeeSubsystem.h>
 #include "subsystems/zigbee/zigbeeEventTracker.h"
+#include <subsystems/zigbee/zigbeeSubsystem.h>
 #endif
 
 #ifdef BARTON_CONFIG_MATTER
 #include <subsystems/matter/matterSubsystem.h>
 #endif
+
+#include "observability/observabilityLogBridge.h"
+#include "observability/observabilityMetrics.h"
+#include "observability/observability.h"
+#include "observability/observabilityTracing.h"
+
+static ObservabilityGauge *deviceActiveGauge = NULL;
+static gint activeDeviceCount = 0;
 
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
@@ -253,10 +261,10 @@ static icHashMap *pendingReconfiguration = NULL;
 static uint16_t discoveryTimeoutSeconds = 0;
 
 static discoverDeviceClassContext *startDiscoveryMonitorForDeviceClass(const char *deviceClass,
-                                                                icLinkedList *filters,
-                                                                uint16_t timeoutSeconds,
-                                                                bool findOrphanedDevices,
-                                                                RcDriverList *startedDrivers);
+                                                                       icLinkedList *filters,
+                                                                       uint16_t timeoutSeconds,
+                                                                       bool findOrphanedDevices,
+                                                                       RcDriverList *startedDrivers);
 
 static bool deviceServiceIsUriAccessible(const char *uri);
 
@@ -552,11 +560,16 @@ static bool checkDescriptorReadinessForDiscovery(const char *deviceClass, icLink
  * The returned list is never NULL but may be empty if all drivers failed.
  * Caller receives ownership of one reference and must call rc_driver_list_unref().
  */
-static RcDriverList *startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
+static RcDriverList *
+startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDevices, bool *anyFailed)
 {
     RcDriverList *startedDrivers = rc_driver_list_new();
     icLinkedList *drivers = deviceDriverManagerGetDeviceDriversByDeviceClass(deviceClass);
     *anyFailed = false;
+
+    g_autoptr(ObservabilitySpan) discoverySpan = observabilitySpanStart("device.discovery");
+    observabilitySpanSetAttribute(discoverySpan, "device.class", deviceClass);
+    observabilitySpanSetAttributeInt(discoverySpan, "discovery.recovery_mode", findOrphanedDevices ? 1 : 0);
 
     if (drivers == NULL)
     {
@@ -628,6 +641,12 @@ static RcDriverList *startDriverDiscoveryForDeviceClass(const char *deviceClass,
     }
 
     linkedListDestroy(drivers, standardDoNotFreeFunc);
+
+    if (*anyFailed)
+    {
+        observabilitySpanSetError(discoverySpan, "one or more drivers failed to start");
+    }
+
     return startedDrivers;
 }
 
@@ -655,7 +674,8 @@ static void rollbackFailedDiscovery(icHashMap *startedDriversPerClass, bool find
                 DeviceDriver *driver = (DeviceDriver *) linkedListIteratorGetNext(driverIterator);
                 if (driver->stopDiscoveringDevices != NULL)
                 {
-                    icLogDebug(LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
+                    icLogDebug(
+                        LOG_TAG, "stopping %s for device class %s due to rollback", driver->driverName, deviceClass);
                     driver->stopDiscoveringDevices(driver->callbackContext, deviceClass);
                 }
             }
@@ -696,8 +716,8 @@ static void startDiscoveryMonitors(icLinkedList *newDeviceClassDiscoveries,
         // Take a reference for the monitor context
         rc_driver_list_ref(startedDrivers);
 
-        discoverDeviceClassContext *ctx =
-            startDiscoveryMonitorForDeviceClass(deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
+        discoverDeviceClassContext *ctx = startDiscoveryMonitorForDeviceClass(
+            deviceClass, filters, timeoutSeconds, findOrphanedDevices, startedDrivers);
         hashMapPut(activeDiscoveries, ctx->deviceClass, (uint16_t) (strlen(deviceClass) + 1), ctx);
     }
 
@@ -797,14 +817,16 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
             const char *deviceClass = linkedListIteratorGetNext(driverStartIterator);
             bool driverFailed = false;
 
-            RcDriverList *startedDrivers = startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
+            RcDriverList *startedDrivers =
+                startDriverDiscoveryForDeviceClass(deviceClass, findOrphanedDevices, &driverFailed);
 
             if (driverFailed)
             {
                 anyDriverFailed = true;
             }
 
-            hashMapPut(startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
+            hashMapPut(
+                startedDriversPerClass, (void *) deviceClass, (uint16_t) (strlen(deviceClass) + 1), startedDrivers);
         }
 
         // Phase 3: Handle success or rollback
@@ -1045,6 +1067,8 @@ bool deviceServiceRemoveDevice(const char *uuid)
 
         sendDeviceRemovedEvent(device->uuid, device->deviceClass);
 
+        observabilityGaugeRecord(deviceActiveGauge, (int64_t) (g_atomic_int_add(&activeDeviceCount, -1) - 1));
+
         deviceDestroy(device);
 
         result = true;
@@ -1097,9 +1121,13 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
         return NULL;
     }
 
+    g_autoptr(ObservabilitySpan) readSpan = observabilitySpanStart("resource.read");
+    observabilitySpanSetAttribute(readSpan, "resource.uri", uri);
+
     if (deviceServiceIsUriAccessible(uri) == false)
     {
         icLogWarn(LOG_TAG, "%s: resource %s is not accessible", __FUNCTION__, uri);
+        observabilitySpanSetError(readSpan, "resource not accessible");
         return NULL;
     }
 
@@ -1128,6 +1156,7 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
     if (result == NULL)
     {
         icLogError(LOG_TAG, "Could not find resource for URI %s", uri);
+        observabilitySpanSetError(readSpan, "resource not found");
         return NULL;
     }
 
@@ -1143,12 +1172,14 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
         {
             icLogError(LOG_TAG, "Could not find device driver for URI %s", uri);
             resourceDestroy(result);
+            observabilitySpanSetError(readSpan, "device driver not found");
             return NULL;
         }
         else if (driver->readResource == NULL)
         {
             icLogError(LOG_TAG, "Device driver for URI %s does not support 'read' operation", uri);
             resourceDestroy(result);
+            observabilitySpanSetError(readSpan, "read not supported");
             return NULL;
         }
 
@@ -1166,6 +1197,11 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
             resourceDestroy(result);
             result = NULL;
         }
+    }
+
+    if (result == NULL)
+    {
+        observabilitySpanSetError(readSpan, "driver read failed");
     }
 
     return result;
@@ -1277,6 +1313,9 @@ bool deviceServiceWriteResource(const char *uri, const char *value)
         return false;
     }
 
+    g_autoptr(ObservabilitySpan) writeSpan = observabilitySpanStart("resource.write");
+    observabilitySpanSetAttribute(writeSpan, "resource.uri", uri);
+
     // check if we are dealing with pattern and get resource(s) accordingly
     //
     icLinkedList *resources = deviceServiceGetResourcesByUriPatternInternal(uri);
@@ -1301,6 +1340,11 @@ bool deviceServiceWriteResource(const char *uri, const char *value)
         }
         linkedListIteratorDestroy(iter);
         linkedListDestroy(resources, (linkedListItemFreeFunc) resourceDestroy);
+    }
+
+    if (!result)
+    {
+        observabilitySpanSetError(writeSpan, "write failed");
     }
 
     return result;
@@ -1826,6 +1870,10 @@ bool deviceServiceInitialize(BCoreClient *service)
     client = g_object_ref(service);
     mutexUnlock(&deviceServiceClientMutex);
 
+    observabilityInit();
+    observabilityLogBridgeInit();
+    deviceActiveGauge = observabilityGaugeCreate("device.active.count", "Number of active devices", "{device}");
+
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_client_get_initialize_params(service);
 
     deviceServiceConfigurationStartup(params);
@@ -2044,6 +2092,9 @@ void deviceServiceShutdown()
     g_clear_object(&client);
     mutexUnlock(&deviceServiceClientMutex);
 
+    observabilityLogBridgeShutdown();
+    observabilityShutdown();
+
     icLogDebug(LOG_TAG, "%s: shutdown complete", __FUNCTION__);
 }
 
@@ -2251,6 +2302,12 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
  */
 bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool neverReject)
 {
+    g_autoptr(ObservabilitySpan) foundSpan = observabilitySpanStart("device.found");
+    observabilitySpanSetAttribute(foundSpan, "device.class", deviceFoundDetails->deviceClass);
+    observabilitySpanSetAttribute(foundSpan, "device.uuid", deviceFoundDetails->deviceUuid);
+    observabilitySpanSetAttribute(foundSpan, "device.manufacturer", deviceFoundDetails->manufacturer);
+    observabilitySpanSetAttribute(foundSpan, "device.model", deviceFoundDetails->model);
+
     icLogDebug(LOG_TAG,
                "%s: deviceClass=%s, deviceClassVersion=%u, uuid=%s, manufacturer=%s, model=%s, hardwareVersion=%s, "
                "firmwareVersion=%s",
@@ -2291,6 +2348,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         sendDeviceRejectedEvent(deviceFoundDetails, inRepairMode);
 
         // tell the device driver that we have rejected this device so it can do any cleanup
+        observabilitySpanSetError(foundSpan, "device denylisted");
         return false;
     }
 
@@ -2340,6 +2398,7 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         sendDeviceRejectedEvent(deviceFoundDetails, inRepairMode);
 
         // tell the device driver that we have rejected this device so it can do any cleanup
+        observabilitySpanSetError(foundSpan, "no device descriptor found");
         return false;
     }
 
@@ -2560,6 +2619,11 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         markDevicePairingFailed(deviceFoundDetails->deviceUuid);
     }
 
+    if (!pairingSuccessful)
+    {
+        observabilitySpanSetError(foundSpan, "device pairing failed");
+    }
+
     return pairingSuccessful;
 }
 
@@ -2624,8 +2688,7 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
     if (tzResource != NULL)
     {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-        char *posixTZ =
-            b_core_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
+        char *posixTZ = b_core_property_provider_get_property_as_string(propertyProvider, POSIX_TIME_ZONE_PROP, NULL);
         if (posixTZ != NULL)
         {
             deviceServiceWriteResource(tzResource->uri, posixTZ);
@@ -2652,6 +2715,8 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
         if (inRepairMode == false)
         {
             sendDeviceAddedEvent(device->uuid);
+
+            observabilityGaugeRecord(deviceActiveGauge, (int64_t) (g_atomic_int_add(&activeDeviceCount, 1) + 1));
 
             icLinkedListIterator *iterator = linkedListIteratorCreate(device->endpoints);
             while (linkedListIteratorHasNext(iterator))
@@ -3148,8 +3213,7 @@ static void scheduleDeviceDescriptorsProcessingTask(void)
 
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
-        if (b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) ==
-            true)
+        if (b_core_property_provider_get_property_as_bool(propertyProvider, TEST_FASTTIMERS_PROP, false) == true)
         {
             delayTimeUnits = DELAY_MILLIS;
         }
@@ -3257,8 +3321,8 @@ static void denylistDevice(const char *uuid)
     {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         AUTO_CLEAN(free_generic__auto)
-        char *propValue = b_core_property_provider_get_property_as_string(
-            propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
+        char *propValue =
+            b_core_property_provider_get_property_as_string(propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
         AUTO_CLEAN(cJSON_Delete__auto) cJSON *denylistedDevicesArray = cJSON_Parse(propValue);
 
         if (cJSON_IsArray(denylistedDevicesArray) == false)
@@ -3288,8 +3352,8 @@ bool deviceServiceIsDeviceDenylisted(const char *uuid)
 
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     AUTO_CLEAN(free_generic__auto)
-    char *denylistedDevices = b_core_property_provider_get_property_as_string(
-        propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
+    char *denylistedDevices =
+        b_core_property_provider_get_property_as_string(propertyProvider, CPE_DENYLISTED_DEVICES_PROPERTY_NAME, "");
 
     if (stringIsEmpty(denylistedDevices) == false)
     {

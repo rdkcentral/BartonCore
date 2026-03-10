@@ -51,6 +51,8 @@
 #include "deviceServicePrivate.h"
 #include "event/deviceEventProducer.h"
 
+#include "observability/observabilityTracing.h"
+
 typedef struct
 {
     const Subsystem *subsystem;
@@ -480,6 +482,8 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 {
     icLogDebug(LOG_TAG, "%s", __func__);
 
+    g_autoptr(ObservabilitySpan) initSpan = observabilitySpanStart("subsystem.init");
+
     GList *localPreRegisteredSubsystems = NULL;
     GHashTable *localSubsystems = NULL;
     bool localSubsystemManagerInitialized = false;
@@ -540,6 +544,7 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
         g_hash_table_foreach(subsystems, initializeSubsystemCallback, NULL);
     }
+
 }
 
 /**
@@ -570,6 +575,8 @@ void subsystemManagerShutdown(void)
 {
     icLogDebug(LOG_TAG, "%s", __FUNCTION__);
 
+    g_autoptr(ObservabilitySpan) shutdownSpan = observabilitySpanStart("subsystem.shutdown");
+
     GHashTable *localSubsystems = NULL;
     bool localSubsystemManagerInitialized = false;
 
@@ -594,6 +601,7 @@ void subsystemManagerShutdown(void)
             g_hash_table_destroy(localSubsystems);
         }
     }
+
 }
 
 /**

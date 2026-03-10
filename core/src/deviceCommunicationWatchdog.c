@@ -43,6 +43,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "observability/observabilityMetrics.h"
+
+static ObservabilityCounter *commFailCounter = NULL;
+static ObservabilityCounter *commRestoreCounter = NULL;
+
 #define LOG_TAG                    "deviceCommunicationWatchdog"
 #define logFmt(fmt)                "%s: " fmt, __func__
 
@@ -104,9 +109,13 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
 
     failedCallback = failedcb;
     restoredCallback = restoredcb;
+
+    commFailCounter = observabilityCounterCreate("device.commfail.count", "Number of device comm-fail events", "{event}");
+    commRestoreCounter =
+        observabilityCounterCreate("device.commrestore.count", "Number of device comm-restore events", "{event}");
+
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    fastCommFailTimer =
-        b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
+    fastCommFailTimer = b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
 
     pthread_mutex_unlock(&controlMutex);
 }
@@ -227,6 +236,7 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
         {
             icLogInfo(LOG_TAG, "%s is no longer in comm fail", uuid);
             TELEMETRY_COUNTER(TELEMETRY_MARKER_DEVICE_COMMRESTORE);
+            observabilityCounterAdd(commRestoreCounter, 1);
             info->inCommFail = false;
             doNotify = true;
         }
@@ -474,23 +484,24 @@ static void *commFailWatchdogThreadProc(void *arg)
                     millisUntilCommFail /= 100;
                 }
 
-            if (millisUntilCommFail == 0 && info->inCommFail == false)
-            {
-                icLogWarn(LOG_TAG, "%s: %s is in comm fail", __FUNCTION__, uuid);
-                TELEMETRY_COUNTER(TELEMETRY_MARKER_DEVICE_COMMFAIL);
-                info->inCommFail = true;
-                g_ptr_array_add(uuidsInCommFail, g_strdup(uuid));
-            }
+                if (millisUntilCommFail == 0 && info->inCommFail == false)
+                {
+                    icLogWarn(LOG_TAG, "%s: %s is in comm fail", __FUNCTION__, uuid);
+                    TELEMETRY_COUNTER(TELEMETRY_MARKER_DEVICE_COMMFAIL);
+                    observabilityCounterAdd(commFailCounter, 1);
+                    info->inCommFail = true;
+                    g_ptr_array_add(uuidsInCommFail, g_strdup(uuid));
+                }
 
-            icLogTrace(LOG_TAG,
-                       "%s: device %s; millisLeft=%" PRIu32 "; lastChecked=%" PRIu64 "; inCommFail=%s",
-                       __FUNCTION__,
-                       uuid,
-                       millisUntilCommFail,
-                       info->commFailRemainingLastSyncMillis,
-                       stringValueOfBool(info->inCommFail));
+                icLogTrace(LOG_TAG,
+                           "%s: device %s; millisLeft=%" PRIu32 "; lastChecked=%" PRIu64 "; inCommFail=%s",
+                           __FUNCTION__,
+                           uuid,
+                           millisUntilCommFail,
+                           info->commFailRemainingLastSyncMillis,
+                           stringValueOfBool(info->inCommFail));
 
-            setMillisUntilCommFail(info, millisUntilCommFail);
+                setMillisUntilCommFail(info, millisUntilCommFail);
             }
         }
         pthread_mutex_unlock(&monitoredDevicesMutex);
