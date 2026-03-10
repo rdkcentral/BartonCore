@@ -317,7 +317,6 @@ bool MatterDevice::GetEndpointForSbmdIndex(uint32_t sbmdIndex, chip::EndpointId 
     auto it = sbmdEndpointMap.find(sbmdIndex);
     if (it == sbmdEndpointMap.end())
     {
-        icError("SBMD endpoint index %u not found in endpoint map for device %s", sbmdIndex, deviceId.c_str());
         return false;
     }
 
