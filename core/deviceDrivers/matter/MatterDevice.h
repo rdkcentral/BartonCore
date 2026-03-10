@@ -95,47 +95,6 @@ namespace barton
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**
-         * Synchronously get attribute data from the cache as a TLVReader.
-         * Note that this does not initiate a read from the device; it only reads
-         * what is already cached.
-         *
-         * @param endpointId The endpoint ID to read from.
-         * @param clusterId The cluster ID to read from.
-         * @param attributeId The attribute ID to read.
-         * @param reader The TLVReader to populate with the attribute data.
-         * @return CHIP_NO_ERROR on success, or an error code on failure.
-         */
-        const CHIP_ERROR GetCachedAttributeData(chip::EndpointId endpointId,
-                                                chip::ClusterId clusterId,
-                                                chip::AttributeId attributeId,
-                                                chip::TLV::TLVReader &reader) const
-        {
-            CHIP_ERROR result = CHIP_ERROR_INCORRECT_STATE;
-
-            if (deviceDataCache)
-            {
-                chip::app::ConcreteAttributePath attributePath(endpointId, clusterId, attributeId);
-                result = deviceDataCache->GetAttributeData(attributePath, reader);
-            }
-
-            return result;
-        }
-
-        /**
-         * A device could have the same cluster on multiple endpoints, but we need the one that
-         * is part of our device type composition.
-         *
-         * Used for device-level SBMD resources (which aren't tied to a specific SBMD endpoint)
-         * and for non-SBMD code paths (e.g., UpdateCachedFeatureMaps).
-         * For endpoint-level SBMD resources, use GetEndpointForSbmdIndex() instead.
-         *
-         * @param clusterId The cluster ID to find.
-         * @param[out] outEndpointId The endpoint ID that hosts the cluster.
-         * @return True if found, false otherwise.
-         */
-        bool GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId);
-
-        /**
          * Build the SBMD-endpoint-to-Matter-endpoint mapping by matching device type lists
          * from the Descriptor cluster against the provided device types.
          * Must be called before resource binding.
@@ -144,15 +103,6 @@ namespace barton
          * @return True if at least one matching endpoint was found, false otherwise.
          */
         bool ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes);
-
-        /**
-         * Look up the pre-resolved Matter endpoint for a given SBMD endpoint index.
-         *
-         * @param sbmdIndex The 0-based SBMD endpoint index.
-         * @param[out] outEndpointId The resolved Matter endpoint ID.
-         * @return True if found, false if index is out of range.
-         */
-        bool GetEndpointForSbmdIndex(uint32_t sbmdIndex, chip::EndpointId &outEndpointId) const;
 
         /**
          * Bind a resource URI for read operations.
@@ -178,8 +128,8 @@ namespace barton
          * @param endpointId The endpoint ID (may be empty for device-level resources)
          * @param resourceId The resource identifier
          * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
-         * resources).
+         *                         When nullopt, falls back to GetEndpointForCluster at exec time
+         *                         (useful for device-level resources).
          * @return True if binding was successful, false otherwise.
          */
         bool BindWriteInfo(const char *uri,
@@ -197,8 +147,8 @@ namespace barton
          * @param endpointId The endpoint ID (may be empty for device-level resources)
          * @param resourceId The resource identifier
          * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
-         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
-         * resources).
+         *                         When nullopt, falls back to GetEndpointForCluster at exec time
+         *                         (useful for device-level resources).
          * @return True if binding was successful, false otherwise.
          */
         bool BindExecuteInfo(const char *uri,
@@ -353,6 +303,56 @@ namespace barton
     private:
         // Allow test subclass to access private members for testing
         friend class TestableMatterDevice;
+
+        /**
+         * Synchronously get attribute data from the cache as a TLVReader.
+         * Note that this does not initiate a read from the device; it only reads
+         * what is already cached.
+         *
+         * @param endpointId The endpoint ID to read from.
+         * @param clusterId The cluster ID to read from.
+         * @param attributeId The attribute ID to read.
+         * @param reader The TLVReader to populate with the attribute data.
+         * @return CHIP_NO_ERROR on success, or an error code on failure.
+         */
+        const CHIP_ERROR GetCachedAttributeData(chip::EndpointId endpointId,
+                                                chip::ClusterId clusterId,
+                                                chip::AttributeId attributeId,
+                                                chip::TLV::TLVReader &reader) const
+        {
+            CHIP_ERROR result = CHIP_ERROR_INCORRECT_STATE;
+
+            if (deviceDataCache)
+            {
+                chip::app::ConcreteAttributePath attributePath(endpointId, clusterId, attributeId);
+                result = deviceDataCache->GetAttributeData(attributePath, reader);
+            }
+
+            return result;
+        }
+
+        /**
+         * A device could have the same cluster on multiple endpoints, but we need the one that
+         * is part of our device type composition.
+         *
+         * Used for device-level SBMD resources (which aren't tied to a specific SBMD endpoint)
+         * and for non-SBMD code paths (e.g., UpdateCachedFeatureMaps).
+         * For endpoint-level SBMD resources, use GetEndpointForSbmdIndex() instead.
+         *
+         * @param clusterId The cluster ID to find.
+         * @param[out] outEndpointId The endpoint ID that hosts the cluster.
+         * @return True if found, false otherwise.
+         */
+        bool GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId);
+
+        /**
+         * Look up the pre-resolved Matter endpoint for a given SBMD endpoint index.
+         *
+         * @param sbmdIndex The 0-based SBMD endpoint index.
+         * @param[out] outEndpointId The resolved Matter endpoint ID.
+         * @return True if found, false if index is out of range.
+         */
+        bool GetEndpointForSbmdIndex(uint32_t sbmdIndex, chip::EndpointId &outEndpointId) const;
 
         /**
          * Get the feature map for a cluster from the device data cache.

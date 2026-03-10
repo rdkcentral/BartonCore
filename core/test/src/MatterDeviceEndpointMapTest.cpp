@@ -23,8 +23,12 @@
 
 #include "deviceDrivers/matter/MatterDevice.h"
 #include "subsystems/matter/DeviceDataCache.h"
+#include <app-common/zap-generated/cluster-objects.h>
+#include <app/data-model/Decode.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <lib/core/TLV.h>
+#include <lib/support/CHIPMem.h>
 #include <memory>
 
 using namespace barton;
@@ -48,11 +52,97 @@ namespace barton
 
         using MatterDevice::ResolveEndpointMap;
         using MatterDevice::GetEndpointForSbmdIndex;
+
+        /**
+         * Populate a DeviceDataCache's internal ClusterStateCache with endpoint and device type data.
+         * This simulates what would happen when a real device subscription delivers attribute reports.
+         *
+         * @param cache The DeviceDataCache to populate
+         * @param partsList Endpoint IDs to include in the root endpoint's PartsList
+         * @param endpointDeviceTypes Map of endpoint ID → device type IDs for each endpoint
+         */
+        static void PopulateTestCache(std::shared_ptr<DeviceDataCache> &cache,
+                                      const std::vector<chip::EndpointId> &partsList,
+                                      const std::map<chip::EndpointId, std::vector<uint16_t>> &endpointDeviceTypes)
+        {
+            // Create the ClusterStateCache (normally done in OnDeviceConnected)
+            cache->clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*cache);
+
+            auto &cb = cache->clusterStateCache->GetBufferedCallback();
+            chip::app::StatusIB okStatus;
+            cb.OnReportBegin();
+
+            // Encode PartsList for endpoint 0 (Descriptor cluster, attribute 0x0003)
+            {
+                uint8_t buffer[256];
+                chip::TLV::TLVWriter writer;
+                writer.Init(buffer, sizeof(buffer));
+                chip::TLV::TLVType arrayType;
+                writer.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, arrayType);
+                for (auto ep : partsList)
+                {
+                    writer.Put(chip::TLV::AnonymousTag(), ep);
+                }
+                writer.EndContainer(arrayType);
+                writer.Finalize();
+
+                chip::TLV::TLVReader reader;
+                reader.Init(buffer, writer.GetLengthWritten());
+                reader.Next();
+
+                chip::app::ConcreteDataAttributePath path(
+                    0, chip::app::Clusters::Descriptor::Id, chip::app::Clusters::Descriptor::Attributes::PartsList::Id);
+                cb.OnAttributeData(path, &reader, okStatus);
+            }
+
+            // Encode DeviceTypeList for each endpoint
+            for (const auto &[endpointId, deviceTypes] : endpointDeviceTypes)
+            {
+                uint8_t buffer[256];
+                chip::TLV::TLVWriter writer;
+                writer.Init(buffer, sizeof(buffer));
+                chip::TLV::TLVType arrayType;
+                writer.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, arrayType);
+                for (uint16_t dt : deviceTypes)
+                {
+                    chip::TLV::TLVType structType;
+                    writer.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Structure, structType);
+                    writer.Put(chip::TLV::ContextTag(0), static_cast<uint32_t>(dt));
+                    writer.Put(chip::TLV::ContextTag(1), static_cast<uint16_t>(1));
+                    writer.EndContainer(structType);
+                }
+                writer.EndContainer(arrayType);
+                writer.Finalize();
+
+                chip::TLV::TLVReader reader;
+                reader.Init(buffer, writer.GetLengthWritten());
+                reader.Next();
+
+                chip::app::ConcreteDataAttributePath path(
+                    endpointId,
+                    chip::app::Clusters::Descriptor::Id,
+                    chip::app::Clusters::Descriptor::Attributes::DeviceTypeList::Id);
+                cb.OnAttributeData(path, &reader, okStatus);
+            }
+
+            cb.OnReportEnd();
+        }
     };
 } // namespace barton
 
 namespace
 {
+    // Initialize CHIP Platform memory once for all tests
+    class ChipPlatformEnvironment : public ::testing::Environment
+    {
+    public:
+        void SetUp() override { ASSERT_EQ(chip::Platform::MemoryInit(), CHIP_NO_ERROR); }
+
+        void TearDown() override { chip::Platform::MemoryShutdown(); }
+    };
+
+    ::testing::Environment *const chipEnv = ::testing::AddGlobalTestEnvironment(new ChipPlatformEnvironment);
+
     class MatterDeviceEndpointMapTest : public ::testing::Test
     {
     protected:
@@ -96,6 +186,87 @@ namespace
     TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapNoDataMultipleTypes)
     {
         EXPECT_FALSE(device->ResolveEndpointMap({0x0100, 0x000F}));
+    }
+
+    // Positive case: multi-endpoint device, skips endpoint 0 and non-matching endpoints,
+    // assigns sequential SBMD indices in PartsList order
+    TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapMultipleEndpoints)
+    {
+        // Device has endpoints 0 (root), 1 (light 0x0100), 2 (sensor 0x000F), 3 (light 0x0100)
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1, 2, 3
+        },
+                                                {
+                                                    {1, {0x0100}},
+                                                    {2, {0x000F}},
+                                                    {3, {0x0100}},
+                                                });
+
+        // Resolve for device type 0x0100 (light) — should match endpoints 1 and 3
+        EXPECT_TRUE(device->ResolveEndpointMap({0x0100}));
+
+        auto &map = device->GetSbmdEndpointMap();
+        ASSERT_EQ(map.size(), 2u);
+        EXPECT_EQ(map[0], 1); // First match → SBMD index 0
+        EXPECT_EQ(map[1], 3); // Second match → SBMD index 1
+    }
+
+    // Positive case: single matching endpoint
+    TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapSingleMatch)
+    {
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1, 2
+        },
+                                                {
+                                                    {1, {0x0100}},
+                                                    {2, {0x000F}},
+                                                });
+
+        EXPECT_TRUE(device->ResolveEndpointMap({0x0100}));
+
+        auto &map = device->GetSbmdEndpointMap();
+        ASSERT_EQ(map.size(), 1u);
+        EXPECT_EQ(map[0], 1);
+    }
+
+    // Positive case: no matching device types on any endpoint
+    TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapNoMatch)
+    {
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1, 2
+        },
+                                                {
+                                                    {1, {0x0100}},
+                                                    {2, {0x000F}},
+                                                });
+
+        EXPECT_FALSE(device->ResolveEndpointMap({0x0302}));
+        EXPECT_TRUE(device->GetSbmdEndpointMap().empty());
+    }
+
+    // Positive case: multiple supported device types match different endpoints
+    TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapMultipleDeviceTypes)
+    {
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1, 2, 3
+        },
+                                                {
+                                                    {1, {0x0100}}, // light
+                                                    {2, {0x000F}}, // sensor
+                                                    {3, {0x0302}}, // no match
+                                                });
+
+        // Match both light and sensor types
+        EXPECT_TRUE(device->ResolveEndpointMap({0x0100, 0x000F}));
+
+        auto &map = device->GetSbmdEndpointMap();
+        ASSERT_EQ(map.size(), 2u);
+        EXPECT_EQ(map[0], 1); // endpoint 1 matches 0x0100
+        EXPECT_EQ(map[1], 2); // endpoint 2 matches 0x000F
     }
 
     // ================================================================
