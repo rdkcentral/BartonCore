@@ -438,8 +438,12 @@ namespace barton
             std::string resourceId;
 
             // Pre-resolved Matter endpoint for ScriptOnly bindings.
-            // Set at bind time from either the endpoint map or cluster lookup.
-            // nullopt if no endpoint could be resolved (should not happen for valid bindings).
+            // For endpoint-level ScriptOnly bindings, this is set at bind time using the
+            // endpoint map when the sbmdEndpointIndex can be resolved. There is currently
+            // no cluster lookup at bind time.
+            // For device-level ScriptOnly bindings this is always std::nullopt, and for
+            // endpoint-level bindings it may also be std::nullopt when the index cannot
+            // be resolved; both cases are expected and valid.
             std::optional<chip::EndpointId> resolvedEndpointId;
         };
 
