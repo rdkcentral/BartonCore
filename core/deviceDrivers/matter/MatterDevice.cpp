@@ -254,6 +254,91 @@ bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::Endpoi
     return false;
 }
 
+bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes)
+{
+    if (!deviceDataCache)
+    {
+        icError("No device data cache for device %s", deviceId.c_str());
+        return false;
+    }
+
+    if (driverSupportedDeviceTypes.empty())
+    {
+        icError("No supported device types provided for device %s", deviceId.c_str());
+        return false;
+    }
+
+    sbmdEndpointMap.clear();
+    int sbmdIndex = 0;
+
+    for (auto endpointId : deviceDataCache->GetEndpointIds())
+    {
+        // Skip the root/aggregator endpoint
+        if (endpointId == 0)
+        {
+            continue;
+        }
+
+        std::vector<uint16_t> endpointDeviceTypes;
+        if (deviceDataCache->GetDeviceTypes(endpointId, endpointDeviceTypes) != CHIP_NO_ERROR)
+        {
+            icDebug("Failed to get device types for endpoint %u on device %s", endpointId, deviceId.c_str());
+            continue;
+        }
+
+        // Check if any device type on this endpoint matches our supported types
+        bool matched = false;
+        for (uint16_t dt : endpointDeviceTypes)
+        {
+            for (uint16_t supported : driverSupportedDeviceTypes)
+            {
+                if (dt == supported)
+                {
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                break;
+            }
+        }
+
+        if (matched)
+        {
+            sbmdEndpointMap[sbmdIndex] = endpointId;
+            icDebug("Mapped SBMD endpoint index %d → Matter endpoint %u for device %s",
+                    sbmdIndex,
+                    endpointId,
+                    deviceId.c_str());
+            sbmdIndex++;
+        }
+    }
+
+    if (sbmdEndpointMap.empty())
+    {
+        icError("No matching device type endpoints found for device %s", deviceId.c_str());
+        return false;
+    }
+
+    icDebug("Resolved %zu endpoint(s) for device %s", sbmdEndpointMap.size(), deviceId.c_str());
+    return true;
+}
+
+bool MatterDevice::GetEndpointForSbmdIndex(int sbmdIndex, chip::EndpointId &outEndpointId) const
+{
+    auto it = sbmdEndpointMap.find(sbmdIndex);
+    if (it == sbmdEndpointMap.end())
+    {
+        icError("SBMD endpoint index %d not found in endpoint map for device %s", sbmdIndex, deviceId.c_str());
+        return false;
+    }
+
+    outEndpointId = it->second;
+    return true;
+}
+
 bool MatterDevice::GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap)
 {
     chip::TLV::TLVReader reader;
@@ -303,7 +388,7 @@ void MatterDevice::UpdateCachedFeatureMaps()
     icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), clusterFeatureMaps.size());
 }
 
-bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper)
+bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper, std::optional<int> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -326,7 +411,16 @@ bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mappe
     {
         const auto &attribute = mapper.readAttribute.value();
 
-        if (!GetEndpointForCluster(attribute.clusterId, endpointId))
+        bool endpointFound = false;
+        if (sbmdEndpointIndex.has_value())
+        {
+            endpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
+        }
+        else
+        {
+            endpointFound = GetEndpointForCluster(attribute.clusterId, endpointId);
+        }
+        if (!endpointFound)
         {
             icError("Failed to find endpoint for cluster 0x%x", attribute.clusterId);
             return false;
@@ -361,7 +455,16 @@ bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mappe
 
         // Populate feature map for the command
         SbmdCommand &cmd = binding.command.value();
-        if (!GetEndpointForCluster(cmd.clusterId, endpointId))
+        bool cmdEndpointFound = false;
+        if (sbmdEndpointIndex.has_value())
+        {
+            cmdEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
+        }
+        else
+        {
+            cmdEndpointFound = GetEndpointForCluster(cmd.clusterId, endpointId);
+        }
+        if (!cmdEndpointFound)
         {
             icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
                     cmd.name.c_str(),
@@ -380,7 +483,8 @@ bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mappe
 bool MatterDevice::BindWriteInfo(const char *uri,
                                  const std::string &resourceKey,
                                  const std::string &endpointId,
-                                 const std::string &resourceId)
+                                 const std::string &resourceId,
+                                 std::optional<int> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -393,6 +497,20 @@ bool MatterDevice::BindWriteInfo(const char *uri,
     binding.resourceKey = resourceKey;
     binding.endpointId = endpointId;
     binding.resourceId = resourceId;
+
+    // Resolve the Matter endpoint at bind time
+    chip::EndpointId resolvedEp;
+    if (sbmdEndpointIndex.has_value())
+    {
+        if (GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), resolvedEp))
+        {
+            binding.resolvedEndpointId = resolvedEp;
+        }
+    }
+    else
+    {
+        // Device-level resource: no SBMD index, endpoint will be determined by script at runtime
+    }
 
     resourceWriteBindings[uri] = binding;
     icDebug("Bound write for URI %s (resourceKey=%s)", uri, resourceKey.c_str());
@@ -402,7 +520,8 @@ bool MatterDevice::BindWriteInfo(const char *uri,
 bool MatterDevice::BindExecuteInfo(const char *uri,
                                    const std::string &resourceKey,
                                    const std::string &endpointId,
-                                   const std::string &resourceId)
+                                   const std::string &resourceId,
+                                   std::optional<int> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -416,12 +535,26 @@ bool MatterDevice::BindExecuteInfo(const char *uri,
     binding.endpointId = endpointId;
     binding.resourceId = resourceId;
 
+    // Resolve the Matter endpoint at bind time
+    chip::EndpointId resolvedEp;
+    if (sbmdEndpointIndex.has_value())
+    {
+        if (GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), resolvedEp))
+        {
+            binding.resolvedEndpointId = resolvedEp;
+        }
+    }
+    else
+    {
+        // Device-level resource: no SBMD index, endpoint will be determined by script at runtime
+    }
+
     resourceExecuteBindings[uri] = binding;
     icDebug("Bound execute for URI %s (resourceKey=%s)", uri, resourceKey.c_str());
     return true;
 }
 
-bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdEvent &event)
+bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdEvent &event, std::optional<int> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -429,9 +562,18 @@ bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdEvent &event
         return false;
     }
 
-    // Find the endpoint for this event's cluster
+    // Find the endpoint using the SBMD endpoint index, or fall back to cluster lookup
     chip::EndpointId endpointId;
-    if (!GetEndpointForCluster(event.clusterId, endpointId))
+    bool eventEndpointFound = false;
+    if (sbmdEndpointIndex.has_value())
+    {
+        eventEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
+    }
+    else
+    {
+        eventEndpointFound = GetEndpointForCluster(event.clusterId, endpointId);
+    }
+    if (!eventEndpointFound)
     {
         icError("Could not find endpoint for cluster 0x%X for URI %s", event.clusterId, uri);
         return false;
@@ -714,6 +856,10 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
         {
             endpointId = result.endpointId.value();
         }
+        else if (binding.resolvedEndpointId.has_value())
+        {
+            endpointId = binding.resolvedEndpointId.value();
+        }
         else if (!GetEndpointForCluster(result.clusterId, endpointId))
         {
             icError("Failed to find endpoint for cluster 0x%x", result.clusterId);
@@ -865,6 +1011,10 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
         if (result.endpointId.has_value())
         {
             endpointId = result.endpointId.value();
+        }
+        else if (binding.resolvedEndpointId.has_value())
+        {
+            endpointId = binding.resolvedEndpointId.value();
         }
         else if (!GetEndpointForCluster(result.clusterId, endpointId))
         {

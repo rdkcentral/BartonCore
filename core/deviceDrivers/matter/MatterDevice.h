@@ -125,6 +125,10 @@ namespace barton
          * A device could have the same cluster on multiple endpoints, but we need the one that
          * is part of our device type composition.
          *
+         * Used for device-level SBMD resources (which aren't tied to a specific SBMD endpoint)
+         * and for non-SBMD code paths (e.g., UpdateCachedFeatureMaps).
+         * For endpoint-level SBMD resources, use GetEndpointForSbmdIndex() instead.
+         *
          * @param clusterId The cluster ID to find.
          * @param[out] outEndpointId The endpoint ID that hosts the cluster.
          * @return True if found, false otherwise.
@@ -132,14 +136,38 @@ namespace barton
         bool GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId);
 
         /**
+         * Build the SBMD-endpoint-to-Matter-endpoint mapping by matching device type lists
+         * from the Descriptor cluster against the provided device types.
+         * Must be called before resource binding.
+         *
+         * @param driverSupportedDeviceTypes The Matter device type IDs to match against.
+         * @return True if at least one matching endpoint was found, false otherwise.
+         */
+        bool ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes);
+
+        /**
+         * Look up the pre-resolved Matter endpoint for a given SBMD endpoint index.
+         *
+         * @param sbmdIndex The 0-based SBMD endpoint index.
+         * @param[out] outEndpointId The resolved Matter endpoint ID.
+         * @return True if found, false if index is out of range.
+         */
+        bool GetEndpointForSbmdIndex(int sbmdIndex, chip::EndpointId &outEndpointId) const;
+
+        /**
          * Bind a resource URI for read operations.
          * Can bind either an attribute or command based on what's in the mapper.
          *
          * @param uri The resource URI
          * @param mapper The mapper containing read configuration
+         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
+         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
+         * resources).
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceReadInfo(const char *uri, const SbmdMapper &mapper);
+        bool BindResourceReadInfo(const char *uri,
+                                  const SbmdMapper &mapper,
+                                  std::optional<int> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for write operations.
@@ -149,12 +177,16 @@ namespace barton
          * @param resourceKey The resource key for script lookup (endpointId:resourceId)
          * @param endpointId The endpoint ID (may be empty for device-level resources)
          * @param resourceId The resource identifier
+         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
+         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
+         * resources).
          * @return True if binding was successful, false otherwise.
          */
         bool BindWriteInfo(const char *uri,
                            const std::string &resourceKey,
                            const std::string &endpointId,
-                           const std::string &resourceId);
+                           const std::string &resourceId,
+                           std::optional<int> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for execute operations.
@@ -164,12 +196,16 @@ namespace barton
          * @param resourceKey The resource key for script lookup (endpointId:resourceId)
          * @param endpointId The endpoint ID (may be empty for device-level resources)
          * @param resourceId The resource identifier
+         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
+         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
+         * resources).
          * @return True if binding was successful, false otherwise.
          */
         bool BindExecuteInfo(const char *uri,
                              const std::string &resourceKey,
                              const std::string &endpointId,
-                             const std::string &resourceId);
+                             const std::string &resourceId,
+                             std::optional<int> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for event-driven updates.
@@ -178,9 +214,14 @@ namespace barton
          *
          * @param uri The resource URI
          * @param event The event information
+         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
+         *                         When nullopt, falls back to GetEndpointForCluster (useful for device-level
+         * resources).
          * @return True if binding was successful, false otherwise.
          */
-        bool BindResourceEventInfo(const char *uri, const SbmdEvent &event);
+        bool BindResourceEventInfo(const char *uri,
+                                   const SbmdEvent &event,
+                                   std::optional<int> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Handle a resource read request by looking up the binding and executing the script.
@@ -310,6 +351,9 @@ namespace barton
         void OnDone(chip::app::CommandSender *apCommandSender) override;
 
     private:
+        // Allow test subclass to access private members for testing
+        friend class TestableMatterDevice;
+
         /**
          * Get the feature map for a cluster from the device data cache.
          *
@@ -392,6 +436,11 @@ namespace barton
             std::string resourceKey;
             std::string endpointId;
             std::string resourceId;
+
+            // Pre-resolved Matter endpoint for ScriptOnly bindings.
+            // Set at bind time from either the endpoint map or cluster lookup.
+            // nullopt if no endpoint could be resolved (should not happen for valid bindings).
+            std::optional<chip::EndpointId> resolvedEndpointId;
         };
 
         // Hash function for ConcreteAttributePath to enable fast lookup
@@ -487,6 +536,7 @@ namespace barton
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
         std::unique_ptr<CacheCallback> cacheCallback;
         std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
+        std::map<int, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId
         std::map<std::string, ResourceBinding> resourceReadBindings;
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
