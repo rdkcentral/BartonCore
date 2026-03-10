@@ -409,7 +409,17 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
         }
         if (!endpointFound)
         {
-            icError("Failed to find endpoint for cluster 0x%x", attribute.clusterId);
+            if (sbmdEndpointIndex.has_value())
+            {
+                icError("No endpoint mapped for SBMD index %u (cluster 0x%x) at URI: %s",
+                        sbmdEndpointIndex.value(),
+                        attribute.clusterId,
+                        uri);
+            }
+            else
+            {
+                icError("No endpoint found hosting cluster 0x%x at URI: %s", attribute.clusterId, uri);
+            }
             return false;
         }
 
@@ -453,10 +463,21 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
         }
         if (!cmdEndpointFound)
         {
-            icError("Failed to find endpoint for command '%s' cluster 0x%x at URI: %s",
-                    cmd.name.c_str(),
-                    cmd.clusterId,
-                    uri);
+            if (sbmdEndpointIndex.has_value())
+            {
+                icError("No endpoint mapped for SBMD index %u (command '%s', cluster 0x%x) at URI: %s",
+                        sbmdEndpointIndex.value(),
+                        cmd.name.c_str(),
+                        cmd.clusterId,
+                        uri);
+            }
+            else
+            {
+                icError("No endpoint found hosting cluster 0x%x for command '%s' at URI: %s",
+                        cmd.clusterId,
+                        cmd.name.c_str(),
+                        uri);
+            }
             return false;
         }
 
@@ -491,8 +512,10 @@ bool MatterDevice::BindWriteInfo(const char *uri,
     {
         if (!GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), resolvedEp))
         {
-            icWarn("Failed to resolve SBMD endpoint index %" PRIu8 " for URI %s (resourceKey=%s)",
-                   sbmdEndpointIndex.value(), uri, resourceKey.c_str());
+            icWarn("Failed to resolve SBMD endpoint index %" PRIu32 " for URI %s (resourceKey=%s)",
+                   sbmdEndpointIndex.value(),
+                   uri,
+                   resourceKey.c_str());
             // Do not bind this resource: per spec, unmatched SBMD endpoints should not be bound
             return false;
         }
@@ -581,7 +604,17 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
     }
     if (!eventEndpointFound)
     {
-        icError("Could not find endpoint for cluster 0x%X for URI %s", event.clusterId, uri);
+        if (sbmdEndpointIndex.has_value())
+        {
+            icError("No endpoint mapped for SBMD index %u (event cluster 0x%X) at URI: %s",
+                    sbmdEndpointIndex.value(),
+                    event.clusterId,
+                    uri);
+        }
+        else
+        {
+            icError("No endpoint found hosting cluster 0x%X for URI: %s", event.clusterId, uri);
+        }
         return false;
     }
 
