@@ -489,10 +489,15 @@ bool MatterDevice::BindWriteInfo(const char *uri,
     chip::EndpointId resolvedEp;
     if (sbmdEndpointIndex.has_value())
     {
-        if (GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), resolvedEp))
+        if (!GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), resolvedEp))
         {
-            binding.resolvedEndpointId = resolvedEp;
+            icWarn("Failed to resolve SBMD endpoint index %" PRIu8 " for URI %s (resourceKey=%s)",
+                   sbmdEndpointIndex.value(), uri, resourceKey.c_str());
+            // Do not bind this resource: per spec, unmatched SBMD endpoints should not be bound
+            return false;
         }
+
+        binding.resolvedEndpointId = resolvedEp;
     }
     else
     {
