@@ -89,7 +89,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
     // is populated: read mappers query the device, event mappers update the value from events.
     // A resource can be readable without a read mapper if its value is populated by events.
-    auto configureResource = [&device](const SbmdResource &sbmdResource, std::optional<int> sbmdEndpointIndex) -> bool {
+    auto configureResource = [&device](const SbmdResource &sbmdResource,
+                                       std::optional<uint32_t> sbmdEndpointIndex) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
@@ -167,7 +168,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     }
 
     // Configure endpoint-level resources
-    for (int epIdx = 0; epIdx < static_cast<int>(spec->endpoints.size()); ++epIdx)
+    for (uint32_t epIdx = 0; epIdx < static_cast<uint32_t>(spec->endpoints.size()); ++epIdx)
     {
         const auto &endpoint = spec->endpoints[epIdx];
         for (const auto &resource : endpoint.resources)

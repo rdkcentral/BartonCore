@@ -41,7 +41,7 @@ namespace barton
         using MatterDevice::MatterDevice;
 
         // Expose private members for test manipulation and verification
-        std::map<int, chip::EndpointId> &GetSbmdEndpointMap() { return sbmdEndpointMap; }
+        std::map<uint32_t, chip::EndpointId> &GetSbmdEndpointMap() { return sbmdEndpointMap; }
         const std::map<std::string, ResourceBinding> &GetReadBindings() { return resourceReadBindings; }
         const std::map<std::string, ResourceBinding> &GetWriteBindings() { return resourceWriteBindings; }
         const std::map<std::string, ResourceBinding> &GetExecuteBindings() { return resourceExecuteBindings; }
@@ -122,7 +122,6 @@ namespace
 
         chip::EndpointId endpointId;
         EXPECT_FALSE(device->GetEndpointForSbmdIndex(1, endpointId));
-        EXPECT_FALSE(device->GetEndpointForSbmdIndex(-1, endpointId));
         EXPECT_FALSE(device->GetEndpointForSbmdIndex(99, endpointId));
     }
 

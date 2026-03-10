@@ -29,6 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "app/WriteClient.h"
+#include <algorithm>
 #include <clusters/shared/GlobalIds.h>
 #include <platform/CHIPDeviceLayer.h>
 
@@ -269,7 +270,7 @@ bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupport
     }
 
     sbmdEndpointMap.clear();
-    int sbmdIndex = 0;
+    uint32_t sbmdIndex = 0;
 
     for (auto endpointId : deviceDataCache->GetEndpointIds())
     {
@@ -287,28 +288,13 @@ bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupport
         }
 
         // Check if any device type on this endpoint matches our supported types
-        bool matched = false;
-        for (uint16_t dt : endpointDeviceTypes)
-        {
-            for (uint16_t supported : driverSupportedDeviceTypes)
-            {
-                if (dt == supported)
-                {
-                    matched = true;
-                    break;
-                }
-            }
-
-            if (matched)
-            {
-                break;
-            }
-        }
-
-        if (matched)
+        if (std::find_first_of(endpointDeviceTypes.begin(),
+                               endpointDeviceTypes.end(),
+                               driverSupportedDeviceTypes.begin(),
+                               driverSupportedDeviceTypes.end()) != endpointDeviceTypes.end())
         {
             sbmdEndpointMap[sbmdIndex] = endpointId;
-            icDebug("Mapped SBMD endpoint index %d → Matter endpoint %u for device %s",
+            icDebug("Mapped SBMD endpoint index %u → Matter endpoint %u for device %s",
                     sbmdIndex,
                     endpointId,
                     deviceId.c_str());
@@ -326,12 +312,12 @@ bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupport
     return true;
 }
 
-bool MatterDevice::GetEndpointForSbmdIndex(int sbmdIndex, chip::EndpointId &outEndpointId) const
+bool MatterDevice::GetEndpointForSbmdIndex(uint32_t sbmdIndex, chip::EndpointId &outEndpointId) const
 {
     auto it = sbmdEndpointMap.find(sbmdIndex);
     if (it == sbmdEndpointMap.end())
     {
-        icError("SBMD endpoint index %d not found in endpoint map for device %s", sbmdIndex, deviceId.c_str());
+        icError("SBMD endpoint index %u not found in endpoint map for device %s", sbmdIndex, deviceId.c_str());
         return false;
     }
 
@@ -388,7 +374,9 @@ void MatterDevice::UpdateCachedFeatureMaps()
     icDebug("Updated cached feature maps for device %s (%zu clusters)", deviceId.c_str(), clusterFeatureMaps.size());
 }
 
-bool MatterDevice::BindResourceReadInfo(const char *uri, const SbmdMapper &mapper, std::optional<int> sbmdEndpointIndex)
+bool MatterDevice::BindResourceReadInfo(const char *uri,
+                                        const SbmdMapper &mapper,
+                                        std::optional<uint32_t> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -484,7 +472,7 @@ bool MatterDevice::BindWriteInfo(const char *uri,
                                  const std::string &resourceKey,
                                  const std::string &endpointId,
                                  const std::string &resourceId,
-                                 std::optional<int> sbmdEndpointIndex)
+                                 std::optional<uint32_t> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -521,7 +509,7 @@ bool MatterDevice::BindExecuteInfo(const char *uri,
                                    const std::string &resourceKey,
                                    const std::string &endpointId,
                                    const std::string &resourceId,
-                                   std::optional<int> sbmdEndpointIndex)
+                                   std::optional<uint32_t> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {
@@ -554,7 +542,9 @@ bool MatterDevice::BindExecuteInfo(const char *uri,
     return true;
 }
 
-bool MatterDevice::BindResourceEventInfo(const char *uri, const SbmdEvent &event, std::optional<int> sbmdEndpointIndex)
+bool MatterDevice::BindResourceEventInfo(const char *uri,
+                                         const SbmdEvent &event,
+                                         std::optional<uint32_t> sbmdEndpointIndex)
 {
     if (uri == nullptr)
     {

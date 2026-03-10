@@ -152,7 +152,7 @@ namespace barton
          * @param[out] outEndpointId The resolved Matter endpoint ID.
          * @return True if found, false if index is out of range.
          */
-        bool GetEndpointForSbmdIndex(int sbmdIndex, chip::EndpointId &outEndpointId) const;
+        bool GetEndpointForSbmdIndex(uint32_t sbmdIndex, chip::EndpointId &outEndpointId) const;
 
         /**
          * Bind a resource URI for read operations.
@@ -167,7 +167,7 @@ namespace barton
          */
         bool BindResourceReadInfo(const char *uri,
                                   const SbmdMapper &mapper,
-                                  std::optional<int> sbmdEndpointIndex = std::nullopt);
+                                  std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for write operations.
@@ -186,7 +186,7 @@ namespace barton
                            const std::string &resourceKey,
                            const std::string &endpointId,
                            const std::string &resourceId,
-                           std::optional<int> sbmdEndpointIndex = std::nullopt);
+                           std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for execute operations.
@@ -205,7 +205,7 @@ namespace barton
                              const std::string &resourceKey,
                              const std::string &endpointId,
                              const std::string &resourceId,
-                             std::optional<int> sbmdEndpointIndex = std::nullopt);
+                             std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Bind a resource URI for event-driven updates.
@@ -221,7 +221,7 @@ namespace barton
          */
         bool BindResourceEventInfo(const char *uri,
                                    const SbmdEvent &event,
-                                   std::optional<int> sbmdEndpointIndex = std::nullopt);
+                                   std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
          * Handle a resource read request by looking up the binding and executing the script.
@@ -536,7 +536,7 @@ namespace barton
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
         std::unique_ptr<CacheCallback> cacheCallback;
         std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
-        std::map<int, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId
+        std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId
         std::map<std::string, ResourceBinding> resourceReadBindings;
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
