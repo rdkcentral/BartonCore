@@ -7,7 +7,8 @@
     "initializeCommand": "docker/setupDockerEnv.sh",
     "dockerComposeFile": [
         "../docker/compose.yaml",
-        "../docker/compose.devcontainer.yaml"
+        "../docker/compose.devcontainer.yaml",
+        "../docker/compose.observability.yaml"
     ],
     "service": "barton",
 
@@ -50,6 +51,14 @@
 
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
+
+    // Jaeger runs in a separate compose service. socat proxies it into this
+    // container so VS Code can forward the port to the local browser.
+    "forwardPorts": [16686],
+    "portsAttributes": {
+        "16686": { "label": "Jaeger UI", "onAutoForward": "silent" }
+    },
+    "postStartCommand": "nohup socat TCP-LISTEN:16686,fork,reuseaddr TCP:jaeger:16686 >/dev/null 2>&1 &",
 
     "features": {
         "ghcr.io/devcontainers/features/node:1": {}
