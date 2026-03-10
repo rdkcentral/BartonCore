@@ -303,14 +303,14 @@ namespace
         EXPECT_EQ(bindings.at("/test/write1").resolvedEndpointId.value(), 3);
     }
 
-    // Endpoint-level write binding with invalid index: succeeds but no resolvedEndpointId
+    // Endpoint-level write binding with invalid index: bind should fail and no binding created
     TEST_F(MatterDeviceEndpointMapTest, BindWriteInfoEndpointLevelBadIndex)
     {
         device->GetSbmdEndpointMap()[0] = 1;
 
-        EXPECT_TRUE(device->BindWriteInfo("/test/write-bad", "key", "ep1", "res1", 5));
+        EXPECT_FALSE(device->BindWriteInfo("/test/write-bad", "key", "ep1", "res1", 5));
         auto &bindings = device->GetWriteBindings();
-        EXPECT_FALSE(bindings.at("/test/write-bad").resolvedEndpointId.has_value());
+        EXPECT_EQ(bindings.find("/test/write-bad"), bindings.end());
     }
 
     // Device-level write binding (nullopt): no resolvedEndpointId (script provides at runtime)
