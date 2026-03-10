@@ -262,6 +262,26 @@ if (BCORE_THREAD)
         ${DBUS_LIBRARIES})
 endif()
 
+# OpenTelemetry observability (if option set)
+if (BCORE_OBSERVABILITY)
+    include(BCoreOpenTelemetry)
+
+    file(GLOB otelSrc "src/observability/*.cpp")
+    list(APPEND SOURCES ${otelSrc})
+
+    list(APPEND XTRA_LIBS
+        opentelemetry_trace
+        opentelemetry_metrics
+        opentelemetry_logs
+        opentelemetry_exporter_otlp_http
+        opentelemetry_exporter_otlp_http_metric
+        opentelemetry_exporter_otlp_http_log
+        opentelemetry_otlp_recordable
+        opentelemetry_resources
+        opentelemetry_common
+        opentelemetry_http_client_curl)
+endif()
+
 list(APPEND SOURCES
         ${SOURCES}
         ${zigSubSrc}
@@ -323,6 +343,13 @@ target_include_directories(BartonCore PRIVATE
                             PUBLIC
                             ${BARTON_PUBLIC_INCLUDES}
                             )
+
+# When OpenTelemetry is enabled, wrap icLogMsg so the OTel log bridge
+# intercepts all logging without modifying BartonCommon.
+if (BCORE_OBSERVABILITY)
+    target_link_options(BartonCoreStatic PRIVATE "-Wl,--wrap=icLogMsg")
+    target_link_options(BartonCore PRIVATE "-Wl,--wrap=icLogMsg")
+endif()
 
 set_target_properties(BartonCore PROPERTIES VERSION ${BARTON_CORE_SO_VERSION} SOVERSION ${BARTON_CORE_MAJOR_VERSION})
 install(TARGETS BartonCore DESTINATION lib)
