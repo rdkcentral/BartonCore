@@ -99,6 +99,49 @@ requires_matterjs = pytest.mark.skipif(
     reason="Test requires matter.js integration (BCORE_MATTER_USE_MATTERJS=ON)",
 )
 
+
+def _is_otel_enabled() -> bool:
+    """Check if BCORE_OBSERVABILITY is enabled in CMakeCache.txt."""
+    cache_path = _get_cmake_cache_path()
+    if not os.path.exists(cache_path):
+        logger.warning(
+            f"CMakeCache.txt not found at {cache_path}, assuming otel is disabled"
+        )
+        return False
+
+    try:
+        with open(cache_path, "r") as f:
+            for line in f:
+                match = re.match(r"^BCORE_OBSERVABILITY:BOOL=(.+)$", line.strip())
+                if match:
+                    value = match.group(1).upper()
+                    enabled = value in ("ON", "TRUE", "1", "YES")
+                    logger.debug(f"BCORE_OBSERVABILITY={value} (enabled={enabled})")
+                    return enabled
+    except Exception as e:
+        logger.warning(f"Error reading CMakeCache.txt: {e}, assuming otel is disabled")
+        return False
+
+    return False
+
+
+_otel_enabled = None
+
+
+def is_otel_enabled() -> bool:
+    """Check if OpenTelemetry observability is enabled (cached)."""
+    global _otel_enabled
+    if _otel_enabled is None:
+        _otel_enabled = _is_otel_enabled()
+    return _otel_enabled
+
+
+# Skip marker for tests that require OpenTelemetry
+requires_otel = pytest.mark.skipif(
+    not is_otel_enabled(),
+    reason="Test requires OpenTelemetry (BCORE_OBSERVABILITY=ON)",
+)
+
 # The following list of plugins are automatically loaded by pytest when running tests.
 # Any fixtures defined within these modules are automatically available to all test modules.
 pytest_plugins = [
