@@ -10,14 +10,14 @@
 ## 2. C Adapter API Headers (No-Op Layer)
 
 - [x] 2.1 Create `core/src/observability/observability.h` — `extern "C"` init/shutdown functions (`observabilityInit`, `observabilityShutdown`) with no-op inline stubs when `BARTON_CONFIG_OBSERVABILITY` is not defined
-- [x] 2.2 Create `core/src/observability/observabilityTracing.h` — `extern "C"` span API (`observabilitySpanStart`, `observabilitySpanStartWithParent`, `observabilitySpanEnd`, `observabilitySpanSetAttribute`, `observabilitySpanSetError`, `observabilitySpanGetContext`, `observabilitySpanContextFree`) with opaque types and no-op stubs
+- [x] 2.2 Create `core/src/observability/observabilityTracing.h` — `extern "C"` span API (`observabilitySpanStart`, `observabilitySpanStartWithParent`, `observabilitySpanRelease`, `observabilitySpanSetAttribute`, `observabilitySpanSetError`, `observabilitySpanGetContext`, `observabilitySpanContextRelease`) with opaque types, no-op stubs, and `G_DEFINE_AUTOPTR_CLEANUP_FUNC` support
 - [x] 2.3 Create `core/src/observability/observabilityMetrics.h` — `extern "C"` metrics API (`observabilityCounterCreate`, `observabilityCounterAdd`, `observabilityGaugeCreate`, `observabilityGaugeRecord`) with no-op stubs
 - [x] 2.4 Create `core/src/observability/observabilityLogBridge.h` — `extern "C"` log bridge API (`observabilityLogBridgeInit`, `observabilityLogBridgeEmit`, `observabilityLogBridgeShutdown`) with no-op stubs
 - [x] 2.5 Unit test: Write a C test (CMocka) in `core/test/` that includes all observability headers with `BARTON_CONFIG_OBSERVABILITY` undefined and verifies all calls compile and are safe no-ops
 
 ## 3. Tracing Implementation
 
-- [x] 3.1 Implement `core/src/observability/observability.cpp` — `TracerProvider` + `MeterProvider` + `LoggerProvider` initialization with OTLP HTTP exporters, reading `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, and `OTEL_RESOURCE_ATTRIBUTES` env vars; shutdown with flush
+- [x] 3.1 Implement `core/src/observability/observability.cpp` — `TracerProvider` + `MeterProvider` + `LoggerProvider` initialization with OTLP HTTP exporters, reading `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` env vars; shutdown with flush
 - [x] 3.2 Implement `core/src/observability/observabilityTracing.cpp` — span lifecycle wrapping `opentelemetry::trace::Tracer`, context extraction/propagation, attribute setting, error status
 - [x] 3.3 Unit test: Write a C++ test (Google Test) in `core/test/` for `observabilityTracing` — create spans, set attributes, create child spans with parent context; use InMemorySpanExporter to assert span names, attributes, and parent-child trace IDs
 - [x] 3.4 Unit test: Write a C++ test (Google Test) in `core/test/` for `observability` init/shutdown — verify providers are created and shutdown flushes without errors
@@ -38,28 +38,28 @@
 
 - [x] 6.1 Wire `observabilityInit()` into `deviceServiceInitialize()` and `observabilityShutdown()` into `deviceServiceShutdown()`, gated by `#ifdef BARTON_CONFIG_OBSERVABILITY`
 - [x] 6.2 Add tracing spans to device discovery flow in `deviceService.c` and driver manager — `device.discovery` root span, `device.found` child spans
-- [x] 6.3 Add tracing spans to commissioning operations — `device.commission` span with device attributes
+- [ ] 6.3 *(deferred)* Add tracing spans to commissioning operations — `device.commission` span with device attributes
 - [x] 6.4 Add tracing spans to resource read/write operations — `resource.read` and `resource.write` spans with URI attributes
 - [x] 6.5 Add tracing spans to subsystem init/shutdown in `subsystemManager` — `subsystem.init` and `subsystem.shutdown` spans
-- [x] 6.6 Add metrics instrumentation: `device.active.count` gauge updates in device add/remove, `device.commfail.count` and `device.commrestore.count` counters in communication watchdog, `device.discovery.duration` histogram in discovery flow
+- [x] 6.6 Add metrics instrumentation: `device.active.count` gauge updates in device add/remove, `device.commfail.count` and `device.commrestore.count` counters in communication watchdog
 
 ## 7. Integration Tests (pytest)
 
 - [x] 7.1 Set up OTLP test infrastructure in `testing/` — a lightweight OTLP receiver (e.g., a local OTel Collector with file exporter, or a Python mock OTLP server) that captures exported spans, metrics, and logs for assertion
-- [x] 7.2 Add a `conftest.py` fixture or marker in `testing/` that detects `BCORE_OBSERVABILITY` from `build/CMakeCache.txt` and skips telemetry tests when the feature is not built
+- [x] 7.2 Add a `conftest.py` fixture or marker in `testing/` that detects `BCORE_OBSERVABILITY` from `build/CMakeCache.txt` and skips observability tests when the feature is not built
 - [x] 7.3 Write a pytest integration test in `testing/test/` that starts a `BCore.Client` with `OTEL_EXPORTER_OTLP_ENDPOINT` pointing to the test receiver, performs a device operation, and asserts that expected spans (`subsystem.init`, `device.discovery`) are present in the captured data
 - [x] 7.4 Write a pytest integration test that verifies metrics (`device.active.count`, `device.commfail.count`) are exported after device add/remove and comm-fail events
 - [x] 7.5 Write a pytest integration test that verifies OTel log records are exported with correct severity and scope when `icLog` messages are emitted during service startup
 
-## 8. Reference App Telemetry Demo
+## 8. Reference App Observability Demo
 
 - [x] 8.1 Create `docker/otel-collector-config.yaml` — OTel Collector config with OTLP HTTP receiver (port 4318) and Jaeger exporter
-- [x] 8.2 Create `docker/compose.telemetry.yaml` — Docker Compose overlay adding `otel-collector` and `jaeger` services, with the collector config mounted; designed to layer on top of `docker/compose.yaml`
-- [x] 8.3 Verify the reference app (`barton-core-reference`) builds and runs with `BCORE_OBSERVABILITY=ON`, exporting telemetry to the collector
-- [x] 8.4 Test: Start the telemetry Docker stack, run the reference app, perform device operations, and verify traces appear in Jaeger UI at `http://localhost:16686`
+- [x] 8.2 Create `docker/compose.observability.yaml` — Docker Compose overlay adding `otel-collector` and `jaeger` services, with the collector config mounted; designed to layer on top of `docker/compose.yaml`
+- [x] 8.3 Verify the reference app (`barton-core-reference`) builds and runs with `BCORE_OBSERVABILITY=ON`, exporting observability data to the collector
+- [x] 8.4 Test: Start the observability Docker stack, run the reference app, perform device operations, and verify traces appear in Jaeger UI at `http://localhost:16686`
 
 ## 9. Documentation and CI
 
-- [x] 9.1 Create `docs/OBSERVABILITY.md` documenting: the `BCORE_OBSERVABILITY` flag, environment variables, how to connect a collector, and a step-by-step walkthrough of running the reference app with the telemetry Docker stack (build → start stack → run app → view in Jaeger)
-- [x] 9.2 Add a CI pipeline step that builds with `BCORE_OBSERVABILITY=ON` and runs both the observability unit tests (ctest) and integration tests (pytest under `testing/`)
+- [x] 9.1 Create `docs/OBSERVABILITY.md` documenting: the `BCORE_OBSERVABILITY` flag, environment variables, how to connect a collector, and a step-by-step walkthrough of running the reference app with the observability Docker stack (build → start stack → run app → view in Jaeger)
+- [x] 9.2 Enable `BCORE_OBSERVABILITY` in the dev linux cmake initial cache (`config/cmake/platforms/dev/linux.cmake`) so the default build and CI run observability tests automatically
 - [x] 9.3 Verify the full test suite passes with both `BCORE_OBSERVABILITY=OFF` and `BCORE_OBSERVABILITY=ON`

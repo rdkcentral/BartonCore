@@ -42,7 +42,7 @@ The build system SHALL support ON/OFF feature flags via the `bcore_option()` CMa
 - **THEN** `BARTON_CONFIG_THREAD=1` SHALL be defined and Thread code SHALL be compiled
 
 ### Requirement: Feature flag catalog
-The build system SHALL support the following ON/OFF flags with specified defaults (16 public + 3 private = 19 total):
+The build system SHALL support the following ON/OFF flags with specified defaults (17 public + 3 private = 20 total):
 
 **Public flags:**
 
@@ -64,6 +64,7 @@ The build system SHALL support the following ON/OFF flags with specified default
 | `BCORE_MATTER_ENABLE_OTA_PROVIDER` | OFF | `BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER` |
 | `BCORE_MATTER_USE_MATTERJS` | ON | `BARTON_CONFIG_MATTER_USE_MATTERJS` |
 | `BCORE_BUILD_THIRD_PARTY_BARTON_COMMON` | ON | `BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON` |
+| `BCORE_OBSERVABILITY` | OFF | `BARTON_CONFIG_OBSERVABILITY` |
 
 **Private flags (internal use):**
 
@@ -76,6 +77,14 @@ The build system SHALL support the following ON/OFF flags with specified default
 #### Scenario: Flag off excludes definition
 - **WHEN** any `BCORE_*` flag is set to OFF
 - **THEN** its corresponding `BARTON_CONFIG_*` definition SHALL NOT be set
+
+#### Scenario: OpenTelemetry flag off (default)
+- **WHEN** `BCORE_OBSERVABILITY=OFF` (default)
+- **THEN** `BARTON_CONFIG_OBSERVABILITY` SHALL NOT be defined, no OpenTelemetry code SHALL be compiled, and no opentelemetry-cpp dependency SHALL be required
+
+#### Scenario: OpenTelemetry flag on
+- **WHEN** `BCORE_OBSERVABILITY=ON`
+- **THEN** `BARTON_CONFIG_OBSERVABILITY=1` SHALL be defined, `core/src/observability/*.cpp` SHALL be compiled, and opentelemetry-cpp SHALL be fetched and linked
 
 ### Requirement: String configuration options
 The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_LINK_LIBRARIES`.
@@ -154,3 +163,33 @@ The build system SHALL derive the project version from `git describe --tags` mat
 #### Scenario: Version from tag
 - **WHEN** the latest tag is `1.5.3`
 - **THEN** `BARTON_CORE_VERSION` SHALL start with `1.5.3`, `BARTON_CORE_SO_VERSION` SHALL be `1.5.3`, and `BARTON_CORE_API_VERSION` SHALL be `1.0`
+
+### Requirement: OpenTelemetry C++ SDK dependency
+When `BCORE_OBSERVABILITY=ON`, the build system SHALL fetch opentelemetry-cpp via `FetchContent_Declare` pinned to a specific release tag. Only the SDK core, OTLP HTTP exporter, and Logs SDK components SHALL be built. The dependency SHALL use libcurl (already required) as the HTTP transport.
+
+#### Scenario: FetchContent retrieval
+- **WHEN** CMake configures with `BCORE_OBSERVABILITY=ON`
+- **THEN** opentelemetry-cpp SHALL be fetched from its GitHub repository at the pinned tag
+
+#### Scenario: Minimal component build
+- **WHEN** opentelemetry-cpp is configured
+- **THEN** only `opentelemetry_api`, `opentelemetry_sdk`, `opentelemetry_exporter_otlp_http`, and `opentelemetry_logs` targets SHALL be built (no gRPC, no Prometheus, no Jaeger exporters)
+
+#### Scenario: Dependency not fetched when disabled
+- **WHEN** `BCORE_OBSERVABILITY=OFF`
+- **THEN** no opentelemetry-cpp source SHALL be downloaded or compiled
+
+### Requirement: Observability sources conditional compilation
+When `BCORE_OBSERVABILITY=ON`, the build system SHALL compile C++ source files from `core/src/observability/` and link them into the `bCoreObject` target. The observability headers SHALL be available to all core source files.
+
+#### Scenario: Sources included
+- **WHEN** `BCORE_OBSERVABILITY=ON`
+- **THEN** `core/src/observability/*.cpp` SHALL be added to the `SOURCES` list for `bCoreObject`
+
+#### Scenario: Sources excluded
+- **WHEN** `BCORE_OBSERVABILITY=OFF`
+- **THEN** no files from `core/src/observability/` SHALL be compiled
+
+#### Scenario: Headers accessible
+- **WHEN** `BCORE_OBSERVABILITY=ON`
+- **THEN** `core/src/observability/` SHALL be in the private include path so that any core `.c` file can `#include "observability/observabilityTracing.h"`
