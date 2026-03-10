@@ -535,6 +535,12 @@ bool MatterDevice::BindExecuteInfo(const char *uri,
         {
             binding.resolvedEndpointId = resolvedEp;
         }
+        else
+        {
+            icError("Failed to resolve endpoint for SBMD index %u; not binding execute for URI %s",
+                    static_cast<unsigned>(sbmdEndpointIndex.value()), uri);
+            return false;
+        }
     }
     else
     {
