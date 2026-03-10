@@ -64,9 +64,9 @@ Proposed flow:
 
 ### 4. Pass SBMD endpoint index through the binding API
 
-**Decision**: Modify `BindResourceReadInfo()`, `BindWriteInfo()`, `BindExecuteInfo()`, and `BindResourceEventInfo()` to require an `int sbmdEndpointIndex` parameter. All callers must pass the SBMD endpoint index; there is no default. Use `GetEndpointForSbmdIndex()` instead of `GetEndpointForCluster()`.
+**Decision**: Modify `BindResourceReadInfo()`, `BindWriteInfo()`, `BindExecuteInfo()`, and `BindResourceEventInfo()` to take a `std::optional<uint32_t> sbmdEndpointIndex` parameter, defaulting to `std::nullopt`. When `sbmdEndpointIndex` has a value, the binding code uses `GetEndpointForSbmdIndex()`; when it is `std::nullopt`, the binding is treated as a device-level resource that is not tied to a specific SBMD endpoint (and continues to use the existing device-level behavior).
 
-**Rationale**: A required parameter makes the endpoint selection explicit at every call site, preventing accidental use of the old cluster-based path. Breaking changes to existing specs and calling code are acceptable to achieve a cleaner design.
+**Rationale**: Callers that care about a specific SBMD endpoint must pass the index explicitly, making endpoint selection clear at those call sites and preventing accidental use of the old cluster-based path, while callers for true device-level resources intentionally rely on the `std::nullopt` default. Breaking changes to existing specs and calling code are acceptable to achieve a cleaner design that still supports device-level bindings.
 
 ### 5. Thread safety: map is built before subscription starts
 
