@@ -344,14 +344,14 @@ namespace
         EXPECT_EQ(bindings.at("/test/exec1").resolvedEndpointId.value(), 3);
     }
 
-    // Endpoint-level execute binding with invalid index: succeeds but no resolvedEndpointId
-    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoEndpointLevelBadIndex)
+    // Endpoint-level execute binding with invalid index: binding fails and no binding is created
+    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoEndpointLevelBadIndexFails)
     {
         device->GetSbmdEndpointMap()[0] = 1;
 
-        EXPECT_TRUE(device->BindExecuteInfo("/test/exec-bad", "key", "ep1", "res1", 5));
+        EXPECT_FALSE(device->BindExecuteInfo("/test/exec-bad", "key", "ep1", "res1", 5));
         auto &bindings = device->GetExecuteBindings();
-        EXPECT_FALSE(bindings.at("/test/exec-bad").resolvedEndpointId.has_value());
+        EXPECT_EQ(bindings.find("/test/exec-bad"), bindings.end());
     }
 
     // Device-level execute binding (nullopt): no resolvedEndpointId (script provides at runtime)
