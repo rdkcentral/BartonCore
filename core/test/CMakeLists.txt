@@ -143,6 +143,15 @@ bcore_add_cmocka_test(
     LINK_LIBRARIES BartonCoreStatic
 )
 
+# Observability no-op test: verifies headers compile and all calls are safe
+# no-ops when BARTON_CONFIG_OBSERVABILITY is not defined.
+bcore_add_cmocka_test(
+    NAME testObservabilityNoop
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityNoopTest.c
+    LINK_LIBRARIES BartonCoreStatic
+    INCLUDES ${BARTON_PRIVATE_INCLUDES}
+)
+
 if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
