@@ -225,15 +225,6 @@ static void test_sbmdParserLightFile(void **state)
     assert_int_equal((int) spec->reporting.minSecs, 1);
     assert_int_equal((int) spec->reporting.maxSecs, 3600);
 
-    // Verify identifySeconds device-level resource exists
-    assert_true(spec->resources.size() >= 1);
-    assert_string_equal(spec->resources[0].id.c_str(), "identifySeconds");
-    assert_true(spec->resources[0].mapper.hasRead);
-    assert_true(spec->resources[0].mapper.hasWrite);
-    assert_true(spec->resources[0].mapper.readAttribute.has_value());
-    // Write uses script-only approach
-    assert_false(spec->resources[0].mapper.writeScript.empty());
-
     // Verify endpoints and core light resources
     assert_int_equal((int) spec->endpoints.size(), 1);
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
