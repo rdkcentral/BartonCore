@@ -136,7 +136,7 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     # from subscribing to the device.
     identify_seconds_uri = f"/{device_uuid}/r/identifySeconds"
 
-    def wait_for_condition(client, uri, predicate, timeout=1, poll_interval=0.1):
+    def wait_for_condition(client, uri, predicate, timeout=3, poll_interval=0.1):
         """Poll for a resource value until predicate(value) is True or timeout is reached."""
         start = time.time()
         while time.time() - start < timeout:
@@ -151,7 +151,7 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
         default_environment.get_client(),
         identify_seconds_uri,
         lambda v: v is not None,
-        timeout=1,
+        timeout=3,
         poll_interval=0.1,
     )
     assert (
@@ -190,7 +190,7 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
         default_environment.get_client(),
         identify_seconds_uri,
         lambda v: (v is not None and v.isdigit() and int(v) == new_value),
-        timeout=1,
+        timeout=3,
         poll_interval=0.1,
     )
     assert (

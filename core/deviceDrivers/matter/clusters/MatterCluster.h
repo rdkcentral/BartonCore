@@ -35,6 +35,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <tuple>
 
 namespace barton
 {
@@ -60,15 +61,18 @@ namespace barton
         {
             nodeId = Subsystem::Matter::UuidToNodeId(this->deviceId.c_str());
 
-            auto key = std::make_tuple(this->deviceId, endpointId, clusterId);
-            this->deviceDataCache->SetClusterCallback(key, this);
+            auto key = std::make_tuple(endpointId, clusterId);
+            if (this->deviceDataCache != nullptr)
+            {
+                this->deviceDataCache->SetClusterCallback(key, this);
+            }
         };
 
         virtual ~MatterCluster()
         {
             if (deviceDataCache != nullptr)
             {
-                auto key = std::make_tuple(deviceId, endpointId, clusterId);
+                auto key = std::make_tuple(endpointId, clusterId);
                 deviceDataCache->RemoveClusterCallback(key);
             }
         }

@@ -47,7 +47,7 @@ namespace barton
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void IdentifyTimeChanged(std::string &deviceUuid, uint16_t identifyTimeSecs) {};
+            virtual void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) {};
         };
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
