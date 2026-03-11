@@ -34,6 +34,7 @@
 
 #include <future>
 #include <json/json.h>
+#include <map>
 #include <string>
 
 using namespace barton::Subsystem::Matter;
@@ -130,6 +131,23 @@ namespace barton
         }
 
         /**
+         * Set the callback handler for common cluster events and attribute changes.
+         *
+         * @param callback Pointer to the callback for a particular device+endpoint+cluster.
+         *                 The cache does not take ownership.
+         */
+        void SetClusterCallback(std::tuple<std::string, chip::EndpointId, chip::ClusterId> key,
+                                chip::app::ClusterStateCache::Callback *callback)
+        {
+            commonClusterCallbacks[key] = callback;
+        }
+
+        void RemoveClusterCallback(std::tuple<std::string, chip::EndpointId, chip::ClusterId> key)
+        {
+            commonClusterCallbacks.erase(key);
+        }
+
+        /**
          * Get attribute data stored in the cache as a TLVReader.
          */
         CHIP_ERROR GetAttributeData(const chip::app::ConcreteDataAttributePath &aPath,
@@ -213,7 +231,18 @@ namespace barton
                          chip::TLV::TLVReader *apData,
                          const chip::app::StatusIB *apStatus) override
         {
-            if (callback != nullptr)
+
+            auto key = std::make_tuple(deviceUuid, aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
+            auto it = commonClusterCallbacks.find(key);
+            chip::app::ClusterStateCache::Callback *commonClusterCallback =
+                (it != commonClusterCallbacks.end()) ? it->second : nullptr;
+
+            if (commonClusterCallback != nullptr)
+            {
+                commonClusterCallback->OnEventData(aEventHeader, apData, apStatus);
+            }
+
+            else if (callback != nullptr)
             {
                 callback->OnEventData(aEventHeader, apData, apStatus);
             }
@@ -238,7 +267,17 @@ namespace barton
                              chip::TLV::TLVReader *apData,
                              const chip::app::StatusIB &aStatus) override
         {
-            if (callback != nullptr && aStatus.IsSuccess())
+            auto key = std::make_tuple(deviceUuid, aPath.mEndpointId, aPath.mClusterId);
+            auto it = commonClusterCallbacks.find(key);
+            chip::app::ClusterStateCache::Callback *commonClusterCallback =
+                (it != commonClusterCallbacks.end()) ? it->second : nullptr;
+
+            if (commonClusterCallback != nullptr && aStatus.IsSuccess())
+            {
+                commonClusterCallback->OnAttributeChanged(clusterStateCache.get(), aPath);
+            }
+
+            else if (callback != nullptr && aStatus.IsSuccess())
             {
                 callback->OnAttributeChanged(clusterStateCache.get(), aPath);
             }
@@ -312,7 +351,15 @@ namespace barton
         uint64_t lastReportCompletedTimestamp = 0;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
 
+        // This is the overall callback handler for device cluster events and attribute changes.
         std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;
+
+        // These callback handlers are for events and attributes on common clusters e.g. PowerSource,
+        // WifiNetworkDiagnostics, which are not specified in the device-specific SBMD files.
+        // device id + endpoint id + cluster id to ClusterStateCache Callback.
+        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, chip::app::ClusterStateCache::Callback *>
+            commonClusterCallbacks;
+
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
     };
