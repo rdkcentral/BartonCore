@@ -524,8 +524,8 @@ bool MatterDevice::BindWriteInfo(const char *uri,
     }
     else
     {
-        // Device-level resource: no SBMD index, endpoint will be determined by script at runtime
-        icInfo("Binding write for device-level resource at URI %s (resourceKey=%s), endpoint will be resolved at runtime",
+        // Device-level resource: no SBMD index, endpoint will be determined by script during write resource operation
+        icInfo("Binding write for device-level resource at URI %s (resourceKey=%s), endpoint will be resolved during write resource operation",
                uri,
                resourceKey.c_str());
     }
