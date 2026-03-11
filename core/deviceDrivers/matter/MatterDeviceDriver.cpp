@@ -630,6 +630,11 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
         linkQualityResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
         linkQualityResource->cachingPolicy = CACHING_POLICY_ALWAYS;
         linkedListAppend(device->resources, linkQualityResource);
+
+        // Since this is where we learn that the device is on Wi-Fi, we can use this opportunity to initialize this
+        // cluster server.
+        // TODO: This probably belongs in a different method, but this is the easiest spot for it right now.
+        GetAnyServerById(device->uuid, chip::app::Clusters::WiFiNetworkDiagnostics::Id);
     }
 
     bool isBatteryPowered = false;
@@ -659,6 +664,16 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
         batteryPercentageResource->cachingPolicy = CACHING_POLICY_ALWAYS;
         linkedListAppend(device->resources, batteryPercentageResource);
     }
+
+    auto *identifySecondsResource = static_cast<icDeviceResource *>(calloc(1, sizeof(icDeviceResource)));
+    identifySecondsResource->id = strdup(COMMON_DEVICE_RESOURCE_IDENTIFY_SECONDS);
+    identifySecondsResource->endpointId = nullptr;
+    identifySecondsResource->deviceUuid = strdup(device->uuid);
+    identifySecondsResource->type = strdup(RESOURCE_TYPE_SECONDS);
+    identifySecondsResource->mode =
+        RESOURCE_MODE_READABLE | RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+    identifySecondsResource->cachingPolicy = CACHING_POLICY_ALWAYS;
+    linkedListAppend(device->resources, identifySecondsResource);
 
     /*
      * RunOnMatterSync can only handle a few captures before
@@ -1105,7 +1120,7 @@ MatterCluster *MatterDeviceDriver::GetAnyServerById(std::string const &deviceUui
     }
     else
     {
-        icError("Failed to locate cluster %#" PRIx32 " endpoint ID for device %s", clusterId, deviceUuid.c_str());
+        icDebug("Cluster %#" PRIx32 " not present for device %s", clusterId, deviceUuid.c_str());
     }
 
     return server;
@@ -1237,6 +1252,11 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
             case chip::app::Clusters::WiFiNetworkDiagnostics::Id:
                 serverRef = std::make_unique<WifiNetworkDiagnostics>(
                     &wifiDiagnosticsClusterEventHandler, deviceUuid, endpointId, deviceDataCache);
+                break;
+
+            case chip::app::Clusters::Identify::Id:
+                serverRef =
+                    std::make_unique<Identify>(&identifyClusterEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             default:

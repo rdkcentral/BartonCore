@@ -29,41 +29,6 @@ reporting:
   minSecs: 1
   maxSecs: 3600
 
-# Device-level resources (not associated with a specific endpoint)
-resources:
-  # Identify timer resource - controls device identification duration
-  - id: "identifySeconds"
-    type: "com.icontrol.seconds"
-    modes:
-      - "read"
-      - "write"
-    mapper:
-      read:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"
-        script: |
-          var TlvUInt16 = MatterClusters.TlvUInt16;
-          var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          var value = TlvUInt16.decode(tlvBytes);
-          return {output: value.toString()};
-
-      write:
-        script: |
-          var TlvUInt16 = MatterClusters.TlvUInt16;
-          var IdentifyCluster = MatterClusters.Identify.IdentifyCluster;
-          var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          var tlvBytes = TlvUInt16.encode(secs);
-          return {
-            write: {
-              clusterId: IdentifyCluster.id,
-              attributeId: IdentifyCluster.attributes.identifyTime.id,
-              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-            }
-          };
-
 # Barton endpoints
 endpoints:
   - id: "1"
