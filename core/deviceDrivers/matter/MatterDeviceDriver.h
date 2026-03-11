@@ -713,7 +713,7 @@ namespace barton
         class IdentifyEventHandler : public Identify::EventHandler
         {
         public:
-            void IdentifyTimeChanged(std::string &deviceUuid, uint16_t identifyTimeSecs) override
+            void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) override
             {
                 updateResource(deviceUuid.c_str(),
                                NULL,
