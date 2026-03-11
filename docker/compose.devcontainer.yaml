@@ -25,21 +25,19 @@
 # Created by Kevin Funderburg on 09/20/2024
 #
 
-# This compose file is used to create the VSC devcontainer by extending the barton
-# service from the base compose.yaml file. It is not meant to be run directly.
+# Compose overlay for the VSC devcontainer. Meant to be combined with compose.yaml:
+#   docker compose -f compose.yaml -f compose.devcontainer.yaml ...
+#
+# It overrides the barton service's image/build so that the user is baked into
+# the image at build time (devcontainers require this -- the entrypoint.sh
+# approach used by dockerw does not work for VS Code remote containers).
 
-# Setting the name element to the user helps keep the container name easy to identify
-# by namespacing it with the user's name. Example: $USER-barton-devcontainer-1
-name: $BUILDER_USER-barton
+# Setting the name element helps distinguish devcontainer instances from dockerw
+# instances on shared machines. Example: $USER-barton-devcontainer-barton-1
+name: $BUILDER_USER-barton-devcontainer
 
 services:
-    devcontainer:
-        extends:
-            file: ./compose.yaml
-            service: barton
-        networks:
-            - barton-ip6net
-
+    barton:
         # devcontainers do not support creating a user at runtime like we do with the
         # `entrypoint.sh` script, so we need to override the base image with
         # Dockerfile.devcontainer file that bakes the user into the image.
@@ -53,9 +51,3 @@ services:
                 - BUILDER_UID=$BUILDER_UID
                 - IMAGE_REPO=$IMAGE_REPO
                 - IMAGE_TAG=$IMAGE_TAG
-
-networks:
-    barton-ip6net:
-        name: $BUILDER_USER-barton-ip6net
-        # Indicate that the network is defined outside of this compose file
-        external: true
