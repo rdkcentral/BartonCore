@@ -36,6 +36,7 @@
 #include <json/json.h>
 #include <map>
 #include <string>
+#include <tuple>
 
 using namespace barton::Subsystem::Matter;
 
