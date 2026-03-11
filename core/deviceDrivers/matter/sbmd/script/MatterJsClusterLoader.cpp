@@ -69,7 +69,7 @@ namespace barton
             return "unknown error";
         }
 
-} // anonymous namespace
+    } // anonymous namespace
 
 bool MatterJsClusterLoader::LoadBundle(JSContext *ctx)
 {
