@@ -50,8 +50,8 @@ namespace barton
         const std::map<std::string, ResourceBinding> &GetWriteBindings() { return resourceWriteBindings; }
         const std::map<std::string, ResourceBinding> &GetExecuteBindings() { return resourceExecuteBindings; }
 
-        using MatterDevice::ResolveEndpointMap;
         using MatterDevice::GetEndpointForSbmdIndex;
+        using MatterDevice::ResolveEndpointMap;
 
         /**
          * Populate a DeviceDataCache's internal ClusterStateCache with endpoint and device type data.
@@ -193,15 +193,13 @@ namespace
     TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapMultipleEndpoints)
     {
         // Device has endpoints 0 (root), 1 (light 0x0100), 2 (sensor 0x000F), 3 (light 0x0100)
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1, 2, 3
-        },
-                                                {
-                                                    {1, {0x0100}},
-                                                    {2, {0x000F}},
-                                                    {3, {0x0100}},
-                                                });
+        std::vector<chip::EndpointId> partsList = {1, 2, 3};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {0x0100}},
+            {2, {0x000F}},
+            {3, {0x0100}},
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes);
 
         // Resolve for device type 0x0100 (light) — should match endpoints 1 and 3
         EXPECT_TRUE(device->ResolveEndpointMap({0x0100}));
@@ -215,14 +213,12 @@ namespace
     // Positive case: single matching endpoint
     TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapSingleMatch)
     {
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1, 2
-        },
-                                                {
-                                                    {1, {0x0100}},
-                                                    {2, {0x000F}},
-                                                });
+        std::vector<chip::EndpointId> partsList = {1, 2};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {0x0100}},
+            {2, {0x000F}},
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes);
 
         EXPECT_TRUE(device->ResolveEndpointMap({0x0100}));
 
@@ -234,14 +230,12 @@ namespace
     // Positive case: no matching device types on any endpoint
     TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapNoMatch)
     {
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1, 2
-        },
-                                                {
-                                                    {1, {0x0100}},
-                                                    {2, {0x000F}},
-                                                });
+        std::vector<chip::EndpointId> partsList = {1, 2};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {0x0100}},
+            {2, {0x000F}},
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes);
 
         EXPECT_FALSE(device->ResolveEndpointMap({0x0302}));
         EXPECT_TRUE(device->GetSbmdEndpointMap().empty());
@@ -250,15 +244,13 @@ namespace
     // Positive case: multiple supported device types match different endpoints
     TEST_F(MatterDeviceEndpointMapTest, ResolveEndpointMapMultipleDeviceTypes)
     {
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1, 2, 3
-        },
-                                                {
-                                                    {1, {0x0100}}, // light
-                                                    {2, {0x000F}}, // sensor
-                                                    {3, {0x0302}}, // no match
-                                                });
+        std::vector<chip::EndpointId> partsList = {1, 2, 3};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {0x0100}}, // light
+            {2, {0x000F}}, // sensor
+            {3, {0x0302}}, // no match
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes);
 
         // Match both light and sensor types
         EXPECT_TRUE(device->ResolveEndpointMap({0x0100, 0x000F}));
