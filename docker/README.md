@@ -6,16 +6,53 @@ ensures that the application runs the same way across different machines. This a
 simplifies the setup process, reduces compatibility issues, and streamlines the development
 workflow.
 
-Additionally, Barton uses Docker Compose to simplify the management of multi-container applications,
-ensuring a consistent development environment. The Compose setup consists of a base `compose.yaml`
-file, which defines the core services, and an extended `compose.devcontainer.yaml` that integrates
-with the Visual Studio Code devcontainer for streamlined development. This approach allows for easy
-dependency management, consistent local environments, and seamless collaboration across different
-development setups.
+## Compose File Layout
+
+Barton uses a layered Docker Compose model. A base `compose.yaml` defines the core `barton`
+service, and optional overlays add or override behavior:
+
+| File | Purpose |
+|---|---|
+| `compose.yaml` | Base service definition (`barton`), network, volumes |
+| `compose.devcontainer.yaml` | Overrides the `barton` service image/build for VS Code devcontainers (bakes the user into the image at build time) |
+| `compose.host-network.yaml` | Switches to host networking for direct device access (e.g., Thread border routers) |
+| `compose.observability.yaml` | Adds OTel Collector + Jaeger services and sets OTEL env vars on the `barton` service |
+
+All overlays operate on the same `barton` service from `compose.yaml`. They are combined by
+listing them in order -- either in the `dockerComposeFile` array in `.devcontainer/devcontainer.json`
+or via `-f` flags on the command line.
+
+### Devcontainer
+
+The devcontainer is configured in `.devcontainer/devcontainer.json` and composes:
+
+```
+compose.yaml → compose.devcontainer.yaml → compose.observability.yaml
+```
+
+### dockerw
+
+The `dockerw` script at the repo root is a convenience wrapper for `docker compose run`.
+It always includes `compose.yaml` as the base, and accepts flags to layer on overlays:
+
+| Flag | Effect |
+|---|---|
+| `-o` | Include `compose.observability.yaml` (OTel Collector + Jaeger) |
+| `-H` | Use host networking |
+| `-e <env>` | Pass extra environment variables |
+| `-d` | Mount development volumes |
+| `-n` | Disable TTY (non-interactive mode) |
+
+Example:
+
+```bash
+./dockerw -o bash          # with observability services
+./dockerw -H bash          # with host networking
+```
 
 ## Building
 
-To build the Barton image, simply run the `docker/build.sh` to create a Barton image.
+To build the Barton image, simply run `docker/build.sh` to create a Barton image.
 
 ## Editing the Image
 
