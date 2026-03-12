@@ -25,7 +25,6 @@
 // Created by tlea on 12/5/25
 //
 
-#include "json/writer.h"
 #define LOG_TAG "QuickJsScript"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
@@ -40,12 +39,8 @@
 #include <lib/core/TLVWriter.h>
 #include <lib/support/Base64.h>
 #include <lib/support/Span.h>
-#include <lib/support/jsontlv/JsonToTlv.h>
-#include <lib/support/jsontlv/TlvJson.h>
 #include <mutex>
 #include <platform/CHIPDeviceLayer.h>
-#include <sstream>
-#include <unordered_map>
 #include <vector>
 
 extern "C" {
@@ -311,24 +306,6 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
     outValue = resultStr;
     icDebug("Script output string: %s", outValue.c_str());
     return true;
-}
-
-// Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &value)
-{
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
-
-    JSValue jsValue = JS_NewString(ctx, value.c_str());
-    JSValue global = JS_GetGlobalObject(ctx);
-
-    JSValue result = JS_SetPropertyStr(ctx, global, name.c_str(), jsValue);
-    bool success = !JS_IsException(result);
-    if (!success)
-    {
-        icError("Failed to set JS variable '%s': %s", name.c_str(), GetExceptionString(ctx).c_str());
-    }
-
-    return success;
 }
 
 bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
