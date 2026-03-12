@@ -129,11 +129,11 @@
 
 ## 19. Documentation Update
 
-- [ ] 19.1 Update `docs/OBSERVABILITY.md` — add section listing all new metrics with names, types, attributes, and descriptions
-- [ ] 19.2 Update `openspec/specs/otel-metrics/spec.md` — reflect expanded API and metric catalog
+- [x] 19.1 Update `docs/OBSERVABILITY.md` — add section listing all new metrics with names, types, attributes, and descriptions
+- [x] 19.2 Update `openspec/specs/otel-metrics/spec.md` — reflect expanded API and metric catalog
 
 ## 20. Verify & Commit — Documentation
 
-- [ ] 20.1 Build the project and run all BartonCore unit tests — final full regression check
-- [ ] 20.2 Run integration tests — final full regression check
-- [ ] 20.3 Commit: `docs(otel): document new metrics catalog and updated API`
+- [x] 20.1 Build the project and run all BartonCore unit tests — final full regression check
+- [x] 20.2 Run integration tests — final full regression check
+- [x] 20.3 Commit: `docs(otel): document new metrics catalog and updated API`
