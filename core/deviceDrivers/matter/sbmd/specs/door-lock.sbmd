@@ -29,49 +29,6 @@ reporting:
   minSecs: 1      # Minimum reporting interval in seconds
   maxSecs: 3600   # Maximum reporting interval in seconds (1 hour)
 
-# Device-level resources (not associated with a specific endpoint)
-resources:
-  # Identify timer resource - controls device identification duration
-  - id: "identifySeconds"
-    type: "com.icontrol.seconds"
-    modes:
-      - "read"   # Resource can be read
-      - "write"  # Resource can be written
-    mapper:
-      # Read mapper: Matter Identify cluster attribute -> Barton seconds
-      read:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"           # Unsigned 16-bit integer
-
-        # Use MatterClusters for type-safe TLV decoding
-        script: |
-          const { TlvUInt16 } = MatterClusters;
-          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          const value = TlvUInt16.decode(tlvBytes);
-          return {output: value.toString()};
-
-      # Write mapper: Barton seconds string -> Matter Identify attribute
-      # Script returns full operation details - no metadata needed
-      write:
-        script: |
-          // Use MatterClusters for type-safe TLV encoding of attribute write
-          const { TlvUInt16, Identify: { IdentifyCluster } } = MatterClusters;
-
-          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-
-          // Encode uint16 value to TLV and return as attribute write
-          const tlvBytes = TlvUInt16.encode(secs);
-          return {
-            write: {
-              clusterId: IdentifyCluster.id,
-              attributeId: IdentifyCluster.attributes.identifyTime.id,
-              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-            }
-          };
-
 # Barton endpoints (logical groupings of resources)
 endpoints:
   # Primary door lock endpoint

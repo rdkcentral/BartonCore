@@ -23,6 +23,7 @@
 
 
 import logging
+import time
 from queue import Queue
 
 from gi.repository import BCore
@@ -108,3 +109,92 @@ def test_light_on_off(default_environment, matter_light):
     assert (
         resource_updated_result == expected_on_off_state
     ), "Light on/off state did not update as expected"
+
+
+def test_light_common_cluster_attribute_report(default_environment, matter_light):
+    """Test that Barton correctly handles attribute reports for common clusters from Matter devices.
+
+    This test verifies that when a Matter device sends an attribute report for
+    the identify-time attribute, Barton correctly updates the corresponding
+    identifySeconds resource. This is verified when the attribute report is sent
+    upon subscribing to the device, and also when the attribute report is sent
+    after a new value is written to the identify-time attribute.
+    """
+    # Commission the device
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+    lights = default_environment.get_client().get_devices_by_device_class("light")
+    assert len(lights) == 1
+
+    light = lights[0]
+    device_uuid = light.props.uuid
+
+    # Read the initial identifySeconds resource from Barton.
+    # This should have been set as a result of receiving the first attribute report
+    # from subscribing to the device.
+    identify_seconds_uri = f"/{device_uuid}/r/identifySeconds"
+
+    def wait_for_condition(client, uri, predicate, timeout=3, poll_interval=0.1):
+        """Poll for a resource value until predicate(value) is True or timeout is reached."""
+        start = time.time()
+        while time.time() - start < timeout:
+            value = client.read_resource(uri)
+            if predicate(value):
+                return value
+            time.sleep(poll_interval)
+        return None
+
+    # Wait for the initial identifySeconds resource value to be available and parse it as an integer.
+    initial_identify_seconds = wait_for_condition(
+        default_environment.get_client(),
+        identify_seconds_uri,
+        lambda v: v is not None,
+        timeout=3,
+        poll_interval=0.1,
+    )
+    assert (
+        initial_identify_seconds is not None
+    ), "Failed to read initial identifySeconds"
+
+    logger.info(f"Initial identify seconds: {initial_identify_seconds}")
+
+    # Parse the string value to get the uint16 value
+    try:
+        initial_value = int(initial_identify_seconds)
+    except ValueError:
+        assert (
+            False
+        ), f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
+
+    # Calculate a different uint16 value to write (ensure it's within uint16 range: 0-65535)
+    new_value = (initial_value + 1) if initial_value < 65535 else 0
+
+    # Write the new value to the identify-time attribute on the Matter device
+    # Cluster: identify, Endpoint: 1, Attribute: identify-time
+    logger.info(f"Writing identify-time attribute to {new_value}")
+    result = matter_light._interactor.write_attribute(
+        node_id=matter_light._chip_tool_node_id,
+        endpoint_id=1,
+        cluster="identify",
+        attribute="identify-time",
+        value=new_value
+    )
+    assert result.success, f"Failed to write identify-time attribute: {result.stderr}"
+
+    # Read the identifySeconds resource again from Barton.
+    # This should have been updated as a result of receiving the attribute report from the
+    # device after its identify-time attribute was written over.
+    updated_identify_seconds = wait_for_condition(
+        default_environment.get_client(),
+        identify_seconds_uri,
+        lambda v: (v is not None and v.isdigit() and int(v) == new_value),
+        timeout=3,
+        poll_interval=0.1,
+    )
+    assert (
+        updated_identify_seconds is not None
+    ), f"identifySeconds was not updated correctly via attribute report. Expected {new_value}"
+
+    logger.info(f"Updated identify seconds: {updated_identify_seconds}")

@@ -598,6 +598,15 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
             // Get all endpoint IDs
             std::vector<chip::EndpointId> endpointIds = self->GetEndpointIds();
 
+            // Trigger OnReportBegin on all registered callbacks for common clusters first,
+            // then for all other device-specific clusters.
+            for (const auto &[key, commonClusterCallback] : self->commonClusterCallbacks)
+            {
+                if (commonClusterCallback)
+                {
+                    commonClusterCallback->OnReportBegin();
+                }
+            }
             self->callback->OnReportBegin();
 
             // Iterate through all endpoints, clusters, and attributes
@@ -635,6 +644,15 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 });
             }
 
+            // Trigger OnReportEnd on all registered callbacks for common clusters first,
+            // then for all other device-specific clusters.
+            for (const auto &[key, commonClusterCallback] : self->commonClusterCallbacks)
+            {
+                if (commonClusterCallback)
+                {
+                    commonClusterCallback->OnReportEnd();
+                }
+            }
             self->callback->OnReportEnd();
 
             icDebug("Done regenerating attribute report");

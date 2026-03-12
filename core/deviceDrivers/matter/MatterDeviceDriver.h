@@ -29,7 +29,9 @@
 
 #include "app/OperationalSessionSetup.h"
 #include "clusters/BasicInformation.hpp"
+#include "clusters/BasicInformation/ClusterId.h"
 #include "clusters/GeneralDiagnostics.h"
+#include "clusters/Identify.hpp"
 #include "clusters/MatterCluster.h"
 #include "clusters/OTARequestor.h"
 #include "clusters/PowerSource.h"
@@ -37,9 +39,9 @@
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "matter/MatterDevice.h"
+#include "sbmd/SbmdSpec.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/Matter.h"
-#include "sbmd/SbmdSpec.h"
 #include <forward_list>
 #include <future>
 #include <memory>
@@ -115,7 +117,13 @@ namespace barton
                 result = deviceResult.second;
             }
 
-            // Initialize power source cluster if available.
+            // Initialize common clusters servers if available.
+            GetAnyServerById(deviceId, chip::app::Clusters::OtaSoftwareUpdateRequestor::Id);
+            GetAnyServerById(deviceId, chip::app::Clusters::BasicInformation::Id);
+            GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id);
+            // TODO: There can be multiple Identify clusters on different endpoints, but for now, we are only handling
+            // the scenario with one.
+            GetAnyServerById(deviceId, chip::app::Clusters::Identify::Id);
             // TODO: There can be multiple PowerSource clusters on different endpoints, e.g. on a bridge which has one
             // device per endpoint with its own power source. What you would do is query the PowerSourceConfiguration
             // cluster for a list of endpoints that have a PowerSource cluster. For now, we are only handling the
@@ -701,6 +709,19 @@ namespace barton
         private:
             MatterDeviceDriver &deviceDriver;
         } wifiDiagnosticsClusterEventHandler;
+
+        class IdentifyEventHandler : public Identify::EventHandler
+        {
+        public:
+            void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) override
+            {
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_IDENTIFY_SECONDS,
+                               std::to_string(identifyTimeSecs).c_str(),
+                               NULL);
+            }
+        } identifyClusterEventHandler;
 
         /* key deviceId */
         std::map<std::string, std::shared_ptr<MatterDevice>> devices;
