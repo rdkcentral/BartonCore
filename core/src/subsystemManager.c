@@ -60,6 +60,7 @@ typedef struct
 
     pthread_mutex_t mtx;
     bool ready;
+    gint64 initStartTime;
 } SubsystemRegistration;
 
 static pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
@@ -77,6 +78,7 @@ static ObservabilityCounter *subsystemInitFailedCounter = NULL;
 static ObservabilityGauge *subsystemInitializedCountGauge = NULL;
 static ObservabilityGauge *subsystemReadyForDevicesGauge = NULL;
 static ObservabilityHistogram *subsystemInitDurationHistogram = NULL;
+static int64_t initializedSubsystemCount = 0;
 
 // Pre-registered subsystems are those that wish to be registered before the
 // subsystem manager is initialized. These are typically automatically registered
@@ -216,14 +218,33 @@ static void setSubsystemReadyLocked(const char *subsystem, bool isReady)
 
 static void onSubsystemInitialized(const char *subsystem)
 {
+    g_autoptr(SubsystemRegistration) reg = NULL;
     {
         READ_LOCK_SCOPE(mutex);
         setSubsystemReadyLocked(subsystem, true);
+        reg = subsystemRegistrationAcquire(g_hash_table_lookup(subsystems, subsystem));
     }
 
     icLogDebug(LOG_TAG, "%s: '%s'", __func__, subsystem);
 
     observabilityCounterAddWithAttrs(subsystemInitCompletedCounter, 1, "subsystem.name", subsystem, NULL);
+
+    if (reg != NULL)
+    {
+        gint64 startTime;
+        mutexLock(&reg->mtx);
+        startTime = reg->initStartTime;
+        mutexUnlock(&reg->mtx);
+        if (startTime > 0)
+        {
+            double durationSecs = (double) (g_get_monotonic_time() - startTime) / G_USEC_PER_SEC;
+            observabilityHistogramRecordWithAttrs(
+                subsystemInitDurationHistogram, durationSecs, "subsystem.name", subsystem, NULL);
+        }
+    }
+
+    initializedSubsystemCount++;
+    observabilityGaugeRecord(subsystemInitializedCountGauge, initializedSubsystemCount);
 
     scoped_icLinkedListNofree *drivers = deviceDriverManagerGetDeviceDriversBySubsystem(subsystem);
     scoped_icLinkedListIterator *it = linkedListIteratorCreate(drivers);
@@ -251,6 +272,12 @@ static void onSubsystemDeinitialized(const char *subsystem)
     {
         READ_LOCK_SCOPE(mutex);
         setSubsystemReadyLocked(subsystem, false);
+    }
+
+    if (initializedSubsystemCount > 0)
+    {
+        initializedSubsystemCount--;
+        observabilityGaugeRecord(subsystemInitializedCountGauge, initializedSubsystemCount);
     }
 
     sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReasonSubsystemStatus);
@@ -487,6 +514,9 @@ static void initializeSubsystemCallback(gpointer key, gpointer value, gpointer u
     {
         observabilityCounterAddWithAttrs(
             subsystemInitStartedCounter, 1, "subsystem.name", registration->subsystem->name, NULL);
+        mutexLock(&registration->mtx);
+        registration->initStartTime = g_get_monotonic_time();
+        mutexUnlock(&registration->mtx);
         registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized);
     }
 }

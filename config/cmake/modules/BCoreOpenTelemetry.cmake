@@ -78,6 +78,11 @@ if(NOT opentelemetry-cpp_POPULATED)
     # CMAKE_SKIP_INSTALL_RULES prevents cmake_install.cmake from being generated,
     # but the parent's cmake_install.cmake still tries to include it. Create an empty one.
     file(WRITE ${opentelemetry-cpp_BINARY_DIR}/cmake_install.cmake "")
+
+    # opentelemetry_proto is a shared library that libBartonCore links against at
+    # runtime.  The blanket CMAKE_SKIP_INSTALL_RULES suppressed its install rule,
+    # so we add one back for just this target.
+    install(TARGETS opentelemetry_proto LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 # Restore BUILD_TESTING and FETCHCONTENT_QUIET after otel-cpp

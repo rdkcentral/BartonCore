@@ -162,4 +162,6 @@ pytest_plugins = [
     "testing.mocks.zhal.requests.request_deserializer",
     "testing.mocks.zhal.requests.request_receiver",
     "testing.mocks.zhal.requests.network_initialize_request",
+    # Observability
+    "testing.mocks.otlp_mock_receiver",
 ]

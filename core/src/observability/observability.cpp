@@ -39,12 +39,14 @@ extern "C" {
 #include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/logs/provider.h>
 #include <opentelemetry/metrics/provider.h>
+#include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
+#include <opentelemetry/sdk/logs/batch_log_record_processor_options.h>
 #include <opentelemetry/sdk/logs/logger_provider_factory.h>
-#include <opentelemetry/sdk/logs/simple_log_record_processor_factory.h>
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
 #include <opentelemetry/sdk/metrics/meter_provider_factory.h>
 #include <opentelemetry/sdk/resource/resource.h>
-#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
 #include <opentelemetry/trace/provider.h>
 
@@ -85,11 +87,15 @@ extern "C" int observabilityInit(void)
     };
     auto otelResource = resource::Resource::Create(resourceAttrs);
 
-    // --- Tracer Provider ---
+    // --- Tracer Provider (batch export avoids blocking during init) ---
     otlp::OtlpHttpExporterOptions traceOpts;
     traceOpts.url = endpoint + "/v1/traces";
     auto traceExporter = otlp::OtlpHttpExporterFactory::Create(traceOpts);
-    auto traceProcessor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(traceExporter));
+    trace_sdk::BatchSpanProcessorOptions bspOpts;
+    bspOpts.schedule_delay_millis =
+        std::chrono::milliseconds(std::stol(getEnvOr("OTEL_BSP_SCHEDULE_DELAY_MS", "5000")));
+    bspOpts.max_export_batch_size = std::stoul(getEnvOr("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "512"));
+    auto traceProcessor = trace_sdk::BatchSpanProcessorFactory::Create(std::move(traceExporter), bspOpts);
     auto tracerProvider = trace_sdk::TracerProviderFactory::Create(std::move(traceProcessor), otelResource);
     trace_api::Provider::SetTracerProvider(std::shared_ptr<trace_api::TracerProvider>(std::move(tracerProvider)));
 
@@ -98,8 +104,9 @@ extern "C" int observabilityInit(void)
     metricOpts.url = endpoint + "/v1/metrics";
     auto metricExporter = otlp::OtlpHttpMetricExporterFactory::Create(metricOpts);
     metrics_sdk::PeriodicExportingMetricReaderOptions readerOpts;
-    readerOpts.export_interval_millis = std::chrono::milliseconds(10000);
-    readerOpts.export_timeout_millis = std::chrono::milliseconds(5000);
+    long exportIntervalMs = std::stol(getEnvOr("OTEL_METRIC_EXPORT_INTERVAL_MS", "10000"));
+    readerOpts.export_interval_millis = std::chrono::milliseconds(exportIntervalMs);
+    readerOpts.export_timeout_millis = std::chrono::milliseconds(std::min(exportIntervalMs / 2, 5000L));
     auto metricReader =
         metrics_sdk::PeriodicExportingMetricReaderFactory::Create(std::move(metricExporter), readerOpts);
     auto meterProvider =
@@ -107,11 +114,15 @@ extern "C" int observabilityInit(void)
     meterProvider->AddMetricReader(std::move(metricReader));
     metrics_api::Provider::SetMeterProvider(std::shared_ptr<metrics_api::MeterProvider>(std::move(meterProvider)));
 
-    // --- Logger Provider ---
+    // --- Logger Provider (batch export avoids blocking during init) ---
     otlp::OtlpHttpLogRecordExporterOptions logOpts;
     logOpts.url = endpoint + "/v1/logs";
     auto logExporter = otlp::OtlpHttpLogRecordExporterFactory::Create(logOpts);
-    auto logProcessor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(logExporter));
+    logs_sdk::BatchLogRecordProcessorOptions blrpOpts;
+    blrpOpts.schedule_delay_millis =
+        std::chrono::milliseconds(std::stol(getEnvOr("OTEL_BLRP_SCHEDULE_DELAY_MS", "5000")));
+    blrpOpts.max_export_batch_size = std::stoul(getEnvOr("OTEL_BLRP_MAX_EXPORT_BATCH_SIZE", "512"));
+    auto logProcessor = logs_sdk::BatchLogRecordProcessorFactory::Create(std::move(logExporter), blrpOpts);
     auto loggerProvider = logs_sdk::LoggerProviderFactory::Create(std::move(logProcessor), otelResource);
     logs_api::Provider::SetLoggerProvider(std::shared_ptr<logs_api::LoggerProvider>(std::move(loggerProvider)));
 
