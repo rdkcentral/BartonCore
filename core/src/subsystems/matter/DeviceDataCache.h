@@ -43,6 +43,9 @@ namespace barton
 
     class DeviceDataCache : public chip::app::ClusterStateCache::Callback
     {
+        // Allow test subclass to access private members for cache population in tests
+        friend class TestableMatterDevice;
+
     public:
         DeviceDataCache(const std::string &deviceUuid,
                         std::shared_ptr<chip::Controller::DeviceController> controller) :
