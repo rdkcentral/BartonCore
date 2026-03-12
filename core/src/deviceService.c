@@ -81,6 +81,14 @@
 
 static ObservabilityGauge *deviceActiveGauge = NULL;
 static gint activeDeviceCount = 0;
+static ObservabilityCounter *discoveryStartedCounter = NULL;
+static ObservabilityCounter *discoveryCompletedCounter = NULL;
+static ObservabilityCounter *discoveredDeviceCounter = NULL;
+static ObservabilityCounter *deviceAddSuccessCounter = NULL;
+static ObservabilityCounter *deviceAddFailedCounter = NULL;
+static ObservabilityCounter *deviceRemoveSuccessCounter = NULL;
+static ObservabilityCounter *deviceRejectedCounter = NULL;
+static ObservabilityHistogram *discoveryDurationHistogram = NULL;
 
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
@@ -742,6 +750,8 @@ bool deviceServiceDiscoverStart(icLinkedList *deviceClasses,
         return false;
     }
 
+    observabilityCounterAdd(discoveryStartedCounter, 1);
+
     mutexLock(&discoveryControlMutex);
 
     discoveryTimeoutSeconds = timeoutSeconds;
@@ -1068,6 +1078,7 @@ bool deviceServiceRemoveDevice(const char *uuid)
         sendDeviceRemovedEvent(device->uuid, device->deviceClass);
 
         observabilityGaugeRecord(deviceActiveGauge, (int64_t) (g_atomic_int_add(&activeDeviceCount, -1) - 1));
+        observabilityCounterAddWithAttrs(deviceRemoveSuccessCounter, 1, "device.class", device->deviceClass, NULL);
 
         deviceDestroy(device);
 
@@ -1873,6 +1884,19 @@ bool deviceServiceInitialize(BCoreClient *service)
     observabilityInit();
     observabilityLogBridgeInit();
     deviceActiveGauge = observabilityGaugeCreate("device.active.count", "Number of active devices", "{device}");
+    discoveryStartedCounter =
+        observabilityCounterCreate("device.discovery.started", "Discovery requests started", "{request}");
+    discoveryCompletedCounter =
+        observabilityCounterCreate("device.discovery.completed", "Discovery requests completed", "{request}");
+    discoveredDeviceCounter = observabilityCounterCreate("device.discovered.count", "Devices discovered", "{device}");
+    deviceAddSuccessCounter =
+        observabilityCounterCreate("device.add.success", "Devices successfully added", "{device}");
+    deviceAddFailedCounter = observabilityCounterCreate("device.add.failed", "Device add failures", "{device}");
+    deviceRemoveSuccessCounter =
+        observabilityCounterCreate("device.remove.success", "Devices successfully removed", "{device}");
+    deviceRejectedCounter =
+        observabilityCounterCreate("device.rejected.count", "Devices rejected by discovery filters", "{device}");
+    discoveryDurationHistogram = observabilityHistogramCreate("device.discovery.duration", "Discovery duration", "s");
 
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_client_get_initialize_params(service);
 
@@ -2092,6 +2116,25 @@ void deviceServiceShutdown()
     g_clear_object(&client);
     mutexUnlock(&deviceServiceClientMutex);
 
+    observabilityCounterRelease(discoveryStartedCounter);
+    discoveryStartedCounter = NULL;
+    observabilityCounterRelease(discoveryCompletedCounter);
+    discoveryCompletedCounter = NULL;
+    observabilityCounterRelease(discoveredDeviceCounter);
+    discoveredDeviceCounter = NULL;
+    observabilityCounterRelease(deviceAddSuccessCounter);
+    deviceAddSuccessCounter = NULL;
+    observabilityCounterRelease(deviceAddFailedCounter);
+    deviceAddFailedCounter = NULL;
+    observabilityCounterRelease(deviceRemoveSuccessCounter);
+    deviceRemoveSuccessCounter = NULL;
+    observabilityCounterRelease(deviceRejectedCounter);
+    deviceRejectedCounter = NULL;
+    observabilityHistogramRelease(discoveryDurationHistogram);
+    discoveryDurationHistogram = NULL;
+    observabilityGaugeRelease(deviceActiveGauge);
+    deviceActiveGauge = NULL;
+
     observabilityLogBridgeShutdown();
     observabilityShutdown();
 
@@ -2302,6 +2345,7 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
  */
 bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool neverReject)
 {
+    gint64 discoveryStartTime = g_get_monotonic_time();
     g_autoptr(ObservabilitySpan) foundSpan = observabilitySpanStart("device.found");
     observabilitySpanSetAttribute(foundSpan, "device.class", deviceFoundDetails->deviceClass);
     observabilitySpanSetAttribute(foundSpan, "device.uuid", deviceFoundDetails->deviceUuid);
@@ -2541,6 +2585,10 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
         {
             // perform device filters checking operation if provided
             pairingSuccessful = checkDeviceDiscoveryFilters(device, initialValues);
+            if (!pairingSuccessful)
+            {
+                observabilityCounterAddWithAttrs(deviceRejectedCounter, 1, "device.class", device->deviceClass, NULL);
+            }
         }
         else
         {
@@ -2588,6 +2636,10 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     // Finally, if we made it here and are still successful, let everyone know.
     if (pairingSuccessful)
     {
+        observabilityCounterAdd(discoveryCompletedCounter, 1);
+        observabilityCounterAddWithAttrs(discoveredDeviceCounter, 1, "device.class", device->deviceClass, NULL);
+        observabilityCounterAddWithAttrs(deviceAddSuccessCounter, 1, "device.class", device->deviceClass, NULL);
+
         if (sendEvents)
         {
             // Signal that we finished discovering the device including all its endpoints
@@ -2616,6 +2668,9 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
             sendDeviceDiscoveryFailedEvent(deviceFoundDetails, inRepairMode);
         }
 
+        observabilityCounterAddWithAttrs(
+            deviceAddFailedCounter, 1, "device.class", deviceFoundDetails->deviceClass, NULL);
+
         markDevicePairingFailed(deviceFoundDetails->deviceUuid);
     }
 
@@ -2623,6 +2678,10 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     {
         observabilitySpanSetError(foundSpan, "device pairing failed");
     }
+
+    double durationSecs = (double) (g_get_monotonic_time() - discoveryStartTime) / G_USEC_PER_SEC;
+    observabilityHistogramRecordWithAttrs(
+        discoveryDurationHistogram, durationSecs, "device.class", deviceFoundDetails->deviceClass, NULL);
 
     return pairingSuccessful;
 }

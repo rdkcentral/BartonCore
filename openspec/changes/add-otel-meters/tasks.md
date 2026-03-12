@@ -21,25 +21,25 @@
 
 ## 4. Device Lifecycle Meters
 
-- [ ] 4.1 Add `#include "observability/observabilityMetrics.h"` and static counter/histogram declarations to `deviceService.c` for discovery, add, remove, and rejection meters
-- [ ] 4.2 Create all device lifecycle meters in `deviceServiceInitialize()` — `device.discovery.started`, `device.discovery.completed`, `device.discovered.count`, `device.add.success`, `device.add.failed`, `device.remove.success`, `device.remove.failed`, `device.rejected.count`, `device.discovery.duration`
-- [ ] 4.3 Instrument `deviceServiceDiscoverStart()` — increment `device.discovery.started` with subsystem attribute, capture start time
-- [ ] 4.4 Instrument discovery completion path — increment `device.discovery.completed`, record `device.discovery.duration` histogram
-- [ ] 4.5 Instrument `finalizeNewDevice()` / device add path — increment `device.add.success` or `device.add.failed` with `device.class` and `subsystem.name` attributes, increment `device.discovered.count`
-- [ ] 4.6 Instrument `deviceServiceRemoveDevice()` — increment `device.remove.success` or `device.remove.failed` with attributes
-- [ ] 4.7 Instrument `checkDeviceDiscoveryFilters()` rejection path — increment `device.rejected.count` with attributes
-- [ ] 4.8 Release all device lifecycle meters in `deviceServiceShutdown()`
+- [x] 4.1 Add `#include "observability/observabilityMetrics.h"` and static counter/histogram declarations to `deviceService.c` for discovery, add, remove, and rejection meters
+- [x] 4.2 Create all device lifecycle meters in `deviceServiceInitialize()` — `device.discovery.started`, `device.discovery.completed`, `device.discovered.count`, `device.add.success`, `device.add.failed`, `device.remove.success`, `device.remove.failed`, `device.rejected.count`, `device.discovery.duration`
+- [x] 4.3 Instrument `deviceServiceDiscoverStart()` — increment `device.discovery.started` with subsystem attribute, capture start time
+- [x] 4.4 Instrument discovery completion path — increment `device.discovery.completed`, record `device.discovery.duration` histogram
+- [x] 4.5 Instrument `finalizeNewDevice()` / device add path — increment `device.add.success` or `device.add.failed` with `device.class` and `subsystem.name` attributes, increment `device.discovered.count`
+- [x] 4.6 Instrument `deviceServiceRemoveDevice()` — increment `device.remove.success` or `device.remove.failed` with attributes
+- [x] 4.7 Instrument `checkDeviceDiscoveryFilters()` rejection path — increment `device.rejected.count` with attributes
+- [x] 4.8 Release all device lifecycle meters in `deviceServiceShutdown()`
 
 ## 5. Device Lifecycle Meters Tests
 
-- [ ] 5.1 Add Google Test unit tests verifying device lifecycle counter creation and increment calls
-- [ ] 5.2 Add pytest integration test verifying `device.discovery.started` and `device.add.success` metrics appear in OTLP export after a simulated device lifecycle
+- [x] 5.1 Add Google Test unit tests verifying device lifecycle counter creation and increment calls
+- [x] 5.2 Add pytest integration test verifying `device.discovery.started` and `device.add.success` metrics appear in OTLP export after a simulated device lifecycle
 
 ## 6. Verify & Commit — Device Lifecycle Meters
 
-- [ ] 6.1 Build the project and run all BartonCore unit tests — verify zero regressions
-- [ ] 6.2 Run integration tests (`scripts/ci/run_integration_tests.sh`) — verify zero regressions
-- [ ] 6.3 Commit: `feat(otel): add device lifecycle meters`
+- [x] 6.1 Build the project and run all BartonCore unit tests — verify zero regressions
+- [x] 6.2 Run integration tests (`scripts/ci/run_integration_tests.sh`) — verify zero regressions
+- [x] 6.3 Commit: `feat(otel): add device lifecycle meters`
 
 ## 7. Matter Subsystem Meters
 
