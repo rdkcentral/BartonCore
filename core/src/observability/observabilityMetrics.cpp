@@ -25,18 +25,74 @@
 
 #ifdef BARTON_CONFIG_OBSERVABILITY
 
+#include <cstdarg>
+#include <map>
+#include <mutex>
+#include <string>
+
 #include <glib.h>
 
+#include <opentelemetry/common/key_value_iterable_view.h>
+#include <opentelemetry/context/context.h>
 #include <opentelemetry/metrics/provider.h>
 
 namespace metrics_api = opentelemetry::metrics;
 
-static const char *kMeterName = "barton-core";
-
-static opentelemetry::nostd::shared_ptr<metrics_api::Meter> getMeter()
+namespace
 {
-    return metrics_api::Provider::GetMeterProvider()->GetMeter(kMeterName);
-}
+    const char *kMeterName = "barton-core";
+
+    opentelemetry::nostd::shared_ptr<metrics_api::Meter> getMeter()
+    {
+        return metrics_api::Provider::GetMeterProvider()->GetMeter(kMeterName);
+    }
+
+    /**
+     * Parse a NULL-terminated variadic list of (const char *key, const char *value) pairs
+     * into owned string pairs.
+     */
+    std::vector<std::pair<std::string, std::string>> parseVarAttrs(va_list ap)
+    {
+        std::vector<std::pair<std::string, std::string>> attrs;
+        while (true)
+        {
+            const char *key = va_arg(ap, const char *);
+            if (key == nullptr)
+            {
+                break;
+            }
+            const char *val = va_arg(ap, const char *);
+            if (val != nullptr)
+            {
+                attrs.emplace_back(key, val);
+            }
+        }
+        return attrs;
+    }
+
+    using AttrPair = std::pair<opentelemetry::nostd::string_view, opentelemetry::common::AttributeValue>;
+
+    /**
+     * Convert owned string pairs to SDK-compatible attribute pairs.
+     * The returned vector contains string_views that reference the input strings,
+     * so the input MUST outlive the returned vector.
+     */
+    std::vector<AttrPair> buildAttrs(const std::vector<std::pair<std::string, std::string>> &attrs)
+    {
+        std::vector<AttrPair> result;
+        result.reserve(attrs.size());
+        for (const auto &kv : attrs)
+        {
+            result.emplace_back(
+                opentelemetry::nostd::string_view {
+                    kv.first.data(), kv.first.size()
+            },
+                opentelemetry::common::AttributeValue {
+                    opentelemetry::nostd::string_view {kv.second.data(), kv.second.size()}});
+        }
+        return result;
+    }
+} // namespace
 
 struct ObservabilityCounter
 {
@@ -48,6 +104,8 @@ struct ObservabilityGauge
 {
     opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument> gauge;
     int64_t currentValue;
+    std::vector<std::pair<std::string, std::string>> currentAttrs;
+    std::mutex mtx;
     gint ref_count;
 };
 
@@ -81,6 +139,30 @@ extern "C" void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t 
     counter->counter->Add(value);
 }
 
+extern "C" void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t value, ...)
+{
+    if (counter == nullptr)
+    {
+        return;
+    }
+
+    va_list ap;
+    va_start(ap, value);
+    auto attrs = parseVarAttrs(ap);
+    va_end(ap);
+
+    if (attrs.empty())
+    {
+        counter->counter->Add(value);
+    }
+    else
+    {
+        auto sdkAttrs = buildAttrs(attrs);
+        opentelemetry::common::KeyValueIterableView<decltype(sdkAttrs)> view {sdkAttrs};
+        counter->counter->Add(value, static_cast<const opentelemetry::common::KeyValueIterable &>(view));
+    }
+}
+
 extern "C" ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *description, const char *unit)
 {
     if (name == nullptr)
@@ -103,13 +185,28 @@ extern "C" ObservabilityGauge *observabilityGaugeCreate(const char *name, const 
     wrapper->gauge->AddCallback(
         [](opentelemetry::metrics::ObserverResult result, void *state) {
             auto *g = static_cast<ObservabilityGauge *>(state);
-            auto val = g->currentValue;
+            int64_t val;
+            std::vector<std::pair<std::string, std::string>> attrsCopy;
+            {
+                std::lock_guard<std::mutex> lock(g->mtx);
+                val = g->currentValue;
+                attrsCopy = g->currentAttrs;
+            }
             if (opentelemetry::nostd::holds_alternative<
                     opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(result))
             {
-                opentelemetry::nostd::get<
-                    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(result)
-                    ->Observe(val);
+                auto observer = opentelemetry::nostd::get<
+                    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
+                if (attrsCopy.empty())
+                {
+                    observer->Observe(val);
+                }
+                else
+                {
+                    auto sdkAttrs = buildAttrs(attrsCopy);
+                    opentelemetry::common::KeyValueIterableView<decltype(sdkAttrs)> view {sdkAttrs};
+                    observer->Observe(val, static_cast<const opentelemetry::common::KeyValueIterable &>(view));
+                }
             }
         },
         wrapper);
@@ -123,7 +220,101 @@ extern "C" void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t valu
     {
         return;
     }
+    std::lock_guard<std::mutex> lock(gauge->mtx);
     gauge->currentValue = value;
+    gauge->currentAttrs.clear();
+}
+
+extern "C" void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...)
+{
+    if (gauge == nullptr)
+    {
+        return;
+    }
+
+    va_list ap;
+    va_start(ap, value);
+    auto attrs = parseVarAttrs(ap);
+    va_end(ap);
+
+    std::lock_guard<std::mutex> lock(gauge->mtx);
+    gauge->currentValue = value;
+    gauge->currentAttrs = std::move(attrs);
+}
+
+struct ObservabilityHistogram
+{
+    opentelemetry::nostd::unique_ptr<metrics_api::Histogram<double>> histogram;
+    gint ref_count;
+};
+
+extern "C" ObservabilityHistogram *
+observabilityHistogramCreate(const char *name, const char *description, const char *unit)
+{
+    if (name == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto meter = getMeter();
+    auto histogram =
+        meter->CreateDoubleHistogram(name, description != nullptr ? description : "", unit != nullptr ? unit : "");
+
+    auto *wrapper = new (std::nothrow) ObservabilityHistogram();
+    if (wrapper == nullptr)
+    {
+        return nullptr;
+    }
+    wrapper->histogram = std::move(histogram);
+    wrapper->ref_count = 1;
+    return wrapper;
+}
+
+extern "C" void observabilityHistogramRecord(ObservabilityHistogram *histogram, double value)
+{
+    if (histogram == nullptr)
+    {
+        return;
+    }
+    histogram->histogram->Record(value, opentelemetry::context::Context {});
+}
+
+extern "C" void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...)
+{
+    if (histogram == nullptr)
+    {
+        return;
+    }
+
+    va_list ap;
+    va_start(ap, value);
+    auto attrs = parseVarAttrs(ap);
+    va_end(ap);
+
+    if (attrs.empty())
+    {
+        histogram->histogram->Record(value, opentelemetry::context::Context {});
+    }
+    else
+    {
+        auto sdkAttrs = buildAttrs(attrs);
+        opentelemetry::common::KeyValueIterableView<decltype(sdkAttrs)> view {sdkAttrs};
+        histogram->histogram->Record(value,
+                                     static_cast<const opentelemetry::common::KeyValueIterable &>(view),
+                                     opentelemetry::context::Context {});
+    }
+}
+
+extern "C" void observabilityHistogramRelease(ObservabilityHistogram *histogram)
+{
+    if (histogram == nullptr)
+    {
+        return;
+    }
+    if (g_atomic_int_dec_and_test(&histogram->ref_count))
+    {
+        delete histogram;
+    }
 }
 
 extern "C" void observabilityCounterRelease(ObservabilityCounter *counter)

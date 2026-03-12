@@ -102,3 +102,98 @@ TEST_F(MetricsTest, GaugeWithNullOptionalArgs)
     ASSERT_NE(gauge, nullptr);
     observabilityGaugeRecord(gauge, 42);
 }
+
+TEST_F(MetricsTest, CounterAddWithAttrs)
+{
+    g_autoptr(ObservabilityCounter) counter = observabilityCounterCreate("test.counter.attrs", "desc", "{count}");
+    ASSERT_NE(counter, nullptr);
+    observabilityCounterAddWithAttrs(counter, 1, "subsystem", "zigbee", NULL);
+    observabilityCounterAddWithAttrs(counter, 5, "subsystem", "matter", "device", "bulb", NULL);
+}
+
+TEST_F(MetricsTest, CounterAddWithAttrsEmpty)
+{
+    g_autoptr(ObservabilityCounter) counter = observabilityCounterCreate("test.counter.noattrs", "desc", "{count}");
+    ASSERT_NE(counter, nullptr);
+    // NULL terminates immediately — no attributes
+    observabilityCounterAddWithAttrs(counter, 3, NULL);
+}
+
+TEST_F(MetricsTest, CounterAddWithAttrsNullCounter)
+{
+    // Should not crash
+    observabilityCounterAddWithAttrs(nullptr, 1, "key", "val", NULL);
+}
+
+TEST_F(MetricsTest, GaugeRecordWithAttrs)
+{
+    g_autoptr(ObservabilityGauge) gauge = observabilityGaugeCreate("test.gauge.attrs", "desc", "{device}");
+    ASSERT_NE(gauge, nullptr);
+    observabilityGaugeRecordWithAttrs(gauge, 10, "subsystem", "zigbee", NULL);
+    observabilityGaugeRecordWithAttrs(gauge, 20, "subsystem", "matter", "status", "online", NULL);
+}
+
+TEST_F(MetricsTest, GaugeRecordWithAttrsEmpty)
+{
+    g_autoptr(ObservabilityGauge) gauge = observabilityGaugeCreate("test.gauge.noattrs", "desc", "{device}");
+    ASSERT_NE(gauge, nullptr);
+    observabilityGaugeRecordWithAttrs(gauge, 7, NULL);
+}
+
+TEST_F(MetricsTest, GaugeRecordWithAttrsNullGauge)
+{
+    // Should not crash
+    observabilityGaugeRecordWithAttrs(nullptr, 1, "key", "val", NULL);
+}
+
+TEST_F(MetricsTest, CreateHistogram)
+{
+    g_autoptr(ObservabilityHistogram) histogram =
+        observabilityHistogramCreate("test.histogram", "A test histogram", "ms");
+    ASSERT_NE(histogram, nullptr);
+    observabilityHistogramRecord(histogram, 1.5);
+    observabilityHistogramRecord(histogram, 100.0);
+}
+
+TEST_F(MetricsTest, CreateHistogramNullName)
+{
+    ObservabilityHistogram *histogram = observabilityHistogramCreate(nullptr, "desc", "unit");
+    EXPECT_EQ(histogram, nullptr);
+}
+
+TEST_F(MetricsTest, HistogramWithNullOptionalArgs)
+{
+    g_autoptr(ObservabilityHistogram) histogram =
+        observabilityHistogramCreate("test.histogram2", nullptr, nullptr);
+    ASSERT_NE(histogram, nullptr);
+    observabilityHistogramRecord(histogram, 42.0);
+}
+
+TEST_F(MetricsTest, HistogramRecordWithAttrs)
+{
+    g_autoptr(ObservabilityHistogram) histogram =
+        observabilityHistogramCreate("test.histogram.attrs", "desc", "ms");
+    ASSERT_NE(histogram, nullptr);
+    observabilityHistogramRecordWithAttrs(histogram, 25.5, "operation", "read", NULL);
+    observabilityHistogramRecordWithAttrs(histogram, 50.0, "operation", "write", "subsystem", "matter", NULL);
+}
+
+TEST_F(MetricsTest, HistogramRecordWithAttrsEmpty)
+{
+    g_autoptr(ObservabilityHistogram) histogram =
+        observabilityHistogramCreate("test.histogram.noattrs", "desc", "ms");
+    ASSERT_NE(histogram, nullptr);
+    observabilityHistogramRecordWithAttrs(histogram, 10.0, NULL);
+}
+
+TEST_F(MetricsTest, RecordNullHistogramIsSafe)
+{
+    observabilityHistogramRecord(nullptr, 1.0);
+    // Should not crash
+}
+
+TEST_F(MetricsTest, HistogramRecordWithAttrsNullHistogram)
+{
+    // Should not crash
+    observabilityHistogramRecordWithAttrs(nullptr, 1.0, "key", "val", NULL);
+}

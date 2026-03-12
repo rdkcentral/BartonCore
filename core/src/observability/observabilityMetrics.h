@@ -38,6 +38,9 @@ typedef struct ObservabilityCounter ObservabilityCounter;
 /** Opaque gauge handle */
 typedef struct ObservabilityGauge ObservabilityGauge;
 
+/** Opaque histogram handle */
+typedef struct ObservabilityHistogram ObservabilityHistogram;
+
 #ifdef BARTON_CONFIG_OBSERVABILITY
 
 /**
@@ -57,6 +60,15 @@ ObservabilityCounter *observabilityCounterCreate(const char *name, const char *d
 void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t value);
 
 /**
+ * Add a value to a counter with string key-value attributes.
+ * The attribute list is NULL-terminated: pass key, value pairs followed by NULL.
+ * @param counter  Counter handle (NULL is safe no-op)
+ * @param value    Value to add (must be non-negative)
+ * @param ...      NULL-terminated pairs of (const char *key, const char *value)
+ */
+void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t value, ...);
+
+/**
  * Create a named gauge instrument.
  * @param name         Metric name (e.g., "device.active.count")
  * @param description  Human-readable description
@@ -73,6 +85,40 @@ ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *descr
 void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t value);
 
 /**
+ * Record a gauge value with string key-value attributes.
+ * The attribute list is NULL-terminated: pass key, value pairs followed by NULL.
+ * @param gauge  Gauge handle (NULL is safe no-op)
+ * @param value  Current value to record
+ * @param ...    NULL-terminated pairs of (const char *key, const char *value)
+ */
+void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...);
+
+/**
+ * Create a named histogram instrument.
+ * @param name         Metric name (e.g., "device.discovery.duration")
+ * @param description  Human-readable description
+ * @param unit         Unit of measurement (e.g., "s", "ms")
+ * @return Histogram handle, or NULL on failure
+ */
+ObservabilityHistogram *observabilityHistogramCreate(const char *name, const char *description, const char *unit);
+
+/**
+ * Record a value into a histogram.
+ * @param histogram  Histogram handle (NULL is safe no-op)
+ * @param value      Value to record
+ */
+void observabilityHistogramRecord(ObservabilityHistogram *histogram, double value);
+
+/**
+ * Record a value into a histogram with string key-value attributes.
+ * The attribute list is NULL-terminated: pass key, value pairs followed by NULL.
+ * @param histogram  Histogram handle (NULL is safe no-op)
+ * @param value      Value to record
+ * @param ...        NULL-terminated pairs of (const char *key, const char *value)
+ */
+void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...);
+
+/**
  * Release a counter reference. Frees when the last reference is dropped.
  * @param counter  Counter to release (NULL is safe no-op)
  */
@@ -84,6 +130,12 @@ void observabilityCounterRelease(ObservabilityCounter *counter);
  */
 void observabilityGaugeRelease(ObservabilityGauge *gauge);
 
+/**
+ * Release a histogram reference. Frees when the last reference is dropped.
+ * @param histogram  Histogram to release (NULL is safe no-op)
+ */
+void observabilityHistogramRelease(ObservabilityHistogram *histogram);
+
 #else /* !BARTON_CONFIG_OBSERVABILITY */
 
 static inline ObservabilityCounter *observabilityCounterCreate(const char *name, const char *description, const char *unit)
@@ -94,6 +146,11 @@ static inline ObservabilityCounter *observabilityCounterCreate(const char *name,
     return (ObservabilityCounter *) 0;
 }
 static inline void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t value)
+{
+    (void) counter;
+    (void) value;
+}
+static inline void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t value, ...)
 {
     (void) counter;
     (void) value;
@@ -110,6 +167,29 @@ static inline void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t v
     (void) gauge;
     (void) value;
 }
+static inline void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...)
+{
+    (void) gauge;
+    (void) value;
+}
+static inline ObservabilityHistogram *
+observabilityHistogramCreate(const char *name, const char *description, const char *unit)
+{
+    (void) name;
+    (void) description;
+    (void) unit;
+    return (ObservabilityHistogram *) 0;
+}
+static inline void observabilityHistogramRecord(ObservabilityHistogram *histogram, double value)
+{
+    (void) histogram;
+    (void) value;
+}
+static inline void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...)
+{
+    (void) histogram;
+    (void) value;
+}
 static inline void observabilityCounterRelease(ObservabilityCounter *counter)
 {
     (void) counter;
@@ -117,6 +197,10 @@ static inline void observabilityCounterRelease(ObservabilityCounter *counter)
 static inline void observabilityGaugeRelease(ObservabilityGauge *gauge)
 {
     (void) gauge;
+}
+static inline void observabilityHistogramRelease(ObservabilityHistogram *histogram)
+{
+    (void) histogram;
 }
 
 #endif /* BARTON_CONFIG_OBSERVABILITY */
@@ -127,5 +211,6 @@ static inline void observabilityGaugeRelease(ObservabilityGauge *gauge)
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(ObservabilityCounter, observabilityCounterRelease)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(ObservabilityGauge, observabilityGaugeRelease)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(ObservabilityHistogram, observabilityHistogramRelease)
 
 #endif /* OBSERVABILITY_METRICS_H */

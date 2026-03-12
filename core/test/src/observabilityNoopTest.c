@@ -77,10 +77,18 @@ static void test_metrics_noop_counter_gauge(void **state)
     ObservabilityCounter *counter = observabilityCounterCreate("test.counter", "desc", "1");
     assert_null(counter);
     observabilityCounterAdd(counter, 1);
+    observabilityCounterAddWithAttrs(counter, 1, "key", "val", NULL);
 
     ObservabilityGauge *gauge = observabilityGaugeCreate("test.gauge", "desc", "1");
     assert_null(gauge);
     observabilityGaugeRecord(gauge, 42);
+    observabilityGaugeRecordWithAttrs(gauge, 42, "key", "val", NULL);
+
+    ObservabilityHistogram *histogram = observabilityHistogramCreate("test.histogram", "desc", "ms");
+    assert_null(histogram);
+    observabilityHistogramRecord(histogram, 1.5);
+    observabilityHistogramRecordWithAttrs(histogram, 2.5, "key", "val", NULL);
+    observabilityHistogramRelease(histogram);
 }
 
 static void test_logbridge_noop(void **state)
