@@ -52,6 +52,7 @@
 #include "event/deviceEventProducer.h"
 
 #include "observability/observabilityTracing.h"
+#include <observability/observabilityMetrics.h>
 
 typedef struct
 {
@@ -69,6 +70,13 @@ static subsystemManagerReadyForDevicesFunc readyForDevicesCB = NULL;
 static void checkSubsystemForMigration(SubsystemRegistration *registration);
 static SubsystemRegistration *subsystemRegistrationAcquire(SubsystemRegistration *reg);
 static bool subsystemManagerInitialized = false;
+
+static ObservabilityCounter *subsystemInitStartedCounter = NULL;
+static ObservabilityCounter *subsystemInitCompletedCounter = NULL;
+static ObservabilityCounter *subsystemInitFailedCounter = NULL;
+static ObservabilityGauge *subsystemInitializedCountGauge = NULL;
+static ObservabilityGauge *subsystemReadyForDevicesGauge = NULL;
+static ObservabilityHistogram *subsystemInitDurationHistogram = NULL;
 
 // Pre-registered subsystems are those that wish to be registered before the
 // subsystem manager is initialized. These are typically automatically registered
@@ -215,6 +223,8 @@ static void onSubsystemInitialized(const char *subsystem)
 
     icLogDebug(LOG_TAG, "%s: '%s'", __func__, subsystem);
 
+    observabilityCounterAddWithAttrs(subsystemInitCompletedCounter, 1, "subsystem.name", subsystem, NULL);
+
     scoped_icLinkedListNofree *drivers = deviceDriverManagerGetDeviceDriversBySubsystem(subsystem);
     scoped_icLinkedListIterator *it = linkedListIteratorCreate(drivers);
     while (linkedListIteratorHasNext(it) == true)
@@ -231,6 +241,7 @@ static void onSubsystemInitialized(const char *subsystem)
     // If everything is now ready, callback
     if (subsystemManagerIsReadyForDevices() == true && readyForDevicesCB != NULL)
     {
+        observabilityGaugeRecord(subsystemReadyForDevicesGauge, 1);
         readyForDevicesCB();
     }
 }
@@ -474,6 +485,8 @@ static void initializeSubsystemCallback(gpointer key, gpointer value, gpointer u
 
     if (registration->subsystem->initialize)
     {
+        observabilityCounterAddWithAttrs(
+            subsystemInitStartedCounter, 1, "subsystem.name", registration->subsystem->name, NULL);
         registration->subsystem->initialize(onSubsystemInitialized, onSubsystemDeinitialized);
     }
 }
@@ -483,6 +496,19 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
     icLogDebug(LOG_TAG, "%s", __func__);
 
     g_autoptr(ObservabilitySpan) initSpan = observabilitySpanStart("subsystem.init");
+
+    subsystemInitStartedCounter =
+        observabilityCounterCreate("subsystem.init.started", "Subsystem initialization started", "{event}");
+    subsystemInitCompletedCounter =
+        observabilityCounterCreate("subsystem.init.completed", "Subsystem initialization completed", "{event}");
+    subsystemInitFailedCounter =
+        observabilityCounterCreate("subsystem.init.failed", "Subsystem initialization failed", "{event}");
+    subsystemInitializedCountGauge =
+        observabilityGaugeCreate("subsystem.initialized.count", "Number of initialized subsystems", "{subsystem}");
+    subsystemReadyForDevicesGauge =
+        observabilityGaugeCreate("subsystem.ready_for_devices", "All subsystems ready for devices", "{state}");
+    subsystemInitDurationHistogram =
+        observabilityHistogramCreate("subsystem.init.duration", "Subsystem initialization duration", "s");
 
     GList *localPreRegisteredSubsystems = NULL;
     GHashTable *localSubsystems = NULL;
@@ -602,6 +628,18 @@ void subsystemManagerShutdown(void)
         }
     }
 
+    observabilityCounterRelease(subsystemInitStartedCounter);
+    subsystemInitStartedCounter = NULL;
+    observabilityCounterRelease(subsystemInitCompletedCounter);
+    subsystemInitCompletedCounter = NULL;
+    observabilityCounterRelease(subsystemInitFailedCounter);
+    subsystemInitFailedCounter = NULL;
+    observabilityGaugeRelease(subsystemInitializedCountGauge);
+    subsystemInitializedCountGauge = NULL;
+    observabilityGaugeRelease(subsystemReadyForDevicesGauge);
+    subsystemReadyForDevicesGauge = NULL;
+    observabilityHistogramRelease(subsystemInitDurationHistogram);
+    subsystemInitDurationHistogram = NULL;
 }
 
 /**

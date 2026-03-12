@@ -86,23 +86,23 @@
 
 ## 13. Subsystem Manager Meters
 
-- [ ] 13.1 Add `#include "observability/observabilityMetrics.h"` and static counter/gauge/histogram declarations to `subsystemManager.c`
-- [ ] 13.2 Create all subsystem manager meters in `subsystemManagerInitialize()` — `subsystem.init.started`, `subsystem.init.completed`, `subsystem.init.failed`, `subsystem.initialized.count`, `subsystem.ready_for_devices`, `subsystem.init.duration`
-- [ ] 13.3 Instrument `initializeSubsystemCallback()` — increment `subsystem.init.started` with `subsystem.name`, capture start time
-- [ ] 13.4 Instrument `onSubsystemInitialized()` — increment `subsystem.init.completed` with `subsystem.name`, record duration histogram, update `subsystem.initialized.count` gauge
-- [ ] 13.5 Instrument `readyForDevicesCB()` — set `subsystem.ready_for_devices` gauge to 1
-- [ ] 13.6 Release all subsystem manager meters in `subsystemManagerShutdown()`
+- [x] 13.1 Add `#include "observability/observabilityMetrics.h"` and static counter/gauge/histogram declarations to `subsystemManager.c`
+- [x] 13.2 Create all subsystem manager meters in `subsystemManagerInitialize()` — `subsystem.init.started`, `subsystem.init.completed`, `subsystem.init.failed`, `subsystem.initialized.count`, `subsystem.ready_for_devices`, `subsystem.init.duration`
+- [x] 13.3 Instrument `initializeSubsystemCallback()` — increment `subsystem.init.started` with `subsystem.name`, capture start time
+- [x] 13.4 Instrument `onSubsystemInitialized()` — increment `subsystem.init.completed` with `subsystem.name`, record duration histogram, update `subsystem.initialized.count` gauge
+- [x] 13.5 Instrument `readyForDevicesCB()` — set `subsystem.ready_for_devices` gauge to 1
+- [x] 13.6 Release all subsystem manager meters in `subsystemManagerShutdown()`
 
 ## 14. Subsystem Manager Meters Tests
 
-- [ ] 14.1 Add Google Test unit tests for subsystem manager meters — verify init counters and readiness gauge
-- [ ] 14.2 Add pytest integration test verifying `subsystem.init.completed` and `subsystem.ready_for_devices` metrics in OTLP export
+- [x] 14.1 Add Google Test unit tests for subsystem manager meters — verify init counters and readiness gauge
+- [x] 14.2 Add pytest integration test verifying `subsystem.init.completed` and `subsystem.ready_for_devices` metrics in OTLP export
 
 ## 15. Verify & Commit — Subsystem Manager Meters
 
-- [ ] 15.1 Build the project and run all BartonCore unit tests — verify zero regressions
-- [ ] 15.2 Run integration tests — verify zero regressions
-- [ ] 15.3 Commit: `feat(otel): add subsystem manager meters`
+- [x] 15.1 Build the project and run all BartonCore unit tests — verify zero regressions
+- [x] 15.2 Run integration tests — verify zero regressions
+- [x] 15.3 Commit: `feat(otel): add subsystem manager meters`
 
 ## 16. Internal Service Meters — Driver Manager, Watchdog, Storage, Events
 
