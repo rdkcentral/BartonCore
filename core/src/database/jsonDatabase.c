@@ -43,6 +43,7 @@
 #include <icTypes/icStringHashMap.h>
 #include <icUtil/stringUtils.h>
 #include <jsonHelper/jsonHelper.h>
+#include <observability/observabilityMetrics.h>
 #include <regex.h>
 
 #define LOG_TAG               "jsonDeviceDatabase"
@@ -114,6 +115,9 @@ static icStringHashMap *systemProperties = NULL;
 // static (private) functions assume the lock is held.   All public functions should lock before
 // calling functions which manipulate global data structures
 static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+
+static ObservabilityCounter *storagePersistCounter = NULL;
+static ObservabilityGauge *storageDeviceCountGauge = NULL;
 
 static bool jsonDatabaseGetSystemPropertyNoLock(const char *key, char **value);
 static bool jsonDatabaseGetAllSystemPropertiesNoLock(icStringHashMap *map);
@@ -774,6 +778,22 @@ bool jsonDatabaseInitialize()
     retval = jsonDatabaseInitializeNoLock();
     pthread_mutex_unlock(&mtx);
 
+    if (storagePersistCounter == NULL)
+    {
+        storagePersistCounter =
+            observabilityCounterCreate("storage.device.persist", "Device persistence operations", "{operation}");
+    }
+    if (storageDeviceCountGauge == NULL)
+    {
+        storageDeviceCountGauge =
+            observabilityGaugeCreate("storage.device.count", "Number of devices in storage", "{device}");
+    }
+
+    if (retval && devices != NULL)
+    {
+        observabilityGaugeRecord(storageDeviceCountGauge, (double) hashMapCount(devices));
+    }
+
     return retval;
 }
 
@@ -842,6 +862,11 @@ void jsonDatabaseCleanup(bool persist)
     pthread_mutex_lock(&mtx);
     jsonDatabaseCleanupNoLock(persist);
     pthread_mutex_unlock(&mtx);
+
+    observabilityCounterRelease(storagePersistCounter);
+    storagePersistCounter = NULL;
+    observabilityGaugeRelease(storageDeviceCountGauge);
+    storageDeviceCountGauge = NULL;
 }
 
 /**
@@ -1092,6 +1117,8 @@ bool jsonDatabaseAddDevice(icDevice *device)
             else
             {
                 retval = true;
+                observabilityCounterAdd(storagePersistCounter, 1);
+                observabilityGaugeRecord(storageDeviceCountGauge, (double) hashMapCount(devices));
             }
         }
         // If loading the device into the cache fails it will clean up the device
@@ -1407,6 +1434,7 @@ bool jsonDatabaseRemoveDeviceById(const char *uuid)
                 // Clean out of id map, which will free all resources
                 hashMapDelete(devices, (void *) uuid, strlen(uuid) + 1, (hashMapFreeFunc) freeDevicesItem);
                 retval = true;
+                observabilityGaugeRecord(storageDeviceCountGauge, (double) hashMapCount(devices));
             }
             else
             {

@@ -106,26 +106,26 @@
 
 ## 16. Internal Service Meters — Driver Manager, Watchdog, Storage, Events
 
-- [ ] 16.1 Add static meter declarations and includes to `deviceDriverManager.c` — `driver.init.started`, `driver.init.success`, `driver.init.failed`, `driver.discovery.requested`, `driver.discovery.completed`, `driver.registered.count`
-- [ ] 16.2 Instrument driver init and discovery paths in `deviceDriverManager.c`, create meters at init, release at shutdown
-- [ ] 16.3 Add static meter declarations to `deviceCommunicationWatchdog.c` — `device.commfail.current` gauge, `device.communication.check.performed` counter
-- [ ] 16.4 Instrument watchdog thread — increment check counter per cycle, update `device.commfail.current` gauge when devices enter/exit comm-fail
-- [ ] 16.5 Add static meter declarations to `database/jsonDatabase.c` — `storage.device.persist` counter, `storage.device.count` gauge
-- [ ] 16.6 Instrument database persist and add/remove paths, create meters at database init, release at shutdown
-- [ ] 16.7 Add `storage.restore.attempt`, `storage.restore.success`, `storage.restore.failed` counters to `deviceService.c` restore path
-- [ ] 16.8 Add static meter declarations to `event/deviceEventProducer.c` — `event.produced` counter
-- [ ] 16.9 Instrument GObject signal emission paths in `deviceEventProducer.c` — increment `event.produced` with `event.type` attribute per signal
+- [x] 16.1 Add static meter declarations and includes to `deviceDriverManager.c` — `driver.init.started`, `driver.init.success`, `driver.init.failed`, `driver.discovery.requested`, `driver.discovery.completed`, `driver.registered.count`
+- [x] 16.2 Instrument driver init and discovery paths in `deviceDriverManager.c`, create meters at init, release at shutdown
+- [x] 16.3 Add static meter declarations to `deviceCommunicationWatchdog.c` — `device.commfail.current` gauge, `device.communication.check.performed` counter
+- [x] 16.4 Instrument watchdog thread — increment check counter per cycle, update `device.commfail.current` gauge when devices enter/exit comm-fail
+- [x] 16.5 Add static meter declarations to `database/jsonDatabase.c` — `storage.device.persist` counter, `storage.device.count` gauge
+- [x] 16.6 Instrument database persist and add/remove paths, create meters at database init, release at shutdown
+- [x] 16.7 Add `storage.restore.attempt`, `storage.restore.success`, `storage.restore.failed` counters to `deviceService.c` restore path
+- [x] 16.8 Add static meter declarations to `event/deviceEventProducer.c` — `event.produced` counter
+- [x] 16.9 Instrument GObject signal emission paths in `deviceEventProducer.c` — increment `event.produced` with `event.type` attribute per signal
 
 ## 17. Internal Service Meters Tests
 
-- [ ] 17.1 Add Google Test unit tests for driver manager, watchdog, storage, and event meter creation and increment
-- [ ] 17.2 Add pytest integration test verifying `driver.init.success`, `storage.device.count`, and `event.produced` metrics in OTLP export
+- [x] 17.1 Add Google Test unit tests for driver manager, watchdog, storage, and event meter creation and increment
+- [x] 17.2 Add pytest integration test verifying `driver.init.success`, `storage.device.count`, and `event.produced` metrics in OTLP export
 
 ## 18. Verify & Commit — Internal Service Meters
 
-- [ ] 18.1 Build the project and run all BartonCore unit tests — verify zero regressions
-- [ ] 18.2 Run integration tests — verify zero regressions
-- [ ] 18.3 Commit: `feat(otel): add internal service meters (drivers, watchdog, storage, events)`
+- [x] 18.1 Build the project and run all BartonCore unit tests — verify zero regressions
+- [x] 18.2 Run integration tests — verify zero regressions
+- [x] 18.3 Commit: `feat(otel): add internal service meters (drivers, watchdog, storage, events)`
 
 ## 19. Documentation Update
 

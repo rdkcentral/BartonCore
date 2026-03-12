@@ -89,6 +89,9 @@ static ObservabilityCounter *deviceAddFailedCounter = NULL;
 static ObservabilityCounter *deviceRemoveSuccessCounter = NULL;
 static ObservabilityCounter *deviceRejectedCounter = NULL;
 static ObservabilityHistogram *discoveryDurationHistogram = NULL;
+static ObservabilityCounter *storageRestoreAttemptCounter = NULL;
+static ObservabilityCounter *storageRestoreSuccessCounter = NULL;
+static ObservabilityCounter *storageRestoreFailedCounter = NULL;
 
 #include "device-driver/device-driver.h"
 #include "device/deviceModelHelper.h"
@@ -356,6 +359,8 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
 {
     g_autofree gchar *storageDir = deviceServiceConfigurationGetStorageDir();
 
+    observabilityCounterAdd(storageRestoreAttemptCounter, 1);
+
     scoped_icLinkedListNofree *deviceDrivers = deviceDriverManagerGetDeviceDrivers();
     scoped_icLinkedListIterator *driverPreRestoreIterator = linkedListIteratorCreate(deviceDrivers);
 
@@ -379,6 +384,7 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
     else
     {
         icLogError(LOG_TAG, "Failed to restore json database!");
+        observabilityCounterAdd(storageRestoreFailedCounter, 1);
         return false;
     }
 
@@ -386,6 +392,7 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
     if (subsystemManagerRestoreConfig(tempRestoreDir, storageDir) == false)
     {
         icLogError(LOG_TAG, "Failed to restore subsystem config");
+        observabilityCounterAdd(storageRestoreFailedCounter, 1);
         return false;
     }
 
@@ -399,6 +406,7 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
             if (!driver->restoreConfig(driver->callbackContext, tempRestoreDir, storageDir))
             {
                 icLogError(LOG_TAG, "Failed to restore config for driver %s", driver->driverName);
+                observabilityCounterAdd(storageRestoreFailedCounter, 1);
                 return false;
             }
         }
@@ -457,6 +465,8 @@ bool deviceServiceRestoreConfig(const char *tempRestoreDir)
             driver->postRestoreConfig(driver->callbackContext);
         }
     }
+
+    observabilityCounterAdd(storageRestoreSuccessCounter, 1);
 
     return true;
 }
@@ -1897,6 +1907,12 @@ bool deviceServiceInitialize(BCoreClient *service)
     deviceRejectedCounter =
         observabilityCounterCreate("device.rejected.count", "Devices rejected by discovery filters", "{device}");
     discoveryDurationHistogram = observabilityHistogramCreate("device.discovery.duration", "Discovery duration", "s");
+    storageRestoreAttemptCounter =
+        observabilityCounterCreate("storage.restore.attempt", "Storage restore attempts", "{attempt}");
+    storageRestoreSuccessCounter =
+        observabilityCounterCreate("storage.restore.success", "Storage restore successes", "{attempt}");
+    storageRestoreFailedCounter =
+        observabilityCounterCreate("storage.restore.failed", "Storage restore failures", "{attempt}");
 
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_client_get_initialize_params(service);
 
@@ -2132,6 +2148,12 @@ void deviceServiceShutdown()
     deviceRejectedCounter = NULL;
     observabilityHistogramRelease(discoveryDurationHistogram);
     discoveryDurationHistogram = NULL;
+    observabilityCounterRelease(storageRestoreAttemptCounter);
+    storageRestoreAttemptCounter = NULL;
+    observabilityCounterRelease(storageRestoreSuccessCounter);
+    storageRestoreSuccessCounter = NULL;
+    observabilityCounterRelease(storageRestoreFailedCounter);
+    storageRestoreFailedCounter = NULL;
     observabilityGaugeRelease(deviceActiveGauge);
     deviceActiveGauge = NULL;
 

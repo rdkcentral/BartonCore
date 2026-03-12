@@ -253,21 +253,21 @@ static gboolean maybeInitMatter(void *context)
 
 /**
  * @brief Wrapper callback for maybeInitMatter that handles exponential backoff scheduling.
- * 
+ *
  * This function is called by the GLib main loop timer source. It attempts to initialize Matter,
  * and if initialization fails, it schedules the next retry with an exponentially increasing delay.
- * 
+ *
  * @param context unused context pointer
  * @return FALSE to indicate the timer source should be removed
  */
 static gboolean maybeInitMatterWithBackoff(void *context)
 {
     bool needsRetry = maybeInitMatter(context);
-    
+
     if (needsRetry)
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
-        
+
         // Check if initialization succeeded between the call and acquiring the lock
         // (e.g., via accountIdChanged callback)
         if (initialized)
@@ -275,28 +275,27 @@ static gboolean maybeInitMatterWithBackoff(void *context)
             // Initialization succeeded, no need to retry
             return false;
         }
-        
+
         // Increment retry attempts and calculate new backoff delay (both protected by lock)
         retryAttempts++;
         guint currentRetryAttempt = retryAttempts;
         guint newBackoffDelay = calculateBackoffDelay(currentRetryAttempt);
-        
-        icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", 
-                currentRetryAttempt, newBackoffDelay);
-        
+
+        icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", currentRetryAttempt, newBackoffDelay);
+
         // Create a new timer source with the new backoff delay
         g_autoptr(GSource) newSource = g_timeout_source_new(newBackoffDelay * 1000);
         g_source_set_priority(newSource, G_PRIORITY_DEFAULT);
         g_source_set_callback(newSource, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(newSource, "maybeInitMatter");
-        
+
         // Attach to the current context and update sourceId
         // Note: The old source is automatically removed by GLib when this callback returns false
         // The mutex protection ensures shutdown can't interfere with this atomic operation
         GMainContext *currentContext = g_main_context_get_thread_default();
         sourceId = g_source_attach(newSource, currentContext);
     }
-    
+
     return false; // Always return false to remove the current source
 }
 
@@ -329,7 +328,7 @@ static void matterInitLoopThreadFunc()
         // but we explicitly reset it here so that if this thread is ever restarted after
         // a previous run, the backoff sequence starts from the initial delay again.
         retryAttempts = 0;
-        
+
         // Create a one-shot timer source for the first scheduled retry with backoff
         // Note: The immediate synchronous maybeInitMatter call above is not counted as a retry attempt
         // This first scheduled retry uses retryAttempts=0
@@ -716,7 +715,7 @@ static void accountIdChanged(const gchar *accountId)
     subsystemMtx.lock();
     retryAttempts = 0;
     subsystemMtx.unlock();
-    
+
     std::thread matterInitThread = std::thread(maybeInitMatter, nullptr);
     matterInitThread.detach();
 }

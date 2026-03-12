@@ -47,6 +47,8 @@
 
 #include "subsystemManager.h"
 
+#include <observability/observabilityMetrics.h>
+
 static bool driverSupportsDeviceClass(const DeviceDriver *driver, const char *deviceClass);
 
 static void destroyDeviceDriverMapEntry(void *key, void *value);
@@ -57,12 +59,20 @@ static pthread_mutex_t deviceDriversMtx = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_N
 
 static pthread_once_t registerExitOnce = PTHREAD_ONCE_INIT;
 
+static ObservabilityCounter *driverRegisteredCounter = NULL;
+static ObservabilityCounter *driverStartupCounter = NULL;
+
 /*
  * Load up the device drivers and initialize them.
  */
 bool deviceDriverManagerInitialize()
 {
     icLogDebug(LOG_TAG, "deviceDriverManagerInitialize");
+
+    driverRegisteredCounter =
+        observabilityCounterCreate("driver.registered.count", "Device drivers registered", "{driver}");
+    driverStartupCounter = observabilityCounterCreate("driver.init.success", "Device driver startups", "{driver}");
+
     return true;
 }
 
@@ -78,6 +88,7 @@ bool deviceDriverManagerStartDeviceDrivers()
     {
         DeviceDriver *driver = linkedListIteratorGetNext(it);
         driver->startup(driver->callbackContext);
+        observabilityCounterAddWithAttrs(driverStartupCounter, 1, "driver.name", driver->driverName, NULL);
     }
 
     return true;
@@ -109,6 +120,11 @@ bool deviceDriverManagerShutdown()
         }
         hashMapIteratorDestroy(iterator);
     }
+
+    observabilityCounterRelease(driverRegisteredCounter);
+    driverRegisteredCounter = NULL;
+    observabilityCounterRelease(driverStartupCounter);
+    driverStartupCounter = NULL;
 
     return true;
 }
@@ -150,6 +166,7 @@ bool deviceDriverManagerRegisterDriver(DeviceDriver *driver)
         icLogDebug(LOG_TAG, "Loading device driver %s", driver->driverName);
         hashMapPut(deviceDrivers, driver->driverName, (uint16_t) (strlen(driver->driverName) + 1), driver);
         linkedListAppend(orderedDeviceDrivers, driver);
+        observabilityCounterAddWithAttrs(driverRegisteredCounter, 1, "driver.name", driver->driverName, NULL);
         result = true;
     }
 

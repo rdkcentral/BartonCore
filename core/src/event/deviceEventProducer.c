@@ -70,6 +70,7 @@
 #include <icConcurrent/threadUtils.h>
 #include <icTypes/icHashMap.h>
 #include <jsonHelper/jsonHelper.h>
+#include <observability/observabilityMetrics.h>
 
 #define LOG_TAG           "deviceServiceEventProducer"
 #define G_LOG_DOMAIN_NAME LOG_TAG
@@ -116,6 +117,19 @@ enum DEVICE_SERVICE_SIGNALS
 };
 
 static guint signals[SIGNAL_MAX];
+
+static ObservabilityCounter *eventProducedCounter = NULL;
+
+static void ensureEventMetersCreated(void)
+{
+    static bool metersCreated = false;
+    if (!metersCreated)
+    {
+        eventProducedCounter =
+            observabilityCounterCreate("event.produced", "Events produced by device service", "{event}");
+        metersCreated = true;
+    }
+}
 
 void deviceEventProducerClassInit(BCoreClientClass *bCoreClientClass)
 {
@@ -561,6 +575,9 @@ void sendDeviceDiscoveryCompletedEvent(icDevice *device, bool forRecovery)
 
 void sendDeviceAddedEvent(const char *uuid)
 {
+    ensureEventMetersCreated();
+    observabilityCounterAddWithAttrs(eventProducedCounter, 1, "event.type", "device.added", NULL);
+
     g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(service, uuid);
 
     if (device)
@@ -634,6 +651,9 @@ void sendDeviceRecoveredEvent(const char *uuid)
 
 void sendDeviceRemovedEvent(const char *uuid, const char *deviceClass)
 {
+    ensureEventMetersCreated();
+    observabilityCounterAddWithAttrs(eventProducedCounter, 1, "event.type", "device.removed", NULL);
+
     g_autoptr(BCoreDeviceRemovedEvent) event = b_core_device_removed_event_new();
     g_object_set(
         event,
@@ -647,6 +667,9 @@ void sendDeviceRemovedEvent(const char *uuid, const char *deviceClass)
 
 void sendResourceUpdatedEvent(icDeviceResource *resource, cJSON *metadata)
 {
+    ensureEventMetersCreated();
+    observabilityCounterAddWithAttrs(eventProducedCounter, 1, "event.type", "resource.updated", NULL);
+
     g_autoptr(BCoreResource) resourceGObject = convertIcDeviceResourceToGObject(resource);
 
     g_autofree gchar *metadataStr = NULL;
@@ -705,6 +728,9 @@ void sendEndpointRemovedEvent(icDeviceEndpoint *endpoint, const char *deviceClas
 
 void sendDeviceServiceStatusEvent(DeviceServiceStatusChangedReason reason)
 {
+    ensureEventMetersCreated();
+    observabilityCounterAddWithAttrs(eventProducedCounter, 1, "event.type", "status.changed", NULL);
+
     g_autoptr(BCoreStatusEvent) event = b_core_status_event_new();
 
     scoped_DeviceServiceStatus *system_status = deviceServiceGetStatus();

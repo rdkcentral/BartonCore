@@ -47,6 +47,8 @@
 
 static ObservabilityCounter *commFailCounter = NULL;
 static ObservabilityCounter *commRestoreCounter = NULL;
+static ObservabilityGauge *commFailCurrentGauge = NULL;
+static ObservabilityCounter *commCheckPerformedCounter = NULL;
 
 #define LOG_TAG                    "deviceCommunicationWatchdog"
 #define logFmt(fmt)                "%s: " fmt, __func__
@@ -113,6 +115,10 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
     commFailCounter = observabilityCounterCreate("device.commfail.count", "Number of device comm-fail events", "{event}");
     commRestoreCounter =
         observabilityCounterCreate("device.commrestore.count", "Number of device comm-restore events", "{event}");
+    commFailCurrentGauge =
+        observabilityGaugeCreate("device.commfail.current", "Devices currently in comm-fail", "{device}");
+    commCheckPerformedCounter = observabilityCounterCreate(
+        "device.communication.check.performed", "Communication check cycles performed", "{cycle}");
 
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
     fastCommFailTimer = b_core_property_provider_get_property_as_bool(propertyProvider, FAST_COMM_FAIL_PROP, false);
@@ -154,6 +160,15 @@ void deviceCommunicationWatchdogTerm()
 
     failedCallback = NULL;
     restoredCallback = NULL;
+
+    observabilityCounterRelease(commFailCounter);
+    commFailCounter = NULL;
+    observabilityCounterRelease(commRestoreCounter);
+    commRestoreCounter = NULL;
+    observabilityGaugeRelease(commFailCurrentGauge);
+    commFailCurrentGauge = NULL;
+    observabilityCounterRelease(commCheckPerformedCounter);
+    commCheckPerformedCounter = NULL;
 }
 
 void deviceCommunicationWatchdogMonitorDevice(const char *uuid, const uint32_t commFailTimeoutSeconds, bool inCommFail)
@@ -469,6 +484,9 @@ static void *commFailWatchdogThreadProc(void *arg)
         // Check if the hash table is still valid (it could be NULL if we're shutting down)
         if (monitoredDevices != NULL)
         {
+            observabilityCounterAdd(commCheckPerformedCounter, 1);
+
+            int commFailDeviceCount = 0;
             GHashTableIter monitoredDevicesIter;
             gchar *uuid = NULL;
             MonitoredDeviceInfo *info = NULL;
@@ -502,7 +520,14 @@ static void *commFailWatchdogThreadProc(void *arg)
                            stringValueOfBool(info->inCommFail));
 
                 setMillisUntilCommFail(info, millisUntilCommFail);
+
+                if (info->inCommFail)
+                {
+                    commFailDeviceCount++;
+                }
             }
+
+            observabilityGaugeRecord(commFailCurrentGauge, commFailDeviceCount);
         }
         pthread_mutex_unlock(&monitoredDevicesMutex);
 
