@@ -159,6 +159,16 @@ if (BCORE_MATTER)
     endif()
 
     bcore_add_cpp_test(
+        NAME testMatterDeviceEndpointMap
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/MatterDeviceEndpointMapTest.cpp
+        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/api/c/public
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    bcore_add_cpp_test(
         NAME testQuickJsScript
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/QuickJsScriptTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/script/QuickJsScript.cpp

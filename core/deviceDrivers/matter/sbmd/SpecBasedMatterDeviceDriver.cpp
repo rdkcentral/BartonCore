@@ -76,12 +76,21 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // Set feature clusters from the spec for featureMap lookup
     device->SetFeatureClusters(spec->matterMeta.featureClusters);
 
+    // Resolve the endpoint map before resource binding
+    if (!device->ResolveEndpointMap(spec->matterMeta.deviceTypes))
+    {
+        icError("Failed to resolve endpoint map for device %s, no matching device types found",
+                device->GetDeviceId().c_str());
+        return false;
+    }
+
     // for each resource in the spec, configure mapper bindings.
     // Note: resource modes ("read", "dynamic", "emitEvents") describe client-facing capabilities
     // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
     // is populated: read mappers query the device, event mappers update the value from events.
     // A resource can be readable without a read mapper if its value is populated by events.
-    auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
+    auto configureResource = [&device](const SbmdResource &sbmdResource,
+                                       std::optional<uint32_t> sbmdEndpointIndex) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
@@ -99,7 +108,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         // a resource can have different mappers for read, write, and execute
         if (sbmdResource.mapper.hasRead)
         {
-            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper))
+            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
             {
                 icError("  Failed to bind read script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -109,7 +118,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         {
             // Write mappers are script-only - script returns full operation details
             std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
-            if (!device->BindWriteInfo(uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
+            if (!device->BindWriteInfo(
+                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
             {
                 icError("  Failed to bind write script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -120,7 +130,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             // Execute mappers are script-only - script returns full operation details
             std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
             if (!device->BindExecuteInfo(
-                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
+                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
             {
                 icError("  Failed to bind execute script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -129,7 +139,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         if (sbmdResource.mapper.event.has_value())
         {
             // Event mappers - bind event to resource for automatic updates
-            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value()))
+            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value(), sbmdEndpointIndex))
             {
                 icError("  Failed to bind event for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -138,10 +148,10 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return true;
     };
 
-    // Configure device-level resources
+    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
     for (const auto &resource : spec->resources)
     {
-        if (!configureResource(resource))
+        if (!configureResource(resource, std::nullopt))
         {
             if (resource.optional)
             {
@@ -158,11 +168,12 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     }
 
     // Configure endpoint-level resources
-    for (const auto &endpoint : spec->endpoints)
+    for (uint32_t epIdx = 0; epIdx < static_cast<uint32_t>(spec->endpoints.size()); ++epIdx)
     {
+        const auto &endpoint = spec->endpoints[epIdx];
         for (const auto &resource : endpoint.resources)
         {
-            if (!configureResource(resource))
+            if (!configureResource(resource, epIdx))
             {
                 if (resource.optional)
                 {
