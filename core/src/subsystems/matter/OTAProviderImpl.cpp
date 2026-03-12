@@ -51,6 +51,7 @@ extern "C" {
 #include <icUtil/stringUtils.h>
 #include <inttypes.h>
 #include <jsonHelper/jsonHelper.h>
+#include <observability/observabilityMetrics.h>
 }
 
 #include "Matter.h"
@@ -76,6 +77,31 @@ using namespace chip::app::Clusters;
 
 // This can be used to log the update token for debugging OTA issues, but should be disabled in production
 // #define OTA_PROVIDER_LOG_TOKEN
+
+namespace
+{
+ObservabilityCounter *otaQueryReceivedCounter = NULL;
+ObservabilityCounter *otaQueryAvailableCounter = NULL;
+ObservabilityCounter *otaQueryNotAvailableCounter = NULL;
+ObservabilityCounter *otaApplyReceivedCounter = NULL;
+
+void ensureOtaMetersCreated()
+{
+    static bool created = false;
+    if (!created)
+    {
+        otaQueryReceivedCounter =
+            observabilityCounterCreate("matter.ota.query_image.received", "OTA query image requests received", "{request}");
+        otaQueryAvailableCounter =
+            observabilityCounterCreate("matter.ota.query_image.available", "OTA images available", "{request}");
+        otaQueryNotAvailableCounter =
+            observabilityCounterCreate("matter.ota.query_image.not_available", "OTA images not available", "{request}");
+        otaApplyReceivedCounter =
+            observabilityCounterCreate("matter.ota.apply_update.received", "OTA apply update requests received", "{request}");
+        created = true;
+    }
+}
+} // namespace
 
 namespace barton
 {
@@ -206,6 +232,8 @@ namespace barton
                                       const OtaSoftwareUpdateProvider::Commands::QueryImage::DecodableType &commandData)
     {
         icDebug();
+        ensureOtaMetersCreated();
+        observabilityCounterAdd(otaQueryReceivedCounter, 1);
 
         chip::NodeId requestorNodeId = commandObj->GetSubjectDescriptor().subject;
 
@@ -229,11 +257,13 @@ namespace barton
                                commandData.requestorCanConsent.ValueOr(false),
                                candidate.otaURL,
                                candidate.softwareVersion);
+            observabilityCounterAdd(otaQueryAvailableCounter, 1);
         }
         else
         {
             // selector will log any specifics as to why (e.g., no matching protocol)
             SendImageNotAvailable(commandObj, commandPath);
+            observabilityCounterAdd(otaQueryNotAvailableCounter, 1);
         }
     }
 
@@ -243,6 +273,8 @@ namespace barton
         const OtaSoftwareUpdateProvider::Commands::ApplyUpdateRequest::DecodableType &commandData)
     {
         icDebug();
+        ensureOtaMetersCreated();
+        observabilityCounterAdd(otaApplyReceivedCounter, 1);
 
 #ifdef OTA_PROVIDER_LOG_TOKEN
         scoped_generic char *token = stringBin2hex(commandData.updateToken.data(), commandData.updateToken.size());

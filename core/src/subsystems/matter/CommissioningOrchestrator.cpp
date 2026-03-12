@@ -45,11 +45,45 @@ extern "C" {
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
 #include <inttypes.h>
+#include <observability/observabilityMetrics.h>
 }
 
 #include <chrono>
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS 15
+
+namespace
+{
+    ObservabilityCounter *commissioningAttemptCounter = NULL;
+    ObservabilityCounter *commissioningSuccessCounter = NULL;
+    ObservabilityCounter *commissioningFailedCounter = NULL;
+    ObservabilityHistogram *commissioningDurationHistogram = NULL;
+    ObservabilityCounter *pairingAttemptCounter = NULL;
+    ObservabilityCounter *pairingSuccessCounter = NULL;
+    ObservabilityCounter *pairingFailedCounter = NULL;
+
+    void ensureMatterMetersCreated()
+    {
+        static bool metersCreated = false;
+        if (!metersCreated)
+        {
+            commissioningAttemptCounter =
+                observabilityCounterCreate("matter.commissioning.attempt", "Commissioning attempts", "{attempt}");
+            commissioningSuccessCounter =
+                observabilityCounterCreate("matter.commissioning.success", "Commissioning successes", "{attempt}");
+            commissioningFailedCounter =
+                observabilityCounterCreate("matter.commissioning.failed", "Commissioning failures", "{attempt}");
+            commissioningDurationHistogram =
+                observabilityHistogramCreate("matter.commissioning.duration", "Commissioning duration", "s");
+            pairingAttemptCounter =
+                observabilityCounterCreate("matter.pairing.attempt", "Pairing attempts", "{attempt}");
+            pairingSuccessCounter =
+                observabilityCounterCreate("matter.pairing.success", "Pairing successes", "{attempt}");
+            pairingFailedCounter = observabilityCounterCreate("matter.pairing.failed", "Pairing failures", "{attempt}");
+            metersCreated = true;
+        }
+    }
+} // namespace
 
 namespace barton
 {
@@ -57,6 +91,10 @@ namespace barton
     bool CommissioningOrchestrator::Commission(const char *setupPayloadStr, uint16_t timeoutSeconds)
     {
         icDebug();
+        ensureMatterMetersCreated();
+
+        gint64 commissionStartTime = g_get_monotonic_time();
+        observabilityCounterAdd(commissioningAttemptCounter, 1);
 
         std::unique_lock<std::mutex> lock_guard(mtx);
         Reset();
@@ -97,11 +135,16 @@ namespace barton
 
         lock_guard.unlock();
 
+        double durationSecs = (double) (g_get_monotonic_time() - commissionStartTime) / G_USEC_PER_SEC;
+        observabilityHistogramRecord(commissioningDurationHistogram, durationSecs);
+
         if (endStatus == CommissionedSuccessfully)
         {
+            observabilityCounterAdd(commissioningSuccessCounter, 1);
             return this->Pair(finalNodeId, timeoutSeconds);
         }
 
+        observabilityCounterAdd(commissioningFailedCounter, 1);
         return false;
     }
 
@@ -113,6 +156,7 @@ namespace barton
         }
 
         icDebug("Pairing device with node id %" PRIx64, nodeId);
+        observabilityCounterAdd(pairingAttemptCounter, 1);
 
         bool result = false;
 
@@ -122,6 +166,7 @@ namespace barton
         {
             icError("Failed to complete commissioning");
             SetCommissioningStatus(CommissioningCompleteFailed);
+            observabilityCounterAdd(pairingFailedCounter, 1);
             return false;
         }
 
@@ -178,6 +223,7 @@ namespace barton
                 {
                     icError("Failed to add Matter device with UUID %s to driver", uuid.c_str());
                     SetCommissioningStatus(CommissioningCompleteFailed);
+                    observabilityCounterAdd(pairingFailedCounter, 1);
                     return false;
                 }
 
@@ -210,10 +256,12 @@ namespace barton
         if (result)
         {
             SetCommissioningStatus(CommissionedSuccessfully);
+            observabilityCounterAdd(pairingSuccessCounter, 1);
         }
         else
         {
             SetCommissioningStatus(CommissioningFailed);
+            observabilityCounterAdd(pairingFailedCounter, 1);
         }
 
         return result;

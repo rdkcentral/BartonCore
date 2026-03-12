@@ -43,24 +43,24 @@
 
 ## 7. Matter Subsystem Meters
 
-- [ ] 7.1 Add static counter/histogram/gauge declarations to `matterSubsystem.cpp` and/or `CommissioningOrchestrator` for commissioning, pairing, OTA, and init meters
-- [ ] 7.2 Create all Matter meters during Matter subsystem initialization — `matter.commissioning.attempt`, `matter.commissioning.success`, `matter.commissioning.failed`, `matter.commissioning.duration`, `matter.pairing.attempt`, `matter.pairing.success`, `matter.pairing.failed`, `matter.ota.query_image.received`, `matter.ota.query_image.available`, `matter.ota.query_image.not_available`, `matter.ota.apply_update.received`, `matter.initializing`
-- [ ] 7.3 Instrument `CommissioningOrchestrator::Commission()` — increment attempt counter at entry, success/failed counters at completion with `failure.stage` attribute, record duration histogram
-- [ ] 7.4 Instrument `CommissioningOrchestrator::Pair()` — increment pairing attempt/success/failed counters
-- [ ] 7.5 Instrument `OTAProviderImpl::HandleQueryImage()` and `HandleApplyUpdateRequest()` — increment OTA counters
-- [ ] 7.6 Instrument `maybeInitMatter()` — set `matter.initializing` gauge to 1 at start, 0 at completion
-- [ ] 7.7 Release all Matter meters during Matter subsystem shutdown
+- [x] 7.1 Add static counter/histogram/gauge declarations to `matterSubsystem.cpp` and/or `CommissioningOrchestrator` for commissioning, pairing, OTA, and init meters
+- [x] 7.2 Create all Matter meters during Matter subsystem initialization — `matter.commissioning.attempt`, `matter.commissioning.success`, `matter.commissioning.failed`, `matter.commissioning.duration`, `matter.pairing.attempt`, `matter.pairing.success`, `matter.pairing.failed`, `matter.ota.query_image.received`, `matter.ota.query_image.available`, `matter.ota.query_image.not_available`, `matter.ota.apply_update.received`, `matter.initializing`
+- [x] 7.3 Instrument `CommissioningOrchestrator::Commission()` — increment attempt counter at entry, success/failed counters at completion with `failure.stage` attribute, record duration histogram
+- [x] 7.4 Instrument `CommissioningOrchestrator::Pair()` — increment pairing attempt/success/failed counters
+- [x] 7.5 Instrument `OTAProviderImpl::HandleQueryImage()` and `HandleApplyUpdateRequest()` — increment OTA counters
+- [x] 7.6 Instrument `maybeInitMatter()` — set `matter.initializing` gauge to 1 at start, 0 at completion
+- [x] 7.7 Release all Matter meters during Matter subsystem shutdown
 
 ## 8. Matter Meters Tests
 
-- [ ] 8.1 Add Google Test unit tests for Matter commissioning and pairing counter instrumentation
-- [ ] 8.2 Add pytest integration test verifying Matter-specific metrics appear in OTLP export (requires Docker for Matter stack)
+- [x] 8.1 Add Google Test unit tests for Matter commissioning and pairing counter instrumentation
+- [x] 8.2 Add pytest integration test verifying Matter-specific metrics appear in OTLP export (requires Docker for Matter stack)
 
 ## 9. Verify & Commit — Matter Meters
 
-- [ ] 9.1 Build the project and run all BartonCore unit tests — verify zero regressions
-- [ ] 9.2 Run integration tests — verify zero regressions
-- [ ] 9.3 Commit: `feat(otel): add Matter subsystem meters`
+- [x] 9.1 Build the project and run all BartonCore unit tests — verify zero regressions
+- [x] 9.2 Run integration tests — verify zero regressions
+- [x] 9.3 Commit: `feat(otel): add Matter subsystem meters`
 
 ## 10. Zigbee Subsystem Meters
 

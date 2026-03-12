@@ -43,6 +43,7 @@ extern "C" {
 #include "icUtil/array.h"
 #include "icUtil/fileUtils.h"
 #include "icUtil/stringUtils.h"
+#include "observability/observabilityMetrics.h"
 #include <device-driver/device-driver.h>
 #include <deviceService.h>
 #include <deviceServicePrivate.h>
@@ -79,6 +80,11 @@ static guint sourceId = 0;
 static char *matterConfigRoot;
 static char *matterKVPath;
 static guint retryAttempts = 0;
+
+namespace
+{
+ObservabilityGauge *matterInitializingGauge = NULL;
+} // namespace
 
 #define RETURN_FALSE_IF_NOT_INITIALIZED()                                                                              \
     do                                                                                                                 \
@@ -190,6 +196,8 @@ static gboolean maybeInitMatter(void *context)
         busy = true;
     }
 
+    observabilityGaugeRecord(matterInitializingGauge, 1);
+
     try
     {
         scoped_generic char *accountIdStr = getAccountId();
@@ -232,6 +240,8 @@ static gboolean maybeInitMatter(void *context)
     initialized = initSuccessful;
     busy = false;
     subsystemMtx.unlock();
+
+    observabilityGaugeRecord(matterInitializingGauge, 0);
 
     if (initSuccessful)
     {
@@ -409,6 +419,8 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
     subsystemInitializedCallback = initializedCallback;
     subsystemDeinitializedCallback = deInitializedCallback;
 
+    matterInitializingGauge = observabilityGaugeCreate("matter.initializing", "Whether Matter is initializing", "1");
+
     free(g_steal_pointer(&matterKVPath));
     free(g_steal_pointer(&matterConfigRoot));
 
@@ -440,6 +452,9 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
 static void matterSubsystemShutdown()
 {
     icDebug();
+
+    observabilityGaugeRelease(matterInitializingGauge);
+    matterInitializingGauge = NULL;
 
     subsystemMtx.lock();
     initialized = false;
