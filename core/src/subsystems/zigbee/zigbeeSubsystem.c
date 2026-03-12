@@ -72,6 +72,7 @@
 #include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
 #include <jsonHelper/jsonHelper.h>
+#include <observability/observabilityMetrics.h>
 #include <subsystemManager.h>
 #include <versionUtils.h>
 #include <zhal/zhal.h>
@@ -186,6 +187,8 @@ static pthread_cond_t networkInitializedCond = PTHREAD_COND_INITIALIZER;
 static bool isChannelChangeInProgress = false;
 
 static pthread_mutex_t channelChangeMutex = PTHREAD_MUTEX_INITIALIZER;
+
+static ObservabilityCounter *zigbeeNetworkStartupCounter = NULL;
 
 static bool initializeNetwork(void);
 
@@ -506,6 +509,9 @@ static bool zigbeeSubsystemInitialize(subsystemInitializedFunc initializedCallba
 
     icLogDebug(LOG_TAG, "%s", __func__);
 
+    zigbeeNetworkStartupCounter =
+        observabilityCounterCreate("zigbee.network.startup.completed", "Zigbee network startup completions", "{event}");
+
     initTimedWaitCond(&prematureClusterCommandsCond);
     initTimedWaitCond(&networkInitializedCond);
 
@@ -654,6 +660,9 @@ static void zigbeeSubsystemShutdown(void)
 
     pthread_cond_destroy(&prematureClusterCommandsCond);
     pthread_cond_destroy(&networkInitializedCond);
+
+    observabilityCounterRelease(zigbeeNetworkStartupCounter);
+    zigbeeNetworkStartupCounter = NULL;
 }
 
 static cJSON *getStatusJson(void)
@@ -724,6 +733,8 @@ static void zigbeeSubsystemSetReady(void)
     mutexLock(&networkInitializedMtx);
     pthread_cond_broadcast(&networkInitializedCond);
     mutexUnlock(&networkInitializedMtx);
+
+    observabilityCounterAdd(zigbeeNetworkStartupCounter, 1);
 }
 
 static void zigbeeSubsystemSetUnready(void)

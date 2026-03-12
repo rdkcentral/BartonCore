@@ -31,6 +31,7 @@
 #include "provider/barton-core-property-provider.h"
 #include <event/deviceEventProducer.h>
 #include <icLog/logging.h>
+#include <observability/observabilityMetrics.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <zhal/zhal.h>
@@ -43,6 +44,22 @@
 
 static pthread_mutex_t problemMtx = PTHREAD_MUTEX_INITIALIZER;
 static bool panIdAttackDetected = false;
+
+static ObservabilityCounter *panIdAttackDetectedCounter = NULL;
+static ObservabilityGauge *panIdAttackActiveGauge = NULL;
+
+static void ensureDefenderMetersCreated(void)
+{
+    static bool metersCreated = false;
+    if (!metersCreated)
+    {
+        panIdAttackDetectedCounter = observabilityCounterCreate(
+            "zigbee.pan_id_attack.detected", "Zigbee PAN ID attack detected events", "{event}");
+        panIdAttackActiveGauge =
+            observabilityGaugeCreate("zigbee.pan_id_attack.active", "Zigbee PAN ID attack currently active", "{state}");
+        metersCreated = true;
+    }
+}
 
 void zigbeeDefenderConfigure()
 {
@@ -89,6 +106,14 @@ void zigbeeDefenderConfigure()
 void zigbeeDefenderSetPanIdAttack(bool attackDetected)
 {
     icLogDebug(LOG_TAG, "%s: attackDetected = %s", __FUNCTION__, attackDetected ? "true" : "false");
+
+    ensureDefenderMetersCreated();
+
+    if (attackDetected)
+    {
+        observabilityCounterAdd(panIdAttackDetectedCounter, 1);
+    }
+    observabilityGaugeRecord(panIdAttackActiveGauge, attackDetected ? 1 : 0);
 
     pthread_mutex_lock(&problemMtx);
     panIdAttackDetected = attackDetected;

@@ -64,25 +64,25 @@
 
 ## 10. Zigbee Subsystem Meters
 
-- [ ] 10.1 Add `#include "observability/observabilityMetrics.h"` and static counter/gauge declarations to `zigbeeEventHandler.c`, `zigbeeHealthCheck.c`, `zigbeeDefender.c`, and `zigbeeSubsystem.c`
-- [ ] 10.2 Create all Zigbee meters during Zigbee subsystem initialization — `zigbee.device.join.count`, `zigbee.device.announce.count`, `zigbee.device.processed.count`, `zigbee.health_check.performed`, `zigbee.health_check.enabled`, `zigbee.interference.detected`, `zigbee.interference.resolved`, `zigbee.interference.active`, `zigbee.pan_id_attack.detected`, `zigbee.pan_id_attack.active`, `zigbee.network.startup.completed`
-- [ ] 10.3 Instrument `zigbeeEventHandler.c` — increment join, announce, and processed counters in respective callbacks
-- [ ] 10.4 Instrument `zigbeeHealthCheck.c` — increment `zigbee.health_check.performed` on each cycle, set `zigbee.health_check.enabled` gauge on start/stop
-- [ ] 10.5 Instrument `zigbeeHealthCheckSetProblem()` — increment `zigbee.interference.detected`/`resolved`, set active gauge
-- [ ] 10.6 Instrument `zigbeeDefenderSetPanIdAttack()` — increment `zigbee.pan_id_attack.detected`, set active gauge
-- [ ] 10.7 Instrument Zigbee network startup path — increment `zigbee.network.startup.completed`
-- [ ] 10.8 Release all Zigbee meters during Zigbee subsystem shutdown
+- [x] 10.1 Add `#include "observability/observabilityMetrics.h"` and static counter/gauge declarations to `zigbeeEventHandler.c`, `zigbeeHealthCheck.c`, `zigbeeDefender.c`, and `zigbeeSubsystem.c`
+- [x] 10.2 Create all Zigbee meters during Zigbee subsystem initialization — `zigbee.device.join.count`, `zigbee.device.announce.count`, `zigbee.device.processed.count`, `zigbee.health_check.performed`, `zigbee.health_check.enabled`, `zigbee.interference.detected`, `zigbee.interference.resolved`, `zigbee.interference.active`, `zigbee.pan_id_attack.detected`, `zigbee.pan_id_attack.active`, `zigbee.network.startup.completed`
+- [x] 10.3 Instrument `zigbeeEventHandler.c` — increment join, announce, and processed counters in respective callbacks
+- [x] 10.4 Instrument `zigbeeHealthCheck.c` — increment `zigbee.health_check.performed` on each cycle, set `zigbee.health_check.enabled` gauge on start/stop
+- [x] 10.5 Instrument `zigbeeHealthCheckSetProblem()` — increment `zigbee.interference.detected`/`resolved`, set active gauge
+- [x] 10.6 Instrument `zigbeeDefenderSetPanIdAttack()` — increment `zigbee.pan_id_attack.detected`, set active gauge
+- [x] 10.7 Instrument Zigbee network startup path — increment `zigbee.network.startup.completed`
+- [x] 10.8 Release all Zigbee meters during Zigbee subsystem shutdown
 
 ## 11. Zigbee Meters Tests
 
-- [ ] 11.1 Add Google Test unit tests for Zigbee meter creation and counter increment calls
-- [ ] 11.2 Add pytest integration test verifying Zigbee-specific metrics appear in OTLP export (requires Docker for Zigbee stack)
+- [x] 11.1 Add Google Test unit tests for Zigbee meter creation and counter increment calls
+- [x] 11.2 Add pytest integration test verifying Zigbee-specific metrics appear in OTLP export (requires Docker for Zigbee stack)
 
 ## 12. Verify & Commit — Zigbee Meters
 
-- [ ] 12.1 Build the project and run all BartonCore unit tests — verify zero regressions
-- [ ] 12.2 Run integration tests — verify zero regressions
-- [ ] 12.3 Commit: `feat(otel): add Zigbee subsystem meters`
+- [x] 12.1 Build the project and run all BartonCore unit tests — verify zero regressions
+- [x] 12.2 Run integration tests — verify zero regressions
+- [x] 12.3 Commit: `feat(otel): add Zigbee subsystem meters`
 
 ## 13. Subsystem Manager Meters
 

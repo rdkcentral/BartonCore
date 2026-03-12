@@ -38,6 +38,7 @@
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>
 #include <icUtil/stringUtils.h>
+#include <observability/observabilityMetrics.h>
 #include <pthread.h>
 #include <zhal/zhal.h>
 
@@ -53,6 +54,10 @@ static pthread_mutex_t announcedDevicesMtx = PTHREAD_MUTEX_INITIALIZER;
 static icHashMap *devicesProcessed = NULL;
 
 static pthread_mutex_t devicesProcessedMtx = PTHREAD_MUTEX_INITIALIZER;
+
+static ObservabilityCounter *zigbeeDeviceJoinCounter = NULL;
+static ObservabilityCounter *zigbeeDeviceAnnounceCounter = NULL;
+static ObservabilityCounter *zigbeeDeviceProcessedCounter = NULL;
 
 typedef struct
 {
@@ -147,6 +152,8 @@ static void processNewDevice(uint64_t eui64)
     }
     pthread_mutex_unlock(&devicesProcessedMtx);
 
+    observabilityCounterAdd(zigbeeDeviceProcessedCounter, 1);
+
     IcDiscoveredDeviceDetails *details = zigbeeSubsystemDiscoverDeviceDetails(eui64);
 
     if (details != NULL)
@@ -197,6 +204,8 @@ static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType
 {
     icLogDebug(LOG_TAG, "deviceAnnounced callback: %016" PRIx64, eui64);
 
+    observabilityCounterAdd(zigbeeDeviceAnnounceCounter, 1);
+
     char *uuid = zigbeeSubsystemEui64ToId(eui64);
     bool known = deviceServiceIsDeviceKnown(uuid);
     free(uuid);
@@ -236,6 +245,8 @@ static void deviceAnnounced(void *ctx, uint64_t eui64, zhalDeviceType deviceType
 static void deviceJoined(void *ctx, uint64_t eui64)
 {
     icLogDebug(LOG_TAG, "deviceJoined callback: %016" PRIx64, eui64);
+
+    observabilityCounterAdd(zigbeeDeviceJoinCounter, 1);
 
     AUTO_CLEAN(free_generic__auto) char *uuid = zigbeeSubsystemEui64ToId(eui64);
     bool known = deviceServiceIsDeviceKnown(uuid);
@@ -426,6 +437,13 @@ static void beaconReceived(void *ctx,
 
 int zigbeeEventHandlerInit(zhalCallbacks *callbacks)
 {
+    zigbeeDeviceJoinCounter =
+        observabilityCounterCreate("zigbee.device.join.count", "Zigbee device join events", "{event}");
+    zigbeeDeviceAnnounceCounter =
+        observabilityCounterCreate("zigbee.device.announce.count", "Zigbee device announce events", "{event}");
+    zigbeeDeviceProcessedCounter =
+        observabilityCounterCreate("zigbee.device.processed.count", "Zigbee devices processed", "{device}");
+
     callbacks->startup = startup;
     callbacks->deviceAnnounced = deviceAnnounced;
     callbacks->deviceLeft = deviceLeft;

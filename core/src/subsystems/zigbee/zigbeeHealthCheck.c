@@ -31,6 +31,7 @@
 #include "provider/barton-core-property-provider.h"
 #include <event/deviceEventProducer.h>
 #include <icLog/logging.h>
+#include <observability/observabilityMetrics.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <zhal/zhal.h>
@@ -53,8 +54,32 @@
 static pthread_mutex_t interferenceDetectedMtx = PTHREAD_MUTEX_INITIALIZER;
 static bool interferenceDetected = false;
 
+static ObservabilityCounter *interferenceDetectedCounter = NULL;
+static ObservabilityCounter *interferenceResolvedCounter = NULL;
+static ObservabilityGauge *interferenceActiveGauge = NULL;
+static ObservabilityGauge *healthCheckEnabledGauge = NULL;
+
+static void ensureHealthCheckMetersCreated(void)
+{
+    static bool metersCreated = false;
+    if (!metersCreated)
+    {
+        interferenceDetectedCounter = observabilityCounterCreate(
+            "zigbee.interference.detected", "Zigbee interference detected events", "{event}");
+        interferenceResolvedCounter = observabilityCounterCreate(
+            "zigbee.interference.resolved", "Zigbee interference resolved events", "{event}");
+        interferenceActiveGauge =
+            observabilityGaugeCreate("zigbee.interference.active", "Zigbee interference currently active", "{state}");
+        healthCheckEnabledGauge =
+            observabilityGaugeCreate("zigbee.health_check.enabled", "Zigbee health check enabled", "{state}");
+        metersCreated = true;
+    }
+}
+
 void zigbeeHealthCheckStart()
 {
+    ensureHealthCheckMetersCreated();
+
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
 
     uint32_t intervalMillis = b_core_property_provider_get_property_as_uint32(
@@ -62,6 +87,8 @@ void zigbeeHealthCheckStart()
     if (intervalMillis == 0)
     {
         icLogDebug(LOG_TAG, "%s: not monitoring, feature disabled", __FUNCTION__);
+
+        observabilityGaugeRecord(healthCheckEnabledGauge, 0);
 
         zigbeeHealthCheckStop();
 
@@ -107,6 +134,10 @@ void zigbeeHealthCheckStart()
         {
             icLogError(LOG_TAG, "%s: failed to start network health checking", __FUNCTION__);
         }
+        else
+        {
+            observabilityGaugeRecord(healthCheckEnabledGauge, 1);
+        }
     }
 }
 
@@ -123,6 +154,18 @@ void zigbeeHealthCheckStop()
 void zigbeeHealthCheckSetProblem(bool problemExists)
 {
     icLogDebug(LOG_TAG, "%s: problemExists = %s", __FUNCTION__, problemExists ? "true" : "false");
+
+    ensureHealthCheckMetersCreated();
+
+    if (problemExists)
+    {
+        observabilityCounterAdd(interferenceDetectedCounter, 1);
+    }
+    else
+    {
+        observabilityCounterAdd(interferenceResolvedCounter, 1);
+    }
+    observabilityGaugeRecord(interferenceActiveGauge, problemExists ? 1 : 0);
 
     pthread_mutex_lock(&interferenceDetectedMtx);
     interferenceDetected = problemExists;
