@@ -96,3 +96,31 @@ def test_discovery_exports_device_found_span(
     assert wait_for_span(otlp_receiver, "device.found"), (
         f"Expected 'device.found' span, got: {otlp_receiver.get_span_names()}"
     )
+
+
+def test_commission_span_parent_child_hierarchy(
+    otlp_receiver, default_environment, matter_light
+):
+    """Commissioning should produce device.commission → device.found parent-child spans."""
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+
+    assert wait_for_span(otlp_receiver, "device.commission"), (
+        f"Expected 'device.commission' span, got: {otlp_receiver.get_span_names()}"
+    )
+    assert wait_for_span(otlp_receiver, "device.found"), (
+        f"Expected 'device.found' span, got: {otlp_receiver.get_span_names()}"
+    )
+
+    spans = otlp_receiver.get_spans()
+    commission_spans = [s for s in spans if s.get("name") == "device.commission"]
+    found_spans = [s for s in spans if s.get("name") == "device.found"]
+    assert len(commission_spans) > 0
+    assert len(found_spans) > 0
+
+    # Both should share the same trace ID
+    assert commission_spans[0]["traceId"] == found_spans[0]["traceId"], (
+        "device.commission and device.found should share the same traceId"
+    )

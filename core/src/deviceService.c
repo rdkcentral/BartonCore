@@ -590,6 +590,10 @@ startDriverDiscoveryForDeviceClass(const char *deviceClass, bool findOrphanedDev
     observabilitySpanSetAttribute(discoverySpan, "device.class", deviceClass);
     observabilitySpanSetAttributeInt(discoverySpan, "discovery.recovery_mode", findOrphanedDevices ? 1 : 0);
 
+    // Set discovery context as TLS current so callbacks (deviceServiceDeviceFound) inherit it
+    g_autoptr(ObservabilitySpanContext) discoveryCtx = observabilitySpanGetContext(discoverySpan);
+    observabilitySpanContextSetCurrent(discoveryCtx);
+
     if (drivers == NULL)
     {
         return startedDrivers; // Return empty list, never NULL
