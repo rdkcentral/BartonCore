@@ -162,3 +162,70 @@ def test_commission_produces_matter_subsystem_spans(
     assert subscribe_spans[0]["traceId"] == trace_id, (
         "matter.subscribe should share traceId with device.commission"
     )
+
+
+def test_remove_device_produces_remove_spans(
+    otlp_receiver, default_environment, matter_light
+):
+    """Removing a device should produce device.remove → device.driver.remove parent-child spans."""
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+
+    devices = default_environment.get_client().get_devices()
+    assert len(devices) > 0
+    device_uuid = devices[0].props.uuid
+
+    default_environment.get_client().remove_device(device_uuid)
+
+    assert wait_for_span(otlp_receiver, "device.remove"), (
+        f"Expected 'device.remove' span, got: {otlp_receiver.get_span_names()}"
+    )
+    assert wait_for_span(otlp_receiver, "device.driver.remove"), (
+        f"Expected 'device.driver.remove' span, got: {otlp_receiver.get_span_names()}"
+    )
+
+    spans = otlp_receiver.get_spans()
+    remove_spans = [s for s in spans if s.get("name") == "device.remove"]
+    driver_remove_spans = [s for s in spans if s.get("name") == "device.driver.remove"]
+    assert len(remove_spans) > 0
+    assert len(driver_remove_spans) > 0
+
+    # device.driver.remove should be a child of device.remove (same traceId)
+    assert remove_spans[0]["traceId"] == driver_remove_spans[0]["traceId"], (
+        "device.remove and device.driver.remove should share the same traceId"
+    )
+
+    # Verify device.remove has device.uuid attribute
+    attrs = {a["key"]: a["value"] for a in remove_spans[0].get("attributes", [])}
+    assert "device.uuid" in attrs, f"Expected 'device.uuid' attribute, got: {attrs}"
+
+
+def test_resource_write_span_has_attributes(
+    otlp_receiver, default_environment, matter_light
+):
+    """Writing a resource should produce a resource.write span with resource.uri attribute."""
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+
+    devices = default_environment.get_client().get_devices_by_device_class("light")
+    assert len(devices) > 0
+    device_uuid = devices[0].props.uuid
+
+    # Write to the isOn resource to trigger a resource.write span
+    uri = f"/{device_uuid}/ep/1/r/isOn"
+    default_environment.get_client().write_resource(uri, "true")
+
+    assert wait_for_span(otlp_receiver, "resource.write"), (
+        f"Expected 'resource.write' span, got: {otlp_receiver.get_span_names()}"
+    )
+
+    spans = otlp_receiver.get_spans()
+    write_spans = [s for s in spans if s.get("name") == "resource.write"]
+    assert len(write_spans) > 0
+
+    attrs = {a["key"]: a["value"] for a in write_spans[0].get("attributes", [])}
+    assert "resource.uri" in attrs, f"Expected 'resource.uri' attribute, got: {attrs}"

@@ -1213,11 +1213,14 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
 
     g_autoptr(ObservabilitySpan) readSpan = observabilitySpanStart("resource.read");
     observabilitySpanSetAttribute(readSpan, "resource.uri", uri);
+    g_autoptr(ObservabilitySpanContext) readCtx = observabilitySpanGetContext(readSpan);
+    observabilitySpanContextSetCurrent(readCtx);
 
     if (deviceServiceIsUriAccessible(uri) == false)
     {
         icLogWarn(LOG_TAG, "%s: resource %s is not accessible", __FUNCTION__, uri);
         observabilitySpanSetError(readSpan, "resource not accessible");
+        observabilitySpanContextSetCurrent(NULL);
         return NULL;
     }
 
@@ -1247,6 +1250,7 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
     {
         icLogError(LOG_TAG, "Could not find resource for URI %s", uri);
         observabilitySpanSetError(readSpan, "resource not found");
+        observabilitySpanContextSetCurrent(NULL);
         return NULL;
     }
 
@@ -1263,6 +1267,7 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
             icLogError(LOG_TAG, "Could not find device driver for URI %s", uri);
             resourceDestroy(result);
             observabilitySpanSetError(readSpan, "device driver not found");
+            observabilitySpanContextSetCurrent(NULL);
             return NULL;
         }
         else if (driver->readResource == NULL)
@@ -1270,6 +1275,7 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
             icLogError(LOG_TAG, "Device driver for URI %s does not support 'read' operation", uri);
             resourceDestroy(result);
             observabilitySpanSetError(readSpan, "read not supported");
+            observabilitySpanContextSetCurrent(NULL);
             return NULL;
         }
 
@@ -1293,6 +1299,8 @@ icDeviceResource *deviceServiceGetResourceByUri(const char *uri)
     {
         observabilitySpanSetError(readSpan, "driver read failed");
     }
+
+    observabilitySpanContextSetCurrent(NULL);
 
     return result;
 }
@@ -1405,6 +1413,8 @@ bool deviceServiceWriteResource(const char *uri, const char *value)
 
     g_autoptr(ObservabilitySpan) writeSpan = observabilitySpanStart("resource.write");
     observabilitySpanSetAttribute(writeSpan, "resource.uri", uri);
+    g_autoptr(ObservabilitySpanContext) writeCtx = observabilitySpanGetContext(writeSpan);
+    observabilitySpanContextSetCurrent(writeCtx);
 
     // check if we are dealing with pattern and get resource(s) accordingly
     //
@@ -1436,6 +1446,8 @@ bool deviceServiceWriteResource(const char *uri, const char *value)
     {
         observabilitySpanSetError(writeSpan, "write failed");
     }
+
+    observabilitySpanContextSetCurrent(NULL);
 
     return result;
 }

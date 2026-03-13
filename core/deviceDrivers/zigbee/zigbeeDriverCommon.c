@@ -2171,6 +2171,14 @@ static bool writeResource(void *ctx, icDeviceResource *resource, const char *pre
 
     if (result && shouldUpdateResource)
     {
+        g_autoptr(ObservabilitySpan) updateSpan =
+            observabilitySpanStartWithParent("resource.update", observabilitySpanContextGetCurrent());
+        observabilitySpanSetAttribute(updateSpan, "device.uuid", resource->deviceUuid);
+        observabilitySpanSetAttribute(updateSpan, "resource.name", resource->id);
+        if (resource->endpointId != NULL)
+        {
+            observabilitySpanSetAttribute(updateSpan, "endpoint.profile", resource->endpointId);
+        }
         updateResource(resource->deviceUuid, resource->endpointId, resource->id, newValue, NULL);
     }
 
