@@ -77,6 +77,7 @@
 #define LOG_TAG     "zigbeeDriverCommon"
 #define logFmt(fmt) "%s: " fmt, __func__
 #include <icLog/logging.h>
+#include <observability/observabilityTracing.h>
 
 #ifdef BARTON_CONFIG_ZIGBEE
 
@@ -695,7 +696,8 @@ static void migrateZigbeeCommonVersion(ZigbeeDriverCommon *commonDriver, icDevic
         }
 
         // Check if the networkType resource already exists before creating it
-        icDeviceResource *existingResource = (icDeviceResource *) linkedListFind(device->resources, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, findDeviceResource);
+        icDeviceResource *existingResource = (icDeviceResource *) linkedListFind(
+            device->resources, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, findDeviceResource);
         if (existingResource == NULL)
         {
             // Create networkType resource
@@ -1103,8 +1105,7 @@ static bool processDeviceDescriptor(void *ctx, icDevice *device, DeviceDescripto
                     firmwareUpgradeContext->commonDriver = commonDriver;
 
                     uint32_t delaySeconds = 1;
-                    g_autoptr(BCorePropertyProvider) propertyProvider =
-                        deviceServiceConfigurationGetPropertyProvider();
+                    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
                     bool noDelay = b_core_property_provider_get_property_as_bool(
                         propertyProvider, ZIGBEE_FW_UPGRADE_NO_DELAY_BOOL_PROPERTY, false);
 
@@ -2101,6 +2102,11 @@ static bool readResource(void *ctx, icDeviceResource *resource, char **value)
 
     icLogDebug(LOG_TAG, "readResource %s", resource->id);
 
+    g_autoptr(ObservabilitySpan) readSpan =
+        observabilitySpanStartWithParent("zigbee.cluster.read", observabilitySpanContextGetCurrent());
+    observabilitySpanSetAttribute(readSpan, "device.uuid", resource->deviceUuid);
+    observabilitySpanSetAttribute(readSpan, "resource.uri", resource->id);
+
     ZigbeeDriverCommon *commonDriver = (ZigbeeDriverCommon *) ctx;
 
     if (resource->endpointId == NULL)
@@ -2135,6 +2141,13 @@ static bool writeResource(void *ctx, icDeviceResource *resource, const char *pre
         return false;
     }
 
+    g_autoptr(ObservabilitySpan) writeSpan =
+        observabilitySpanStartWithParent("zigbee.cluster.write", observabilitySpanContextGetCurrent());
+    observabilitySpanSetAttribute(writeSpan, "device.uuid", resource->deviceUuid);
+    observabilitySpanSetAttribute(writeSpan, "resource.uri", resource->id);
+    g_autoptr(ObservabilitySpanContext) writeCtx = observabilitySpanGetContext(writeSpan);
+    observabilitySpanContextSetCurrent(writeCtx);
+
     ZigbeeDriverCommon *commonDriver = (ZigbeeDriverCommon *) ctx;
 
     if (resource->endpointId == NULL)
@@ -2160,6 +2173,8 @@ static bool writeResource(void *ctx, icDeviceResource *resource, const char *pre
     {
         updateResource(resource->deviceUuid, resource->endpointId, resource->id, newValue, NULL);
     }
+
+    observabilitySpanContextSetCurrent(NULL);
 
     return result;
 }
@@ -3120,6 +3135,11 @@ static bool deviceDiscoveredCallback(void *ctx, IcDiscoveredDeviceDetails *detai
                                                  .metadata = metadata,
                                                  .endpointProfileMap = endpointProfileMap};
 
+        g_autoptr(ObservabilitySpan) discoveredSpan =
+            observabilitySpanStartWithParent("zigbee.device.discovered", observabilitySpanContextGetCurrent());
+        observabilitySpanSetAttribute(discoveredSpan, "device.eui64", uuid);
+        observabilitySpanSetAttribute(discoveredSpan, "device.manufacturer", details->manufacturer);
+
         if (deviceServiceDeviceFound(&deviceFoundDetails, commonDriver->baseDriver.neverReject) == false)
         {
             // device service did not like something about this device and it was not successfully
@@ -4056,8 +4076,7 @@ downloadFirmwareFile(const char *firmwareBaseUrl, const char *firmwareDirectory,
         {
             // set standard curl options
             const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-            g_autoptr(BCorePropertyProvider) propertyProvider =
-                deviceServiceConfigurationGetPropertyProvider();
+            g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
             g_autofree char *propValue =
                 b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
 
