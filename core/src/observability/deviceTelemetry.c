@@ -48,20 +48,27 @@
 static ObservabilityGauge *resourceValueGauge = NULL;
 static ObservabilityCounter *stateChangeCounter = NULL;
 static ObservabilityCounter *resourceUpdateCounter = NULL;
+static ObservabilityGauge *zigbeeRssiGauge = NULL;
+static ObservabilityGauge *zigbeeLqiGauge = NULL;
 
 static void ensureDeviceTelemetryMetersCreated(void)
 {
     static bool metersCreated = false;
     if (!metersCreated)
     {
-        resourceValueGauge = observabilityGaugeCreate(
-            "device.resource.value", "Current numeric value of a device resource", "{value}");
+        resourceValueGauge =
+            observabilityGaugeCreate("device.resource.value", "Current numeric value of a device resource", "{value}");
 
         stateChangeCounter = observabilityCounterCreate(
             "device.resource.state_change", "Boolean state transitions on a device resource", "{transition}");
 
         resourceUpdateCounter = observabilityCounterCreate(
             "device.resource.update", "Resource value changes reported by devices", "{update}");
+
+        zigbeeRssiGauge =
+            observabilityGaugeCreate("zigbee.device.rssi", "Zigbee device received signal strength indicator", "dBm");
+
+        zigbeeLqiGauge = observabilityGaugeCreate("zigbee.device.lqi", "Zigbee device link quality indicator", "{lqi}");
 
         metersCreated = true;
     }
@@ -278,8 +285,7 @@ void deviceTelemetryRecordResourceUpdate(const char *deviceUuid,
     // Type-specific metrics: only when value actually changed and is non-NULL
     if (didChange && newValue != NULL && resourceType != NULL)
     {
-        if (strcmp(resourceType, RESOURCE_TYPE_INTEGER) == 0 ||
-            strcmp(resourceType, RESOURCE_TYPE_PERCENTAGE) == 0)
+        if (strcmp(resourceType, RESOURCE_TYPE_INTEGER) == 0 || strcmp(resourceType, RESOURCE_TYPE_PERCENTAGE) == 0)
         {
             char *endptr = NULL;
             long numValue = strtol(newValue, &endptr, 10);
@@ -333,6 +339,24 @@ void deviceTelemetryRecordResourceUpdate(const char *deviceUuid,
                                              "state",
                                              newValue,
                                              NULL);
+        }
+        else if (strcmp(resourceType, RESOURCE_TYPE_RSSI) == 0)
+        {
+            char *endptr = NULL;
+            long numValue = strtol(newValue, &endptr, 10);
+            if (endptr != newValue)
+            {
+                observabilityGaugeRecordWithAttrs(zigbeeRssiGauge, (int64_t) numValue, "device.id", deviceUuid, NULL);
+            }
+        }
+        else if (strcmp(resourceType, RESOURCE_TYPE_LQI) == 0)
+        {
+            char *endptr = NULL;
+            long numValue = strtol(newValue, &endptr, 10);
+            if (endptr != newValue)
+            {
+                observabilityGaugeRecordWithAttrs(zigbeeLqiGauge, (int64_t) numValue, "device.id", deviceUuid, NULL);
+            }
         }
     }
 

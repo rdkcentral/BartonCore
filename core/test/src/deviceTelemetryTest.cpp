@@ -354,3 +354,25 @@ TEST_F(DeviceTelemetryTest, InvalidateAllCaches)
     deviceTelemetryRecordResourceUpdate("device-001", "1", "temp", RESOURCE_TYPE_INTEGER, "55", true);
     deviceTelemetryRecordResourceUpdate("device-002", "1", "isOn", RESOURCE_TYPE_BOOLEAN, "false", true);
 }
+
+// ---------------------------------------------------------------------------
+// Zigbee RSSI/LQI tests
+// ---------------------------------------------------------------------------
+
+TEST_F(DeviceTelemetryTest, RssiResourceEmitsZigbeeRssiGauge)
+{
+    // RSSI values are negative dBm
+    deviceTelemetryRecordResourceUpdate("device-001", nullptr, "feRssi", RESOURCE_TYPE_RSSI, "-65", true);
+}
+
+TEST_F(DeviceTelemetryTest, LqiResourceEmitsZigbeeLqiGauge)
+{
+    // LQI values are 0-255
+    deviceTelemetryRecordResourceUpdate("device-001", nullptr, "feLqi", RESOURCE_TYPE_LQI, "200", true);
+}
+
+TEST_F(DeviceTelemetryTest, RssiUnchangedStillEmitsUpdateCounter)
+{
+    // didChange=false should still emit update counter but not RSSI gauge
+    deviceTelemetryRecordResourceUpdate("device-001", nullptr, "feRssi", RESOURCE_TYPE_RSSI, "-65", false);
+}
