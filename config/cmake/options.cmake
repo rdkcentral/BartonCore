@@ -169,7 +169,7 @@ bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
            DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
 bcore_option(NAME BCORE_MATTER_USE_MATTERJS
            DEFINITION BARTON_CONFIG_MATTER_USE_MATTERJS
-           DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding. Not compatible with mquickjs.")
+           DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding. Only compatible with quickjs engine.")
 bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
            DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
            DESCRIPTION "Enable validation of SBMD schemas"
@@ -242,6 +242,11 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
                     DESCRIPTION "Name of the Matter BLE controller device."
                     VALUE "Matter-Controller")
 
+bcore_string_option(NAME BCORE_MATTER_SBMD_JS_ENGINE
+                    DEFINITION BARTON_CONFIG_MATTER_SBMD_JS_ENGINE
+                    DESCRIPTION "JavaScript engine for SBMD scripts: 'quickjs' or 'mquickjs' (required when BCORE_MATTER is ON)."
+                    VALUE "mquickjs")
+
 bcore_string_option(NAME BCORE_MATTER_SBMD_SPECS_DIR
                     DEFINITION BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
                     DESCRIPTION "Default semicolon-delimited list of directories containing SBMD spec files at runtime."
@@ -278,3 +283,16 @@ macro(bcore_removed_option NAME error)
         message(FATAL_ERROR "Removed option ${NAME} is set - ${error}")
     endif()
 endmacro()
+
+# Validate JS engine selection
+if (BCORE_MATTER)
+    if (NOT BCORE_MATTER_SBMD_JS_ENGINE)
+        message(FATAL_ERROR "BCORE_MATTER_SBMD_JS_ENGINE must be set when BCORE_MATTER is ON. Valid values: quickjs, mquickjs")
+    elseif (NOT BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs" AND NOT BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        message(FATAL_ERROR "BCORE_MATTER_SBMD_JS_ENGINE='${BCORE_MATTER_SBMD_JS_ENGINE}' is not valid. Must be 'quickjs' or 'mquickjs'.")
+    endif()
+
+    if (BCORE_MATTER_USE_MATTERJS AND BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        message(FATAL_ERROR "BCORE_MATTER_USE_MATTERJS is not compatible with BCORE_MATTER_SBMD_JS_ENGINE=mquickjs. Use quickjs instead.")
+    endif()
+endif()

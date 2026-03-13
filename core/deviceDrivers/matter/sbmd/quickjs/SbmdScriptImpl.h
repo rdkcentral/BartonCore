@@ -28,34 +28,36 @@
 #pragma once
 
 #include "../SbmdScript.h"
-#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <quickjs/quickjs.h>
 
-extern "C" {
-#include <mquickjs/mquickjs.h>
+// Forward declaration for JsonCpp
+namespace Json
+{
+    class Value;
 }
 
 namespace barton
 {
     /**
-     * mquickjs implementation of SbmdScript for mapping between Barton resources and
+     * QuickJS implementation of SbmdScript for mapping between Barton resources and
      * Matter attributes/commands using JavaScript.
      *
      * This class is thread-safe. All public methods are protected by an internal mutex.
      */
-    class MQuickJsScript : public SbmdScript
+    class SbmdScriptImpl : public SbmdScript
     {
     public:
         /**
-         * Factory method to create a MQuickJsScript instance.
+         * Factory method to create a SbmdScriptImpl instance.
          * @param deviceId The device identifier for this script context
-         * @return A unique_ptr to a MQuickJsScript, or nullptr if initialization failed
+         * @return A unique_ptr to a SbmdScriptImpl, or nullptr if initialization failed
          */
-        static std::unique_ptr<MQuickJsScript> Create(const std::string &deviceId);
+        static std::unique_ptr<SbmdScriptImpl> Create(const std::string &deviceId);
 
-        ~MQuickJsScript() override;
+        ~SbmdScriptImpl() override;
 
         /**
          * @see SbmdScript::SetClusterFeatureMaps
@@ -81,7 +83,7 @@ namespace barton
                               const std::optional<std::string> &responseScript) override;
 
         /**
-         * mquickjs implementation passes input as global variable "sbmdReadArgs".
+         * QuickJS implementation passes input as global variable "sbmdReadArgs".
          * @see SbmdScript::MapAttributeRead for JSON format.
          */
         bool MapAttributeRead(const SbmdAttribute &attributeInfo,
@@ -89,7 +91,7 @@ namespace barton
                               std::string &outValue) override;
 
         /**
-         * mquickjs implementation passes input as global variable "sbmdCommandResponseArgs".
+         * QuickJS implementation passes input as global variable "sbmdCommandResponseArgs".
          * @see SbmdScript::MapCommandExecuteResponse for JSON format.
          */
         bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
@@ -97,7 +99,7 @@ namespace barton
                                        std::string &outValue) override;
 
         /**
-         * mquickjs implementation passes input as global variable "sbmdWriteArgs".
+         * QuickJS implementation passes input as global variable "sbmdWriteArgs".
          * @see SbmdScript::MapWrite for JSON format.
          */
         bool MapWrite(const std::string &resourceKey,
@@ -107,7 +109,7 @@ namespace barton
                       ScriptWriteResult &result) override;
 
         /**
-         * mquickjs implementation passes input as global variable "sbmdCommandArgs".
+         * QuickJS implementation passes input as global variable "sbmdCommandArgs".
          * @see SbmdScript::MapExecute for JSON format.
          */
         bool MapExecute(const std::string &resourceKey,
@@ -122,7 +124,7 @@ namespace barton
         bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) override;
 
         /**
-         * mquickjs implementation passes input as global variable "sbmdEventArgs".
+         * QuickJS implementation passes input as global variable "sbmdEventArgs".
          * @see SbmdScript::MapEvent for JSON format.
          */
         bool MapEvent(const SbmdEvent &eventInfo,
@@ -130,9 +132,9 @@ namespace barton
                       std::string &outValue) override;
 
     private:
-        explicit MQuickJsScript(const std::string &deviceId);
+        explicit SbmdScriptImpl(const std::string &deviceId);
 
-        // Mutex for protecting script collections (separate from mquickjs context mutex)
+        // Mutex for protecting script collections (separate from QuickJS context mutex)
         mutable std::mutex scriptsMutex;
 
         // Cached cluster feature maps, set via SetClusterFeatureMaps
@@ -147,25 +149,38 @@ namespace barton
         std::map<SbmdEvent, std::string> eventScripts;             // event -> script
 
         /**
-         * Execute a script with a JSValue argument passed via IIFE parameter.
+         * Execute a script.
          */
-        bool
-        ExecuteScript(const std::string &script, const std::string &argumentName, JSValue jsonArg, JSValue &outJson);
+        bool ExecuteScript(const std::string &script,
+                           const std::string &argumentName,
+                           const JSValue &argumentJson,
+                           JSValue &outJson);
+
+        /**
+         * Parse a JSON string into a QuickJS JSValue.
+         */
+        bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
 
         /**
          * Extract the "output" field from a script result as a string.
+         * Frees the script result JSValue.
          */
         bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
 
         /**
-         * Build base args as a mquickjs object with common fields.
+         * Set a JavaScript variable from a string value.
+         */
+        bool SetJsVariable(const std::string &name, const std::string &value);
+
+        /**
+         * Build base args JSON with common fields.
          * Always includes: deviceUuid, clusterFeatureMaps
          * Optional fields added when provided: endpointId, clusterId, resourceId, input
          */
-        JSValue BuildBaseArgs(const std::optional<std::string> &endpointId = std::nullopt,
-                              std::optional<uint32_t> clusterId = std::nullopt,
-                              const std::optional<std::string> &resourceId = std::nullopt,
-                              const std::optional<std::string> &input = std::nullopt) const;
+        Json::Value BuildBaseArgsJson(const std::optional<std::string> &endpointId = std::nullopt,
+                                      std::optional<uint32_t> clusterId = std::nullopt,
+                                      const std::optional<std::string> &resourceId = std::nullopt,
+                                      const std::optional<std::string> &input = std::nullopt) const;
     };
 
 } // namespace barton

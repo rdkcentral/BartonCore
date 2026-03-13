@@ -25,12 +25,12 @@
 // Created by tlea on 12/5/25
 //
 
-#define LOG_TAG "MQuickJsScript"
+#define LOG_TAG "SbmdScriptImpl"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "../SbmdSpec.h"
 #include "MQuickJsRuntime.h"
-#include "MQuickJsScript.h"
+#include "SbmdScriptImpl.h"
 #include "SbmdUtilsLoader.h"
 #include <cstring>
 
@@ -92,7 +92,7 @@ namespace barton
 
     } // anonymous namespace
 
-    std::unique_ptr<MQuickJsScript> MQuickJsScript::Create(const std::string &deviceId)
+    std::unique_ptr<SbmdScriptImpl> SbmdScriptImpl::Create(const std::string &deviceId)
     {
         // Ensure the shared runtime is initialized
         if (!MQuickJsRuntime::IsInitialized())
@@ -112,28 +112,28 @@ namespace barton
             icInfo("SBMD utilities loaded from %s", SbmdUtilsLoader::GetSource());
         }
 
-        icDebug("MQuickJsScript created for device %s (using shared mquickjs context)", deviceId.c_str());
-        return std::unique_ptr<MQuickJsScript>(new MQuickJsScript(deviceId));
+        icDebug("SbmdScriptImpl created for device %s (using shared mquickjs context)", deviceId.c_str());
+        return std::unique_ptr<SbmdScriptImpl>(new SbmdScriptImpl(deviceId));
     }
 
-MQuickJsScript::MQuickJsScript(const std::string &deviceId) :
+SbmdScriptImpl::SbmdScriptImpl(const std::string &deviceId) :
     SbmdScript(deviceId)
 {
 }
 
-MQuickJsScript::~MQuickJsScript()
+SbmdScriptImpl::~SbmdScriptImpl()
 {
-    icDebug("MQuickJsScript destroyed for device %s", deviceId.c_str());
+    icDebug("SbmdScriptImpl destroyed for device %s", deviceId.c_str());
 }
 
-void MQuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
+void SbmdScriptImpl::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
     clusterFeatureMaps = maps;
     icDebug("Set %zu cluster feature maps for device %s", maps.size(), deviceId.c_str());
 }
 
-JSValue MQuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpointId,
+JSValue SbmdScriptImpl::BuildBaseArgs(const std::optional<std::string> &endpointId,
                                      std::optional<uint32_t> clusterId,
                                      const std::optional<std::string> &resourceId,
                                      const std::optional<std::string> &input) const
@@ -173,7 +173,7 @@ JSValue MQuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpoint
     return args;
 }
 
-bool MQuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
+bool SbmdScriptImpl::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -193,7 +193,7 @@ bool MQuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
     return true;
 }
 
-bool MQuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
+bool SbmdScriptImpl::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                                     const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -214,7 +214,7 @@ bool MQuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandI
 }
 
 // Requires MQuickJsRuntime::GetMutex() to be held by caller.
-bool MQuickJsScript::ExecuteScript(const std::string &script,
+bool SbmdScriptImpl::ExecuteScript(const std::string &script,
                                   const std::string &argumentName,
                                   JSValue jsonArg,
                                   JSValue &outJson)
@@ -272,7 +272,7 @@ bool MQuickJsScript::ExecuteScript(const std::string &script,
 }
 
 // Requires MQuickJsRuntime::GetMutex() to be held by caller.
-bool MQuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
+bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
 {
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
@@ -297,7 +297,7 @@ bool MQuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
     return true;
 }
 
-bool MQuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
+bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      chip::TLV::TLVReader &reader,
                                      std::string &outValue)
 {
@@ -358,7 +358,7 @@ bool MQuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool MQuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
+bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               chip::TLV::TLVReader &reader,
                                               std::string &outValue)
 {
@@ -418,7 +418,7 @@ bool MQuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool MQuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::string &script)
+bool SbmdScriptImpl::AddWriteMapper(const std::string &resourceKey, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -439,7 +439,7 @@ bool MQuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::s
     return true;
 }
 
-bool MQuickJsScript::AddExecuteMapper(const std::string &resourceKey,
+bool SbmdScriptImpl::AddExecuteMapper(const std::string &resourceKey,
                                      const std::string &script,
                                      const std::optional<std::string> &responseScript)
 {
@@ -466,7 +466,7 @@ bool MQuickJsScript::AddExecuteMapper(const std::string &resourceKey,
     return true;
 }
 
-bool MQuickJsScript::MapWrite(const std::string &resourceKey,
+bool SbmdScriptImpl::MapWrite(const std::string &resourceKey,
                              const std::string &endpointId,
                              const std::string &resourceId,
                              const std::string &inValue,
@@ -709,7 +709,7 @@ bool MQuickJsScript::MapWrite(const std::string &resourceKey,
     return false;
 }
 
-bool MQuickJsScript::MapExecute(const std::string &resourceKey,
+bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
                                const std::string &endpointId,
                                const std::string &resourceId,
                                const std::string &inValue,
@@ -858,7 +858,7 @@ bool MQuickJsScript::MapExecute(const std::string &resourceKey,
     return true;
 }
 
-bool MQuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
+bool SbmdScriptImpl::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -877,7 +877,7 @@ bool MQuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::strin
     return true;
 }
 
-bool MQuickJsScript::MapEvent(const SbmdEvent &eventInfo,
+bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
                              chip::TLV::TLVReader &reader,
                              std::string &outValue)
 {

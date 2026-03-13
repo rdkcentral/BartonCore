@@ -168,22 +168,38 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    bcore_add_cpp_test(
-        NAME testMQuickJsScript
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/QuickJsScriptTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsScript.cpp
+    # Select engine-specific sources and libraries for the SbmdScript test
+    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdScriptImpl.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock mquickjs jsoncpp BartonCommon::xhLog
+        )
+        set(SBMD_SCRIPT_TEST_ENGINE_LIBS mquickjs)
+    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
+        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdScriptImpl.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/QuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/MatterJsClusterLoader.cpp
+        )
+        set(SBMD_SCRIPT_TEST_ENGINE_LIBS quickjs)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdScript
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdScriptTest.cpp
+                ${SBMD_SCRIPT_TEST_ENGINE_SOURCES}
+        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock ${SBMD_SCRIPT_TEST_ENGINE_LIBS} jsoncpp BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core
                  ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd
     )
 
-    if (TARGET testMQuickJsScript)
-        target_link_libraries(testMQuickJsScript bCoreConfig)
+    if (TARGET testSbmdScript)
+        target_link_libraries(testSbmdScript bCoreConfig)
     endif()
 
     if (BUILD_TESTING)

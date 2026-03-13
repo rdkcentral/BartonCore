@@ -86,7 +86,17 @@ if (BCORE_MATTER)
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
-    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.c")
+    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp")
+
+    # Select JS engine sources based on BCORE_MATTER_SBMD_JS_ENGINE
+    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        file(GLOB sbmdEngineSrc "deviceDrivers/matter/sbmd/mquickjs/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.c")
+        add_compile_definitions(BCORE_USE_MQUICKJS=1)
+    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
+        file(GLOB sbmdEngineSrc "deviceDrivers/matter/sbmd/quickjs/*.cpp")
+        add_compile_definitions(BCORE_USE_QUICKJS=1)
+    endif()
+    list(APPEND sbmdSrc ${sbmdEngineSrc})
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
@@ -148,7 +158,12 @@ if (BCORE_MATTER)
     pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
     link_directories(${YAMLCPP_LIBRARY_DIRS})
     list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
-    list(APPEND XTRA_LIBS yaml-cpp mquickjs)
+    list(APPEND XTRA_LIBS yaml-cpp)
+    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        list(APPEND XTRA_LIBS mquickjs)
+    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
+        list(APPEND XTRA_LIBS quickjs)
+    endif()
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
