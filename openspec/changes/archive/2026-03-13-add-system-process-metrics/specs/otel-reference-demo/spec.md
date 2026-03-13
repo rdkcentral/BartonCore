@@ -1,26 +1,4 @@
-## Requirements
-
-### Requirement: Reference app observability enablement
-When built with `BCORE_OBSERVABILITY=ON`, the reference application SHALL demonstrate BartonCore's observability capabilities as a working example for client developers.
-
-#### Scenario: Build with observability
-- **WHEN** the reference app is built with `BCORE_OBSERVABILITY=ON`
-- **THEN** the resulting `barton-core-reference` binary SHALL initialize the observability layer and export traces, metrics, and logs via OTLP
-
-#### Scenario: Build without observability
-- **WHEN** the reference app is built with `BCORE_OBSERVABILITY=OFF`
-- **THEN** the reference app SHALL behave identically to its current behavior with no observability overhead
-
-### Requirement: OTLP endpoint configuration
-The reference app SHALL respect the standard OpenTelemetry environment variables for configuring the export destination, requiring no code changes from the developer.
-
-#### Scenario: Default endpoint
-- **WHEN** the reference app starts with `BCORE_OBSERVABILITY=ON` and no `OTEL_EXPORTER_OTLP_ENDPOINT` is set
-- **THEN** observability data SHALL be exported to `http://localhost:4318`
-
-#### Scenario: Custom endpoint via environment
-- **WHEN** `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` is set
-- **THEN** the reference app SHALL export all observability data to that endpoint
+## MODIFIED Requirements
 
 ### Requirement: Docker Compose observability overlay
 A Docker Compose overlay file SHALL provide a complete local observability stack (OTel Collector + Jaeger + Prometheus) that works alongside the existing development Compose files.
@@ -63,13 +41,6 @@ The observability overlay SHALL include an OTel Collector configuration file tha
 #### Scenario: Spanmetrics connector derives RED metrics
 - **WHEN** traces flow through the collector
 - **THEN** the `spanmetrics` connector SHALL produce `calls_total` and `duration_milliseconds` metrics automatically
-
-### Requirement: Observability demo documentation
-Documentation SHALL guide a developer through running the reference app with observability end-to-end.
-
-#### Scenario: Getting started guide
-- **WHEN** a developer reads the observability documentation
-- **THEN** they SHALL find step-by-step instructions for: building with `BCORE_OBSERVABILITY=ON`, starting the observability Docker stack, running the reference app, and viewing traces in the Jaeger UI
 
 ### Requirement: Prometheus backend
 The observability overlay SHALL include a Prometheus instance that scrapes the collector's metrics endpoint.
