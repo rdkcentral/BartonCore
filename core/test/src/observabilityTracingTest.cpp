@@ -230,3 +230,59 @@ TEST_F(TracingTest, TlsIsolationAcrossThreads)
     observabilitySpanContextRelease(ctx);
     observabilitySpanRelease(span);
 }
+
+TEST_F(TracingTest, ChildSpanInheritsTlsParent)
+{
+    // Simulate the device lifecycle pattern: root span → set TLS → child inherits
+    ObservabilitySpan *root = observabilitySpanStart("root.op");
+    ObservabilitySpanContext *rootCtx = observabilitySpanGetContext(root);
+    observabilitySpanContextSetCurrent(rootCtx);
+
+    // Child created with TLS parent — same pattern as device.found
+    ObservabilitySpan *child = observabilitySpanStartWithParent("child.op", observabilitySpanContextGetCurrent());
+    ASSERT_NE(child, nullptr);
+
+    observabilitySpanRelease(child);
+    observabilitySpanRelease(root);
+
+    auto spans = spanData->GetSpans();
+    ASSERT_EQ(spans.size(), 2u);
+    // Both should share the same trace ID
+    EXPECT_EQ(spans[0]->GetTraceId(), spans[1]->GetTraceId());
+
+    observabilitySpanContextSetCurrent(nullptr);
+    observabilitySpanContextRelease(rootCtx);
+}
+
+TEST_F(TracingTest, TlsContextPropagatesAcrossThreads)
+{
+    // Simulate the commission pattern: main thread creates span + context,
+    // thread receives context via args, sets TLS, creates child span
+    ObservabilitySpan *root = observabilitySpanStart("device.commission");
+    ObservabilitySpanContext *rootCtx = observabilitySpanGetContext(root);
+    ASSERT_NE(rootCtx, nullptr);
+    observabilitySpanContextRef(rootCtx);
+
+    bool childCreated = false;
+    std::thread t([&spanData = this->spanData, rootCtx, &childCreated]() {
+        observabilitySpanContextSetCurrent(rootCtx);
+        observabilitySpanContextRelease(rootCtx);
+
+        ObservabilitySpan *child =
+            observabilitySpanStartWithParent("device.found", observabilitySpanContextGetCurrent());
+        ASSERT_NE(child, nullptr);
+        observabilitySpanRelease(child);
+        childCreated = true;
+
+        observabilitySpanContextSetCurrent(nullptr);
+    });
+    t.join();
+
+    observabilitySpanRelease(root);
+    observabilitySpanContextRelease(rootCtx);
+
+    EXPECT_TRUE(childCreated);
+    auto spans = spanData->GetSpans();
+    ASSERT_EQ(spans.size(), 2u);
+    EXPECT_EQ(spans[0]->GetTraceId(), spans[1]->GetTraceId());
+}

@@ -926,6 +926,7 @@ struct OnboardMatterDeviceArgs
     };
     uint16_t timeoutSeconds;
     ObservabilitySpanContext *spanCtx;
+    ObservabilitySpan *rootSpan;
 };
 
 struct commissionMatterDeviceArgs
@@ -933,6 +934,7 @@ struct commissionMatterDeviceArgs
     char *setupPayload;
     uint16_t timeoutSeconds;
     ObservabilitySpanContext *spanCtx;
+    ObservabilitySpan *rootSpan;
 };
 
 static void *commissionMatterDeviceFunc(void *args)
@@ -942,7 +944,13 @@ static void *commissionMatterDeviceFunc(void *args)
     observabilitySpanContextSetCurrent(cmda->spanCtx);
     observabilitySpanContextRelease(cmda->spanCtx);
 
-    matterSubsystemCommissionDevice(cmda->setupPayload, cmda->timeoutSeconds);
+    bool success = matterSubsystemCommissionDevice(cmda->setupPayload, cmda->timeoutSeconds);
+
+    if (!success)
+    {
+        observabilitySpanSetError(cmda->rootSpan, "commissioning failed");
+    }
+    observabilitySpanRelease(cmda->rootSpan);
 
     observabilitySpanContextSetCurrent(NULL);
 
@@ -958,7 +966,13 @@ static void *pairMatterDeviceFunc(void *args)
     observabilitySpanContextSetCurrent(cmda->spanCtx);
     observabilitySpanContextRelease(cmda->spanCtx);
 
-    matterSubsystemPairDevice(cmda->nodeId, cmda->timeoutSeconds);
+    bool success = matterSubsystemPairDevice(cmda->nodeId, cmda->timeoutSeconds);
+
+    if (!success)
+    {
+        observabilitySpanSetError(cmda->rootSpan, "pairing failed");
+    }
+    observabilitySpanRelease(cmda->rootSpan);
 
     observabilitySpanContextSetCurrent(NULL);
 
@@ -976,13 +990,18 @@ bool deviceServiceCommissionDevice(const char *setupPayload, uint16_t timeoutSec
     struct commissionMatterDeviceArgs *args = calloc(1, sizeof(*args));
     args->setupPayload = strdup(setupPayload);
     args->timeoutSeconds = timeoutSeconds;
-    args->spanCtx = observabilitySpanContextGetCurrent();
-    observabilitySpanContextRef(args->spanCtx);
+
+    args->rootSpan = observabilitySpanStart("device.commission");
+    observabilitySpanSetAttribute(args->rootSpan, "commissioning.payload", setupPayload);
+    observabilitySpanSetAttributeInt(args->rootSpan, "commissioning.timeout_seconds", timeoutSeconds);
+    args->spanCtx = observabilitySpanGetContext(args->rootSpan);
 
     result = createDetachedThread(commissionMatterDeviceFunc, args, "MatterCommDev");
     if (!result)
     {
         icLogError(LOG_TAG, "Unable to create matter commissioning thread");
+        observabilitySpanSetError(args->rootSpan, "thread creation failed");
+        observabilitySpanRelease(args->rootSpan);
         observabilitySpanContextRelease(args->spanCtx);
         free(args->setupPayload);
         free(args);
@@ -1007,13 +1026,18 @@ bool deviceServiceAddMatterDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     struct OnboardMatterDeviceArgs *args = calloc(1, sizeof(*args));
     args->nodeId = nodeId;
     args->timeoutSeconds = timeoutSeconds;
-    args->spanCtx = observabilitySpanContextGetCurrent();
-    observabilitySpanContextRef(args->spanCtx);
+
+    args->rootSpan = observabilitySpanStart("device.pair");
+    observabilitySpanSetAttributeInt(args->rootSpan, "device.node_id", (int64_t) nodeId);
+    observabilitySpanSetAttributeInt(args->rootSpan, "pairing.timeout_seconds", timeoutSeconds);
+    args->spanCtx = observabilitySpanGetContext(args->rootSpan);
 
     result = createDetachedThread(pairMatterDeviceFunc, args, "MatterPairDev");
     if (!result)
     {
         icLogError(LOG_TAG, "Unable to create matter pairing thread");
+        observabilitySpanSetError(args->rootSpan, "thread creation failed");
+        observabilitySpanRelease(args->rootSpan);
         observabilitySpanContextRelease(args->spanCtx);
         free(args);
     }
@@ -1027,7 +1051,16 @@ bool deviceServiceOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSe
     bool result = false;
 
 #ifdef BARTON_CONFIG_MATTER
+    g_autoptr(ObservabilitySpan) cwSpan = observabilitySpanStart("device.commission_window.open");
+    observabilitySpanSetAttribute(cwSpan, "device.node_id", nodeId);
+    observabilitySpanSetAttributeInt(cwSpan, "window.timeout_seconds", timeoutSeconds);
+
     result = matterSubsystemOpenCommissioningWindow(nodeId, timeoutSeconds, setupCode, qrCode);
+
+    if (!result)
+    {
+        observabilitySpanSetError(cwSpan, "open commissioning window failed");
+    }
 #endif
 
     return result;
@@ -1077,6 +1110,10 @@ bool deviceServiceRemoveDevice(const char *uuid)
 {
     bool result = false;
 
+    g_autoptr(ObservabilitySpan) removeSpan = observabilitySpanStart("device.remove");
+    observabilitySpanSetAttribute(removeSpan, "device.uuid", uuid);
+    g_autoptr(ObservabilitySpanContext) removeCtx = observabilitySpanGetContext(removeSpan);
+
     icDevice *device = jsonDatabaseGetDeviceById(uuid);
 
     if (device != NULL)
@@ -1084,6 +1121,7 @@ bool deviceServiceRemoveDevice(const char *uuid)
         if (jsonDatabaseRemoveDeviceById(uuid) == false)
         {
             icLogError(LOG_TAG, "Failed to remove device %s", uuid);
+            observabilitySpanSetError(removeSpan, "database removal failed");
             deviceDestroy(device);
             return false;
         }
@@ -1102,7 +1140,10 @@ bool deviceServiceRemoveDevice(const char *uuid)
         DeviceDriver *driver = deviceDriverManagerGetDeviceDriver(device->managingDeviceDriver);
         if (driver != NULL && driver->deviceRemoved != NULL)
         {
+            g_autoptr(ObservabilitySpan) driverRemoveSpan =
+                observabilitySpanStartWithParent("device.driver.remove", removeCtx);
             driver->deviceRemoved(driver->callbackContext, device);
+            (void) driverRemoveSpan; // ended by g_autoptr
         }
 
         sendDeviceRemovedEvent(device->uuid, device->deviceClass);
@@ -2390,7 +2431,9 @@ static bool checkDeviceDiscoveryFilters(icDevice *device, icInitialResourceValue
 bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool neverReject)
 {
     gint64 discoveryStartTime = g_get_monotonic_time();
-    g_autoptr(ObservabilitySpan) foundSpan = observabilitySpanStart("device.found");
+    g_autoptr(ObservabilitySpan) foundSpan =
+        observabilitySpanStartWithParent("device.found", observabilitySpanContextGetCurrent());
+    g_autoptr(ObservabilitySpanContext) foundCtx = observabilitySpanGetContext(foundSpan);
     observabilitySpanSetAttribute(foundSpan, "device.class", deviceFoundDetails->deviceClass);
     observabilitySpanSetAttribute(foundSpan, "device.uuid", deviceFoundDetails->deviceUuid);
     observabilitySpanSetAttribute(foundSpan, "device.manufacturer", deviceFoundDetails->manufacturer);
@@ -2563,7 +2606,20 @@ bool deviceServiceDeviceFound(DeviceFoundDetails *deviceFoundDetails, bool never
     deviceServiceCommFailHintDeviceTimeoutSecs(device, commFailTimeoutSecs);
 
     // here the device descriptor is used for initial configuration, not necessarily full and normal handling
-    if (configureFunc != NULL && configureFunc(ctx, device, dd) == false)
+    bool configureFailed = false;
+    if (configureFunc != NULL)
+    {
+        g_autoptr(ObservabilitySpan) configSpan = observabilitySpanStartWithParent("device.configure", foundCtx);
+        observabilitySpanSetAttribute(configSpan, "device.class", deviceFoundDetails->deviceClass);
+
+        configureFailed = !configureFunc(ctx, device, dd);
+        if (configureFailed)
+        {
+            observabilitySpanSetError(configSpan, "device configuration failed");
+        }
+    }
+
+    if (configureFailed)
     {
         // Note, parts of the deviceFoundDetails may have be freed by this point. For instance, for cameras, some of the
         // details point to the cameraDevice used in configuration above. If configuration fails, that cameraDevice is
@@ -2807,7 +2863,15 @@ static bool finalizeNewDevice(icDevice *device, bool sendEvents, bool inRepairMo
     }
     else
     {
-        result &= jsonDatabaseAddDevice(device);
+        g_autoptr(ObservabilitySpan) persistSpan =
+            observabilitySpanStartWithParent("device.persist", observabilitySpanContextGetCurrent());
+        observabilitySpanSetAttribute(persistSpan, "device.uuid", device->uuid);
+        bool persisted = jsonDatabaseAddDevice(device);
+        if (!persisted)
+        {
+            observabilitySpanSetError(persistSpan, "database persist failed");
+        }
+        result &= persisted;
     }
 
     icLogDebug(LOG_TAG, "device finalized:");
