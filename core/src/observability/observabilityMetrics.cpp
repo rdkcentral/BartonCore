@@ -25,6 +25,7 @@
 
 #ifdef BARTON_CONFIG_OBSERVABILITY
 
+#include <algorithm>
 #include <cstdarg>
 #include <map>
 #include <mutex>
@@ -103,8 +104,9 @@ struct ObservabilityCounter
 struct ObservabilityGauge
 {
     opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument> gauge;
-    int64_t currentValue;
-    std::vector<std::pair<std::string, std::string>> currentAttrs;
+    // Multi-dimensional: each unique attribute combination has its own value.
+    // Key: sorted vector of attribute pairs (canonical form for dedup).
+    std::map<std::vector<std::pair<std::string, std::string>>, int64_t> observations;
     std::mutex mtx;
     gint ref_count;
 };
@@ -175,7 +177,6 @@ extern "C" ObservabilityGauge *observabilityGaugeCreate(const char *name, const 
     {
         return nullptr;
     }
-    wrapper->currentValue = 0;
     wrapper->ref_count = 1;
 
     auto meter = getMeter();
@@ -185,27 +186,29 @@ extern "C" ObservabilityGauge *observabilityGaugeCreate(const char *name, const 
     wrapper->gauge->AddCallback(
         [](opentelemetry::metrics::ObserverResult result, void *state) {
             auto *g = static_cast<ObservabilityGauge *>(state);
-            int64_t val;
-            std::vector<std::pair<std::string, std::string>> attrsCopy;
+            std::map<std::vector<std::pair<std::string, std::string>>, int64_t> snapshot;
             {
                 std::lock_guard<std::mutex> lock(g->mtx);
-                val = g->currentValue;
-                attrsCopy = g->currentAttrs;
+                snapshot = g->observations;
             }
             if (opentelemetry::nostd::holds_alternative<
                     opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(result))
             {
                 auto observer = opentelemetry::nostd::get<
                     opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(result);
-                if (attrsCopy.empty())
+                for (const auto &entry : snapshot)
                 {
-                    observer->Observe(val);
-                }
-                else
-                {
-                    auto sdkAttrs = buildAttrs(attrsCopy);
-                    opentelemetry::common::KeyValueIterableView<decltype(sdkAttrs)> view {sdkAttrs};
-                    observer->Observe(val, static_cast<const opentelemetry::common::KeyValueIterable &>(view));
+                    if (entry.first.empty())
+                    {
+                        observer->Observe(entry.second);
+                    }
+                    else
+                    {
+                        auto sdkAttrs = buildAttrs(entry.first);
+                        opentelemetry::common::KeyValueIterableView<decltype(sdkAttrs)> view {sdkAttrs};
+                        observer->Observe(entry.second,
+                                          static_cast<const opentelemetry::common::KeyValueIterable &>(view));
+                    }
                 }
             }
         },
@@ -221,8 +224,8 @@ extern "C" void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t valu
         return;
     }
     std::lock_guard<std::mutex> lock(gauge->mtx);
-    gauge->currentValue = value;
-    gauge->currentAttrs.clear();
+    // Empty key = no attributes
+    gauge->observations[{}] = value;
 }
 
 extern "C" void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...)
@@ -237,9 +240,11 @@ extern "C" void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int
     auto attrs = parseVarAttrs(ap);
     va_end(ap);
 
+    // Sort attributes to canonicalize the key
+    std::sort(attrs.begin(), attrs.end());
+
     std::lock_guard<std::mutex> lock(gauge->mtx);
-    gauge->currentValue = value;
-    gauge->currentAttrs = std::move(attrs);
+    gauge->observations[attrs] = value;
 }
 
 struct ObservabilityHistogram
