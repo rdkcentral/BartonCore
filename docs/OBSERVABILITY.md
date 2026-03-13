@@ -33,6 +33,11 @@ starting the application.
 |---|---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP/HTTP collector endpoint |
 | `OTEL_SERVICE_NAME` | `barton-core` | Service name in exported data |
+| `OTEL_BSP_SCHEDULE_DELAY_MS` | `5000` | Batch span processor export delay (ms) |
+| `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | `512` | Batch span processor max batch size |
+| `OTEL_BLRP_SCHEDULE_DELAY_MS` | `5000` | Batch log record processor export delay (ms) |
+| `OTEL_BLRP_MAX_EXPORT_BATCH_SIZE` | `512` | Batch log record processor max batch size |
+| `OTEL_METRIC_EXPORT_INTERVAL_MS` | `10000` | Periodic metric reader export interval (ms) |
 
 ## What is Instrumented
 
@@ -108,7 +113,7 @@ zero-cost no-op.
 | `subsystem.init.failed` | Counter | {event} | — | Subsystem initialization failed |
 | `subsystem.initialized.count` | Gauge | {subsystem} | — | Number of initialized subsystems |
 | `subsystem.ready_for_devices` | Gauge | {state} | — | All subsystems ready for devices |
-| `subsystem.init.duration` | Histogram | s | — | Subsystem initialization duration |
+| `subsystem.init.duration` | Histogram | s | `subsystem.name` | Subsystem initialization duration |
 
 #### Matter Subsystem
 
@@ -117,7 +122,7 @@ zero-cost no-op.
 | `matter.initializing` | Gauge | 1 | — | Whether Matter is initializing |
 | `matter.commissioning.attempt` | Counter | {attempt} | — | Commissioning attempts |
 | `matter.commissioning.success` | Counter | {attempt} | — | Commissioning successes |
-| `matter.commissioning.failed` | Counter | {attempt} | `failure.stage` | Commissioning failures |
+| `matter.commissioning.failed` | Counter | {attempt} | — | Commissioning failures |
 | `matter.commissioning.duration` | Histogram | s | — | Commissioning duration |
 | `matter.pairing.attempt` | Counter | {attempt} | — | Pairing attempts |
 | `matter.pairing.success` | Counter | {attempt} | — | Pairing successes |
