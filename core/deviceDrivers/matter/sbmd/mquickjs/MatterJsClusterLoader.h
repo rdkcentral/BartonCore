@@ -38,7 +38,7 @@ namespace barton
     /**
      * Loader for the matter.js cluster bundle.
      *
-     * This class loads the matter.js cluster definitions into a QuickJS context,
+     * This class loads the matter.js cluster definitions into a mquickjs context,
      * exposing a global 'MatterClusters' object with:
      * - All Matter cluster namespaces (LevelControl, OnOff, DoorLock, etc.)
      * - Each cluster contains TLV schema objects (TlvMoveToLevelRequest, etc.)
@@ -64,13 +64,13 @@ namespace barton
     {
     public:
         /**
-         * Load the matter.js cluster bundle into the given QuickJS context.
+         * Load the matter.js cluster bundle into the given mquickjs context.
          *
          * This creates a global 'MatterClusters' object in the context containing
          * all Matter cluster TLV schemas. Script isolation is maintained via IIFEs
          * (each script runs in its own function scope).
          *
-         * @param ctx The QuickJS context to load the bundle into
+         * @param ctx The mquickjs context to load the bundle into
          * @return true if the bundle was loaded successfully, false otherwise
          */
         static bool LoadBundle(JSContext *ctx);

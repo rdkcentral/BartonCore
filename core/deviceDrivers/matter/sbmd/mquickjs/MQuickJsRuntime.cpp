@@ -25,10 +25,10 @@
 // Created by tlea on 2/18/26
 //
 
-#define LOG_TAG "QuickJsRuntime"
+#define LOG_TAG "MQuickJsRuntime"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "QuickJsRuntime.h"
+#include "MQuickJsRuntime.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -47,11 +47,11 @@ namespace barton
 {
 
 // Static member initialization
-uint8_t *QuickJsRuntime::memBuffer = nullptr;
-size_t QuickJsRuntime::memSize = 0;
-JSContext *QuickJsRuntime::ctx = nullptr;
-std::mutex QuickJsRuntime::mutex;
-bool QuickJsRuntime::initialized = false;
+uint8_t *MQuickJsRuntime::memBuffer = nullptr;
+size_t MQuickJsRuntime::memSize = 0;
+JSContext *MQuickJsRuntime::ctx = nullptr;
+std::mutex MQuickJsRuntime::mutex;
+bool MQuickJsRuntime::initialized = false;
 
 namespace
 {
@@ -73,7 +73,7 @@ namespace
 
 } // anonymous namespace
 
-bool QuickJsRuntime::Initialize(size_t memorySize)
+bool MQuickJsRuntime::Initialize(size_t memorySize)
 {
     if (initialized)
     {
@@ -138,7 +138,7 @@ bool QuickJsRuntime::Initialize(size_t memorySize)
     return true;
 }
 
-void QuickJsRuntime::Shutdown()
+void MQuickJsRuntime::Shutdown()
 {
     if (!initialized)
     {
@@ -164,22 +164,22 @@ void QuickJsRuntime::Shutdown()
     icInfo("Shared mquickjs context shutdown complete");
 }
 
-JSContext *QuickJsRuntime::GetSharedContext()
+JSContext *MQuickJsRuntime::GetSharedContext()
 {
     return ctx;
 }
 
-std::mutex &QuickJsRuntime::GetMutex()
+std::mutex &MQuickJsRuntime::GetMutex()
 {
     return mutex;
 }
 
-bool QuickJsRuntime::IsInitialized()
+bool MQuickJsRuntime::IsInitialized()
 {
     return initialized;
 }
 
-bool QuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg)
+bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg)
 {
     if (!ctx)
     {

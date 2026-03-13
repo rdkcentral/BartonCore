@@ -24,11 +24,11 @@
 /*
  * Created by tlea on 2/3/2026
  *
- * Unit tests for QuickJsScript module focusing on script interfaces.
+ * Unit tests for MQuickJsScript module focusing on script interfaces.
  */
 
-#include "deviceDrivers/matter/sbmd/script/QuickJsScript.h"
 #include "deviceDrivers/matter/sbmd/SbmdSpec.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsScript.h"
 #include <gtest/gtest.h>
 #include <lib/core/TLVReader.h>
 #include <lib/core/TLVTypes.h>
@@ -59,30 +59,30 @@ namespace
     ::testing::Environment* const chipEnv =
         ::testing::AddGlobalTestEnvironment(new ChipPlatformEnvironment);
 
-    class QuickJsScriptTest : public ::testing::Test
+    class MQuickJsScriptTest : public ::testing::Test
     {
     protected:
         void SetUp() override
         {
             deviceId = "test-device-uuid";
-            script = QuickJsScript::Create(deviceId);
-            ASSERT_NE(script, nullptr) << "Failed to create QuickJsScript";
+            script = MQuickJsScript::Create(deviceId);
+            ASSERT_NE(script, nullptr) << "Failed to create MQuickJsScript";
         }
 
         void TearDown() override { script.reset(); }
 
         std::string deviceId;
-        std::unique_ptr<QuickJsScript> script;
+        std::unique_ptr<MQuickJsScript> script;
     };
 
-    // Test: QuickJsScript can be instantiated
-    TEST_F(QuickJsScriptTest, CanCreate)
+    // Test: MQuickJsScript can be instantiated
+    TEST_F(MQuickJsScriptTest, CanCreate)
     {
         ASSERT_NE(script, nullptr);
     }
 
     // Test: AddAttributeReadMapper returns true for valid input
-    TEST_F(QuickJsScriptTest, AddAttributeReadMapperSuccess)
+    TEST_F(MQuickJsScriptTest, AddAttributeReadMapperSuccess)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006; // On/Off cluster
@@ -97,7 +97,7 @@ namespace
     }
 
     // Test: MapAttributeRead returns false when no mapper is registered
-    TEST_F(QuickJsScriptTest, MapAttributeReadNoMapper)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadNoMapper)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -121,7 +121,7 @@ namespace
     }
 
     // Test: MapAttributeRead with simple boolean passthrough script
-    TEST_F(QuickJsScriptTest, MapAttributeReadBooleanPassthrough)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadBooleanPassthrough)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -154,7 +154,7 @@ namespace
 
     // Test: MapAttributeRead with boolean false value
     // sbmdReadArgs.tlvBase64 contains base64 encoded TLV - use SbmdUtils.Tlv.decode() to decode
-    TEST_F(QuickJsScriptTest, MapAttributeReadBooleanFalse)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadBooleanFalse)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -187,7 +187,7 @@ namespace
 
     // Test: MapAttributeRead with integer value conversion
     // sbmdReadArgs.tlvBase64 contains base64 encoded TLV - use SbmdUtils.Tlv.decode() to decode
-    TEST_F(QuickJsScriptTest, MapAttributeReadIntegerConversion)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadIntegerConversion)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0008; // Level cluster
@@ -222,7 +222,7 @@ namespace
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains deviceUuid
-    TEST_F(QuickJsScriptTest, MapAttributeReadHasDeviceUuid)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadHasDeviceUuid)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -251,7 +251,7 @@ namespace
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains clusterId
-    TEST_F(QuickJsScriptTest, MapAttributeReadHasClusterId)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadHasClusterId)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -280,7 +280,7 @@ namespace
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeId
-    TEST_F(QuickJsScriptTest, MapAttributeReadHasAttributeId)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadHasAttributeId)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -309,7 +309,7 @@ namespace
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeName
-    TEST_F(QuickJsScriptTest, MapAttributeReadHasAttributeName)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadHasAttributeName)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -338,7 +338,7 @@ namespace
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeType
-    TEST_F(QuickJsScriptTest, MapAttributeReadHasAttributeType)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadHasAttributeType)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -367,7 +367,7 @@ namespace
     }
 
     // Test: MapAttributeRead fails when script doesn't return output field
-    TEST_F(QuickJsScriptTest, MapAttributeReadMissingOutputField)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadMissingOutputField)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -395,7 +395,7 @@ namespace
     }
 
     // Test: MapAttributeRead fails with script syntax error
-    TEST_F(QuickJsScriptTest, MapAttributeReadScriptSyntaxError)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadScriptSyntaxError)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -423,7 +423,7 @@ namespace
     }
 
     // Test: MapAttributeRead with endpointId set
-    TEST_F(QuickJsScriptTest, MapAttributeReadWithEndpointId)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadWithEndpointId)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -453,7 +453,7 @@ namespace
     }
 
     // Test: Multiple attribute mappers can coexist
-    TEST_F(QuickJsScriptTest, MultipleAttributeMappers)
+    TEST_F(MQuickJsScriptTest, MultipleAttributeMappers)
     {
         SbmdAttribute attr1;
         attr1.clusterId = 0x0006;
@@ -505,7 +505,7 @@ namespace
     }
 
     // Test: Script can access complex JSON structures
-    TEST_F(QuickJsScriptTest, MapAttributeReadWithJsonStructure)
+    TEST_F(MQuickJsScriptTest, MapAttributeReadWithJsonStructure)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -548,7 +548,7 @@ namespace
     //==============================================================================
 
     // Test: MapCommandExecuteResponse returns false when no mapper is registered
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseNoMapper)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseNoMapper)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -571,7 +571,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse happy path with boolean response
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseBooleanHappyPath)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseBooleanHappyPath)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -603,7 +603,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse happy path with integer response
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseIntegerHappyPath)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseIntegerHappyPath)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0101; // Door Lock
@@ -636,7 +636,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse with struct TLV response
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseStructHappyPath)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseStructHappyPath)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0101;
@@ -674,7 +674,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains deviceUuid
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseHasDeviceUuid)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseHasDeviceUuid)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -702,7 +702,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains clusterId
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseHasClusterId)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseHasClusterId)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0008;
@@ -730,7 +730,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains commandId
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseHasCommandId)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseHasCommandId)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -758,7 +758,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains commandName
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseHasCommandName)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseHasCommandName)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -786,7 +786,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse with endpointId
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseWithEndpointId)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseWithEndpointId)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -815,7 +815,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse fails when script doesn't return output field
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseMissingOutputField)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseMissingOutputField)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -842,7 +842,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse fails with script syntax error
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseScriptSyntaxError)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseScriptSyntaxError)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -869,7 +869,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse fails with runtime exception
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseRuntimeException)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseRuntimeException)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
@@ -898,7 +898,7 @@ namespace
     }
 
     // Test: MapCommandExecuteResponse with string TLV response
-    TEST_F(QuickJsScriptTest, MapCommandExecuteResponseStringValue)
+    TEST_F(MQuickJsScriptTest, MapCommandExecuteResponseStringValue)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0050;
@@ -930,7 +930,7 @@ namespace
     }
 
     // Test: Multiple command response mappers can coexist
-    TEST_F(QuickJsScriptTest, MultipleCommandResponseMappers)
+    TEST_F(MQuickJsScriptTest, MultipleCommandResponseMappers)
     {
         SbmdCommand cmd1;
         cmd1.clusterId = 0x0006;

@@ -57,7 +57,7 @@ namespace barton
      * The Initialize() and Shutdown() methods are NOT thread-safe and should only
      * be called during application startup/shutdown.
      */
-    class QuickJsRuntime
+    class MQuickJsRuntime
     {
     public:
         /**

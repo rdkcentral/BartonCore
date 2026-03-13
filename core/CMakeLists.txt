@@ -86,7 +86,7 @@ if (BCORE_MATTER)
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
-    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/script/*.cpp" "deviceDrivers/matter/sbmd/script/*.c")
+    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.c")
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
@@ -154,7 +154,7 @@ if (BCORE_MATTER)
         # SBMD specification validation
         # Validates all .sbmd files against the JSON schema during build
         set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
-        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts")
+        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts")
         set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
         set(SBMD_STUBS_FILE "${CMAKE_BINARY_DIR}/sbmd-stubs.json")
@@ -183,7 +183,7 @@ if (BCORE_MATTER)
         )
     endif()
 
-    # Build matter.js cluster bundle for QuickJS SBMD runtime
+    # Build matter.js cluster bundle for mquickjs SBMD runtime
     # This bundle provides TLV encoding/decoding for SBMD scripts
     bcore_matterjs_build_clusters()
 
@@ -204,7 +204,7 @@ if (BCORE_MATTER)
     endif()
 
     # Embed SbmdUtils bundle (always available for SBMD scripts)
-    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-utils.js")
+    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
     set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
 

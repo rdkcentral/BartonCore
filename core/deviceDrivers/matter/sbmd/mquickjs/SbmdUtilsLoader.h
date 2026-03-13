@@ -38,14 +38,14 @@ namespace barton
     /**
      * Loader for the SBMD utilities bundle.
      *
-     * This class loads the SBMD utilities into a QuickJS context, exposing a
+     * This class loads the SBMD utilities into a mquickjs context, exposing a
      * global 'SbmdUtils' object with:
      * - Base64: encode/decode utilities
      * - Tlv: TLV encoding/decoding for Matter types
      * - Response: helpers for building invoke/write responses
      *
      * Unlike the MatterClusters bundle, this is always loaded into every
-     * SBMD QuickJS context since it provides essential utilities for all
+     * SBMD mquickjs context since it provides essential utilities for all
      * SBMD scripts regardless of whether they use matter.js.
      *
      * Example usage in SBMD scripts:
@@ -65,12 +65,12 @@ namespace barton
     {
     public:
         /**
-         * Load the SBMD utilities bundle into the given QuickJS context.
+         * Load the SBMD utilities bundle into the given mquickjs context.
          *
          * This creates a global 'SbmdUtils' object in the context. The object
          * is frozen after loading to prevent modification by scripts.
          *
-         * @param ctx The QuickJS context to load the utilities into
+         * @param ctx The mquickjs context to load the utilities into
          * @return true if the utilities were loaded successfully, false otherwise
          */
         static bool LoadBundle(JSContext *ctx);

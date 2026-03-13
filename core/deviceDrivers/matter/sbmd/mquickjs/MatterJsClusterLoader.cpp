@@ -29,7 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "MatterJsClusterLoader.h"
-#include "QuickJsRuntime.h"
+#include "MQuickJsRuntime.h"
 
 #include <string>
 
@@ -153,7 +153,7 @@ bool MatterJsClusterLoader::ExecuteBundle(JSContext *ctx, const char *bundleSour
     }
 
     // Check if bundle execution left an exception (indicates a problem we should fix)
-    if (QuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
+    if (MQuickJsRuntime::CheckAndClearPendingException(ctx, nullptr))
     {
         icError("Bundle execution left a pending exception - this is a bug");
         return false;

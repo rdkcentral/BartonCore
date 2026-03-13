@@ -25,13 +25,13 @@
 // Created by tlea on 12/5/25
 //
 
-#define LOG_TAG "QuickJsScript"
+#define LOG_TAG "MQuickJsScript"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "../SbmdSpec.h"
 #include "MatterJsClusterLoader.h"
-#include "QuickJsRuntime.h"
-#include "QuickJsScript.h"
+#include "MQuickJsRuntime.h"
+#include "MQuickJsScript.h"
 #include "SbmdUtilsLoader.h"
 #include <cstring>
 
@@ -93,18 +93,18 @@ namespace barton
 
     } // anonymous namespace
 
-    std::unique_ptr<QuickJsScript> QuickJsScript::Create(const std::string &deviceId)
+    std::unique_ptr<MQuickJsScript> MQuickJsScript::Create(const std::string &deviceId)
     {
         // Ensure the shared runtime is initialized
-        if (!QuickJsRuntime::IsInitialized())
+        if (!MQuickJsRuntime::IsInitialized())
         {
-            if (!QuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
+            if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
             {
                 icError("Failed to initialize shared mquickjs context");
                 return nullptr;
             }
             // Load SBMD utilities bundle into the shared context (required)
-            JSContext *ctx = QuickJsRuntime::GetSharedContext();
+            JSContext *ctx = MQuickJsRuntime::GetSharedContext();
             if (!SbmdUtilsLoader::LoadBundle(ctx))
             {
                 icError("Failed to load SBMD utilities bundle - scripts will not work correctly");
@@ -123,33 +123,33 @@ namespace barton
             }
         }
 
-        icDebug("QuickJsScript created for device %s (using shared mquickjs context)", deviceId.c_str());
-        return std::unique_ptr<QuickJsScript>(new QuickJsScript(deviceId));
+        icDebug("MQuickJsScript created for device %s (using shared mquickjs context)", deviceId.c_str());
+        return std::unique_ptr<MQuickJsScript>(new MQuickJsScript(deviceId));
     }
 
-QuickJsScript::QuickJsScript(const std::string &deviceId) :
+MQuickJsScript::MQuickJsScript(const std::string &deviceId) :
     SbmdScript(deviceId)
 {
 }
 
-QuickJsScript::~QuickJsScript()
+MQuickJsScript::~MQuickJsScript()
 {
-    icDebug("QuickJsScript destroyed for device %s", deviceId.c_str());
+    icDebug("MQuickJsScript destroyed for device %s", deviceId.c_str());
 }
 
-void QuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
+void MQuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
     clusterFeatureMaps = maps;
     icDebug("Set %zu cluster feature maps for device %s", maps.size(), deviceId.c_str());
 }
 
-JSValue QuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpointId,
+JSValue MQuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpointId,
                                      std::optional<uint32_t> clusterId,
                                      const std::optional<std::string> &resourceId,
                                      const std::optional<std::string> &input) const
 {
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     JSValue args = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, args, "deviceUuid", JS_NewString(ctx, deviceId.c_str()));
@@ -184,7 +184,7 @@ JSValue QuickJsScript::BuildBaseArgs(const std::optional<std::string> &endpointI
     return args;
 }
 
-bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
+bool MQuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -204,7 +204,7 @@ bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
     return true;
 }
 
-bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
+bool MQuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                                     const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -224,13 +224,13 @@ bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandIn
     return true;
 }
 
-// Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ExecuteScript(const std::string &script,
+// Requires MQuickJsRuntime::GetMutex() to be held by caller.
+bool MQuickJsScript::ExecuteScript(const std::string &script,
                                   const std::string &argumentName,
                                   JSValue jsonArg,
                                   JSValue &outJson)
 {
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     if (script.empty())
     {
@@ -240,7 +240,7 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
 
     // Check for pending exception from previous operations
     std::string exMsg;
-    if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+    if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
     {
         icError("Found unhandled exception before script execution: %s - this is a bug", exMsg.c_str());
         return false;
@@ -282,10 +282,10 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
     return true;
 }
 
-// Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
+// Requires MQuickJsRuntime::GetMutex() to be held by caller.
+bool MQuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
 {
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     // Extract the "output" field from the result JSON object
     JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
@@ -308,12 +308,12 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
     return true;
 }
 
-bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
+bool MQuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      chip::TLV::TLVReader &reader,
                                      std::string &outValue)
 {
-    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = attributeReadScripts.find(attributeInfo);
     if (it == attributeReadScripts.end())
@@ -369,12 +369,12 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
+bool MQuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               chip::TLV::TLVReader &reader,
                                               std::string &outValue)
 {
-    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = commandExecuteResponseScripts.find(commandInfo);
     if (it == commandExecuteResponseScripts.end())
@@ -429,7 +429,7 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool QuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::string &script)
+bool MQuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -450,7 +450,7 @@ bool QuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::st
     return true;
 }
 
-bool QuickJsScript::AddExecuteMapper(const std::string &resourceKey,
+bool MQuickJsScript::AddExecuteMapper(const std::string &resourceKey,
                                      const std::string &script,
                                      const std::optional<std::string> &responseScript)
 {
@@ -477,14 +477,14 @@ bool QuickJsScript::AddExecuteMapper(const std::string &resourceKey,
     return true;
 }
 
-bool QuickJsScript::MapWrite(const std::string &resourceKey,
+bool MQuickJsScript::MapWrite(const std::string &resourceKey,
                              const std::string &endpointId,
                              const std::string &resourceId,
                              const std::string &inValue,
                              ScriptWriteResult &result)
 {
-    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = writeScripts.find(resourceKey);
     if (it == writeScripts.end())
@@ -720,14 +720,14 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
     return false;
 }
 
-bool QuickJsScript::MapExecute(const std::string &resourceKey,
+bool MQuickJsScript::MapExecute(const std::string &resourceKey,
                                const std::string &endpointId,
                                const std::string &resourceId,
                                const std::string &inValue,
                                ScriptWriteResult &result)
 {
-    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = executeScripts.find(resourceKey);
     if (it == executeScripts.end())
@@ -869,7 +869,7 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     return true;
 }
 
-bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
+bool MQuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -888,12 +888,12 @@ bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string
     return true;
 }
 
-bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
+bool MQuickJsScript::MapEvent(const SbmdEvent &eventInfo,
                              chip::TLV::TLVReader &reader,
                              std::string &outValue)
 {
-    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
-    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = eventScripts.find(eventInfo);
     if (it == eventScripts.end())

@@ -29,7 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdUtilsLoader.h"
-#include "QuickJsRuntime.h"
+#include "MQuickJsRuntime.h"
 
 #include <string>
 
@@ -144,7 +144,7 @@ namespace barton
 
         // Check if bundle execution left an exception (indicates a problem we should fix)
         std::string exMsg;
-        if (QuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
+        if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("SbmdUtils bundle execution left a pending exception: %s - this is a bug", exMsg.c_str());
             return false;

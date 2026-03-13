@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "SbmdScript.h"
+#include "../SbmdScript.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -40,22 +40,22 @@ extern "C" {
 namespace barton
 {
     /**
-     * QuickJS implementation of SbmdScript for mapping between Barton resources and
+     * mquickjs implementation of SbmdScript for mapping between Barton resources and
      * Matter attributes/commands using JavaScript.
      *
      * This class is thread-safe. All public methods are protected by an internal mutex.
      */
-    class QuickJsScript : public SbmdScript
+    class MQuickJsScript : public SbmdScript
     {
     public:
         /**
-         * Factory method to create a QuickJsScript instance.
+         * Factory method to create a MQuickJsScript instance.
          * @param deviceId The device identifier for this script context
-         * @return A unique_ptr to a QuickJsScript, or nullptr if initialization failed
+         * @return A unique_ptr to a MQuickJsScript, or nullptr if initialization failed
          */
-        static std::unique_ptr<QuickJsScript> Create(const std::string &deviceId);
+        static std::unique_ptr<MQuickJsScript> Create(const std::string &deviceId);
 
-        ~QuickJsScript() override;
+        ~MQuickJsScript() override;
 
         /**
          * @see SbmdScript::SetClusterFeatureMaps
@@ -81,7 +81,7 @@ namespace barton
                               const std::optional<std::string> &responseScript) override;
 
         /**
-         * QuickJS implementation passes input as global variable "sbmdReadArgs".
+         * mquickjs implementation passes input as global variable "sbmdReadArgs".
          * @see SbmdScript::MapAttributeRead for JSON format.
          */
         bool MapAttributeRead(const SbmdAttribute &attributeInfo,
@@ -89,7 +89,7 @@ namespace barton
                               std::string &outValue) override;
 
         /**
-         * QuickJS implementation passes input as global variable "sbmdCommandResponseArgs".
+         * mquickjs implementation passes input as global variable "sbmdCommandResponseArgs".
          * @see SbmdScript::MapCommandExecuteResponse for JSON format.
          */
         bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
@@ -97,7 +97,7 @@ namespace barton
                                        std::string &outValue) override;
 
         /**
-         * QuickJS implementation passes input as global variable "sbmdWriteArgs".
+         * mquickjs implementation passes input as global variable "sbmdWriteArgs".
          * @see SbmdScript::MapWrite for JSON format.
          */
         bool MapWrite(const std::string &resourceKey,
@@ -107,7 +107,7 @@ namespace barton
                       ScriptWriteResult &result) override;
 
         /**
-         * QuickJS implementation passes input as global variable "sbmdCommandArgs".
+         * mquickjs implementation passes input as global variable "sbmdCommandArgs".
          * @see SbmdScript::MapExecute for JSON format.
          */
         bool MapExecute(const std::string &resourceKey,
@@ -122,7 +122,7 @@ namespace barton
         bool AddEventMapper(const SbmdEvent &eventInfo, const std::string &script) override;
 
         /**
-         * QuickJS implementation passes input as global variable "sbmdEventArgs".
+         * mquickjs implementation passes input as global variable "sbmdEventArgs".
          * @see SbmdScript::MapEvent for JSON format.
          */
         bool MapEvent(const SbmdEvent &eventInfo,
@@ -130,9 +130,9 @@ namespace barton
                       std::string &outValue) override;
 
     private:
-        explicit QuickJsScript(const std::string &deviceId);
+        explicit MQuickJsScript(const std::string &deviceId);
 
-        // Mutex for protecting script collections (separate from QuickJS context mutex)
+        // Mutex for protecting script collections (separate from mquickjs context mutex)
         mutable std::mutex scriptsMutex;
 
         // Cached cluster feature maps, set via SetClusterFeatureMaps
