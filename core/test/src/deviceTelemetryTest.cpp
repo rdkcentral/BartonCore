@@ -185,6 +185,35 @@ TEST_F(DeviceTelemetryTest, PercentageResourceEmitsValueGauge)
     deviceTelemetryRecordResourceUpdate("device-001", "1", "currentLevel", RESOURCE_TYPE_PERCENTAGE, "75", true);
 }
 
+TEST_F(DeviceTelemetryTest, LightLevelResourceEmitsValueGauge)
+{
+    // com.icontrol.lightLevel is a numeric type and should emit a gauge
+    deviceTelemetryRecordResourceUpdate("device-001", "1", "currentLevel", RESOURCE_TYPE_LIGHT_LEVEL, "50", true);
+}
+
+TEST_F(DeviceTelemetryTest, TemperatureResourceEmitsValueGauge)
+{
+    // Temperature stored as hundredths of degrees C (e.g. 1900 = 19.00°C)
+    deviceTelemetryRecordResourceUpdate("device-001", "1", "localTemperature", RESOURCE_TYPE_TEMPERATURE, "1900", true);
+}
+
+TEST_F(DeviceTelemetryTest, IlluminanceResourceEmitsValueGauge)
+{
+    deviceTelemetryRecordResourceUpdate("device-001", "1", "measuredValue", RESOURCE_TYPE_ILLUMINANCE, "350", true);
+}
+
+TEST_F(DeviceTelemetryTest, MagneticFieldStrengthResourceEmitsValueGauge)
+{
+    deviceTelemetryRecordResourceUpdate(
+        "device-001", "1", "magneticField", RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH, "42", true);
+}
+
+TEST_F(DeviceTelemetryTest, MotionSensitivityResourceEmitsValueGauge)
+{
+    deviceTelemetryRecordResourceUpdate(
+        "device-001", "1", "pirOMotionSensitivity", RESOURCE_TYPE_MOTION_SENSITIVITY, "5", true);
+}
+
 TEST_F(DeviceTelemetryTest, BooleanResourceEmitsStateChangeCounter)
 {
     deviceTelemetryRecordResourceUpdate("device-001", "1", "isOn", RESOURCE_TYPE_BOOLEAN, "true", true);

@@ -285,7 +285,17 @@ void deviceTelemetryRecordResourceUpdate(const char *deviceUuid,
     // Type-specific metrics: only when value actually changed and is non-NULL
     if (didChange && newValue != NULL && resourceType != NULL)
     {
-        if (strcmp(resourceType, RESOURCE_TYPE_INTEGER) == 0 || strcmp(resourceType, RESOURCE_TYPE_PERCENTAGE) == 0)
+        if (strcmp(resourceType, RESOURCE_TYPE_INTEGER) == 0 || strcmp(resourceType, RESOURCE_TYPE_PERCENTAGE) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_LIGHT_LEVEL) == 0 || strcmp(resourceType, RESOURCE_TYPE_SECONDS) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_MINUTES) == 0 || strcmp(resourceType, RESOURCE_TYPE_MILLIWATTS) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_WATTS) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_BATTERY_VOLTAGE) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_RELATIVE_HUMIDITY) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_SIGNAL_STRENGTH) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_TEMPERATURE) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_MOTION_SENSITIVITY) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_ILLUMINANCE) == 0 ||
+            strcmp(resourceType, RESOURCE_TYPE_MAGNETIC_FIELD_STRENGTH) == 0)
         {
             char *endptr = NULL;
             long numValue = strtol(newValue, &endptr, 10);
