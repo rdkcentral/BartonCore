@@ -78,7 +78,7 @@ binaries through firmware updates.
 │  ┌──────────────────────────────────────────────────────────────────┐   │
 │  │                SpecBasedMatterDeviceDriver                       │   │
 │  │  ┌─────────────────┐    ┌─────────────────┐                      │   │
-│  │  │  MatterDevice   │    │  QuickJsScript  │                      │   │
+│  │  │  MatterDevice   │    │   SbmdScript    │                      │   │
 │  │  │  (per device)   │◀──▶│  (JS runtime)   │                      │   │
 │  │  └────────┬────────┘    └────────┬────────┘                      │   │
 │  └───────────┼──────────────────────┼───────────────────────────────┘   │
@@ -111,7 +111,7 @@ binaries through firmware updates.
 | **SbmdFactory** | Auto-registers SBMD drivers from the specs directory at startup |
 | **SpecBasedMatterDeviceDriver** | Device driver implementation that uses SBMD specs |
 | **MatterDevice** | Per-device instance managing state, cache, and script execution |
-| **QuickJsScript** | JavaScript runtime (QuickJS) for executing mapper scripts |
+| **SbmdScript** | JavaScript runtime for executing mapper scripts (QuickJS or MQuickJS) |
 | **DeviceDataCache** | Cached attribute data kept up-to-date via Matter subscriptions |
 
 ### 2.3 Data Flow
@@ -467,11 +467,16 @@ mapper:
 
 ## 5. JavaScript Script Interfaces
 
-Scripts are executed in a QuickJS JavaScript runtime. Each mapper type provides a
-specific input object and expects a specific output format.
+Scripts are executed in an embedded JavaScript runtime. The engine is selected at build
+time via the `BCORE_MATTER_SBMD_JS_ENGINE` CMake option (`"quickjs"` or `"mquickjs"`,
+default: `"mquickjs"`). Each mapper type provides a specific input object and expects a
+specific output format.
+
+> **Note**: The optional matter.js cluster library (`BCORE_MATTER_USE_MATTERJS`) is only
+> compatible with the `quickjs` engine. See [SBMD matter.js Integration](SBMD_MATTERJS_INTEGRATION.md).
 
 > **TypeScript Definitions**: A formal schema for all script interfaces is available in
-> [`core/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts`](../core/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts).
+> [`core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts`](../core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts).
 > This file can be used for IDE autocompletion and type checking during script development.
 
 ### 5.1 Read Mapper Script Interface
@@ -1021,7 +1026,7 @@ if ((featureMap & <feature_bit>) !== 0) {
 
 ### 8.4 Debugging Tips
 
-1. Script errors are logged via `icLog` - check logs for "QuickJsScript" tag
+1. Script errors are logged via `icLog` - check logs for the "SbmdScriptImpl" tag
 2. JSON input/output is logged at debug level
 3. Use `console.log()` in scripts for additional debugging (outputs to log)
 4. Validate YAML syntax before deployment

@@ -86,7 +86,17 @@ if (BCORE_MATTER)
 
     file(GLOB matterDriversSrc "deviceDrivers/matter/*.cpp" "deviceDrivers/matter/clusters/*.cpp" "deviceDrivers/matter/subscriptions/*.cpp")
 
-    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp" "deviceDrivers/matter/sbmd/script/*.cpp")
+    file(GLOB sbmdSrc "deviceDrivers/matter/sbmd/*.cpp")
+
+    # Select JS engine sources based on BCORE_MATTER_SBMD_JS_ENGINE
+    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        file(GLOB sbmdEngineSrc "deviceDrivers/matter/sbmd/mquickjs/*.cpp" "deviceDrivers/matter/sbmd/mquickjs/*.c")
+        add_compile_definitions(BCORE_USE_MQUICKJS=1)
+    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
+        file(GLOB sbmdEngineSrc "deviceDrivers/matter/sbmd/quickjs/*.cpp")
+        add_compile_definitions(BCORE_USE_QUICKJS=1)
+    endif()
+    list(APPEND sbmdSrc ${sbmdEngineSrc})
 
     add_compile_definitions(CHIP_HAVE_CONFIG_H=1)
 
@@ -148,13 +158,18 @@ if (BCORE_MATTER)
     pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
     link_directories(${YAMLCPP_LIBRARY_DIRS})
     list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
-    list(APPEND XTRA_LIBS yaml-cpp quickjs)
+    list(APPEND XTRA_LIBS yaml-cpp)
+    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
+        list(APPEND XTRA_LIBS mquickjs)
+    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
+        list(APPEND XTRA_LIBS quickjs)
+    endif()
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
         # Validates all .sbmd files against the JSON schema during build
         set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
-        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-script.d.ts")
+        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts")
         set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
         set(SBMD_STUBS_FILE "${CMAKE_BINARY_DIR}/sbmd-stubs.json")
@@ -162,8 +177,12 @@ if (BCORE_MATTER)
         # Find Python3
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-        # Collect all .sbmd files for dependency tracking
-        file(GLOB CONFIGURE_DEPENDS SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
+        # Collect all .sbmd files for dependency tracking and validation
+        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
+        if(BCORE_MATTER_USE_MATTERJS)
+            file(GLOB SBMD_MATTERJS_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/matterjs/*.sbmd")
+            list(APPEND SBMD_SPEC_FILES ${SBMD_MATTERJS_SPEC_FILES})
+        endif()
 
         # Generate stubs from .d.ts file
         add_custom_command(
@@ -176,16 +195,17 @@ if (BCORE_MATTER)
 
         # Create a custom target that validates SBMD specs
         add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPECS_DIR} --stubs ${SBMD_STUBS_FILE}
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPEC_FILES} --stubs ${SBMD_STUBS_FILE}
             DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMENT "Validating SBMD specification files against schema..."
         )
     endif()
 
-    # Build matter.js cluster bundle for QuickJS SBMD runtime
-    # This bundle provides TLV encoding/decoding for SBMD scripts
-    bcore_matterjs_build_clusters()
+    # Build matter.js cluster bundle (for future script engines that support it)
+    if(BCORE_MATTER_USE_MATTERJS)
+        bcore_matterjs_build_clusters()
+    endif()
 
     # Conditionally generate embedded header from the bundle
     if(BCORE_MATTER_USE_MATTERJS)
@@ -204,7 +224,7 @@ if (BCORE_MATTER)
     endif()
 
     # Embed SbmdUtils bundle (always available for SBMD scripts)
-    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/script/sbmd-utils.js")
+    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
     set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
 
@@ -224,11 +244,11 @@ if (BCORE_MATTER)
     # Add header generation as a source dependency
     # Include matterjs header only if enabled
     if(BCORE_MATTER_USE_MATTERJS)
-        add_custom_target(generate_matterjs_header
+        add_custom_target(generate_sbmd_embedded_headers
             DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
         )
     else()
-        add_custom_target(generate_matterjs_header
+        add_custom_target(generate_sbmd_embedded_headers
             DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
         )
     endif()
@@ -305,7 +325,7 @@ target_include_directories(bCoreObject PRIVATE
                             ${BARTON_PUBLIC_INCLUDES}
                             )
 if (BCORE_MATTER)
-    add_dependencies(bCoreObject generate_matterjs_header)
+    add_dependencies(bCoreObject generate_sbmd_embedded_headers)
 endif()
 
 add_library(BartonCoreStatic STATIC $<TARGET_OBJECTS:bCoreObject>)

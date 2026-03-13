@@ -29,7 +29,13 @@
 
 #include "SpecBasedMatterDeviceDriver.h"
 #include "matter/sbmd/SbmdSpec.h"
-#include "matter/sbmd/script/QuickJsScript.h"
+
+#if defined(BCORE_USE_MQUICKJS)
+#include "matter/sbmd/mquickjs/SbmdScriptImpl.h"
+#elif defined(BCORE_USE_QUICKJS)
+#include "matter/sbmd/quickjs/SbmdScriptImpl.h"
+#endif
+
 #include <memory>
 
 extern "C" {
@@ -195,8 +201,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
 std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(const std::string &deviceId)
 {
-    // For now, only QuickJS is supported
-    auto script = QuickJsScript::Create(deviceId);
+    auto script = SbmdScriptImpl::Create(deviceId);
     if (!script)
     {
         icLogError(LOG_TAG, "Failed to create script for device %s", deviceId.c_str());

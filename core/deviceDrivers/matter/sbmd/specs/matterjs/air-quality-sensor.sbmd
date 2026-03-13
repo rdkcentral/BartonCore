@@ -45,16 +45,17 @@ resources:
           name: "IdentifyTime"
           type: "uint16"
         script: |
-          const { TlvUInt16 } = MatterClusters;
-          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          const value = TlvUInt16.decode(tlvBytes);
+          var TlvUInt16 = MatterClusters.TlvUInt16;
+          var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+          var value = TlvUInt16.decode(tlvBytes);
           return {output: value.toString()};
 
       write:
         script: |
-          const { TlvUInt16, Identify: { IdentifyCluster } } = MatterClusters;
-          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          const tlvBytes = TlvUInt16.encode(secs);
+          var TlvUInt16 = MatterClusters.TlvUInt16;
+          var IdentifyCluster = MatterClusters.Identify.IdentifyCluster;
+          var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
+          var tlvBytes = TlvUInt16.encode(secs);
           return {
             write: {
               clusterId: IdentifyCluster.id,
@@ -85,13 +86,13 @@ endpoints:
               name: "AirQuality"
               type: "enum8"            # AirQualityEnum: 0=Unknown, 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=VeryPoor, 6=ExtremelyPoor
             script: |
-              const { TlvEnum } = MatterClusters;
-              const { AirQuality: { AirQualityCluster } } = MatterClusters;
-              const AirQualityEnum = AirQualityCluster.attributes.airQuality.schema.type;
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvEnum(AirQualityEnum).decode(tlvBytes);
+              var TlvEnum = MatterClusters.TlvEnum;
+              var AirQualityCluster = MatterClusters.AirQuality.AirQualityCluster;
+              var AirQualityEnum = AirQualityCluster.attributes.airQuality.schema.type;
+              var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              var value = TlvEnum(AirQualityEnum).decode(tlvBytes);
               // Map enum values to human-readable strings
-              const levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
+              var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
               return {output: levels[value] || 'unknown'};
 
       # Temperature measurement - in degrees Celsius (hundredths)
@@ -110,10 +111,11 @@ endpoints:
               name: "MeasuredValue"
               type: "int16"            # Temperature in hundredths of degrees Celsius
             script: |
-              const { TlvNullable, TlvInt16 } = MatterClusters;
-              const TlvMeasuredValue = TlvNullable(TlvInt16);
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvMeasuredValue.decode(tlvBytes);
+              var TlvNullable = MatterClusters.TlvNullable;
+              var TlvInt16 = MatterClusters.TlvInt16;
+              var TlvMeasuredValue = TlvNullable(TlvInt16);
+              var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              var value = TlvMeasuredValue.decode(tlvBytes);
               if (value === null) {
                 return {output: null};
               }
@@ -136,15 +138,16 @@ endpoints:
               name: "MeasuredValue"
               type: "uint16"           # Humidity in hundredths of percent
             script: |
-              const { TlvNullable, TlvUInt16 } = MatterClusters;
-              const TlvMeasuredValue = TlvNullable(TlvUInt16);
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvMeasuredValue.decode(tlvBytes);
+              var TlvNullable = MatterClusters.TlvNullable;
+              var TlvUInt16 = MatterClusters.TlvUInt16;
+              var TlvMeasuredValue = TlvNullable(TlvUInt16);
+              var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              var value = TlvMeasuredValue.decode(tlvBytes);
               if (value === null) {
                 return {output: null};
               }
               // Matter humidity is in hundredths of percent, convert to whole percent
-              const percent = Math.round(value / 100);
+              var percent = Math.round(value / 100);
               return {output: percent.toString()};
 
       # CO2 concentration - parts per million (ppm)
@@ -163,10 +166,11 @@ endpoints:
               name: "MeasuredValue"
               type: "float"            # Concentration in ppm (single-precision float)
             script: |
-              const { TlvNullable, TlvFloat } = MatterClusters;
-              const TlvMeasuredValue = TlvNullable(TlvFloat);
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvMeasuredValue.decode(tlvBytes);
+              var TlvNullable = MatterClusters.TlvNullable;
+              var TlvFloat = MatterClusters.TlvFloat;
+              var TlvMeasuredValue = TlvNullable(TlvFloat);
+              var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              var value = TlvMeasuredValue.decode(tlvBytes);
               if (value === null) {
                 return {output: null};
               }
@@ -190,10 +194,11 @@ endpoints:
               name: "MeasuredValue"
               type: "float"            # Concentration in μg/m³ (single-precision float)
             script: |
-              const { TlvNullable, TlvFloat } = MatterClusters;
-              const TlvMeasuredValue = TlvNullable(TlvFloat);
-              const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-              const value = TlvMeasuredValue.decode(tlvBytes);
+              var TlvNullable = MatterClusters.TlvNullable;
+              var TlvFloat = MatterClusters.TlvFloat;
+              var TlvMeasuredValue = TlvNullable(TlvFloat);
+              var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
+              var value = TlvMeasuredValue.decode(tlvBytes);
               if (value === null) {
                 return {output: null};
               }
