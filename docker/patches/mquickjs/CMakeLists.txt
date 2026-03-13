@@ -115,16 +115,37 @@ target_compile_options(mquickjs PRIVATE
 target_link_libraries(mquickjs PUBLIC m)
 
 ###############################################################################
+# Stage 3: Build the mqjs interpreter
+###############################################################################
+
+add_executable(mqjs
+    ${CMAKE_CURRENT_SOURCE_DIR}/mqjs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/readline.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/readline_tty.c
+)
+add_dependencies(mqjs mquickjs_generated_headers)
+
+target_include_directories(mqjs PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}   # for mqjs_stdlib.h
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_compile_definitions(mqjs PRIVATE _GNU_SOURCE)
+target_compile_options(mqjs PRIVATE -O2 -fno-math-errno -fno-trapping-math)
+target_link_libraries(mqjs PRIVATE mquickjs)
+
+###############################################################################
 # Install configuration
 ###############################################################################
 
 include(GNUInstallDirs)
 
-# Install the static library
-install(TARGETS mquickjs
+# Install the static library and mqjs interpreter
+install(TARGETS mquickjs mqjs
     EXPORT mquickjs-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # Install public headers
