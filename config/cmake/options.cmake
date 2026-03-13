@@ -169,8 +169,7 @@ bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
            DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
 bcore_option(NAME BCORE_MATTER_USE_MATTERJS
            DEFINITION BARTON_CONFIG_MATTER_USE_MATTERJS
-           DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding"
-           ENABLE)
+           DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding. Not compatible with mquickjs.")
 bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
            DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
            DESCRIPTION "Enable validation of SBMD schemas"
@@ -245,7 +244,7 @@ bcore_string_option(NAME BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 bcore_string_option(NAME BCORE_MATTER_SBMD_SPECS_DIR
                     DEFINITION BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
-                    DESCRIPTION "Directory containing SBMD spec files at runtime. Defaults to the install destination."
+                    DESCRIPTION "Default semicolon-delimited list of directories containing SBMD spec files at runtime."
                     VALUE "${CMAKE_INSTALL_PREFIX}/sbmd-specs")
 
 bcore_string_option(NAME BCORE_LINK_LIBRARIES

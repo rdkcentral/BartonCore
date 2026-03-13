@@ -33,11 +33,10 @@ Validates .sbmd YAML files against the SBMD JSON Schema and validates
 embedded JavaScript scripts using MicroQuickJS (mqjs).
 
 Usage:
-    validate_sbmd_specs.py <schema_file> <spec_file_or_directory> [<spec_file_or_directory> ...]
+    validate_sbmd_specs.py <schema_file> <sbmd_file> [<sbmd_file> ...]
 
 Example:
-    validate_sbmd_specs.py schema.json specs/
-    validate_sbmd_specs.py schema.json door-lock.sbmd light.sbmd
+    validate_sbmd_specs.py schema.json specs/light.sbmd specs/door-lock.sbmd
 """
 
 import sys
@@ -97,17 +96,17 @@ def validate_spec(spec_data: dict, validator: Draft202012Validator, file_path: s
     return errors
 
 
-def find_sbmd_files(paths: list) -> list:
-    """Find all .sbmd files in the given paths (files or directories)."""
+def collect_sbmd_files(paths: list) -> list:
+    """Collect .sbmd files from the given paths, warning on non-.sbmd files."""
     sbmd_files = []
     for path in paths:
         p = Path(path)
         if p.is_file() and p.suffix == '.sbmd':
             sbmd_files.append(str(p))
-        elif p.is_dir():
-            sbmd_files.extend(str(f) for f in p.rglob('*.sbmd'))
         elif p.is_file():
             print(f"WARNING: Skipping non-.sbmd file: {path}", file=sys.stderr)
+        else:
+            print(f"WARNING: Not a file: {path}", file=sys.stderr)
     return sorted(sbmd_files)
 
 
@@ -288,7 +287,7 @@ def main():
         description='Validate SBMD specification files against the JSON schema and validate scripts'
     )
     parser.add_argument('schema', help='Path to the JSON schema file')
-    parser.add_argument('specs', nargs='+', help='Path(s) to .sbmd files or directories')
+    parser.add_argument('specs', nargs='+', help='Path(s) to .sbmd files to validate')
     parser.add_argument('-q', '--quiet', action='store_true', help='Only show errors')
     parser.add_argument('--no-scripts', action='store_true', help='Skip JavaScript validation')
     parser.add_argument('--stubs', help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
@@ -325,8 +324,8 @@ def main():
     # Create validator
     validator = Draft202012Validator(schema)
 
-    # Find all .sbmd files
-    sbmd_files = find_sbmd_files(args.specs)
+    # Collect .sbmd files from arguments
+    sbmd_files = collect_sbmd_files(args.specs)
     if not sbmd_files:
         print("ERROR: No .sbmd files found", file=sys.stderr)
         return 1

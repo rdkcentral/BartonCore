@@ -162,8 +162,12 @@ if (BCORE_MATTER)
         # Find Python3
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-        # Collect all .sbmd files for dependency tracking
-        file(GLOB CONFIGURE_DEPENDS SBMD_SPEC_FILES "${SBMD_SPECS_DIR}/*.sbmd")
+        # Collect all .sbmd files for dependency tracking and validation
+        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
+        if(BCORE_MATTER_USE_MATTERJS)
+            file(GLOB SBMD_MATTERJS_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/matterjs/*.sbmd")
+            list(APPEND SBMD_SPEC_FILES ${SBMD_MATTERJS_SPEC_FILES})
+        endif()
 
         # Generate stubs from .d.ts file
         add_custom_command(
@@ -176,16 +180,17 @@ if (BCORE_MATTER)
 
         # Create a custom target that validates SBMD specs
         add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPECS_DIR} --stubs ${SBMD_STUBS_FILE}
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPEC_FILES} --stubs ${SBMD_STUBS_FILE}
             DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMENT "Validating SBMD specification files against schema..."
         )
     endif()
 
-    # Build matter.js cluster bundle for mquickjs SBMD runtime
-    # This bundle provides TLV encoding/decoding for SBMD scripts
-    bcore_matterjs_build_clusters()
+    # Build matter.js cluster bundle (for future script engines that support it)
+    if(BCORE_MATTER_USE_MATTERJS)
+        bcore_matterjs_build_clusters()
+    endif()
 
     # Conditionally generate embedded header from the bundle
     if(BCORE_MATTER_USE_MATTERJS)
@@ -224,11 +229,11 @@ if (BCORE_MATTER)
     # Add header generation as a source dependency
     # Include matterjs header only if enabled
     if(BCORE_MATTER_USE_MATTERJS)
-        add_custom_target(generate_matterjs_header
+        add_custom_target(generate_sbmd_embedded_headers
             DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
         )
     else()
-        add_custom_target(generate_matterjs_header
+        add_custom_target(generate_sbmd_embedded_headers
             DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
         )
     endif()
@@ -305,7 +310,7 @@ target_include_directories(bCoreObject PRIVATE
                             ${BARTON_PUBLIC_INCLUDES}
                             )
 if (BCORE_MATTER)
-    add_dependencies(bCoreObject generate_matterjs_header)
+    add_dependencies(bCoreObject generate_sbmd_embedded_headers)
 endif()
 
 add_library(BartonCoreStatic STATIC $<TARGET_OBJECTS:bCoreObject>)

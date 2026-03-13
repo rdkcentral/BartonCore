@@ -173,7 +173,6 @@ if (BCORE_MATTER)
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/QuickJsScriptTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsScript.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MatterJsClusterLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock mquickjs jsoncpp BartonCommon::xhLog

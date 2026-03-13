@@ -53,11 +53,6 @@ set(MATTERJS_CLUSTERS_BUNDLE "${MATTERJS_CLUSTERS_OUTPUT_DIR}/matter-clusters.js
 #   bcore_matterjs_build_clusters()
 #
 function(bcore_matterjs_build_clusters)
-    # Check if matter.js integration is enabled
-    if(NOT BCORE_MATTER_USE_MATTERJS)
-        message(STATUS "matter.js integration disabled (BCORE_MATTER_USE_MATTERJS=OFF)")
-        return()
-    endif()
 
     set(BUILD_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/build-matterjs-clusters.sh")
 
