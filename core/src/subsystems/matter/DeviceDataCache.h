@@ -128,16 +128,13 @@ namespace barton
         /**
          * Set the overall callback handler for cluster events and attribute changes.
          */
-        void SetCallback(std::unique_ptr<chip::app::ClusterStateCache::Callback> cb)
-        {
-            callback = std::move(cb);
-        }
+        void SetCallback(std::unique_ptr<chip::app::ClusterStateCache::Callback> cb) { callback = std::move(cb); }
 
         /**
          * Get attribute data stored in the cache as a TLVReader.
          */
         CHIP_ERROR GetAttributeData(const chip::app::ConcreteDataAttributePath &aPath,
-                                      chip::TLV::TLVReader &aReader) const;
+                                    chip::TLV::TLVReader &aReader) const;
 
         /**
          * Get the network interface info for the operational network.
@@ -322,6 +319,9 @@ namespace barton
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
 
         ObservabilitySpanContext *spanCtx;
+        ObservabilitySpan *caseConnectSpan = nullptr;
+        ObservabilitySpan *subscribeSpan = nullptr;
+        ObservabilitySpan *reportSpan = nullptr;
     };
 
 } // namespace barton

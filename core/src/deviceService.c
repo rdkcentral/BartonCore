@@ -1146,8 +1146,10 @@ bool deviceServiceRemoveDevice(const char *uuid)
         {
             g_autoptr(ObservabilitySpan) driverRemoveSpan =
                 observabilitySpanStartWithParent("device.driver.remove", removeCtx);
+            g_autoptr(ObservabilitySpanContext) driverRemoveCtx = observabilitySpanGetContext(driverRemoveSpan);
+            observabilitySpanContextSetCurrent(driverRemoveCtx);
             driver->deviceRemoved(driver->callbackContext, device);
-            (void) driverRemoveSpan; // ended by g_autoptr
+            observabilitySpanContextSetCurrent(NULL);
         }
 
         sendDeviceRemovedEvent(device->uuid, device->deviceClass);

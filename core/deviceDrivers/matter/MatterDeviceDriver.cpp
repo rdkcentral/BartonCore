@@ -71,6 +71,7 @@ extern "C" {
 #include "glib.h"
 #include "icTypes/icStringHashMap.h"
 #include "icUtil/stringUtils.h"
+#include "observability/observabilityTracing.h"
 #include "resourceTypes.h"
 #include <commonDeviceDefs.h>
 #include <deviceServicePrivate.h>
@@ -295,6 +296,10 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
 {
     icDebug();
 
+    g_autoptr(ObservabilitySpan) fabricRemoveSpan =
+        observabilitySpanStartWithParent("matter.fabric.remove", observabilitySpanContextGetCurrent());
+    observabilitySpanSetAttribute(fabricRemoveSpan, "device.uuid", device->uuid);
+
     // First, the CurrentFabricIndex attribute, which shall contain the
     // accessing fabric index, must be read from the remote device.
     chip::FabricIndex fabricIndex = kUndefinedFabricIndex;
@@ -349,6 +354,11 @@ bool MatterDeviceDriver::DeviceRemoved(icDevice *device)
             devices.erase(device->uuid);
         }
     });
+
+    if (!sentRemoveFabricRequest)
+    {
+        observabilitySpanSetError(fabricRemoveSpan, "fabric removal not sent");
+    }
 
     return sentRemoveFabricRequest;
 }
@@ -894,8 +904,8 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
 
 bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid, uint16_t timeoutSeconds)
 {
-    //if a device isnt available yet (there would have been if it had just been paired),
-    // create and start the device data cache and add the device.
+    // if a device isnt available yet (there would have been if it had just been paired),
+    //  create and start the device data cache and add the device.
     if (GetDevice(deviceUuid) == nullptr)
     {
         auto newCache = std::make_shared<DeviceDataCache>(deviceUuid, Matter::GetInstance().GetCommissioner());
@@ -1222,16 +1232,18 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
                 break;
 
             case chip::app::Clusters::BasicInformation::Id:
-                serverRef = std::make_unique<BasicInformation>(&basicInfoEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef =
+                    std::make_unique<BasicInformation>(&basicInfoEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::GeneralDiagnostics::Id:
-                serverRef =
-                    std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef = std::make_unique<GeneralDiagnostics>(
+                    &generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::PowerSource::Id:
-                serverRef = std::make_unique<PowerSource>(&powerSourceEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef =
+                    std::make_unique<PowerSource>(&powerSourceEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::WiFiNetworkDiagnostics::Id:
@@ -1295,8 +1307,7 @@ bool MatterDeviceDriver::ConfigureOTARequestorCluster(std::forward_list<std::pro
     return true;
 }
 
-void MatterDeviceDriver::DeviceFirmwareUpdateFailed(OTARequestor &source,
-                                                    uint32_t softwareVersion)
+void MatterDeviceDriver::DeviceFirmwareUpdateFailed(OTARequestor &source, uint32_t softwareVersion)
 {
     std::string deviceUuid = source.GetDeviceId();
 
@@ -1321,8 +1332,7 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnStateTransition(
     if (oldState == OTAUpdateStateEnum::kDownloading && newState == OTAUpdateStateEnum::kIdle &&
         ((reason == OTAChangeReasonEnum::kFailure) || (reason == OTAChangeReasonEnum::kTimeOut)))
     {
-        driver.DeviceFirmwareUpdateFailed(
-            source, targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value());
+        driver.DeviceFirmwareUpdateFailed(source, targetSoftwareVersion.IsNull() ? 0 : targetSoftwareVersion.Value());
         icWarn("Update faiure reason: %s", reason == OTAChangeReasonEnum::kFailure ? "Failed" : "Timed out");
     }
     else if (newState == OTAUpdateStateEnum::kDownloading)

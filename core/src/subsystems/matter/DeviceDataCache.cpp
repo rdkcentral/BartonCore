@@ -160,11 +160,18 @@ std::future<bool> DeviceDataCache::Start()
 
             self->connectionStartTime = std::chrono::steady_clock::now();
 
+            observabilitySpanContextSetCurrent(self->spanCtx);
+            self->caseConnectSpan = observabilitySpanStartWithParent("matter.case.connect", self->spanCtx);
+
             if (self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
                                                      &self->mOnDeviceConnectedCallback,
                                                      &self->mOnDeviceConnectionFailureCallback) != CHIP_NO_ERROR)
             {
                 icError("Failed to start device connection");
+                observabilitySpanSetError(self->caseConnectSpan, "GetConnectedDevice failed");
+                observabilitySpanRelease(self->caseConnectSpan);
+                self->caseConnectSpan = nullptr;
+                observabilitySpanContextSetCurrent(nullptr);
                 std::lock_guard<std::mutex> lock(self->startupPromiseMutex);
                 if (self->startupPromise)
                 {
@@ -546,6 +553,9 @@ SubscriptionIntervalSecs DeviceDataCache::CalculateFinalSubscriptionIntervalSecs
 void DeviceDataCache::OnReportBegin()
 {
     icDebug();
+    observabilitySpanContextSetCurrent(spanCtx);
+    reportSpan = observabilitySpanStartWithParent("matter.report", spanCtx);
+    observabilitySpanSetAttribute(reportSpan, "device.id", deviceUuid.c_str());
 }
 
 Json::Value DeviceDataCache::GetEndpointAsJson(chip::EndpointId endpointId)
@@ -687,6 +697,10 @@ void DeviceDataCache::OnReportEnd()
 {
     icDebug();
 
+    observabilitySpanRelease(reportSpan);
+    reportSpan = nullptr;
+    observabilitySpanContextSetCurrent(nullptr);
+
     ensureMatterMetersCreated();
     observabilityCounterAddWithAttrs(subscriptionReportCounter, 1, "device.id", deviceUuid.c_str(), NULL);
 
@@ -707,6 +721,9 @@ void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscripti
 {
     icDebug("Subscription established with ID: %" PRIu32, aSubscriptionId);
 
+    observabilitySpanRelease(subscribeSpan);
+    subscribeSpan = nullptr;
+
     ensureMatterMetersCreated();
     observabilityCounterAddWithAttrs(subscriptionEstablishedCounter, 1, "device.id", deviceUuid.c_str(), NULL);
 }
@@ -714,6 +731,13 @@ void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscripti
 void DeviceDataCache::OnError(CHIP_ERROR aError)
 {
     icError("ReadClient encountered an error: %s", aError.AsString());
+
+    if (subscribeSpan != nullptr)
+    {
+        observabilitySpanSetError(subscribeSpan, aError.AsString());
+        observabilitySpanRelease(subscribeSpan);
+        subscribeSpan = nullptr;
+    }
 
     ensureMatterMetersCreated();
     observabilityCounterAddWithAttrs(
@@ -767,6 +791,10 @@ void DeviceDataCache::OnDeviceConnected(chip::Messaging::ExchangeManager &exchan
                                         const chip::SessionHandle &sessionHandle)
 {
     icDebug();
+
+    // End the CASE connect span — connection succeeded
+    observabilitySpanRelease(caseConnectSpan);
+    caseConnectSpan = nullptr;
 
     ensureMatterMetersCreated();
     auto elapsed = std::chrono::steady_clock::now() - connectionStartTime;
@@ -827,12 +855,21 @@ void DeviceDataCache::OnDeviceConnected(chip::Messaging::ExchangeManager &exchan
             startupPromise.reset();
         }
     }
+    else
+    {
+        subscribeSpan = observabilitySpanStartWithParent("matter.subscribe", spanCtx);
+    }
 }
 
 void DeviceDataCache::OnDeviceConnectionFailure(const chip::ScopedNodeId &peerId, CHIP_ERROR error)
 {
     icDebug();
     icError("Device connection failed: %s", error.AsString());
+
+    // End the CASE connect span with error
+    observabilitySpanSetError(caseConnectSpan, error.AsString());
+    observabilitySpanRelease(caseConnectSpan);
+    caseConnectSpan = nullptr;
 
     ensureMatterMetersCreated();
     observabilityCounterAddWithAttrs(

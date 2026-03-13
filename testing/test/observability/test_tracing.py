@@ -124,3 +124,41 @@ def test_commission_span_parent_child_hierarchy(
     assert commission_spans[0]["traceId"] == found_spans[0]["traceId"], (
         "device.commission and device.found should share the same traceId"
     )
+
+
+def test_commission_produces_matter_subsystem_spans(
+    otlp_receiver, default_environment, matter_light
+):
+    """Commissioning should produce matter.case.connect and matter.subscribe spans."""
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+
+    assert wait_for_span(otlp_receiver, "matter.case.connect"), (
+        f"Expected 'matter.case.connect' span, got: {otlp_receiver.get_span_names()}"
+    )
+    assert wait_for_span(otlp_receiver, "matter.subscribe"), (
+        f"Expected 'matter.subscribe' span, got: {otlp_receiver.get_span_names()}"
+    )
+    # device.commission ends after the thread function returns, so it may arrive after the child spans
+    assert wait_for_span(otlp_receiver, "device.commission"), (
+        f"Expected 'device.commission' span, got: {otlp_receiver.get_span_names()}"
+    )
+
+    spans = otlp_receiver.get_spans()
+    commission_spans = [s for s in spans if s.get("name") == "device.commission"]
+    case_spans = [s for s in spans if s.get("name") == "matter.case.connect"]
+    subscribe_spans = [s for s in spans if s.get("name") == "matter.subscribe"]
+    assert len(commission_spans) > 0
+    assert len(case_spans) > 0
+    assert len(subscribe_spans) > 0
+
+    # All Matter subsystem spans should share the same trace ID as device.commission
+    trace_id = commission_spans[0]["traceId"]
+    assert case_spans[0]["traceId"] == trace_id, (
+        "matter.case.connect should share traceId with device.commission"
+    )
+    assert subscribe_spans[0]["traceId"] == trace_id, (
+        "matter.subscribe should share traceId with device.commission"
+    )
