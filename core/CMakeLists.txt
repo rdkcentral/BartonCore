@@ -267,7 +267,8 @@ if (BCORE_OBSERVABILITY)
     include(BCoreOpenTelemetry)
 
     file(GLOB otelSrc "src/observability/*.cpp")
-    list(APPEND SOURCES ${otelSrc})
+    file(GLOB otelSrcC "src/observability/*.c")
+    list(APPEND SOURCES ${otelSrc} ${otelSrcC})
 
     list(APPEND XTRA_LIBS
         opentelemetry_trace

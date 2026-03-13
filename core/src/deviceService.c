@@ -74,9 +74,10 @@
 #include <subsystems/matter/matterSubsystem.h>
 #endif
 
+#include "observability/deviceTelemetry.h"
+#include "observability/observability.h"
 #include "observability/observabilityLogBridge.h"
 #include "observability/observabilityMetrics.h"
-#include "observability/observability.h"
 #include "observability/observabilityTracing.h"
 
 static ObservabilityGauge *deviceActiveGauge = NULL;
@@ -1089,6 +1090,8 @@ bool deviceServiceRemoveDevice(const char *uuid)
 
         observabilityGaugeRecord(deviceActiveGauge, (int64_t) (g_atomic_int_add(&activeDeviceCount, -1) - 1));
         observabilityCounterAddWithAttrs(deviceRemoveSuccessCounter, 1, "device.class", device->deviceClass, NULL);
+
+        deviceTelemetryInvalidateCache(device->uuid);
 
         deviceDestroy(device);
 
@@ -2953,6 +2956,7 @@ void updateResource(const char *deviceUuid,
     if (resource != NULL)
     {
         bool sendEvent = false;
+        bool valueChanged = false;
 
         if (resource->cachingPolicy == CACHING_POLICY_NEVER && (resource->mode & RESOURCE_MODE_EMIT_EVENTS))
         {
@@ -2972,6 +2976,7 @@ void updateResource(const char *deviceUuid,
             // Writable resources that are never cached have no dateOfLastSync metadata in the devicedb,
             // so we need to manually update the date of last contact.
             updateDeviceDateLastContacted(deviceUuid);
+            valueChanged = true;
         }
         else
         {
@@ -3008,6 +3013,7 @@ void updateResource(const char *deviceUuid,
 
                 // the database knows how to honor lazy saves
                 jsonDatabaseSaveResource(resource);
+                valueChanged = true;
             }
             else
             {
@@ -3024,6 +3030,12 @@ void updateResource(const char *deviceUuid,
         if (sendEvent)
         {
             sendResourceUpdatedEvent(resource, metadata);
+        }
+
+        if (valueChanged)
+        {
+            deviceTelemetryRecordResourceUpdate(
+                deviceUuid, endpointId, resourceId, resource->type, resource->value, true);
         }
     }
 

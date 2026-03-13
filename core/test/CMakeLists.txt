@@ -195,6 +195,19 @@ if (BCORE_OBSERVABILITY)
     if(TARGET testObservabilityLogBridge)
         set_property(TARGET testObservabilityLogBridge PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_logs opentelemetry_trace opentelemetry_exporter_in_memory opentelemetry_resources opentelemetry_common)
     endif()
+
+    bcore_add_cpp_test(
+        NAME testDeviceTelemetry
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceTelemetryTest.cpp
+        LIBS BartonCoreStatic opentelemetry_metrics opentelemetry_resources opentelemetry_common
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+    )
+    if(TARGET testDeviceTelemetry)
+        set_property(TARGET testDeviceTelemetry PROPERTY LINK_LIBRARIES gmock_main gmock gtest BartonCoreStatic opentelemetry_metrics opentelemetry_resources opentelemetry_common)
+        target_link_options(testDeviceTelemetry PRIVATE
+            -Wl,--wrap=deviceServiceGetDevice
+            -Wl,--wrap=deviceServiceGetEndpointById)
+    endif()
 endif()
 
 if (BCORE_MATTER)
