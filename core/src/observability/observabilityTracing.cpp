@@ -188,6 +188,15 @@ extern "C" ObservabilitySpanContext *observabilitySpanGetContext(ObservabilitySp
     return ctx;
 }
 
+extern "C" void observabilitySpanContextRef(ObservabilitySpanContext *ctx)
+{
+    if (ctx == nullptr)
+    {
+        return;
+    }
+    g_atomic_int_inc(&ctx->ref_count);
+}
+
 extern "C" void observabilitySpanContextRelease(ObservabilitySpanContext *ctx)
 {
     if (ctx == nullptr)
@@ -198,6 +207,23 @@ extern "C" void observabilitySpanContextRelease(ObservabilitySpanContext *ctx)
     {
         delete ctx;
     }
+}
+
+static thread_local ObservabilitySpanContext *tlsCurrentContext = nullptr;
+
+extern "C" void observabilitySpanContextSetCurrent(ObservabilitySpanContext *ctx)
+{
+    if (tlsCurrentContext != ctx)
+    {
+        observabilitySpanContextRelease(tlsCurrentContext);
+        tlsCurrentContext = ctx;
+        observabilitySpanContextRef(tlsCurrentContext);
+    }
+}
+
+extern "C" ObservabilitySpanContext *observabilitySpanContextGetCurrent(void)
+{
+    return tlsCurrentContext;
 }
 
 #endif /* BARTON_CONFIG_OBSERVABILITY */

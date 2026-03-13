@@ -92,10 +92,28 @@ void observabilitySpanSetError(ObservabilitySpan *span, const char *message);
 ObservabilitySpanContext *observabilitySpanGetContext(ObservabilitySpan *span);
 
 /**
+ * Acquire an additional reference on a span context.
+ * @param ctx  Context to ref (NULL is safe no-op)
+ */
+void observabilitySpanContextRef(ObservabilitySpanContext *ctx);
+
+/**
  * Release a span context reference. Frees when the last reference is dropped.
  * @param ctx  Context to release (NULL is safe no-op)
  */
 void observabilitySpanContextRelease(ObservabilitySpanContext *ctx);
+
+/**
+ * Set the current thread's span context. Refs the new context and releases any previous one.
+ * @param ctx  Context to set as current (NULL clears the current context)
+ */
+void observabilitySpanContextSetCurrent(ObservabilitySpanContext *ctx);
+
+/**
+ * Get the current thread's span context (borrowed reference — caller must NOT release).
+ * @return Current context, or NULL if none is set.
+ */
+ObservabilitySpanContext *observabilitySpanContextGetCurrent(void);
 
 #else /* !BARTON_CONFIG_OBSERVABILITY */
 
@@ -136,9 +154,21 @@ static inline ObservabilitySpanContext *observabilitySpanGetContext(Observabilit
     (void) span;
     return (ObservabilitySpanContext *) 0;
 }
+static inline void observabilitySpanContextRef(ObservabilitySpanContext *ctx)
+{
+    (void) ctx;
+}
 static inline void observabilitySpanContextRelease(ObservabilitySpanContext *ctx)
 {
     (void) ctx;
+}
+static inline void observabilitySpanContextSetCurrent(ObservabilitySpanContext *ctx)
+{
+    (void) ctx;
+}
+static inline ObservabilitySpanContext *observabilitySpanContextGetCurrent(void)
+{
+    return (ObservabilitySpanContext *) 0;
 }
 
 #endif /* BARTON_CONFIG_OBSERVABILITY */

@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include <opentelemetry/exporters/memory/in_memory_span_exporter.h>
 #include <opentelemetry/sdk/trace/simple_processor.h>
 #include <opentelemetry/sdk/trace/tracer_provider.h>
@@ -147,4 +149,84 @@ TEST_F(TracingTest, SetAttributeOnNullSpanIsSafe)
     observabilitySpanSetAttributeInt(nullptr, "key", 1);
     observabilitySpanSetError(nullptr, "err");
     // Should not crash
+}
+
+TEST_F(TracingTest, SpanContextRefRelease)
+{
+    ObservabilitySpan *span = observabilitySpanStart("ref.test");
+    ObservabilitySpanContext *ctx = observabilitySpanGetContext(span);
+    ASSERT_NE(ctx, nullptr);
+
+    // Initial ref count is 1. Ref bumps to 2, then 3.
+    observabilitySpanContextRef(ctx);
+    observabilitySpanContextRef(ctx);
+
+    // Release 3 → 2 → 1 → 0 (freed)
+    observabilitySpanContextRelease(ctx);
+    observabilitySpanContextRelease(ctx);
+    observabilitySpanContextRelease(ctx);
+
+    // Ref/Release on null must not crash
+    observabilitySpanContextRef(nullptr);
+    observabilitySpanContextRelease(nullptr);
+
+    observabilitySpanRelease(span);
+}
+
+TEST_F(TracingTest, TlsGetCurrentReturnsNullByDefault)
+{
+    // Fresh TLS should be null (or cleared from prior tests)
+    observabilitySpanContextSetCurrent(nullptr);
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), nullptr);
+}
+
+TEST_F(TracingTest, TlsSetCurrentAndClear)
+{
+    ObservabilitySpan *span = observabilitySpanStart("tls.test");
+    ObservabilitySpanContext *ctx = observabilitySpanGetContext(span);
+    ASSERT_NE(ctx, nullptr);
+
+    observabilitySpanContextSetCurrent(ctx);
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), ctx);
+
+    // Setting same value again should be a no-op (no double-release)
+    observabilitySpanContextSetCurrent(ctx);
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), ctx);
+
+    // Clear
+    observabilitySpanContextSetCurrent(nullptr);
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), nullptr);
+
+    observabilitySpanContextRelease(ctx);
+    observabilitySpanRelease(span);
+}
+
+TEST_F(TracingTest, TlsIsolationAcrossThreads)
+{
+    ObservabilitySpan *span = observabilitySpanStart("tls.isolation");
+    ObservabilitySpanContext *ctx = observabilitySpanGetContext(span);
+    ASSERT_NE(ctx, nullptr);
+
+    observabilitySpanContextSetCurrent(ctx);
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), ctx);
+
+    ObservabilitySpanContext *otherThreadResult = nullptr;
+    bool otherThreadRan = false;
+
+    std::thread t([&otherThreadResult, &otherThreadRan]() {
+        // Fresh thread should see null
+        otherThreadResult = observabilitySpanContextGetCurrent();
+        otherThreadRan = true;
+    });
+    t.join();
+
+    EXPECT_TRUE(otherThreadRan);
+    EXPECT_EQ(otherThreadResult, nullptr);
+
+    // Main thread still has its context
+    EXPECT_EQ(observabilitySpanContextGetCurrent(), ctx);
+
+    observabilitySpanContextSetCurrent(nullptr);
+    observabilitySpanContextRelease(ctx);
+    observabilitySpanRelease(span);
 }
