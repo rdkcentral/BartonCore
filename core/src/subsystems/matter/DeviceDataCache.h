@@ -32,6 +32,7 @@
 #include "controller/CHIPDeviceController.h"
 #include "lib/core/DataModelTypes.h"
 
+#include <chrono>
 #include <future>
 #include <json/json.h>
 #include <string>
@@ -307,6 +308,7 @@ namespace barton
         std::unique_ptr<std::promise<bool>> startupPromise;
         std::mutex startupPromiseMutex;
         uint64_t lastReportCompletedTimestamp = 0;
+        std::chrono::steady_clock::time_point connectionStartTime;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
 
         std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;

@@ -38,10 +38,45 @@
 
 extern "C" {
 #include <icLog/logging.h>
+#include <observability/observabilityMetrics.h>
 }
 
 using namespace barton;
 using namespace barton::Subsystem;
+
+// ---------------------------------------------------------------------------
+// Lazy meter creation for Matter subscription & CASE session metrics
+// ---------------------------------------------------------------------------
+
+static ObservabilityCounter *subscriptionEstablishedCounter = nullptr;
+static ObservabilityCounter *subscriptionReportCounter = nullptr;
+static ObservabilityCounter *subscriptionErrorCounter = nullptr;
+static ObservabilityHistogram *caseSessionDurationHistogram = nullptr;
+static ObservabilityCounter *caseSessionErrorCounter = nullptr;
+
+static void ensureMatterMetersCreated()
+{
+    static bool metersCreated = false;
+    if (!metersCreated)
+    {
+        subscriptionEstablishedCounter = observabilityCounterCreate(
+            "matter.subscription.established", "Matter subscription (re)establishment events", "{event}");
+
+        subscriptionReportCounter = observabilityCounterCreate(
+            "matter.subscription.report", "Matter subscription report cycles received", "{report}");
+
+        subscriptionErrorCounter =
+            observabilityCounterCreate("matter.subscription.error", "Matter subscription errors", "{error}");
+
+        caseSessionDurationHistogram = observabilityHistogramCreate(
+            "matter.case.session.duration", "Time from GetConnectedDevice to OnDeviceConnected", "s");
+
+        caseSessionErrorCounter = observabilityCounterCreate(
+            "matter.case.session.error", "Matter CASE session connection failures", "{error}");
+
+        metersCreated = true;
+    }
+}
 
 DeviceDataCache::~DeviceDataCache()
 {
@@ -87,8 +122,8 @@ DeviceDataCache::~DeviceDataCache()
                     promise->set_value();
                     delete context;
                 },
-                reinterpret_cast<intptr_t>(
-                    new std::tuple<void *, void *, std::promise<void> *>(cacheToDestroy, clientToDestroy, &destructionComplete)));
+                reinterpret_cast<intptr_t>(new std::tuple<void *, void *, std::promise<void> *>(
+                    cacheToDestroy, clientToDestroy, &destructionComplete)));
 
             // Wait for the Matter thread to complete destruction before returning
             destructionFuture.wait();
@@ -120,6 +155,8 @@ std::future<bool> DeviceDataCache::Start()
     chip::DeviceLayer::PlatformMgr().ScheduleWork(
         [](intptr_t arg) {
             auto *self = reinterpret_cast<DeviceDataCache *>(arg);
+
+            self->connectionStartTime = std::chrono::steady_clock::now();
 
             if (self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
                                                      &self->mOnDeviceConnectedCallback,
@@ -604,7 +641,6 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
             for (chip::EndpointId endpointId : endpointIds)
             {
                 self->clusterStateCache->ForEachCluster(endpointId, [self, endpointId](chip::ClusterId clusterId) {
-
                     // Iterate through all attributes in this cluster
                     self->clusterStateCache->ForEachAttribute(
                         endpointId, clusterId, [self](const chip::app::ConcreteAttributePath &path) {
@@ -615,7 +651,8 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                             CHIP_ERROR err = self->clusterStateCache->Get(dataPath, reader);
                             if (err != CHIP_NO_ERROR)
                             {
-                                icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32 ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
+                                icWarn("Failed to get cached attribute data for endpoint 0x%02x, cluster 0x%04" PRIx32
+                                       ", attribute 0x%04" PRIx32 ": %" CHIP_ERROR_FORMAT,
                                        static_cast<unsigned int>(dataPath.mEndpointId),
                                        static_cast<uint32_t>(dataPath.mClusterId),
                                        static_cast<uint32_t>(dataPath.mAttributeId),
@@ -648,6 +685,9 @@ void DeviceDataCache::OnReportEnd()
 {
     icDebug();
 
+    ensureMatterMetersCreated();
+    observabilityCounterAddWithAttrs(subscriptionReportCounter, 1, "device.id", deviceUuid.c_str(), NULL);
+
     Json::Value cacheJson = GetCacheAsJson();
     std::string jsonString = chip::JsonToString(cacheJson);
     icDebug("Cluster state cache JSON:\n%s", jsonString.c_str());
@@ -664,11 +704,18 @@ void DeviceDataCache::OnReportEnd()
 void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId)
 {
     icDebug("Subscription established with ID: %" PRIu32, aSubscriptionId);
+
+    ensureMatterMetersCreated();
+    observabilityCounterAddWithAttrs(subscriptionEstablishedCounter, 1, "device.id", deviceUuid.c_str(), NULL);
 }
 
 void DeviceDataCache::OnError(CHIP_ERROR aError)
 {
     icError("ReadClient encountered an error: %s", aError.AsString());
+
+    ensureMatterMetersCreated();
+    observabilityCounterAddWithAttrs(
+        subscriptionErrorCounter, 1, "device.id", deviceUuid.c_str(), "error", aError.AsString(), NULL);
 }
 
 void DeviceDataCache::OnDeallocatePaths(chip::app::ReadPrepareParams &&aReadPrepareParams)
@@ -718,6 +765,12 @@ void DeviceDataCache::OnDeviceConnected(chip::Messaging::ExchangeManager &exchan
                                         const chip::SessionHandle &sessionHandle)
 {
     icDebug();
+
+    ensureMatterMetersCreated();
+    auto elapsed = std::chrono::steady_clock::now() - connectionStartTime;
+    double durationSecs = std::chrono::duration<double>(elapsed).count();
+    observabilityHistogramRecordWithAttrs(
+        caseSessionDurationHistogram, durationSecs, "device.id", deviceUuid.c_str(), NULL);
 
     clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*this);
     readClient =
@@ -778,6 +831,10 @@ void DeviceDataCache::OnDeviceConnectionFailure(const chip::ScopedNodeId &peerId
 {
     icDebug();
     icError("Device connection failed: %s", error.AsString());
+
+    ensureMatterMetersCreated();
+    observabilityCounterAddWithAttrs(
+        caseSessionErrorCounter, 1, "device.id", deviceUuid.c_str(), "error", error.AsString(), NULL);
     std::lock_guard<std::mutex> lock(startupPromiseMutex);
     if (startupPromise)
     {
