@@ -23,8 +23,9 @@
 
 # OpenTelemetry Collector configuration for the Barton observability demo.
 #
-# Receives OTLP/HTTP on port 4318, exports traces to Jaeger and
-# logs everything to the console for debugging.
+# Receives OTLP/HTTP on port 4318, exports traces to Jaeger,
+# derives RED metrics from spans via the spanmetrics connector,
+# and exposes all metrics to Prometheus on port 8889.
 
 receivers:
   otlp:
@@ -32,14 +33,31 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
+  hostmetrics:
+    collection_interval: 15s
+    scrapers:
+      cpu:
+      memory:
+      process:
+        include:
+          match_type: regexp
+          names:
+            - barton-core-reference
+
 exporters:
   otlp/jaeger:
     endpoint: "jaeger:4317"
     tls:
       insecure: true
 
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
   debug:
     verbosity: basic
+
+connectors:
+  spanmetrics:
 
 processors:
   batch:
@@ -50,11 +68,11 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger, debug]
+      exporters: [otlp/jaeger, spanmetrics, debug]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, hostmetrics, spanmetrics]
       processors: [batch]
-      exporters: [debug]
+      exporters: [prometheus, debug]
     logs:
       receivers: [otlp]
       processors: [batch]

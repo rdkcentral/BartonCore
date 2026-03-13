@@ -34,8 +34,7 @@
 
     // A set of name-value pairs that sets or overrides environment variables for VS Code
     // (or sub-processes like terminals) but not the container as a whole
-    "remoteEnv":
-    {
+    "remoteEnv": {
         "BUILDER_USER": "${localEnv:USER}",
         "HOME": "/home/${localEnv:USER}",
         "GIT_PS1_SHOWDIRTYSTATE": "1",
@@ -46,70 +45,75 @@
         // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
         // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
         "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
-        "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}"
+        "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}",
+
+        // OpenTelemetry: collector endpoint is provided by compose.observability.yaml
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4318",
+        "OTEL_SERVICE_NAME": "barton-core"
     },
 
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
 
-    // Jaeger runs in a separate compose service. socat proxies it into this
-    // container so VS Code can forward the port to the local browser.
-    "forwardPorts": [16686],
+    // Jaeger and Prometheus run in separate compose services. socat proxies
+    // them into this container so VS Code can forward the ports to the local browser.
+    "forwardPorts": [16686, 9090],
     "portsAttributes": {
-        "16686": { "label": "Jaeger UI", "onAutoForward": "silent" }
+        "16686": { "label": "Jaeger UI", "onAutoForward": "silent" },
+        "9090": { "label": "Prometheus UI", "onAutoForward": "silent" }
     },
-    "postStartCommand": "nohup socat TCP-LISTEN:16686,fork,reuseaddr TCP:jaeger:16686 >/dev/null 2>&1 &",
+    "postStartCommand": {
+        "jaeger-proxy": "until curl -sf http://jaeger:16686/ >/dev/null 2>&1; do sleep 1; done && socat TCP-LISTEN:16686,fork,reuseaddr TCP:jaeger:16686",
+        "prometheus-proxy": "until curl -sf http://prometheus:9090/ >/dev/null 2>&1; do sleep 1; done && socat TCP-LISTEN:9090,fork,reuseaddr TCP:prometheus:9090"
+    },
 
     "features": {
         "ghcr.io/devcontainers/features/node:1": {}
     },
 
-    "customizations":
-    {
-        "vscode":
-        {
+    "customizations": {
+        "vscode": {
             "extensions": [
                 // Docker and Container Management
-                "ms-azuretools.vscode-docker",           // Docker support for managing containers
+                "ms-azuretools.vscode-docker", // Docker support for managing containers
 
                 // C/C++ Development
-                "ms-vscode.cmake-tools",                 // CMake support for build configuration
-                "ms-vscode.cpptools",                    // C/C++ language support with IntelliSense and debugging
-                "ms-vscode.cpptools-extension-pack",     // Additional tools for C/C++ development
+                "ms-vscode.cmake-tools", // CMake support for build configuration
+                "ms-vscode.cpptools", // C/C++ language support with IntelliSense and debugging
+                "ms-vscode.cpptools-extension-pack", // Additional tools for C/C++ development
                 "llvm-vs-code-extensions.vscode-clangd", // Enhanced C/C++ language support using Clangd
-                "xaver.clang-format",                    // Manually triggered Clang-formatter for C/C++ code
+                "xaver.clang-format", // Manually triggered Clang-formatter for C/C++ code
 
                 // Python Development
-                "ms-python.python",                      // Comprehensive Python support with IntelliSense and debugging
-                "ms-python.vscode-pylance",              // Fast, feature-rich language support for Python using Pylance
-                "ms-python.debugpy",                     // Python debugging support
-                "ms-python.vscode-pyright",              // Type checking and IntelliSense for Python
-                "ms-python.black-formatter",             // Python code formatter
-                "KevinRose.vsc-python-indent",           // Correct Python indentation
+                "ms-python.python", // Comprehensive Python support with IntelliSense and debugging
+                "ms-python.vscode-pylance", // Fast, feature-rich language support for Python using Pylance
+                "ms-python.debugpy", // Python debugging support
+                "ms-python.vscode-pyright", // Type checking and IntelliSense for Python
+                "ms-python.black-formatter", // Python code formatter
+                "KevinRose.vsc-python-indent", // Correct Python indentation
 
                 // Markdown and Documentation
-                "yzhang.markdown-all-in-one",            // All-in-one Markdown support with preview and shortcuts
+                "yzhang.markdown-all-in-one", // All-in-one Markdown support with preview and shortcuts
 
                 // Git and Version Control
-                "eamodio.gitlens",                       // Git enhancements for better insights and navigation
-                "GitHub.vscode-github-actions",          // GitHub Actions support
-                "GitHub.vscode-pull-request-github",     // GitHub Pull Requests and Issues support]
+                "eamodio.gitlens", // Git enhancements for better insights and navigation
+                "GitHub.vscode-github-actions", // GitHub Actions support
+                "GitHub.vscode-pull-request-github", // GitHub Pull Requests and Issues support]
 
                 // Code Formatting and Style
-                "aaron-bond.better-comments",            // Enhanced comment formatting
-                "christian-kohler.path-intellisense",    // Filename completion for better navigation
-                "esbenp.prettier-vscode",                // Code formatter for various languages
-                "foxundermoon.shell-format",             // Shell script formatting
+                "aaron-bond.better-comments", // Enhanced comment formatting
+                "christian-kohler.path-intellisense", // Filename completion for better navigation
+                "esbenp.prettier-vscode", // Code formatter for various languages
+                "foxundermoon.shell-format", // Shell script formatting
 
                 // Build and Project Management
-                "npclaudiu.vscode-gn",                   // Ninja build system support
+                "npclaudiu.vscode-gn", // Ninja build system support
 
-                "doi.fileheadercomment",                 // File header comment generator
-                "atman-dev.openspec-for-copilot"         // Openspec support
+                "doi.fileheadercomment", // File header comment generator
+                "atman-dev.openspec-for-copilot" // Openspec support
             ],
 
-            "settings":
-            {
+            "settings": {
                 "terminal.integrated.defaultProfile.linux": "bash",
                 "asciidoc.extensions.enableKroki": true
             }

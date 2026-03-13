@@ -22,37 +22,36 @@
 # ------------------------------ tabstop = 4 ----------------------------------
 
 #
-# Docker Compose overlay that adds an OpenTelemetry Collector and Jaeger
-# instance for visualizing traces, metrics, and logs from Barton.
+# Docker Compose overlay that adds an OpenTelemetry Collector, Jaeger, and
+# Prometheus for visualizing traces, metrics, and logs from Barton.
 #
 # No host ports are published by this file -- all inter-service traffic uses
-# the Docker network (otel-collector:4318, jaeger:4317). The Jaeger UI is
-# accessed differently depending on the environment:
+# the Docker network. The UIs are accessed differently depending on the
+# environment:
 #
-#   Devcontainer:  socat proxies jaeger:16686 into the barton container so
-#                  VS Code can forward port 16686 to the local browser.
-#                  See .devcontainer/devcontainer.json (postStartCommand).
+#   Devcontainer:  socat proxies jaeger:16686 and prometheus:9090 into the
+#                  barton container so VS Code can forward them to the local
+#                  browser.  See .devcontainer/devcontainer.json.
 #
-#   dockerw -o:    A temporary compose override publishes Jaeger on an
-#                  ephemeral host port. The assigned URL is printed at
-#                  startup (e.g. "Jaeger UI available at http://0.0.0.0:49152").
+#   dockerw -o:    A temporary compose override publishes Jaeger and
+#                  Prometheus on ephemeral host ports. The assigned URLs are
+#                  printed at startup.
+#
+# OTEL environment variables for the Barton service are injected by:
+#   - CLI (dockerw):    via -e flags in the dockerw script when -o is used.
+#   - Devcontainer:     via remoteEnv in .devcontainer/devcontainer.json.
 #
 # The Barton container should be built with -DBCORE_OBSERVABILITY=ON.
 #
 
 services:
-    barton:
-        environment:
-            # otel-collector will resolve to local service, not a remote host
-            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-            - OTEL_SERVICE_NAME=barton-core
-        depends_on:
-            - otel-collector
-
     otel-collector:
         image: otel/opentelemetry-collector-contrib:0.104.0
+        pid: "service:barton"
         volumes:
             - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+        depends_on:
+            - barton
         networks:
             - barton-ip6net
 
@@ -60,5 +59,19 @@ services:
         image: jaegertracing/all-in-one:1.58
         environment:
             - COLLECTOR_OTLP_ENABLED=true
+            - METRICS_STORAGE_TYPE=prometheus
+            - PROMETHEUS_SERVER_URL=http://prometheus:9090
+            - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
+            - PROMETHEUS_QUERY_NORMALIZE_CALLS=true
+            - PROMETHEUS_QUERY_NORMALIZE_DURATION=true
+        depends_on:
+            - prometheus
+        networks:
+            - barton-ip6net
+
+    prometheus:
+        image: prom/prometheus:v2.53.0
+        volumes:
+            - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
         networks:
             - barton-ip6net

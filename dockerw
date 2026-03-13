@@ -70,31 +70,39 @@ COMPOSE_ARGS="-f ${DIR}/docker/compose.yaml"
 
 if [ "${OBSERVABILITY_COMPOSE}" = "true" ]; then
     COMPOSE_ARGS="${COMPOSE_ARGS} -f ${DIR}/docker/compose.observability.yaml"
+    EXTRA_ENV="${EXTRA_ENV} -e OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 -e OTEL_SERVICE_NAME=barton-core"
 
-    # Create a temporary override that publishes Jaeger on an ephemeral host
-    # port. The devcontainer uses socat instead, so compose.observability.yaml
-    # itself has no ports: section.
+    # Create a temporary override that publishes Jaeger and Prometheus on
+    # ephemeral host ports.  The devcontainer uses socat instead, so
+    # compose.observability.yaml itself has no ports: section.
     OTEL_OVERRIDE=$(mktemp /tmp/compose-otel-ports.XXXXXX.yaml)
     cat > "${OTEL_OVERRIDE}" <<'EOF'
 services:
     jaeger:
         ports:
             - "16686"
+    prometheus:
+        ports:
+            - "9090"
 EOF
     COMPOSE_ARGS="${COMPOSE_ARGS} -f ${OTEL_OVERRIDE}"
 
     cleanup_observability() {
-        docker compose ${COMPOSE_ARGS} down otel-collector jaeger 2>/dev/null
+        docker compose ${COMPOSE_ARGS} down otel-collector jaeger prometheus 2>/dev/null
         rm -f "${OTEL_OVERRIDE}"
     }
     trap cleanup_observability EXIT
 
     # Start observability infrastructure before the barton service
-    docker compose ${COMPOSE_ARGS} up -d otel-collector jaeger
+    docker compose ${COMPOSE_ARGS} up -d otel-collector jaeger prometheus
 
     JAEGER_URL=$(docker compose ${COMPOSE_ARGS} port jaeger 16686 2>/dev/null)
     if [ -n "${JAEGER_URL}" ]; then
         notice "Jaeger UI available at http://${JAEGER_URL}"
+    fi
+    PROMETHEUS_URL=$(docker compose ${COMPOSE_ARGS} port prometheus 9090 2>/dev/null)
+    if [ -n "${PROMETHEUS_URL}" ]; then
+        notice "Prometheus UI available at http://${PROMETHEUS_URL}"
     fi
 fi
 
