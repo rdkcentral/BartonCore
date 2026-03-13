@@ -151,6 +151,34 @@ The OTel Collector's `spanmetrics` connector automatically derives Rate,
 Errors, and Duration (RED) metrics from every traced span. No application
 code is required — any traced operation produces these metrics.
 
+The following spans are instrumented and therefore produce RED metrics
+(see [OBSERVABILITY.md](OBSERVABILITY.md) for the full span hierarchy and
+attribute details):
+
+| Span Name | Subsystem | Description |
+|---|---|---|
+| `subsystem.init` | Core | Subsystem initialization |
+| `subsystem.shutdown` | Core | Subsystem shutdown |
+| `device.discovery` | Core | Device discovery session |
+| `device.found` | Core | Device found during discovery |
+| `device.configure` | Core | Driver configure callback |
+| `device.persist` | Core | Database persistence |
+| `device.commission` | Core | Device commissioning operation |
+| `device.pair` | Core | Device pairing operation |
+| `device.remove` | Core | Device removal operation |
+| `device.driver.remove` | Core | Driver removal callback |
+| `device.commission_window.open` | Core | Commissioning window open |
+| `resource.read` | Core | Resource read operation |
+| `resource.write` | Core | Resource write operation |
+| `resource.update` | Matter / Zigbee | Resource update from driver |
+| `matter.case.connect` | Matter | CASE session establishment |
+| `matter.subscribe` | Matter | Subscription request |
+| `matter.report` | Matter | Subscription report cycle |
+| `matter.fabric.remove` | Matter | Fabric removal on device remove |
+| `zigbee.device.discovered` | Zigbee | Zigbee device discovered callback |
+| `zigbee.cluster.read` | Zigbee | Zigbee cluster read operation |
+| `zigbee.cluster.write` | Zigbee | Zigbee cluster write operation |
+
 | Metric Name | Type | Labels | Description |
 |---|---|---|---|
 | `calls` | Counter | `service_name`, `span_name`, `span_kind`, `status_code` | Total span invocations |

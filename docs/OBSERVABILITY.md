@@ -43,14 +43,71 @@ starting the application.
 
 ### Traces (Spans)
 
-| Span Name | Location | Attributes |
-|---|---|---|
-| `subsystem.init` | `subsystemManager.c` | — |
-| `subsystem.shutdown` | `subsystemManager.c` | — |
-| `device.discovery` | `deviceService.c` | `device.class`, `discovery.recovery_mode` |
-| `device.found` | `deviceService.c` | `device.class`, `device.uuid`, `device.manufacturer`, `device.model` |
-| `resource.read` | `deviceService.c` | `resource.uri` |
-| `resource.write` | `deviceService.c` | `resource.uri` |
+Spans are organized into parent-child hierarchies that trace operations
+end-to-end through the stack. Root spans are created at operation entry
+points; child spans are created for internal steps and inherit the parent's
+trace context automatically via thread-local storage (TLS) or explicit
+context propagation across thread boundaries.
+
+#### Span Hierarchy
+
+```
+subsystem.init                          (root)
+subsystem.shutdown                      (root)
+device.discovery                        (root)
+└── device.found                        (child)
+    ├── device.configure                (child)
+    └── device.persist                  (child)
+device.commission                       (root)
+├── device.found                        (child)
+│   ├── device.configure                (child)
+│   └── device.persist                  (child)
+├── matter.case.connect                 (child)
+├── matter.subscribe                    (child)
+└── matter.report                       (child)
+    └── resource.update                 (child, Matter)
+device.pair                             (root)
+├── matter.case.connect                 (child)
+├── matter.subscribe                    (child)
+└── matter.report                       (child)
+    └── resource.update                 (child, Matter)
+device.remove                           (root)
+├── device.driver.remove                (child)
+└── matter.fabric.remove                (child, Matter)
+device.commission_window.open           (root)
+resource.read                           (root)
+└── zigbee.cluster.read                 (child, Zigbee)
+resource.write                          (root)
+└── zigbee.cluster.write                (child, Zigbee)
+    └── resource.update                 (child, Zigbee)
+zigbee.device.discovered                (child of device.found)
+```
+
+#### Span Inventory
+
+| Span Name | Parent | Location | Attributes |
+|---|---|---|---|
+| `subsystem.init` | — | `subsystemManager.c` | — |
+| `subsystem.shutdown` | — | `subsystemManager.c` | — |
+| `device.discovery` | — | `deviceService.c` | `device.class`, `discovery.recovery_mode` |
+| `device.found` | TLS (discovery/commission) | `deviceService.c` | `device.class`, `device.uuid`, `device.manufacturer`, `device.model` |
+| `device.configure` | TLS | `deviceService.c` | `device.class` |
+| `device.persist` | TLS | `deviceService.c` | `device.uuid` |
+| `device.commission` | — | `deviceService.c` | `commissioning.payload`, `commissioning.timeout_seconds` |
+| `device.pair` | — | `deviceService.c` | `device.node_id`, `pairing.timeout_seconds` |
+| `device.remove` | — | `deviceService.c` | `device.uuid` |
+| `device.driver.remove` | `device.remove` | `deviceService.c` | — |
+| `device.commission_window.open` | — | `deviceService.c` | `device.node_id`, `window.timeout_seconds` |
+| `resource.read` | — | `deviceService.c` | `resource.uri` |
+| `resource.write` | — | `deviceService.c` | `resource.uri` |
+| `resource.update` | TLS (report/write) | `MatterDevice.cpp`, `zigbeeDriverCommon.c` | `device.uuid`, `resource.name`, `endpoint.profile` |
+| `matter.case.connect` | stored context | `DeviceDataCache.cpp` | — |
+| `matter.subscribe` | stored context | `DeviceDataCache.cpp` | — |
+| `matter.report` | stored context | `DeviceDataCache.cpp` | `device.id` |
+| `matter.fabric.remove` | TLS | `MatterDeviceDriver.cpp` | `device.uuid` |
+| `zigbee.device.discovered` | TLS (found) | `zigbeeDriverCommon.c` | `device.eui64`, `device.manufacturer` |
+| `zigbee.cluster.read` | TLS (resource.read) | `zigbeeDriverCommon.c` | `device.uuid`, `resource.uri` |
+| `zigbee.cluster.write` | TLS (resource.write) | `zigbeeDriverCommon.c` | `device.uuid`, `resource.uri` |
 
 ### Metrics
 
