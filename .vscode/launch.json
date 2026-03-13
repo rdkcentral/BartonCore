@@ -17,6 +17,12 @@
             "args": ["-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -35,6 +41,12 @@
             "args": ["-z", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -53,6 +65,12 @@
             "args": ["-z", "-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -71,6 +89,12 @@
             "args": ["-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -89,6 +113,12 @@
             "args": ["-m", "-t"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -107,6 +137,12 @@
             "args": ["-z", "-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "OTEL_METRIC_EXPORT_INTERVAL_MS",
+                    "value": "1000"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [

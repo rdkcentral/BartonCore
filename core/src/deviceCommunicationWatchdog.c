@@ -117,6 +117,7 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
         observabilityCounterCreate("device.commrestore.count", "Number of device comm-restore events", "{event}");
     commFailCurrentGauge =
         observabilityGaugeCreate("device.commfail.current", "Devices currently in comm-fail", "{device}");
+    observabilityGaugeRecord(commFailCurrentGauge, 0);
     commCheckPerformedCounter = observabilityCounterCreate(
         "device.communication.check.performed", "Communication check cycles performed", "{cycle}");
 

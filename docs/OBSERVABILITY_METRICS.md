@@ -105,6 +105,44 @@ every call compiles to a zero-cost no-op.
 | `zigbee.pan_id_attack.detected` | Counter | {event} | — | Zigbee PAN ID attack detected |
 | `zigbee.pan_id_attack.active` | Gauge | {state} | — | Zigbee PAN ID attack currently active |
 
+### Device Telemetry
+
+Per-device resource metrics with rich metadata attributes. The metadata
+cache populates on the first resource update after device-add completes
+(device class and manufacturer must both be non-empty). Metrics are emitted
+from the central `updateResource()` convergence point in `deviceService.c`
+so all subsystems (Zigbee, Matter, etc.) are covered automatically.
+
+#### Resource Metrics
+
+| Metric Name | Type | Unit | Attributes | Description |
+|---|---|---|---|---|
+| `device.resource.value` | Gauge | {value} | `device.id`, `device.class`, `endpoint.profile`, `resource.name`, `device.manufacturer`, `device.model`, `device.hardware_version`, `device.firmware_version`, `driver.type` | Current numeric value of a device resource (integer, percentage, lightLevel, temperature, seconds, minutes, milliWatts, watts, battery.voltage, humidity.relative, signalStrength, motionSensitivity, illuminance, magneticFieldStrength) |
+| `device.resource.state_change` | Counter | {transition} | `device.id`, `device.class`, `endpoint.profile`, `resource.name`, `device.manufacturer`, `device.model`, `device.hardware_version`, `device.firmware_version`, `driver.type`, `state` | Boolean state transitions on a device resource |
+| `device.resource.update` | Counter | {update} | `device.id`, `device.class`, `endpoint.profile`, `resource.name`, `device.manufacturer`, `device.model`, `device.hardware_version`, `device.firmware_version`, `driver.type` | Resource value changes reported by devices (all resource types) |
+
+#### Zigbee Link Quality
+
+| Metric Name | Type | Unit | Attributes | Description |
+|---|---|---|---|---|
+| `zigbee.device.rssi` | Gauge | dBm | `device.id` | Zigbee device received signal strength indicator |
+| `zigbee.device.lqi` | Gauge | {lqi} | `device.id` | Zigbee device link quality indicator |
+
+#### Matter Subscription Lifecycle
+
+| Metric Name | Type | Unit | Attributes | Description |
+|---|---|---|---|---|
+| `matter.subscription.established` | Counter | {event} | `device.id` | Matter subscription (re)establishment events |
+| `matter.subscription.report` | Counter | {report} | `device.id` | Matter subscription report cycles received |
+| `matter.subscription.error` | Counter | {error} | `device.id`, `error` | Matter subscription errors |
+
+#### CASE Session
+
+| Metric Name | Type | Unit | Attributes | Description |
+|---|---|---|---|---|
+| `matter.case.session.duration` | Histogram | s | `device.id` | Time from `GetConnectedDevice` to `OnDeviceConnected` |
+| `matter.case.session.error` | Counter | {error} | `device.id`, `error` | Matter CASE session connection failures |
+
 ---
 
 ## Span-Derived RED Metrics
@@ -217,6 +255,32 @@ collector and other container processes are excluded by the name filter.
 > totals instead, which remain valid for the lifetime of the process. The
 > mean (`sum / count`) gives the exact average; the quantile gives the
 > nearest bucket boundary.
+
+### Device Telemetry
+
+| Panel | PromQL |
+|---|---|
+| Resource updates / min by device | `sum(rate(device_resource_update_total[5m])) by (device_id) * 60` |
+| Resource updates by device class | `sum(rate(device_resource_update_total[5m])) by (device_class)` |
+| Current temperature by device | `device_resource_value{resource_name=~".*temperature.*"}` |
+| Boolean state transitions / min | `sum(rate(device_resource_state_change_total[5m])) by (device_id, resource_name) * 60` |
+| Firmware version breakdown | `count by (device_firmware_version) (device_resource_update_total)` |
+| Zigbee RSSI by device | `zigbee_device_rssi_dBm` |
+| Zigbee LQI by device | `zigbee_device_lqi` |
+| Mean RSSI across fleet | `avg(zigbee_device_rssi_dBm)` |
+| Matter subscriptions established | `matter_subscription_established_total` |
+| Matter subscription errors | `matter_subscription_error_total` |
+| Subscription report rate / min | `sum(rate(matter_subscription_report_total[5m])) * 60` |
+| CASE session mean duration | `matter_case_session_duration_seconds_sum / matter_case_session_duration_seconds_count` |
+| CASE session duration p50 | `histogram_quantile(0.5, matter_case_session_duration_seconds_bucket)` |
+| CASE session duration p95 | `histogram_quantile(0.95, matter_case_session_duration_seconds_bucket)` |
+| CASE session error rate | `rate(matter_case_session_error_total[5m])` |
+
+> **High-cardinality attributes:** Device telemetry metrics carry a rich
+> attribute set (`device.id`, `resource.name`, `device.manufacturer`, etc.).
+> In a large fleet, Prometheus series count can grow significantly.
+> Production deployments should consider applying metric views or attribute
+> filters in the OTel Collector to drop unused attributes before export.
 
 ### Span-Derived RED Metrics
 

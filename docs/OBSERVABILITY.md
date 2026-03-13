@@ -55,8 +55,16 @@ starting the application.
 ### Metrics
 
 See [OBSERVABILITY_METRICS.md](OBSERVABILITY_METRICS.md) for the full
-metrics reference including application metrics, span-derived RED metrics,
-system/process metrics, and Prometheus query examples.
+metrics reference including application metrics, device telemetry,
+span-derived RED metrics, system/process metrics, and Prometheus query
+examples.
+
+Device telemetry metrics emit per-device resource values, state transitions,
+and update counts with rich metadata attributes (manufacturer, model,
+firmware version, etc.). Zigbee RSSI/LQI gauges and Matter subscription
+lifecycle counters are also included. All device telemetry flows through the
+central `updateResource()` path and is gated by
+`BARTON_CONFIG_OBSERVABILITY`.
 
 ### Log Bridge
 
