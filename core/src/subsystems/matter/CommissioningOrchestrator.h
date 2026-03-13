@@ -36,6 +36,10 @@
 #include <cstdint>
 #include <mutex>
 
+extern "C" {
+#include <observability/observabilityTracing.h>
+}
+
 namespace barton
 {
     // keep this in sync with the ostream operator
@@ -82,11 +86,18 @@ namespace barton
         CommissioningOrchestrator(OnDeviceCommissioningStatusChanged onDeviceCommissioningStatusChangedCb,
                                   void *callbackContext) :
             finalNodeId(kUndefinedNodeId), commissioningStatus(Pending), callbackContext(callbackContext),
-            discoveredNodeData(nullptr), onDeviceCommissioningStatusChanged(onDeviceCommissioningStatusChangedCb)
+            discoveredNodeData(nullptr), onDeviceCommissioningStatusChanged(onDeviceCommissioningStatusChangedCb),
+            spanCtx(nullptr)
         {
+            spanCtx = observabilitySpanContextGetCurrent();
+            observabilitySpanContextRef(spanCtx);
         }
 
-        ~CommissioningOrchestrator() override { Reset(); }
+        ~CommissioningOrchestrator() override
+        {
+            Reset();
+            observabilitySpanContextRelease(spanCtx);
+        }
 
         /**
          * Attempt to commission a device matching the setup payload
@@ -116,6 +127,12 @@ namespace barton
          * Resets the state of the orchestrator instance for cleanup / reuse.
          */
         void Reset();
+
+        /**
+         * Get the span context for trace propagation.
+         * Returned pointer is borrowed (caller must NOT release).
+         */
+        ObservabilitySpanContext *GetSpanContext() const { return spanCtx; }
 
         ////////////// DevicePairingDelegate overrides ////////////////////
         void OnCommissioningSuccess(chip::PeerId peerId) override;
@@ -172,6 +189,8 @@ namespace barton
         bool SendCommissioningComplete(chip::NodeId nodeId);
 
         OnDeviceCommissioningStatusChanged onDeviceCommissioningStatusChanged;
+
+        ObservabilitySpanContext *spanCtx;
 
         void CommissionWorkFunc();
         static void CommissionWorkFuncCb(intptr_t arg);

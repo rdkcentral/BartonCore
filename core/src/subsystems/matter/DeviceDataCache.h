@@ -37,6 +37,10 @@
 #include <json/json.h>
 #include <string>
 
+extern "C" {
+#include <observability/observabilityTracing.h>
+}
+
 using namespace barton::Subsystem::Matter;
 
 namespace barton
@@ -45,11 +49,13 @@ namespace barton
     class DeviceDataCache : public chip::app::ClusterStateCache::Callback
     {
     public:
-        DeviceDataCache(const std::string &deviceUuid,
-                        std::shared_ptr<chip::Controller::DeviceController> controller) :
+        DeviceDataCache(const std::string &deviceUuid, std::shared_ptr<chip::Controller::DeviceController> controller) :
             deviceUuid(deviceUuid), mOnDeviceConnectedCallback(OnDeviceConnectedCallback, this),
-            mOnDeviceConnectionFailureCallback(OnDeviceConnectionFailureCallback, this), controller(controller)
+            mOnDeviceConnectionFailureCallback(OnDeviceConnectionFailureCallback, this), controller(controller),
+            spanCtx(nullptr)
         {
+            spanCtx = observabilitySpanContextGetCurrent();
+            observabilitySpanContextRef(spanCtx);
         }
 
         ~DeviceDataCache();
@@ -314,6 +320,8 @@ namespace barton
         std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
+
+        ObservabilitySpanContext *spanCtx;
     };
 
 } // namespace barton

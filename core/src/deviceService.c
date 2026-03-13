@@ -925,19 +925,26 @@ struct OnboardMatterDeviceArgs
         uint64_t nodeId;
     };
     uint16_t timeoutSeconds;
+    ObservabilitySpanContext *spanCtx;
 };
 
 struct commissionMatterDeviceArgs
 {
     char *setupPayload;
     uint16_t timeoutSeconds;
+    ObservabilitySpanContext *spanCtx;
 };
 
 static void *commissionMatterDeviceFunc(void *args)
 {
     struct commissionMatterDeviceArgs *cmda = (struct commissionMatterDeviceArgs *) args;
 
+    observabilitySpanContextSetCurrent(cmda->spanCtx);
+    observabilitySpanContextRelease(cmda->spanCtx);
+
     matterSubsystemCommissionDevice(cmda->setupPayload, cmda->timeoutSeconds);
+
+    observabilitySpanContextSetCurrent(NULL);
 
     free(cmda->setupPayload);
     free(cmda);
@@ -947,9 +954,15 @@ static void *commissionMatterDeviceFunc(void *args)
 static void *pairMatterDeviceFunc(void *args)
 {
     struct OnboardMatterDeviceArgs *cmda = (struct OnboardMatterDeviceArgs *) args;
-    matterSubsystemPairDevice(cmda->nodeId, cmda->timeoutSeconds);
-    free(cmda);
 
+    observabilitySpanContextSetCurrent(cmda->spanCtx);
+    observabilitySpanContextRelease(cmda->spanCtx);
+
+    matterSubsystemPairDevice(cmda->nodeId, cmda->timeoutSeconds);
+
+    observabilitySpanContextSetCurrent(NULL);
+
+    free(cmda);
     return NULL;
 }
 #endif
@@ -963,11 +976,14 @@ bool deviceServiceCommissionDevice(const char *setupPayload, uint16_t timeoutSec
     struct commissionMatterDeviceArgs *args = calloc(1, sizeof(*args));
     args->setupPayload = strdup(setupPayload);
     args->timeoutSeconds = timeoutSeconds;
+    args->spanCtx = observabilitySpanContextGetCurrent();
+    observabilitySpanContextRef(args->spanCtx);
 
     result = createDetachedThread(commissionMatterDeviceFunc, args, "MatterCommDev");
     if (!result)
     {
         icLogError(LOG_TAG, "Unable to create matter commissioning thread");
+        observabilitySpanContextRelease(args->spanCtx);
         free(args->setupPayload);
         free(args);
     }
@@ -991,11 +1007,14 @@ bool deviceServiceAddMatterDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     struct OnboardMatterDeviceArgs *args = calloc(1, sizeof(*args));
     args->nodeId = nodeId;
     args->timeoutSeconds = timeoutSeconds;
+    args->spanCtx = observabilitySpanContextGetCurrent();
+    observabilitySpanContextRef(args->spanCtx);
 
     result = createDetachedThread(pairMatterDeviceFunc, args, "MatterPairDev");
     if (!result)
     {
         icLogError(LOG_TAG, "Unable to create matter pairing thread");
+        observabilitySpanContextRelease(args->spanCtx);
         free(args);
     }
 #endif

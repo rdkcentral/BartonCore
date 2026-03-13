@@ -129,6 +129,8 @@ DeviceDataCache::~DeviceDataCache()
             destructionFuture.wait();
         }
     }
+
+    observabilitySpanContextRelease(spanCtx);
 }
 
 std::future<bool> DeviceDataCache::Start()
