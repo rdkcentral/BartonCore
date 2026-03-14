@@ -56,6 +56,15 @@ ObservabilitySpan *observabilitySpanStart(const char *name);
 ObservabilitySpan *observabilitySpanStartWithParent(const char *name, const ObservabilitySpanContext *parent);
 
 /**
+ * Start a new root span with an OTel span link to an existing context.
+ * The returned span is NOT a child of @p linked; it starts its own trace but carries a link reference.
+ * @param name    Span name
+ * @param linked  Span context to link (NULL creates a plain root span with no link)
+ * @return Span handle, or NULL on failure. Caller owns one reference; use g_autoptr or observabilitySpanRelease().
+ */
+ObservabilitySpan *observabilitySpanStartWithLink(const char *name, const ObservabilitySpanContext *linked);
+
+/**
  * Release a span reference. Ends the span and frees when the last reference is dropped.
  * @param span  Span to release (NULL is safe no-op)
  */
@@ -122,10 +131,18 @@ static inline ObservabilitySpan *observabilitySpanStart(const char *name)
     (void) name;
     return (ObservabilitySpan *) 0;
 }
-static inline ObservabilitySpan *observabilitySpanStartWithParent(const char *name, const ObservabilitySpanContext *parent)
+static inline ObservabilitySpan *observabilitySpanStartWithParent(const char *name,
+                                                                  const ObservabilitySpanContext *parent)
 {
     (void) name;
     (void) parent;
+    return (ObservabilitySpan *) 0;
+}
+static inline ObservabilitySpan *observabilitySpanStartWithLink(const char *name,
+                                                                const ObservabilitySpanContext *linked)
+{
+    (void) name;
+    (void) linked;
     return (ObservabilitySpan *) 0;
 }
 static inline void observabilitySpanRelease(ObservabilitySpan *span)

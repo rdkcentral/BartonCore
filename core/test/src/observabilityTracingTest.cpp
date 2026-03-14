@@ -286,3 +286,41 @@ TEST_F(TracingTest, TlsContextPropagatesAcrossThreads)
     ASSERT_EQ(spans.size(), 2u);
     EXPECT_EQ(spans[0]->GetTraceId(), spans[1]->GetTraceId());
 }
+
+TEST_F(TracingTest, SpanStartWithLinkCreatesRootSpan)
+{
+    // Create an "origin" span to link from
+    ObservabilitySpan *origin = observabilitySpanStart("subsystem.init");
+    ObservabilitySpanContext *originCtx = observabilitySpanGetContext(origin);
+    ASSERT_NE(originCtx, nullptr);
+
+    // Create linked root span — should NOT be a child of origin
+    ObservabilitySpan *linked = observabilitySpanStartWithLink("matter.init", originCtx);
+    ASSERT_NE(linked, nullptr);
+
+    observabilitySpanRelease(linked);
+    observabilitySpanRelease(origin);
+    observabilitySpanContextRelease(originCtx);
+
+    auto spans = spanData->GetSpans();
+    ASSERT_EQ(spans.size(), 2u);
+
+    // The linked span must have a DIFFERENT trace ID (it's a root, not a child)
+    EXPECT_NE(spans[0]->GetTraceId(), spans[1]->GetTraceId());
+
+    // The linked span should carry a link referencing the origin span's context
+    auto &linkedSpan = spans[0]; // InMemorySpanExporter records in end-order; linked ended first
+    ASSERT_EQ(linkedSpan->GetLinks().size(), 1u);
+}
+
+TEST_F(TracingTest, SpanStartWithLinkNullLinkedCreatesPlainRoot)
+{
+    ObservabilitySpan *span = observabilitySpanStartWithLink("matter.init", nullptr);
+    ASSERT_NE(span, nullptr);
+    observabilitySpanRelease(span);
+
+    auto spans = spanData->GetSpans();
+    ASSERT_EQ(spans.size(), 1u);
+    EXPECT_EQ(spans[0]->GetName(), "matter.init");
+    EXPECT_TRUE(spans[0]->GetLinks().empty());
+}

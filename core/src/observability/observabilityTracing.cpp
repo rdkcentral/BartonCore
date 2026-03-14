@@ -38,7 +38,7 @@ namespace trace_api = opentelemetry::trace;
 
 namespace
 {
-const char *kTracerName = "barton-core";
+    const char *kTracerName = "barton-core";
 } // namespace
 
 /**
@@ -63,10 +63,10 @@ struct ObservabilitySpanContext
 
 namespace
 {
-opentelemetry::nostd::shared_ptr<trace_api::Tracer> getTracer()
-{
-    return trace_api::Provider::GetTracerProvider()->GetTracer(kTracerName);
-}
+    opentelemetry::nostd::shared_ptr<trace_api::Tracer> getTracer()
+    {
+        return trace_api::Provider::GetTracerProvider()->GetTracer(kTracerName);
+    }
 } // namespace
 
 extern "C" ObservabilitySpan *observabilitySpanStart(const char *name)
@@ -105,6 +105,41 @@ extern "C" ObservabilitySpan *observabilitySpanStartWithParent(const char *name,
     {
         opts.parent = trace_api::GetSpan(parent->context)->GetContext();
         span = tracer->StartSpan(name, {}, opts);
+    }
+    else
+    {
+        span = tracer->StartSpan(name);
+    }
+
+    auto *wrapper = new (std::nothrow) ObservabilitySpan();
+    if (wrapper == nullptr)
+    {
+        span->End();
+        return nullptr;
+    }
+    wrapper->span = span;
+    wrapper->ref_count = 1;
+    return wrapper;
+}
+
+extern "C" ObservabilitySpan *observabilitySpanStartWithLink(const char *name, const ObservabilitySpanContext *linked)
+{
+    if (name == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto tracer = getTracer();
+
+    opentelemetry::nostd::shared_ptr<trace_api::Span> span;
+    if (linked != nullptr)
+    {
+        auto linkedSpanCtx = trace_api::GetSpan(linked->context)->GetContext();
+        std::pair<
+            trace_api::SpanContext,
+            std::initializer_list<std::pair<opentelemetry::nostd::string_view, opentelemetry::common::AttributeValue>>>
+            link {linkedSpanCtx, {}};
+        span = tracer->StartSpan(name, {}, {link});
     }
     else
     {

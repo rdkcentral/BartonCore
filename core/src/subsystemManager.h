@@ -234,4 +234,11 @@ GPtrArray *subsystemManagerGetRegisteredSubsystems(void);
  */
 cJSON *subsystemManagerGetSubsystemStatusJson(const char *subsystemName);
 
+/**
+ * Get the span context captured during subsystemManagerInitialize().
+ * The returned pointer is owned by subsystemManager; callers must NOT release it.
+ */
+typedef struct ObservabilitySpanContext ObservabilitySpanContext;
+ObservabilitySpanContext *subsystemManagerGetInitSpanContext(void);
+
 #endif // FLEXCORE_SUBSYSTEMMANAGER_H

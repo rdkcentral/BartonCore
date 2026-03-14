@@ -44,6 +44,7 @@ extern "C" {
 #include "icUtil/fileUtils.h"
 #include "icUtil/stringUtils.h"
 #include "observability/observabilityMetrics.h"
+#include "observability/observabilityTracing.h"
 #include <device-driver/device-driver.h>
 #include <deviceService.h>
 #include <deviceServicePrivate.h>
@@ -83,7 +84,7 @@ static guint retryAttempts = 0;
 
 namespace
 {
-ObservabilityGauge *matterInitializingGauge = NULL;
+    ObservabilityGauge *matterInitializingGauge = NULL;
 } // namespace
 
 #define RETURN_FALSE_IF_NOT_INITIALIZED()                                                                              \
@@ -198,6 +199,12 @@ static gboolean maybeInitMatter(void *context)
 
     observabilityGaugeRecord(matterInitializingGauge, 1);
 
+    g_autoptr(ObservabilitySpan) initSpan =
+        observabilitySpanStartWithLink("matter.init", subsystemManagerGetInitSpanContext());
+    observabilitySpanSetAttributeInt(initSpan, "retry.attempt", retryAttempts);
+    ObservabilitySpanContext *initCtx = observabilitySpanGetContext(initSpan);
+    observabilitySpanContextSetCurrent(initCtx);
+
     try
     {
         scoped_generic char *accountIdStr = getAccountId();
@@ -235,6 +242,14 @@ static gboolean maybeInitMatter(void *context)
     {
         icError("failed to initialize/start Matter interface: %s", e.what());
     }
+
+    if (!initSuccessful)
+    {
+        observabilitySpanSetError(initSpan, "matter initialization failed");
+    }
+
+    observabilitySpanContextSetCurrent(NULL);
+    observabilitySpanContextRelease(initCtx);
 
     subsystemMtx.lock();
     initialized = initSuccessful;
@@ -332,7 +347,8 @@ static void matterInitLoopThreadFunc()
         // Create a one-shot timer source for the first scheduled retry with backoff
         // Note: The immediate synchronous maybeInitMatter call above is not counted as a retry attempt
         // This first scheduled retry uses retryAttempts=0
-        // Backoff schedule (scheduled retries): 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s (retry 4+)
+        // Backoff schedule (scheduled retries): 15s (retry 0), 30s (retry 1), 60s (retry 2), 120s (retry 3), 240s
+        // (retry 4+)
         guint backoffDelay = calculateBackoffDelay(retryAttempts);
         g_autoptr(GSource) source = g_timeout_source_new(backoffDelay * 1000);
         g_source_set_priority(source, G_PRIORITY_DEFAULT);
@@ -340,9 +356,7 @@ static void matterInitLoopThreadFunc()
         g_source_set_name(source, "maybeInitMatter");
         sourceId = g_source_attach(source, thisThreadContext);
 
-        icDebug("Scheduling initial maybeInitMatter in %u seconds with source id %u",
-                backoffDelay,
-                sourceId);
+        icDebug("Scheduling initial maybeInitMatter in %u seconds with source id %u", backoffDelay, sourceId);
 
         g_autoptr(GMainLoop) localLoopCopy = g_main_loop_ref(matterInitLoop);
 
@@ -512,7 +526,10 @@ bool matterSubsystemPairDevice(uint64_t nodeId, uint16_t timeoutSeconds)
     return orchestrator.Pair(nodeId, timeoutSeconds);
 }
 
-bool matterSubsystemOpenCommissioningWindow(const char *nodeId, uint16_t timeoutSeconds, char **setupCode, char **qrCode)
+bool matterSubsystemOpenCommissioningWindow(const char *nodeId,
+                                            uint16_t timeoutSeconds,
+                                            char **setupCode,
+                                            char **qrCode)
 {
     bool result = false;
 

@@ -78,6 +78,7 @@ static ObservabilityCounter *subsystemInitFailedCounter = NULL;
 static ObservabilityGauge *subsystemInitializedCountGauge = NULL;
 static ObservabilityGauge *subsystemReadyForDevicesGauge = NULL;
 static ObservabilityHistogram *subsystemInitDurationHistogram = NULL;
+static ObservabilitySpanContext *initSpanContext = NULL;
 static int64_t initializedSubsystemCount = 0;
 
 // Pre-registered subsystems are those that wish to be registered before the
@@ -526,6 +527,8 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
     icLogDebug(LOG_TAG, "%s", __func__);
 
     g_autoptr(ObservabilitySpan) initSpan = observabilitySpanStart("subsystem.init");
+    observabilitySpanContextRelease(initSpanContext);
+    initSpanContext = observabilitySpanGetContext(initSpan);
 
     subsystemInitStartedCounter =
         observabilityCounterCreate("subsystem.init.started", "Subsystem initialization started", "{event}");
@@ -600,7 +603,6 @@ void subsystemManagerInitialize(subsystemManagerReadyForDevicesFunc readyForDevi
 
         g_hash_table_foreach(subsystems, initializeSubsystemCallback, NULL);
     }
-
 }
 
 /**
@@ -967,4 +969,9 @@ bool subsystemManagerRestoreConfig(const char *tempRestoreDir, const char *dynam
     }
 
     return result;
+}
+
+ObservabilitySpanContext *subsystemManagerGetInitSpanContext(void)
+{
+    return initSpanContext;
 }
