@@ -91,6 +91,12 @@ zigbee.device.discovered                (child of device.found)
 
 #### Span Inventory
 
+See [OBSERVABILITY_SPANS.md](OBSERVABILITY_SPANS.md) for the full spans
+reference including detailed per-span documentation, context propagation
+mechanisms, error conditions, and attribute reference.
+
+The summary table below lists every instrumented span:
+
 | Span Name | Parent | Location | Attributes |
 |---|---|---|---|
 | `subsystem.init` | — | `subsystemManager.c` | — |
