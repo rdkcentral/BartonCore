@@ -219,9 +219,14 @@ static gboolean maybeInitMatter(void *context)
             scoped_generic char *trustStore = deviceServiceConfigurationGetMatterAttestationTrustStoreDir();
             std::string attestationTrustStorePath(trustStore);
 
-            if (!Matter::GetInstance().Init(accountId, std::move(attestationTrustStorePath)))
             {
-                initSuccessful = false;
+                g_autoptr(ObservabilitySpan) stackSpan =
+                    observabilitySpanStartWithParent("matter.init.stack", observabilitySpanContextGetCurrent());
+                if (!Matter::GetInstance().Init(accountId, std::move(attestationTrustStorePath)))
+                {
+                    observabilitySpanSetError(stackSpan, "matter stack init failed");
+                    initSuccessful = false;
+                }
             }
 
             // FIXME: Matter shouldn't be a singleton with Init() but a properly constructed object.

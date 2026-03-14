@@ -316,9 +316,13 @@ bool Matter::Start()
     // If Server::Init succeeded in a previous attempt, we shouldn't perform these steps again
     if (!serverIsInitialized)
     {
+        g_autoptr(ObservabilitySpan) serverSpan =
+            observabilitySpanStartWithParent("matter.init.server", observabilitySpanContextGetCurrent());
+
         if ((err = serverInitParams.InitializeStaticResourcesBeforeServerInit()) != CHIP_NO_ERROR)
         {
             icError("InitializeStaticResourcesBeforeServerInit failed: %s", err.AsString());
+            observabilitySpanSetError(serverSpan, err.AsString());
             return false;
         }
 
@@ -337,6 +341,7 @@ bool Matter::Start()
         if ((err = Server::GetInstance().Init(serverInitParams)) != CHIP_NO_ERROR)
         {
             icError("Server::Init failed: %s", err.AsString());
+            observabilitySpanSetError(serverSpan, err.AsString());
             return false;
         }
 
@@ -351,10 +356,15 @@ bool Matter::Start()
     auto dacProvider = BartonMatterProviderRegistry::Instance().GetBartonDACProvider();
     SetDeviceAttestationCredentialsProvider(dacProvider.get());
 
-    if ((err = InitCommissioner()) != CHIP_NO_ERROR)
     {
-        icError("InitCommissioner failed: %s", err.AsString());
-        return false;
+        g_autoptr(ObservabilitySpan) commSpan =
+            observabilitySpanStartWithParent("matter.init.commissioner", observabilitySpanContextGetCurrent());
+        if ((err = InitCommissioner()) != CHIP_NO_ERROR)
+        {
+            icError("InitCommissioner failed: %s", err.AsString());
+            observabilitySpanSetError(commSpan, err.AsString());
+            return false;
+        }
     }
 
     state.store(State::running);
@@ -509,6 +519,9 @@ CHIP_ERROR Matter::InitCommissioner()
 
     if (chainAvailable == CHIP_ERROR_NOT_FOUND || !fabricFound)
     {
+        g_autoptr(ObservabilitySpan) fabricSpan =
+            observabilitySpanStartWithParent("matter.fabric.create", observabilitySpanContextGetCurrent());
+
         ChipLogProgress(Support,
                         "No Commissioner NOC chain or no fabric, requesting a new NOC and creating new fabric");
 
@@ -588,7 +601,11 @@ CHIP_ERROR Matter::InitCommissioner()
     ReturnLogErrorOnFailure(fabricTable->CommitPendingFabricData());
 
     // advertise operational since we are an admin
-    chip::app::DnssdServer::Instance().AdvertiseOperational();
+    {
+        g_autoptr(ObservabilitySpan) advertiseSpan =
+            observabilitySpanStartWithParent("matter.init.advertise", observabilitySpanContextGetCurrent());
+        chip::app::DnssdServer::Instance().AdvertiseOperational();
+    }
 
     ChipLogProgress(Support,
                     "InitCommissioner nodeId=0x" ChipLogFormatX64 " fabric.fabricId=0x" ChipLogFormatX64
