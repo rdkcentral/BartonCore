@@ -158,6 +158,12 @@ attribute details):
 | Span Name | Subsystem | Description |
 |---|---|---|
 | `subsystem.init` | Core | Subsystem initialization |
+| `matter.init` | Matter | Matter subsystem initialization (linked to `subsystem.init`) |
+| `matter.init.stack` | Matter | CHIP platform stack initialization |
+| `matter.init.server` | Matter | CHIP server initialization |
+| `matter.init.commissioner` | Matter | Commissioner setup |
+| `matter.fabric.create` | Matter | Fabric/NOC chain generation (first run) |
+| `matter.init.advertise` | Matter | mDNS operational advertisement |
 | `subsystem.shutdown` | Core | Subsystem shutdown |
 | `device.discovery` | Core | Device discovery session |
 | `device.found` | Core | Device found during discovery |

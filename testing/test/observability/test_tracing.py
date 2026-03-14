@@ -57,6 +57,35 @@ def test_startup_exports_subsystem_shutdown_span_absent(
     )
 
 
+def test_matter_init_produces_span_hierarchy(otlp_receiver, default_environment):
+    """Matter initialization should export matter.init with child spans sharing a traceId."""
+    assert wait_for_span(otlp_receiver, "matter.init"), (
+        f"Expected 'matter.init' span, got: {otlp_receiver.get_span_names()}"
+    )
+
+    spans = otlp_receiver.get_spans()
+    init_spans = [s for s in spans if s.get("name") == "matter.init"]
+    assert len(init_spans) > 0
+
+    trace_id = init_spans[0]["traceId"]
+
+    # matter.init children should share the same traceId
+    expected_children = ["matter.init.stack", "matter.init.server", "matter.init.commissioner"]
+    for child_name in expected_children:
+        assert wait_for_span(otlp_receiver, child_name), (
+            f"Expected '{child_name}' span, got: {otlp_receiver.get_span_names()}"
+        )
+        child_spans = [s for s in otlp_receiver.get_spans() if s.get("name") == child_name]
+        assert len(child_spans) > 0
+        assert child_spans[0]["traceId"] == trace_id, (
+            f"{child_name} should share traceId with matter.init"
+        )
+
+    # matter.init should have retry.attempt attribute
+    attrs = {a["key"]: a["value"] for a in init_spans[0].get("attributes", [])}
+    assert "retry.attempt" in attrs, f"Expected 'retry.attempt' attribute, got: {attrs}"
+
+
 # ---------------------------------------------------------------------------
 # Device-commission span tests
 # ---------------------------------------------------------------------------

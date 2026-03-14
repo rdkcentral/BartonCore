@@ -53,6 +53,12 @@ context propagation across thread boundaries.
 
 ```
 subsystem.init                          (root)
+matter.init                             (root, linked to subsystem.init)
+├── matter.init.stack                   (child)
+├── matter.init.server                  (child)
+└── matter.init.commissioner            (child)
+    ├── matter.fabric.create            (child, conditional)
+    └── matter.init.advertise           (child)
 subsystem.shutdown                      (root)
 device.discovery                        (root)
 └── device.found                        (child)
@@ -88,6 +94,12 @@ zigbee.device.discovered                (child of device.found)
 | Span Name | Parent | Location | Attributes |
 |---|---|---|---|
 | `subsystem.init` | — | `subsystemManager.c` | — |
+| `matter.init` | — (linked to `subsystem.init`) | `matterSubsystem.cpp` | `retry.attempt` |
+| `matter.init.stack` | TLS (`matter.init`) | `matterSubsystem.cpp` | — |
+| `matter.init.server` | TLS (`matter.init`) | `Matter.cpp` | — |
+| `matter.init.commissioner` | TLS (`matter.init`) | `Matter.cpp` | — |
+| `matter.fabric.create` | TLS (`matter.init.commissioner`) | `Matter.cpp` | — |
+| `matter.init.advertise` | TLS (`matter.init.commissioner`) | `Matter.cpp` | — |
 | `subsystem.shutdown` | — | `subsystemManager.c` | — |
 | `device.discovery` | — | `deviceService.c` | `device.class`, `discovery.recovery_mode` |
 | `device.found` | TLS (discovery/commission) | `deviceService.c` | `device.class`, `device.uuid`, `device.manufacturer`, `device.model` |
