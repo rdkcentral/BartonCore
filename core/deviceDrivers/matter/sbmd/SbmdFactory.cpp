@@ -78,47 +78,49 @@ bool SbmdFactory::RegisterDrivers()
             continue;
         }
 
-        if (!RegisterDriversFromDirectory(dirPath, allRegistered))
-        {
-            allRegistered = false;
-        }
+        RegisterDriversFromDirectory(dirPath, allRegistered);
     }
 
     return allRegistered;
 }
 
-bool SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
+void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
 {
     std::error_code ec;
     bool exists = std::filesystem::exists(dirPath, ec);
     if (ec)
     {
         icError("Failed to check if SBMD directory exists %s: %s", dirPath.c_str(), ec.message().c_str());
-        return false;
+        allRegistered = false;
+        return;
     }
     if (!exists)
     {
         icWarn("SBMD specs directory does not exist: %s", dirPath.c_str());
-        return false;
+        allRegistered = false;
+        return;
     }
 
     bool isDir = std::filesystem::is_directory(dirPath, ec);
     if (ec)
     {
         icError("Failed to check if SBMD path is a directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        return false;
+        allRegistered = false;
+        return;
     }
     if (!isDir)
     {
         icWarn("SBMD specs path is not a directory: %s", dirPath.c_str());
-        return false;
+        allRegistered = false;
+        return;
     }
 
     std::filesystem::directory_iterator dirIterator(dirPath, ec);
     if (ec)
     {
         icError("Failed to open SBMD directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        return false;
+        allRegistered = false;
+        return;
     }
 
     try
@@ -165,6 +167,4 @@ bool SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
     }
-
-    return allRegistered;
 }

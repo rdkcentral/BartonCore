@@ -29,7 +29,7 @@
  * - TLV encoding/decoding for Matter types
  * - Helper functions for constructing invoke/write responses
  *
- * This bundle is always loaded into the QuickJS context for SBMD scripts,
+ * This bundle is always loaded into the JS context for SBMD scripts,
  * providing a consistent interface regardless of whether matter.js is used.
  */
 
@@ -300,6 +300,40 @@
      * Read a single TLV element
      * @returns {{tag: number|null, value: any, type: number}}
      */
+
+    // Detect host endianness once at load time (no DataView needed)
+    var _isHostLE = (function() {
+        var buf = new ArrayBuffer(2);
+        new Uint8Array(buf)[0] = 1;
+        return new Uint16Array(buf)[0] === 1;
+    })();
+
+    // Helper: decode float32/float64 from little-endian bytes, regardless of host endianness
+    function decodeFloatLE(bytes, isDouble) {
+        // Use DataView if available
+        if (typeof DataView !== 'undefined') {
+            var dv = new DataView(bytes.buffer, bytes.byteOffset || 0, bytes.length);
+            return isDouble ? dv.getFloat64(0, true) : dv.getFloat32(0, true);
+        }
+        if (_isHostLE) {
+            // Data is LE, host is LE — direct view if aligned, copy otherwise
+            var align = isDouble ? 8 : 4;
+            if (bytes.byteOffset % align === 0) {
+                return isDouble
+                    ? new Float64Array(bytes.buffer, bytes.byteOffset, 1)[0]
+                    : new Float32Array(bytes.buffer, bytes.byteOffset, 1)[0];
+            }
+            var arr = new Uint8Array(align);
+            for (var i = 0; i < align; i++) arr[i] = bytes[i];
+            return isDouble ? new Float64Array(arr.buffer)[0] : new Float32Array(arr.buffer)[0];
+        }
+        // BE host: reverse bytes
+        var len = isDouble ? 8 : 4;
+        var rev = new Uint8Array(len);
+        for (var i = 0; i < len; i++) rev[i] = bytes[len - 1 - i];
+        return isDouble ? new Float64Array(rev.buffer)[0] : new Float32Array(rev.buffer)[0];
+    }
+
     TlvReader.prototype.readElement = function() {
         var control = this.readByte();
         var elementType = control & CONTROL_ELEMENT_TYPE_MASK;
@@ -340,13 +374,11 @@
         } else if (baseType === TLV_TYPE.BOOL_TRUE) {
             value = true;
         } else if (baseType === TLV_TYPE.FLOAT) {
-            // Read float32: copy bytes into a fresh ArrayBuffer, overlay Float32Array
             var floatBytes = this.readBytes(4);
-            value = new Float32Array(floatBytes.buffer)[0];
+            value = decodeFloatLE(floatBytes, false);
         } else if (baseType === TLV_TYPE.DOUBLE) {
-            // Read float64: copy bytes into a fresh ArrayBuffer, overlay Float64Array
             var doubleBytes = this.readBytes(8);
-            value = new Float64Array(doubleBytes.buffer)[0];
+            value = decodeFloatLE(doubleBytes, true);
         } else if (baseType >= 0x0C && baseType <= 0x0F) {
             // UTF-8 string
             var strLen = this.readLength(baseType - 0x0C);
