@@ -165,9 +165,6 @@
          * @returns {Uint8Array} Decoded bytes
          */
         decode: function(base64) {
-            // Handle padding
-            var padding = (base64.length >= 2 && base64.substring(base64.length - 2) === '==') ? 2 :
-                           (base64.length >= 1 && base64.substring(base64.length - 1) === '=') ? 1 : 0;
             var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
             var bytes = [];
 
