@@ -53,6 +53,6 @@ namespace barton
         /**
          * Load and register SBMD drivers from a single directory.
          */
-        static bool RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+        static void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
     };
 } //namespace barton
