@@ -143,14 +143,14 @@ namespace barton
         {
             // clusterCallbacks is read from Matter-thread callbacks, so it must be mutated on the Matter thread
             // as well to avoid race conditions
-            Matter::RunOnMatterThread([this, key, callback] {
+            Matter::RunOnMatterStack([this, key, callback] {
                 clusterCallbacks[key] = callback;
             });
         }
 
         void RemoveClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key)
         {
-            Matter::RunOnMatterThread([this, key] {
+            Matter::RunOnMatterStack([this, key] {
                 clusterCallbacks.erase(key);
             });
         }

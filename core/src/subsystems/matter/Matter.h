@@ -184,10 +184,10 @@ namespace barton
         inline bool IsRunning() { return state == State::running; }
 
         /**
-         * Execute work on the Matter thread. If already on the Matter thread, executes
-         * inline. Otherwise, schedules onto the Matter thread and blocks until complete.
+         * Execute work on the Matter stack. If already on the Matter stack, executes
+         * inline. Otherwise, schedules onto the Matter stack and blocks until complete.
          */
-        static void RunOnMatterThread(std::function<void()> work);
+        static void RunOnMatterStack(std::function<void()> work);
 
     private:
         static Matter *instance;
