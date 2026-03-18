@@ -32,6 +32,7 @@
 #include "app/ConcreteAttributePath.h"
 #include "lib/core/DataModelTypes.h"
 #include <string>
+#include <app-common/zap-generated/ids/Clusters.h>
 
 namespace barton
 {

@@ -1440,18 +1440,35 @@ void Matter::RunOnMatterStack(std::function<void()> work)
         std::future<void> future = done.get_future();
 
         CHIP_ERROR err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&work, &done]() {
-            work();
-            done.set_value();
+            try
+            {
+                work();
+                done.set_value();
+            }
+            catch (...)
+            {
+                done.set_exception(std::current_exception());
+            }
         });
 
         if (err != CHIP_NO_ERROR)
         {
-            ChipLogError(
-                DeviceLayer, "RunOnMatterThread: ScheduleLambda failed: %" CHIP_ERROR_FORMAT, err.Format());
+            icError("RunOnMatterStack: ScheduleLambda failed: %" CHIP_ERROR_FORMAT, err.Format());
             done.set_value();
         }
 
-        future.wait();
+        try
+        {
+            future.get();
+        }
+        catch (const std::exception & e)
+        {
+            icError("RunOnMatterThread: work() threw exception: %s", e.what());
+        }
+        catch (...)
+        {
+            icError("RunOnMatterThread: work() threw unknown exception");
+        }
     }
 }
 

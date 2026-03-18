@@ -666,7 +666,7 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
     identifySecondsResource->deviceUuid = strdup(device->uuid);
     identifySecondsResource->type = strdup(RESOURCE_TYPE_SECONDS);
     identifySecondsResource->mode =
-        RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+        RESOURCE_MODE_READABLE | RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
     identifySecondsResource->cachingPolicy = CACHING_POLICY_ALWAYS;
     linkedListAppend(device->resources, identifySecondsResource);
 
@@ -939,7 +939,7 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
     // Initialize cluster servers for all common clusters that are present on this device,
     // so that the cached subscription data flows through the correct callbacks for
     // resource population.
-    static const chip::ClusterId alwaysPresentClusters[] = {
+    static const chip::ClusterId commonClusters[] = {
         chip::app::Clusters::OtaSoftwareUpdateRequestor::Id,
         chip::app::Clusters::BasicInformation::Id,
         chip::app::Clusters::GeneralDiagnostics::Id,
@@ -951,11 +951,13 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 
     if (deviceCache != nullptr)
     {
-        for (auto clusterId : alwaysPresentClusters)
+        for (auto clusterId : commonClusters)
         {
             auto endpoints = FindServerEndpoints(deviceId, clusterId);
             if (!endpoints.empty())
             {
+                // TODO: Devices can expose some of these clusters on multiple endpoints, but for now, we are just
+                // handling the case of one endpoint per cluster.
                 GetServerById(deviceId, endpoints.front(), clusterId);
             }
             else

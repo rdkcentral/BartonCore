@@ -135,16 +135,17 @@ namespace barton
         /**
          * Set the callback handler for common cluster events and attribute changes.
          *
-         * @param callback Weak pointer to the callback for a particular device+endpoint+cluster.
-         *                 The cache does not take ownership; expired weak pointers are erased on dispatch.
+         * @param key A tuple containing the endpoint ID and cluster ID.
+         * @param clusterCallback Weak pointer to the callback for a particular device+endpoint+cluster.
+         *                        The cache does not take ownership; expired weak pointers are erased on dispatch.
          */
         void SetClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key,
-                                std::weak_ptr<chip::app::ClusterStateCache::Callback> callback)
+                                std::weak_ptr<chip::app::ClusterStateCache::Callback> clusterCallback)
         {
             // clusterCallbacks is read from Matter-thread callbacks, so it must be mutated on the Matter thread
             // as well to avoid race conditions
-            Matter::RunOnMatterStack([this, key, callback] {
-                clusterCallbacks[key] = callback;
+            Matter::RunOnMatterStack([this, key, clusterCallback] {
+                clusterCallbacks[key] = clusterCallback;
             });
         }
 
