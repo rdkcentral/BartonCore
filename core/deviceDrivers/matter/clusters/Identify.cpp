@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2025 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Created by Raiyan Chowdhury on 3/4/26.
+// Created by Raiyan Chowdhury on 3/4/2026.
 //
 
 #define LOG_TAG     "IdentifyCluster"

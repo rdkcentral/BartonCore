@@ -105,33 +105,7 @@ namespace barton
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
         const char *GetDeviceClass() const;
 
-        virtual bool AddDevice(std::unique_ptr<MatterDevice> device)
-        {
-            bool result = false;
-
-            const std::string deviceId = device->GetDeviceId();
-
-            {
-                std::lock_guard<std::mutex> lock(devicesMutex);
-                auto deviceResult = devices.emplace(deviceId, std::move(device));
-                result = deviceResult.second;
-            }
-
-            // Initialize common clusters servers if available.
-            GetAnyServerById(deviceId, chip::app::Clusters::OtaSoftwareUpdateRequestor::Id);
-            GetAnyServerById(deviceId, chip::app::Clusters::BasicInformation::Id);
-            GetAnyServerById(deviceId, chip::app::Clusters::GeneralDiagnostics::Id);
-            // TODO: There can be multiple Identify clusters on different endpoints, but for now, we are only handling
-            // the scenario with one.
-            GetAnyServerById(deviceId, chip::app::Clusters::Identify::Id);
-            // TODO: There can be multiple PowerSource clusters on different endpoints, e.g. on a bridge which has one
-            // device per endpoint with its own power source. What you would do is query the PowerSourceConfiguration
-            // cluster for a list of endpoints that have a PowerSource cluster. For now, we are only handling the
-            // scenario in which there is just one PowerSource cluster on anything we commission.
-            GetAnyServerById(deviceId, chip::app::Clusters::PowerSource::Id);
-
-            return result && InitializeClustersForDevice(deviceId);
-        }
+        virtual bool AddDevice(std::unique_ptr<MatterDevice> device);
 
         virtual bool DeviceRemoved(icDevice *device);
 
@@ -701,10 +675,18 @@ namespace barton
                 deviceDriver.OnDeviceWorkCompleted(context, success);
             };
 
+            void RssiReported(std::string &deviceUuid, int8_t *rssi) override;
+
             void RssiReadComplete(const std::string &deviceUuid,
                                   const int8_t *rssi,
                                   bool success,
                                   void *asyncContext) override;
+
+            // Helper function used to reduce code duplication between RssiReported and RssiReadComplete.
+            void UpdateRssiResources(
+                const std::string &deviceUuid,
+                const int8_t *rssi,
+                std::function<void(const char *rssiStr, const char *linkScoreStr, const char *linkQuality)> onUpdated);
 
         private:
             MatterDeviceDriver &deviceDriver;
@@ -729,7 +711,7 @@ namespace barton
 
         // This contains only core/standard clusters Barton needs for basic operation.
         // Device-specific clusters are handled by SBMD scripting.
-        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
+        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::shared_ptr<MatterCluster>>
             clusterServers;
 
         std::unordered_set<void *> storedContexts;
