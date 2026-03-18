@@ -630,11 +630,6 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
         linkQualityResource->mode = RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
         linkQualityResource->cachingPolicy = CACHING_POLICY_ALWAYS;
         linkedListAppend(device->resources, linkQualityResource);
-
-        // Since this is where we learn that the device is on Wi-Fi, we can use this opportunity to initialize this
-        // cluster server.
-        // TODO: This probably belongs in a different method, but this is the easiest spot for it right now.
-        GetAnyServerById(device->uuid, chip::app::Clusters::WiFiNetworkDiagnostics::Id);
     }
 
     bool isBatteryPowered = false;
@@ -929,6 +924,47 @@ bool MatterDeviceDriver::AddDeviceIfRequired(const std::string &deviceUuid, uint
     return true;
 }
 
+bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
+{
+    bool result = false;
+
+    const std::string deviceId = device->GetDeviceId();
+
+    {
+        std::lock_guard<std::mutex> lock(devicesMutex);
+        auto deviceResult = devices.emplace(deviceId, std::move(device));
+        result = deviceResult.second;
+    }
+
+    // Initialize cluster servers for all common clusters that are present on this device,
+    // so that the cached subscription data flows through the correct callbacks for
+    // resource population.
+    static const chip::ClusterId alwaysPresentClusters[] = {
+        chip::app::Clusters::OtaSoftwareUpdateRequestor::Id,
+        chip::app::Clusters::BasicInformation::Id,
+        chip::app::Clusters::GeneralDiagnostics::Id,
+        chip::app::Clusters::Identify::Id,
+        chip::app::Clusters::PowerSource::Id,
+    };
+
+    for (auto clusterId : alwaysPresentClusters)
+    {
+        GetAnyServerById(deviceId, clusterId);
+    }
+
+    auto deviceCache = GetDeviceDataCache(deviceId);
+    if (deviceCache != nullptr)
+    {
+        std::string networkType;
+        if (deviceCache->GetNetworkType(networkType) == CHIP_NO_ERROR && networkType == NETWORK_TYPE_WIFI)
+        {
+            GetAnyServerById(deviceId, chip::app::Clusters::WiFiNetworkDiagnostics::Id);
+        }
+    }
+
+    return result;
+}
+
 static bool configureDevice(void *self, icDevice *device, DeviceDescriptor *descriptor)
 {
     return static_cast<MatterDeviceDriver *>(self)->ConfigureDevice(device, descriptor);
@@ -1120,7 +1156,7 @@ MatterCluster *MatterDeviceDriver::GetAnyServerById(std::string const &deviceUui
     }
     else
     {
-        icDebug("Cluster %#" PRIx32 " not present for device %s", clusterId, deviceUuid.c_str());
+        icError("Failed to locate cluster %#" PRIx32 " endpoint ID for device %s", clusterId, deviceUuid.c_str());
     }
 
     return server;
@@ -1227,36 +1263,38 @@ MatterDeviceDriver::GetServerById(std::string const &deviceUuid, chip::EndpointI
 
     if (serverIt == clusterServers.end())
     {
-        std::unique_ptr<MatterCluster> serverRef;
+        std::shared_ptr<MatterCluster> serverRef;
 
         switch (clusterId)
         {
             case OtaSoftwareUpdateRequestor::Id:
-                serverRef = std::make_unique<OTARequestor>(
+                serverRef = MatterCluster::Create<OTARequestor>(
                     (OTARequestor::EventHandler *) &otaRequestorEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::BasicInformation::Id:
-                serverRef = std::make_unique<BasicInformation>(&basicInfoEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef = MatterCluster::Create<BasicInformation>(
+                    &basicInfoEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::GeneralDiagnostics::Id:
-                serverRef =
-                    std::make_unique<GeneralDiagnostics>(&generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef = MatterCluster::Create<GeneralDiagnostics>(
+                    &generalDiagnosticsEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::PowerSource::Id:
-                serverRef = std::make_unique<PowerSource>(&powerSourceEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef = MatterCluster::Create<PowerSource>(
+                    &powerSourceEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::WiFiNetworkDiagnostics::Id:
-                serverRef = std::make_unique<WifiNetworkDiagnostics>(
+                serverRef = MatterCluster::Create<WifiNetworkDiagnostics>(
                     &wifiDiagnosticsClusterEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             case chip::app::Clusters::Identify::Id:
-                serverRef =
-                    std::make_unique<Identify>(&identifyClusterEventHandler, deviceUuid, endpointId, deviceDataCache);
+                serverRef = MatterCluster::Create<Identify>(
+                    &identifyClusterEventHandler, deviceUuid, endpointId, deviceDataCache);
                 break;
 
             default:
@@ -1410,20 +1448,16 @@ void MatterDeviceDriver::OtaRequestorEventHandler::OnVersionApplied(OTARequestor
     }
 }
 
-void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(const std::string &deviceUuid,
-                                                                              const int8_t *rssi,
-                                                                              bool success,
-                                                                              void *asyncContext)
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::UpdateRssiResources(
+    const std::string &deviceUuid,
+    const int8_t *rssi,
+    std::function<void(const char *rssiStr, const char *linkScoreStr, const char *linkQuality)> onUpdated)
 {
-    auto readContext = static_cast<ClusterReadContext *>(asyncContext);
-
-    // Per Matter 1.4 11.15.6, the RSSI attribute is not included in subscription reports, so changes to the RSSI
-    // and related resources must be updated here.
-
     g_autofree char *rssiStr = nullptr;
     g_autofree char *linkScoreStr = nullptr;
     uint8_t linkScore = 0;
     g_autofree char *linkQuality = nullptr;
+
     if (rssi)
     {
         rssiStr = g_strdup_printf("%" PRId8, *rssi);
@@ -1436,33 +1470,60 @@ void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(co
         linkQuality = g_strdup(LINK_QUALITY_UNKNOWN);
     }
 
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr, nullptr);
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_SCORE, linkScoreStr, nullptr);
+    updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_QUALITY, linkQuality, nullptr);
+
+    if (onUpdated)
+    {
+        onUpdated(rssiStr, linkScoreStr, linkQuality);
+    }
+}
+
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReported(std::string &deviceUuid, int8_t *rssi)
+{
+    UpdateRssiResources(deviceUuid, rssi, nullptr);
+}
+
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(const std::string &deviceUuid,
+                                                                              const int8_t *rssi,
+                                                                              bool success,
+                                                                              void *asyncContext)
+{
+    auto readContext = static_cast<ClusterReadContext *>(asyncContext);
+
     if (success)
     {
-        updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_FERSSI, rssiStr, nullptr);
-        updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_SCORE, linkScoreStr, nullptr);
-        updateResource(deviceUuid.c_str(), nullptr, COMMON_DEVICE_RESOURCE_LINK_QUALITY, linkQuality, nullptr);
-
-        // All three of these resources rely on the value of the RSSI attribute, but the readResource() call was only
-        // invoked for one of them, so the value must be set to that of the requested resource.
-        if (readContext->resourceId != nullptr)
-        {
-            if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_FERSSI) == 0)
-            {
-                *readContext->value = g_strdup(rssiStr);
-            }
-            else if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_LINK_SCORE) == 0)
-            {
-                *readContext->value = g_strdup(linkScoreStr);
-            }
-            else if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_LINK_QUALITY) == 0)
-            {
-                *readContext->value = g_strdup(linkQuality);
-            }
-            else
-            {
-                icError("Unexpected resource ID %s in RSSI read context", readContext->resourceId);
-            }
-        }
+        // Per Matter 1.4 11.15.6, changes to the RSSI attribute value are not included in subscription reports, only in
+        // the initial priming report after a subscription is established and in read responses. The only way to stay
+        // up to date on RSSI changes is to read the attribute on demand, so the related resources must be updared after
+        // each read as if in response to a subscription report (allowing us to e.g. poll it on demand)
+        // After doing so, the read context's value can be set to fulfill the resource read request that triggered this
+        // callback.
+        UpdateRssiResources(
+            deviceUuid, rssi, [&readContext](const char *rssiStr, const char *linkScoreStr, const char *linkQuality) {
+                // All three of these resources rely on the value of the RSSI attribute, but the readResource() call was
+                // only invoked for one of them, so the value must be set to that of the requested resource.
+                if (readContext->resourceId != nullptr)
+                {
+                    if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_FERSSI) == 0)
+                    {
+                        *readContext->value = g_strdup(rssiStr);
+                    }
+                    else if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_LINK_SCORE) == 0)
+                    {
+                        *readContext->value = g_strdup(linkScoreStr);
+                    }
+                    else if (g_strcmp0(readContext->resourceId, COMMON_DEVICE_RESOURCE_LINK_QUALITY) == 0)
+                    {
+                        *readContext->value = g_strdup(linkQuality);
+                    }
+                    else
+                    {
+                        icError("Unexpected resource ID %s in RSSI read context", readContext->resourceId);
+                    }
+                }
+            });
     }
 
     deviceDriver.OnDeviceWorkCompleted(readContext->driverContext, success);

@@ -45,6 +45,7 @@
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
 #include <platform/Linux/CHIPLinuxStorage.h>
 #include <thread>
+#include <future>
 
 #include <lib/support/PersistedCounter.h>
 
@@ -181,6 +182,33 @@ namespace barton
         inline chip::FabricIndex GetFabricIndex() { return myFabricIndex; }
 
         inline bool IsRunning() { return state == State::running; }
+
+        /**
+         * Execute work on the Matter thread. If already on the Matter thread, executes
+         * inline. Otherwise, schedules onto the Matter thread and blocks until complete.
+         */
+        static void RunOnMatterThread(std::function<void()> work)
+        {
+            if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
+            {
+                work();
+            }
+            else
+            {
+                std::promise<void> done;
+                std::future<void> future = done.get_future();
+                chip::DeviceLayer::PlatformMgr().ScheduleWork(
+                    [](intptr_t arg) {
+                        auto *ctx = reinterpret_cast<std::pair<std::function<void()>, std::promise<void> *> *>(arg);
+                        ctx->first();
+                        ctx->second->set_value();
+                        delete ctx;
+                    },
+                    reinterpret_cast<intptr_t>(
+                        new std::pair<std::function<void()>, std::promise<void> *>(std::move(work), &done)));
+                future.wait();
+            }
+        }
 
     private:
         static Matter *instance;
