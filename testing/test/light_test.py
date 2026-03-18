@@ -136,18 +136,6 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     # from subscribing to the device.
     identify_seconds_uri = f"/{device_uuid}/r/identifySeconds"
 
-    def parse_int_value(value):
-        """
-        Try to parse the given value as an integer.
-
-        Returns the parsed integer on success, or None if the value cannot be parsed.
-        """
-        try:
-            # Convert to string, strip whitespace, and attempt to parse.
-            return int(str(value).strip())
-        except (TypeError, ValueError):
-            return None
-
     def wait_for_condition(client, uri, predicate, timeout=3, poll_interval=0.1):
         """Poll for a resource value until predicate(value) is True or timeout is reached."""
         start = time.time()
@@ -158,11 +146,11 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
             time.sleep(poll_interval)
         return None
 
-    # Wait for the initial identifySeconds resource value to be available and parseable as an integer.
+    # Wait for the initial identifySeconds resource value to be available and parse it as an integer.
     initial_identify_seconds = wait_for_condition(
         default_environment.get_client(),
         identify_seconds_uri,
-        lambda v: parse_int_value(v) is not None,
+        lambda v: v is not None,
         timeout=3,
         poll_interval=0.1,
     )
@@ -173,10 +161,12 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     logger.info(f"Initial identify seconds: {initial_identify_seconds}")
 
     # Parse the string value to get the uint16 value
-    initial_value = parse_int_value(initial_identify_seconds)
-    assert (
-        initial_value is not None
-    ), f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
+    try:
+        initial_value = int(initial_identify_seconds)
+    except ValueError:
+        assert (
+            False
+        ), f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
 
     # Calculate a different uint16 value to write (ensure it's within uint16 range: 0-65535)
     new_value = (initial_value + 1) if initial_value < 65535 else 0
@@ -196,14 +186,10 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     # Read the identifySeconds resource again from Barton.
     # This should have been updated as a result of receiving the attribute report from the
     # device after its identify-time attribute was written over.
-    def matches_new_value(v):
-        parsed = parse_int_value(v)
-        return parsed is not None and parsed == new_value
-
     updated_identify_seconds = wait_for_condition(
         default_environment.get_client(),
         identify_seconds_uri,
-        matches_new_value,
+        lambda v: (v is not None and v.isdigit() and int(v) == new_value),
         timeout=3,
         poll_interval=0.1,
     )
