@@ -600,11 +600,11 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
 
             // Trigger OnReportBegin on all registered callbacks for common clusters first,
             // then for all other device-specific clusters.
-            for (const auto &[key, commonClusterCallback] : self->commonClusterCallbacks)
+            for (const auto &[key, clusterCallback] : self->clusterCallbacks)
             {
-                if (commonClusterCallback)
+                if (clusterCallback)
                 {
-                    commonClusterCallback->OnReportBegin();
+                    clusterCallback->OnReportBegin();
                 }
             }
             self->callback->OnReportBegin();
@@ -646,11 +646,11 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
 
             // Trigger OnReportEnd on all registered callbacks for common clusters first,
             // then for all other device-specific clusters.
-            for (const auto &[key, commonClusterCallback] : self->commonClusterCallbacks)
+            for (const auto &[key, clusterCallback] : self->clusterCallbacks)
             {
-                if (commonClusterCallback)
+                if (clusterCallback)
                 {
-                    commonClusterCallback->OnReportEnd();
+                    clusterCallback->OnReportEnd();
                 }
             }
             self->callback->OnReportEnd();

@@ -38,18 +38,13 @@ namespace barton
     class WifiNetworkDiagnostics : public MatterCluster
     {
     public:
-        WifiNetworkDiagnostics(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
-                              std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::WiFiNetworkDiagnostics::Id, deviceDataCache)
-        {
-        }
-
         /**
          * Base EventHandler with cluster specific additions
          */
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
+            virtual void RssiReported(std::string &deviceUuid, int8_t *rssi) {};
             virtual void RssiReadComplete(const std::string &deviceUuid,
                                           const int8_t *rssi,
                                           bool success,
@@ -59,5 +54,19 @@ namespace barton
         bool GetRssi(void *context,
                      chip::Messaging::ExchangeManager &exchangeMgr,
                      const chip::SessionHandle &sessionHandle);
+
+        void OnAttributeChanged(chip::app::ClusterStateCache *cache,
+                                const chip::app::ConcreteAttributePath &path) override;
+
+    protected:
+        WifiNetworkDiagnostics(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                              std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::WiFiNetworkDiagnostics::Id, deviceDataCache)
+        {
+        }
+
+    private:
+        template <typename T, typename... Args>
+        friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton
