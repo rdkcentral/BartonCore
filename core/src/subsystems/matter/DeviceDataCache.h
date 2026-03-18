@@ -135,11 +135,11 @@ namespace barton
         /**
          * Set the callback handler for common cluster events and attribute changes.
          *
-         * @param callback Pointer to the callback for a particular device+endpoint+cluster.
-         *                 The cache does not take ownership.
+         * @param callback Weak pointer to the callback for a particular device+endpoint+cluster.
+         *                 The cache does not take ownership; expired weak pointers are erased on dispatch.
          */
         void SetClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key,
-                                std::shared_ptr<chip::app::ClusterStateCache::Callback> callback)
+                                std::weak_ptr<chip::app::ClusterStateCache::Callback> callback)
         {
             // clusterCallbacks is read from Matter-thread callbacks, so it must be mutated on the Matter thread
             // as well to avoid race conditions
@@ -242,8 +242,16 @@ namespace barton
 
             auto key = std::make_tuple(aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
             auto it = clusterCallbacks.find(key);
-            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback =
-                (it != clusterCallbacks.end()) ? it->second : nullptr;
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
 
             if (clusterCallback != nullptr)
             {
@@ -277,8 +285,16 @@ namespace barton
         {
             auto key = std::make_tuple(aPath.mEndpointId, aPath.mClusterId);
             auto it = clusterCallbacks.find(key);
-            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback =
-                (it != clusterCallbacks.end()) ? it->second : nullptr;
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
 
             if (clusterCallback != nullptr && aStatus.IsSuccess())
             {
@@ -365,7 +381,7 @@ namespace barton
         // These callback handlers are for events and attributes on specific clusters that are
         // not encompassed in the overall callback handler above.
         // endpoint id + cluster id to ClusterStateCache Callback.
-        std::map<std::tuple<chip::EndpointId, chip::ClusterId>, std::shared_ptr<chip::app::ClusterStateCache::Callback>>
+        std::map<std::tuple<chip::EndpointId, chip::ClusterId>, std::weak_ptr<chip::app::ClusterStateCache::Callback>>
             clusterCallbacks;
 
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
