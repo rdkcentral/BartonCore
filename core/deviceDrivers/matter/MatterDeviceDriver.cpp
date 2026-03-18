@@ -947,14 +947,23 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
         chip::app::Clusters::PowerSource::Id,
     };
 
-    for (auto clusterId : alwaysPresentClusters)
-    {
-        GetAnyServerById(deviceId, clusterId);
-    }
-
     auto deviceCache = GetDeviceDataCache(deviceId);
+
     if (deviceCache != nullptr)
     {
+        for (auto clusterId : alwaysPresentClusters)
+        {
+            auto endpoints = FindServerEndpoints(deviceId, clusterId);
+            if (!endpoints.empty())
+            {
+                GetServerById(deviceId, endpoints.front(), clusterId);
+            }
+            else
+            {
+                icDebug("Common cluster %#" PRIx32 " not present on device %s, skipping", clusterId, deviceId.c_str());
+            }
+        }
+
         std::string networkType;
         if (deviceCache->GetNetworkType(networkType) == CHIP_NO_ERROR && networkType == NETWORK_TYPE_WIFI)
         {
@@ -1480,7 +1489,8 @@ void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::UpdateRssiResources
     }
 }
 
-void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReported(std::string &deviceUuid, int8_t *rssi)
+void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReported(const std::string &deviceUuid,
+                                                                          const int8_t *rssi)
 {
     UpdateRssiResources(deviceUuid, rssi, nullptr);
 }
@@ -1496,7 +1506,7 @@ void MatterDeviceDriver::WifiNetworkDiagnosticsEventHandler::RssiReadComplete(co
     {
         // Per Matter 1.4 11.15.6, changes to the RSSI attribute value are not included in subscription reports, only in
         // the initial priming report after a subscription is established and in read responses. The only way to stay
-        // up to date on RSSI changes is to read the attribute on demand, so the related resources must be updared after
+        // up to date on RSSI changes is to read the attribute on demand, so the related resources must be updated after
         // each read as if in response to a subscription report (allowing us to e.g. poll it on demand)
         // After doing so, the read context's value can be set to fulfill the resource read request that triggered this
         // callback.
