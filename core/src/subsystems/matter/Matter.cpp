@@ -1422,7 +1422,7 @@ bool Matter::ClearAccessRestrictionList()
     return success;
 }
 
-void Matter::RunOnMatterThread(std::function<void()> work)
+void Matter::RunOnMatterStack(std::function<void()> work)
 {
     if (!Matter::GetInstance().IsRunning())
     {
