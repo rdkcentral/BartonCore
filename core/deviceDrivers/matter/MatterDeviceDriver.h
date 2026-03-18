@@ -406,13 +406,6 @@ namespace barton
             });
         }
 
-        /**
-         * @brief Create and register clusters for a given device.
-         *
-         * @return true if clusters were created successfully
-         */
-        virtual bool InitializeClustersForDevice(const std::string &deviceUuid) { return true; };
-
         // Asynchronous DeviceDriver interface entrypoints
 
         /**
@@ -675,7 +668,7 @@ namespace barton
                 deviceDriver.OnDeviceWorkCompleted(context, success);
             };
 
-            void RssiReported(std::string &deviceUuid, int8_t *rssi) override;
+            void RssiReported(const std::string &deviceUuid, const int8_t *rssi) override;
 
             void RssiReadComplete(const std::string &deviceUuid,
                                   const int8_t *rssi,

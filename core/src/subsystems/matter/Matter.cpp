@@ -1422,6 +1422,39 @@ bool Matter::ClearAccessRestrictionList()
     return success;
 }
 
+void Matter::RunOnMatterThread(std::function<void()> work)
+{
+    if (!Matter::GetInstance().IsRunning())
+    {
+        icError("Matter subsystem is down!");
+        return;
+    }
+
+    if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
+    {
+        work();
+    }
+    else
+    {
+        std::promise<void> done;
+        std::future<void> future = done.get_future();
+
+        CHIP_ERROR err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&work, &done]() {
+            work();
+            done.set_value();
+        });
+
+        if (err != CHIP_NO_ERROR)
+        {
+            ChipLogError(
+                DeviceLayer, "RunOnMatterThread: ScheduleLambda failed: %" CHIP_ERROR_FORMAT, err.Format());
+            done.set_value();
+        }
+
+        future.wait();
+    }
+}
+
 // Note: Because we have initialized two parts of the stack (commissioner and commissionee), the callback functions
 // below are invoked twice. As long as they're attempting to perform the exact same initialization each time, we can
 // safely ignore calls after the first as a workaround.

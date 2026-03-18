@@ -44,7 +44,7 @@ namespace barton
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void RssiReported(std::string &deviceUuid, int8_t *rssi) {};
+            virtual void RssiReported(const std::string &deviceUuid, const int8_t *rssi) {};
             virtual void RssiReadComplete(const std::string &deviceUuid,
                                           const int8_t *rssi,
                                           bool success,

@@ -129,10 +129,8 @@ namespace barton
             if (deviceDataCache != nullptr)
             {
                 auto key = std::make_tuple(endpointId, clusterId);
-                if (deviceDataCache != nullptr)
-                {
-                    deviceDataCache->SetClusterCallback(key, shared_from_this());
-                }
+                deviceDataCache->SetClusterCallback(
+                    key, std::weak_ptr<chip::app::ClusterStateCache::Callback>(shared_from_this()));
             }
         }
 
