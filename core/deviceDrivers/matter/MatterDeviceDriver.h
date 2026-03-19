@@ -688,14 +688,14 @@ namespace barton
                                   bool success,
                                   void *asyncContext) override;
 
+        private:
+            MatterDeviceDriver &deviceDriver;
+
             // Helper function used to reduce code duplication between RssiReported and RssiReadComplete.
             void UpdateRssiResources(
                 const std::string &deviceUuid,
                 const int8_t *rssi,
                 std::function<void(const char *rssiStr, const char *linkScoreStr, const char *linkQuality)> onUpdated);
-
-        private:
-            MatterDeviceDriver &deviceDriver;
         } wifiDiagnosticsClusterEventHandler;
 
         class IdentifyEventHandler : public Identify::EventHandler
