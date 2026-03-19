@@ -50,7 +50,7 @@ namespace barton
 {
 
     // Static member initialization
-    const char *SbmdUtilsLoader::source_ = "none";
+    const char *SbmdUtilsLoader::source = "none";
 
     namespace
     {
@@ -82,7 +82,7 @@ namespace barton
         // Load from embedded bundle
         if (LoadFromEmbedded(ctx))
         {
-            source_ = "embedded";
+            source = "embedded";
             icInfo("SBMD utilities loaded from embedded");
             return true;
         }
@@ -102,7 +102,7 @@ namespace barton
 
     const char *SbmdUtilsLoader::GetSource()
     {
-        return source_;
+        return source;
     }
 
     bool SbmdUtilsLoader::LoadFromEmbedded(JSContext *ctx)

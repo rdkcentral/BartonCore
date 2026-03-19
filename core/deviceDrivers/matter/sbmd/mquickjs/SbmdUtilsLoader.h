@@ -94,7 +94,7 @@ namespace barton
         static bool LoadFromEmbedded(JSContext *ctx);
         static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length);
 
-        static const char *source_;
+        static const char *source;
     };
 
 } // namespace barton
