@@ -42,7 +42,7 @@ struct _BCoreInitializeParamsContainer
     gchar *firmwareFileDir;
     gchar *matterStorageDir;
     gchar *matterAttestationTrustStoreDir;
-    gchar *sbmdDir;
+    gchar *sbmdDirs;
     gchar *accountId;
 };
 
@@ -62,7 +62,7 @@ static void b_core_initialize_params_container_finalize(GObject *object)
     g_free(self->firmwareFileDir);
     g_free(self->matterStorageDir);
     g_free(self->matterAttestationTrustStoreDir);
-    g_free(self->sbmdDir);
+    g_free(self->sbmdDirs);
     g_free(self->accountId);
 
     G_OBJECT_CLASS(b_core_initialize_params_container_parent_class)->finalize(object);
@@ -96,8 +96,8 @@ b_core_initialize_params_get_property(GObject *object, guint property_id, GValue
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR:
             g_value_set_string(value, self->matterAttestationTrustStoreDir);
             break;
-        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR:
-            g_value_set_string(value, self->sbmdDir);
+        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS:
+            g_value_set_string(value, self->sbmdDirs);
             break;
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID:
             g_value_set_string(value, self->accountId);
@@ -140,8 +140,8 @@ static void b_core_initialize_params_set_property(GObject *object,
             b_core_initialize_params_container_set_matter_attestation_trust_store_dir(
                 self, g_value_get_string(value));
             break;
-        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR:
-            b_core_initialize_params_container_set_sbmd_dir(self, g_value_get_string(value));
+        case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS:
+            b_core_initialize_params_container_set_sbmd_dirs(self, g_value_get_string(value));
             break;
         case B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID:
             b_core_initialize_params_container_set_account_id(self, g_value_get_string(value));
@@ -216,10 +216,10 @@ static void b_core_initialize_params_container_class_init(BCoreInitializeParamsC
                             NULL,
                             G_PARAM_READWRITE);
 
-    properties[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR] = g_param_spec_string(
-        B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR],
-        "SBMD Directory",
-        "The directory for SBMD specification files",
+    properties[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS] = g_param_spec_string(
+        B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS],
+        "SBMD Directories",
+        "The directories for SBMD specification files",
         NULL,
         G_PARAM_READWRITE);
 
@@ -245,7 +245,7 @@ static void b_core_initialize_params_container_init(BCoreInitializeParamsContain
     self->firmwareFileDir = NULL;
     self->matterStorageDir = NULL;
     self->matterAttestationTrustStoreDir = NULL;
-    self->sbmdDir = NULL;
+    self->sbmdDirs = NULL;
     self->accountId = NULL;
 }
 
@@ -326,11 +326,11 @@ gchar *b_core_initialize_params_container_get_matter_attestation_trust_store_dir
     return g_strdup(self->matterAttestationTrustStoreDir);
 }
 
-gchar *b_core_initialize_params_container_get_sbmd_dir(BCoreInitializeParamsContainer *self)
+gchar *b_core_initialize_params_container_get_sbmd_dirs(BCoreInitializeParamsContainer *self)
 {
     g_return_val_if_fail(self != NULL, NULL);
 
-    return g_strdup(self->sbmdDir);
+    return g_strdup(self->sbmdDirs);
 }
 
 gchar *b_core_initialize_params_container_get_account_id(BCoreInitializeParamsContainer *self)
@@ -415,12 +415,12 @@ void b_core_initialize_params_container_set_matter_attestation_trust_store_dir(
     self->matterAttestationTrustStoreDir = g_strdup(matterAttestationTrustStoreDir);
 }
 
-void b_core_initialize_params_container_set_sbmd_dir(BCoreInitializeParamsContainer *self, const gchar *sbmdDir)
+void b_core_initialize_params_container_set_sbmd_dirs(BCoreInitializeParamsContainer *self, const gchar *sbmdDirs)
 {
     g_return_if_fail(self != NULL);
 
-    g_free(self->sbmdDir);
-    self->sbmdDir = g_strdup(sbmdDir);
+    g_free(self->sbmdDirs);
+    self->sbmdDirs = g_strdup(sbmdDirs);
 }
 
 void b_core_initialize_params_container_set_account_id(BCoreInitializeParamsContainer *self,

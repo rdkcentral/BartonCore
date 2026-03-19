@@ -33,6 +33,8 @@
 #include "../MatterDriverFactory.h"
 
 #include <filesystem>
+#include <sstream>
+#include <string>
 
 extern "C" {
 #include "deviceServiceConfiguration.h"
@@ -45,55 +47,80 @@ bool SbmdFactory::RegisterDrivers()
 {
     bool allRegistered = true;
 
-    g_autofree gchar *sbmdDir = deviceServiceConfigurationGetSbmdDir();
-    if (sbmdDir == nullptr || sbmdDir[0] == '\0')
+    g_autofree gchar *sbmdDirs = deviceServiceConfigurationGetSbmdDirs();
+    if (sbmdDirs == nullptr || sbmdDirs[0] == '\0')
     {
 #ifdef BARTON_CONFIG_MATTER_SBMD_SPECS_DIR
-        icWarn("SBMD directory not configured via '%s' property. Falling back to default: %s",
-               B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR],
+        icWarn("SBMD directories not configured via '%s' property. Falling back to default: %s",
+               B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS],
                BARTON_CONFIG_MATTER_SBMD_SPECS_DIR);
 
-        // Transfer ownership to sbmdDir so g_autofree handles cleanup
-        g_clear_pointer(&sbmdDir, g_free);
-        sbmdDir = g_strdup(BARTON_CONFIG_MATTER_SBMD_SPECS_DIR);
+        // Transfer ownership to sbmdDirs so g_autofree handles cleanup
+        g_clear_pointer(&sbmdDirs, g_free);
+        sbmdDirs = g_strdup(BARTON_CONFIG_MATTER_SBMD_SPECS_DIR);
 #else
-        icError("SBMD directory not configured. Set the SBMD directory using the '%s' property on the initialize "
+        icError("SBMD directories not configured. Set the SBMD directories using the '%s' property on the initialize "
                 "params container.",
-                B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR]);
+                B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS]);
         return false;
 #endif
     }
 
+    // Split the semicolon-delimited list of directories
+    std::istringstream stream(sbmdDirs);
+    std::string dirPath;
+
+    while (std::getline(stream, dirPath, ';'))
+    {
+        // Skip empty entries (e.g., from trailing semicolons)
+        if (dirPath.empty())
+        {
+            continue;
+        }
+
+        RegisterDriversFromDirectory(dirPath, allRegistered);
+    }
+
+    return allRegistered;
+}
+
+void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
+{
     std::error_code ec;
-    bool exists = std::filesystem::exists(sbmdDir, ec);
+    bool exists = std::filesystem::exists(dirPath, ec);
     if (ec)
     {
-        icError("Failed to check if SBMD directory exists %s: %s", sbmdDir, ec.message().c_str());
-        return false;
+        icError("Failed to check if SBMD directory exists %s: %s", dirPath.c_str(), ec.message().c_str());
+        allRegistered = false;
+        return;
     }
     if (!exists)
     {
-        icWarn("SBMD specs directory does not exist: %s", sbmdDir);
-        return false;
+        icWarn("SBMD specs directory does not exist: %s", dirPath.c_str());
+        allRegistered = false;
+        return;
     }
 
-    bool isDir = std::filesystem::is_directory(sbmdDir, ec);
+    bool isDir = std::filesystem::is_directory(dirPath, ec);
     if (ec)
     {
-        icError("Failed to check if SBMD path is a directory %s: %s", sbmdDir, ec.message().c_str());
-        return false;
+        icError("Failed to check if SBMD path is a directory %s: %s", dirPath.c_str(), ec.message().c_str());
+        allRegistered = false;
+        return;
     }
     if (!isDir)
     {
-        icWarn("SBMD specs path is not a directory: %s", sbmdDir);
-        return false;
+        icWarn("SBMD specs path is not a directory: %s", dirPath.c_str());
+        allRegistered = false;
+        return;
     }
 
-    std::filesystem::directory_iterator dirIterator(sbmdDir, ec);
+    std::filesystem::directory_iterator dirIterator(dirPath, ec);
     if (ec)
     {
-        icError("Failed to open SBMD directory %s: %s", sbmdDir, ec.message().c_str());
-        return false;
+        icError("Failed to open SBMD directory %s: %s", dirPath.c_str(), ec.message().c_str());
+        allRegistered = false;
+        return;
     }
 
     try
@@ -140,6 +167,4 @@ bool SbmdFactory::RegisterDrivers()
         icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
     }
-
-    return allRegistered;
 }
