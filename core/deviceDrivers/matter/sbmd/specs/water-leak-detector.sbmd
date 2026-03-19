@@ -45,5 +45,5 @@ endpoints:
               name: "StateValue"
               type: "bool"
             script: |
-              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               return {output: (value === true) ? 'true' : 'false'};

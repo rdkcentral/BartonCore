@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "SbmdScript.h"
+#include "../SbmdScript.h"
 #include <map>
 #include <memory>
 #include <mutex>
@@ -47,17 +47,17 @@ namespace barton
      *
      * This class is thread-safe. All public methods are protected by an internal mutex.
      */
-    class QuickJsScript : public SbmdScript
+    class SbmdScriptImpl : public SbmdScript
     {
     public:
         /**
-         * Factory method to create a QuickJsScript instance.
+         * Factory method to create a SbmdScriptImpl instance.
          * @param deviceId The device identifier for this script context
-         * @return A unique_ptr to a QuickJsScript, or nullptr if initialization failed
+         * @return A unique_ptr to a SbmdScriptImpl, or nullptr if initialization failed
          */
-        static std::unique_ptr<QuickJsScript> Create(const std::string &deviceId);
+        static std::unique_ptr<SbmdScriptImpl> Create(const std::string &deviceId);
 
-        ~QuickJsScript() override;
+        ~SbmdScriptImpl() override;
 
         /**
          * @see SbmdScript::SetClusterFeatureMaps
@@ -132,7 +132,7 @@ namespace barton
                       std::string &outValue) override;
 
     private:
-        explicit QuickJsScript(const std::string &deviceId);
+        explicit SbmdScriptImpl(const std::string &deviceId);
 
         // Mutex for protecting script collections (separate from QuickJS context mutex)
         mutable std::mutex scriptsMutex;

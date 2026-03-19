@@ -45,6 +45,6 @@ endpoints:
               name: "Occupancy"
               type: "uint8"
             script: |
-              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              const occupied = (value & 0x01) !== 0;
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var occupied = (value & 0x01) !== 0;
               return {output: occupied ? 'true' : 'false'};

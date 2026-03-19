@@ -81,7 +81,7 @@ class BaseEnvironmentOrchestrator(ABC):
         _commissioned_device (bool): Flag indicating if a device has been commissioned.
         _barton_storage_path (str): Path to the storage directory for Barton data.
         _matter_storage_path (str): Path to the storage directory for Matter data.
-        _sbmd_dir (str): Path to the SBMD specs directory.
+        _sbmd_dirs (str): Semicolon-delimited list of paths to SBMD specs directories.
     """
 
     _barton_client: BCore.Client
@@ -92,7 +92,7 @@ class BaseEnvironmentOrchestrator(ABC):
     _commissioned_device: bool
     _barton_storage_path: str
     _matter_storage_path: str
-    _sbmd_dir: str
+    _sbmd_dirs: str
 
     def __init__(self):
         """
@@ -108,7 +108,7 @@ class BaseEnvironmentOrchestrator(ABC):
         self._matter_storage_path = self._barton_storage_path + "/matter"
         # SBMD specs directory relative to workspace root
         workspace_root = Path(__file__).parent.parent.parent
-        self._sbmd_dir = str(
+        self._sbmd_dirs = str(
             workspace_root / "core" / "deviceDrivers" / "matter" / "sbmd" / "specs"
         )
         self._init_client()
@@ -122,7 +122,7 @@ class BaseEnvironmentOrchestrator(ABC):
         self._barton_client_params.set_storage_dir(self._barton_storage_path)
         self._barton_client_params.set_matter_storage_dir(self._matter_storage_path)
         self._barton_client_params.set_matter_attestation_trust_store_dir(self._matter_storage_path)
-        self._barton_client_params.set_sbmd_dir(self._sbmd_dir)
+        self._barton_client_params.set_sbmd_dirs(self._sbmd_dirs)
         net_creds_provider = (
             network_credentials_provider.ExampleNetworkCredentialsProvider()
         )

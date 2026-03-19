@@ -162,7 +162,7 @@ static void test_sbmdParserDoorLockFile(void **state)
     (void) state;
 
     // Use absolute path defined by CMake
-    const char *filePath = SBMD_SPEC_DIR "door-lock.sbmd";
+    const char *filePath = SBMD_SPEC_DIR "matterjs/door-lock.sbmd";
 
     auto spec = barton::SbmdParser::ParseFile(filePath);
     assert_non_null(spec.get());
