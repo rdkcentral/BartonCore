@@ -1,0 +1,78 @@
+# Temperature/Humidity Sensor SBMD Specification
+# Maps Matter Temperature Sensor and Humidity Sensor device types to Barton
+# "temperatureHumiditySensor" device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Temperature/Humidity Sensor"
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "temperatureHumiditySensor"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0302  # Temperature Sensor
+    - 0x0307  # Humidity Sensor
+  revision: 1
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+# Barton endpoints
+endpoints:
+  - id: "1"
+    profile: "temperatureHumiditySensor"
+    profileVersion: 1
+    resources:
+      # Temperature measurement - reported in hundredths of degrees Celsius
+      - id: "temperature"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0402"      # Temperature Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "int16"            # Nullable; temperature in hundredths of degrees C (e.g. 23°C = 2300)
+            script: |
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      # Relative humidity measurement - reported in hundredths of percent
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0405"      # Relative Humidity Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "uint16"           # Nullable; humidity in hundredths of percent
+            script: |
+              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              // Matter humidity is in hundredths of percent, convert to whole percent
+              const percent = Math.round(value / 100);
+              return {output: percent.toString()};
