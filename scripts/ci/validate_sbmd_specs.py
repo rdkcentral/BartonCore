@@ -30,13 +30,14 @@
 SBMD Specification Validator
 
 Validates .sbmd YAML files against the SBMD JSON Schema and validates
-embedded JavaScript scripts using MicroQuickJS (mqjs).
+embedded JavaScript scripts using the configured JS engine (mquickjs or quickjs).
 
 Usage:
-    validate_sbmd_specs.py <schema_file> <sbmd_file> [<sbmd_file> ...]
+    validate_sbmd_specs.py [--js-engine ENGINE] <schema_file> <sbmd_file> [<sbmd_file> ...]
 
 Example:
     validate_sbmd_specs.py schema.json specs/light.sbmd specs/door-lock.sbmd
+    validate_sbmd_specs.py --js-engine quickjs schema.json specs/light.sbmd
 """
 
 import sys
@@ -110,9 +111,9 @@ def collect_sbmd_files(paths: list) -> list:
     return sorted(sbmd_files)
 
 
-def validate_js_syntax(script: str, stub_type: str, location: str, mqjs_path: str, stubs: dict) -> list:
+def validate_js_syntax(script: str, stub_type: str, location: str, js_compiler_path: str, stubs: dict) -> list:
     """
-    Validate JavaScript syntax using MicroQuickJS (mqjs).
+    Validate JavaScript syntax using the configured JS compiler (mqjs or qjsc).
     Uses bytecode compilation as a validation step without executing code.
     Returns a list of error messages, empty if valid.
     """
@@ -132,17 +133,17 @@ def validate_js_syntax(script: str, stub_type: str, location: str, mqjs_path: st
 }})();
 '''
 
-    # Write to temp file and validate with mqjs
+    # Write to temp file and validate with the configured JS compiler
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
             f.write(wrapped_script)
             temp_path = f.name
 
-        # Use mqjs to validate syntax by compiling to bytecode (no execution)
+        # Use the JS compiler to validate syntax by compiling to bytecode (no execution)
         # The -o flag saves bytecode; output is discarded via os.devnull
-        # mqjs will exit with error if there are syntax errors during parsing
+        # The compiler will exit with error if there are syntax errors during parsing
         result = subprocess.run(
-            [mqjs_path, '-o', os.devnull, temp_path],
+            [js_compiler_path, '-o', os.devnull, temp_path],
             capture_output=True,
             text=True,
             timeout=5
@@ -253,7 +254,7 @@ def extract_all_scripts(spec_data: dict) -> list:
     return scripts
 
 
-def validate_scripts(spec_data: dict, mqjs_path: str, stubs: dict) -> list:
+def validate_scripts(spec_data: dict, js_compiler_path: str, stubs: dict) -> list:
     """
     Validate all JavaScript scripts in the spec.
     Returns a list of error messages, empty if all valid.
@@ -262,7 +263,7 @@ def validate_scripts(spec_data: dict, mqjs_path: str, stubs: dict) -> list:
     scripts = extract_all_scripts(spec_data)
 
     for script, stub_type, location in scripts:
-        errors.extend(validate_js_syntax(script, stub_type, location, mqjs_path, stubs))
+        errors.extend(validate_js_syntax(script, stub_type, location, js_compiler_path, stubs))
 
     return errors
 
@@ -282,7 +283,23 @@ def find_mqjs() -> str:
     return None
 
 
+def find_qjsc() -> str:
+    """Find the qjsc (QuickJS compiler) executable."""
+    qjsc_path = shutil.which('qjsc')
+    if qjsc_path:
+        return qjsc_path
+
+    # Check common locations
+    common_paths = ['/usr/bin/qjsc', '/usr/local/bin/qjsc']
+    for path in common_paths:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+
+    return None
+
+
 def main():
+    default_engine = os.environ.get('BCORE_MATTER_SBMD_JS_ENGINE', 'mquickjs')
     parser = argparse.ArgumentParser(
         description='Validate SBMD specification files against the JSON schema and validate scripts'
     )
@@ -291,6 +308,13 @@ def main():
     parser.add_argument('-q', '--quiet', action='store_true', help='Only show errors')
     parser.add_argument('--no-scripts', action='store_true', help='Skip JavaScript validation')
     parser.add_argument('--stubs', help='Path to generated stubs JSON file (from sbmd-script.d.ts)')
+    parser.add_argument(
+        '--js-engine',
+        choices=['mquickjs', 'quickjs'],
+        default=default_engine,
+        help='JavaScript engine to use for script validation (default: %(default)s, '
+             'or set BCORE_MATTER_SBMD_JS_ENGINE env var)'
+    )
     args = parser.parse_args()
 
     # Load stubs for script validation
@@ -303,13 +327,19 @@ def main():
         print(f"ERROR: Invalid stubs file {args.stubs}: {e}", file=sys.stderr)
         return 1
 
-    # Find mqjs for script validation
-    mqjs_path = None
+    # Find JS compiler for script validation
+    js_compiler_path = None
     if not args.no_scripts:
-        mqjs_path = find_mqjs()
-        if not mqjs_path:
-            print("WARNING: mqjs not found, skipping JavaScript validation", file=sys.stderr)
-            print("         Build and install from: https://github.com/bellard/mquickjs", file=sys.stderr)
+        if args.js_engine == 'quickjs':
+            js_compiler_path = find_qjsc()
+            if not js_compiler_path:
+                print("WARNING: qjsc not found, skipping JavaScript validation", file=sys.stderr)
+                print("         Install QuickJS from: https://bellard.org/quickjs/", file=sys.stderr)
+        else:
+            js_compiler_path = find_mqjs()
+            if not js_compiler_path:
+                print("WARNING: mqjs not found, skipping JavaScript validation", file=sys.stderr)
+                print("         Build and install from: https://github.com/bellard/mquickjs", file=sys.stderr)
 
     # Load schema
     try:
@@ -331,7 +361,7 @@ def main():
         return 1
 
     if not args.quiet:
-        validation_type = "schema and scripts" if mqjs_path else "schema only"
+        validation_type = "schema and scripts" if js_compiler_path else "schema only"
         print(f"Validating {len(sbmd_files)} SBMD file(s) ({validation_type})...")
 
     # Validate each file
@@ -356,9 +386,9 @@ def main():
         # Schema validation
         errors = validate_spec(spec_data, validator, sbmd_file)
 
-        # Script validation (only if schema is valid and mqjs available)
-        if not errors and mqjs_path:
-            errors.extend(validate_scripts(spec_data, mqjs_path, stubs))
+        # Script validation (only if schema is valid and JS compiler available)
+        if not errors and js_compiler_path:
+            errors.extend(validate_scripts(spec_data, js_compiler_path, stubs))
 
         if errors:
             print(f"FAIL: {sbmd_file}")
