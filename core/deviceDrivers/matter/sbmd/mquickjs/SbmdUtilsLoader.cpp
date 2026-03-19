@@ -146,7 +146,7 @@ namespace barton
         std::string exMsg;
         if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
         {
-            icError("SbmdUtils bundle execution left a pending exception: %s - this is a bug", exMsg.c_str());
+            icError("SbmdUtils bundle execution left a pending exception: %s", exMsg.c_str());
             return false;
         }
 
