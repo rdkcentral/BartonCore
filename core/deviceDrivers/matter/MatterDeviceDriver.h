@@ -226,6 +226,19 @@ namespace barton
                                    const chip::SessionHandle &sessionHandle);
 
         /**
+         * @brief Called by WriteResource() to write resources specific to a particular device-type.
+         * Driver subclasses shall override this method to implement resource writes that are specific
+         * to their device-type.
+         */
+        virtual bool DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                                     const std::string &deviceId,
+                                     icDeviceResource *resource,
+                                     const char *previousValue,
+                                     const char *newValue,
+                                     chip::Messaging::ExchangeManager &exchangeMgr,
+                                     const chip::SessionHandle &sessionHandle);
+
+        /**
          * @brief Execute a resource.
          *
          * @param promises
@@ -688,6 +701,13 @@ namespace barton
         class IdentifyEventHandler : public Identify::EventHandler
         {
         public:
+            IdentifyEventHandler(MatterDeviceDriver &outer) : deviceDriver(outer) {};
+
+            void WriteRequestCompleted(void *context, bool success) override
+            {
+                deviceDriver.OnDeviceWorkCompleted(context, success);
+            };
+
             void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) override
             {
                 updateResource(deviceUuid.c_str(),
@@ -696,6 +716,9 @@ namespace barton
                                std::to_string(identifyTimeSecs).c_str(),
                                NULL);
             }
+
+        private:
+            MatterDeviceDriver &deviceDriver;
         } identifyClusterEventHandler;
 
         /* key deviceId */

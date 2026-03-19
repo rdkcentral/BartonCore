@@ -37,15 +37,13 @@ extern "C" {
 #include "lib/core/CHIPError.h"
 
 using namespace chip::app::Clusters::Identify;
-
+using namespace chip::app;
 
 namespace barton
 {
     void Identify::OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                      const chip::app::ConcreteAttributePath &path)
     {
-        using namespace chip::app;
-
         if (path.mEndpointId != endpointId || path.mClusterId != Clusters::Identify::Id)
         {
             return;
@@ -74,5 +72,36 @@ namespace barton
             default:
                 break;
         }
+    }
+
+    bool Identify::SetIdentifyTime(void *context,
+                                   const uint16_t identifyTimeSecs,
+                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                   const chip::SessionHandle &sessionHandle)
+    {
+        icDebug();
+
+        using TypeInfo = Attributes::IdentifyTime::TypeInfo;
+
+        auto writeClient = new chip::app::WriteClient(&exchangeMgr, this, chip::Optional<uint16_t>::Missing());
+
+        TypeInfo::Type value = identifyTimeSecs;
+
+        chip::app::AttributePathParams attributePathParams;
+        attributePathParams.mEndpointId = endpointId;
+        attributePathParams.mClusterId = Clusters::Identify::Id;
+        attributePathParams.mAttributeId = Attributes::IdentifyTime::Id;
+
+        CHIP_ERROR err = writeClient->EncodeAttribute(attributePathParams, value);
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icError("Failed to encode attribute");
+
+            delete writeClient;
+            return false;
+        }
+
+        return SendWriteRequest(writeClient, sessionHandle, context);
     }
 } // namespace barton

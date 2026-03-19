@@ -48,6 +48,11 @@ namespace barton
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
 
+        bool SetIdentifyTime(void *context,
+                             const uint16_t identifyTimeSecs,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle);
+
     protected:
         Identify(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
                  std::shared_ptr<DeviceDataCache> deviceDataCache) :

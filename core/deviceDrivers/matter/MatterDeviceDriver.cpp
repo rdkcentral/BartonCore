@@ -100,7 +100,7 @@ static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *v
 
 MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *deviceClass, uint8_t dcVersion) :
     driver(), deviceClassVersion(dcVersion + deviceModelVersion), otaRequestorEventHandler(*this),
-    generalDiagnosticsEventHandler(*this), wifiDiagnosticsClusterEventHandler(*this)
+    generalDiagnosticsEventHandler(*this), wifiDiagnosticsClusterEventHandler(*this), identifyClusterEventHandler(*this)
 {
     driver.driverName = strdup(driverName);
     driver.callbackContext = this;
@@ -510,6 +510,64 @@ bool MatterDeviceDriver::WriteResource(std::forward_list<std::promise<bool>> &pr
                                        chip::Messaging::ExchangeManager &exchangeMgr,
                                        const chip::SessionHandle &sessionHandle)
 {
+    icDebug("%s", resource->id);
+
+    if (g_strcmp0(resource->id, COMMON_DEVICE_RESOURCE_IDENTIFY_SECONDS) == 0)
+    {
+        auto *identifyServer = static_cast<Identify *>(GetAnyServerById(deviceId, chip::app::Clusters::Identify::Id));
+
+        if (identifyServer == nullptr)
+        {
+            icError("Identify cluster not present on device %s!", deviceId.c_str());
+            FailOperation(promises);
+            return false;
+        }
+
+        guint64 identifyTimeSecsU64 = 0;
+        g_autoptr(GError) error = nullptr;
+        g_ascii_string_to_unsigned(newValue, 10, 0, G_MAXUINT16, &identifyTimeSecsU64, &error);
+
+        if (error != nullptr)
+        {
+            icError("Unable to parse identify time value '%s' for device %s: %s",
+                    newValue,
+                    deviceId.c_str(),
+                    error->message);
+            FailOperation(promises);
+            return false;
+        }
+
+        uint16_t identifyTimeSecs = static_cast<uint16_t>(identifyTimeSecsU64);
+
+        promises.emplace_front();
+        auto &writePromise = promises.front();
+
+        // Paired with IdentifyEventHandler::WriteRequestCompleted()
+        AssociateStoredContext(&writePromise);
+
+        if (!identifyServer->SetIdentifyTime(&writePromise, identifyTimeSecs, exchangeMgr, sessionHandle))
+        {
+            AbandonDeviceWork(writePromise);
+            return false;
+        }
+
+        return true; // let the caller update the resource
+    }
+    else
+    {
+        // If the resource write was not handled above, then let the subclass try to handle it
+        return DoWriteResource(promises, deviceId, resource, previousValue, newValue, exchangeMgr, sessionHandle);
+    }
+}
+
+bool MatterDeviceDriver::DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                                         const std::string &deviceId,
+                                         icDeviceResource *resource,
+                                         const char *previousValue,
+                                         const char *newValue,
+                                         chip::Messaging::ExchangeManager &exchangeMgr,
+                                         const chip::SessionHandle &sessionHandle)
+{
     icDebug("Unimplemented");
     FailOperation(promises);
     return false;
@@ -666,7 +724,7 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
     identifySecondsResource->deviceUuid = strdup(device->uuid);
     identifySecondsResource->type = strdup(RESOURCE_TYPE_SECONDS);
     identifySecondsResource->mode =
-        RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+        RESOURCE_MODE_READABLE | RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
     identifySecondsResource->cachingPolicy = CACHING_POLICY_ALWAYS;
     linkedListAppend(device->resources, identifySecondsResource);
 
@@ -953,12 +1011,12 @@ bool MatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
     {
         for (auto clusterId : commonClusters)
         {
-            auto endpoints = FindServerEndpoints(deviceId, clusterId);
-            if (!endpoints.empty())
+            auto serverEndpoints = FindServerEndpoints(deviceId, clusterId);
+            if (!serverEndpoints.empty())
             {
                 // TODO: Devices can expose some of these clusters on multiple endpoints, but for now, we are just
                 // handling the case of one endpoint per cluster.
-                GetServerById(deviceId, endpoints.front(), clusterId);
+                GetServerById(deviceId, serverEndpoints.front(), clusterId);
             }
             else
             {
