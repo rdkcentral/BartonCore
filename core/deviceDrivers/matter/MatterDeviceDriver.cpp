@@ -666,7 +666,7 @@ bool MatterDeviceDriver::RegisterResources(icDevice *device)
     identifySecondsResource->deviceUuid = strdup(device->uuid);
     identifySecondsResource->type = strdup(RESOURCE_TYPE_SECONDS);
     identifySecondsResource->mode =
-        RESOURCE_MODE_READABLE | RESOURCE_MODE_WRITEABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
+        RESOURCE_MODE_READABLE | RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_EMIT_EVENTS;
     identifySecondsResource->cachingPolicy = CACHING_POLICY_ALWAYS;
     linkedListAppend(device->resources, identifySecondsResource);
 
