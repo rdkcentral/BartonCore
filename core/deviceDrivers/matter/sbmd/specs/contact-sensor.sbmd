@@ -1,5 +1,5 @@
 # Contact Sensor SBMD Specification
-# Maps Matter contact sensor device types to Barton contact sensor device class
+# Maps Matter contact sensor device types to Barton sensor device class
 
 # SBMD schema version 1.0
 schemaVersion: "1.0"
@@ -7,12 +7,12 @@ schemaVersion: "1.0"
 driverVersion: "1.0"
 # Human-readable driver name
 name: "Contact Sensor"
-# Script type (currently only JavaScript is supported)
+# Script type (matter.js not used/needed due to simplicity)
 scriptType: "JavaScript"
 
 # Barton device class mapping
 bartonMeta:
-  deviceClass: "contactSensor"
+  deviceClass: "sensor"
   deviceClassVersion: 1
 
 # Matter device type support
@@ -25,40 +25,6 @@ matterMeta:
 reporting:
   minSecs: 1
   maxSecs: 3600
-
-# Device-level resources (not associated with a specific endpoint)
-resources:
-  # Identify timer resource - controls device identification duration
-  - id: "identifySeconds"
-    type: "com.icontrol.seconds"
-    modes:
-      - "read"
-      - "write"
-    mapper:
-      read:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"
-        script: |
-          const { TlvUInt16 } = MatterClusters;
-          const tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          const value = TlvUInt16.decode(tlvBytes);
-          return {output: value.toString()};
-
-      write:
-        script: |
-          const { TlvUInt16, Identify: { IdentifyCluster } } = MatterClusters;
-          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          const tlvBytes = TlvUInt16.encode(secs);
-          return {
-            write: {
-              clusterId: IdentifyCluster.id,
-              attributeId: IdentifyCluster.attributes.identifyTime.id,
-              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-            }
-          };
 
 endpoints:
   - id: "1"
