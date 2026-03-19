@@ -62,7 +62,8 @@ The build system SHALL support the following ON/OFF flags with specified default
 | `BCORE_MATTER_SKIP_SDK` | OFF | `BARTON_CONFIG_MATTER_SKIP_SDK` |
 | `BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA` | OFF | `BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA` |
 | `BCORE_MATTER_ENABLE_OTA_PROVIDER` | OFF | `BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER` |
-| `BCORE_MATTER_USE_MATTERJS` | ON | `BARTON_CONFIG_MATTER_USE_MATTERJS` |
+| `BCORE_MATTER_USE_MATTERJS` | OFF | `BARTON_CONFIG_MATTER_USE_MATTERJS` |
+| `BCORE_MATTER_VALIDATE_SCHEMAS` | ON | `BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS` |
 | `BCORE_BUILD_THIRD_PARTY_BARTON_COMMON` | ON | `BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON` |
 
 **Private flags (internal use):**
@@ -78,7 +79,7 @@ The build system SHALL support the following ON/OFF flags with specified default
 - **THEN** its corresponding `BARTON_CONFIG_*` definition SHALL NOT be set
 
 ### Requirement: String configuration options
-The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_LINK_LIBRARIES`.
+The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_MATTER_SBMD_JS_ENGINE` (default: `"mquickjs"`, valid values: `"quickjs"` or `"mquickjs"`), `BCORE_MATTER_SBMD_SPECS_DIR` (semicolon-delimited list of directories), `BCORE_LINK_LIBRARIES`.
 
 #### Scenario: Custom Matter library name
 - **WHEN** `BCORE_MATTER_LIB=CustomMatter` is set
@@ -89,7 +90,7 @@ The build system SHALL support string configuration via `bcore_string_option()` 
 - **THEN** those sources SHALL be compiled and linked instead of the default providers
 
 ### Requirement: Integer configuration options
-The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120).
+The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120), `BCORE_MQUICKJS_MEMSIZE_BYTES` (default: 2097152, size of the pre-allocated memory buffer for the mquickjs JavaScript engine).
 
 #### Scenario: Custom Zigbee timeout
 - **WHEN** `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS=60` is set

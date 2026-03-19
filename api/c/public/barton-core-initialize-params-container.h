@@ -54,7 +54,7 @@ typedef enum
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_STORAGE_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_MATTER_ATTESTATION_TRUST_STORE_DIR,
     B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_ACCOUNT_ID,
-    B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR,
+    B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS,
 
     N_B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTIES
 } BCoreInitializeParamsContainerProperty;
@@ -69,7 +69,7 @@ static const gchar *B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[] = {
     "matter-storage-dir",
     "matter-attestation-trust-store-dir",
     "account-id",
-    "sbmd-dir",
+    "sbmd-dirs",
 };
 
 /**
@@ -145,12 +145,13 @@ gchar *b_core_initialize_params_container_get_matter_attestation_trust_store_dir
     BCoreInitializeParamsContainer *self);
 
 /**
- * b_core_initialize_params_container_get_sbmd_dir
+ * b_core_initialize_params_container_get_sbmd_dirs
  * @self: BCoreInitializeParamsContainer*
  *
- * Returns: (transfer full): The directory device service will use for SBMD specification files.
+ * Returns: (transfer full): A semicolon-delimited list of directories device service will
+ * use to load SBMD specification files.
  */
-gchar *b_core_initialize_params_container_get_sbmd_dir(BCoreInitializeParamsContainer *self);
+gchar *b_core_initialize_params_container_get_sbmd_dirs(BCoreInitializeParamsContainer *self);
 
 /**
  * b_core_initialize_params_container_get_account_id
@@ -226,11 +227,11 @@ void b_core_initialize_params_container_set_matter_attestation_trust_store_dir(
     const gchar *matterAttestationTrustStoreDir);
 
 /**
- * b_core_initialize_params_container_set_sbmd_dir
+ * b_core_initialize_params_container_set_sbmd_dirs
  * @self: BCoreInitializeParamsContainer*
- * @sbmdDir: const gchar*
+ * @sbmdDirs: (nullable): A semicolon-delimited list of directories containing SBMD specification files.
  */
-void b_core_initialize_params_container_set_sbmd_dir(BCoreInitializeParamsContainer *self, const gchar *sbmdDir);
+void b_core_initialize_params_container_set_sbmd_dirs(BCoreInitializeParamsContainer *self, const gchar *sbmdDirs);
 
 /**
  * b_core_initialize_params_container_set_account_id

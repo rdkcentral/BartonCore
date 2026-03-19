@@ -26,13 +26,13 @@
 //
 
 #include "json/writer.h"
-#define LOG_TAG "QuickJsScript"
+#define LOG_TAG "SbmdScriptImpl"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "../SbmdSpec.h"
 #include "MatterJsClusterLoader.h"
 #include "QuickJsRuntime.h"
-#include "QuickJsScript.h"
+#include "SbmdScriptImpl.h"
 #include "SbmdUtilsLoader.h"
 #include <cstring>
 #include <json/json.h>
@@ -185,7 +185,7 @@ namespace barton
 
     } // anonymous namespace
 
-    std::unique_ptr<QuickJsScript> QuickJsScript::Create(const std::string &deviceId)
+    std::unique_ptr<SbmdScriptImpl> SbmdScriptImpl::Create(const std::string &deviceId)
     {
         // Ensure the shared runtime is initialized
         if (!QuickJsRuntime::IsInitialized())
@@ -215,28 +215,28 @@ namespace barton
             }
         }
 
-        icDebug("QuickJsScript created for device %s (using shared runtime)", deviceId.c_str());
-        return std::unique_ptr<QuickJsScript>(new QuickJsScript(deviceId));
+        icDebug("SbmdScriptImpl created for device %s (using shared runtime)", deviceId.c_str());
+        return std::unique_ptr<SbmdScriptImpl>(new SbmdScriptImpl(deviceId));
     }
 
-QuickJsScript::QuickJsScript(const std::string &deviceId) :
+SbmdScriptImpl::SbmdScriptImpl(const std::string &deviceId) :
     SbmdScript(deviceId)
 {
 }
 
-QuickJsScript::~QuickJsScript()
+SbmdScriptImpl::~SbmdScriptImpl()
 {
-    icDebug("QuickJsScript destroyed for device %s", deviceId.c_str());
+    icDebug("SbmdScriptImpl destroyed for device %s", deviceId.c_str());
 }
 
-void QuickJsScript::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
+void SbmdScriptImpl::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
     clusterFeatureMaps = maps;
     icDebug("Set %zu cluster feature maps for device %s", maps.size(), deviceId.c_str());
 }
 
-Json::Value QuickJsScript::BuildBaseArgsJson(const std::optional<std::string> &endpointId,
+Json::Value SbmdScriptImpl::BuildBaseArgsJson(const std::optional<std::string> &endpointId,
                                              std::optional<uint32_t> clusterId,
                                              const std::optional<std::string> &resourceId,
                                              const std::optional<std::string> &input) const
@@ -274,7 +274,7 @@ Json::Value QuickJsScript::BuildBaseArgsJson(const std::optional<std::string> &e
     return argsJson;
 }
 
-bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
+bool SbmdScriptImpl::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
                                            const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -294,7 +294,7 @@ bool QuickJsScript::AddAttributeReadMapper(const SbmdAttribute &attributeInfo,
     return true;
 }
 
-bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
+bool SbmdScriptImpl::AddCommandExecuteResponseMapper(const SbmdCommand &commandInfo,
                                                     const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
@@ -315,7 +315,7 @@ bool QuickJsScript::AddCommandExecuteResponseMapper(const SbmdCommand &commandIn
 }
 
 // Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ExecuteScript(const std::string &script,
+bool SbmdScriptImpl::ExecuteScript(const std::string &script,
                                   const std::string &argumentName,
                                   const JSValue &argumentJson,
                                   JSValue &outJson)
@@ -359,7 +359,7 @@ bool QuickJsScript::ExecuteScript(const std::string &script,
 }
 
 // Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
+bool SbmdScriptImpl::ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue)
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
@@ -384,7 +384,7 @@ bool QuickJsScript::ParseJsonToJSValue(const std::string &jsonString, const std:
 }
 
 // Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
+bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
@@ -412,7 +412,7 @@ bool QuickJsScript::ExtractScriptOutputAsString(JSValue &scriptResult, std::stri
 }
 
 // Requires QuickJsRuntime::GetMutex() to be held by caller.
-bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &value)
+bool SbmdScriptImpl::SetJsVariable(const std::string &name, const std::string &value)
 {
     JSContext *ctx = QuickJsRuntime::GetSharedContext();
 
@@ -430,7 +430,7 @@ bool QuickJsScript::SetJsVariable(const std::string &name, const std::string &va
     return success;
 }
 
-bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
+bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
                                      chip::TLV::TLVReader &reader,
                                      std::string &outValue)
 {
@@ -510,7 +510,7 @@ bool QuickJsScript::MapAttributeRead(const SbmdAttribute &attributeInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
+bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                               chip::TLV::TLVReader &reader,
                                               std::string &outValue)
 {
@@ -589,7 +589,7 @@ bool QuickJsScript::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 
-bool QuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::string &script)
+bool SbmdScriptImpl::AddWriteMapper(const std::string &resourceKey, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -610,7 +610,7 @@ bool QuickJsScript::AddWriteMapper(const std::string &resourceKey, const std::st
     return true;
 }
 
-bool QuickJsScript::AddExecuteMapper(const std::string &resourceKey,
+bool SbmdScriptImpl::AddExecuteMapper(const std::string &resourceKey,
                                      const std::string &script,
                                      const std::optional<std::string> &responseScript)
 {
@@ -637,7 +637,7 @@ bool QuickJsScript::AddExecuteMapper(const std::string &resourceKey,
     return true;
 }
 
-bool QuickJsScript::MapWrite(const std::string &resourceKey,
+bool SbmdScriptImpl::MapWrite(const std::string &resourceKey,
                              const std::string &endpointId,
                              const std::string &resourceId,
                              const std::string &inValue,
@@ -899,7 +899,7 @@ bool QuickJsScript::MapWrite(const std::string &resourceKey,
     return false;
 }
 
-bool QuickJsScript::MapExecute(const std::string &resourceKey,
+bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
                                const std::string &endpointId,
                                const std::string &resourceId,
                                const std::string &inValue,
@@ -1068,7 +1068,7 @@ bool QuickJsScript::MapExecute(const std::string &resourceKey,
     return true;
 }
 
-bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
+bool SbmdScriptImpl::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
 {
     std::lock_guard<std::mutex> lock(scriptsMutex);
 
@@ -1087,7 +1087,7 @@ bool QuickJsScript::AddEventMapper(const SbmdEvent &eventInfo, const std::string
     return true;
 }
 
-bool QuickJsScript::MapEvent(const SbmdEvent &eventInfo,
+bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
                              chip::TLV::TLVReader &reader,
                              std::string &outValue)
 {

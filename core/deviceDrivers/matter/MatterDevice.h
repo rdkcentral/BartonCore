@@ -31,7 +31,7 @@
 #include "lib/core/DataModelTypes.h"
 #include "lib/core/TLVReader.h"
 #include "matter/sbmd/SbmdSpec.h"
-#include "matter/sbmd/script/SbmdScript.h"
+#include "matter/sbmd/SbmdScript.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include <forward_list>
 #include <future>

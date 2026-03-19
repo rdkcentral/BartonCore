@@ -2,6 +2,10 @@
 
 This document describes the integration of the [matter.js](https://github.com/matter-js/matter.js) cluster library into the SBMD (Specification-Based Matter Drivers) QuickJS runtime for TLV encoding/decoding.
 
+> **Important**: matter.js integration requires `BCORE_MATTER_SBMD_JS_ENGINE=quickjs`.
+> It is not compatible with the `mquickjs` engine. Set `BCORE_MATTER_USE_MATTERJS=ON`
+> and `BCORE_MATTER_SBMD_JS_ENGINE=quickjs` in your CMake configuration to enable it.
+
 ## Overview
 
 The matter.js project provides a complete Matter implementation in TypeScript/JavaScript. Barton integrates just the cluster library portion to enable SBMD JavaScript mappers to perform type-safe TLV encoding and decoding without relying on the CHIP SDK's JSON/TLV conversion utilities.

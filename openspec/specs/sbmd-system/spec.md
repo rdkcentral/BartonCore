@@ -119,12 +119,40 @@ The system SHALL include an `SbmdFactory` that scans the configured SBMD directo
 - **WHEN** the Matter subsystem initializes with an SBMD directory containing `.sbmd` files
 - **THEN** `SbmdFactory` SHALL parse each file and register a corresponding driver
 
-### Requirement: QuickJS script engine
-The system SHALL use QuickJS as the embedded JavaScript engine for SBMD scripts. All devices SHALL share a single `QuickJsRuntime` singleton context, with per-device isolation via `QuickJsScript` instances that use IIFEs (Immediately Invoked Function Expressions) for scope isolation. Thread safety SHALL be ensured via two mutexes: a per-instance `scriptsMutex` for script collections and a shared `QuickJsRuntime::GetMutex()` for context access.
+### Requirement: Configurable JavaScript engine
+The system SHALL support a build-time configurable JavaScript engine for SBMD scripts via the `BCORE_MATTER_SBMD_JS_ENGINE` CMake option. Valid values SHALL be `"quickjs"` (standard QuickJS) and `"mquickjs"` (MicroQuickJS). The default SHALL be `"mquickjs"`. If no value or an invalid value is provided when `BCORE_MATTER` is ON, configuration SHALL fail with a fatal error.
+
+All devices SHALL share a single runtime singleton context regardless of engine choice, with per-device isolation via `SbmdScriptImpl` instances (one per engine, both named `SbmdScriptImpl` for interface uniformity) that use IIFEs (Immediately Invoked Function Expressions) for scope isolation. Thread safety SHALL be ensured via two mutexes: a per-instance `scriptsMutex` for script collections and a shared runtime mutex for context access.
+
+#### Scenario: Default engine selection
+- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE` is not explicitly set
+- **THEN** the default engine SHALL be `"mquickjs"`
+
+#### Scenario: Invalid engine selection
+- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE` is set to a value other than `"quickjs"` or `"mquickjs"`
+- **THEN** CMake configuration SHALL fail with a `FATAL_ERROR`
 
 #### Scenario: Thread-safe script execution
 - **WHEN** multiple threads invoke script mappers for the same device concurrently
-- **THEN** the QuickJS script instance SHALL serialize access via its internal mutex
+- **THEN** the script instance SHALL serialize access via its internal mutex
+
+### Requirement: matter.js engine compatibility
+The optional matter.js cluster integration (`BCORE_MATTER_USE_MATTERJS`) SHALL only be available when `BCORE_MATTER_SBMD_JS_ENGINE=quickjs`. If `BCORE_MATTER_USE_MATTERJS=ON` is set with `BCORE_MATTER_SBMD_JS_ENGINE=mquickjs`, CMake configuration SHALL fail with a `FATAL_ERROR`.
+
+#### Scenario: mquickjs with matter.js rejected
+- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE=mquickjs` and `BCORE_MATTER_USE_MATTERJS=ON`
+- **THEN** CMake configuration SHALL fail
+
+#### Scenario: quickjs with matter.js accepted
+- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE=quickjs` and `BCORE_MATTER_USE_MATTERJS=ON`
+- **THEN** the matter.js cluster bundle SHALL be built and embedded
+
+### Requirement: mquickjs memory configuration
+When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 2097152 bytes = 2 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer.
+
+#### Scenario: Custom mquickjs memory size
+- **WHEN** `BCORE_MQUICKJS_MEMSIZE_BYTES=4194304` is set
+- **THEN** the mquickjs engine SHALL allocate a 4 MB memory buffer
 
 ### Requirement: SbmdUtils built-in library
 The system SHALL provide a built-in JavaScript library `SbmdUtils` (loaded into every QuickJS context) with: `SbmdUtils.Tlv.decode(base64)` for Matter TLV decoding, `SbmdUtils.Tlv.decodeStruct(base64)` for struct TLV decoding, `SbmdUtils.Tlv.encode(value, type)` for TLV encoding, `SbmdUtils.Tlv.encodeStruct(obj, schema)` for struct encoding, `SbmdUtils.Tlv.emptyStruct()` for empty struct TLV, `SbmdUtils.Response.write(clusterId, attributeId, tlvBase64, options?)` for write operation construction, `SbmdUtils.Response.invoke(clusterId, commandId, tlvBase64, opts)` for invoke operation construction, `SbmdUtils.Base64` for base64 encode/decode, and `SbmdUtils.TLV_TYPE` with TLV type constants.

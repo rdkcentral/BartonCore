@@ -141,6 +141,7 @@ FROM base_builder AS third_party_builder
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
 ARG FFF_GIT_TAG="5111c61e1ef7848e3afd3550044a8cf4405f4199"
+ARG MQUICKJS_GIT_TAG="ee50431eac9b14b99f722b537ec4cac0c8dd75ab"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -318,18 +319,19 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     rm -rf /root/.cipd-cache-dir
 SHELL ["/bin/sh", "-c"]
 
-# Download, build, and install quickjs, which needs our custom CMakeLists.txt
+# Download, build, and install mquickjs, which needs our custom CMakeLists.txt
 RUN cd /tmp && \
-    wget https://bellard.org/quickjs/quickjs-2025-09-13-2.tar.xz && \
-    tar -xvf quickjs-2025-09-13-2.tar.xz && \
-    cd quickjs-2025-09-13 && \
-    cp /tmp/patches/quickjs/CMakeLists.txt . && \
+    git clone --depth 1 https://github.com/bellard/mquickjs.git && \
+    cd mquickjs && \
+    git fetch --depth 1 origin ${MQUICKJS_GIT_TAG} && \
+    git checkout ${MQUICKJS_GIT_TAG} && \
+    cp /tmp/patches/mquickjs/CMakeLists.txt . && \
     mkdir build && \
     cd build && \
     cmake .. && \
     make && \
     make install && \
-    rm -rf /tmp/quickjs-2025-09-13-2.tar.xz /tmp/quickjs-2025-09-13
+    rm -rf /tmp/mquickjs
 
 # Clean up our patches
 RUN rm -rf /tmp/patches
