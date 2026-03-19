@@ -1,0 +1,81 @@
+From 01097bef9d871890ea6500878d6e9365b1ace890 Mon Sep 17 00:00:00 2001
+From: tlea <tlea@comcast.com>
+Date: Thu, 19 Mar 2026 15:15:20 +0000
+Subject: [PATCH] Add JS_GetMemoryUsage API for memory instrumentation
+
+---
+ mquickjs.c | 31 +++++++++++++++++++++++++++++++
+ mquickjs.h | 17 +++++++++++++++++
+ 2 files changed, 48 insertions(+)
+
+diff --git a/mquickjs.c b/mquickjs.c
+index a950f3c..f19a2bb 100644
+--- a/mquickjs.c
++++ b/mquickjs.c
+@@ -7123,6 +7123,37 @@ static __maybe_unused void JS_DumpUniqueStrings(JSContext *ctx)
+ }
+ #endif
+ 
++int JS_GetMemoryUsage(JSContext *ctx, JSMemoryUsage *usage, int flags)
++{
++    uint8_t *ptr;
++
++    if (!ctx || !usage)
++        return -1;
++
++    usage->arena_size = ctx->stack_top - (uint8_t *)ctx;
++    usage->overhead = ctx->heap_base - (uint8_t *)ctx;
++    usage->heap_used = ctx->heap_free - ctx->heap_base;
++    usage->stack_used = ctx->stack_top - (uint8_t *)ctx->sp;
++    usage->free_size = (uint8_t *)ctx->sp - ctx->heap_free;
++
++    /* Walk the heap to find free blocks (freed by GC but not compacted) */
++    usage->heap_free_blocks = 0;
++    usage->flags = flags;
++    if (flags & JS_MEMUSAGE_WALK_HEAP) {
++        ptr = ctx->heap_base;
++        while (ptr < ctx->heap_free) {
++            int mtag = ((JSMemBlockHeader *)ptr)->mtag;
++            int size = get_mblock_size(ptr);
++            if (mtag == JS_MTAG_FREE) {
++                usage->heap_free_blocks += size;
++            }
++            ptr += size;
++        }
++    }
++
++    return 0;
++}
++
+ void JS_DumpValueF(JSContext *ctx, const char *str,
+                    JSValue val, int flags)
+ {
+diff --git a/mquickjs.h b/mquickjs.h
+index a1557fe..18ac005 100644
+--- a/mquickjs.h
++++ b/mquickjs.h
+@@ -379,4 +379,21 @@ void JS_DumpValue(JSContext *ctx, const char *str,
+                   JSValue val);
+ void JS_DumpMemory(JSContext *ctx, JS_BOOL is_long);
+ 
++/* Flags for JS_GetMemoryUsage */
++#define JS_MEMUSAGE_WALK_HEAP  (1 << 0) /* walk heap to count free blocks (expensive) */
++
++/* Memory usage statistics */
++typedef struct JSMemoryUsage {
++    size_t arena_size;       /* total memory arena (mem_size passed to JS_NewContext) */
++    size_t heap_used;        /* heap bytes in use (includes free blocks from GC) */
++    size_t heap_free_blocks; /* bytes in freed/compacted blocks within the heap (only if JS_MEMUSAGE_WALK_HEAP) */
++    size_t stack_used;       /* stack bytes currently in use */
++    size_t free_size;        /* free gap between heap top and stack bottom */
++    size_t overhead;         /* context struct overhead (before heap_base) */
++    int flags;               /* flags passed to JS_GetMemoryUsage */
++} JSMemoryUsage;
++
++/* Get current memory usage statistics. Returns 0 on success, -1 on error. */
++int JS_GetMemoryUsage(JSContext *ctx, JSMemoryUsage *usage, int flags);
++
+ #endif /* MQUICKJS_H */
+-- 
+2.43.0
+

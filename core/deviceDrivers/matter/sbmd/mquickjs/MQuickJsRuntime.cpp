@@ -52,6 +52,7 @@ size_t MQuickJsRuntime::memSize = 0;
 JSContext *MQuickJsRuntime::ctx = nullptr;
 std::mutex MQuickJsRuntime::mutex;
 bool MQuickJsRuntime::initialized = false;
+size_t MQuickJsRuntime::peakHeapUsed = 0;
 
 namespace
 {
@@ -123,7 +124,14 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     JSValue urlResult = JS_Eval(ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL);
     if (JS_IsException(urlResult))
     {
-        icWarn("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
+        icError("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
+        LogMemoryUsage("polyfill-failed", IC_LOG_ERROR, true);
+        JS_FreeContext(ctx);
+        ctx = nullptr;
+        free(memBuffer);
+        memBuffer = nullptr;
+        memSize = 0;
+        return false;
     }
 
     // Check if polyfill installation left an exception
@@ -134,6 +142,7 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     }
 
     initialized = true;
+    LogMemoryUsage("post-init (context + stdlib + polyfills)", IC_LOG_DEBUG);
     icInfo("Shared mquickjs context initialized successfully");
     return true;
 }
@@ -261,6 +270,72 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
     }
 
     return true;
+}
+
+void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bool walkHeap)
+{
+    if (!ctx)
+    {
+        return;
+    }
+
+    int flags = walkHeap ? JS_MEMUSAGE_WALK_HEAP : 0;
+    JSMemoryUsage usage = {};
+    if (JS_GetMemoryUsage(ctx, &usage, flags) != 0)
+    {
+        icWarn("Failed to get mquickjs memory usage at '%s'", label);
+        return;
+    }
+
+    bool heapWalked = (usage.flags & JS_MEMUSAGE_WALK_HEAP) != 0;
+
+    if (heapWalked)
+    {
+        // Net heap = heap region minus free blocks reclaimed by GC
+        size_t netHeapUsed = usage.heap_used - usage.heap_free_blocks;
+
+        if (netHeapUsed > peakHeapUsed)
+        {
+            peakHeapUsed = netHeapUsed;
+        }
+
+        icLogMsg(__FILE__,
+                 sizeof(__FILE__) - 1,
+                 __func__,
+                 sizeof(__func__) - 1,
+                 __LINE__,
+                 LOG_TAG,
+                 priority,
+                 logFmt("[%s] mquickjs memory: arena=%zu heap=%zu (net=%zu, free_blocks=%zu) "
+                        "stack=%zu free_gap=%zu overhead=%zu peak_heap=%zu"),
+                 label,
+                 usage.arena_size,
+                 usage.heap_used,
+                 netHeapUsed,
+                 usage.heap_free_blocks,
+                 usage.stack_used,
+                 usage.free_size,
+                 usage.overhead,
+                 peakHeapUsed);
+    }
+    else
+    {
+        icLogMsg(__FILE__,
+                 sizeof(__FILE__) - 1,
+                 __func__,
+                 sizeof(__func__) - 1,
+                 __LINE__,
+                 LOG_TAG,
+                 priority,
+                 logFmt("[%s] mquickjs memory: arena=%zu heap=%zu "
+                        "stack=%zu free_gap=%zu overhead=%zu (heap_free_blocks not computed)"),
+                 label,
+                 usage.arena_size,
+                 usage.heap_used,
+                 usage.stack_used,
+                 usage.free_size,
+                 usage.overhead);
+    }
 }
 
 } // namespace barton

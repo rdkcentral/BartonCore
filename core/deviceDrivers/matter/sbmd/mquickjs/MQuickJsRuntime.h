@@ -33,6 +33,7 @@
 #include <string>
 
 extern "C" {
+#include <icLog/logging.h>
 #include <mquickjs/mquickjs.h>
 }
 
@@ -115,12 +116,25 @@ namespace barton
          */
         static bool CheckAndClearPendingException(JSContext *ctx, std::string *outExceptionMsg = nullptr);
 
+        /**
+         * Log current mquickjs memory usage at the given label.
+         * Also updates peak tracking. Thread-safe (caller must hold mutex).
+         *
+         * @param label Descriptive label for the log entry (e.g. "post-init")
+         * @param priority Log priority level (e.g. IC_LOG_DEBUG, IC_LOG_ERROR)
+         * @param walkHeap If true, walk the heap to compute free block fragmentation
+         *                 (expensive O(n) scan). Use on error paths where the extra
+         *                 detail justifies the cost.
+         */
+        static void LogMemoryUsage(const char *label, logPriority priority, bool walkHeap = false);
+
     private:
         static uint8_t *memBuffer;
         static size_t memSize;
         static JSContext *ctx;
         static std::mutex mutex;
         static bool initialized;
+        static size_t peakHeapUsed;
     };
 
 } // namespace barton

@@ -326,6 +326,7 @@ RUN cd /tmp && \
     git fetch --depth 1 origin ${MQUICKJS_GIT_TAG} && \
     git checkout ${MQUICKJS_GIT_TAG} && \
     cp /tmp/patches/mquickjs/CMakeLists.txt . && \
+    git apply /tmp/patches/mquickjs/0001-add-memory-usage-api.patch && \
     mkdir build && \
     cd build && \
     cmake .. && \

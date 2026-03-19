@@ -139,6 +139,7 @@ namespace barton
         if (JS_IsException(result))
         {
             icError("Failed to execute SBMD utilities bundle: %s", GetExceptionString(ctx).c_str());
+            MQuickJsRuntime::LogMemoryUsage("sbmd-utils-load-failed", IC_LOG_ERROR, true);
             return false;
         }
 
