@@ -46,6 +46,7 @@
 #include <platform/Linux/CHIPLinuxStorage.h>
 #include <thread>
 #include <future>
+#include <functional>
 
 #include <lib/support/PersistedCounter.h>
 
