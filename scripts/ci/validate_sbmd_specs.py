@@ -48,6 +48,7 @@ import subprocess
 import tempfile
 import shutil
 from pathlib import Path
+from typing import Optional
 
 try:
     import yaml
@@ -268,7 +269,7 @@ def validate_scripts(spec_data: dict, js_compiler_path: str, stubs: dict) -> lis
     return errors
 
 
-def find_mqjs() -> str:
+def find_mqjs() -> Optional[str]:
     """Find the mqjs (MicroQuickJS) executable."""
     mqjs_path = shutil.which('mqjs')
     if mqjs_path:
@@ -283,7 +284,7 @@ def find_mqjs() -> str:
     return None
 
 
-def find_qjsc() -> str:
+def find_qjsc() -> Optional[str]:
     """Find the qjsc (QuickJS compiler) executable."""
     qjsc_path = shutil.which('qjsc')
     if qjsc_path:

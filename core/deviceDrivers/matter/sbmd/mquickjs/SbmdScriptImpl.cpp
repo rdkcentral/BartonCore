@@ -145,10 +145,13 @@ JSValue SbmdScriptImpl::BuildBaseArgs(const std::optional<std::string> &endpoint
 
     // Add cluster feature maps so scripts can check cluster capabilities
     JSValue featureMaps = JS_NewObject(ctx);
-    for (const auto &pair : clusterFeatureMaps)
     {
-        // Use string key (JavaScript object keys are strings)
-        JS_SetPropertyStr(ctx, featureMaps, std::to_string(pair.first).c_str(), JS_NewUint32(ctx, pair.second));
+        std::lock_guard<std::mutex> lock(scriptsMutex);
+        for (const auto &pair : clusterFeatureMaps)
+        {
+            // Use string key (JavaScript object keys are strings)
+            JS_SetPropertyStr(ctx, featureMaps, std::to_string(pair.first).c_str(), JS_NewUint32(ctx, pair.second));
+        }
     }
     JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
 
