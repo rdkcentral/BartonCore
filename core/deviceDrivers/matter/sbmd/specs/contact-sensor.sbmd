@@ -7,7 +7,6 @@ schemaVersion: "1.0"
 driverVersion: "1.0"
 # Human-readable driver name
 name: "Contact Sensor"
-# Script type (matter.js not used/needed due to simplicity)
 scriptType: "JavaScript"
 
 # Barton device class mapping
