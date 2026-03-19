@@ -380,13 +380,13 @@ void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<
     device->HandleResourceRead(promises, resource, value, exchangeMgr, sessionHandle);
 }
 
-bool SpecBasedMatterDeviceDriver::WriteResource(std::forward_list<std::promise<bool>> &promises,
-                                                const std::string &deviceId,
-                                                icDeviceResource *resource,
-                                                const char *previousValue,
-                                                const char *newValue,
-                                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                                const chip::SessionHandle &sessionHandle)
+bool SpecBasedMatterDeviceDriver::DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                                                  const std::string &deviceId,
+                                                  icDeviceResource *resource,
+                                                  const char *previousValue,
+                                                  const char *newValue,
+                                                  chip::Messaging::ExchangeManager &exchangeMgr,
+                                                  const chip::SessionHandle &sessionHandle)
 {
     icDebug("%s = %s", resource->id, newValue);
 
