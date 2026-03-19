@@ -195,7 +195,9 @@ if (BCORE_MATTER)
 
         # Create a custom target that validates SBMD specs
         add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPEC_FILES} --stubs ${SBMD_STUBS_FILE}
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPEC_FILES}
+                    --stubs ${SBMD_STUBS_FILE}
+                    --js-engine ${BCORE_MATTER_SBMD_JS_ENGINE}
             DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMENT "Validating SBMD specification files against schema..."
