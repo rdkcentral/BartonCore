@@ -1463,11 +1463,11 @@ void Matter::RunOnMatterStack(std::function<void()> work)
         }
         catch (const std::exception & e)
         {
-            icError("RunOnMatterThread: work() threw exception: %s", e.what());
+            icError("RunOnMatterStack: work() threw exception: %s", e.what());
         }
         catch (...)
         {
-            icError("RunOnMatterThread: work() threw unknown exception");
+            icError("RunOnMatterStack: work() threw unknown exception");
         }
     }
 }
