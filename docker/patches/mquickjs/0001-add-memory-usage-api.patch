@@ -27,7 +27,12 @@ index a950f3c..f19a2bb 100644
 +    usage->overhead = ctx->heap_base - (uint8_t *)ctx;
 +    usage->heap_used = ctx->heap_free - ctx->heap_base;
 +    usage->stack_used = ctx->stack_top - (uint8_t *)ctx->sp;
-+    usage->free_size = (uint8_t *)ctx->sp - ctx->heap_free;
++
++    if (ctx->heap_free >= (uint8_t *)ctx->sp) {
++        usage->free_size = 0;
++    } else {
++        usage->free_size = (size_t)((uint8_t *)ctx->sp - ctx->heap_free);
++    }
 +
 +    /* Walk the heap to find free blocks (freed by GC but not compacted) */
 +    usage->heap_free_blocks = 0;
