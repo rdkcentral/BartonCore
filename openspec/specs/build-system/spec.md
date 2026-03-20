@@ -90,7 +90,7 @@ The build system SHALL support string configuration via `bcore_string_option()` 
 - **THEN** those sources SHALL be compiled and linked instead of the default providers
 
 ### Requirement: Integer configuration options
-The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120), `BCORE_MQUICKJS_MEMSIZE_BYTES` (default: 2097152, size of the pre-allocated memory buffer for the mquickjs JavaScript engine).
+The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120), `BCORE_MQUICKJS_MEMSIZE_BYTES` (default: 1048576, size of the pre-allocated memory buffer for the mquickjs JavaScript engine).
 
 #### Scenario: Custom Zigbee timeout
 - **WHEN** `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS=60` is set

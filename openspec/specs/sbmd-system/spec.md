@@ -148,7 +148,7 @@ The optional matter.js cluster integration (`BCORE_MATTER_USE_MATTERJS`) SHALL o
 - **THEN** the matter.js cluster bundle SHALL be built and embedded
 
 ### Requirement: mquickjs memory configuration
-When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 2097152 bytes = 2 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer.
+When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 1048576 bytes = 1 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer.
 
 #### Scenario: Custom mquickjs memory size
 - **WHEN** `BCORE_MQUICKJS_MEMSIZE_BYTES=4194304` is set

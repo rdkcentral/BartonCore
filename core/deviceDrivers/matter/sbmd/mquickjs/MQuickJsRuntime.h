@@ -118,7 +118,7 @@ namespace barton
 
         /**
          * Log current mquickjs memory usage at the given label.
-         * Also updates peak tracking.
+         * Also updates peak tracking when walkHeap is enabled.
          *
          * Not thread-safe: callers must hold MQuickJsRuntime::GetMutex() while
          * calling this function.

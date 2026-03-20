@@ -306,7 +306,7 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
         {
             netHeapUsed = usage.heap_used - usage.heap_free_blocks;
         }
-        
+
         if (netHeapUsed > peakHeapUsed)
         {
             peakHeapUsed = netHeapUsed;
