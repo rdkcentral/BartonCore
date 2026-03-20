@@ -83,6 +83,7 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     }
 
     icInfo("Initializing shared mquickjs context for SBMD scripts (%zu bytes)...", memorySize);
+    peakHeapUsed = 0;
 
     // Allocate the memory buffer for the mquickjs context
     memBuffer = static_cast<uint8_t *>(malloc(memorySize));
@@ -125,7 +126,10 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     if (JS_IsException(urlResult))
     {
         icError("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
-        LogMemoryUsage("polyfill-failed", IC_LOG_ERROR, true);
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            LogMemoryUsage("polyfill-failed", IC_LOG_ERROR, true);
+        }
         JS_FreeContext(ctx);
         ctx = nullptr;
         free(memBuffer);
@@ -142,7 +146,10 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     }
 
     initialized = true;
-    LogMemoryUsage("post-init (context + stdlib + polyfills)", IC_LOG_DEBUG);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        LogMemoryUsage("post-init (context + stdlib + polyfills)", IC_LOG_DEBUG);
+    }
     icInfo("Shared mquickjs context initialized successfully");
     return true;
 }
@@ -281,6 +288,7 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
 
     int flags = walkHeap ? JS_MEMUSAGE_WALK_HEAP : 0;
     JSMemoryUsage usage = {};
+    
     if (JS_GetMemoryUsage(ctx, &usage, flags) != 0)
     {
         icWarn("Failed to get mquickjs memory usage at '%s'", label);

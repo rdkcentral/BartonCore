@@ -1053,12 +1053,7 @@ namespace
         ASSERT_NE(ctx, nullptr);
 
         // Load SBMD utils (needed for scripts to work)
-        bool loaded = SbmdUtilsLoader::LoadBundle(ctx);
-        if (!loaded)
-        {
-            // 200KB was too small for SBMD utils - that's also a valid OOM detection
-            return;
-        }
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx)) << "200KB should be sufficient for SBMD utils";
         JS_GC(ctx);
 
         auto script = SbmdScriptImpl::Create("oom-test-device");
@@ -1114,11 +1109,7 @@ namespace
         JSContext *ctx = MQuickJsRuntime::GetSharedContext();
         ASSERT_NE(ctx, nullptr);
 
-        bool loaded = SbmdUtilsLoader::LoadBundle(ctx);
-        if (!loaded)
-        {
-            return;
-        }
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx)) << "200KB should be sufficient for SBMD utils";
         JS_GC(ctx);
 
         auto script = SbmdScriptImpl::Create("stack-oom-test");

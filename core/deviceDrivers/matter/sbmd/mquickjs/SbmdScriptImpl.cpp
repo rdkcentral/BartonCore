@@ -110,9 +110,12 @@ namespace barton
                 return nullptr;
             }
             icInfo("SBMD utilities loaded from %s", SbmdUtilsLoader::GetSource());
-            MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load", IC_LOG_DEBUG);
-            JS_GC(ctx);
-            MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load-after-gc", IC_LOG_DEBUG);
+            {
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load", IC_LOG_DEBUG);
+                JS_GC(ctx);
+                MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load-after-gc", IC_LOG_DEBUG);
+            }
         }
 
         icDebug("SbmdScriptImpl created for device %s (using shared mquickjs context)", deviceId.c_str());
@@ -280,7 +283,7 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     outJson = scriptResult;
 
     // here we do the more expensive heap walk for our dump to capture the impact of the executed script,
-    // which may have caused significant deallocations that may not have been compacted yet until the next GC.'
+    // which may have caused significant deallocations that may not have been compacted yet until the next GC.
     MQuickJsRuntime::LogMemoryUsage("post-script-exec", IC_LOG_DEBUG, true);
 
     icDebug("Script executed successfully");
