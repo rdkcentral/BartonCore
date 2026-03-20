@@ -39,13 +39,26 @@ index a950f3c..f19a2bb 100644
 +    usage->flags = flags;
 +    if (flags & JS_MEMUSAGE_WALK_HEAP) {
 +        ptr = ctx->heap_base;
++
 +        while (ptr < ctx->heap_free) {
-+            int mtag = ((JSMemBlockHeader *)ptr)->mtag;
++            JSMemBlockHeader *header = (JSMemBlockHeader *)ptr;
 +            int size = get_mblock_size(ptr);
-+            if (mtag == JS_MTAG_FREE) {
++
++            if (size <= 0) {
++                break;
++            }
++
++            uint8_t *next = ptr + size;
++
++            if (next > ctx->heap_free) {
++                break;
++            }
++
++            if (header->mtag == JS_MTAG_FREE) {
 +                usage->heap_free_blocks += size;
 +            }
-+            ptr += size;
++
++            ptr = next;
 +        }
 +    }
 +
