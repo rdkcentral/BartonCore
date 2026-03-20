@@ -1095,10 +1095,13 @@ namespace
         reader.Next();
 
         std::string outValue;
-        // This should fail gracefully (OOM) rather than crash
+        // The script catches the OOM error internally via try/catch, so it
+        // completes successfully.  The important thing is the engine does not
+        // crash.  Zero buffers should have been allocated since each request
+        // (256 KB) exceeds the remaining arena.
         bool result = script->MapAttributeRead(attr, reader, outValue);
-        // The script should fail due to OOM
-        EXPECT_FALSE(result);
+        EXPECT_TRUE(result);
+        EXPECT_EQ(outValue, R"({"value":0})");
     }
 
     // Test stack exhaustion via deeply recursive script
