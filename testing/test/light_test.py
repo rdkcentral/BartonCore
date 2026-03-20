@@ -120,7 +120,22 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     upon subscribing to the device, and also when the attribute report is sent
     after a new value is written to the identify-time attribute.
     """
-    # Commission the device
+    resource_updated_queue = Queue()
+
+    def check_resource_updates(
+        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
+    ) -> None:
+        resource = resource_updated_event.props.resource
+        logger.debug(
+            f"Resource updated: {resource.props.id} with value {resource.props.value}"
+        )
+        if resource.props.id == "identifySeconds":
+            resource_updated_queue.put(resource.props.value)
+
+    default_environment.get_client().connect(
+        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
+    )
+
     default_environment.get_client().commission_device(
         matter_light.get_commissioning_code(), 100
     )
@@ -131,32 +146,12 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     light = lights[0]
     device_uuid = light.props.uuid
 
-    # Read the initial identifySeconds resource from Barton.
-    # This should have been set as a result of receiving the first attribute report
-    # from subscribing to the device.
-    identify_seconds_uri = f"/{device_uuid}/r/identifySeconds"
-
-    def wait_for_condition(client, uri, predicate, timeout=3, poll_interval=0.1):
-        """Poll for a resource value until predicate(value) is True or timeout is reached."""
-        start = time.time()
-        while time.time() - start < timeout:
-            value = client.read_resource(uri)
-            if predicate(value):
-                return value
-            time.sleep(poll_interval)
-        return None
-
-    # Wait for the initial identifySeconds resource value to be available and parse it as an integer.
-    initial_identify_seconds = wait_for_condition(
-        default_environment.get_client(),
-        identify_seconds_uri,
-        lambda v: v is not None,
-        timeout=3,
-        poll_interval=0.1,
-    )
+    # Wait for the initial identifySeconds attribute report that arrives as
+    # part of the subscription to the device.
+    initial_identify_seconds = resource_updated_queue.get(timeout=5)
     assert (
         initial_identify_seconds is not None
-    ), "Failed to read initial identifySeconds"
+    ), "Failed to receive initial identifySeconds attribute report"
 
     logger.info(f"Initial identify seconds: {initial_identify_seconds}")
 
@@ -164,15 +159,12 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     try:
         initial_value = int(initial_identify_seconds)
     except ValueError:
-        assert (
-            False
-        ), f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
+        assert False, f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
 
     # Calculate a different uint16 value to write (ensure it's within uint16 range: 0-65535)
     new_value = (initial_value + 1) if initial_value < 65535 else 0
 
     # Write the new value to the identify-time attribute on the Matter device
-    # Cluster: identify, Endpoint: 1, Attribute: identify-time
     logger.info(f"Writing identify-time attribute to {new_value}")
     result = matter_light._interactor.write_attribute(
         node_id=matter_light._chip_tool_node_id,
@@ -183,18 +175,10 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     )
     assert result.success, f"Failed to write identify-time attribute: {result.stderr}"
 
-    # Read the identifySeconds resource again from Barton.
-    # This should have been updated as a result of receiving the attribute report from the
-    # device after its identify-time attribute was written over.
-    updated_identify_seconds = wait_for_condition(
-        default_environment.get_client(),
-        identify_seconds_uri,
-        lambda v: (v is not None and v.isdigit() and int(v) == new_value),
-        timeout=3,
-        poll_interval=0.1,
-    )
+    # Wait for the attribute report triggered by the write above.
+    updated_identify_seconds = resource_updated_queue.get(timeout=5)
     assert (
-        updated_identify_seconds is not None
-    ), f"identifySeconds was not updated correctly via attribute report. Expected {new_value}"
+        updated_identify_seconds is not None and int(updated_identify_seconds) == new_value
+    ), f"identifySeconds was not updated correctly via attribute report. Expected {new_value}, got {updated_identify_seconds}"
 
     logger.info(f"Updated identify seconds: {updated_identify_seconds}")
