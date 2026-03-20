@@ -1071,13 +1071,20 @@ namespace
         attr.name = "oomTest";
         attr.type = "bool";
 
-        // Script that tries to build large strings and objects to exhaust heap
+        // Script that allocates buffers to exhaust heap quickly and deterministically
         std::string heavyScript = R"(
-            var big = '';
-            for (var i = 0; i < 100000; i++) {
-                big = big + 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+            var bufs = [];
+            try {
+                // Allocate a series of buffers until the arena is exhausted.
+                // With a 200KB arena, this should OOM well before the loop completes.
+                for (var i = 0; i < 2048; i++) {
+                    bufs.push(new ArrayBuffer(256 * 1024));
+                }
+            } catch (e) {
+                // Ignore out-of-memory or other allocation errors; we only care
+                // that the engine handled them without crashing the host.
             }
-            return { output: JSON.stringify({value: big.length}) };
+            return { output: JSON.stringify({ value: bufs.length }) };
         )";
         script->AddAttributeReadMapper(attr, heavyScript);
 
