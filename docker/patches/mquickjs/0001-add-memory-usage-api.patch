@@ -1,18 +1,18 @@
-From 01097bef9d871890ea6500878d6e9365b1ace890 Mon Sep 17 00:00:00 2001
+From fd8d653d17d3c5cdb3e3f4203e9c3d64a2b6a8d2 Mon Sep 17 00:00:00 2001
 From: tlea <tlea@comcast.com>
-Date: Thu, 19 Mar 2026 15:15:20 +0000
+Date: Fri, 20 Mar 2026 10:46:29 -0500
 Subject: [PATCH] Add JS_GetMemoryUsage API for memory instrumentation
 
 ---
- mquickjs.c | 31 +++++++++++++++++++++++++++++++
+ mquickjs.c | 49 +++++++++++++++++++++++++++++++++++++++++++++++++
  mquickjs.h | 17 +++++++++++++++++
- 2 files changed, 48 insertions(+)
+ 2 files changed, 66 insertions(+)
 
 diff --git a/mquickjs.c b/mquickjs.c
-index a950f3c..f19a2bb 100644
+index a950f3c..4d537e1 100644
 --- a/mquickjs.c
 +++ b/mquickjs.c
-@@ -7123,6 +7123,37 @@ static __maybe_unused void JS_DumpUniqueStrings(JSContext *ctx)
+@@ -7123,6 +7123,55 @@ static __maybe_unused void JS_DumpUniqueStrings(JSContext *ctx)
  }
  #endif
  
@@ -69,7 +69,7 @@ index a950f3c..f19a2bb 100644
                     JSValue val, int flags)
  {
 diff --git a/mquickjs.h b/mquickjs.h
-index a1557fe..18ac005 100644
+index a1557fe..ff50886 100644
 --- a/mquickjs.h
 +++ b/mquickjs.h
 @@ -379,4 +379,21 @@ void JS_DumpValue(JSContext *ctx, const char *str,
@@ -95,5 +95,5 @@ index a1557fe..18ac005 100644
 +
  #endif /* MQUICKJS_H */
 -- 
-2.43.0
+2.51.0
 

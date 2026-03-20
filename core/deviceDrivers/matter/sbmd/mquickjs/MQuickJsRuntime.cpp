@@ -288,7 +288,7 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
 
     int flags = walkHeap ? JS_MEMUSAGE_WALK_HEAP : 0;
     JSMemoryUsage usage = {};
-    
+
     if (JS_GetMemoryUsage(ctx, &usage, flags) != 0)
     {
         icWarn("Failed to get mquickjs memory usage at '%s'", label);
@@ -300,8 +300,13 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
     if (heapWalked)
     {
         // Net heap = heap region minus free blocks reclaimed by GC
-        size_t netHeapUsed = usage.heap_used - usage.heap_free_blocks;
+        size_t netHeapUsed = 0;
 
+        if (usage.heap_used >= usage.heap_free_blocks)
+        {
+            netHeapUsed = usage.heap_used - usage.heap_free_blocks;
+        }
+        
         if (netHeapUsed > peakHeapUsed)
         {
             peakHeapUsed = netHeapUsed;
