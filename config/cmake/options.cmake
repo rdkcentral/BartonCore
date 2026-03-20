@@ -269,7 +269,7 @@ bcore_int_option(NAME BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS
 bcore_int_option(NAME BCORE_MQUICKJS_MEMSIZE_BYTES
                DEFINITION BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES
                DESCRIPTION "Size in bytes of the pre-allocated memory buffer for mquickjs."
-               VALUE 2097152)
+               VALUE 1048576)
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 

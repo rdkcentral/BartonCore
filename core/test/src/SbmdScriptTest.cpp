@@ -32,6 +32,8 @@
 
 #if defined(BCORE_USE_MQUICKJS)
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdScriptImpl.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
 #elif defined(BCORE_USE_QUICKJS)
 #include "deviceDrivers/matter/sbmd/quickjs/SbmdScriptImpl.h"
 #endif
@@ -990,5 +992,175 @@ namespace
         ASSERT_TRUE(script->MapCommandExecuteResponse(cmd2, reader2, outValue2));
         EXPECT_EQ(outValue2, "response2");
     }
+
+    //--------------------------------------------------------------------------
+    // Out-of-memory handling tests (mquickjs-specific)
+    //
+    // These tests artificially restrict the mquickjs arena to verify that
+    // OOM conditions are detected gracefully (return false / log errors)
+    // rather than crashing.
+    //--------------------------------------------------------------------------
+#if defined(BCORE_USE_MQUICKJS)
+
+    class SbmdScriptOomTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            // Shut down any existing runtime from prior tests
+            MQuickJsRuntime::Shutdown();
+        }
+
+        void TearDown() override
+        {
+            // Always clean up the runtime so subsequent tests start fresh
+            MQuickJsRuntime::Shutdown();
+        }
+    };
+
+    // Arena too small even for context initialization (stdlib setup needs heap)
+    TEST_F(SbmdScriptOomTest, TinyArenaFailsInitGracefully)
+    {
+        // 4 KB is too small for context + stdlib init
+        EXPECT_FALSE(MQuickJsRuntime::Initialize(4096));
+        EXPECT_FALSE(MQuickJsRuntime::IsInitialized());
+    }
+
+    // Arena large enough for context/stdlib/polyfill but too small for SBMD utils bundle
+    TEST_F(SbmdScriptOomTest, SmallArenaFailsSbmdUtilsLoadGracefully)
+    {
+        // 16 KB: enough for init (~10KB) but SBMD utils bundle (28939 bytes)
+        // needs significant heap for parsing
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(16384));
+
+        // Manually try to load SBMD utils - this should fail due to OOM
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+
+        bool loaded = SbmdUtilsLoader::LoadBundle(ctx);
+        EXPECT_FALSE(loaded);
+    }
+
+    // Arena just barely large enough for everything, then execute scripts
+    // that allocate heavily to trigger OOM during script execution
+    TEST_F(SbmdScriptOomTest, HeapExhaustionDuringScriptExec)
+    {
+        // 200KB is enough for init + SBMD utils but scripts that allocate heavily
+        // will exhaust the remaining heap
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(200 * 1024));
+
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+
+        // Load SBMD utils (needed for scripts to work)
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx)) << "200KB should be sufficient for SBMD utils";
+        JS_GC(ctx);
+
+        auto script = SbmdScriptImpl::Create("oom-test-device");
+        ASSERT_NE(script, nullptr);
+
+        // Add a mapper with a script that allocates heavily
+        SbmdAttribute attr;
+        attr.clusterId = 6;
+        attr.attributeId = 0;
+        attr.name = "oomTest";
+        attr.type = "bool";
+
+        // Script that allocates buffers to exhaust heap quickly and deterministically
+        std::string heavyScript = R"(
+            var bufs = [];
+            try {
+                // Allocate a series of buffers until the arena is exhausted.
+                // With a 200KB arena, this should OOM well before the loop completes.
+                for (var i = 0; i < 2048; i++) {
+                    bufs.push(new ArrayBuffer(256 * 1024));
+                }
+            } catch (e) {
+                // Ignore out-of-memory or other allocation errors; we only care
+                // that the engine handled them without crashing the host.
+            }
+            return { output: JSON.stringify({ value: bufs.length }) };
+        )";
+        script->AddAttributeReadMapper(attr, heavyScript);
+
+        // Create a simple TLV value for the read call
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        // The script catches the OOM error internally via try/catch, so it
+        // completes successfully.  The important thing is the engine does not
+        // crash.  Zero buffers should have been allocated since each request
+        // (256 KB) exceeds the remaining arena.
+        bool result = script->MapAttributeRead(attr, reader, outValue);
+        EXPECT_TRUE(result);
+        EXPECT_EQ(outValue, R"({"value":0})");
+    }
+
+    // Test stack exhaustion via deeply recursive script
+    TEST_F(SbmdScriptOomTest, StackExhaustionDuringScriptExec)
+    {
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(200 * 1024)); // 200KB
+
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx)) << "200KB should be sufficient for SBMD utils";
+        JS_GC(ctx);
+
+        auto script = SbmdScriptImpl::Create("stack-oom-test");
+        ASSERT_NE(script, nullptr);
+
+        SbmdAttribute attr;
+        attr.clusterId = 6;
+        attr.attributeId = 0;
+        attr.name = "stackTest";
+        attr.type = "bool";
+
+        // Script with infinite recursion to exhaust the stack
+        std::string recursiveScript = R"(
+            function recurse(n) { return recurse(n + 1); }
+            return { output: JSON.stringify({value: recurse(0)}) };
+        )";
+        script->AddAttributeReadMapper(attr, recursiveScript);
+
+        // Create a simple TLV value
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        // Should fail gracefully with stack overflow, not crash
+        bool result = script->MapAttributeRead(attr, reader, outValue);
+        EXPECT_FALSE(result);
+    }
+
+    // After OOM during init, verify we can re-initialize with a larger size
+    TEST_F(SbmdScriptOomTest, RecoveryAfterInitOom)
+    {
+        // First try with too-small arena
+        EXPECT_FALSE(MQuickJsRuntime::Initialize(4096));
+        EXPECT_FALSE(MQuickJsRuntime::IsInitialized());
+
+        // Should be able to try again with a proper size
+        MQuickJsRuntime::Shutdown(); // clean up any partial state
+        EXPECT_TRUE(MQuickJsRuntime::Initialize(2097152));
+        EXPECT_TRUE(MQuickJsRuntime::IsInitialized());
+    }
+
+#endif // BCORE_USE_MQUICKJS
 
 } // namespace

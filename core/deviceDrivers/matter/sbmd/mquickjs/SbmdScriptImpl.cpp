@@ -110,6 +110,12 @@ namespace barton
                 return nullptr;
             }
             icInfo("SBMD utilities loaded from %s", SbmdUtilsLoader::GetSource());
+            {
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load", IC_LOG_DEBUG);
+                JS_GC(ctx);
+                MQuickJsRuntime::LogMemoryUsage("post-sbmd-utils-load-after-gc", IC_LOG_DEBUG);
+            }
         }
 
         icDebug("SbmdScriptImpl created for device %s (using shared mquickjs context)", deviceId.c_str());
@@ -249,7 +255,9 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     JSValue func = JS_Eval(ctx, wrappedScript.c_str(), wrappedScript.length(), "<sbmd_script>", JS_EVAL_RETVAL);
     if (JS_IsException(func))
     {
-        icError("Script compilation failed: %s", GetExceptionString(ctx).c_str());
+        std::string err = GetExceptionString(ctx);
+        icError("Script compilation failed: %s", err.c_str());
+        MQuickJsRuntime::LogMemoryUsage("compilation-failed", IC_LOG_ERROR, true);
         return false;
     }
 
@@ -257,6 +265,7 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     if (JS_StackCheck(ctx, 3))
     {
         icError("Stack overflow before script call");
+        MQuickJsRuntime::LogMemoryUsage("stack-overflow-pre-call", IC_LOG_ERROR, true);
         return false;
     }
     JS_PushArg(ctx, jsonArg);
@@ -265,11 +274,18 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     JSValue scriptResult = JS_Call(ctx, 1);
     if (JS_IsException(scriptResult))
     {
-        icError("Script execution failed: %s", GetExceptionString(ctx).c_str());
+        std::string err = GetExceptionString(ctx);
+        icError("Script execution failed: %s", err.c_str());
+        MQuickJsRuntime::LogMemoryUsage("execution-failed", IC_LOG_ERROR, true);
         return false;
     }
 
     outJson = scriptResult;
+
+    // here we do the more expensive heap walk for our dump to capture the impact of the executed script,
+    // which may have caused significant deallocations that may not have been compacted yet until the next GC.
+    MQuickJsRuntime::LogMemoryUsage("post-script-exec", IC_LOG_DEBUG, true);
+
     icDebug("Script executed successfully");
     return true;
 }
