@@ -69,14 +69,7 @@ namespace barton
             return instance;
         }
 
-        virtual ~MatterCluster()
-        {
-            if (deviceDataCache != nullptr)
-            {
-                auto key = std::make_tuple(endpointId, clusterId);
-                deviceDataCache->RemoveClusterCallback(key);
-            }
-        }
+        virtual ~MatterCluster() = default;
 
         // ReadClient callbacks
         virtual void OnDone(chip::app::ReadClient * apReadClient) override;
