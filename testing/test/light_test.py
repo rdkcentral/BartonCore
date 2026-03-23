@@ -23,7 +23,6 @@
 
 
 import logging
-import time
 from queue import Queue
 
 from gi.repository import BCore
