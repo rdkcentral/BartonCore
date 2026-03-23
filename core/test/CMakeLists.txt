@@ -182,7 +182,6 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdScriptImpl.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/QuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdUtilsLoader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/MatterJsClusterLoader.cpp
         )
         set(SBMD_SCRIPT_TEST_ENGINE_LIBS quickjs)
     endif()

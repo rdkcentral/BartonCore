@@ -162,7 +162,7 @@ static void test_sbmdParserDoorLockFile(void **state)
     (void) state;
 
     // Use absolute path defined by CMake
-    const char *filePath = SBMD_SPEC_DIR "matterjs/door-lock.sbmd";
+    const char *filePath = SBMD_SPEC_DIR "door-lock.sbmd";
 
     auto spec = barton::SbmdParser::ParseFile(filePath);
     assert_non_null(spec.get());
@@ -240,7 +240,7 @@ static void test_sbmdParserLightFile(void **state)
     assert_string_equal(spec->endpoints[0].profile.c_str(), "light");
     assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
 
-    // isOn resource maps to OnOff cluster - uses MatterJs script-only approach
+    // isOn resource maps to OnOff cluster - uses script-only approach
     auto &isOn = spec->endpoints[0].resources[0];
     assert_string_equal(isOn.id.c_str(), "isOn");
     assert_false(isOn.optional);
@@ -252,7 +252,7 @@ static void test_sbmdParserLightFile(void **state)
     // Write uses script-only approach
     assert_false(isOn.mapper.writeScript.empty());
 
-    // currentLevel resource maps to LevelControl cluster - uses MatterJs script-only approach
+    // currentLevel resource maps to LevelControl cluster - uses script-only approach
     auto &currentLevel = spec->endpoints[0].resources[1];
     assert_string_equal(currentLevel.id.c_str(), "currentLevel");
     assert_true(currentLevel.optional);

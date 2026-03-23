@@ -75,7 +75,6 @@ set(SBMD_SPECS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/specs"
 
 if (BCORE_MATTER)
     include(BCoreMatterHelper)
-    include(BCoreMatterJsClusters)
 
     # Check for jsoncpp here rather than in DependencyVersions.cmake because the
     # Matter build process installs jsoncpp, and might not be available during
@@ -179,10 +178,6 @@ if (BCORE_MATTER)
 
         # Collect all .sbmd files for dependency tracking and validation
         file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
-        if(BCORE_MATTER_USE_MATTERJS)
-            file(GLOB SBMD_MATTERJS_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/matterjs/*.sbmd")
-            list(APPEND SBMD_SPEC_FILES ${SBMD_MATTERJS_SPEC_FILES})
-        endif()
 
         # Generate stubs from .d.ts file
         add_custom_command(
@@ -204,27 +199,6 @@ if (BCORE_MATTER)
         )
     endif()
 
-    # Build matter.js cluster bundle (for future script engines that support it)
-    if(BCORE_MATTER_USE_MATTERJS)
-        bcore_matterjs_build_clusters()
-    endif()
-
-    # Conditionally generate embedded header from the bundle
-    if(BCORE_MATTER_USE_MATTERJS)
-        # Get the path to the bundle for embedding
-        bcore_matterjs_get_bundle_path(OUTPUT MATTERJS_BUNDLE_PATH)
-
-        # Generate embedded header from the bundle
-        set(MATTERJS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/MatterJsClustersEmbedded.h")
-        bcore_matterjs_embed_bundle(
-            OUTPUT ${MATTERJS_EMBEDDED_HEADER}
-            VARIABLE_NAME kMatterJsClustersBundle
-        )
-    else()
-        message(STATUS "matter.js cluster bundle will not be embedded (BCORE_MATTER_USE_MATTERJS=${BCORE_MATTER_USE_MATTERJS})")
-        set(MATTERJS_EMBEDDED_HEADER "")
-    endif()
-
     # Embed SbmdUtils bundle (always available for SBMD scripts)
     set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
     set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
@@ -244,16 +218,9 @@ if (BCORE_MATTER)
     )
 
     # Add header generation as a source dependency
-    # Include matterjs header only if enabled
-    if(BCORE_MATTER_USE_MATTERJS)
-        add_custom_target(generate_sbmd_embedded_headers
-            DEPENDS ${MATTERJS_EMBEDDED_HEADER} ${SBMD_UTILS_EMBEDDED_HEADER}
-        )
-    else()
-        add_custom_target(generate_sbmd_embedded_headers
-            DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
-        )
-    endif()
+    add_custom_target(generate_sbmd_embedded_headers
+        DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
+    )
 
     # Include the generated header directory
     list(APPEND XTRA_INCLUDES ${CMAKE_CURRENT_BINARY_DIR}/src)
@@ -349,31 +316,12 @@ target_include_directories(BartonCore PRIVATE
 set_target_properties(BartonCore PROPERTIES VERSION ${BARTON_CORE_SO_VERSION} SOVERSION ${BARTON_CORE_MAJOR_VERSION})
 install(TARGETS BartonCore DESTINATION lib)
 
-# Install SBMD driver specification files, categorized by script type.
-# Plain JavaScript specs are always installed; matter.js-dependent specs
-# are only installed when BCORE_MATTER_USE_MATTERJS is enabled.
+# Install SBMD driver specification files.
 if (BCORE_MATTER)
     file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
 
-    # Categorize SBMD specs by their script type
-    foreach(SBMD_FILE ${ALL_SBMD_FILES})
-        file(READ "${SBMD_FILE}" SBMD_CONTENT)
-        string(FIND "${SBMD_CONTENT}" "scriptType: \"JavaScript+matterjs\"" _pos)
-        if (_pos EQUAL -1)
-            list(APPEND SBMD_JS_FILES "${SBMD_FILE}")
-        else()
-            list(APPEND SBMD_MATTERJS_FILES "${SBMD_FILE}")
-        endif()
-    endforeach()
-
-    # Always install plain JavaScript SBMD specs
-    if (SBMD_JS_FILES)
-        install(FILES ${SBMD_JS_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
-    endif()
-
-    # Install matter.js-dependent specs only when matter.js is enabled
-    if (BCORE_MATTER_USE_MATTERJS AND SBMD_MATTERJS_FILES)
-        install(FILES ${SBMD_MATTERJS_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    if (ALL_SBMD_FILES)
+        install(FILES ${ALL_SBMD_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
     endif()
 endif()
 

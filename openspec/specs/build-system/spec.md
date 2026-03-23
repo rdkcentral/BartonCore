@@ -42,7 +42,7 @@ The build system SHALL support ON/OFF feature flags via the `bcore_option()` CMa
 - **THEN** `BARTON_CONFIG_THREAD=1` SHALL be defined and Thread code SHALL be compiled
 
 ### Requirement: Feature flag catalog
-The build system SHALL support the following ON/OFF flags with specified defaults (16 public + 3 private = 19 total):
+The build system SHALL support the following ON/OFF flags with specified defaults (15 public + 3 private = 18 total):
 
 **Public flags:**
 
@@ -62,7 +62,6 @@ The build system SHALL support the following ON/OFF flags with specified default
 | `BCORE_MATTER_SKIP_SDK` | OFF | `BARTON_CONFIG_MATTER_SKIP_SDK` |
 | `BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA` | OFF | `BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA` |
 | `BCORE_MATTER_ENABLE_OTA_PROVIDER` | OFF | `BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER` |
-| `BCORE_MATTER_USE_MATTERJS` | OFF | `BARTON_CONFIG_MATTER_USE_MATTERJS` |
 | `BCORE_MATTER_VALIDATE_SCHEMAS` | ON | `BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS` |
 | `BCORE_BUILD_THIRD_PARTY_BARTON_COMMON` | ON | `BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON` |
 
@@ -77,6 +76,10 @@ The build system SHALL support the following ON/OFF flags with specified default
 #### Scenario: Flag off excludes definition
 - **WHEN** any `BCORE_*` flag is set to OFF
 - **THEN** its corresponding `BARTON_CONFIG_*` definition SHALL NOT be set
+
+#### Scenario: Removed matterjs flag rejected
+- **WHEN** `BCORE_MATTER_USE_MATTERJS` is set in the CMake cache
+- **THEN** configuration SHALL fail with a `FATAL_ERROR` indicating the option has been removed
 
 ### Requirement: String configuration options
 The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_MATTER_SBMD_JS_ENGINE` (default: `"mquickjs"`, valid values: `"quickjs"` or `"mquickjs"`), `BCORE_MATTER_SBMD_SPECS_DIR` (semicolon-delimited list of directories), `BCORE_LINK_LIBRARIES`.

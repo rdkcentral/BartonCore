@@ -13,17 +13,7 @@
 >   indicates that the related resource should not be updated by returning a `null`
 >   output or an invalid JSON object (which causes an error). This behavior will be
 >   formalized and corrected in a future release.
->
-> - **matter.js script support is optional and under evaluation.** Enabling
->   `JavaScript+matterjs` adds significant runtime resource overhead (~1 MB RAM).
->   Some drivers use only `SbmdUtils` for TLV operations while others use the
->   matter.js cluster library; both approaches are present intentionally to allow
->   comparison. Once more complex drivers are implemented (e.g., door lock user/PIN
->   code management), the method will be standardized. `SbmdUtils` is expected to
->   always be available going forward and will have a growing library of lower-level
->   utility functions.
->
-> - **Verbose logging.** Logging output is very verbose at the moment, especially the
+>\n> - **Verbose logging.** Logging output is very verbose at the moment, especially the
 >   frequent dumps of the entire device data cache JSON. This will be reduced.
 >
 > - **No multi-instance cluster support.** Devices that expose multiple instances of
@@ -163,13 +153,7 @@ The `scriptType` field specifies the JavaScript runtime requirements for the dri
 
 | Value | Description |
 |-------|-------------|
-| `JavaScript` | Default. Scripts use only `SbmdUtils` helpers. |
-| `JavaScript+matterjs` | Scripts require the `MatterClusters` global for TLV encoding. |
-
-Drivers that use `JavaScript+matterjs` require the matter.js cluster bundle to be
-built and available. If the bundle is not present, device initialization will fail.
-See [SBMD matter.js Integration](SBMD_MATTERJS_INTEGRATION.md) for details on using
-matter.js for TLV encoding.
+| `JavaScript` | Scripts use `SbmdUtils` helpers for TLV encoding/decoding. |
 
 ### 3.3 Barton Metadata
 
@@ -309,8 +293,7 @@ Write and execute mapper scripts return one of:
 - `{write: {clusterId, attributeId, tlvBase64}}` - for attribute writes
 - `{invoke: {clusterId, commandId, tlvBase64, ...}}` - for command invocations
 
-Scripts use `SbmdUtils.Tlv.encode*()` helpers for TLV encoding. For complex
-type-safe encoding, see the optional [matter.js integration](SBMD_MATTERJS_INTEGRATION.md).
+Scripts use `SbmdUtils.Tlv.encode*()` helpers for TLV encoding.
 
 ### 4.1 Attribute Mapping
 
@@ -471,9 +454,6 @@ Scripts are executed in an embedded JavaScript runtime. The engine is selected a
 time via the `BCORE_MATTER_SBMD_JS_ENGINE` CMake option (`"quickjs"` or `"mquickjs"`,
 default: `"mquickjs"`). Each mapper type provides a specific input object and expects a
 specific output format.
-
-> **Note**: The optional matter.js cluster library (`BCORE_MATTER_USE_MATTERJS`) is only
-> compatible with the `quickjs` engine. See [SBMD matter.js Integration](SBMD_MATTERJS_INTEGRATION.md).
 
 > **TypeScript Definitions**: A formal schema for all script interfaces is available in
 > [`core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts`](../core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts).
@@ -820,11 +800,6 @@ var tlv = SbmdUtils.Tlv.encodeStruct(args, {
 });
 ```
 
-> **matter.js Encoding**: For complex type-safe encoding with schema validation,
-> scripts can use the optional matter.js cluster library. This requires
-> `scriptType: "JavaScript+matterjs"` in the spec file. See
-> [SBMD matter.js Integration](SBMD_MATTERJS_INTEGRATION.md) for details.
-
 ## 7. Complete Examples
 
 ### 7.1 Door Lock Driver
@@ -1057,14 +1032,6 @@ Future versions may support:
 - Dynamic loading of new specs without restart
 - Remote spec distribution
 - Spec versioning and updates
-
-### 9.4 matter.js Cluster Integration
-
-SBMD supports integration with the [matter.js](https://github.com/matter-js/matter.js)
-cluster library for type-safe TLV encoding and decoding. When available, SBMD scripts
-can use the `MatterClusters` global object to access Matter cluster TLV schemas.
-
-See [SBMD_MATTERJS_INTEGRATION.md](SBMD_MATTERJS_INTEGRATION.md) for detailed documentation.
 
 ## 10. Appendix
 
