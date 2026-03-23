@@ -142,9 +142,6 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     lights = default_environment.get_client().get_devices_by_device_class("light")
     assert len(lights) == 1
 
-    light = lights[0]
-    device_uuid = light.props.uuid
-
     # Wait for the initial identifySeconds attribute report that arrives as
     # part of the subscription to the device.
     initial_identify_seconds = resource_updated_queue.get(timeout=5)
