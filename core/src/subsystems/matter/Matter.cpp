@@ -1432,7 +1432,18 @@ void Matter::RunOnMatterStack(std::function<void()> work)
 
     if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
     {
-        work();
+        try
+        {
+            work();
+        }
+        catch (const std::exception & e)
+        {
+            icError("RunOnMatterStack: work() threw exception: %s", e.what());
+        }
+        catch (...)
+        {
+            icError("RunOnMatterStack: work() threw unknown exception");
+        }
     }
     else
     {
