@@ -29,7 +29,6 @@
 
 #include "app/OperationalSessionSetup.h"
 #include "clusters/BasicInformation.hpp"
-#include "clusters/BasicInformation/ClusterId.h"
 #include "clusters/GeneralDiagnostics.h"
 #include "clusters/Identify.hpp"
 #include "clusters/MatterCluster.h"
