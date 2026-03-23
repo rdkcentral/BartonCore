@@ -182,8 +182,9 @@ namespace barton
         bool
         SendCommand(chip::app::CommandSender *commandSender, const chip::SessionHandle &sessionHandle, void *context);
 
-        bool
-        SendWriteRequest(chip::app::WriteClient *writeClient, const chip::SessionHandle &sessionHandle, void *context);
+        bool SendWriteRequest(std::unique_ptr<chip::app::WriteClient> writeClient,
+                              const chip::SessionHandle &sessionHandle,
+                              void *context);
 
     private:
     };

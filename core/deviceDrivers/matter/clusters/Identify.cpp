@@ -83,7 +83,8 @@ namespace barton
 
         using TypeInfo = Attributes::IdentifyTime::TypeInfo;
 
-        auto writeClient = new chip::app::WriteClient(&exchangeMgr, this, chip::Optional<uint16_t>::Missing());
+        auto writeClient =
+            std::make_unique<chip::app::WriteClient>(&exchangeMgr, this, chip::Optional<uint16_t>::Missing());
 
         TypeInfo::Type value = identifyTimeSecs;
 
@@ -97,11 +98,9 @@ namespace barton
         if (err != CHIP_NO_ERROR)
         {
             icError("Failed to encode attribute");
-
-            delete writeClient;
             return false;
         }
 
-        return SendWriteRequest(writeClient, sessionHandle, context);
+        return SendWriteRequest(std::move(writeClient), sessionHandle, context);
     }
 } // namespace barton
