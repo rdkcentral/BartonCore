@@ -9,7 +9,6 @@ Matter.js was integrated as an optional build-time dependency (`BCORE_MATTER_USE
 - Remove the `MatterJsClusterLoader` C++ class and its integration in `SbmdScriptImpl`
 - Remove the `BCoreMatterJsClusters.cmake` CMake module and all matterjs-conditional build logic in `core/CMakeLists.txt`
 - Remove the `scripts/build-matterjs-clusters.sh` build script
-- Remove Node.js/npm installation from `docker/Dockerfile.devcontainer` (only needed for matter.js builds)
 - Delete the `docs/SBMD_MATTERJS_INTEGRATION.md` documentation file
 - Migrate `core/deviceDrivers/matter/sbmd/specs/matterjs/door-lock.sbmd` and `air-quality-sensor.sbmd` to `core/deviceDrivers/matter/sbmd/specs/`, rewriting their scripts to use `SbmdUtils.Tlv` and `SbmdUtils.Response` instead of `MatterClusters`
 - Remove the `matterjs/` specs subdirectory
@@ -44,7 +43,6 @@ _(none — this is a removal/simplification change)_
 - **Core runtime** (`core/deviceDrivers/matter/sbmd/quickjs/`): `MatterJsClusterLoader` class deletion, `SbmdScriptImpl` simplification
 - **SBMD schema** (`sbmd-spec-schema.json`): `scriptType` enum reduced to `["JavaScript"]`
 - **SBMD specs** (`core/deviceDrivers/matter/sbmd/specs/`): Two specs migrated, subdirectory removed
-- **Docker** (`docker/Dockerfile.devcontainer`): Node.js installation removed
 - **Documentation** (`docs/`): One file deleted, one file updated
 - **Testing** (`testing/conftest.py`, `core/test/`): Test helpers and matterjs-specific test cases removed/updated
 - **OpenSpec specs** (`openspec/specs/`): Two existing specs updated to reflect removal

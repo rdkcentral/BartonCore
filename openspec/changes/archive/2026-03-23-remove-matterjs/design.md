@@ -17,7 +17,6 @@ The built-in `SbmdUtils.Tlv` and `SbmdUtils.Response` helpers now handle all the
 **Goals:**
 - Completely remove all matter.js code, build infrastructure, and configuration from the codebase
 - Migrate the two matterjs SBMD specs (door-lock, air-quality-sensor) to use standard `SbmdUtils.Tlv` JavaScript
-- Remove Node.js/npm from the Docker dev container (only needed for matter.js)
 - Update all documentation and openspec specifications to reflect the removal
 - Ensure the build compiles and tests pass without any matterjs references
 
@@ -38,27 +37,19 @@ The built-in `SbmdUtils.Tlv` and `SbmdUtils.Response` helpers now handle all the
 
 **Alternative considered**: Deleting the matterjs specs entirely. Rejected because door-lock and air-quality-sensor are valuable device types that should continue to be supported.
 
-### 2. Remove Node.js from Dockerfile.devcontainer
-
-**Decision**: Remove the Node.js 22.x installation block from `docker/Dockerfile.devcontainer`.
-
-**Rationale**: Node.js was added solely to support the matter.js build pipeline (`npm install`, TypeScript compilation, esbuild bundling). No other part of the BartonCore build or runtime requires Node.js. The dev container already has Python for tests and C/C++ toolchains for the main build.
-
-**Alternative considered**: Keeping Node.js for potential future use. Rejected — it can be re-added if needed, and keeping unused dependencies contradicts the simplification goal.
-
-### 3. Delete files rather than deprecate
+### 2. Delete files rather than deprecate
 
 **Decision**: Completely delete `MatterJsClusterLoader.h/.cpp`, `BCoreMatterJsClusters.cmake`, `scripts/build-matterjs-clusters.sh`, `docs/SBMD_MATTERJS_INTEGRATION.md`, and the `specs/matterjs/` directory.
 
 **Rationale**: These files are only meaningful when `BCORE_MATTER_USE_MATTERJS=ON`. Since we're removing the option entirely, keeping dead code adds confusion. Git history preserves everything if it's ever needed.
 
-### 4. Remove `JavaScript+matterjs` from the schema enum
+### 3. Remove `JavaScript+matterjs` from the schema enum
 
 **Decision**: Reduce the `scriptType` enum in `sbmd-spec-schema.json` to `["JavaScript"]` only.
 
 **Rationale**: With no specs using `JavaScript+matterjs` and no loader to support it, keeping the enum value would be misleading. If a future integration needs a new script type, it can add one.
 
-### 5. Clean up `embed-js-as-header.py` default variable name
+### 4. Clean up `embed-js-as-header.py` default variable name
 
 **Decision**: Leave `scripts/embed-js-as-header.py` mostly as-is — it is a general-purpose tool.  The variable name should no longer have a default and should instead be required. It is still used to embed SbmdUtils.
 
