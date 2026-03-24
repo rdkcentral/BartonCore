@@ -126,7 +126,25 @@ echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 # Save off a workspace identifier (basename of the repo directory) to uniquely identify
 # this clone in Docker Compose project names and network names, enabling multiple clones
 # to run simultaneously without sharing networks.
-BARTON_WORKSPACE_ID=$(basename $BARTON_TOP)
+# Use realpath to resolve the canonical path before taking basename so that the trailing
+# "/.." in BARTON_TOP does not result in ".." as the workspace id. Sanitize to lowercase
+# alphanumeric-and-hyphens to satisfy Docker Compose project name restrictions.
+workspacePath=$(realpath "$BARTON_TOP")
+workspaceName=$(basename -- "$workspacePath")
+BARTON_WORKSPACE_ID=$(printf '%s' "$workspaceName" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+
+# Trim leading and trailing hyphens and ensure a non-empty, reasonably sized workspace ID
+BARTON_WORKSPACE_ID=${BARTON_WORKSPACE_ID##-}
+BARTON_WORKSPACE_ID=${BARTON_WORKSPACE_ID%%-}
+
+if [ -z "$BARTON_WORKSPACE_ID" ]; then
+    BARTON_WORKSPACE_ID="workspace"
+fi
+
+maxWorkspaceIdLen=40
+if [ ${#BARTON_WORKSPACE_ID} -gt $maxWorkspaceIdLen ]; then
+    BARTON_WORKSPACE_ID=${BARTON_WORKSPACE_ID:0:$maxWorkspaceIdLen}
+fi
 echo "BARTON_WORKSPACE_ID=$BARTON_WORKSPACE_ID" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
