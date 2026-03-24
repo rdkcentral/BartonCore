@@ -131,6 +131,19 @@ echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 workspacePath=$(realpath "$BARTON_TOP")
 workspaceName=$(basename -- "$workspacePath")
 workspaceId=$(printf '%s' "$workspaceName" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+
+# Trim leading and trailing hyphens and ensure a non-empty, reasonably sized workspace ID
+workspaceId=${workspaceId##-}
+workspaceId=${workspaceId%%-}
+
+if [ -z "$workspaceId" ]; then
+    workspaceId="workspace"
+fi
+
+maxWorkspaceIdLen=40
+if [ ${#workspaceId} -gt $maxWorkspaceIdLen ]; then
+    workspaceId=${workspaceId:0:$maxWorkspaceIdLen}
+fi
 echo "BARTON_WORKSPACE_ID=$workspaceId" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
