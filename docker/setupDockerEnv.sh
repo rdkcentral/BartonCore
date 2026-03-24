@@ -123,6 +123,9 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
+# Save off a workspace identifier (basename of the repo directory) to uniquely identify
+# this clone in Docker Compose project names, enabling multiple clones to run simultaneously.
+echo "BARTON_WORKSPACE_ID=$(basename $BARTON_TOP)" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
