@@ -128,7 +128,10 @@ echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 # Use realpath to resolve the canonical path before taking basename so that the trailing
 # "/.." in BARTON_TOP does not result in ".." as the workspace id. Sanitize to lowercase
 # alphanumeric-and-hyphens to satisfy Docker Compose project name restrictions.
-echo "BARTON_WORKSPACE_ID=$(printf '%s' "$(basename -- "$(realpath "$BARTON_TOP")")" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')" >> $OUTFILE
+workspacePath=$(realpath "$BARTON_TOP")
+workspaceName=$(basename -- "$workspacePath")
+workspaceId=$(printf '%s' "$workspaceName" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+echo "BARTON_WORKSPACE_ID=$workspaceId" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
