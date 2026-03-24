@@ -273,10 +273,9 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 # Check removed/replaced options
 
 macro(bcore_removed_option NAME error)
-    # This macro checks for a remove option and emits an error
+    # This macro checks for a removed option and emits an error
     # if the option is set.
-    get_property(is_set CACHE ${NAME} PROPERTY VALUE SET)
-    if (is_set)
+    if (DEFINED CACHE{${NAME}})
         message(FATAL_ERROR "Removed option ${NAME} is set - ${error}")
     endif()
 endmacro()

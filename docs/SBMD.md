@@ -13,7 +13,7 @@
 >   indicates that the related resource should not be updated by returning a `null`
 >   output or an invalid JSON object (which causes an error). This behavior will be
 >   formalized and corrected in a future release.
->\n> - **Verbose logging.** Logging output is very verbose at the moment, especially the
+> - **Verbose logging.** Logging output is very verbose at the moment, especially the
 >   frequent dumps of the entire device data cache JSON. This will be reduced.
 >
 > - **No multi-instance cluster support.** Devices that expose multiple instances of
