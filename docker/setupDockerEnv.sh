@@ -125,7 +125,26 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 # Save off a workspace identifier (basename of the repo directory) to uniquely identify
 # this clone in Docker Compose project names, enabling multiple clones to run simultaneously.
-echo "BARTON_WORKSPACE_ID=$(basename $BARTON_TOP)" >> $OUTFILE
+# Use realpath to resolve the canonical path before taking basename so that the trailing
+# "/.." in BARTON_TOP does not result in ".." as the workspace id. Sanitize to lowercase
+# alphanumeric-and-hyphens to satisfy Docker Compose project name restrictions.
+workspacePath=$(realpath "$BARTON_TOP")
+workspaceName=$(basename -- "$workspacePath")
+workspaceId=$(printf '%s' "$workspaceName" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+
+# Trim leading and trailing hyphens and ensure a non-empty, reasonably sized workspace ID
+workspaceId=${workspaceId##-}
+workspaceId=${workspaceId%%-}
+
+if [ -z "$workspaceId" ]; then
+    workspaceId="workspace"
+fi
+
+maxWorkspaceIdLen=40
+if [ ${#workspaceId} -gt $maxWorkspaceIdLen ]; then
+    workspaceId=${workspaceId:0:$maxWorkspaceIdLen}
+fi
+echo "BARTON_WORKSPACE_ID=$workspaceId" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE

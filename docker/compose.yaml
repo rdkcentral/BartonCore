@@ -26,7 +26,7 @@
 #
 
 # Setting the name element to the user helps keep the container name easy to identify
-# by namespacing it with the user's name. Example: $USER-barton-1
+# by namespacing it with the user's name and workspace. Example: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-1
 name: $BUILDER_USER-$BARTON_WORKSPACE_ID
 
 services:
