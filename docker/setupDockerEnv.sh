@@ -124,8 +124,10 @@ echo "BUILDER_GID=$(id -g)" >> $OUTFILE
 # Save off the path to the Barton directory so we can mount it in the same path in the container
 echo "BARTON_TOP=$BARTON_TOP" >> $OUTFILE
 # Save off a workspace identifier (basename of the repo directory) to uniquely identify
-# this clone in Docker Compose project names, enabling multiple clones to run simultaneously.
-echo "BARTON_WORKSPACE_ID=$(basename $BARTON_TOP)" >> $OUTFILE
+# this clone in Docker Compose project names and network names, enabling multiple clones
+# to run simultaneously without sharing networks.
+BARTON_WORKSPACE_ID=$(basename $BARTON_TOP)
+echo "BARTON_WORKSPACE_ID=$BARTON_WORKSPACE_ID" >> $OUTFILE
 # Save off the image repo/tag into the .env file so it can be used in the compose process
 echo "IMAGE_REPO=$IMAGE_REPO" >> $OUTFILE
 echo "IMAGE_TAG=$IMAGE_TAG" >> $OUTFILE
@@ -163,8 +165,10 @@ echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
 
 # Ensure the container network exists
-NETWORK_NAME="$USER-barton-ip6net"
-IPV6_SUBNET="fd00:$(echo $USER | sha256sum | cut -c1-4)::/64"
+NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
+_SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID" | sha256sum | cut -c1-8)
+IPV6_SUBNET="fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64"
+unset _SUBNET_HASH
 
 if ! docker network ls | grep -q "$NETWORK_NAME"; then
     echo "Network $NETWORK_NAME does not exist. Creating it..."
