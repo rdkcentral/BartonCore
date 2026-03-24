@@ -66,6 +66,10 @@
 #define BASE_DD_EXPONENTIAL_DELAY_SECONDS 2
 #define MAX_DD_EXPONENTIAL_DELAY_SECONDS  (60 * 60 * 24)
 
+// Property names to override retry delays for testing
+#define CPE_DD_EXPONENTIAL_DELAY_SECS     "cpe.dd.exponentialDelaySecs"
+#define CPE_DD_INCREMENTAL_DELAY_SECS     "cpe.dd.incrementalDelaySecs"
+
 static pthread_mutex_t deviceDescriptorMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t allowlistTaskId = 0;
@@ -117,17 +121,15 @@ void deviceServiceDeviceDescriptorsInit(deviceDescriptorsReadyForPairingFunc rea
 
     if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
     {
-        allowlistUrl = b_core_property_provider_get_property_as_string(
-            propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE, NULL);
+        allowlistUrl =
+            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE, NULL);
     }
     else if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESCRIPTOR_LIST))
     {
-        allowlistUrl =
-            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
+        allowlistUrl = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
     }
 
-    char *denylistUrl =
-        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
+    char *denylistUrl = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
 
     // device service can be informed for pairing is possible or not based on
     // valid local allowlist & denyList. If url is valid, url will be used to check
@@ -267,15 +269,19 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
 
         if (useAggressivePolicy == true)
         {
-            policy = createIncrementalRepeatingTaskPolicy(INIT_DD_TASK_WAIT_TIME_SECONDS,
-                                                          MAX_DD_TASK_WAIT_TIME_SECONDS,
-                                                          INTERVAL_DD_TASK_TIME_SECONDS,
-                                                          DELAY_SECS);
+            uint64_t incrementalDelay = b_core_property_provider_get_property_as_uint64(
+                propertyProvider, CPE_DD_INCREMENTAL_DELAY_SECS, INIT_DD_TASK_WAIT_TIME_SECONDS);
+
+            policy = createIncrementalRepeatingTaskPolicy(
+                incrementalDelay, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
         }
         else
         {
-            policy = createExponentialRepeatingTaskPolicy(
-                BASE_DD_EXPONENTIAL_DELAY_SECONDS, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
+            uint8_t exponentialDelay = (uint8_t) b_core_property_provider_get_property_as_uint8(
+                propertyProvider, CPE_DD_EXPONENTIAL_DELAY_SECS, BASE_DD_EXPONENTIAL_DELAY_SECONDS);
+
+            policy =
+                createExponentialRepeatingTaskPolicy(exponentialDelay, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
         }
 
         // Kick it off in the background, with increasing backoff until it eventually completes
@@ -429,9 +435,13 @@ void deviceDescriptorsUpdateDenylist(const char *url)
         scoped_generic char *pendingDenylistDownloadUrl = strdup(url);
 
         // Kick it off in the background, with increasing backoff until it eventually completes
-        // Kick it off in the background, with increasing backoff until it eventually completes
+        g_autoptr(BCorePropertyProvider) denylistPropertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+        uint64_t incrementalDelay = b_core_property_provider_get_property_as_uint64(
+            denylistPropertyProvider, CPE_DD_INCREMENTAL_DELAY_SECS, INIT_DD_TASK_WAIT_TIME_SECONDS);
+
         RepeatingTaskPolicy *policy = createIncrementalRepeatingTaskPolicy(
-            INIT_DD_TASK_WAIT_TIME_SECONDS, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
+            incrementalDelay, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
         denylistTaskId = createPolicyRepeatingTask(updateDenylistTaskFunc,
                                                    destroyDenylistTaskObjectsFunc,
                                                    policy,
@@ -566,7 +576,6 @@ static void destroyDenylistTaskObjectsFunc(uint32_t taskHandle, void *userArg, R
     free(userArg);
 }
 
-
 static bool downloadFile(const char *url, const char *destFile, deviceDescriptorFileValidator fileValidator)
 {
     icLogDebug(LOG_TAG, "%s: url=%s, destFile=%s", __FUNCTION__, url, destFile);
@@ -580,8 +589,7 @@ static bool downloadFile(const char *url, const char *destFile, deviceDescriptor
 
     const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
     g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *propValue =
-        b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
+    g_autofree char *propValue = b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
 
     sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
 
