@@ -28,7 +28,9 @@
  * success.  The interval between each download attempt will increase until we reach our maximum interval.
  */
 
+#include <inttypes.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
@@ -37,6 +39,7 @@
 
 #include "deviceDescriptorHandler.h"
 #include "deviceServiceConfiguration.h"
+#include "deviceServiceHash.h"
 #include "deviceServicePrivate.h"
 #include "glib.h"
 #include "provider/barton-core-property-provider.h"
@@ -44,7 +47,6 @@
 #include <devicePrivateProperties.h>
 #include <deviceService.h>
 #include <icConcurrent/repeatingTask.h>
-#include <icCrypto/digest.h>
 #include <icLog/logging.h>
 #include <icLog/telemetryMarkers.h>
 #include <icUtil/fileUtils.h>
@@ -277,11 +279,26 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
         }
         else
         {
-            uint8_t exponentialDelay = (uint8_t) b_core_property_provider_get_property_as_uint8(
+            uint32_t exponentialDelay = b_core_property_provider_get_property_as_uint32(
                 propertyProvider, CPE_DD_EXPONENTIAL_DELAY_SECS, BASE_DD_EXPONENTIAL_DELAY_SECONDS);
 
-            policy =
-                createExponentialRepeatingTaskPolicy(exponentialDelay, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
+            if (exponentialDelay == 0)
+            {
+                icLogWarn(LOG_TAG, "%s: clamping exponential delay from 0 to 1", __FUNCTION__);
+                exponentialDelay = 1;
+            }
+            else if (exponentialDelay > UINT8_MAX)
+            {
+                icLogWarn(LOG_TAG,
+                          "%s: clamping exponential delay %" PRIu32 " to %d",
+                          __FUNCTION__,
+                          exponentialDelay,
+                          UINT8_MAX);
+                exponentialDelay = UINT8_MAX;
+            }
+
+            policy = createExponentialRepeatingTaskPolicy(
+                (uint8_t) exponentialDelay, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
         }
 
         // Kick it off in the background, with increasing backoff until it eventually completes
@@ -363,7 +380,8 @@ static bool updateAllowlistTaskFunc(void *taskArg)
 
             // update our system properties
             deviceServiceSetSystemProperty(CURRENT_DEVICE_DESCRIPTOR_URL, url);
-            scoped_generic char *md5 = digestFileHex(allowlistPath, CRYPTO_DIGEST_MD5);
+
+            g_autofree char *md5 = deviceServiceHashComputeFileMd5HexString(allowlistPath);
             deviceServiceSetSystemProperty(CURRENT_DEVICE_DESCRIPTOR_MD5, md5);
         }
     }
@@ -529,7 +547,8 @@ static bool updateDenylistTaskFunc(void *taskArg)
 
             // update our system properties
             deviceServiceSetSystemProperty(CURRENT_DENYLIST_URL, url);
-            scoped_generic char *md5 = digestFileHex(denylistPath, CRYPTO_DIGEST_MD5);
+
+            g_autofree char *md5 = deviceServiceHashComputeFileMd5HexString(denylistPath);
             deviceServiceSetSystemProperty(CURRENT_DENYLIST_MD5, md5);
         }
     }
@@ -680,7 +699,7 @@ static bool fileNeedsUpdating(const char *currentUrlSystemKey,
         if (strcmp(currentUrl, newUrl) == 0)
         {
             // URL is the same, so compare the MD5
-            scoped_generic char *localMd5 = digestFileHex(currentFilePath, CRYPTO_DIGEST_MD5);
+            g_autofree char *localMd5 = deviceServiceHashComputeFileMd5HexString(currentFilePath);
 
             // compare to what we have in our database (to see if the local file was altered, replaced, etc)
             if (stringCompare(currentMd5, localMd5, true) != 0)
