@@ -30,7 +30,6 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "../SbmdSpec.h"
-#include "MatterJsClusterLoader.h"
 #include "QuickJsRuntime.h"
 #include "SbmdScriptImpl.h"
 #include "SbmdUtilsLoader.h"
@@ -203,16 +202,6 @@ namespace barton
                 return nullptr;
             }
             icInfo("SBMD utilities loaded from %s", SbmdUtilsLoader::GetSource());
-
-            // Load matter.js cluster bundle into the shared context (optional)
-            if (MatterJsClusterLoader::LoadBundle(ctx))
-            {
-                icInfo("matter.js clusters loaded from %s", MatterJsClusterLoader::GetSource());
-            }
-            else if (MatterJsClusterLoader::IsAvailable())
-            {
-                icWarn("matter.js clusters available but failed to load");
-            }
         }
 
         icDebug("SbmdScriptImpl created for device %s (using shared runtime)", deviceId.c_str());

@@ -232,13 +232,6 @@ namespace barton
         SbmdReporting reporting;
         std::vector<SbmdResource> resources;  // Top-level resources
         std::vector<SbmdEndpoint> endpoints;
-
-        /**
-         * Check if this spec uses matter.js for script execution.
-         * When true, write mappers return fully-specified operations (invoke/write)
-         * and the command/commands/attribute metadata in the SBMD file is ignored.
-         */
-        bool UsesMatterJs() const { return scriptType == "JavaScript+matterjs"; }
     };
 
 } // namespace barton

@@ -55,23 +55,23 @@ def escape_for_c_string(content: str) -> tuple[str, str]:
     base = "JS"
     delimiter = base
     counter = 0
-    
+
     # Increment counter until we find a delimiter not in content or hit length limit
     while delimiter in content and len(delimiter) < 16:
         counter += 1
         delimiter = f"{base}{counter}"
-    
+
     # If we hit the length limit with base "JS", try a random delimiter
     if delimiter in content and len(delimiter) >= 16:
         for _ in range(100):  # Try up to 100 random delimiters
             delimiter = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
             if delimiter not in content:
                 break
-    
+
     # Final fallback: use a UUID-based delimiter (guaranteed unique)
     if delimiter in content:
         delimiter = str(uuid.uuid4()).replace('-', '')[:16]
-    
+
     return content, delimiter
 
 
@@ -185,9 +185,7 @@ def main():
         help='Output C/C++ header file path'
     )
     parser.add_argument(
-        '--variable', '-v',
-        default='kMatterJsClustersBundle',
-        help='Name of the C variable (default: kMatterJsClustersBundle)'
+        "--variable", "-v", required=True, help="Name of the C variable"
     )
 
     args = parser.parse_args()
