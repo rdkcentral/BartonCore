@@ -56,6 +56,6 @@ services:
 
 networks:
     barton-ip6net:
-        name: $BUILDER_USER-barton-ip6net
+        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
         # Indicate that the network is defined outside of this compose file
         external: true
