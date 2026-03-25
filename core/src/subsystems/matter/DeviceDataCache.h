@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "Matter.h"
 #include "MatterCommon.h"
 #include "app/ClusterStateCache.h"
 #include "controller/CHIPDeviceController.h"
@@ -34,7 +35,9 @@
 
 #include <future>
 #include <json/json.h>
+#include <map>
 #include <string>
+#include <tuple>
 
 using namespace barton::Subsystem::Matter;
 
@@ -130,6 +133,30 @@ namespace barton
         }
 
         /**
+         * Set the callback handler for common cluster events and attribute changes.
+         *
+         * @param key A tuple containing the endpoint ID and cluster ID.
+         * @param clusterCallback Weak pointer to the callback for a particular device+endpoint+cluster.
+         *                        The cache does not take ownership; expired weak pointers are erased on dispatch.
+         */
+        void SetClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key,
+                                std::weak_ptr<chip::app::ClusterStateCache::Callback> clusterCallback)
+        {
+            // clusterCallbacks is read from Matter-thread callbacks, so it must be mutated on the Matter thread
+            // as well to avoid race conditions
+            Matter::RunOnMatterStack([this, key, clusterCallback] {
+                clusterCallbacks[key] = clusterCallback;
+            });
+        }
+
+        void RemoveClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key)
+        {
+            Matter::RunOnMatterStack([this, key] {
+                clusterCallbacks.erase(key);
+            });
+        }
+
+        /**
          * Get attribute data stored in the cache as a TLVReader.
          */
         CHIP_ERROR GetAttributeData(const chip::app::ConcreteDataAttributePath &aPath,
@@ -213,7 +240,26 @@ namespace barton
                          chip::TLV::TLVReader *apData,
                          const chip::app::StatusIB *apStatus) override
         {
-            if (callback != nullptr)
+
+            auto key = std::make_tuple(aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
+            auto it = clusterCallbacks.find(key);
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
+
+            if (clusterCallback != nullptr)
+            {
+                clusterCallback->OnEventData(aEventHeader, apData, apStatus);
+            }
+
+            else if (callback != nullptr)
             {
                 callback->OnEventData(aEventHeader, apData, apStatus);
             }
@@ -238,7 +284,25 @@ namespace barton
                              chip::TLV::TLVReader *apData,
                              const chip::app::StatusIB &aStatus) override
         {
-            if (callback != nullptr && aStatus.IsSuccess())
+            auto key = std::make_tuple(aPath.mEndpointId, aPath.mClusterId);
+            auto it = clusterCallbacks.find(key);
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
+
+            if (clusterCallback != nullptr && aStatus.IsSuccess())
+            {
+                clusterCallback->OnAttributeChanged(clusterStateCache.get(), aPath);
+            }
+
+            else if (callback != nullptr && aStatus.IsSuccess())
             {
                 callback->OnAttributeChanged(clusterStateCache.get(), aPath);
             }
@@ -312,7 +376,15 @@ namespace barton
         uint64_t lastReportCompletedTimestamp = 0;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
 
+        // This is the overall callback handler for device cluster events and attribute changes.
         std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;
+
+        // These callback handlers are for events and attributes on specific clusters that are
+        // not encompassed in the overall callback handler above.
+        // endpoint id + cluster id to ClusterStateCache Callback.
+        std::map<std::tuple<chip::EndpointId, chip::ClusterId>, std::weak_ptr<chip::app::ClusterStateCache::Callback>>
+            clusterCallbacks;
+
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
     };

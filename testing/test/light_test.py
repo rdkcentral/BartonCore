@@ -108,3 +108,73 @@ def test_light_on_off(default_environment, matter_light):
     assert (
         resource_updated_result == expected_on_off_state
     ), "Light on/off state did not update as expected"
+
+
+def test_light_common_cluster_attribute_report(default_environment, matter_light):
+    """Test that Barton correctly handles attribute reports for common clusters from Matter devices.
+
+    This test verifies that when a Matter device sends an attribute report for
+    the identify-time attribute, Barton correctly updates the corresponding
+    identifySeconds resource. This is verified when the attribute report is sent
+    upon subscribing to the device, and also when the attribute report is sent
+    after a new value is written to the identify-time attribute.
+    """
+    resource_updated_queue = Queue()
+
+    def check_resource_updates(
+        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
+    ) -> None:
+        resource = resource_updated_event.props.resource
+        logger.debug(
+            f"Resource updated: {resource.props.id} with value {resource.props.value}"
+        )
+        if resource.props.id == "identifySeconds":
+            resource_updated_queue.put(resource.props.value)
+
+    default_environment.get_client().connect(
+        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
+    )
+
+    default_environment.get_client().commission_device(
+        matter_light.get_commissioning_code(), 100
+    )
+    default_environment.wait_for_device_added()
+    lights = default_environment.get_client().get_devices_by_device_class("light")
+    assert len(lights) == 1
+
+    # Wait for the initial identifySeconds attribute report that arrives as
+    # part of the subscription to the device.
+    initial_identify_seconds = resource_updated_queue.get(timeout=5)
+    assert (
+        initial_identify_seconds is not None
+    ), "Failed to receive initial identifySeconds attribute report"
+
+    logger.info(f"Initial identify seconds: {initial_identify_seconds}")
+
+    # Parse the string value to get the uint16 value
+    try:
+        initial_value = int(initial_identify_seconds)
+    except ValueError:
+        assert False, f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
+
+    # Calculate a different uint16 value to write (ensure it's within uint16 range: 0-65535)
+    new_value = (initial_value + 1) if initial_value < 65535 else 0
+
+    # Write the new value to the identify-time attribute on the Matter device
+    logger.info(f"Writing identify-time attribute to {new_value}")
+    result = matter_light._interactor.write_attribute(
+        node_id=matter_light._chip_tool_node_id,
+        endpoint_id=1,
+        cluster="identify",
+        attribute="identify-time",
+        value=new_value
+    )
+    assert result.success, f"Failed to write identify-time attribute: {result.stderr}"
+
+    # Wait for the attribute report triggered by the write above.
+    updated_identify_seconds = resource_updated_queue.get(timeout=5)
+    assert (
+        updated_identify_seconds is not None and int(updated_identify_seconds) == new_value
+    ), f"identifySeconds was not updated correctly via attribute report. Expected {new_value}, got {updated_identify_seconds}"
+
+    logger.info(f"Updated identify seconds: {updated_identify_seconds}")

@@ -42,12 +42,6 @@ namespace barton
     class GeneralDiagnostics : public MatterCluster
     {
     public:
-        GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
-                          std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::GeneralDiagnostics::Id, deviceDataCache)
-        {
-        }
-
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
@@ -64,5 +58,16 @@ namespace barton
 
         std::string GetMacAddress();
         std::string GetNetworkType();
+
+    protected:
+        GeneralDiagnostics(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                          std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::GeneralDiagnostics::Id, deviceDataCache)
+        {
+        }
+
+    private:
+        template <typename T, typename... Args>
+        friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton

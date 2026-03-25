@@ -65,7 +65,7 @@ namespace barton
         }
     }
 
-    bool MatterCluster::SendWriteRequest(chip::app::WriteClient *writeClient,
+    bool MatterCluster::SendWriteRequest(std::unique_ptr<chip::app::WriteClient> writeClient,
                                          const chip::SessionHandle &sessionHandle,
                                          void *context)
     {
@@ -78,6 +78,7 @@ namespace barton
 
         if (error == CHIP_NO_ERROR)
         {
+            writeClient.release(); // ownership transferred to Matter stack; OnDone() will delete
             return true; // we are awaiting async now
         }
         else
@@ -88,8 +89,7 @@ namespace barton
             writeRequestContext = nullptr;
             mtx.unlock();
 
-            // no async will occur
-            delete writeClient;
+            // no async will occur; unique_ptr destructor cleans up
             return false;
         }
     }
