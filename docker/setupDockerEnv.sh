@@ -188,7 +188,7 @@ _SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID" | sha256sum | cut -c1-8)
 IPV6_SUBNET="fd00:${_SUBNET_HASH:0:4}:${_SUBNET_HASH:4:4}::/64"
 unset _SUBNET_HASH
 
-if ! docker network ls | grep -q "$NETWORK_NAME"; then
+if ! docker network ls --format '{{.Name}}' | grep -Fxq "$NETWORK_NAME"; then
     echo "Network $NETWORK_NAME does not exist. Creating it..."
     docker network create --ipv6 --subnet $IPV6_SUBNET $NETWORK_NAME
 fi
