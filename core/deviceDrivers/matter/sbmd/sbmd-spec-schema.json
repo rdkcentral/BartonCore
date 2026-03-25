@@ -23,8 +23,8 @@
     },
     "scriptType": {
       "type": "string",
-      "description": "Script type: 'JavaScript' for base64 TLV passed to/from scripts via SbmdUtils, 'JavaScript+matterjs' for matter.js-based TLV encoding/decoding",
-      "enum": ["JavaScript", "JavaScript+matterjs"]
+      "description": "Script type: 'JavaScript' for base64 TLV passed to/from scripts via SbmdUtils",
+      "enum": ["JavaScript"]
     },
     "bartonMeta": {
       "$ref": "#/$defs/bartonMeta"

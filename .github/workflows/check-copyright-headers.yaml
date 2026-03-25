@@ -58,11 +58,28 @@ jobs:
                     COPYRIGHT_HEADER_SLASH=$(cat docs/copyright-header-slash.txt)
                     COPYRIGHT_HEADER_HASH=$(cat docs/copyright-header-hash.txt)
 
+                    # Files and directories to skip (glob patterns matched against relative paths)
+                    SKIP_PATTERNS=(
+                        "openspec/*"
+                    )
+
                     missing_header=false
                     bad_files="/tmp/bad_files.txt"
                     echo "Missing or incorrect copyright headers in the following files:" > $bad_files
 
                     while read -r file; do
+                        # Check if file matches any skip pattern
+                        skip=false
+                        for pattern in "${SKIP_PATTERNS[@]}"; do
+                            if [[ "$file" == $pattern ]]; then
+                                skip=true
+                                break
+                            fi
+                        done
+                        if [[ "$skip" == true ]]; then
+                            continue
+                        fi
+
                         if [[ "$file" == *.c || "$file" == *.h || "$file" == *.cpp || "$file" == *.hpp ]]; then
                             if ! awk -v pattern="$COPYRIGHT_HEADER_SLASH" 'BEGIN { found=0 } { content = content $0 "\n" } END { if (match(content, pattern) != 0) found=1 } END { exit !found }' "$file"; then
                                 echo "Missing or incorrect copyright header in $file"

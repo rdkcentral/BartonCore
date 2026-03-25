@@ -1,6 +1,5 @@
 # Door Lock SBMD Specification
 # Maps Matter Door Lock device type to Barton doorLock device class
-# Uses MatterClusters (matter.js) for TLV encoding
 
 # SBMD schema version 1.0
 schemaVersion: "1.0"
@@ -9,7 +8,7 @@ driverVersion: "1.0"
 # Human-readable driver name
 name: "Door Lock"
 # Script type (currently only JavaScript is supported)
-scriptType: "JavaScript+matterjs"
+scriptType: "JavaScript"
 
 # Barton device class mapping
 bartonMeta:
@@ -46,32 +45,16 @@ resources:
           name: "IdentifyTime"
           type: "uint16"           # Unsigned 16-bit integer
 
-        # Use MatterClusters for type-safe TLV decoding
         script: |
-          var TlvUInt16 = MatterClusters.TlvUInt16;
-          var tlvBytes = SbmdUtils.Base64.decode(sbmdReadArgs.tlvBase64);
-          var value = TlvUInt16.decode(tlvBytes);
+          var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
           return {output: value.toString()};
 
       # Write mapper: Barton seconds string -> Matter Identify attribute
-      # Script returns full operation details - no metadata needed
       write:
         script: |
-          // Use MatterClusters for type-safe TLV encoding of attribute write
-          var TlvUInt16 = MatterClusters.TlvUInt16;
-          var IdentifyCluster = MatterClusters.Identify.IdentifyCluster;
-
           var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-
-          // Encode uint16 value to TLV and return as attribute write
-          var tlvBytes = TlvUInt16.encode(secs);
-          return {
-            write: {
-              clusterId: IdentifyCluster.id,
-              attributeId: IdentifyCluster.attributes.identifyTime.id,
-              tlvBase64: btoa(String.fromCharCode.apply(null, tlvBytes))
-            }
-          };
+          var tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
+          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 # Barton endpoints (logical groupings of resources)
 endpoints:
@@ -98,23 +81,11 @@ endpoints:
             # LockOperation event data contains lockOperationType:
             #   1 = Lock, 2 = Unlock, 3 = NonAccessUserEvent, 4 = ForcedUserEvent, 5 = Unlatch
             script: |
-              var TlvObject = MatterClusters.TlvObject;
-              var TlvField = MatterClusters.TlvField;
-              var TlvEnum = MatterClusters.TlvEnum;
-              var TlvUInt8 = MatterClusters.TlvUInt8;
-              var TlvNullable = MatterClusters.TlvNullable;
-              var TlvOptional = MatterClusters.TlvOptional;
-              var DoorLock = MatterClusters.DoorLock.DoorLock;
-              var LockOperationType = DoorLock.LockOperationType;
-
-              // Define TLV schema for LockOperationEvent fields we care about
-              var TlvLockOperationEvent = TlvObject({
-                lockOperationType: TlvField(0, TlvEnum(LockOperationType)),
-              });
-
-              var tlvBytes = SbmdUtils.Base64.decode(sbmdEventArgs.tlvBase64);
-              var eventData = TlvLockOperationEvent.decode(tlvBytes);
-              var isLocked = eventData.lockOperationType === LockOperationType.Lock;
+              var eventData = SbmdUtils.Tlv.decodeStruct(sbmdEventArgs.tlvBase64);
+              // Tag 0 = lockOperationType enum
+              var lockOperationType = eventData[0];
+              // LockOperationType 1 = Lock
+              var isLocked = lockOperationType === 1;
               return { output: isLocked ? 'true' : 'false' };
 
       # Lock function resource - locks the door
@@ -122,77 +93,59 @@ endpoints:
         type: "function"
         mapper:
           # Execute mapper: Barton lock function -> Matter LockDoor command
-          # Script returns full operation details - no metadata needed
           execute:
             script: |
-              // Use MatterClusters for type-safe TLV encoding
-              var DoorLock = MatterClusters.DoorLock.DoorLock;
-              var DoorLockCluster = MatterClusters.DoorLock.DoorLockCluster;
-              var TlvLockDoorRequest = DoorLock.TlvLockDoorRequest;
-
+              // DoorLock cluster ID = 0x0101, LockDoor command ID = 0x0000
               // Get DoorLock cluster feature map
               // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
-              var featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
+              var featureMap = sbmdCommandArgs.clusterFeatureMaps[0x0101] || 0;
 
               // Build command arguments
               var tlvBase64 = null;
               var pinString = sbmdCommandArgs.input;
               if (((featureMap & 0x81) === 0x81) &&
                   pinString && pinString.length > 0) {
-                // Convert PIN string to Uint8Array for encoding
+                // LockDoorRequest has optional PINCode at tag 0 (octstr)
+                var schema = {
+                  PINCode: {tag: 0, type: 'octstr'}
+                };
+                // Convert PIN string to byte array
                 var pinBytes = new Uint8Array(pinString.length);
                 for (var i = 0; i < pinString.length; i++) {
                   pinBytes[i] = pinString.charCodeAt(i);
                 }
-                var tlvBytes = TlvLockDoorRequest.encode({ pinCode: pinBytes });
-                tlvBase64 = btoa(String.fromCharCode.apply(null, tlvBytes));
+                tlvBase64 = SbmdUtils.Tlv.encodeStruct({PINCode: pinBytes}, schema);
               }
 
-              return {
-                invoke: {
-                  clusterId: DoorLockCluster.id,
-                  commandId: DoorLock.Base.commands.lockDoor.requestId,
-                  tlvBase64: tlvBase64,
-                  timedInvokeTimeoutMs: 10000
-                }
-              };
+              return SbmdUtils.Response.invoke(0x0101, 0x0000, tlvBase64, {timedInvokeTimeoutMs: 10000});
 
       # Unlock function resource - unlocks the door
       - id: "unlock"
         type: "function"
         mapper:
           # Execute mapper: Barton unlock function -> Matter UnlockDoor command
-          # Script returns full operation details - no metadata needed
           execute:
             script: |
-              // Use MatterClusters for type-safe TLV encoding
-              var DoorLock = MatterClusters.DoorLock.DoorLock;
-              var DoorLockCluster = MatterClusters.DoorLock.DoorLockCluster;
-              var TlvUnlockDoorRequest = DoorLock.TlvUnlockDoorRequest;
-
+              // DoorLock cluster ID = 0x0101, UnlockDoor command ID = 0x0001
               // Get DoorLock cluster feature map
               // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
-              var featureMap = sbmdCommandArgs.clusterFeatureMaps[DoorLockCluster.id] || 0;
+              var featureMap = sbmdCommandArgs.clusterFeatureMaps[0x0101] || 0;
 
               // Build command arguments
               var tlvBase64 = null;
               var pinString = sbmdCommandArgs.input;
               if (((featureMap & 0x81) === 0x81) &&
                   pinString && pinString.length > 0) {
-                // Convert PIN string to Uint8Array for encoding
+                // UnlockDoorRequest has optional PINCode at tag 0 (octstr)
+                var schema = {
+                  PINCode: {tag: 0, type: 'octstr'}
+                };
+                // Convert PIN string to byte array
                 var pinBytes = new Uint8Array(pinString.length);
                 for (var i = 0; i < pinString.length; i++) {
                   pinBytes[i] = pinString.charCodeAt(i);
                 }
-                var tlvBytes = TlvUnlockDoorRequest.encode({ pinCode: pinBytes });
-                tlvBase64 = btoa(String.fromCharCode.apply(null, tlvBytes));
+                tlvBase64 = SbmdUtils.Tlv.encodeStruct({PINCode: pinBytes}, schema);
               }
 
-              return {
-                invoke: {
-                  clusterId: DoorLockCluster.id,
-                  commandId: DoorLock.Base.commands.unlockDoor.requestId,
-                  tlvBase64: tlvBase64,
-                  timedInvokeTimeoutMs: 10000
-                }
-              };
+              return SbmdUtils.Response.invoke(0x0101, 0x0001, tlvBase64, {timedInvokeTimeoutMs: 10000});
