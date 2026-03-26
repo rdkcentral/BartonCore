@@ -30,6 +30,7 @@
 #include "app/OperationalSessionSetup.h"
 #include "clusters/BasicInformation.hpp"
 #include "clusters/GeneralDiagnostics.h"
+#include "clusters/Identify.hpp"
 #include "clusters/MatterCluster.h"
 #include "clusters/OTARequestor.h"
 #include "clusters/PowerSource.h"
@@ -37,9 +38,9 @@
 #include "lib/core/CHIPCallback.h"
 #include "lib/core/DataModelTypes.h"
 #include "matter/MatterDevice.h"
+#include "sbmd/SbmdSpec.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include "subsystems/matter/Matter.h"
-#include "sbmd/SbmdSpec.h"
 #include <forward_list>
 #include <future>
 #include <memory>
@@ -103,27 +104,7 @@ namespace barton
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
         const char *GetDeviceClass() const;
 
-        virtual bool AddDevice(std::unique_ptr<MatterDevice> device)
-        {
-            bool result = false;
-
-            const std::string deviceId = device->GetDeviceId();
-
-            {
-                std::lock_guard<std::mutex> lock(devicesMutex);
-                auto deviceResult = devices.emplace(deviceId, std::move(device));
-                result = deviceResult.second;
-            }
-
-            // Initialize power source cluster if available.
-            // TODO: There can be multiple PowerSource clusters on different endpoints, e.g. on a bridge which has one
-            // device per endpoint with its own power source. What you would do is query the PowerSourceConfiguration
-            // cluster for a list of endpoints that have a PowerSource cluster. For now, we are only handling the
-            // scenario in which there is just one PowerSource cluster on anything we commission.
-            GetAnyServerById(deviceId, chip::app::Clusters::PowerSource::Id);
-
-            return result && InitializeClustersForDevice(deviceId);
-        }
+        virtual bool AddDevice(std::unique_ptr<MatterDevice> device);
 
         virtual bool DeviceRemoved(icDevice *device);
 
@@ -242,6 +223,19 @@ namespace barton
                                    const char *newValue,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
                                    const chip::SessionHandle &sessionHandle);
+
+        /**
+         * @brief Called by WriteResource() to write resources specific to a particular device-type.
+         * Driver subclasses shall override this method to implement resource writes that are specific
+         * to their device-type.
+         */
+        virtual bool DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                                     const std::string &deviceId,
+                                     icDeviceResource *resource,
+                                     const char *previousValue,
+                                     const char *newValue,
+                                     chip::Messaging::ExchangeManager &exchangeMgr,
+                                     const chip::SessionHandle &sessionHandle);
 
         /**
          * @brief Execute a resource.
@@ -423,13 +417,6 @@ namespace barton
                 promise->set_value(success);
             });
         }
-
-        /**
-         * @brief Create and register clusters for a given device.
-         *
-         * @return true if clusters were created successfully
-         */
-        virtual bool InitializeClustersForDevice(const std::string &deviceUuid) { return true; };
 
         // Asynchronous DeviceDriver interface entrypoints
 
@@ -693,6 +680,8 @@ namespace barton
                 deviceDriver.OnDeviceWorkCompleted(context, success);
             };
 
+            void RssiReported(const std::string &deviceUuid, const int8_t *rssi) override;
+
             void RssiReadComplete(const std::string &deviceUuid,
                                   const int8_t *rssi,
                                   bool success,
@@ -700,7 +689,36 @@ namespace barton
 
         private:
             MatterDeviceDriver &deviceDriver;
+
+            // Helper function used to reduce code duplication between RssiReported and RssiReadComplete.
+            void UpdateRssiResources(
+                const std::string &deviceUuid,
+                const int8_t *rssi,
+                std::function<void(const char *rssiStr, const char *linkScoreStr, const char *linkQuality)> onUpdated);
         } wifiDiagnosticsClusterEventHandler;
+
+        class IdentifyEventHandler : public Identify::EventHandler
+        {
+        public:
+            IdentifyEventHandler(MatterDeviceDriver &outer) : deviceDriver(outer) {};
+
+            void WriteRequestCompleted(void *context, bool success) override
+            {
+                deviceDriver.OnDeviceWorkCompleted(context, success);
+            };
+
+            void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) override
+            {
+                updateResource(deviceUuid.c_str(),
+                               NULL,
+                               COMMON_DEVICE_RESOURCE_IDENTIFY_SECONDS,
+                               std::to_string(identifyTimeSecs).c_str(),
+                               NULL);
+            }
+
+        private:
+            MatterDeviceDriver &deviceDriver;
+        } identifyClusterEventHandler;
 
         /* key deviceId */
         std::map<std::string, std::shared_ptr<MatterDevice>> devices;
@@ -708,7 +726,7 @@ namespace barton
 
         // This contains only core/standard clusters Barton needs for basic operation.
         // Device-specific clusters are handled by SBMD scripting.
-        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::unique_ptr<MatterCluster>>
+        std::map<std::tuple<std::string, chip::EndpointId, chip::ClusterId>, std::shared_ptr<MatterCluster>>
             clusterServers;
 
         std::unordered_set<void *> storedContexts;

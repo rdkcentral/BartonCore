@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2025 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Created by Raiyan Chowdhury on 8/16/24.
+// Created by Raiyan Chowdhury on 3/4/2026.
 //
 
 #pragma once
@@ -30,29 +30,33 @@
 #include "MatterCluster.h"
 #include "app/ClusterStateCache.h"
 #include "app/ConcreteAttributePath.h"
-#include "lib/core/CHIPError.h"
 #include "lib/core/DataModelTypes.h"
 #include <string>
+#include <app-common/zap-generated/ids/Clusters.h>
 
 namespace barton
 {
-    class PowerSource : public MatterCluster
+    class Identify : public MatterCluster
     {
     public:
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
-            virtual void BatChargeLevelChanged(std::string &deviceUuid, chip::app::Clusters::PowerSource::BatChargeLevelEnum chargeLevel) {};
-            virtual void BatPercentRemainingChanged(std::string &deviceUuid, uint8_t halfPercent) {};
+            virtual void IdentifyTimeChanged(const std::string &deviceUuid, uint16_t identifyTimeSecs) {};
         };
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
 
+        bool SetIdentifyTime(void *context,
+                             const uint16_t identifyTimeSecs,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle);
+
     protected:
-        PowerSource(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
-                    std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::PowerSource::Id, deviceDataCache)
+        Identify(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                 std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::Identify::Id, deviceDataCache)
         {
         }
 
@@ -61,3 +65,4 @@ namespace barton
         friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton
+
