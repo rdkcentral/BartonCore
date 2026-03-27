@@ -12,7 +12,7 @@ The matter.js virtual device base class (`VirtualDevice`) SHALL initialize a Mat
 - **THEN** the base class SHALL use sensible defaults (vendor ID `0xFFF1`, product ID `0x8000`, port `0` for dynamic assignment)
 
 ### Requirement: Side-band HTTP server
-The `VirtualDevice` base class SHALL start an HTTP server on a dynamically assigned port that accepts side-band operation requests from test drivers. The server SHALL listen on `0.0.0.0` and accept JSON-encoded POST requests.
+The `VirtualDevice` base class SHALL start an HTTP server on a dynamically assigned port that accepts side-band operation requests from test drivers. The server SHALL listen on `127.0.0.1` and accept JSON-encoded POST requests.
 
 #### Scenario: Side-band server starts on dynamic port
 - **WHEN** the virtual device starts

@@ -23,42 +23,15 @@
 
 
 import logging
-import time
-from queue import Empty, Queue
+from queue import Queue
 
 import pytest
 from gi.repository import BCore
+from testing.utils.barton_utils import wait_for_resource_value
 
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
-
-
-def _wait_for_resource_value(queue, expected_value, timeout=10):
-    """Drain events from the queue until we get the expected value or time out.
-
-    This handles spurious initial subscription events that may arrive before
-    the event triggered by the test action.
-    """
-    deadline = time.monotonic() + timeout
-
-    while True:
-        remaining = deadline - time.monotonic()
-
-        if remaining <= 0:
-            raise AssertionError(
-                f"Timed out waiting for resource value '{expected_value}'"
-            )
-
-        try:
-            value = queue.get(timeout=remaining)
-        except Empty:
-            raise AssertionError(
-                f"Timed out waiting for resource value '{expected_value}'"
-            )
-
-        if value == expected_value:
-            return value
 
 
 def assert_device_has_common_resources(client, device, required_resources):
@@ -130,7 +103,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     # Unlock via Barton — execute the "unlock" function resource
     unlock_uri = f"/{device_uuid}/ep/1/r/unlock"
     client.execute_resource(unlock_uri, "", "")
-    _wait_for_resource_value(resource_updated_queue, "false")
+    wait_for_resource_value(resource_updated_queue, "false")
 
     # Verify via side-band
     state = matter_door_lock.sideband.get_state()
@@ -139,7 +112,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     # Lock via Barton — execute the "lock" function resource
     lock_uri = f"/{device_uuid}/ep/1/r/lock"
     client.execute_resource(lock_uri, "", "")
-    _wait_for_resource_value(resource_updated_queue, "true", timeout=10)
+    wait_for_resource_value(resource_updated_queue, "true", timeout=10)
 
     # Verify via side-band
     state = matter_door_lock.sideband.get_state()
@@ -174,7 +147,7 @@ def test_sideband_unlock_triggers_barton_update(
     assert result["lockState"] == "unlocked"
 
     # Barton should receive a resource update for the locked resource
-    _wait_for_resource_value(resource_updated_queue, "false", timeout=10)
+    wait_for_resource_value(resource_updated_queue, "false", timeout=10)
 
 
 def test_sideband_lock_triggers_barton_update(
@@ -202,11 +175,11 @@ def test_sideband_lock_triggers_barton_update(
 
     # First unlock the device via side-band so we can test locking
     matter_door_lock.sideband.send("unlock")
-    _wait_for_resource_value(resource_updated_queue, "false")
+    wait_for_resource_value(resource_updated_queue, "false")
 
     # Simulate manual lock via side-band
     result = matter_door_lock.sideband.send("lock")
     assert result["lockState"] == "locked"
 
     # Barton should receive a resource update for the locked resource
-    _wait_for_resource_value(resource_updated_queue, "true")
+    wait_for_resource_value(resource_updated_queue, "true")

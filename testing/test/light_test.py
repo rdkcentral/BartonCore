@@ -28,37 +28,11 @@ from queue import Empty, Queue
 
 import pytest
 from gi.repository import BCore
+from testing.utils.barton_utils import wait_for_resource_value
 
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
-
-
-def _wait_for_resource_value(queue, expected_value, timeout=5):
-    """Drain events from the queue until we get the expected value or time out.
-
-    This handles spurious initial subscription events that may arrive before
-    the event triggered by the test action.
-    """
-    deadline = time.monotonic() + timeout
-
-    while True:
-        remaining = deadline - time.monotonic()
-
-        if remaining <= 0:
-            raise AssertionError(
-                f"Timed out waiting for resource value '{expected_value}'"
-            )
-
-        try:
-            value = queue.get(timeout=remaining)
-        except Empty:
-            raise AssertionError(
-                f"Timed out waiting for resource value '{expected_value}'"
-            )
-
-        if value == expected_value:
-            return value
 
 
 def assert_device_has_common_resources(client, device, required_resources):
@@ -140,7 +114,7 @@ def test_light_on_off(default_environment, matter_light):
     expected_on_off_state = not is_on
 
     matter_light.sideband.send("toggle")
-    _wait_for_resource_value(resource_updated_queue, expected_on_off_state)
+    wait_for_resource_value(resource_updated_queue, expected_on_off_state, timeout=5)
 
 
 def test_light_common_cluster_attribute_report(default_environment, matter_light):
