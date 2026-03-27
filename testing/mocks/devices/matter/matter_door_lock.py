@@ -3,7 +3,7 @@
 # If not stated otherwise in this file or this component's LICENSE file the
 # following copyright and licenses apply:
 #
-# Copyright 2024 Comcast Cable Communications Management, LLC
+# Copyright 2025 Comcast Cable Communications Management, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,23 +21,22 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-#
-# Created by Kevin Funderburg on 11/14/2024
-#
-
 import pytest
 
 from testing.mocks.devices.matter.matter_device import MatterDevice
 
 
-class MatterLight(MatterDevice):
+class MatterDoorLock(MatterDevice):
     """
-    Represents a Matter light device backed by a matter.js virtual device.
+    Represents a Matter door lock device backed by a matter.js virtual device.
 
     This device uses a matter.js Node.js process under the hood, but presents
     the same interface as any other MatterDevice subclass. The side-band
-    interface allows tests to simulate user-side interactions (e.g., toggling
-    the light from the device itself).
+    interface allows tests to simulate user-side interactions (e.g., manually
+    turning a thumb-lock).
+
+    Supported clusters:
+        - DoorLock (0x0101) on endpoint 1
     """
 
     def __init__(
@@ -46,29 +45,29 @@ class MatterLight(MatterDevice):
         product_id: int = 0,
     ):
         super().__init__(
-            device_class="light",
-            matterjs_entry_point="light-device.js",
+            device_class="doorLock",
+            matterjs_entry_point="door-lock-device.js",
             vendor_id=vendor_id,
             product_id=product_id,
         )
 
 
 @pytest.fixture
-def matter_light():
+def matter_door_lock():
     """
-    Fixture to create and manage a MatterLight instance for testing.
+    Fixture to create and manage a MatterDoorLock instance for testing.
 
-    This fixture creates and starts a MatterLight instance (matter.js virtual
+    This fixture creates and starts a MatterDoorLock instance (matter.js virtual
     device). After this fixture runs, get_commissioning_code() returns the code
     for commissioning the device with Barton.
 
     Yields:
-        MatterLight: A started instance ready for commissioning.
+        MatterDoorLock: A started instance ready for commissioning.
     """
-    light_instance = MatterLight()
-    light_instance.start()
+    lock_instance = MatterDoorLock()
+    lock_instance.start()
 
     try:
-        yield light_instance
+        yield lock_instance
     finally:
-        light_instance._cleanup()
+        lock_instance._cleanup()

@@ -37,6 +37,9 @@ making it easier to maintain and scale the test suite.
 
 import logging
 import os
+import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -50,17 +53,152 @@ pytest_plugins = [
     "testing.environment.default_environment_orchestrator",
     # Devices
     "testing.mocks.devices.matter.matter_light",
-    "testing.mocks.devices.matter.device_interactor",
+    "testing.mocks.devices.matter.matter_door_lock",
     # ZHAL
-    "testing.mocks.zhal.mock_zhal_implementation",
-    ## events
+    ## events (load first so pytest can assert-rewrite these modules before
+    ## they are imported transitively by other plugins)
     "testing.mocks.zhal.events.zhal_event",
     "testing.mocks.zhal.events.zhal_startup_event",
     "testing.mocks.zhal.events.responses.response",
     "testing.mocks.zhal.events.responses.heartbeat_response",
     ## requests
     "testing.mocks.zhal.requests.heartbeat_request",
+    "testing.mocks.zhal.requests.network_initialize_request",
     "testing.mocks.zhal.requests.request_deserializer",
     "testing.mocks.zhal.requests.request_receiver",
-    "testing.mocks.zhal.requests.network_initialize_request",
+    "testing.mocks.zhal.mock_zhal_implementation",
 ]
+
+
+def _matterjs_available() -> bool:
+    """Check if Node.js and matter.js are available at runtime."""
+    if shutil.which("node") is None:
+        return False
+
+    matterjs_dir = os.path.join(
+        os.path.dirname(__file__), "mocks", "devices", "matterjs"
+    )
+    node_modules = os.path.join(matterjs_dir, "node_modules", "@matter")
+
+    return os.path.isdir(node_modules)
+
+
+_has_matterjs = _matterjs_available()
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "requires_matterjs: skip test when Node.js or matter.js is not available",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if _has_matterjs:
+        return
+
+    skip_marker = pytest.mark.skip(
+        reason="Requires Node.js and matter.js (not available)"
+    )
+
+    for item in items:
+        if "requires_matterjs" in item.keywords:
+            item.add_marker(skip_marker)
+
+
+# ---------------------------------------------------------------------------
+#  Subprocess isolation for tests that need a fresh process.
+#
+#  The Matter SDK is a C++ singleton that cannot reinitialize within a single
+#  process.  pytest-forked (os.fork) breaks VS Code's vscode_pytest plugin
+#  because the forked child inherits and closes the test-results named pipe.
+#
+#  NOTE: the above Matter SDK limitation was true as of 1.4.2, but may be
+#  resolved in future versions.  If that happens, we can remove this subprocess.
+#
+#  Instead, we re-invoke pytest in a subprocess for each `requires_matterjs`
+#  test.  The subprocess is a clean Python process — no shared file descriptors,
+#  no atexit handlers leak.  The outer test simply asserts the subprocess passed.
+# ---------------------------------------------------------------------------
+
+_SUBPROCESS_MARKER_ENV = "_PYTEST_SUBPROCESS_INNER"
+
+
+def pytest_runtest_protocol(item, nextitem):
+    """Run only requires_matterjs tests in a subprocess to isolate the Matter SDK."""
+    if os.environ.get(_SUBPROCESS_MARKER_ENV):
+        return None  # inner run — execute normally
+
+    if "requires_matterjs" not in item.keywords:
+        return None  # not a matter test — execute normally
+
+    if not _has_matterjs:
+        # Tests requiring matter.js are already marked skipped during collection.
+        # Avoid spawning one subprocess per skipped test.
+        return None
+
+    ihook = item.ihook
+    ihook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
+
+    from _pytest import runner
+
+    call = runner.CallInfo.from_call(lambda: _run_in_subprocess(item), when="call")
+    report = runner.pytest_runtest_makereport(item=item, call=call)
+    ihook.pytest_runtest_logreport(report=report)
+    ihook.pytest_runtest_logfinish(nodeid=item.nodeid, location=item.location)
+
+    return True
+
+
+def _run_in_subprocess(item):
+    """Spawn a child pytest that runs exactly one test node."""
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-x",
+        "--override-ini=addopts=",
+        "--override-ini=log_cli=false",
+        "--no-header",
+        "-q",
+        item.nodeid,
+    ]
+
+    # In CI, py_test.sh preloads libasan via LD_PRELOAD so Python/GI tests can
+    # load ASAN-instrumented Barton libraries. Keep the environment intact for
+    # this child pytest process.
+    child_env = dict(os.environ)
+    child_env[_SUBPROCESS_MARKER_ENV] = "1"
+
+    result = subprocess.run(
+        cmd,
+        cwd=str(item.config.rootpath),
+        capture_output=True,
+        text=True,
+        env=child_env,
+    )
+
+    if result.returncode != 0:
+        output = result.stdout + result.stderr
+        lines = output.strip().splitlines()
+
+        if not lines:
+            excerpt = "<no output captured from child pytest process>"
+        elif len(lines) > 160:
+            head = "\n".join(lines[:80])
+            tail = "\n".join(lines[-80:])
+            excerpt = (
+                f"{head}\n\n"
+                f"... ({len(lines) - 160} lines omitted) ...\n\n"
+                f"{tail}"
+            )
+        else:
+            excerpt = "\n".join(lines)
+
+        raise AssertionError(
+            "Subprocess test failed\n"
+            f"exit code: {result.returncode}\n"
+            f"cwd: {item.config.rootpath}\n"
+            f"command: {' '.join(cmd)}\n\n"
+            f"Captured output:\n{excerpt}"
+        )

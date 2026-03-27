@@ -23,13 +23,44 @@
 
 
 import logging
-from queue import Queue
+import time
+from queue import Empty, Queue
 
+import pytest
 from gi.repository import BCore
 
-from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
-
 logger = logging.getLogger(__name__)
+
+pytestmark = pytest.mark.requires_matterjs
+
+
+def _wait_for_resource_value(queue, expected_value, timeout=5):
+    """Drain events from the queue until we get the expected value or time out.
+
+    This handles spurious initial subscription events that may arrive before
+    the event triggered by the test action.
+    """
+    deadline = time.monotonic() + timeout
+
+    while True:
+        remaining = deadline - time.monotonic()
+
+        if remaining <= 0:
+            raise AssertionError(
+                f"Timed out waiting for resource value '{expected_value}'"
+            )
+
+        try:
+            value = queue.get(timeout=remaining)
+        except Empty:
+            raise AssertionError(
+                f"Timed out waiting for resource value '{expected_value}'"
+            )
+
+        if value == expected_value:
+            return value
+
+
 def assert_device_has_common_resources(client, device, required_resources):
     """Assert that the device has all required common resources.
 
@@ -94,20 +125,22 @@ def test_light_on_off(default_environment, matter_light):
             f"Resource updated: {resource.props.id} with value {resource.props.value}"
         )
         if resource.props.id == "isOn":
-            resource_updated_queue.put(bool(resource.props.value))
+            value = resource.props.value
+            if isinstance(value, str):
+                normalized = value.strip().lower() not in ("false", "0", "")
+            else:
+                normalized = bool(value)
+            resource_updated_queue.put(normalized)
 
     default_environment.get_client().connect(
         BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
     )
 
-    is_on = matter_light.get_cluster(OnOffCluster.CLUSTER_ID).is_on()
+    is_on = matter_light.sideband.get_state()["onOff"]
     expected_on_off_state = not is_on
 
-    matter_light.get_cluster(OnOffCluster.CLUSTER_ID).toggle()
-    resource_updated_result = resource_updated_queue.get(timeout=5)
-    assert (
-        resource_updated_result == expected_on_off_state
-    ), "Light on/off state did not update as expected"
+    matter_light.sideband.send("toggle")
+    _wait_for_resource_value(resource_updated_queue, expected_on_off_state)
 
 
 def test_light_common_cluster_attribute_report(default_environment, matter_light):
@@ -157,24 +190,49 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     except ValueError:
         assert False, f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
 
-    # Calculate a different uint16 value to write (ensure it's within uint16 range: 0-65535)
-    new_value = (initial_value + 1) if initial_value < 65535 else 0
+    # Use a larger delta to avoid flaky 1-second countdown races where the
+    # first post-write report may already be back to 0.
+    if initial_value <= 65530:
+        new_value = initial_value + 5
+    else:
+        new_value = initial_value - 5
 
     # Write the new value to the identify-time attribute on the Matter device
     logger.info(f"Writing identify-time attribute to {new_value}")
-    result = matter_light._interactor.write_attribute(
-        node_id=matter_light._chip_tool_node_id,
-        endpoint_id=1,
-        cluster="identify",
-        attribute="identify-time",
-        value=new_value
-    )
-    assert result.success, f"Failed to write identify-time attribute: {result.stderr}"
+    matter_light.sideband.send("setIdentifyTime", {"identifyTime": new_value})
 
-    # Wait for the attribute report triggered by the write above.
-    updated_identify_seconds = resource_updated_queue.get(timeout=5)
-    assert (
-        updated_identify_seconds is not None and int(updated_identify_seconds) == new_value
-    ), f"identifySeconds was not updated correctly via attribute report. Expected {new_value}, got {updated_identify_seconds}"
+    # Wait for the attribute report triggered by the write above. We may see
+    # stale initial values first, and IdentifyTime may tick down before the
+    # report is delivered. Accept any first value that changed from initial and
+    # is within the expected countdown window.
+    deadline = time.monotonic() + 10
+
+    while True:
+        remaining = deadline - time.monotonic()
+
+        if remaining <= 0:
+            assert False, (
+                f"identifySeconds was not updated via attribute report after write. "
+                f"Expected a value in [1, {new_value}] different from initial {initial_value}."
+            )
+
+        try:
+            candidate = resource_updated_queue.get(timeout=remaining)
+        except Empty:
+            assert False, (
+                f"identifySeconds was not updated via attribute report after write. "
+                f"Expected a value in [1, {new_value}] different from initial {initial_value}."
+            )
+
+        try:
+            updated_identify_seconds = int(candidate)
+        except (TypeError, ValueError):
+            continue
+
+        if (
+            updated_identify_seconds != initial_value
+            and 1 <= updated_identify_seconds <= new_value
+        ):
+            break
 
     logger.info(f"Updated identify seconds: {updated_identify_seconds}")

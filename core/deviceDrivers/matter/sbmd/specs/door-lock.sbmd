@@ -43,21 +43,19 @@ endpoints:
           - "dynamic"     # Value can change asynchronously (via device button, etc.)
           - "emitEvents"  # Changes generate events to subscribers
         mapper:
-          # Event mapper: Matter LockOperation event -> Barton boolean
-          event:
-            event:
+          # Read mapper: Matter LockState attribute -> Barton boolean
+          read:
+            attribute:
               clusterId: "0x0101"      # Door Lock cluster
-              eventId: "0x0002"        # LockOperation event
-              name: "LockOperation"
+              attributeId: "0x0000"    # LockState attribute
+              name: "LockState"
+              type: "uint8"            # DlLockState enum (uint8)
 
-            # LockOperation event data contains lockOperationType:
-            #   1 = Lock, 2 = Unlock, 3 = NonAccessUserEvent, 4 = ForcedUserEvent, 5 = Unlatch
+            # LockState enum values:
+            #   0 = NotFullyLocked, 1 = Locked, 2 = Unlocked, 3 = Unlatched
             script: |
-              var eventData = SbmdUtils.Tlv.decodeStruct(sbmdEventArgs.tlvBase64);
-              // Tag 0 = lockOperationType enum
-              var lockOperationType = eventData[0];
-              // LockOperationType 1 = Lock
-              var isLocked = lockOperationType === 1;
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var isLocked = value === 1;
               return { output: isLocked ? 'true' : 'false' };
 
       # Lock function resource - locks the door
