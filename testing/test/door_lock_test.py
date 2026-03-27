@@ -29,6 +29,7 @@ from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
     resource_update_listener,
+    resource_uri,
     wait_for_resource_value,
 )
 
@@ -62,13 +63,11 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     """Lock and unlock the door lock via Barton resource writes, verify via side-band."""
     lock = _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
-    device_uuid = lock.props.uuid
 
     resource_updated_queue = resource_update_listener(client, "locked")
 
     # Unlock via Barton — execute the "unlock" function resource
-    unlock_uri = f"/{device_uuid}/ep/1/r/unlock"
-    client.execute_resource(unlock_uri, "", "")
+    client.execute_resource(resource_uri(lock, "unlock", endpoint_id=1), "", "")
     wait_for_resource_value(resource_updated_queue, "false")
 
     # Verify via side-band
@@ -76,8 +75,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     assert state["lockState"] == "unlocked"
 
     # Lock via Barton — execute the "lock" function resource
-    lock_uri = f"/{device_uuid}/ep/1/r/lock"
-    client.execute_resource(lock_uri, "", "")
+    client.execute_resource(resource_uri(lock, "lock", endpoint_id=1), "", "")
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)
 
     # Verify via side-band

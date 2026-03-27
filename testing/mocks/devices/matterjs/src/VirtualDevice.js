@@ -37,7 +37,7 @@
  */
 
 import "@matter/nodejs";
-import { ServerNode, Endpoint, Environment, Logger } from "@matter/main";
+import { ServerNode, Environment, Logger } from "@matter/main";
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";

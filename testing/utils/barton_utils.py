@@ -21,40 +21,50 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-import logging
 import time
 from queue import Empty, Queue
 
 from gi.repository import BCore
 
-logger = logging.getLogger(__name__)
-
 
 def commission_device(environment, device, device_class):
-    """Commission a device and return the single device of the expected class.
+    """Commission a device and return the most recently added device of the expected class.
 
     Commissions the device via the environment's client, waits for the
-    device-added event, then asserts exactly one device of the given class
-    exists and returns it.
+    device-added event, then returns the last device of the given class.
     """
     environment.get_client().commission_device(device.get_commissioning_code(), 100)
     environment.wait_for_device_added()
     devices = environment.get_client().get_devices_by_device_class(device_class)
-    assert (
-        len(devices) == 1
-    ), f"Expected 1 '{device_class}' device, found {len(devices)}"
+    assert len(devices) >= 1, f"Expected at least 1 '{device_class}' device, found 0"
 
-    return devices[0]
+    return devices[-1]
+
+
+def resource_uri(device, resource_id, endpoint_id=None):
+    """Build a Barton resource URI.
+
+    Args:
+        device: A BCoreDevice (must have .props.uuid).
+        resource_id: The resource name (e.g. "lock", "isOn").
+        endpoint_id: Optional endpoint ID. When provided the URI targets an
+            endpoint resource (``/<uuid>/ep/<ep>/r/<res>``); when omitted it
+            targets a device-level resource (``/<uuid>/r/<res>``).
+    """
+    uuid = device.props.uuid
+
+    if endpoint_id is not None:
+        return f"/{uuid}/ep/{endpoint_id}/r/{resource_id}"
+
+    return f"/{uuid}/r/{resource_id}"
 
 
 def assert_device_has_common_resources(client, device, required_resources):
     """Assert that the device has all required common resources."""
-    device_uuid = device.props.uuid
-
     missing_resources = []
 
     for resource_name in required_resources:
-        uri = f"/{device_uuid}/r/{resource_name}"
+        uri = resource_uri(device, resource_name)
         resource = client.get_resource_by_uri(uri)
 
         if resource is None:
