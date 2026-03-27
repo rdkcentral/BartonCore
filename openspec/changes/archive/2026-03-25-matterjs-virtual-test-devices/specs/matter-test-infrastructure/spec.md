@@ -16,7 +16,7 @@ The `MatterDevice` base class SHALL exclusively use matter.js virtual devices. T
 - **AND** expose it via `device.sideband`
 
 ### Requirement: MatterDoorLock device class
-A `MatterDoorLock` Python class SHALL be a standard `MatterDevice` subclass in `testing/mocks/devices/matter/`. It SHALL specify `matterjs_entry_point="door-lock-device.js"` and `device_class="doorLock"`.
+A `MatterDoorLock` Python class SHALL be a standard `MatterDevice` subclass in `testing/mocks/devices/matter/`. It SHALL specify `matterjs_entry_point="DoorLockDevice.js"` and `device_class="doorLock"`.
 
 #### Scenario: Start a door lock device
 - **WHEN** `device.start()` is called on a `MatterDoorLock` instance
@@ -34,7 +34,7 @@ A `MatterDoorLock` Python class SHALL be a standard `MatterDevice` subclass in `
 - **THEN** it SHALL return a valid Matter manual pairing code suitable for commissioning
 
 ### Requirement: MatterLight migrated to matter.js
-`MatterLight` SHALL be migrated from `chip-lighting-app` to a matter.js virtual light device. It SHALL specify `matterjs_entry_point="light-device.js"`. Cluster registration calls (`_register_cluster`) and cluster imports SHALL be removed since the cluster class system is eliminated. The `matter_light` pytest fixture SHALL remain unchanged in its interface.
+`MatterLight` SHALL be migrated from `chip-lighting-app` to a matter.js virtual light device. It SHALL specify `matterjs_entry_point="LightDevice.js"`. Cluster registration calls (`_register_cluster`) and cluster imports SHALL be removed since the cluster class system is eliminated. The `matter_light` pytest fixture SHALL remain unchanged in its interface.
 
 #### Scenario: MatterLight uses matter.js
 - **WHEN** `MatterLight` is instantiated

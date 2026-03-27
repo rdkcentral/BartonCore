@@ -21,7 +21,7 @@
 - [x] 3.3 Register side-band `unlock` operation — update DoorLock cluster `LockState` attribute to Unlocked, return `{ "lockState": "unlocked" }`
 - [x] 3.4 Register side-band `getState` operation — return current lock state, users, and pin codes as JSON
 - [x] 3.5 Set initial lock state to Locked on startup
-- [x] 3.6 Create `testing/mocks/devices/matterjs/src/door-lock-device.js` entry point script that instantiates and starts the door lock
+- [x] 3.6 Entry point logic inlined into `DoorLockDevice.js` via `import.meta.url` guard (separate `door-lock-device.js` removed)
 - [x] 3.7 Test door lock manually: start device, commission with chip-tool, send lock/unlock via chip-tool and side-band, verify state changes
 
 ## 4. Python Side-band Client
@@ -35,7 +35,7 @@
 
 ## 5. MatterDevice Refactor and Device Classes
 
-- [x] 5.1 Create `testing/mocks/devices/matter/matter_door_lock.py` — `MatterDoorLock` class as a `MatterDevice` subclass. Specify `matterjs_entry_point="door-lock-device.js"` and `device_class="doorLock"`.
+- [x] 5.1 Create `testing/mocks/devices/matter/matter_door_lock.py` — `MatterDoorLock` class as a `MatterDevice` subclass. Specify `matterjs_entry_point="DoorLockDevice.js"` and `device_class="doorLock"`.
 - [x] 5.2 Implement matter.js subprocess management in `MatterDevice` — `start()` spawns Node.js, parses JSON ready signal from stdout, and configures `SidebandClient`. Expose via `device.sideband` property.
 - [x] 5.3 Integrate `SidebandClient` into `MatterDevice` — auto-configure from parsed ready signal.
 - [x] 5.4 Create pytest fixture `matter_door_lock` — starts device, commissions with `ChipToolDeviceInteractor`, opens ECM window, yields device, cleans up.
@@ -43,8 +43,8 @@
 - [x] 5.6 Remove parallel class tree — remove `testing/mocks/devices/matterjs/matter_js_device.py` and `testing/mocks/devices/matterjs/matter_js_door_lock.py`
 - [x] 5.7 Remove CHIP SDK sample app support from `MatterDevice` — remove `_app_name` attribute, `_start_chip_app()` method, and the `app_name` constructor parameter. `MatterDevice.__init__()` takes `matterjs_entry_point` as a required parameter. `start()` exclusively calls `_start_matterjs()`.
 - [x] 5.8 Create `testing/mocks/devices/matterjs/src/LightDevice.js` — matter.js virtual light device extending `VirtualDevice` with OnOff, LevelControl, and ColorControl clusters on endpoint 1. Register side-band operations: `on`, `off`, `toggle`, `getState`.
-- [x] 5.9 Create `testing/mocks/devices/matterjs/src/light-device.js` — CLI entry point for the virtual light device.
-- [x] 5.10 Migrate `MatterLight` from `chip-lighting-app` to matter.js — change from `app_name="chip-lighting-app"` to `matterjs_entry_point="light-device.js"`. Remove `mdns_port` parameter. Verify `matter_light` fixture still works.
+- [x] 5.9 Entry point logic inlined into `LightDevice.js` via `import.meta.url` guard (separate `light-device.js` removed)
+- [x] 5.10 Migrate `MatterLight` from `chip-lighting-app` to matter.js — change from `app_name="chip-lighting-app"` to `matterjs_entry_point="LightDevice.js"`. Remove `mdns_port` parameter. Verify `matter_light` fixture still works.
 - [x] 5.11 Verify `MatterLight` migration — run existing light tests to confirm no regressions.
 
 ## 6. Conditional Test Execution
