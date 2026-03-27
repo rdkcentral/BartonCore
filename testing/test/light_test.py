@@ -24,48 +24,24 @@
 
 import logging
 import time
-from queue import Empty, Queue
+from queue import Empty
 
 import pytest
-from gi.repository import BCore
-from testing.utils.barton_utils import wait_for_resource_value
+from testing.utils.barton_utils import (
+    assert_device_has_common_resources,
+    commission_device,
+    resource_update_listener,
+    wait_for_resource_value,
+)
 
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
 
 
-def assert_device_has_common_resources(client, device, required_resources):
-    """Assert that the device has all required common resources.
-
-    Args:
-        device: BCoreDevice object
-        required_resources: List of required resource names
-
-    Raises:
-        AssertionError: If any required resource is missing
-    """
-    device_uuid = device.props.uuid
-
-    missing_resources = []
-    for resource_name in required_resources:
-        uri = f"/{device_uuid}/r/{resource_name}"
-        resource = client.get_resource_by_uri(uri)
-        if resource is None:
-            missing_resources.append(resource_name)
-
-    assert not missing_resources, f"Device is missing resources: {missing_resources}"
-
-
 def test_commission_light(default_environment, matter_light):
-    default_environment.get_client().commission_device(
-        matter_light.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    lights = default_environment.get_client().get_devices_by_device_class("light")
-    assert len(lights) == 1
+    light = commission_device(default_environment, matter_light, "light")
 
-    light = lights[0]
     assert_device_has_common_resources(
         default_environment.get_client(),
         light,
@@ -78,36 +54,19 @@ def test_commission_light(default_environment, matter_light):
     )
 
 
+def _str_to_bool(value):
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "")
+
+    return bool(value)
+
+
 def test_light_on_off(default_environment, matter_light):
-    # TODO: Probably need some kind of helper for repetitious blocks like this
-    default_environment.get_client().commission_device(
-        matter_light.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    lights = default_environment.get_client().get_devices_by_device_class("light")
-    assert len(lights) == 1
+    commission_device(default_environment, matter_light, "light")
+    client = default_environment.get_client()
 
-    # Add resource update event listener
-    resource_updated_queue = Queue()
-
-    def check_resource_updates(
-        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        # TODO: Probably need some URI builder/helper
-        resource = resource_updated_event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} with value {resource.props.value}"
-        )
-        if resource.props.id == "isOn":
-            value = resource.props.value
-            if isinstance(value, str):
-                normalized = value.strip().lower() not in ("false", "0", "")
-            else:
-                normalized = bool(value)
-            resource_updated_queue.put(normalized)
-
-    default_environment.get_client().connect(
-        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
+    resource_updated_queue = resource_update_listener(
+        client, "isOn", transform=_str_to_bool
     )
 
     is_on = matter_light.sideband.get_state()["onOff"]
@@ -126,28 +85,10 @@ def test_light_common_cluster_attribute_report(default_environment, matter_light
     upon subscribing to the device, and also when the attribute report is sent
     after a new value is written to the identify-time attribute.
     """
-    resource_updated_queue = Queue()
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "identifySeconds")
 
-    def check_resource_updates(
-        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        resource = resource_updated_event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} with value {resource.props.value}"
-        )
-        if resource.props.id == "identifySeconds":
-            resource_updated_queue.put(resource.props.value)
-
-    default_environment.get_client().connect(
-        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
-    )
-
-    default_environment.get_client().commission_device(
-        matter_light.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    lights = default_environment.get_client().get_devices_by_device_class("light")
-    assert len(lights) == 1
+    commission_device(default_environment, matter_light, "light")
 
     # Wait for the initial identifySeconds attribute report that arrives as
     # part of the subscription to the device.

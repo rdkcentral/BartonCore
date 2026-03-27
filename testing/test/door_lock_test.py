@@ -23,43 +23,23 @@
 
 
 import logging
-from queue import Queue
 
 import pytest
-from gi.repository import BCore
-from testing.utils.barton_utils import wait_for_resource_value
+from testing.utils.barton_utils import (
+    assert_device_has_common_resources,
+    commission_device,
+    resource_update_listener,
+    wait_for_resource_value,
+)
 
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
 
 
-def assert_device_has_common_resources(client, device, required_resources):
-    """Assert that the device has all required common resources."""
-    device_uuid = device.props.uuid
-
-    missing_resources = []
-
-    for resource_name in required_resources:
-        uri = f"/{device_uuid}/r/{resource_name}"
-        resource = client.get_resource_by_uri(uri)
-
-        if resource is None:
-            missing_resources.append(resource_name)
-
-    assert not missing_resources, f"Device is missing resources: {missing_resources}"
-
-
 def _commission_door_lock(default_environment, matter_door_lock):
     """Helper to commission the door lock and return the device object."""
-    default_environment.get_client().commission_device(
-        matter_door_lock.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    locks = default_environment.get_client().get_devices_by_device_class("doorLock")
-    assert len(locks) == 1
-
-    return locks[0]
+    return commission_device(default_environment, matter_door_lock, "doorLock")
 
 
 def test_commission_door_lock(default_environment, matter_door_lock):
@@ -84,21 +64,7 @@ def test_lock_unlock_via_barton(default_environment, matter_door_lock):
     client = default_environment.get_client()
     device_uuid = lock.props.uuid
 
-    # Listen for lock state resource updates
-    resource_updated_queue = Queue()
-
-    def on_resource_updated(
-        client: BCore.Client, event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        resource = event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} = {resource.props.value}"
-        )
-
-        if resource.props.id == "locked":
-            resource_updated_queue.put(resource.props.value)
-
-    client.connect(BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, on_resource_updated)
+    resource_updated_queue = resource_update_listener(client, "locked")
 
     # Unlock via Barton — execute the "unlock" function resource
     unlock_uri = f"/{device_uuid}/ep/1/r/unlock"
@@ -126,21 +92,7 @@ def test_sideband_unlock_triggers_barton_update(
     _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
 
-    # Listen for lock state resource updates
-    resource_updated_queue = Queue()
-
-    def on_resource_updated(
-        client: BCore.Client, event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        resource = event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} = {resource.props.value}"
-        )
-
-        if resource.props.id == "locked":
-            resource_updated_queue.put(resource.props.value)
-
-    client.connect(BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, on_resource_updated)
+    resource_updated_queue = resource_update_listener(client, "locked")
 
     # The door lock starts in locked state. Simulate manual unlock via side-band.
     result = matter_door_lock.sideband.send("unlock")
@@ -157,21 +109,7 @@ def test_sideband_lock_triggers_barton_update(
     _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
 
-    # Listen for lock state resource updates
-    resource_updated_queue = Queue()
-
-    def on_resource_updated(
-        client: BCore.Client, event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        resource = event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} = {resource.props.value}"
-        )
-
-        if resource.props.id == "locked":
-            resource_updated_queue.put(resource.props.value)
-
-    client.connect(BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, on_resource_updated)
+    resource_updated_queue = resource_update_listener(client, "locked")
 
     # First unlock the device via side-band so we can test locking
     matter_door_lock.sideband.send("unlock")
