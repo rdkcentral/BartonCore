@@ -72,7 +72,7 @@ bcore_add_cmocka_test(
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceDescriptorsAvailabilityTest.c
     WRAPPED_FUNCTIONS b_core_property_provider_has_property
                       b_core_property_provider_get_property_as_string
-                      deviceServiceSetSystemProperty digestFile
+                      deviceServiceSetSystemProperty
                       deviceServiceGetSystemProperty urlHelperDownloadFile
 
     LINK_LIBRARIES BartonCoreStatic xhDeviceDescriptors
@@ -141,6 +141,16 @@ bcore_add_cmocka_test(
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceCommunicationWatchdogTest.c
     WRAPPED_FUNCTIONS b_core_property_provider_get_property_as_bool
     LINK_LIBRARIES BartonCoreStatic
+)
+
+bcore_add_cmocka_test(
+    NAME testDeviceServiceHash
+    TYPE unit
+    TEST_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceServiceHashTest.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/deviceServiceHash.c
+    WRAPPED_FUNCTIONS fread ferror
+    LINK_LIBRARIES BartonCommon::xhLog
 )
 
 if (BCORE_MATTER)

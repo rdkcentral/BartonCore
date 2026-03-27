@@ -37,7 +37,6 @@
 #include <cmocka.h>
 #include <deviceDescriptors.h>
 #include <icConcurrent/timedWait.h>
-#include <icCrypto/digest.h>
 #include <icTime/timeUtils.h>
 #include <icUtil/fileUtils.h>
 #include <pthread.h>
@@ -67,15 +66,14 @@ static void descriptorsUpdatedCb(void)
     return;
 }
 
-gboolean __wrap_b_core_property_provider_has_property(BCorePropertyProvider *provider,
-                                                                const char *propName)
+gboolean __wrap_b_core_property_provider_has_property(BCorePropertyProvider *provider, const char *propName)
 {
     return mock_type(gboolean);
 }
 
 gchar *__wrap_b_core_property_provider_get_property_as_string(BCorePropertyProvider *provider,
-                                                                        const char *propName,
-                                                                        const char *defValue)
+                                                              const char *propName,
+                                                              const char *defValue)
 {
     // not great but this unit test erroneously runs in different threads which is a big no-no
     // in cmocka. When it tries to ask about sslVerify prop stuff, it's a different thread
@@ -128,11 +126,6 @@ bool __wrap_deviceServiceGetSystemProperty(const char *name, char **value)
     }
 
     return true;
-}
-
-uint8_t *__wrap_digestFile(const char *filename, CryptoDigest algorithm, uint8_t *digestLen)
-{
-    return NULL;
 }
 
 size_t __wrap_urlHelperDownloadFile(const char *url,
@@ -195,7 +188,7 @@ static void test_local_device_descriptors_availability(void **state)
     deviceDescriptorsInit(localWhiteListPath, NULL);
 
     will_return(__wrap_b_core_property_provider_has_property,
-                false); // deviceDescriptor.whitelist.url.override
+                false);                                               // deviceDescriptor.whitelist.url.override
     will_return(__wrap_b_core_property_provider_has_property, false); // deviceDescriptorList
     // set it to NULL to set isBlacklistValid flag
     will_return(__wrap_b_core_property_provider_get_property_as_string, NULL); // deviceDescriptor.blacklist
