@@ -3,7 +3,7 @@
 // If not stated otherwise in this file or this component's LICENSE file the
 // following copyright and licenses apply:
 //
-// Copyright 2024 Comcast Cable Communications Management, LLC
+// Copyright 2026 Comcast Cable Communications Management, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,14 +21,18 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
-#pragma once
+#ifndef BARTONCORE_DEVICESERVICEHASH_H
+#define BARTONCORE_DEVICESERVICEHASH_H
 
-/*
- * validate the signature of a file.  used during upgrade situations to
- * ensure the packaged file was un-touched and good-to-go for use
+#include <glib.h>
+
+/**
+ * Compute the MD5 hex digest of a file.
  *
- * @param keyFilename - the public key to use for the validation
- * @param baseFilename - the filename the signature will be validated against
- * @param signatureFilename - the .sig file (to accompany the baseFilename)
+ * @param filePath path to the file to hash
+ * @return a g_malloc'd hex-encoded MD5 digest string, or NULL on error.
+ *         Free with g_free().
  */
-bool verifySignature(char *keyFilename, char *baseFilename, char *signatureFilename);
+char *deviceServiceHashComputeFileMd5HexString(const char *filePath);
+
+#endif // BARTONCORE_DEVICESERVICEHASH_H

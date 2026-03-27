@@ -45,12 +45,86 @@ import pytest
 
 logger = logging.getLogger(__name__)
 
+def pytest_configure(config):
+    """Register custom markers and patch pytest-forked for native output.
+
+    The pytest-forked patch emits native (C library) stdout/stderr from child
+    processes.  By default, pytest-forked redirects the child's fd 1/fd 2 to
+    temp files and then discards the content for passing tests.  This means
+    some C-level log output (e.g. icLog) can be silently lost.
+
+    Requires ``--capture=sys`` (set in pyproject.toml) so that pytest's own fd
+    capture does not override ForkedFunc's fd redirect.
+    """
+    config.addinivalue_line(
+        "markers",
+        "requires_matterjs: skip test when Node.js or matter.js is not available",
+    )
+
+    try:
+        import pytest_forked
+
+        def _patched_forked_run_report(item):
+            from _pytest.runner import TestReport
+
+            import marshal
+
+            import py
+
+            def runforked():
+                from _pytest.runner import runtestprotocol
+
+                try:
+                    reports = runtestprotocol(item, log=False)
+                except KeyboardInterrupt:
+                    os._exit(4)
+
+                return marshal.dumps(
+                    [pytest_forked.serialize_report(x) for x in reports]
+                )
+
+            ff = py.process.ForkedFunc(runforked)
+            result = ff.waitfinish()
+
+            if result.retval is not None:
+                report_dumps = marshal.loads(result.retval)
+                reports = [TestReport(**x) for x in report_dumps]
+                # Emit the child's native stdout/stderr so C-level logs are visible
+                if result.out:
+                    if isinstance(result.out, bytes):
+                        sys.stderr.buffer.write(result.out)
+                        sys.stderr.buffer.flush()
+                    else:
+                        sys.stderr.write(result.out)
+                        sys.stderr.flush()
+
+                if result.err:
+                    if isinstance(result.err, bytes):
+                        sys.stderr.buffer.write(result.err)
+                        sys.stderr.buffer.flush()
+                    else:
+                        sys.stderr.write(result.err)
+                        sys.stderr.flush()
+
+                return reports
+            else:
+                return [pytest_forked.report_process_crash(item, result)]
+
+        pytest_forked.forked_run_report = _patched_forked_run_report
+    except ImportError:
+        pass
+
 
 # The following list of plugins are automatically loaded by pytest when running tests.
 # Any fixtures defined within these modules are automatically available to all test modules.
 pytest_plugins = [
     # Environments
     "testing.environment.default_environment_orchestrator",
+    "testing.environment.descriptor_environment_orchestrator",
+    # Helpers
+    "testing.helpers.http_fixture_server",
+    # Mocks
+    "testing.mocks.device_descriptor_server",
     # Devices
     "testing.mocks.devices.matter.matter_light",
     "testing.mocks.devices.matter.matter_door_lock",
@@ -84,13 +158,6 @@ def _matterjs_available() -> bool:
 
 
 _has_matterjs = _matterjs_available()
-
-
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers",
-        "requires_matterjs: skip test when Node.js or matter.js is not available",
-    )
 
 
 def pytest_collection_modifyitems(config, items):

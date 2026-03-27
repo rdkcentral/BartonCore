@@ -29,6 +29,7 @@
 #include "devicePrivateProperties.h"
 #include "deviceServiceCommFail.h"
 #include "deviceServiceConfiguration.h"
+#include "deviceServiceHash.h"
 #include "icTypes/icLinkedList.h"
 #include "provider/barton-core-property-provider.h"
 #include "zigbeeClusters/alarmsCluster.h"
@@ -50,7 +51,6 @@
 #include <icConcurrent/threadPool.h>
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
-#include <icCrypto/digest.h>
 #include <icLog/telemetryMarkers.h>
 #include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
@@ -695,7 +695,8 @@ static void migrateZigbeeCommonVersion(ZigbeeDriverCommon *commonDriver, icDevic
         }
 
         // Check if the networkType resource already exists before creating it
-        icDeviceResource *existingResource = (icDeviceResource *) linkedListFind(device->resources, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, findDeviceResource);
+        icDeviceResource *existingResource = (icDeviceResource *) linkedListFind(
+            device->resources, COMMON_DEVICE_RESOURCE_NETWORK_TYPE, findDeviceResource);
         if (existingResource == NULL)
         {
             // Create networkType resource
@@ -1103,8 +1104,7 @@ static bool processDeviceDescriptor(void *ctx, icDevice *device, DeviceDescripto
                     firmwareUpgradeContext->commonDriver = commonDriver;
 
                     uint32_t delaySeconds = 1;
-                    g_autoptr(BCorePropertyProvider) propertyProvider =
-                        deviceServiceConfigurationGetPropertyProvider();
+                    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
                     bool noDelay = b_core_property_provider_get_property_as_bool(
                         propertyProvider, ZIGBEE_FW_UPGRADE_NO_DELAY_BOOL_PROPERTY, false);
 
@@ -3534,7 +3534,6 @@ static void handlePollControlCheckin(uint64_t eui64,
     }
 }
 
-
 void zigbeeDriverCommonComcastBatterySavingUpdateResources(uint64_t eui64,
                                                            const ComcastBatterySavingData *data,
                                                            const void *ctx)
@@ -4011,8 +4010,9 @@ static bool validateMD5Checksum(const char *originalMD5Checksum, const char *fil
 {
     bool retVal = false;
 
-    scoped_generic char *fileMd5Checksum = digestFileHex(filePath, CRYPTO_DIGEST_MD5);
-    if (stringCompare(originalMD5Checksum, fileMd5Checksum, true) == 0)
+    g_autofree char *fileMd5Checksum = deviceServiceHashComputeFileMd5HexString(filePath);
+
+    if (fileMd5Checksum != NULL && stringCompare(originalMD5Checksum, fileMd5Checksum, true) == 0)
     {
         retVal = true;
     }
@@ -4056,8 +4056,7 @@ downloadFirmwareFile(const char *firmwareBaseUrl, const char *firmwareDirectory,
         {
             // set standard curl options
             const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-            g_autoptr(BCorePropertyProvider) propertyProvider =
-                deviceServiceConfigurationGetPropertyProvider();
+            g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
             g_autofree char *propValue =
                 b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
 
