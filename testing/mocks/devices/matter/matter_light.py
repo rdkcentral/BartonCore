@@ -47,7 +47,7 @@ class MatterLight(MatterDevice):
     ):
         super().__init__(
             device_class="light",
-            matterjs_entry_point="light-device.js",
+            matterjs_entry_point="LightDevice.js",
             vendor_id=vendor_id,
             product_id=product_id,
         )

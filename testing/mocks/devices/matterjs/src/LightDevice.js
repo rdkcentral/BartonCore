@@ -28,11 +28,14 @@
  *   - Dimmable Light device type (0x0101) with OnOff and LevelControl clusters
  *   - Side-band operations: on, off, toggle, getState
  *   - Initial state: off, level 1
+ *
+ * Can be run directly:  node LightDevice.js --passcode ... --discriminator ...
  */
 
 import { Endpoint } from "@matter/main";
 import { DimmableLightDevice, DimmableLightRequirements } from "@matter/main/devices";
 import { VirtualDevice } from "./VirtualDevice.js";
+import { parseArgs } from "./parseArgs.js";
 
 export class LightDevice extends VirtualDevice {
     constructor(options = {}) {
@@ -127,4 +130,11 @@ export class LightDevice extends VirtualDevice {
 
         return { identifyTime };
     }
+}
+
+// Entry point when run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    const config = parseArgs(process.argv);
+    const device = new LightDevice(config);
+    await device.start();
 }

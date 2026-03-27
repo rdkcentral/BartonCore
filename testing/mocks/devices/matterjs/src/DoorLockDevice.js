@@ -28,12 +28,15 @@
  *   - DoorLock device type (0x000A) with DoorLock cluster on endpoint 1
  *   - Side-band operations: lock, unlock, getState
  *   - Initial state: locked
+ *
+ * Can be run directly:  node DoorLockDevice.js --passcode ... --discriminator ...
  */
 
 import { Endpoint } from "@matter/main";
 import { DoorLockDevice as MatterDoorLockDevice, DoorLockRequirements } from "@matter/main/devices";
 import { DoorLock } from "@matter/main/clusters";
 import { VirtualDevice } from "./VirtualDevice.js";
+import { parseArgs } from "./parseArgs.js";
 
 export class DoorLockDevice extends VirtualDevice {
     constructor(options = {}) {
@@ -117,4 +120,11 @@ export class DoorLockDevice extends VirtualDevice {
             pinCodes: [],
         };
     }
+}
+
+// Entry point when run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    const config = parseArgs(process.argv);
+    const device = new DoorLockDevice(config);
+    await device.start();
 }

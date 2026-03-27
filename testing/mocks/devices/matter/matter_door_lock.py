@@ -46,7 +46,7 @@ class MatterDoorLock(MatterDevice):
     ):
         super().__init__(
             device_class="doorLock",
-            matterjs_entry_point="door-lock-device.js",
+            matterjs_entry_point="DoorLockDevice.js",
             vendor_id=vendor_id,
             product_id=product_id,
         )
