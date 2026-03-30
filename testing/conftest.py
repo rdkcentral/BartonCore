@@ -48,73 +48,11 @@ import pytest
 logger = logging.getLogger(__name__)
 
 def pytest_configure(config):
-    """Register custom markers and patch pytest-forked for native output.
-
-    The pytest-forked patch emits native (C library) stdout/stderr from child
-    processes.  By default, pytest-forked redirects the child's fd 1/fd 2 to
-    temp files and then discards the content for passing tests.  This means
-    some C-level log output (e.g. icLog) can be silently lost.
-
-    Requires ``--capture=sys`` (set in pyproject.toml) so that pytest's own fd
-    capture does not override ForkedFunc's fd redirect.
-    """
+    """Register custom markers."""
     config.addinivalue_line(
         "markers",
         "requires_matterjs: skip test when Node.js or matter.js is not available",
     )
-
-    try:
-        import pytest_forked
-
-        def _patched_forked_run_report(item):
-            from _pytest.runner import TestReport
-
-            import marshal
-
-            import py
-
-            def runforked():
-                from _pytest.runner import runtestprotocol
-
-                try:
-                    reports = runtestprotocol(item, log=False)
-                except KeyboardInterrupt:
-                    os._exit(4)
-
-                return marshal.dumps(
-                    [pytest_forked.serialize_report(x) for x in reports]
-                )
-
-            ff = py.process.ForkedFunc(runforked)
-            result = ff.waitfinish()
-
-            if result.retval is not None:
-                report_dumps = marshal.loads(result.retval)
-                reports = [TestReport(**x) for x in report_dumps]
-                # Emit the child's native stdout/stderr so C-level logs are visible
-                if result.out:
-                    if isinstance(result.out, bytes):
-                        sys.stderr.buffer.write(result.out)
-                        sys.stderr.buffer.flush()
-                    else:
-                        sys.stderr.write(result.out)
-                        sys.stderr.flush()
-
-                if result.err:
-                    if isinstance(result.err, bytes):
-                        sys.stderr.buffer.write(result.err)
-                        sys.stderr.buffer.flush()
-                    else:
-                        sys.stderr.write(result.err)
-                        sys.stderr.flush()
-
-                return reports
-            else:
-                return [pytest_forked.report_process_crash(item, result)]
-
-        pytest_forked.forked_run_report = _patched_forked_run_report
-    except ImportError:
-        pass
 
 
 # The following list of plugins are automatically loaded by pytest when running tests.
@@ -179,13 +117,12 @@ def pytest_collection_modifyitems(config, items):
 #  Subprocess isolation for tests that need a fresh process.
 #
 #  The Matter SDK is a C++ singleton that cannot reinitialize within a single
-#  process.  pytest-forked (os.fork) breaks VS Code's vscode_pytest plugin
-#  because the forked child inherits and closes the test-results named pipe.
+#  process.
 #
 #  NOTE: the above Matter SDK limitation was true as of 1.4.2, but may be
 #  resolved in future versions.  If that happens, we can remove this subprocess.
 #
-#  Instead, we re-invoke pytest in a subprocess for each `requires_matterjs`
+#  We re-invoke pytest in a subprocess for each `requires_matterjs`
 #  test.  The subprocess writes its result to a JUnit XML file.  The outer
 #  test parses that file and propagates the true outcome (passed / skipped /
 #  xfailed / xpassed / failed) so that CI/reporting is accurate.
