@@ -176,12 +176,9 @@ def _parse_junit_outcome(junit_path):
 
         if skipped is not None:
             msg = skipped.get("message", "") or (skipped.text or "")
-            msg_lower = msg.lower()
+            skipped_type = (skipped.get("type", "") or "").lower()
 
-            if "xpass" in msg_lower:
-                return "xpassed", msg
-
-            if "xfail" in msg_lower:
+            if skipped_type == "pytest.xfail":
                 return "xfail", msg
 
             return "skipped", msg
@@ -189,7 +186,16 @@ def _parse_junit_outcome(junit_path):
         failure = testcase.find("failure")
 
         if failure is not None:
-            return "failed", failure.get("message", "")
+            failure_msg = failure.get("message", "")
+            failure_type = (failure.get("type", "") or "").lower()
+
+            if (
+                failure_type == "pytest.xfail"
+                or "[xpass(strict)]" in failure_msg.lower()
+            ):
+                return "xpassed", failure_msg
+
+            return "failed", failure_msg
 
         error = testcase.find("error")
 

@@ -32,6 +32,7 @@
  * Can be run directly:  node LightDevice.js --passcode ... --discriminator ...
  */
 
+import { pathToFileURL } from "node:url";
 import { Endpoint } from "@matter/main";
 import { DimmableLightDevice, DimmableLightRequirements } from "@matter/main/devices";
 import { VirtualDevice } from "./VirtualDevice.js";
@@ -133,7 +134,7 @@ export class LightDevice extends VirtualDevice {
 }
 
 // Entry point when run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const config = parseArgs(process.argv);
     const device = new LightDevice(config);
     await device.start();
