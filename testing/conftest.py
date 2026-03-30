@@ -40,6 +40,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -184,8 +186,9 @@ def pytest_collection_modifyitems(config, items):
 #  resolved in future versions.  If that happens, we can remove this subprocess.
 #
 #  Instead, we re-invoke pytest in a subprocess for each `requires_matterjs`
-#  test.  The subprocess is a clean Python process — no shared file descriptors,
-#  no atexit handlers leak.  The outer test simply asserts the subprocess passed.
+#  test.  The subprocess writes its result to a JUnit XML file.  The outer
+#  test parses that file and propagates the true outcome (passed / skipped /
+#  xfailed / xpassed / failed) so that CI/reporting is accurate.
 # ---------------------------------------------------------------------------
 
 _SUBPROCESS_MARKER_ENV = "_PYTEST_SUBPROCESS_INNER"
@@ -217,55 +220,130 @@ def pytest_runtest_protocol(item, nextitem):
     return True
 
 
+def _parse_junit_outcome(junit_path):
+    """Parse a JUnit XML file written by a child pytest to determine test outcome.
+
+    Returns a tuple of (outcome, message) where outcome is one of:
+      "passed", "skipped", "xfail", "xpassed", "failed", "unknown".
+    """
+    try:
+        tree = ET.parse(junit_path)
+        root = tree.getroot()
+
+        testcase = root.find(".//testcase")
+
+        if testcase is None:
+            return "unknown", ""
+
+        skipped = testcase.find("skipped")
+
+        if skipped is not None:
+            msg = skipped.get("message", "") or (skipped.text or "")
+            msg_lower = msg.lower()
+
+            if "xpass" in msg_lower:
+                return "xpassed", msg
+
+            if "xfail" in msg_lower:
+                return "xfail", msg
+
+            return "skipped", msg
+
+        failure = testcase.find("failure")
+
+        if failure is not None:
+            return "failed", failure.get("message", "")
+
+        error = testcase.find("error")
+
+        if error is not None:
+            return "failed", error.get("message", "")
+
+        return "passed", ""
+    except (ET.ParseError, FileNotFoundError, OSError):
+        return "unknown", ""
+
+
 def _run_in_subprocess(item):
-    """Spawn a child pytest that runs exactly one test node."""
-    cmd = [
-        sys.executable,
-        "-m",
-        "pytest",
-        "-x",
-        "--override-ini=addopts=",
-        "--override-ini=log_cli=false",
-        "--no-header",
-        "-q",
-        item.nodeid,
-    ]
+    """Spawn a child pytest that runs exactly one test node.
 
-    # In CI, py_test.sh preloads libasan via LD_PRELOAD so Python/GI tests can
-    # load ASAN-instrumented Barton libraries. Keep the environment intact for
-    # this child pytest process.
-    child_env = dict(os.environ)
-    child_env[_SUBPROCESS_MARKER_ENV] = "1"
+    The child's JUnit XML output is parsed to propagate the true test outcome
+    (passed / skipped / xfailed / xpassed / failed) back to the outer pytest
+    session, so that skipped and xfail results are not silently reported as
+    passed.
+    """
+    junit_fd, junit_path = tempfile.mkstemp(suffix=".xml")
+    os.close(junit_fd)
 
-    result = subprocess.run(
-        cmd,
-        cwd=str(item.config.rootpath),
-        capture_output=True,
-        text=True,
-        env=child_env,
-    )
+    try:
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-x",
+            "--override-ini=addopts=",
+            "--override-ini=log_cli=false",
+            "--no-header",
+            "-q",
+            f"--junit-xml={junit_path}",
+            item.nodeid,
+        ]
 
-    if result.returncode != 0:
-        output = result.stdout + result.stderr
-        lines = output.strip().splitlines()
+        # In CI, py_test.sh preloads libasan via LD_PRELOAD so Python/GI tests can
+        # load ASAN-instrumented Barton libraries. Keep the environment intact for
+        # this child pytest process.
+        child_env = dict(os.environ)
+        child_env[_SUBPROCESS_MARKER_ENV] = "1"
 
-        if not lines:
-            excerpt = "<no output captured from child pytest process>"
-        elif len(lines) > 160:
-            head = "\n".join(lines[:80])
-            tail = "\n".join(lines[-80:])
-            excerpt = (
-                f"{head}\n\n"
-                f"... ({len(lines) - 160} lines omitted) ...\n\n"
-                f"{tail}"
-            )
-        else:
-            excerpt = "\n".join(lines)
-
-        raise AssertionError(
-            "Subprocess test failed\n"
-            f"exit code: {result.returncode}\n"
-            f"cwd: {item.config.rootpath}\n"
-            f"command: {' '.join(cmd)}\n\n"
-            f"Captured output:\n{excerpt}"
+        result = subprocess.run(
+            cmd,
+            cwd=str(item.config.rootpath),
+            capture_output=True,
+            text=True,
+            env=child_env,
         )
+
+        outcome, message = _parse_junit_outcome(junit_path)
+
+        if outcome == "skipped":
+            pytest.skip(message or "skipped in subprocess")
+
+        if outcome == "xfail":
+            pytest.xfail(message or "xfailed in subprocess")
+
+        if outcome == "xpassed":
+            # xpassed means the test unexpectedly passed — treat as a failure
+            # so the outer session is notified rather than silently passing.
+            raise AssertionError(
+                f"Subprocess test unexpectedly passed (xpass): {message}"
+            )
+
+        if outcome in ("failed", "unknown") or result.returncode != 0:
+            output = result.stdout + result.stderr
+            lines = output.strip().splitlines()
+
+            if not lines:
+                excerpt = "<no output captured from child pytest process>"
+            elif len(lines) > 160:
+                head = "\n".join(lines[:80])
+                tail = "\n".join(lines[-80:])
+                excerpt = (
+                    f"{head}\n\n"
+                    f"... ({len(lines) - 160} lines omitted) ...\n\n"
+                    f"{tail}"
+                )
+            else:
+                excerpt = "\n".join(lines)
+
+            raise AssertionError(
+                "Subprocess test failed\n"
+                f"exit code: {result.returncode}\n"
+                f"cwd: {item.config.rootpath}\n"
+                f"command: {' '.join(cmd)}\n\n"
+                f"Captured output:\n{excerpt}"
+            )
+    finally:
+        try:
+            os.unlink(junit_path)
+        except OSError:
+            pass
