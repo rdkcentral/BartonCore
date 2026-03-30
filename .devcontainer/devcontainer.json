@@ -44,15 +44,17 @@
         // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
         // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
         "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
-        "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}"
+        "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}",
+
+        // ASAN-instrumented libBartonCore.so requires the link order check to be disabled
+        // when loaded via GObject introspection in Python. Without this, VS Code's pytest
+        // discovery crashes because ASAN kills the process. This is harmless for non-ASAN
+        // processes — they simply ignore the option.
+        "ASAN_OPTIONS": "verify_asan_link_order=0"
     },
 
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
-
-    "features": {
-        "ghcr.io/devcontainers/features/node:1": {}
-    },
 
     "customizations":
     {

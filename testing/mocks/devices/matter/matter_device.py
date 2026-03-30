@@ -26,22 +26,21 @@
 #
 
 from pathlib import Path
-import shutil
+import json
+import os
+import select
 import subprocess
 import logging
-import tempfile
-from typing import TYPE_CHECKING
+import threading
+import time
 
 from testing.mocks.devices.base_device import BaseDevice
 from testing.helpers.matter import code_generators
+from testing.helpers.matterjs.sideband_client import SidebandClient
 from testing.utils import process_utils as putils
-from testing.mocks.devices.matter.clusters.matter_cluster import (
-    ClusterId,
-    MatterCluster,
-)
 
-if TYPE_CHECKING:
-    from testing.mocks.devices.matter.device_interactor import ChipToolDeviceInteractor
+# Path to the matter.js virtual device source directory
+MATTERJS_DIR = Path(__file__).resolve().parent.parent / "matterjs"
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +48,13 @@ logger = logging.getLogger(__name__)
 class MatterDevice(BaseDevice):
     """
     MatterDevice is a base class, inheriting from BaseDevice class, that provides common
-    functionality for matter devices. This class is intended to be inherited by other matter
-    device classes to share common methods and attributes such as starting and stopping the
-    device, sending messages, and setting commissioning codes.
+    functionality for matter devices. Each device is backed by a matter.js virtual device
+    running as a Node.js subprocess with a side-band HTTP control channel.
+
+    Subclasses specify a `matterjs_entry_point` — the JavaScript file to run.
 
     Attributes:
-        _app_name (str): The name of the matter sample application to run.
-        _mdns_port (int): The mDNS port for the device (default is 5540).
+        _matterjs_entry_point (str): Relative path to the matter.js JS entry point.
         _passcode (int): The passcode for the device.
         _discriminator (int): The discriminator for the device.
         _vendor_id (int): The vendor ID for the device (default is 0).
@@ -64,115 +63,31 @@ class MatterDevice(BaseDevice):
         _process (subprocess.Popen): The process running the device application.
     """
 
-    _app_name: str
-    _mdns_port: int
+    _matterjs_entry_point: str
     _passcode: int
     _discriminator: int
     _vendor_id: int
     _product_id: int
     _commissioning_code: str
     _process: subprocess.Popen
-    _cluster_classes: dict[ClusterId, tuple[type[MatterCluster], int]]
-    _interactor: "ChipToolDeviceInteractor"
-    _chip_tool_node_id: int
-    _kvs_dir: Path
+    _sideband: SidebandClient | None
 
     def __init__(
         self,
-        app_name: str,
         device_class: str,
+        matterjs_entry_point: str,
         vendor_id: int = 0,
         product_id: int = 0,
-        mdns_port: int = 5540,
     ):
-        self._app_name = app_name
+        self._matterjs_entry_point = matterjs_entry_point
         self._device_class = device_class
         self._vendor_id = vendor_id
         self._product_id = product_id
-        self._mdns_port = mdns_port
         self._passcode = self._set_passcode()
         self._discriminator = self._set_discriminator()
         self._commissioning_code = self._set_commissioning_code()
         self._process = None
-        self._cluster_classes = {}
-        self._interactor = None
-        self._chip_tool_node_id = None
-        # Create a unique temp directory for this device's KVS storage
-        self._kvs_dir = Path(tempfile.mkdtemp(prefix=f"matter_device_{device_class}_"))
-
-    def _register_cluster(
-        self, cluster_class: type[MatterCluster], endpoint_id: int
-    ) -> None:
-        """
-        Register a cluster class that this device supports on a specific endpoint.
-
-        Subclasses should call this in their __init__ to declare which
-        clusters they support and on which endpoints. The endpoint ID should
-        match the device's ZAP configuration.
-
-        Args:
-            cluster_class: The cluster class to register (e.g., OnOffCluster).
-            endpoint_id: The endpoint ID where this cluster resides.
-        """
-        self._cluster_classes[cluster_class.CLUSTER_ID] = (cluster_class, endpoint_id)
-
-    def _set_interactor(
-        self, interactor: "ChipToolDeviceInteractor", node_id: int
-    ) -> None:
-        """
-        Set the interactor and node ID for this device.
-
-        Called by the interactor when the device is registered/commissioned.
-        A device may be commissioned to multiple fabrics with different node IDs;
-        this stores the node ID for the chip-tool fabric specifically.
-
-        Args:
-            interactor: The ChipToolDeviceInteractor for executing commands.
-            node_id: The node ID assigned by chip-tool during commissioning.
-        """
-        self._interactor = interactor
-        self._chip_tool_node_id = node_id
-
-    def get_cluster(self, cluster_id: ClusterId) -> MatterCluster:
-        """
-        Get a cluster interface for this device.
-
-        Args:
-            cluster_id: The Matter cluster ID (e.g., OnOffCluster.CLUSTER_ID).
-
-        Returns:
-            MatterCluster: An instance of the appropriate cluster class.
-
-        Raises:
-            ValueError: If the cluster ID is not supported by this device.
-            RuntimeError: If the device has not been registered with an interactor.
-
-        Example:
-            from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
-
-            onoff = light.get_cluster(OnOffCluster.CLUSTER_ID)
-            onoff.on()
-        """
-        if self._interactor is None or self._chip_tool_node_id is None:
-            raise RuntimeError(
-                "Device must be registered with an interactor before getting clusters. "
-                "Use device_interactor.register_device(device) first."
-            )
-
-        cluster_entry = self._cluster_classes.get(cluster_id)
-        if cluster_entry is None:
-            raise ValueError(
-                f"Cluster ID 0x{cluster_id:04X} is not supported by this device. "
-                f"Supported clusters: {[f'0x{c:04X}' for c in self._cluster_classes.keys()]}"
-            )
-
-        cluster_class, registered_endpoint = cluster_entry
-
-        return cluster_class(
-            interactor=self._interactor,
-            node_id=self._chip_tool_node_id,
-            endpoint_id=registered_endpoint,
-        )
+        self._sideband = None
 
     def _set_passcode(self) -> int:
         """
@@ -203,62 +118,160 @@ class MatterDevice(BaseDevice):
     def get_commissioning_code(self) -> str:
         """
         Returns the current commissioning code for the device.
-
-        Note: This may change if a commissioning window is opened with ECM,
-        which generates a new passcode. Use set_commissioning_code() to update
-        after opening an ECM commissioning window.
         """
         return self._commissioning_code
 
-    def set_commissioning_code(self, code: str) -> None:
-        """
-        Update the commissioning code for this device.
+    @property
+    def sideband(self) -> SidebandClient:
+        """Access the side-band client for this device.
 
-        This should be called when an ECM commissioning window is opened,
-        as ECM generates a new passcode and the device will advertise with
-        a new commissioning code.
-
-        Args:
-            code: The new manual pairing code (e.g., from chip-tool output).
+        Raises:
+            RuntimeError: If the device has not been started yet.
         """
-        self._commissioning_code = code
+        if self._sideband is None:
+            raise RuntimeError(
+                "Device has not been started yet. Call start() first."
+            )
+
+        return self._sideband
 
     def start(self):
         """
-        Starts the device application as a subprocess given the device parameters.
+        Start the matter.js virtual device as a Node.js subprocess.
+
+        Blocks until the device emits its ready signal on stdout, then
+        configures the SidebandClient with the reported port.
 
         Raises:
-            subprocess.SubprocessError: If the subprocess fails to start.
+            FileNotFoundError: If the entry point script does not exist.
+            RuntimeError: If the device fails to emit a ready signal.
         """
         logger.debug(
-            f"Starting {self._device_class} with passcode {self._passcode} and discriminator {self._discriminator}"
+            f"Starting {self._device_class} with passcode {self._passcode} "
+            f"and discriminator {self._discriminator}"
         )
 
-        try:
-            self._process = subprocess.Popen(
-                [
-                    self._app_name,
-                    "--passcode",
-                    str(self._passcode),
-                    "--discriminator",
-                    str(self._discriminator),
-                    "--vendor-id",
-                    str(self._vendor_id),
-                    "--product-id",
-                    str(self._product_id),
-                    "--secured-device-port",
-                    str(self._mdns_port),
-                    "--KVS",
-                    str(self._kvs_dir / "chip_kvs"),
-                ],
-                shell=False,
+        entry_point_path = MATTERJS_DIR / "src" / self._matterjs_entry_point
+
+        if not entry_point_path.exists():
+            raise FileNotFoundError(
+                f"Entry point not found: {entry_point_path}"
             )
 
-            logger.debug(f"Started {self._device_class} with PID: {self._process.pid}")
+        cmd = [
+            "node",
+            str(entry_point_path),
+            "--passcode",
+            str(self._passcode),
+            "--discriminator",
+            str(self._discriminator),
+            "--port",
+            "0",
+        ]
 
-        except subprocess.SubprocessError as e:
-            logger.debug(f"Failed to start {self._device_class} process: {e}")
-            self._process = None
+        if self._vendor_id:
+            cmd.extend(["--vendor-id", str(self._vendor_id)])
+
+        if self._product_id:
+            cmd.extend(["--product-id", str(self._product_id)])
+
+        # Keep LD_PRELOAD for Python (ASAN-instrumented Barton libs), but do
+        # not inject it into Node.js virtual devices to avoid cross-runtime
+        # sanitizer issues.
+        node_env = dict(os.environ)
+        node_env.pop("LD_PRELOAD", None)
+
+        self._process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(MATTERJS_DIR),
+            env=node_env,
+        )
+
+        # Drain stderr in background to avoid pipe buffer deadlock
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr,
+            daemon=True,
+        )
+        self._stderr_thread.start()
+
+        # Wait for the ready signal on stdout
+        ready_signal = self._wait_for_ready()
+
+        if ready_signal is None:
+            self.stop()
+
+            raise RuntimeError(
+                f"Failed to start {self._device_class}: no ready signal received"
+            )
+
+        sideband_port = ready_signal["sidebandPort"]
+        self._sideband = SidebandClient("localhost", sideband_port)
+
+        logger.debug(
+            f"Started {self._device_class} with PID {self._process.pid}, "
+            f"sideband port {sideband_port}, "
+            f"matter port {ready_signal.get('matterPort')}"
+        )
+
+    def _wait_for_ready(self, timeout: float = 30.0) -> dict | None:
+        """Read stdout lines until the JSON ready signal is received."""
+        deadline = time.monotonic() + timeout
+
+        while True:
+            remaining = deadline - time.monotonic()
+
+            if remaining <= 0:
+                logger.error(
+                    f"Timeout waiting for ready signal from {self._device_class}"
+                )
+
+                return None
+
+            if self._process.poll() is not None:
+                logger.error(
+                    f"{self._device_class} process exited with code "
+                    f"{self._process.returncode} before emitting ready signal"
+                )
+
+                return None
+
+            ready, _, _ = select.select([self._process.stdout], [], [], remaining)
+
+            if not ready:
+                logger.error(
+                    f"Timeout waiting for ready signal from {self._device_class}"
+                )
+
+                return None
+
+            line = self._process.stdout.readline()
+
+            if not line:
+                return None
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            try:
+                data = json.loads(line)
+
+                if data.get("ready"):
+                    return data
+            except json.JSONDecodeError:
+                logger.debug(f"Non-JSON stdout from device: {line}")
+
+    def _drain_stderr(self):
+        """Drain stderr in a background thread to prevent pipe buffer deadlock."""
+        try:
+            for line in self._process.stderr:
+                logger.debug(f"[{self._device_class}] {line.rstrip()}")
+        except (ValueError, OSError):
+            pass  # Process closed
 
     def stop(self):
         """
@@ -278,7 +291,3 @@ class MatterDevice(BaseDevice):
         logger.debug(f"Cleaning up {self._device_class}")
 
         self.stop()
-        # Clean up only this device's KVS directory
-        if self._kvs_dir and self._kvs_dir.exists():
-            shutil.rmtree(self._kvs_dir, ignore_errors=True)
-            logger.debug(f"Removed device storage directory {self._kvs_dir}")

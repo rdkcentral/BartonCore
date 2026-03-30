@@ -41,10 +41,15 @@ ARG BUILDER_UID=""
 
 RUN /setupUser.sh $BUILDER_UID $BUILDER_GID $BUILDER_USER
 
-# Install Node.js (required for openspec)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# VS Code's Python extension tries to run "python" (not "python3") for test discovery.
+# Ubuntu only ships "python3", so create a symlink.
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Allow ASAN-instrumented shared libraries (libBartonCore.so) to be loaded via dlopen
+# (e.g. GObject introspection in Python) without requiring LD_PRELOAD. Without this,
+# VS Code's pytest discovery crashes because ASAN kills processes that load the library
+# when the runtime isn't first in the link order.
+ENV ASAN_OPTIONS=verify_asan_link_order=0
 
 ENV OPENSPEC_TELEMETRY=0
 RUN npm install -g @fission-ai/openspec@v1.2.0

@@ -107,8 +107,7 @@ RUN pip3 install --upgrade --break-system-packages \
     pygobject-stubs==2.14.0 \
     setuptools==73.0.0 \
     python_stdnum \
-    pytest \
-    pytest-forked
+    pytest
 
 # pygobject-stubs distributed the stub (pyi) files for standard distribution girs, but we also want its tools so we can make
 # out own stubs. Those don't come with the pip package.
@@ -339,6 +338,19 @@ RUN rm -rf /tmp/patches
 
 # Ensure the system uses OpenSSL 3 by default
 ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
+
+###############################################################################
+# Node.js for virtual test devices (matter.js deps installed at runtime)
+###############################################################################
+RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs
 
 ###############################################################################
 # Development build stage
