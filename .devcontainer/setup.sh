@@ -36,17 +36,33 @@ set -e
 # https://code.visualstudio.com/docs/python/environments#_environment-variable-definitions-file
 PYTHON_ENV_FILE=".devcontainer/vsc-python.env"
 
-# Add the ASAN library to the LD_PRELOAD environment variable within the vsc-python.env file
-# so pytest invocations will run with the AddressSanitizer preloaded. Without this, pytest
-# discovery will fail in VSC.
-LD_PRELOAD_LINE="LD_PRELOAD=$(gcc -print-file-name=libasan.so)"
+# Ensure the env file exists (VS Code reads it via python.envFile setting).
+# LD_PRELOAD is no longer written here — see sitecustomize.py below for the
+# ASAN fix. The env file is kept for any future Python-specific env vars.
+touch "$PYTHON_ENV_FILE"
 
-if [ -f "$PYTHON_ENV_FILE" ]; then
-    if grep -q "^LD_PRELOAD=" "$PYTHON_ENV_FILE"; then
-        sed -i "s|^LD_PRELOAD=.*|$LD_PRELOAD_LINE|" "$PYTHON_ENV_FILE"
-    else
-        echo "$LD_PRELOAD_LINE" >> "$PYTHON_ENV_FILE"
-    fi
-else
-    echo "$LD_PRELOAD_LINE" > "$PYTHON_ENV_FILE"
+# Install a sitecustomize.py that sets ASAN_OPTIONS at Python interpreter startup.
+# This guarantees the option is set regardless of how the process is spawned (VS Code
+# extensions, terminals, subprocess, etc.). Without this, processes that load
+# ASAN-instrumented libBartonCore.so via GObject introspection crash because ASAN
+# kills them when the runtime isn't first in the link order.
+# NOTE: We append to the existing stdlib sitecustomize.py (Ubuntu's apport hook)
+# because Python only loads one, and the stdlib location takes precedence over
+# dist-packages.
+SITE_CUSTOMIZE="$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")/sitecustomize.py"
+if ! grep -q "ASAN_OPTIONS" "$SITE_CUSTOMIZE" 2>/dev/null; then
+    sudo tee -a "$SITE_CUSTOMIZE" > /dev/null << 'PYEOF'
+
+# BartonCore: ensure ASAN link-order check is disabled for GObject introspection
+import os as _os
+_os.environ.setdefault("ASAN_OPTIONS", "verify_asan_link_order=0")
+del _os
+PYEOF
+fi
+
+# Install matter.js dependencies for virtual test devices.
+# The package.json pins the exact version (currently v0.16.10).
+MATTERJS_DIR="testing/mocks/devices/matterjs"
+if [ -f "$MATTERJS_DIR/package.json" ]; then
+    npm --prefix "$MATTERJS_DIR" install
 fi

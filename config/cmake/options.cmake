@@ -167,9 +167,6 @@ bcore_option(NAME BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA
 bcore_option(NAME BCORE_MATTER_ENABLE_OTA_PROVIDER
            DEFINITION BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER
            DESCRIPTION "Enable OTA provider for Matter and configure devices with OTA Requestor cluster")
-bcore_option(NAME BCORE_MATTER_USE_MATTERJS
-           DEFINITION BARTON_CONFIG_MATTER_USE_MATTERJS
-           DESCRIPTION "Enable matter.js integration for SBMD TLV encoding/decoding. Only compatible with quickjs engine.")
 bcore_option(NAME BCORE_MATTER_VALIDATE_SCHEMAS
            DEFINITION BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS
            DESCRIPTION "Enable validation of SBMD schemas"
@@ -276,13 +273,14 @@ message(STATUS "- - - - - - - - - - - - - - - - ")
 # Check removed/replaced options
 
 macro(bcore_removed_option NAME error)
-    # This macro checks for a remove option and emits an error
+    # This macro checks for a removed option and emits an error
     # if the option is set.
-    get_property(is_set CACHE ${NAME} PROPERTY VALUE SET)
-    if (is_set)
+    if (DEFINED CACHE{${NAME}})
         message(FATAL_ERROR "Removed option ${NAME} is set - ${error}")
     endif()
 endmacro()
+
+bcore_removed_option(BCORE_MATTER_USE_MATTERJS "matter.js integration has been removed. Use scriptType 'JavaScript' with SbmdUtils helpers instead.")
 
 # Validate JS engine selection
 if (BCORE_MATTER)
@@ -292,7 +290,4 @@ if (BCORE_MATTER)
         message(FATAL_ERROR "BCORE_MATTER_SBMD_JS_ENGINE='${BCORE_MATTER_SBMD_JS_ENGINE}' is not valid. Must be 'quickjs' or 'mquickjs'.")
     endif()
 
-    if (BCORE_MATTER_USE_MATTERJS AND BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
-        message(FATAL_ERROR "BCORE_MATTER_USE_MATTERJS is not compatible with BCORE_MATTER_SBMD_JS_ENGINE=mquickjs. Use quickjs instead.")
-    endif()
 endif()

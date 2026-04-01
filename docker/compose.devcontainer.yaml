@@ -29,8 +29,8 @@
 # service from the base compose.yaml file. It is not meant to be run directly.
 
 # Setting the name element to the user helps keep the container name easy to identify
-# by namespacing it with the user's name. Example: $USER-barton-devcontainer-1
-name: $BUILDER_USER-barton
+# by namespacing it with the user's name and workspace. Example: $BUILDER_USER-barton-$BARTON_WORKSPACE_ID-devcontainer-1
+name: $BUILDER_USER-barton-$BARTON_WORKSPACE_ID
 
 services:
     devcontainer:
@@ -56,6 +56,6 @@ services:
 
 networks:
     barton-ip6net:
-        name: $BUILDER_USER-barton-ip6net
+        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
         # Indicate that the network is defined outside of this compose file
         external: true

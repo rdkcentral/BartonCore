@@ -1,0 +1,121 @@
+# Door Lock SBMD Specification
+# Maps Matter Door Lock device type to Barton doorLock device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Door Lock"
+# Script type (currently only JavaScript is supported)
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 3
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x000a  # Matter Door Lock device type
+  revision: 1 # Device Specification revision from Matter spec that this driver complies with
+  featureClusters:
+    - 0x0101  # DoorLock cluster - for featureMap access in scripts
+
+# Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
+reporting:
+  minSecs: 1      # Minimum reporting interval in seconds
+  maxSecs: 3600   # Maximum reporting interval in seconds (1 hour)
+
+# Barton endpoints (logical groupings of resources)
+endpoints:
+  # Primary door lock endpoint
+  - id: "1"                    # Barton endpoint identifier
+    profile: "doorLock"        # Barton profile name
+    profileVersion: 3          # Profile version
+    resources:
+      # Lock state resource - indicates whether the door is locked
+      - id: "locked"
+        type: "boolean"
+        modes:
+          - "read"        # Resource can be read
+          - "dynamic"     # Value can change asynchronously (via device button, etc.)
+          - "emitEvents"  # Changes generate events to subscribers
+        mapper:
+          # Read mapper: Matter LockState attribute -> Barton boolean
+          read:
+            attribute:
+              clusterId: "0x0101"      # Door Lock cluster
+              attributeId: "0x0000"    # LockState attribute
+              name: "LockState"
+              type: "uint8"            # DlLockState enum (uint8)
+
+            # LockState enum values:
+            #   0 = NotFullyLocked, 1 = Locked, 2 = Unlocked, 3 = Unlatched
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var isLocked = value === 1;
+              return { output: isLocked ? 'true' : 'false' };
+
+      # Lock function resource - locks the door
+      - id: "lock"
+        type: "function"
+        mapper:
+          # Execute mapper: Barton lock function -> Matter LockDoor command
+          execute:
+            script: |
+              // DoorLock cluster ID = 0x0101, LockDoor command ID = 0x0000
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              var featureMap = sbmdCommandArgs.clusterFeatureMaps[0x0101] || 0;
+
+              // Build command arguments
+              var tlvBase64 = null;
+              var pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
+                // LockDoorRequest has optional PINCode at tag 0 (octstr)
+                var schema = {
+                  PINCode: {tag: 0, type: 'octstr'}
+                };
+                // Convert PIN string to byte array
+                var pinBytes = new Uint8Array(pinString.length);
+                for (var i = 0; i < pinString.length; i++) {
+                  pinBytes[i] = pinString.charCodeAt(i);
+                }
+                tlvBase64 = SbmdUtils.Tlv.encodeStruct({PINCode: pinBytes}, schema);
+              }
+
+              return SbmdUtils.Response.invoke(0x0101, 0x0000, tlvBase64, {timedInvokeTimeoutMs: 10000});
+
+      # Unlock function resource - unlocks the door
+      - id: "unlock"
+        type: "function"
+        mapper:
+          # Execute mapper: Barton unlock function -> Matter UnlockDoor command
+          execute:
+            script: |
+              // DoorLock cluster ID = 0x0101, UnlockDoor command ID = 0x0001
+              // Get DoorLock cluster feature map
+              // 0x01 = PIN credential, 0x80 = COTA (credential over the air access)
+              var featureMap = sbmdCommandArgs.clusterFeatureMaps[0x0101] || 0;
+
+              // Build command arguments
+              var tlvBase64 = null;
+              var pinString = sbmdCommandArgs.input;
+              if (((featureMap & 0x81) === 0x81) &&
+                  pinString && pinString.length > 0) {
+                // UnlockDoorRequest has optional PINCode at tag 0 (octstr)
+                var schema = {
+                  PINCode: {tag: 0, type: 'octstr'}
+                };
+                // Convert PIN string to byte array
+                var pinBytes = new Uint8Array(pinString.length);
+                for (var i = 0; i < pinString.length; i++) {
+                  pinBytes[i] = pinString.charCodeAt(i);
+                }
+                tlvBase64 = SbmdUtils.Tlv.encodeStruct({PINCode: pinBytes}, schema);
+              }
+
+              return SbmdUtils.Response.invoke(0x0101, 0x0001, tlvBase64, {timedInvokeTimeoutMs: 10000});

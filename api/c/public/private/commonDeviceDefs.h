@@ -83,6 +83,7 @@
 #define COMMON_DEVICE_METADATA_RECONFIGURATION_REQUIRED              "reconfRequired"
 #define COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS                "commFailOverrideSeconds"
 #define COMMON_DEVICE_RESOURCE_NETWORK_TYPE                          "networkType"
+#define COMMON_DEVICE_RESOURCE_IDENTIFY_SECONDS                      "identifySeconds"
 
 #define COMMON_ENDPOINT_RESOURCE_LABEL                               "label"
 #define COMMON_ENDPOINT_RESOURCE_TAMPERED                            "tampered"

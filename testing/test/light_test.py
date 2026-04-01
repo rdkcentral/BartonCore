@@ -23,44 +23,25 @@
 
 
 import logging
-from queue import Queue
+import time
+from queue import Empty
 
-from gi.repository import BCore
-
-from testing.mocks.devices.matter.clusters.onoff_cluster import OnOffCluster
+import pytest
+from testing.utils.barton_utils import (
+    assert_device_has_common_resources,
+    commission_device,
+    resource_update_listener,
+    wait_for_resource_value,
+)
 
 logger = logging.getLogger(__name__)
-def assert_device_has_common_resources(client, device, required_resources):
-    """Assert that the device has all required common resources.
 
-    Args:
-        device: BCoreDevice object
-        required_resources: List of required resource names
-
-    Raises:
-        AssertionError: If any required resource is missing
-    """
-    device_uuid = device.props.uuid
-
-    missing_resources = []
-    for resource_name in required_resources:
-        uri = f"/{device_uuid}/r/{resource_name}"
-        resource = client.get_resource_by_uri(uri)
-        if resource is None:
-            missing_resources.append(resource_name)
-
-    assert not missing_resources, f"Device is missing resources: {missing_resources}"
+pytestmark = pytest.mark.requires_matterjs
 
 
 def test_commission_light(default_environment, matter_light):
-    default_environment.get_client().commission_device(
-        matter_light.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    lights = default_environment.get_client().get_devices_by_device_class("light")
-    assert len(lights) == 1
+    light = commission_device(default_environment, matter_light, "light")
 
-    light = lights[0]
     assert_device_has_common_resources(
         default_environment.get_client(),
         light,
@@ -73,38 +54,100 @@ def test_commission_light(default_environment, matter_light):
     )
 
 
+def _str_to_bool(value):
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "")
+
+    return bool(value)
+
+
 def test_light_on_off(default_environment, matter_light):
-    # TODO: Probably need some kind of helper for repetitious blocks like this
-    default_environment.get_client().commission_device(
-        matter_light.get_commissioning_code(), 100
-    )
-    default_environment.wait_for_device_added()
-    lights = default_environment.get_client().get_devices_by_device_class("light")
-    assert len(lights) == 1
+    commission_device(default_environment, matter_light, "light")
+    client = default_environment.get_client()
 
-    # Add resource update event listener
-    resource_updated_queue = Queue()
-
-    def check_resource_updates(
-        client: BCore.Client, resource_updated_event: BCore.ResourceUpdatedEvent
-    ) -> None:
-        # TODO: Probably need some URI builder/helper
-        resource = resource_updated_event.props.resource
-        logger.debug(
-            f"Resource updated: {resource.props.id} with value {resource.props.value}"
-        )
-        if resource.props.id == "isOn":
-            resource_updated_queue.put(bool(resource.props.value))
-
-    default_environment.get_client().connect(
-        BCore.CLIENT_SIGNAL_NAME_RESOURCE_UPDATED, check_resource_updates
+    resource_updated_queue = resource_update_listener(
+        client, "isOn", transform=_str_to_bool
     )
 
-    is_on = matter_light.get_cluster(OnOffCluster.CLUSTER_ID).is_on()
+    is_on = matter_light.sideband.get_state()["onOff"]
     expected_on_off_state = not is_on
 
-    matter_light.get_cluster(OnOffCluster.CLUSTER_ID).toggle()
-    resource_updated_result = resource_updated_queue.get(timeout=5)
+    matter_light.sideband.send("toggle")
+    wait_for_resource_value(resource_updated_queue, expected_on_off_state, timeout=5)
+
+
+def test_light_common_cluster_attribute_report(default_environment, matter_light):
+    """Test that Barton correctly handles attribute reports for common clusters from Matter devices.
+
+    This test verifies that when a Matter device sends an attribute report for
+    the identify-time attribute, Barton correctly updates the corresponding
+    identifySeconds resource. This is verified when the attribute report is sent
+    upon subscribing to the device, and also when the attribute report is sent
+    after a new value is written to the identify-time attribute.
+    """
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "identifySeconds")
+
+    commission_device(default_environment, matter_light, "light")
+
+    # Wait for the initial identifySeconds attribute report that arrives as
+    # part of the subscription to the device.
+    initial_identify_seconds = resource_updated_queue.get(timeout=5)
     assert (
-        resource_updated_result == expected_on_off_state
-    ), "Light on/off state did not update as expected"
+        initial_identify_seconds is not None
+    ), "Failed to receive initial identifySeconds attribute report"
+
+    logger.info(f"Initial identify seconds: {initial_identify_seconds}")
+
+    # Parse the string value to get the uint16 value
+    try:
+        initial_value = int(initial_identify_seconds)
+    except ValueError:
+        assert False, f"Could not parse initial identifySeconds as int: {initial_identify_seconds}"
+
+    # Use a larger delta to avoid flaky 1-second countdown races where the
+    # first post-write report may already be back to 0.
+    if initial_value <= 65530:
+        new_value = initial_value + 5
+    else:
+        new_value = initial_value - 5
+
+    # Write the new value to the identify-time attribute on the Matter device
+    logger.info(f"Writing identify-time attribute to {new_value}")
+    matter_light.sideband.send("setIdentifyTime", {"identifyTime": new_value})
+
+    # Wait for the attribute report triggered by the write above. We may see
+    # stale initial values first, and IdentifyTime may tick down before the
+    # report is delivered. Accept any first value that changed from initial and
+    # is within the expected countdown window.
+    deadline = time.monotonic() + 10
+
+    while True:
+        remaining = deadline - time.monotonic()
+
+        if remaining <= 0:
+            assert False, (
+                f"identifySeconds was not updated via attribute report after write. "
+                f"Expected a value in [1, {new_value}] different from initial {initial_value}."
+            )
+
+        try:
+            candidate = resource_updated_queue.get(timeout=remaining)
+        except Empty:
+            assert False, (
+                f"identifySeconds was not updated via attribute report after write. "
+                f"Expected a value in [1, {new_value}] different from initial {initial_value}."
+            )
+
+        try:
+            updated_identify_seconds = int(candidate)
+        except (TypeError, ValueError):
+            continue
+
+        if (
+            updated_identify_seconds != initial_value
+            and 1 <= updated_identify_seconds <= new_value
+        ):
+            break
+
+    logger.info(f"Updated identify seconds: {updated_identify_seconds}")

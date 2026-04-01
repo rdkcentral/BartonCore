@@ -95,11 +95,15 @@ A resource's mapper MAY contain an `event` section specifying a Matter cluster e
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
 
 ### Requirement: SBMD schema validation
-SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints.
+SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 
 #### Scenario: Schema validation at build time
 - **WHEN** the project is built with SBMD specs present
 - **THEN** each `.sbmd` file SHALL be validated against the JSON schema, and build SHALL fail if any spec is invalid
+
+#### Scenario: Invalid scriptType rejected
+- **WHEN** an SBMD spec contains `scriptType: "JavaScript+matterjs"`
+- **THEN** schema validation SHALL reject the spec
 
 ### Requirement: SBMD parser pipeline
 The system SHALL include an `SbmdParser` that reads `.sbmd` YAML files using yaml-cpp and produces `SbmdSpec` C++ data structures. The parser SHALL support both `ParseFile(path)` and `ParseString(yaml)` static methods.
@@ -136,17 +140,6 @@ All devices SHALL share a single runtime singleton context regardless of engine 
 - **WHEN** multiple threads invoke script mappers for the same device concurrently
 - **THEN** the script instance SHALL serialize access via its internal mutex
 
-### Requirement: matter.js engine compatibility
-The optional matter.js cluster integration (`BCORE_MATTER_USE_MATTERJS`) SHALL only be available when `BCORE_MATTER_SBMD_JS_ENGINE=quickjs`. If `BCORE_MATTER_USE_MATTERJS=ON` is set with `BCORE_MATTER_SBMD_JS_ENGINE=mquickjs`, CMake configuration SHALL fail with a `FATAL_ERROR`.
-
-#### Scenario: mquickjs with matter.js rejected
-- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE=mquickjs` and `BCORE_MATTER_USE_MATTERJS=ON`
-- **THEN** CMake configuration SHALL fail
-
-#### Scenario: quickjs with matter.js accepted
-- **WHEN** `BCORE_MATTER_SBMD_JS_ENGINE=quickjs` and `BCORE_MATTER_USE_MATTERJS=ON`
-- **THEN** the matter.js cluster bundle SHALL be built and embedded
-
 ### Requirement: mquickjs memory configuration
 When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 1048576 bytes = 1 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer.
 
@@ -176,19 +169,10 @@ SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArg
 - **WHEN** a read script is invoked on a device with FeatureMap data for cluster 6
 - **THEN** `sbmdReadArgs.clusterFeatureMaps` SHALL contain an object mapping cluster IDs to their feature map values
 
-### Requirement: matter.js integration
-The system SHALL optionally support loading matter.js cluster definitions into the QuickJS context when `scriptType` is `"JavaScript+matterjs"` and `BCORE_MATTER_USE_MATTERJS=ON`. This SHALL provide the global `MatterClusters` object with type-safe TLV encoding/decoding via matter.js schemas.
-
-#### Scenario: matter.js TLV encoding
-- **WHEN** a script with `scriptType: "JavaScript+matterjs"` uses `MatterClusters` for encoding
-- **THEN** the cluster-specific TLV schemas SHALL be available for type-safe encoding/decoding
-
-#### Scenario: matter.js disabled
-- **WHEN** `BCORE_MATTER_USE_MATTERJS=OFF` in CMake
-- **THEN** specs with `scriptType: "JavaScript+matterjs"` SHALL NOT be loaded and tests requiring matter.js SHALL be skipped
-
 ### Requirement: Current SBMD spec catalog
-The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript+matterjs), `air-quality-sensor` (device type 0x002c, JavaScript+matterjs), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript).
+The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript).
+
+All specs SHALL use `scriptType: "JavaScript"` and the `SbmdUtils` built-in library for TLV encoding/decoding.
 
 #### Scenario: Light SBMD spec coverage
 - **WHEN** a Matter device with device type 0x0100 (On/Off Light) is commissioned
@@ -196,4 +180,12 @@ The system SHALL ship with SBMD specs for: `light` (13 Matter device types, Java
 
 #### Scenario: Door lock SBMD spec
 - **WHEN** a Matter device with device type 0x000a (Door Lock) is commissioned
-- **THEN** the `door-lock.sbmd` driver SHALL claim it and register lock-related resources using matter.js for TLV encoding
+- **THEN** the `door-lock.sbmd` driver SHALL claim it and register lock-related resources using `SbmdUtils.Tlv` for TLV encoding
+
+#### Scenario: Air quality sensor SBMD spec
+- **WHEN** a Matter device with device type 0x002c (Air Quality Sensor) is commissioned
+- **THEN** the `air-quality-sensor.sbmd` driver SHALL claim it and register air quality, temperature, humidity, CO2, and PM2.5 resources
+
+#### Scenario: All specs use standard JavaScript
+- **WHEN** any SBMD spec is loaded
+- **THEN** it SHALL use `scriptType: "JavaScript"` and SHALL NOT require `MatterClusters` or any matter.js bundle

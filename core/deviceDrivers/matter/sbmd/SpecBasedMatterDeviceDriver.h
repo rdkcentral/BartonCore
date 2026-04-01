@@ -57,13 +57,13 @@ namespace barton
                             chip::Messaging::ExchangeManager &exchangeMgr,
                             const chip::SessionHandle &sessionHandle) override;
 
-        bool WriteResource(std::forward_list<std::promise<bool>> &promises,
-                           const std::string &deviceId,
-                           icDeviceResource *resource,
-                           const char *previousValue,
-                           const char *newValue,
-                           chip::Messaging::ExchangeManager &exchangeMgr,
-                           const chip::SessionHandle &sessionHandle) override;
+        bool DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                             const std::string &deviceId,
+                             icDeviceResource *resource,
+                             const char *previousValue,
+                             const char *newValue,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle) override;
 
         void ExecuteResource(std::forward_list<std::promise<bool>> &promises,
                              const std::string &deviceId,

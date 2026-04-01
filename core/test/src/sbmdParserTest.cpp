@@ -162,7 +162,7 @@ static void test_sbmdParserDoorLockFile(void **state)
     (void) state;
 
     // Use absolute path defined by CMake
-    const char *filePath = SBMD_SPEC_DIR "matterjs/door-lock.sbmd";
+    const char *filePath = SBMD_SPEC_DIR "door-lock.sbmd";
 
     auto spec = barton::SbmdParser::ParseFile(filePath);
     assert_non_null(spec.get());
@@ -185,20 +185,16 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
     assert_string_equal(spec->endpoints[0].profile.c_str(), "doorLock");
 
-    // Verify locked resource uses event mapper (LockOperation)
+    // Verify locked resource uses read mapper (LockState attribute)
     assert_true(spec->endpoints[0].resources.size() >= 1);
     auto &locked = spec->endpoints[0].resources[0];
     assert_string_equal(locked.id.c_str(), "locked");
-    assert_false(locked.mapper.hasRead);
-    assert_true(locked.mapper.event.has_value());
-    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
-    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
-    assert_string_equal(locked.mapper.event->name.c_str(), "LockOperation");
-    assert_false(locked.mapper.eventScript.empty());
-    // Event should have endpoint ID set
-    assert_true(locked.mapper.event->resourceEndpointId.has_value());
-    assert_string_equal(locked.mapper.event->resourceEndpointId.value().c_str(), "1");
-    assert_string_equal(locked.mapper.event->resourceId.c_str(), "locked");
+    assert_true(locked.mapper.hasRead);
+    assert_true(locked.mapper.readAttribute.has_value());
+    assert_int_equal((int) locked.mapper.readAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.readAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.readAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.readScript.empty());
 }
 
 static void test_sbmdParserLightFile(void **state)
@@ -225,22 +221,13 @@ static void test_sbmdParserLightFile(void **state)
     assert_int_equal((int) spec->reporting.minSecs, 1);
     assert_int_equal((int) spec->reporting.maxSecs, 3600);
 
-    // Verify identifySeconds device-level resource exists
-    assert_true(spec->resources.size() >= 1);
-    assert_string_equal(spec->resources[0].id.c_str(), "identifySeconds");
-    assert_true(spec->resources[0].mapper.hasRead);
-    assert_true(spec->resources[0].mapper.hasWrite);
-    assert_true(spec->resources[0].mapper.readAttribute.has_value());
-    // Write uses script-only approach
-    assert_false(spec->resources[0].mapper.writeScript.empty());
-
     // Verify endpoints and core light resources
     assert_int_equal((int) spec->endpoints.size(), 1);
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
     assert_string_equal(spec->endpoints[0].profile.c_str(), "light");
     assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
 
-    // isOn resource maps to OnOff cluster - uses MatterJs script-only approach
+    // isOn resource maps to OnOff cluster - uses script-only approach
     auto &isOn = spec->endpoints[0].resources[0];
     assert_string_equal(isOn.id.c_str(), "isOn");
     assert_false(isOn.optional);
@@ -252,7 +239,7 @@ static void test_sbmdParserLightFile(void **state)
     // Write uses script-only approach
     assert_false(isOn.mapper.writeScript.empty());
 
-    // currentLevel resource maps to LevelControl cluster - uses MatterJs script-only approach
+    // currentLevel resource maps to LevelControl cluster - uses script-only approach
     auto &currentLevel = spec->endpoints[0].resources[1];
     assert_string_equal(currentLevel.id.c_str(), "currentLevel");
     assert_true(currentLevel.optional);

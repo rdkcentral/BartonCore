@@ -45,6 +45,8 @@
 #include <credentials/attestation_verifier/DeviceAttestationDelegate.h>
 #include <platform/Linux/CHIPLinuxStorage.h>
 #include <thread>
+#include <future>
+#include <functional>
 
 #include <lib/support/PersistedCounter.h>
 
@@ -181,6 +183,12 @@ namespace barton
         inline chip::FabricIndex GetFabricIndex() { return myFabricIndex; }
 
         inline bool IsRunning() { return state == State::running; }
+
+        /**
+         * Execute work on the Matter stack. If already on the Matter stack, executes
+         * inline. Otherwise, schedules onto the Matter stack and blocks until complete.
+         */
+        static void RunOnMatterStack(std::function<void()> work);
 
     private:
         static Matter *instance;

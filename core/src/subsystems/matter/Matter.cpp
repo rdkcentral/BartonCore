@@ -1422,6 +1422,67 @@ bool Matter::ClearAccessRestrictionList()
     return success;
 }
 
+void Matter::RunOnMatterStack(std::function<void()> work)
+{
+    if (!Matter::GetInstance().IsRunning())
+    {
+        icError("Matter subsystem is down!");
+        return;
+    }
+
+    if (chip::DeviceLayer::PlatformMgr().IsChipStackLockedByCurrentThread())
+    {
+        try
+        {
+            work();
+        }
+        catch (const std::exception & e)
+        {
+            icError("RunOnMatterStack: work() threw exception: %s", e.what());
+        }
+        catch (...)
+        {
+            icError("RunOnMatterStack: work() threw unknown exception");
+        }
+    }
+    else
+    {
+        std::promise<void> done;
+        std::future<void> future = done.get_future();
+
+        CHIP_ERROR err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&work, &done]() {
+            try
+            {
+                work();
+                done.set_value();
+            }
+            catch (...)
+            {
+                done.set_exception(std::current_exception());
+            }
+        });
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icError("RunOnMatterStack: ScheduleLambda failed: %" CHIP_ERROR_FORMAT, err.Format());
+            done.set_value();
+        }
+
+        try
+        {
+            future.get();
+        }
+        catch (const std::exception & e)
+        {
+            icError("RunOnMatterStack: work() threw exception: %s", e.what());
+        }
+        catch (...)
+        {
+            icError("RunOnMatterStack: work() threw unknown exception");
+        }
+    }
+}
+
 // Note: Because we have initialized two parts of the stack (commissioner and commissionee), the callback functions
 // below are invoked twice. As long as they're attempting to perform the exact same initialization each time, we can
 // safely ignore calls after the first as a workaround.
