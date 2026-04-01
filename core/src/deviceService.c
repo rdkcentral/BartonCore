@@ -160,6 +160,8 @@ static void pendingReconfigurationFreeFunc(void *key, void *value);
 
 static void reconfigureDeviceTask(void *arg);
 
+static void waitForOrCancelPendingReconfiguration(const char *uuid);
+
 /* Private data */
 
 /**
@@ -1019,6 +1021,10 @@ bool deviceServiceRemoveDevice(const char *uuid)
 
     if (device != NULL)
     {
+        // Any device (especially sleepy devices) may still have a pending reconfiguration operation
+        // that needs to be waited on or canceled before we can safely remove it.
+        waitForOrCancelPendingReconfiguration(uuid);
+
         if (jsonDatabaseRemoveDeviceById(uuid) == false)
         {
             icLogError(LOG_TAG, "Failed to remove device %s", uuid);
@@ -4669,6 +4675,56 @@ static void destroyReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
     if (ctx != NULL)
     {
         free(ctx->deviceUuid);
+    }
+}
+
+static void waitForOrCancelPendingReconfiguration(const char *uuid)
+{
+    g_autoptr(ReconfigureDeviceContext) ctx = deviceServiceGetReconfigureDeviceContext(uuid);
+
+    if (ctx == NULL)
+    {
+        return;
+    }
+
+    mutexLock(&ctx->mtx);
+    uint32_t taskHandle = ctx->taskHandle;
+    mutexUnlock(&ctx->mtx);
+
+    if (isDelayTaskWaiting(taskHandle) == true)
+    {
+        cancelDelayTask(taskHandle);
+        deviceServiceRemoveReconfigureDeviceContext(ctx);
+        return;
+    }
+
+    if (sendReconfigurationSignal(ctx, true) == true)
+    {
+        bool done = false;
+        struct timespec start, now;
+
+        getCurrentTime(&start, supportMonotonic());
+
+        while (done == false)
+        {
+            getCurrentTime(&now, supportMonotonic());
+
+            long elapsed_sec = now.tv_sec - start.tv_sec;
+            if (elapsed_sec >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
+            {
+                done = true;
+                icError("Device pending reconfiguration is taking too long to cancel");
+                continue;
+            }
+
+            mutexLock(&reconfigurationControlMutex);
+            incrementalCondTimedWait(&reconfigurationControlCond,
+                                     &reconfigurationControlMutex,
+                                     (PENDING_RECONFIGURATION_TIMEOUT_SEC - elapsed_sec));
+            mutexUnlock(&reconfigurationControlMutex);
+
+            done = deviceServiceIsReconfigurationPending(uuid) == false;
+        }
     }
 }
 
