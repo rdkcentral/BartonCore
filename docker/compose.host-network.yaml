@@ -35,6 +35,7 @@
 #     .devcontainer/devcontainer.json:
 #
 #       "dockerComposeFile": [
+#           "../docker/compose.yaml",
 #           "../docker/compose.devcontainer.yaml",
 #           "../docker/compose.host-network.yaml"
 #       ]
@@ -44,6 +45,6 @@
 #       when switching to host networking.
 
 services:
-    devcontainer:
+    barton:
         network_mode: host
         networks: !reset []

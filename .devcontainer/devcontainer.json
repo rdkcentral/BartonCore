@@ -6,9 +6,10 @@
     "name": "Barton Ubuntu Development Environment",
     "initializeCommand": "docker/setupDockerEnv.sh",
     "dockerComposeFile": [
+        "../docker/compose.yaml",
         "../docker/compose.devcontainer.yaml"
     ],
-    "service": "devcontainer",
+    "service": "barton",
 
     // keep the local path of our tree the same within the container
     "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
