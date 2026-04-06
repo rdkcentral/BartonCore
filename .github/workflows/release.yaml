@@ -55,7 +55,7 @@ jobs:
       - name: Generate Changelog
         run: cog changelog --at ${{ steps.release.outputs.version }} > CHANGELOG.md
 
-      # Correlates release with already uploaded tag. This action doesn't support deply keys, so we push the tag
+      # Correlates release with already uploaded tag. This action doesn't support deploy keys, so we push the tag
       # ourselves earlier.
       - name: Upload github release
         uses: softprops/action-gh-release@v1
