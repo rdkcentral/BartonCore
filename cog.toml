@@ -1,6 +1,7 @@
 # Basic settings
 from_latest_tag = true
 ignore_merge_commits = true
+branch_whitelist = ["main"]
 
 [commit_types]
 app = { changelog_title = "Reference App" }
