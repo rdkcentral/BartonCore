@@ -346,6 +346,21 @@ namespace barton
         bool GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId);
 
         /**
+         * Resolve the Matter endpoint for a given cluster, using the SBMD endpoint index if
+         * available, with automatic fallback to cluster-based lookup when the mapped endpoint
+         * doesn't host the required cluster (e.g. composite devices where clusters span
+         * multiple Matter endpoints but are grouped under one SBMD endpoint).
+         *
+         * @param clusterId The cluster ID to resolve.
+         * @param sbmdEndpointIndex Optional SBMD endpoint index; if nullopt, uses cluster-based lookup.
+         * @param[out] outEndpointId The resolved Matter endpoint ID.
+         * @return True if found, false otherwise.
+         */
+        bool ResolveEndpointForCluster(chip::ClusterId clusterId,
+                                       std::optional<uint32_t> sbmdEndpointIndex,
+                                       chip::EndpointId &outEndpointId);
+
+        /**
          * Look up the pre-resolved Matter endpoint for a given SBMD endpoint index.
          *
          * @param sbmdIndex The 0-based SBMD endpoint index.

@@ -351,6 +351,20 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
         }
     }
 
+    // Parse optional deviceTypeMatch
+    if (node["deviceTypeMatch"])
+    {
+        std::string matchValue = node["deviceTypeMatch"].as<std::string>();
+
+        if (matchValue != "any" && matchValue != "all")
+        {
+            icError("Invalid deviceTypeMatch value '%s' (expected 'any' or 'all')", matchValue.c_str());
+            return false;
+        }
+
+        meta.deviceTypeMatch = matchValue;
+    }
+
     return true;
 }
 

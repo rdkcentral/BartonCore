@@ -37,6 +37,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <tuple>
 #include <unistd.h>
@@ -138,47 +139,78 @@ MatterDeviceDriver::~MatterDeviceDriver()
 
 bool MatterDeviceDriver::ClaimDevice(const DeviceDataCache *deviceDataCache)
 {
-    std::vector<uint16_t> deviceTypes = GetSupportedDeviceTypes();
+    bool claimed = false;
 
     if (!deviceDataCache)
     {
         icError("deviceDataCache is null");
-        return false;
+        return claimed;
     }
 
-    // Get all endpoints from the device (excluding root endpoint 0)
-    std::vector<chip::EndpointId> endpointIds = deviceDataCache->GetEndpointIds();
+    auto supportedDeviceTypes = GetSupportedDeviceTypes();
 
-    for (chip::EndpointId endpointId : endpointIds)
+    // Collect all device types present across non-root endpoints
+    std::set<uint16_t> presentDeviceTypes;
+
+    for (chip::EndpointId endpointId : deviceDataCache->GetEndpointIds())
     {
-        // Skip root endpoint 0
         if (endpointId == 0)
         {
             continue;
         }
 
-        std::vector<uint16_t> deviceTypes;
-        if (deviceDataCache->GetDeviceTypes(endpointId, deviceTypes) != CHIP_NO_ERROR)
+        std::vector<uint16_t> epDeviceTypes;
+        if (deviceDataCache->GetDeviceTypes(endpointId, epDeviceTypes) != CHIP_NO_ERROR)
         {
             continue;
         }
 
-        auto supportedDeviceTypes = GetSupportedDeviceTypes();
-
-        // Check if any device type on this endpoint matches our supported types
-        for (uint16_t deviceTypeId : deviceTypes)
+        for (uint16_t deviceType : epDeviceTypes)
         {
-            if (std::find(supportedDeviceTypes.begin(), supportedDeviceTypes.end(), deviceTypeId) !=
-                supportedDeviceTypes.end())
-            {
-                icDebug("Device claimed: endpoint %d has matching device type 0x%04x", endpointId, deviceTypeId);
-                return true;
-            }
+            presentDeviceTypes.insert(deviceType);
         }
     }
 
-    icDebug("Device not claimed: no matching device types found");
-    return false;
+    if (IsCompositeDriver())
+    {
+        // Composite drivers require every supported device type to be present
+        bool hasAllDeviceTypes = true;
+        for (uint16_t deviceType : supportedDeviceTypes)
+        {
+            if (presentDeviceTypes.find(deviceType) == presentDeviceTypes.end())
+            {
+                icDebug("Device not claimed: missing required device type 0x%04x", deviceType);
+                hasAllDeviceTypes = false;
+                break;
+            }
+        }
+
+        if (hasAllDeviceTypes)
+        {
+            icDebug("Device claimed: all required device types present");
+            claimed = true;
+        }
+    }
+    else
+    {
+        // Non-composite drivers claim on any single matching device type
+        for (uint16_t deviceType : supportedDeviceTypes)
+        {
+            if (presentDeviceTypes.find(deviceType) != presentDeviceTypes.end())
+            {
+                icDebug("Device claimed: found matching device type 0x%04x", deviceType);
+                claimed = true;
+                break;
+            }
+        }
+
+        if (!claimed)
+        {
+            icDebug("Device not claimed: no matching device types found");
+        }
+    }
+
+    return claimed;
 }
 
 const char *MatterDeviceDriver::GetDeviceClass() const

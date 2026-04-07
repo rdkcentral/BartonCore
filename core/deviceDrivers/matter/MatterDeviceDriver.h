@@ -100,6 +100,20 @@ namespace barton
 
         virtual bool ClaimDevice(const DeviceDataCache *deviceDataCache);
 
+        /**
+         * @brief Returns true if this driver requires ALL advertised device types to match
+         * before it will claim a device, rather than matching on any single type.
+         *
+         * Composite drivers model multi-endpoint devices that expose several distinct
+         * Matter device types together (e.g. a combined thermostat + fan). Because such
+         * a driver would be mis-selected if only one of its required types is present,
+         * @ref MatterDriverFactory::GetDriver gives composite drivers first priority so
+         * they can claim the device before a simpler single-type driver does.
+         *
+         * The default returns false because most drivers target a single device type.
+         */
+        virtual bool IsCompositeDriver() const { return false; }
+
         DeviceDriver *GetDriver() { return &driver; }
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
         const char *GetDeviceClass() const;

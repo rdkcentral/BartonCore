@@ -255,6 +255,45 @@ bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::Endpoi
     return false;
 }
 
+bool MatterDevice::ResolveEndpointForCluster(chip::ClusterId clusterId,
+                                             std::optional<uint32_t> sbmdEndpointIndex,
+                                             chip::EndpointId &outEndpointId)
+{
+    if (sbmdEndpointIndex.has_value())
+    {
+        if (!GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), outEndpointId))
+        {
+            return false;
+        }
+
+        // One SBMD endpoint maps to one Matter endpoint, but the SBMD endpoint's
+        // resources may reference clusters that live on different Matter endpoints
+        // (e.g. a temperature-humidity sensor has one SBMD endpoint with both
+        // temperature and humidity resources, but the clusters are on separate
+        // Matter endpoints). To resolve the correct Matter endpoint: first check if the
+        // mapped endpoint hosts the requested cluster, and if not, fall back to
+        // scanning all endpoints.
+
+        // Use the mapped endpoint if it hosts this cluster (or if we can't
+        // verify because cache data isn't available yet).
+        if (!deviceDataCache ||
+            !deviceDataCache->EndpointHasServerCluster(outEndpointId, chip::app::Clusters::Descriptor::Id) ||
+            deviceDataCache->EndpointHasServerCluster(outEndpointId, clusterId))
+        {
+            return true;
+        }
+
+        // Mapped endpoint doesn't host this cluster — scan all endpoints.
+        icDebug("SBMD endpoint %u (Matter EP %u) does not host cluster 0x%x, "
+                "falling back to cluster-based lookup",
+                sbmdEndpointIndex.value(),
+                outEndpointId,
+                clusterId);
+    }
+
+    return GetEndpointForCluster(clusterId, outEndpointId);
+}
+
 bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes)
 {
     if (!deviceDataCache)
@@ -398,15 +437,8 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
     {
         const auto &attribute = mapper.readAttribute.value();
 
-        bool endpointFound = false;
-        if (sbmdEndpointIndex.has_value())
-        {
-            endpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-        }
-        else
-        {
-            endpointFound = GetEndpointForCluster(attribute.clusterId, endpointId);
-        }
+        bool endpointFound = ResolveEndpointForCluster(attribute.clusterId, sbmdEndpointIndex, endpointId);
+
         if (!endpointFound)
         {
             if (sbmdEndpointIndex.has_value())
@@ -420,6 +452,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
             {
                 icError("No endpoint found hosting cluster 0x%x at URI: %s", attribute.clusterId, uri);
             }
+
             return false;
         }
 
@@ -452,15 +485,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
 
         // Populate feature map for the command
         SbmdCommand &cmd = binding.command.value();
-        bool cmdEndpointFound = false;
-        if (sbmdEndpointIndex.has_value())
-        {
-            cmdEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-        }
-        else
-        {
-            cmdEndpointFound = GetEndpointForCluster(cmd.clusterId, endpointId);
-        }
+        bool cmdEndpointFound = ResolveEndpointForCluster(cmd.clusterId, sbmdEndpointIndex, endpointId);
         if (!cmdEndpointFound)
         {
             if (sbmdEndpointIndex.has_value())
@@ -478,6 +503,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
                         cmd.name.c_str(),
                         uri);
             }
+
             return false;
         }
 
@@ -593,15 +619,7 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
 
     // Find the endpoint using the SBMD endpoint index, or fall back to cluster lookup
     chip::EndpointId endpointId;
-    bool eventEndpointFound = false;
-    if (sbmdEndpointIndex.has_value())
-    {
-        eventEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-    }
-    else
-    {
-        eventEndpointFound = GetEndpointForCluster(event.clusterId, endpointId);
-    }
+    bool eventEndpointFound = ResolveEndpointForCluster(event.clusterId, sbmdEndpointIndex, endpointId);
     if (!eventEndpointFound)
     {
         if (sbmdEndpointIndex.has_value())
@@ -615,6 +633,7 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
         {
             icError("No endpoint found hosting cluster 0x%X for URI: %s", event.clusterId, uri);
         }
+
         return false;
     }
 

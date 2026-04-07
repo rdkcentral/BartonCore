@@ -812,6 +812,109 @@ static void test_sbmdParserEmptyString(void **state)
     assert_true(spec->schemaVersion.empty());
 }
 
+static void test_sbmdParserDeviceTypeMatchAny(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  deviceTypeMatch: "any"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+}
+
+static void test_sbmdParserDeviceTypeMatchAll(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+    - "0x0307"
+  revision: 1
+  deviceTypeMatch: "all"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "all");
+}
+
+static void test_sbmdParserDeviceTypeMatchDefault(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+}
+
+static void test_sbmdParserDeviceTypeMatchInvalid(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  deviceTypeMatch: "invalid"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -839,6 +942,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchAny),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchAll),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchDefault),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchInvalid),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

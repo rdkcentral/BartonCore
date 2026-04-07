@@ -83,17 +83,41 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
 MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
 {
     MatterDeviceDriver *result = nullptr;
+    std::string driverName;
 
-    // iterate over the drivers and allow them to claim the device.  First one to claim it gets it.  Order
-    // of drivers is deterministic since we store in std::map.
+    // Two-pass claiming: composite drivers (requiring all device types) get priority
+    // over simple drivers (matching any single type). This prevents a simple driver
+    // from stealing a device that a composite driver should handle.
+    // Within each pass, order is deterministic since we store in std::map.
+
+    // First pass: try composite drivers only
     for (auto const &entry : drivers)
     {
-        if (entry.second->ClaimDevice(dataCache))
+        if (entry.second->IsCompositeDriver() && entry.second->ClaimDevice(dataCache))
         {
-            icInfo("%s claimed the device", entry.first.c_str());
+            driverName = entry.first;
             result = entry.second;
             break;
         }
+    }
+
+    // Second pass: try non-composite drivers
+    if (result == nullptr)
+    {
+        for (auto const &entry : drivers)
+        {
+            if (!entry.second->IsCompositeDriver() && entry.second->ClaimDevice(dataCache))
+            {
+                driverName = entry.first;
+                result = entry.second;
+                break;
+            }
+        }
+    }
+
+    if (result)
+    {
+        icInfo("%s claimed the device", driverName.c_str());
     }
 
     return result;

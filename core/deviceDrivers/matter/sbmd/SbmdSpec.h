@@ -207,6 +207,7 @@ namespace barton
         std::vector<uint16_t> deviceTypes;
         uint32_t revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
+        std::string deviceTypeMatch = "any";   // "any" (default) or "all" for composite device matching
     };
 
     /**

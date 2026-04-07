@@ -96,6 +96,12 @@
             "type": ["integer", "string"],
             "description": "Cluster ID (hex or decimal)"
           }
+        },
+        "deviceTypeMatch": {
+          "type": "string",
+          "description": "How to match device types: 'any' (default, OR) or 'all' (AND)",
+          "enum": ["any", "all"],
+          "default": "any"
         }
       },
       "additionalProperties": false

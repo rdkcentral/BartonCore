@@ -8,24 +8,24 @@ Infrastructure changes — no new SBMD driver specs yet.
 
 ### 1a. Composite Device Type Matching
 
-- [ ] 1.1 Add `deviceTypeMatch` field (std::string, default "any") to `SbmdMatterMeta` in `SbmdSpec.h`
-- [ ] 1.2 Update `SbmdParser::ParseMatterMeta` in `SbmdParser.cpp` to read and validate `deviceTypeMatch` from YAML (accept "any", "all"; reject others)
-- [ ] 1.3 Add unit tests for `SbmdParser` parsing `deviceTypeMatch` (valid values, omitted field defaults, invalid value rejected)
-- [ ] 1.4 Implement "all"-match logic in `MatterDeviceDriver::ClaimDevice` via `IsCompositeDriver()`: collect device types from all non-root endpoints; if `IsCompositeDriver()` returns true, verify every `matterMeta.deviceTypes` entry is present; otherwise use existing OR semantics. Override `IsCompositeDriver()` in `SpecBasedMatterDeviceDriver` to return true when `deviceTypeMatch == "all"`
-- [ ] 1.5 Add unit tests for `ClaimDevice` with "any" semantics (existing behavior preserved) and "all" semantics (all present → true, subset → false, same endpoint → true)
+- [x] 1.1 Add `deviceTypeMatch` field (std::string, default "any") to `SbmdMatterMeta` in `SbmdSpec.h`
+- [x] 1.2 Update `SbmdParser::ParseMatterMeta` in `SbmdParser.cpp` to read and validate `deviceTypeMatch` from YAML (accept "any", "all"; reject others)
+- [x] 1.3 Add unit tests for `SbmdParser` parsing `deviceTypeMatch` (valid values, omitted field defaults, invalid value rejected)
+- [x] 1.4 Override `ClaimDevice` in `SpecBasedMatterDeviceDriver` to implement "all"-match logic: collect device types from all non-root endpoints; if `deviceTypeMatch == "all"`, verify every `matterMeta.deviceTypes` entry is present; otherwise delegate to base class
+- [x] 1.5 Add unit tests for `ClaimDevice` with "any" semantics (existing behavior preserved) and "all" semantics (all present → true, subset → false, same endpoint → true)
 
 ### 1b. Endpoint Cluster Fallback
 
-- [ ] 1.6 Add `ResolveEndpointForCluster` method to `MatterDevice` (declaration in `MatterDevice.h`, implementation in `MatterDevice.cpp`): takes `clusterId`, `optional<uint32_t> sbmdEndpointIndex`, and `outEndpointId`; tries SBMD-mapped endpoint first, verifies it hosts the cluster via `DeviceDataCache::EndpointHasServerCluster`, falls back to `GetEndpointForCluster` if not
-- [ ] 1.7 Replace the duplicated if/else endpoint resolution blocks in `BindResourceReadInfo` (attribute path), `BindResourceReadInfo` (command path), and `BindResourceEventInfo` with calls to `ResolveEndpointForCluster`
-- [ ] 1.8 Update `PopulateTestCache` in `MatterDeviceEndpointMapTest.cpp` to accept an optional `endpointServerClusters` map and inject cluster data into the cache
-- [ ] 1.9 Add unit test `BindReadInfoFallsBackToClusterWhenNotOnMappedEndpoint`: composite device (EP 1 with 0x0402, EP 2 with 0x0405), verify SBMD index 0 resolves temperature to EP 1 directly and humidity falls back to EP 2
-- [ ] 1.10 Add unit test `BindEventInfoFallsBackToClusterWhenNotOnMappedEndpoint`: same composite device, verify event binding on cluster 0x0405 with SBMD index 0 falls back to EP 2
+- [x] 1.6 Add `ResolveEndpointForCluster` to `MatterDevice` — given an SBMD index and cluster ID, resolve to the mapped endpoint if it hosts the cluster, otherwise scan all endpoints for one that does
+- [x] 1.7 Replace the duplicated if/else endpoint resolution blocks in `BindResourceReadInfo` (attribute path), `BindResourceReadInfo` (command path), and `BindResourceEventInfo` with calls to `ResolveEndpointForCluster`
+- [x] 1.8 Update `PopulateTestCache` in `MatterDeviceEndpointMapTest.cpp` to accept an optional `endpointServerClusters` map and inject cluster data into the cache
+- [x] 1.9 Add unit test `BindReadInfoFallsBackToClusterWhenNotOnMappedEndpoint` — composite device where SBMD index 0 maps to EP 1 (temperature), but binding a humidity cluster attribute falls back to EP 2
+- [x] 1.10 Add unit test `BindEventInfoFallsBackToClusterWhenNotOnMappedEndpoint` — same composite setup, verifying event binding falls back when the mapped endpoint doesn't host the event cluster
 
 ### 1c. Build and Validate
 
-- [ ] 1.11 Build with `./build.sh` and run unit tests with `ctest --output-on-failure --test-dir build`
-- [ ] 1.12 Commit: `feat: add composite match and endpoint fallback`
+- [x] 1.11 Build with `./build.sh` and run unit tests with `ctest --output-on-failure --test-dir build`
+- [x] 1.12 Commit: `feat: add composite match and endpoint fallback`
 
 ---
 
