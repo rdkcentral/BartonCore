@@ -182,6 +182,32 @@ echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 ##############################################################################
 
+##############################################################################
+# Optional Thread real-radio variables (used by docker/compose.otbr-radio.yaml).
+#
+# RADIO_DEVICE: host path of the Silabs USB radio serial device.
+#   - Default /dev/ttyACM0 suits the BRD2703 xG24 Explorer Kit.
+#   - Override by exporting RADIO_DEVICE before running setupDockerEnv.sh or
+#     dockerw, e.g.: export RADIO_DEVICE=/dev/ttyACM1
+#
+# BACKBONE_IF: network interface used by otbr-agent for Thread backbone routing.
+#   - Defaults to the host default-route interface when detectable.
+#   - Left empty if detection fails; the container entrypoint will re-detect at
+#     runtime and exit with an error if no interface can be found.
+#   - Override by exporting BACKBONE_IF before running setupDockerEnv.sh or
+#     dockerw, e.g.: export BACKBONE_IF=enp6s0
+#
+# These variables are only consumed when compose.otbr-radio.yaml is included
+# in the compose stack (dockerw -T, or devcontainer override).
+# Auto-detect the default-route network interface for the Thread backbone.
+# The entrypoint will also re-detect at runtime, so this is only used when
+# BACKBONE_IF is not already set in the environment.
+detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+
+echo "RADIO_DEVICE=${RADIO_DEVICE:-/dev/ttyACM0}" >> $OUTFILE
+echo "BACKBONE_IF=${BACKBONE_IF:-$detectedBackboneIf}" >> $OUTFILE
+##############################################################################
+
 # Ensure the container network exists
 NETWORK_NAME="$USER-$BARTON_WORKSPACE_ID-barton-ip6net"
 _SUBNET_HASH=$(echo "$USER-$BARTON_WORKSPACE_ID" | sha256sum | cut -c1-8)

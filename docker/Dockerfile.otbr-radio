@@ -1,0 +1,188 @@
+# ------------------------------ tabstop = 4 ----------------------------------
+#
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
+#
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Dockerfile for the optional Thread Border Router container that supports a
+# real Silabs USB radio (e.g., BRD2703 xG24 Explorer Kit).
+#
+# This container runs two daemons:
+#   1. cpcd  - Silicon Labs Co-Processor Communication daemon.  Manages the
+#              USB serial link to the physical radio using the CPC protocol.
+#   2. otbr-agent - OpenThread Border Router agent.  Implements the Thread
+#              network stack and exposes it over D-Bus so Barton can consume it.
+#
+# The container is NOT built or started by default. It is activated by:
+#   - CLI:          ./dockerw -T bash
+#   - Devcontainer: add ../docker/compose.otbr-radio.yaml to dockerComposeFile
+#                   in .devcontainer/devcontainer.json
+#
+# See docs/THREAD_BORDER_ROUTER_SUPPORT.md for full setup instructions,
+# including how to use USB-IP to forward a locally connected radio to a remote
+# dev server.
+#
+
+FROM ubuntu:24.04 AS base
+
+RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    wget \
+    unzip \
+    ninja-build \
+    lsb-release \
+    sudo \
+    jq \
+    meson \
+    libssl-dev \
+    libmbedtls-dev \
+    libdbus-1-dev \
+    libavahi-client-dev \
+    libavahi-common-dev \
+    avahi-daemon \
+    dbus \
+    libsystemd-dev \
+    libcurl4-openssl-dev \
+    uuid-dev \
+    libxml2-dev \
+    libreadline-dev \
+    libyaml-cpp-dev \
+    checkinstall \
+    socat \
+    iproute2 \
+    iptables \
+    ipset \
+    udev \
+    libglib2.0-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy over the third party patches (shared with the main Dockerfile)
+ADD patches /tmp/patches
+ARG APPLY_PATCHES_PATH="/tmp/patches/applyPatches.sh"
+RUN chmod +x ${APPLY_PATCHES_PATH}
+
+###############################################################################
+# cpcd — Silicon Labs Co-Processor Communication Daemon
+#
+# cpcd manages the USB serial link to the physical Silabs radio (e.g., BRD2703)
+# using the CPC multiplexing protocol. otbr-agent connects to it via the
+# spinel+cpc:// URI scheme instead of directly to the serial port.
+#
+# Source: https://github.com/SiliconLabs/cpc-daemon
+###############################################################################
+ARG CPCD_GIT_TAG="v4.5.2"
+
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${CPCD_GIT_TAG} \
+        https://github.com/SiliconLabs/cpc-daemon.git && \
+    cd cpc-daemon && \
+    mkdir build && cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCPC_SECURITY_ENABLED=FALSE && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/cpc-daemon
+
+###############################################################################
+# otbr-agent — OpenThread Border Router Agent
+#
+# Built from upstream ot-br-posix, with Silicon Labs Gecko SDK vendor transport
+# files layered in to enable CPC/multi-PAN support for `spinel+cpc://`.
+###############################################################################
+ARG GSDK_GIT_BRANCH="gsdk_4.4"
+ARG GSDK_GIT_REV="59d2160fe448b13730a91c0f019a8b4c53c43eb2"
+ARG OTBR_GIT_TAG="731e115257d295a1ec64ea2f60e17a43e43892f6"
+
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${GSDK_GIT_BRANCH} \
+        https://github.com/SiliconLabs/gecko_sdk.git gecko_sdk && \
+    cd gecko_sdk && \
+    git fetch --depth 1 origin ${GSDK_GIT_REV} && \
+    git checkout ${GSDK_GIT_REV} && \
+    cd /tmp && \
+    git clone --depth 1 https://github.com/openthread/ot-br-posix && \
+    cd ot-br-posix && \
+    git fetch --depth 1 origin ${OTBR_GIT_TAG} && \
+    git checkout ${OTBR_GIT_TAG} && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/otbr . && \
+    cd script && \
+    OTBR_MDNS=avahi ./bootstrap && \
+    ./cmake-build \
+    -DOTBR_DUA_ROUTING=ON \
+    -DOTBR_DNSSD_DISCOVERY_PROXY=ON \
+    -DOTBR_SRP_ADVERTISING_PROXY=ON \
+    -DOTBR_BORDER_ROUTING=ON \
+    -DOTBR_TREL=ON \
+    -DOTBR_NAT64=ON \
+    -DOT_TREL=ON \
+    -DOT_DNS_CLIENT=ON \
+    -DOT_DNSSD_SERVER=ON \
+    -DOT_SRP_CLIENT=ON \
+    -DOT_SRP_SERVER=ON \
+    -DOT_THREAD_VERSION=1.4 \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_FLAGS=-Wno-error=unused-but-set-variable \
+    -DOT_DHCP6_CLIENT=ON \
+    -DOT_DHCP6_SERVER=ON \
+    -DOTBR_DHCP6_PD=OFF \
+    -DOTBR_DNS_UPSTREAM_QUERY=ON \
+    -DBUILD_TESTING=OFF \
+    -DOTBR_COVERAGE=OFF \
+    -DOT_MLR=ON \
+    -DOTBR_DBUS=ON \
+    -DOT_PLATFORM=posix \
+    -DOT_PLATFORM_CONFIG=/tmp/gecko_sdk/protocol/openthread/platform-abstraction/posix/openthread-core-silabs-posix-config.h \
+    -DOT_ECDSA=ON \
+    -DOT_FIREWALL=OFF \
+    -DOT_CHANNEL_MANAGER=OFF \
+    -DOT_CHANNEL_MONITOR=OFF \
+    -DOTBR_BACKBONE_ROUTER=ON \
+    -DOT_BACKBONE_ROUTER_DUA_NDPROXYING=ON \
+    -DOT_BACKBONE_ROUTER_MULTICAST_ROUTING=ON \
+    -DOTBR_MDNS=avahi \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DOTBR_TELEMETRY_DATA_API=ON \
+    -DOT_CLI_VENDOR_EXTENSION=/tmp/gecko_sdk/protocol/openthread/platform-abstraction/posix/posix_vendor_cli.cmake \
+    -DOT_MULTIPAN_RCP=ON \
+    -DOT_POSIX_CONFIG_RCP_VENDOR_DEPS_PACKAGE=/tmp/gecko_sdk/protocol/openthread/platform-abstraction/posix/posix_vendor_rcp.cmake \
+    -DOT_POSIX_CONFIG_RCP_VENDOR_INTERFACE=/tmp/gecko_sdk/protocol/openthread/platform-abstraction/posix/cpc_interface.cpp \
+    -DOT_POSIX_RCP_VENDOR_BUS=ON \
+    && \
+    cd ../build/otbr/ && \
+    ninja install && \
+    cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
+    rm -rf /tmp/ot-br-posix /tmp/gecko_sdk
+
+# D-Bus policy allowing otbr-agent to own its well-known bus name
+COPY otbr-agent.conf /etc/dbus-1/system.d/
+
+# Clean up patches
+RUN rm -rf /tmp/patches
+
+COPY otbr-radio-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
