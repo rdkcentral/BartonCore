@@ -1,0 +1,52 @@
+# Humidity Sensor SBMD Specification
+# Maps Matter Humidity Sensor device type to Barton sensor device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Humidity Sensor"
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "humiditySensor"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0307  # Humidity Sensor
+  revision: 3
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 2
+    resources:
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0405"      # Relative Humidity Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "uint16"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              // 0xFFFF: Matter null for uint16 MeasuredValue
+              if (value === null || value === 0xFFFF) {
+                return {output: ''};
+              }
+              return {output: value.toString()};

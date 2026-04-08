@@ -35,28 +35,28 @@ New driver specs and test coverage, built on the infrastructure from Commit 1.
 
 ### 2a. SBMD Specs
 
-- [ ] 2.1 Create `temperature-humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureHumiditySensor"`, `deviceTypeMatch: "all"`, deviceTypes `[0x0302, 0x0307]`, single endpoint with `temperature` and `humidity` resources and mapper scripts
-- [ ] 2.2 Create `temperature-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureSensor"`, deviceTypes `[0x0302]`, single endpoint with `temperature` resource and mapper script
-- [ ] 2.3 Create `humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"humiditySensor"`, deviceTypes `[0x0307]`, single endpoint with `humidity` resource and mapper script
-- [ ] 2.4 Verify all three specs parse correctly via unit tests (SbmdParser roundtrip)
+- [x] 2.1 Create `temperature-humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureHumiditySensor"`, `deviceTypeMatch: "all"`, deviceTypes `[0x0302, 0x0307]`, single endpoint with `temperature` and `humidity` resources and mapper scripts
+- [x] 2.2 Create `temperature-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureSensor"`, deviceTypes `[0x0302]`, single endpoint with `temperature` resource and mapper script
+- [x] 2.3 Create `humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"humiditySensor"`, deviceTypes `[0x0307]`, single endpoint with `humidity` resource and mapper script
+- [x] 2.4 Verify all three specs parse correctly via unit tests (SbmdParser roundtrip)
 
 ### 2b. Python Test Devices
 
-- [ ] 2.5 Create a composite temperature-humidity virtual Matter test device (Python) exposing EP 1 (device type 0x0302, cluster 0x0402) and EP 2 (device type 0x0307, cluster 0x0405)
-- [ ] 2.6 Create a standalone temperature virtual Matter test device (Python) exposing one endpoint with device type 0x0302 and cluster 0x0402
-- [ ] 2.7 Create a standalone humidity virtual Matter test device (Python) exposing one endpoint with device type 0x0307 and cluster 0x0405
+- [x] 2.5 Create a composite temperature-humidity virtual Matter test device (Python) exposing EP 1 (device type 0x0302, cluster 0x0402) and EP 2 (device type 0x0307, cluster 0x0405)
+- [x] 2.6 Create a standalone temperature virtual Matter test device (Python) exposing one endpoint with device type 0x0302 and cluster 0x0402
+- [x] 2.7 Create a standalone humidity virtual Matter test device (Python) exposing one endpoint with device type 0x0307 and cluster 0x0405
 
 ### 2c. Integration Tests
 
-- [ ] 2.8 Add integration test: commission composite temperature-humidity device, verify claimed by `temperature-humidity-sensor` driver, read both `temperature` and `humidity` resources
-- [ ] 2.9 Add integration test: commission standalone temperature device, verify claimed by `temperature-sensor` driver, read `temperature` resource
-- [ ] 2.10 Add integration test: commission standalone humidity device, verify claimed by `humidity-sensor` driver, read `humidity` resource
-- [ ] 2.11 Add negative test: composite `temperature-humidity-sensor` driver rejects a device with only temperature (no humidity endpoint)
-- [ ] 2.12 Add negative test: composite `temperature-humidity-sensor` driver rejects a device with only humidity (no temperature endpoint)
-- [ ] 2.13 Add negative test: standalone `temperature-sensor` driver does not claim a composite device that has both temperature and humidity (composite driver wins via priority)
-- [ ] 2.14 Add negative test: standalone `humidity-sensor` driver does not claim a composite device that has both temperature and humidity (composite driver wins via priority)
+- [x] 2.8 Add integration test: commission composite temperature-humidity device, verify claimed by `temperature-humidity-sensor` driver, read both `temperature` and `humidity` resources
+- [x] 2.9 Add integration test: commission standalone temperature device, verify claimed by `temperature-sensor` driver, read `temperature` resource
+- [x] 2.10 Add integration test: commission standalone humidity device, verify claimed by `humidity-sensor` driver, read `humidity` resource
+- [x] 2.11 Add negative test: composite `temperature-humidity-sensor` driver rejects a device with only temperature (no humidity endpoint)
+- [x] 2.12 Add negative test: composite `temperature-humidity-sensor` driver rejects a device with only humidity (no temperature endpoint)
+- [x] 2.13 Add negative test: standalone `temperature-sensor` driver does not claim a composite device that has both temperature and humidity (composite driver wins via priority)
+- [x] 2.14 Add negative test: standalone `humidity-sensor` driver does not claim a composite device that has both temperature and humidity (composite driver wins via priority)
 
 ### 2d. Build and Validate
 
-- [ ] 2.15 Build with `./build.sh`, run unit tests with `ctest --output-on-failure --test-dir build`, and run integration tests with `./scripts/ci/run_integration_tests.sh`
+- [x] 2.15 Build with `./build.sh`, run unit tests with `ctest --output-on-failure --test-dir build`, and run integration tests with `./scripts/ci/run_integration_tests.sh`
 - [ ] 2.16 Commit: `feat: add temperature and humidity sensor SBMD drivers`
