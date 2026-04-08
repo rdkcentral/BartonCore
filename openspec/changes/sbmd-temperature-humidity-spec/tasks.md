@@ -43,7 +43,7 @@ Infrastructure changes — no new SBMD driver specs yet.
 ### 1e. Build and Validate
 
 - [x] 1.23 Build with `./build.sh` and run unit tests with `ctest --output-on-failure --test-dir build`
-- [ ] 1.24 Commit: `feat(sbmd): add vendor/product ID claiming and endpoint fallback`
+- [x] 1.24 Commit: `feat(sbmd): add vendor/product ID claiming and endpoint fallback`
 
 ---
 
@@ -53,27 +53,27 @@ New driver specs and test coverage, built on the infrastructure from Commit 1.
 
 ### 2a. SBMD Specs
 
-- [ ] 2.1 Rename `temperature-humidity-sensor.sbmd` to `ikea-timmerflotte.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` — change from `deviceTypeMatch: "all"` to `vendorId`/`productId` (IKEA TIMMERFLOTTE), keep deviceTypes `[0x0302, 0x0307]` for endpoint mapping, single endpoint with `temperature` and `humidity` resources and mapper scripts
-- [ ] 2.2 Create `temperature-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureSensor"`, deviceTypes `[0x0302]`, single endpoint with `temperature` resource and mapper script
-- [ ] 2.3 Create `humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"humiditySensor"`, deviceTypes `[0x0307]`, single endpoint with `humidity` resource and mapper script
-- [ ] 2.4 Verify all three specs parse correctly via unit tests (SbmdParser roundtrip)
+- [x] 2.1 Rename `temperature-humidity-sensor.sbmd` to `ikea-timmerflotte.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` — change from `deviceTypeMatch: "all"` to `vendorId`/`productId` (IKEA TIMMERFLOTTE), keep deviceTypes `[0x0302, 0x0307]` for endpoint mapping, single endpoint with `temperature` and `humidity` resources and mapper scripts
+- [x] 2.2 Create `temperature-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"temperatureSensor"`, deviceTypes `[0x0302]`, single endpoint with `temperature` resource and mapper script
+- [x] 2.3 Create `humidity-sensor.sbmd` in `core/deviceDrivers/matter/sbmd/specs/` with deviceClass `"humiditySensor"`, deviceTypes `[0x0307]`, single endpoint with `humidity` resource and mapper script
+- [x] 2.4 Verify all three specs parse correctly via unit tests (SbmdParser roundtrip)
 
 ### 2b. Python Test Devices
 
-- [ ] 2.5 Update the temperature-humidity virtual Matter test device to expose IKEA vendor ID and TIMMERFLOTTE product ID in BasicInformation, plus EP 1 (device type 0x0302, cluster 0x0402) and EP 2 (device type 0x0307, cluster 0x0405)
-- [ ] 2.6 Create a standalone temperature virtual Matter test device (Python) exposing one endpoint with device type 0x0302 and cluster 0x0402
-- [ ] 2.7 Create a standalone humidity virtual Matter test device (Python) exposing one endpoint with device type 0x0307 and cluster 0x0405
+- [x] 2.5 Update the temperature-humidity virtual Matter test device to expose IKEA vendor ID and TIMMERFLOTTE product ID in BasicInformation, plus EP 1 (device type 0x0302, cluster 0x0402) and EP 2 (device type 0x0307, cluster 0x0405)
+- [x] 2.6 Create a standalone temperature virtual Matter test device (Python) exposing one endpoint with device type 0x0302 and cluster 0x0402
+- [x] 2.7 Create a standalone humidity virtual Matter test device (Python) exposing one endpoint with device type 0x0307 and cluster 0x0405
 
 ### 2c. Integration Tests
 
-- [ ] 2.8 Add integration test: commission TIMMERFLOTTE device, verify claimed by `ikea-timmerflotte` driver (via vendor/product match), read both `temperature` and `humidity` resources
-- [ ] 2.9 Add integration test: commission standalone temperature device, verify claimed by `temperature-sensor` driver, read `temperature` resource
-- [ ] 2.10 Add integration test: commission standalone humidity device, verify claimed by `humidity-sensor` driver, read `humidity` resource
-- [ ] 2.11 Add negative test: `ikea-timmerflotte` driver rejects a device with matching device types but different vendor/product ID
-- [ ] 2.12 Add negative test: standalone `temperature-sensor` driver does not claim a TIMMERFLOTTE device (vendor-specific driver wins via priority)
-- [ ] 2.13 Add negative test: standalone `humidity-sensor` driver does not claim a TIMMERFLOTTE device (vendor-specific driver wins via priority)
+- [x] 2.8 Add integration test: commission TIMMERFLOTTE device, verify claimed by `ikea-timmerflotte` driver (via vendor/product match), read both `temperature` and `humidity` resources
+- [x] 2.9 Add integration test: commission standalone temperature device, verify claimed by `temperature-sensor` driver, read `temperature` resource
+- [x] 2.10 Add integration test: commission standalone humidity device, verify claimed by `humidity-sensor` driver, read `humidity` resource
+- [x] 2.11 Add negative test: `ikea-timmerflotte` driver rejects a device with matching device types but different vendor/product ID
+- [x] 2.12 Add negative test: standalone `temperature-sensor` driver does not claim a TIMMERFLOTTE device (vendor-specific driver wins via priority)
+- [x] 2.13 Add negative test: standalone `humidity-sensor` driver does not claim a TIMMERFLOTTE device (vendor-specific driver wins via priority)
 
 ### 2d. Build and Validate
 
-- [ ] 2.14 Build with `./build.sh`, run unit tests with `ctest --output-on-failure --test-dir build`, and run integration tests with `./scripts/ci/run_integration_tests.sh`
-- [ ] 2.15 Commit: `feat(sbmd): add IKEA TIMMERFLOTTE, temperature, and humidity sensor drivers`
+- [x] 2.14 Build with `./build.sh`, run unit tests with `ctest --output-on-failure --test-dir build`, and run integration tests with `./scripts/ci/run_integration_tests.sh`
+- [x] 2.15 Commit: `feat(sbmd): add IKEA TIMMERFLOTTE, temperature, and humidity sensor drivers`

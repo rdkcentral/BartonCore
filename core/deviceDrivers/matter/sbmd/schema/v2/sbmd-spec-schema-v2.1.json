@@ -73,7 +73,7 @@
     "matterMeta": {
       "type": "object",
       "description": "Matter device type support",
-      "required": ["deviceTypes", "revision"],
+      "required": ["deviceTypes"],
       "properties": {
         "deviceTypes": {
           "type": "array",
