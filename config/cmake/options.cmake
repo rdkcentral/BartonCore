@@ -268,6 +268,11 @@ bcore_int_option(NAME BCORE_MQUICKJS_MEMSIZE_BYTES
                DESCRIPTION "Size in bytes of the pre-allocated memory buffer for mquickjs."
                VALUE 1048576)
 
+bcore_int_option(NAME BCORE_SBMD_SCRIPT_TIMEOUT_MS
+               DEFINITION BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
+               DESCRIPTION "Maximum execution time in milliseconds for SBMD mapper scripts."
+               VALUE 5000)
+
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 # Check removed/replaced options

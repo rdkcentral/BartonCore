@@ -271,7 +271,16 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     JS_PushArg(ctx, jsonArg);
     JS_PushArg(ctx, func);
     JS_PushArg(ctx, JS_NULL);
+
+    // Arm the execution timeout before calling into JS
+    MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() +
+                                 std::chrono::milliseconds(BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS));
+
     JSValue scriptResult = JS_Call(ctx, 1);
+
+    // Disarm the deadline immediately after JS returns
+    MQuickJsRuntime::ClearDeadline();
+
     if (JS_IsException(scriptResult))
     {
         std::string err = GetExceptionString(ctx);

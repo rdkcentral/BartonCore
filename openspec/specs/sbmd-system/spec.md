@@ -141,11 +141,15 @@ All devices SHALL share a single runtime singleton context regardless of engine 
 - **THEN** the script instance SHALL serialize access via its internal mutex
 
 ### Requirement: mquickjs memory configuration
-When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 1048576 bytes = 1 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer.
+When using the mquickjs engine, the system SHALL support configuring the pre-allocated memory buffer size via the `BCORE_MQUICKJS_MEMSIZE_BYTES` CMake integer option (default: 1048576 bytes = 1 MB). The mquickjs engine uses a fixed-size, non-growing memory buffer. Additionally, the system SHALL support `BCORE_SBMD_SCRIPT_TIMEOUT_MS` (default: 5000) for script execution timeout.
 
 #### Scenario: Custom mquickjs memory size
 - **WHEN** `BCORE_MQUICKJS_MEMSIZE_BYTES=4194304` is set
 - **THEN** the mquickjs engine SHALL allocate a 4 MB memory buffer
+
+#### Scenario: Script timeout configuration
+- **WHEN** `BCORE_SBMD_SCRIPT_TIMEOUT_MS=10000` is set
+- **THEN** the mquickjs engine SHALL allow scripts up to 10 seconds of execution time before interrupting
 
 ### Requirement: SbmdUtils built-in library
 The system SHALL provide a built-in JavaScript library `SbmdUtils` (loaded into every QuickJS context) with: `SbmdUtils.Tlv.decode(base64)` for Matter TLV decoding, `SbmdUtils.Tlv.decodeStruct(base64)` for struct TLV decoding, `SbmdUtils.Tlv.encode(value, type)` for TLV encoding, `SbmdUtils.Tlv.encodeStruct(obj, schema)` for struct encoding, `SbmdUtils.Tlv.emptyStruct()` for empty struct TLV, `SbmdUtils.Response.write(clusterId, attributeId, tlvBase64, options?)` for write operation construction, `SbmdUtils.Response.invoke(clusterId, commandId, tlvBase64, opts)` for invoke operation construction, `SbmdUtils.Base64` for base64 encode/decode, and `SbmdUtils.TLV_TYPE` with TLV type constants.

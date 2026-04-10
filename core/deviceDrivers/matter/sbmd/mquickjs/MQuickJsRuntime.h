@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -131,6 +132,33 @@ namespace barton
          */
         static void LogMemoryUsage(const char *label, logPriority priority, bool walkHeap = false);
 
+        /**
+         * Set or clear the script execution deadline.
+         *
+         * When a non-zero deadline is set, the interrupt handler will terminate
+         * any running script once steady_clock::now() exceeds the deadline.
+         * Pass a default-constructed time_point (epoch) to clear the deadline.
+         *
+         * Must be called while holding GetMutex().
+         *
+         * @param deadline The absolute time point at which to interrupt, or epoch to disable
+         */
+        static void SetDeadline(std::chrono::steady_clock::time_point deadline);
+
+        /**
+         * Clear the script execution deadline, disabling timeout enforcement.
+         *
+         * Must be called while holding GetMutex().
+         */
+        static void ClearDeadline();
+
+        /**
+         * Get the current script execution deadline.
+         *
+         * @return The current deadline, or epoch if no deadline is active
+         */
+        static std::chrono::steady_clock::time_point GetDeadline();
+
     private:
         static uint8_t *memBuffer;
         static size_t memSize;
@@ -138,6 +166,7 @@ namespace barton
         static std::mutex mutex;
         static bool initialized;
         static size_t peakHeapUsed;
+        static std::chrono::steady_clock::time_point deadline;
     };
 
 } // namespace barton
