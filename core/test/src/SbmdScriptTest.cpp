@@ -994,6 +994,65 @@ namespace
     }
 
     //--------------------------------------------------------------------------
+    // Input validation tests — invalid Base64 input
+    //--------------------------------------------------------------------------
+
+    // Test: SbmdUtils.Tlv.decode throws on invalid Base64 characters
+    TEST_F(SbmdScriptTest, TlvDecodeInvalidBase64Exception)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0006;
+        attr.attributeId = 0x0000;
+        attr.name = "onOff";
+        attr.type = "bool";
+
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('!!!invalid!!!'); return {output: 'unreachable'};";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+    }
+
+    // Test: SbmdUtils.Base64.decode throws on invalid Base64 characters
+    TEST_F(SbmdScriptTest, Base64DecodeInvalidBase64Exception)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0006;
+        attr.attributeId = 0x0000;
+        attr.name = "onOff";
+        attr.type = "bool";
+
+        std::string mapperScript =
+            "var bytes = SbmdUtils.Base64.decode('!!!bad!!!'); return {output: bytes.length.toString()};";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+    }
+
+    //--------------------------------------------------------------------------
     // Out-of-memory handling tests (mquickjs-specific)
     //
     // These tests artificially restrict the mquickjs arena to verify that
