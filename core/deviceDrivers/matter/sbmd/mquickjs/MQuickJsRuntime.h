@@ -133,15 +133,15 @@ namespace barton
         static void LogMemoryUsage(const char *label, logPriority priority, bool walkHeap = false);
 
         /**
-         * Set or clear the script execution deadline.
+         * Set the script execution deadline.
          *
-         * When a non-zero deadline is set, the interrupt handler will terminate
-         * any running script once steady_clock::now() exceeds the deadline.
-         * Pass a default-constructed time_point (epoch) to clear the deadline.
+         * When set, the interrupt handler will terminate any running script
+         * once steady_clock::now() exceeds the deadline. Call ClearDeadline()
+         * to disable timeout enforcement.
          *
          * Must be called while holding GetMutex().
          *
-         * @param deadline The absolute time point at which to interrupt, or epoch to disable
+         * @param deadline The absolute time point at which to interrupt
          */
         static void SetDeadline(std::chrono::steady_clock::time_point deadline);
 
