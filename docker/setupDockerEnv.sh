@@ -202,7 +202,10 @@ echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 # Auto-detect the default-route network interface for the Thread backbone.
 # The entrypoint will also re-detect at runtime, so this is only used when
 # BACKBONE_IF is not already set in the environment.
-detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+detectedBackboneIf=""
+if command -v ip >/dev/null 2>&1; then
+    detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+fi
 
 echo "RADIO_DEVICE=${RADIO_DEVICE:-/dev/ttyACM0}" >> $OUTFILE
 echo "BACKBONE_IF=${BACKBONE_IF:-$detectedBackboneIf}" >> $OUTFILE

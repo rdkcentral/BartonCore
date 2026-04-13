@@ -70,16 +70,21 @@ fi
 ###############################################################################
 echo "[otbr-radio] Starting D-Bus system bus..."
 mkdir -p /var/run/dbus
+dbusRunning=false
 if [ -f /var/run/dbus/pid ]; then
     dbusPid=$(cat /var/run/dbus/pid 2>/dev/null || true)
     if [ -n "${dbusPid}" ] && kill -0 "${dbusPid}" 2>/dev/null; then
-        echo "[otbr-radio] D-Bus already running (PID ${dbusPid}), skipping start."
-    else
-        echo "[otbr-radio] Removing stale D-Bus pid/socket files..."
-        rm -f /var/run/dbus/pid /var/run/dbus/system_bus_socket
-        dbus-daemon --system --fork
+        dbusComm=$(cat "/proc/${dbusPid}/comm" 2>/dev/null || true)
+        if [ "${dbusComm}" = "dbus-daemon" ] && [ -S /var/run/dbus/system_bus_socket ]; then
+            dbusRunning=true
+        fi
     fi
+fi
+if [ "${dbusRunning}" = "true" ]; then
+    echo "[otbr-radio] D-Bus already running (PID ${dbusPid}), skipping start."
 else
+    echo "[otbr-radio] Removing stale D-Bus pid/socket files..."
+    rm -f /var/run/dbus/pid /var/run/dbus/system_bus_socket
     dbus-daemon --system --fork
 fi
 echo "[otbr-radio] D-Bus started."
@@ -123,7 +128,8 @@ EOF
 
 echo "[otbr-radio] Starting cpcd (instance: cpcd_0, device: ${RADIO_DEVICE})..."
 CPCD_LOG="/tmp/cpcd.log"
-cpcd --conf "${CPCD_CONF}" 2>&1 | tee "${CPCD_LOG}" &
+: > "${CPCD_LOG}"
+cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
 CPCD_PID=$!
 
 # Wait until cpcd logs its ready message, meaning it has fully connected to the

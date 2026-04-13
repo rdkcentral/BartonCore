@@ -38,7 +38,7 @@ COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 HOST_NETWORK=""
-OTBR_RADIO_COMPOSE=""
+OTBR_RADIO_COMPOSE=()
 
 DIR=$(pwd)
 
@@ -57,7 +57,7 @@ while getopts ":ne:dHT" opt; do
         HOST_NETWORK="--network host"
         ;;
     T) # spin up the real Thread radio OTBR container (requires BRD2703 + cpcd)
-        OTBR_RADIO_COMPOSE="-f ${DIR}/docker/compose.otbr-radio.yaml"
+        OTBR_RADIO_COMPOSE=(-f "${DIR}/docker/compose.otbr-radio.yaml")
         ;;
     esac
 done
@@ -77,9 +77,9 @@ VOLUMES_ARGS="-v $HOME:$HOME
 # background before opening the barton shell.  The container runs cpcd and
 # otbr-agent and shares its D-Bus socket with the barton service so that
 # Barton code can reach otbr-agent without any extra steps inside the shell.
-if [ -n "${OTBR_RADIO_COMPOSE}" ]; then
+if [ ${#OTBR_RADIO_COMPOSE[@]} -gt 0 ]; then
     notice "Starting otbr-radio container (cpcd + otbr-agent)..."
-    docker compose -f "${COMPOSE_FILE}" ${OTBR_RADIO_COMPOSE} up -d otbr-radio
+    docker compose -f "${COMPOSE_FILE}" "${OTBR_RADIO_COMPOSE[@]}" up -d otbr-radio
     notice "otbr-radio container is up. cpcd and otbr-agent are running in the background."
 fi
 
@@ -88,7 +88,7 @@ USER_ID=$(id -u -n)
 RANDOM_NUMBER=$(shuf -i 100000-999999 -n 1)
 CONTAINER_NAME="${USER_ID}_${RANDOM_NUMBER}"
 
-docker compose -f "${COMPOSE_FILE}" ${OTBR_RADIO_COMPOSE} run \
+docker compose -f "${COMPOSE_FILE}" "${OTBR_RADIO_COMPOSE[@]}" run \
     --rm \
     --name ${CONTAINER_NAME} \
     ${COMPOSE_INTERACTIVE_FLAGS} \
@@ -97,4 +97,4 @@ docker compose -f "${COMPOSE_FILE}" ${OTBR_RADIO_COMPOSE} run \
     ${VOLUMES_ARGS} \
     ${EXTRA_ENV} \
     barton \
-    $*
+    "$@"
