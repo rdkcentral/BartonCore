@@ -204,7 +204,8 @@
 
                 if (c0 === -1 || c1 === -1 || c2 === -1 || c3 === -1)
                 {
-                    throw new Error('Invalid Base64 character at position ' + i);
+                    var badIndex = c0 === -1 ? i : c1 === -1 ? i + 1 : c2 === -1 ? i + 2 : i + 3;
+                    throw new Error('Invalid Base64 character at index ' + badIndex + ': \'' + base64[badIndex] + '\'');
                 }
 
                 bytes.push((c0 << 2) | (c1 >> 4));

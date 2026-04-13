@@ -1006,7 +1006,8 @@ namespace
         attr.name = "onOff";
         attr.type = "bool";
 
-        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('!!!invalid!!!'); return {output: 'unreachable'};";
+        // '!!!!' is a valid-length (4-char) quartet with all-invalid Base64 characters.
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('!!!!'); return {output: 'unreachable'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -1033,8 +1034,9 @@ namespace
         attr.name = "onOff";
         attr.type = "bool";
 
+        // 'AA!A' is a valid-length (4-char) quartet with an invalid '!' at index 2.
         std::string mapperScript =
-            "var bytes = SbmdUtils.Base64.decode('!!!bad!!!'); return {output: bytes.length.toString()};";
+            "var bytes = SbmdUtils.Base64.decode('AA!A'); return {output: bytes.length.toString()};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
