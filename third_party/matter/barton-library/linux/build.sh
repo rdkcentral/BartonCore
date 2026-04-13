@@ -99,10 +99,16 @@ pushd $CHIP_ROOT
 . scripts/activate.sh
 popd
 
+# Grab the semantic version from the nearest git tag
+REPO_ROOT=$(git -C $MY_DIR rev-parse --show-toplevel)
+BARTON_CORE_VERSION=$(git -C $REPO_ROOT describe --tags --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "0.0.0")
+BARTON_CORE_VERSION=$(echo $BARTON_CORE_VERSION | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+echo "Barton Core Version: ${BARTON_CORE_VERSION}"
+
 # Remove the old project config to ensure fresh generation
 rm -rf ${MY_DIR}/include/project_config
 echo "Generating BartonProjectConfig"
-python3 $MY_DIR/configure_project_config.py $MY_DIR/BartonProjectConfig.h.in $PROJECT_CONFIG_DIR/BartonProjectConfig.h "CHIP_BARTON_CONF_DIR=$MATTER_CONF_DIR"
+python3 $MY_DIR/configure_project_config.py $MY_DIR/BartonProjectConfig.h.in $PROJECT_CONFIG_DIR/BartonProjectConfig.h "CHIP_BARTON_CONF_DIR=$MATTER_CONF_DIR" "BARTON_CORE_VERSION=$BARTON_CORE_VERSION"
 
 GN_ARGS="chip_project_config_include_dirs=$PROJECT_INCLUDE_DIRS target_cflags_c=$CFLAGS target_cflags_cc=$CXXFLAGS target_ldflags=$LDFLAGS"
 

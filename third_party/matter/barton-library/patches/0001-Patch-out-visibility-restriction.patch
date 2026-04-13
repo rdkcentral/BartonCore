@@ -1,0 +1,56 @@
+From 53b8fd8adca3d1b62816705e806661e207e40c85 Mon Sep 17 00:00:00 2001
+From: Christian Leithner <christian_leithner@comcast.com>
+Date: Thu, 26 Mar 2026 18:23:52 +0000
+Subject: [PATCH] Patch out visibility restriction
+
+For some reason, the SDK put in a gn restriction for the required-privileges
+source_set that prevents any gn from using it either directly or transitively
+unless it falls under the set of paths listed. Because we build barton matter
+with the SDK as a subdirectory, the barton matter gn is never in the visibility
+scope. This commit simply removes the visibility restriction so we can still
+build.
+---
+ src/app/BUILD.gn | 26 --------------------------
+ 1 file changed, 26 deletions(-)
+
+diff --git a/src/app/BUILD.gn b/src/app/BUILD.gn
+index 17f0ec2a..a0ec4c89 100644
+--- a/src/app/BUILD.gn
++++ b/src/app/BUILD.gn
+@@ -357,33 +357,7 @@ source_set("required-privileges") {
+   # CodegenDataModelProvider should be the only one using this. Since CodegenDataModelProvider
+   # is part of application code, the visibility is broad. However generally DO NOT USE THIS
+   # unless you are creating a new CodegenDataModelProvider based item
+-  visibility = [
+-    # Test data models: mock models for testing
+-    # TODO: Some of these are questionable as they would not work as part of a monolith
+-    #       (single app) test build: in particular the energy management bits seem wrong
+-    "${chip_root}/examples/common/server-cluster-shim:mock_data_model_with_shim",
+-    "${chip_root}/examples/energy-management-app/energy-management-common",
+-    "${chip_root}/src/app/util/mock/*",
+-    "${chip_root}/src/data-model-providers/codegen/tests/*",
+-
+-    # Controller data models:
+-    #   linked by controllers only, never by applications
+-    "${chip_root}/src/controller/data_model",
+-    "${chip_root}/src/controller/java:jni",
+-    "${chip_root}/src/controller/python:ChipDeviceCtrl",
+-  ]
+-
+-  # Application integration: `chip_data_model` target should be set here
+-  if (chip_app_data_model_target != "") {
+-    visibility += [ chip_app_data_model_target ]
+-  }
+ 
+-  # We still have some strong coupling in this case
+-  # Eventually dynamic server should be replaced with code-driven and not try
+-  # to fake out ember codegen
+-  if (chip_build_controller_dynamic_server) {
+-    visibility += [ ":interaction-model" ]
+-  }
+ }
+ 
+ source_set("status-response") {
+-- 
+2.43.0
+
