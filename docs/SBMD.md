@@ -1061,3 +1061,4 @@ Common error causes:
 - Missing `output` field in return value
 - Type mismatches in TLV conversion
 - Undefined variables or properties
+- Invalid Base64 input passed to `SbmdUtils.Tlv.decode()` or `SbmdUtils.Base64.decode()`
