@@ -162,6 +162,10 @@ The system SHALL provide a built-in JavaScript library `SbmdUtils` (loaded into 
 - **WHEN** `SbmdUtils.Response.invoke(6, 1, tlvBase64)` is called
 - **THEN** it SHALL return `{invoke: {clusterId: 6, commandId: 1, tlvBase64: <value>}}`
 
+#### Scenario: Decode invalid Base64 input
+- **WHEN** `SbmdUtils.Tlv.decode(base64)` or `SbmdUtils.Base64.decode(base64)` is called with a string containing characters outside the Base64 alphabet (not A–Z, a–z, 0–9, `+`, `/`, or `=`)
+- **THEN** it SHALL throw a JavaScript `Error` describing the invalid input
+
 ### Requirement: Script context variables
 SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArgs` (with `tlvBase64`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`, `clusterId`, `attributeId`, `attributeName`, `attributeType`), `sbmdWriteArgs` (with `input`, `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`), `sbmdExecuteArgs`, `sbmdEventArgs`, and `sbmdCommandResponseArgs`.
 
