@@ -100,9 +100,16 @@ pushd $CHIP_ROOT
 popd
 
 # Grab the semantic version from the nearest git tag
-REPO_ROOT=$(git -C $MY_DIR rev-parse --show-toplevel)
-BARTON_CORE_VERSION=$(git -C $REPO_ROOT describe --tags --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "0.0.0")
-BARTON_CORE_VERSION=$(echo $BARTON_CORE_VERSION | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+BARTON_CORE_VERSION="0.0.0"
+
+if REPO_ROOT=$(git -C "$MY_DIR" rev-parse --show-toplevel 2>/dev/null); then
+    gitVersion=$(git -C "$REPO_ROOT" describe --tags --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "0.0.0")
+    parsedVersion=$(echo "$gitVersion" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)
+
+    if [ -n "$parsedVersion" ]; then
+        BARTON_CORE_VERSION="$parsedVersion"
+    fi
+fi
 echo "Barton Core Version: ${BARTON_CORE_VERSION}"
 
 # Remove the old project config to ensure fresh generation
