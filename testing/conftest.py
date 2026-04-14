@@ -119,17 +119,18 @@ def pytest_collection_modifyitems(config, items):
 
 
 # ---------------------------------------------------------------------------
-#  Subprocess isolation for tests that need a fresh process.
+#  Subprocess isolation for all tests.
 #
-#  The Matter SDK is a C++ singleton that cannot reinitialize within a single
-#  process.
+#  Every test is re-invoked in its own subprocess.  This provides:
+#    1. Output isolation — C library log output (written directly to fd 1/2 by
+#       background threads) is captured by the subprocess pipe and only shown
+#       when a test fails.
+#    2. State isolation — the Matter SDK is a C++ singleton that cannot
+#       reinitialize within a single process, so each matterjs test needs a
+#       fresh process anyway.
 #
-#  NOTE: the above Matter SDK limitation was true as of 1.4.2, but may be
-#  resolved in future versions.  If that happens, we can remove this subprocess.
-#
-#  We re-invoke pytest in a subprocess for each `requires_matterjs`
-#  test.  The subprocess writes its result to a JUnit XML file.  The outer
-#  test parses that file and propagates the true outcome (passed / skipped /
+#  The subprocess writes its result to a JUnit XML file.  The outer test
+#  parses that file and propagates the true outcome (passed / skipped /
 #  xfailed / xpassed / failed) so that CI/reporting is accurate.
 # ---------------------------------------------------------------------------
 
@@ -137,14 +138,12 @@ _SUBPROCESS_MARKER_ENV = "_PYTEST_SUBPROCESS_INNER"
 
 
 def pytest_runtest_protocol(item, nextitem):
-    """Run only requires_matterjs tests in a subprocess to isolate the Matter SDK."""
+    """Run each test in a subprocess to isolate C library output and state."""
+
     if os.environ.get(_SUBPROCESS_MARKER_ENV):
         return None  # inner run — execute normally
 
-    if "requires_matterjs" not in item.keywords:
-        return None  # not a matter test — execute normally
-
-    if not _has_matterjs:
+    if "requires_matterjs" in item.keywords and not _has_matterjs:
         # Tests requiring matter.js are already marked skipped during collection.
         # Avoid spawning one subprocess per skipped test.
         return None
@@ -272,14 +271,6 @@ def _run_in_subprocess(item):
 
             if not lines:
                 excerpt = "<no output captured from child pytest process>"
-            elif len(lines) > 160:
-                head = "\n".join(lines[:80])
-                tail = "\n".join(lines[-80:])
-                excerpt = (
-                    f"{head}\n\n"
-                    f"... ({len(lines) - 160} lines omitted) ...\n\n"
-                    f"{tail}"
-                )
             else:
                 excerpt = "\n".join(lines)
 
