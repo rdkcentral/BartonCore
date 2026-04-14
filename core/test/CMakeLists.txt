@@ -209,6 +209,11 @@ if (BCORE_MATTER)
 
     if (TARGET testSbmdScript)
         target_link_libraries(testSbmdScript bCoreConfig)
+        # Use a short timeout for tests so they don't wait 5 seconds.
+        # The -U removes the definition from bCoreConfig before -D redefines it.
+        target_compile_options(testSbmdScript PRIVATE
+            -UBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
+            -DBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS=100)
     endif()
 
     if (BUILD_TESTING)

@@ -30,6 +30,7 @@
 
 #include "MQuickJsRuntime.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -53,7 +54,7 @@ JSContext *MQuickJsRuntime::ctx = nullptr;
 std::mutex MQuickJsRuntime::mutex;
 bool MQuickJsRuntime::initialized = false;
 size_t MQuickJsRuntime::peakHeapUsed = 0;
-
+std::chrono::steady_clock::time_point MQuickJsRuntime::deadline {};
 namespace
 {
     /**
@@ -70,6 +71,32 @@ namespace
             return std::string(str);
         }
         return "unknown error";
+    }
+
+    /**
+     * Interrupt handler for script execution timeout.
+     *
+     * Called periodically by the mquickjs engine during bytecode execution.
+     * Returns non-zero to abort the running script when the deadline has passed.
+     * When no deadline is active (epoch value), always returns 0.
+     */
+    int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
+    {
+        auto currentDeadline = MQuickJsRuntime::GetDeadline();
+
+        // No deadline set, allow script to run uninterrupted
+        if (currentDeadline == std::chrono::steady_clock::time_point {})
+        {
+            return 0;
+        }
+
+        if (std::chrono::steady_clock::now() > currentDeadline)
+        {
+            icError("SBMD script execution timeout: script exceeded the configured time limit");
+            return 1;
+        }
+
+        return 0;
     }
 
 } // anonymous namespace
@@ -146,6 +173,11 @@ bool MQuickJsRuntime::Initialize(size_t memorySize)
     }
 
     initialized = true;
+
+    // Install the script execution timeout interrupt handler
+    JS_SetInterruptHandler(ctx, ScriptInterruptHandler);
+    icDebug("Script execution interrupt handler installed");
+
     {
         std::lock_guard<std::mutex> lock(mutex);
         LogMemoryUsage("post-init (context + stdlib + polyfills)", IC_LOG_DEBUG);
@@ -349,6 +381,21 @@ void MQuickJsRuntime::LogMemoryUsage(const char *label, logPriority priority, bo
                  usage.free_size,
                  usage.overhead);
     }
+}
+
+void MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::time_point value)
+{
+    deadline = value;
+}
+
+void MQuickJsRuntime::ClearDeadline()
+{
+    deadline = std::chrono::steady_clock::time_point {};
+}
+
+std::chrono::steady_clock::time_point MQuickJsRuntime::GetDeadline()
+{
+    return deadline;
 }
 
 } // namespace barton
