@@ -202,6 +202,12 @@
                 var c2 = base64[i + 2] === '=' ? 0 : this.chars.indexOf(base64[i + 2]);
                 var c3 = base64[i + 3] === '=' ? 0 : this.chars.indexOf(base64[i + 3]);
 
+                if (c0 === -1 || c1 === -1 || c2 === -1 || c3 === -1)
+                {
+                    var badIndex = c0 === -1 ? i : c1 === -1 ? i + 1 : c2 === -1 ? i + 2 : i + 3;
+                    throw new Error('Invalid Base64 character at index ' + badIndex + ': \'' + base64[badIndex] + '\'');
+                }
+
                 bytes.push((c0 << 2) | (c1 >> 4));
                 if (base64[i + 2] !== '=')
                 {
