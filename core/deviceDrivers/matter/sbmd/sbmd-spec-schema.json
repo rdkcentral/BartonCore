@@ -96,6 +96,13 @@
             "type": ["integer", "string"],
             "description": "Cluster ID (hex or decimal)"
           }
+        },
+        "aliases": {
+          "type": "array",
+          "description": "Named Matter element definitions (attributes or events) referenced by resources",
+          "items": {
+            "$ref": "#/$defs/alias"
+          }
         }
       },
       "additionalProperties": false
@@ -175,6 +182,27 @@
           "description": "If true, failure to add/configure this resource does not block commissioning. Defaults to false.",
           "default": false
         },
+        "prerequisites": {
+          "description": "Prerequisite cluster/attribute presence gates checked before resource registration. Use 'prerequisites: none' to always register. Required on all resources.",
+          "oneOf": [
+            {
+              "type": "null",
+              "description": "Explicit opt-out: always register this resource"
+            },
+            {
+              "type": "string",
+              "enum": ["none"],
+              "description": "Explicit opt-out using keyword: always register this resource"
+            },
+            {
+              "type": "array",
+              "description": "List of prerequisite entries; all must be satisfied",
+              "items": {
+                "$ref": "#/$defs/prerequisite"
+              }
+            }
+          ]
+        },
         "mapper": {
           "$ref": "#/$defs/mapper"
         }
@@ -205,8 +233,10 @@
       "description": "Read mapper configuration",
       "required": ["script"],
       "properties": {
-        "attribute": {
-          "$ref": "#/$defs/attribute"
+        "alias": {
+          "type": "string",
+          "description": "Name of the matterMeta alias (must be an attribute alias) to read from",
+          "minLength": 1
         },
         "command": {
           "$ref": "#/$defs/command"
@@ -218,12 +248,9 @@
         }
       },
       "oneOf": [
-        {"required": ["attribute"]},
+        {"required": ["alias"]},
         {"required": ["command"]}
       ],
-      "not": {
-        "required": ["attribute", "command"]
-      },
       "additionalProperties": false
     },
     "writeMapper": {
@@ -263,10 +290,12 @@
     "eventMapper": {
       "type": "object",
       "description": "Event mapper configuration for handling Matter events that update the resource",
-      "required": ["event", "script"],
+      "required": ["alias", "script"],
       "properties": {
-        "event": {
-          "$ref": "#/$defs/event"
+        "alias": {
+          "type": "string",
+          "description": "Name of the matterMeta alias (must be an event alias) to subscribe to",
+          "minLength": 1
         },
         "script": {
           "type": "string",
@@ -373,6 +402,42 @@
           "$ref": "#/$defs/matterType"
         }
       },
+      "additionalProperties": false
+    },
+    "prerequisite": {
+      "type": "object",
+      "description": "A single prerequisite gate for resource registration; references a matterMeta alias by name",
+      "required": ["alias"],
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Name of the matterMeta alias whose cluster (and attribute, if attribute alias) must be present",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "alias": {
+      "type": "object",
+      "description": "Named Matter element (attribute or event) in matterMeta.aliases; referenced by resources",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Alias identifier, unique within the driver spec",
+          "minLength": 1
+        },
+        "attribute": {
+          "$ref": "#/$defs/attribute"
+        },
+        "event": {
+          "$ref": "#/$defs/event"
+        }
+      },
+      "oneOf": [
+        {"required": ["attribute"]},
+        {"required": ["event"]}
+      ],
       "additionalProperties": false
     },
     "matterType": {

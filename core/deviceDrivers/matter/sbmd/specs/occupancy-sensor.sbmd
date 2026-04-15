@@ -20,6 +20,13 @@ matterMeta:
   deviceTypes:
     - 0x0107  # Occupancy Sensor
   revision: 1
+  aliases:
+    - name: "occupancy"
+      attribute:
+        clusterId: "0x0406"      # Occupancy Sensing cluster
+        attributeId: "0x0000"    # Occupancy attribute (bitmap8)
+        name: "Occupancy"
+        type: "uint8"
 
 # Subscription reporting configuration
 reporting:
@@ -37,13 +44,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "occupancy"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0406"      # Occupancy Sensing cluster
-              attributeId: "0x0000"    # Occupancy attribute (bitmap8)
-              name: "Occupancy"
-              type: "uint8"
+            alias: "occupancy"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               var occupied = (value & 0x01) !== 0;

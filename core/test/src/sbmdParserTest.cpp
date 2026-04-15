@@ -31,7 +31,9 @@ extern "C" {
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
+// clang-format off  // setjmp.h must precede cmocka.h
 #include <cmocka.h>
+// clang-format on
 #include <stdio.h>
 #include <string.h>
 
@@ -72,8 +74,8 @@ endpoints: []
     assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0043);
 
     // Verify reporting section
-    assert_int_equal((int)spec->reporting.minSecs, 5);
-    assert_int_equal((int)spec->reporting.maxSecs, 7200);
+    assert_int_equal((int) spec->reporting.minSecs, 5);
+    assert_int_equal((int) spec->reporting.maxSecs, 7200);
 }
 
 static void test_sbmdParserReportingOptional(void **state)
@@ -105,8 +107,8 @@ endpoints: []
     assert_int_equal((int) spec->matterMeta.deviceTypes[1], 67);
 
     // Verify reporting defaults to 0 when not present
-    assert_int_equal((int)spec->reporting.minSecs, 0);
-    assert_int_equal((int)spec->reporting.maxSecs, 0);
+    assert_int_equal((int) spec->reporting.minSecs, 0);
+    assert_int_equal((int) spec->reporting.maxSecs, 0);
 }
 
 static void test_sbmdParserEndpointWithStringIds(void **state)
@@ -177,8 +179,8 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x000a);
 
     // Verify reporting section from the actual file
-    assert_int_equal((int)spec->reporting.minSecs, 1);
-    assert_int_equal((int)spec->reporting.maxSecs, 3600);
+    assert_int_equal((int) spec->reporting.minSecs, 1);
+    assert_int_equal((int) spec->reporting.maxSecs, 3600);
 
     // Verify endpoints
     assert_int_equal((int) spec->endpoints.size(), 1);
@@ -267,29 +269,50 @@ matterMeta:
   deviceTypes:
     - "0x0043"
   revision: 1
+  aliases:
+    - name: requiredAttr
+      attribute:
+        clusterId: "0x0001"
+        attributeId: "0x0002"
+        name: "TestAttr"
+        type: "bool"
+    - name: optionalAttr
+      attribute:
+        clusterId: "0x0003"
+        attributeId: "0x0004"
+        name: "TestAttr2"
+        type: "bool"
+    - name: epRequiredAttr
+      attribute:
+        clusterId: "0x0005"
+        attributeId: "0x0006"
+        name: "TestAttr3"
+        type: "bool"
+    - name: epOptionalAttr
+      attribute:
+        clusterId: "0x0007"
+        attributeId: "0x0008"
+        name: "TestAttr4"
+        type: "bool"
 resources:
   - id: "requiredResource"
     type: "boolean"
     modes: ["read"]
+    prerequisites:
+      - alias: requiredAttr
     mapper:
       read:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
+        alias: requiredAttr
         script: "return value;"
   - id: "optionalResource"
     type: "boolean"
     optional: true
     modes: ["read"]
+    prerequisites:
+      - alias: optionalAttr
     mapper:
       read:
-        attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0004"
-          name: "TestAttr2"
-          type: "bool"
+        alias: optionalAttr
         script: "return value;"
 endpoints:
   - id: "ep1"
@@ -299,25 +322,21 @@ endpoints:
       - id: "epRequired"
         type: "boolean"
         modes: ["read"]
+        prerequisites:
+          - alias: epRequiredAttr
         mapper:
           read:
-            attribute:
-              clusterId: "0x0005"
-              attributeId: "0x0006"
-              name: "TestAttr3"
-              type: "bool"
+            alias: epRequiredAttr
             script: "return value;"
       - id: "epOptional"
         type: "boolean"
         optional: true
         modes: ["read"]
+        prerequisites:
+          - alias: epOptionalAttr
         mapper:
           read:
-            attribute:
-              clusterId: "0x0007"
-              attributeId: "0x0008"
-              name: "TestAttr4"
-              type: "bool"
+            alias: epOptionalAttr
             script: "return value;"
 )";
 
@@ -355,17 +374,28 @@ matterMeta:
   deviceTypes:
     - "0x0043"
   revision: 1
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0001"
+        attributeId: "0x0002"
+        name: "TestAttr"
+        type: "bool"
+    - name: testAttr2
+      attribute:
+        clusterId: "0x0003"
+        attributeId: "0x0004"
+        name: "TestAttr2"
+        type: "bool"
 resources:
   - id: "rootResource"
     type: "boolean"
     modes: ["read"]
+    prerequisites:
+      - alias: testAttr
     mapper:
       read:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
+        alias: testAttr
         script: "return value;"
 endpoints:
   - id: "ep1"
@@ -375,19 +405,18 @@ endpoints:
       - id: "endpointResource"
         type: "boolean"
         modes: ["read", "write"]
+        prerequisites:
+          - alias: testAttr2
         mapper:
           read:
-            attribute:
-              clusterId: "0x0003"
-              attributeId: "0x0004"
-              name: "TestAttr2"
-              type: "bool"
+            alias: testAttr2
             script: "return value;"
           write:
             script: "return value;"
       - id: "executeResource"
         type: "function"
         modes: []
+        prerequisites: none
         mapper:
           execute:
             script: "return {};"
@@ -551,7 +580,7 @@ static void test_sbmdParserMapperWithBothAttributeAndCommand(void **state)
 {
     (void) state;
 
-    // A mapper cannot have both attribute and command
+    // A read mapper must reference an attribute alias; referencing an event alias should fail
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -563,27 +592,27 @@ matterMeta:
   deviceTypes:
     - "0x0043"
   revision: 1
+  aliases:
+    - name: lockOp
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
 resources:
   - id: "testResource"
     type: "boolean"
     modes: ["read"]
+    prerequisites:
+      - alias: lockOp
     mapper:
       read:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
-        command:
-          clusterId: "0x0001"
-          commandId: "0x0003"
-          name: "TestCmd"
+        alias: lockOp
         script: "return value;"
 endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail when read mapper has both attribute and command
+    // Parser should fail: read mapper alias must be an attribute alias, not an event alias
     assert_null(spec.get());
 }
 
@@ -591,7 +620,7 @@ static void test_sbmdParserMapperWithNeitherAttributeNorCommand(void **state)
 {
     (void) state;
 
-    // A mapper must have either attribute or command
+    // A read mapper must have either 'alias' or 'command'
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -607,6 +636,7 @@ resources:
   - id: "testResource"
     type: "boolean"
     modes: ["read"]
+    prerequisites: none
     mapper:
       read:
         script: "return value;"
@@ -614,7 +644,7 @@ endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail when read mapper has neither attribute nor command
+    // Parser should fail when read mapper has neither alias nor command
     assert_null(spec.get());
 }
 
@@ -634,17 +664,22 @@ matterMeta:
   deviceTypes:
     - "0x0043"
   revision: 1
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0001"
+        attributeId: "0x0002"
+        name: "TestAttr"
+        type: "bool"
 resources:
   - id: "testResource"
     type: "boolean"
     modes: ["read"]
+    prerequisites:
+      - alias: testAttr
     mapper:
       read:
-        attribute:
-          clusterId: "0x0001"
-          attributeId: "0x0002"
-          name: "TestAttr"
-          type: "bool"
+        alias: testAttr
 endpoints: []
 )";
 
@@ -766,7 +801,7 @@ static void test_sbmdParserInvalidAttributeType(void **state)
 {
     (void) state;
 
-    // attribute should be a map, not a scalar
+    // An alias must have exactly one of 'attribute' or 'event', not both
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -778,19 +813,23 @@ matterMeta:
   deviceTypes:
     - "0x0043"
   revision: 1
-resources:
-  - id: "testResource"
-    type: "boolean"
-    modes: ["read"]
-    mapper:
-      read:
-        attribute: "this should be a map"
-        script: "return value;"
+  aliases:
+    - name: badAlias
+      attribute:
+        clusterId: "0x0001"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "bool"
+      event:
+        clusterId: "0x0001"
+        eventId: "0x0000"
+        name: "TestEvent"
+resources: []
 endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(yaml);
-    // Parser should fail on invalid attribute type
+    // Parser should fail: alias cannot have both attribute and event
     assert_null(spec.get());
 }
 
@@ -799,6 +838,465 @@ static void test_sbmdParserNonexistentFile(void **state)
     (void) state;
 
     auto spec = barton::SbmdParser::ParseFile("/nonexistent/path/to/file.sbmd");
+    assert_null(spec.get());
+}
+
+// ============================================================================
+// Prerequisites Tests
+// ============================================================================
+
+static void test_prerequisiteFromReadMapper(void **state)
+{
+    (void) state;
+
+    // Renamed intent: prerequisite from attribute alias resolves clusterId + attributeId
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: humidity
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0000"
+        name: "MeasuredValue"
+        type: "uint16"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes: ["read"]
+        prerequisites:
+          - alias: humidity
+        mapper:
+          read:
+            alias: humidity
+            script: "return {output: 'test'};"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &resource = spec->endpoints[0].resources[0];
+    assert_int_equal((int) resource.prerequisites.size(), 1);
+    // Alias resolved at parse time: clusterId and attributeId populated, no mapperRef
+    assert_int_equal((int) resource.prerequisites[0].clusterId, 0x0405);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds.size(), 1);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds[0], 0x0000);
+
+    // Verify mapper also resolved alias
+    assert_true(resource.mapper.hasRead);
+    assert_true(resource.mapper.readAttribute.has_value());
+    assert_int_equal((int) resource.mapper.readAttribute->clusterId, 0x0405);
+    assert_int_equal((int) resource.mapper.readAttribute->attributeId, 0x0000);
+    assert_string_equal(resource.mapper.readAttribute->name.c_str(), "MeasuredValue");
+}
+
+static void test_prerequisiteFromEventMapper(void **state)
+{
+    (void) state;
+
+    // Renamed intent: prerequisite from event alias resolves clusterId only (no attribute check)
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockOp
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read", "dynamic", "emitEvents"]
+        prerequisites:
+          - alias: lockOp
+        mapper:
+          event:
+            alias: lockOp
+            script: "return {output: 'true'};"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &resource = spec->endpoints[0].resources[0];
+    assert_int_equal((int) resource.prerequisites.size(), 1);
+    // Event alias: clusterId resolved, attributeIds empty (cluster-only check)
+    assert_int_equal((int) resource.prerequisites[0].clusterId, 0x0101);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds.size(), 0);
+
+    // Verify mapper event resolved
+    assert_true(resource.mapper.event.has_value());
+    assert_int_equal((int) resource.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) resource.mapper.event->eventId, 0x0002);
+    assert_string_equal(resource.mapper.event->name.c_str(), "LockOperation");
+}
+
+static void test_prerequisiteExplicitClusterOnly(void **state)
+{
+    (void) state;
+
+    // Tests that two aliases can both be used: one as prerequisite, one as mapper
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: humidityCluster
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0000"
+        name: "MeasuredValue"
+        type: "uint16"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes: ["read"]
+        prerequisites:
+          - alias: humidityCluster
+        mapper:
+          read:
+            alias: humidityCluster
+            script: "return {output: 'test'};"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    auto &resource = spec->endpoints[0].resources[0];
+    assert_int_equal((int) resource.prerequisites.size(), 1);
+    assert_int_equal((int) resource.prerequisites[0].clusterId, 0x0405);
+    // Attribute alias always resolves attributeId
+    assert_int_equal((int) resource.prerequisites[0].attributeIds.size(), 1);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds[0], 0x0000);
+}
+
+static void test_prerequisiteExplicitClusterAndAttribute(void **state)
+{
+    (void) state;
+
+    // Two separate aliases used in two prerequisites
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: measuredValue
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0000"
+        name: "MeasuredValue"
+        type: "uint16"
+    - name: tolerance
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0003"
+        name: "Tolerance"
+        type: "uint16"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "humidityTolerance"
+        type: "com.icontrol.humidity"
+        modes: ["read"]
+        prerequisites:
+          - alias: tolerance
+        mapper:
+          read:
+            alias: measuredValue
+            script: "return {output: 'test'};"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    auto &resource = spec->endpoints[0].resources[0];
+    assert_int_equal((int) resource.prerequisites.size(), 1);
+    assert_int_equal((int) resource.prerequisites[0].clusterId, 0x0405);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds.size(), 1);
+    assert_int_equal((int) resource.prerequisites[0].attributeIds[0], 0x0003);
+}
+
+static void test_prerequisiteNone(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: stateValue
+      attribute:
+        clusterId: "0x0045"
+        attributeId: "0x0000"
+        name: "StateValue"
+        type: "bool"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "faulted"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites: none
+        mapper:
+          read:
+            alias: stateValue
+            script: "return {output: 'true'};"
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    auto &resource = spec->endpoints[0].resources[0];
+    // prerequisites: none -> empty vector, always register
+    assert_int_equal((int) resource.prerequisites.size(), 0);
+}
+
+static void test_prerequisiteMissingOnReadMapper(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: stateValue
+      attribute:
+        clusterId: "0x0045"
+        attributeId: "0x0000"
+        name: "StateValue"
+        type: "bool"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "faulted"
+        type: "boolean"
+        modes: ["read"]
+        mapper:
+          read:
+            alias: stateValue
+            script: "return {output: 'true'};"
+)";
+
+    // Must fail: read mapper present but no prerequisites declared
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_prerequisiteMissingOnEventMapper(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockOp
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read", "dynamic", "emitEvents"]
+        mapper:
+          event:
+            alias: lockOp
+            script: "return {output: 'true'};"
+)";
+
+    // Must fail: event mapper present but no prerequisites declared
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_prerequisiteNotRequiredForWriteMapper(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "setLevel"
+        type: "com.icontrol.lightLevel"
+        optional: true
+        modes: ["write"]
+        mapper:
+          write:
+            script: "return SbmdUtils.Response.invoke(0x0008, 0x0004);"
+)";
+
+    // Must fail: prerequisites is required on every resource
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_prerequisiteNotRequiredForExecuteMapper(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "lock"
+        type: "function"
+        mapper:
+          execute:
+            script: "return SbmdUtils.Response.invoke(0x0101, 0x0000);"
+)";
+
+    // Must fail: prerequisites is required on every resource
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_prerequisiteInvalidBothForms(void **state)
+{
+    (void) state;
+
+    // A prerequisite entry that references a nonexistent alias should fail
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: humidity
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0000"
+        name: "MeasuredValue"
+        type: "uint16"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes: ["read"]
+        prerequisites:
+          - alias: nonExistentAlias
+        mapper:
+          read:
+            alias: humidity
+            script: "return {output: 'test'};"
+)";
+
+    // Must fail: prerequisite references unknown alias
+    auto spec = barton::SbmdParser::ParseString(yaml);
     assert_null(spec.get());
 }
 
@@ -839,6 +1337,17 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
+        // Prerequisites tests
+        cmocka_unit_test(test_prerequisiteFromReadMapper),
+        cmocka_unit_test(test_prerequisiteFromEventMapper),
+        cmocka_unit_test(test_prerequisiteExplicitClusterOnly),
+        cmocka_unit_test(test_prerequisiteExplicitClusterAndAttribute),
+        cmocka_unit_test(test_prerequisiteNone),
+        cmocka_unit_test(test_prerequisiteMissingOnReadMapper),
+        cmocka_unit_test(test_prerequisiteMissingOnEventMapper),
+        cmocka_unit_test(test_prerequisiteNotRequiredForWriteMapper),
+        cmocka_unit_test(test_prerequisiteNotRequiredForExecuteMapper),
+        cmocka_unit_test(test_prerequisiteInvalidBothForms),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

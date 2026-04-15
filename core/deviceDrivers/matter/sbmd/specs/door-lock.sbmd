@@ -22,6 +22,13 @@ matterMeta:
   revision: 1 # Device Specification revision from Matter spec that this driver complies with
   featureClusters:
     - 0x0101  # DoorLock cluster - for featureMap access in scripts
+  aliases:
+    - name: "lockState"
+      attribute:
+        clusterId: "0x0101"      # Door Lock cluster
+        attributeId: "0x0000"    # LockState attribute
+        name: "LockState"
+        type: "uint8"            # DlLockState enum (uint8)
 
 # Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
 reporting:
@@ -42,14 +49,12 @@ endpoints:
           - "read"        # Resource can be read
           - "dynamic"     # Value can change asynchronously (via device button, etc.)
           - "emitEvents"  # Changes generate events to subscribers
+        prerequisites:
+          - alias: "lockState"
         mapper:
           # Read mapper: Matter LockState attribute -> Barton boolean
           read:
-            attribute:
-              clusterId: "0x0101"      # Door Lock cluster
-              attributeId: "0x0000"    # LockState attribute
-              name: "LockState"
-              type: "uint8"            # DlLockState enum (uint8)
+            alias: "lockState"
 
             # LockState enum values:
             #   0 = NotFullyLocked, 1 = Locked, 2 = Unlocked, 3 = Unlatched
@@ -61,6 +66,7 @@ endpoints:
       # Lock function resource - locks the door
       - id: "lock"
         type: "function"
+        prerequisites: none
         mapper:
           # Execute mapper: Barton lock function -> Matter LockDoor command
           execute:
@@ -92,6 +98,7 @@ endpoints:
       # Unlock function resource - unlocks the door
       - id: "unlock"
         type: "function"
+        prerequisites: none
         mapper:
           # Execute mapper: Barton unlock function -> Matter UnlockDoor command
           execute:

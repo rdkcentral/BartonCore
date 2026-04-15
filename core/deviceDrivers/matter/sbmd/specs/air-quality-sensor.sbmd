@@ -22,6 +22,37 @@ matterMeta:
   revision: 1 # Device Specification revision from Matter spec
   featureClusters:
     - 0x005b  # Air Quality cluster - for featureMap access in scripts
+  aliases:
+    - name: "airQuality"
+      attribute:
+        clusterId: "0x005b"      # Air Quality cluster
+        attributeId: "0x0000"    # AirQuality attribute
+        name: "AirQuality"
+        type: "enum8"            # AirQualityEnum: 0=Unknown, 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=VeryPoor, 6=ExtremelyPoor
+    - name: "temperature"
+      attribute:
+        clusterId: "0x0402"      # Temperature Measurement cluster
+        attributeId: "0x0000"    # MeasuredValue attribute
+        name: "MeasuredValue"
+        type: "int16"            # Temperature in hundredths of degrees Celsius
+    - name: "humidity"
+      attribute:
+        clusterId: "0x0405"      # Relative Humidity Measurement cluster
+        attributeId: "0x0000"    # MeasuredValue attribute
+        name: "MeasuredValue"
+        type: "uint16"           # Humidity in hundredths of percent
+    - name: "co2Concentration"
+      attribute:
+        clusterId: "0x040d"      # Carbon Dioxide Concentration Measurement cluster
+        attributeId: "0x0000"    # MeasuredValue attribute
+        name: "MeasuredValue"
+        type: "float"            # Concentration in ppm (single-precision float)
+    - name: "pm25Concentration"
+      attribute:
+        clusterId: "0x042a"      # PM2.5 Concentration Measurement cluster
+        attributeId: "0x0000"    # MeasuredValue attribute
+        name: "MeasuredValue"
+        type: "float"            # Concentration in μg/m³ (single-precision float)
 
 # Subscription reporting configuration
 reporting:
@@ -42,13 +73,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "airQuality"
         mapper:
           read:
-            attribute:
-              clusterId: "0x005b"      # Air Quality cluster
-              attributeId: "0x0000"    # AirQuality attribute
-              name: "AirQuality"
-              type: "enum8"            # AirQualityEnum: 0=Unknown, 1=Good, 2=Fair, 3=Moderate, 4=Poor, 5=VeryPoor, 6=ExtremelyPoor
+            alias: "airQuality"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // Map enum values to human-readable strings
@@ -63,13 +92,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "temperature"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0402"      # Temperature Measurement cluster
-              attributeId: "0x0000"    # MeasuredValue attribute
-              name: "MeasuredValue"
-              type: "int16"            # Temperature in hundredths of degrees Celsius
+            alias: "temperature"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
@@ -86,13 +113,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "humidity"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0405"      # Relative Humidity Measurement cluster
-              attributeId: "0x0000"    # MeasuredValue attribute
-              name: "MeasuredValue"
-              type: "uint16"           # Humidity in hundredths of percent
+            alias: "humidity"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
@@ -110,13 +135,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "co2Concentration"
         mapper:
           read:
-            attribute:
-              clusterId: "0x040d"      # Carbon Dioxide Concentration Measurement cluster
-              attributeId: "0x0000"    # MeasuredValue attribute
-              name: "MeasuredValue"
-              type: "float"            # Concentration in ppm (single-precision float)
+            alias: "co2Concentration"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
@@ -133,13 +156,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "pm25Concentration"
         mapper:
           read:
-            attribute:
-              clusterId: "0x042a"      # PM2.5 Concentration Measurement cluster
-              attributeId: "0x0000"    # MeasuredValue attribute
-              name: "MeasuredValue"
-              type: "float"            # Concentration in μg/m³ (single-precision float)
+            alias: "pm25Concentration"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {

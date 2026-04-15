@@ -19,6 +19,13 @@ matterMeta:
   deviceTypes:
     - 0x0015  # Contact Sensor
   revision: 2
+  aliases:
+    - name: "stateValue"
+      attribute:
+        clusterId: "0x0045"      # Boolean State cluster
+        attributeId: "0x0000"    # StateValue attribute
+        name: "StateValue"
+        type: "bool"
 
 # Subscription reporting configuration
 reporting:
@@ -36,13 +43,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "stateValue"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0045"      # Boolean State cluster
-              attributeId: "0x0000"    # StateValue attribute
-              name: "StateValue"
-              type: "bool"
+            alias: "stateValue"
             script: |
               const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // StateValue=true means contact is closed (not faulted); invert for Barton
