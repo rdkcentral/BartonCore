@@ -994,6 +994,67 @@ namespace
     }
 
     //--------------------------------------------------------------------------
+    // Input validation tests — invalid Base64 input
+    //--------------------------------------------------------------------------
+
+    // Test: SbmdUtils.Tlv.decode throws on invalid Base64 characters
+    TEST_F(SbmdScriptTest, TlvDecodeInvalidBase64Exception)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0006;
+        attr.attributeId = 0x0000;
+        attr.name = "onOff";
+        attr.type = "bool";
+
+        // 'CQ!!' is a valid-length (4-char) quartet with an invalid '!' at index 2 and 3.
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('CQ!!'); return {output: 'unreachable'};";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+    }
+
+    // Test: SbmdUtils.Base64.decode throws on invalid Base64 characters
+    TEST_F(SbmdScriptTest, Base64DecodeInvalidBase64Exception)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0006;
+        attr.attributeId = 0x0000;
+        attr.name = "onOff";
+        attr.type = "bool";
+
+        // 'AA!A' is a valid-length (4-char) quartet with an invalid '!' at index 2.
+        std::string mapperScript =
+            "var bytes = SbmdUtils.Base64.decode('AA!A'); return {output: bytes.length.toString()};";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+    }
+
+    //--------------------------------------------------------------------------
     // Out-of-memory handling tests (mquickjs-specific)
     //
     // These tests artificially restrict the mquickjs arena to verify that
@@ -1159,6 +1220,156 @@ namespace
         MQuickJsRuntime::Shutdown(); // clean up any partial state
         EXPECT_TRUE(MQuickJsRuntime::Initialize(2097152));
         EXPECT_TRUE(MQuickJsRuntime::IsInitialized());
+    }
+
+    //--------------------------------------------------------------------------
+    // Script execution timeout tests (mquickjs-specific)
+    //
+    // These tests verify that the interrupt handler terminates runaway scripts
+    // and that the context remains usable afterward.
+    //--------------------------------------------------------------------------
+
+    class SbmdScriptTimeoutTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override { MQuickJsRuntime::Shutdown(); }
+
+        void TearDown() override { MQuickJsRuntime::Shutdown(); }
+    };
+
+    // An infinite loop script must be terminated by the interrupt handler
+    TEST_F(SbmdScriptTimeoutTest, InfiniteLoopTerminatedByTimeout)
+    {
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(1048576));
+
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+
+        auto script = SbmdScriptImpl::Create("timeout-test-device");
+        ASSERT_NE(script, nullptr);
+
+        SbmdAttribute attr;
+        attr.clusterId = 6;
+        attr.attributeId = 0;
+        attr.name = "timeoutTest";
+        attr.type = "bool";
+
+        std::string infiniteScript = "while(true) {} return {output: 'never'};";
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, infiniteScript));
+
+        // Create a simple TLV boolean
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        // Must return false (script interrupted), not hang forever
+        bool result = script->MapAttributeRead(attr, reader, outValue);
+        EXPECT_FALSE(result);
+    }
+
+    // A normal fast script completes successfully with timeout enabled
+    TEST_F(SbmdScriptTimeoutTest, NormalScriptCompletesWithTimeoutEnabled)
+    {
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(1048576));
+
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+
+        auto script = SbmdScriptImpl::Create("timeout-normal-device");
+        ASSERT_NE(script, nullptr);
+
+        SbmdAttribute attr;
+        attr.clusterId = 6;
+        attr.attributeId = 0;
+        attr.name = "normalTest";
+        attr.type = "bool";
+
+        std::string normalScript =
+            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: val ? 'true' : 'false'};";
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, normalScript));
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
+        EXPECT_EQ(outValue, "true");
+    }
+
+    // After a timeout, the context must remain usable for subsequent scripts
+    TEST_F(SbmdScriptTimeoutTest, ContextUsableAfterTimeout)
+    {
+        ASSERT_TRUE(MQuickJsRuntime::Initialize(1048576));
+
+        JSContext *ctx = MQuickJsRuntime::GetSharedContext();
+        ASSERT_NE(ctx, nullptr);
+        ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+
+        auto script = SbmdScriptImpl::Create("timeout-recovery-device");
+        ASSERT_NE(script, nullptr);
+
+        SbmdAttribute badAttr;
+        badAttr.clusterId = 6;
+        badAttr.attributeId = 0;
+        badAttr.name = "badScript";
+        badAttr.type = "bool";
+
+        SbmdAttribute goodAttr;
+        goodAttr.clusterId = 6;
+        goodAttr.attributeId = 1;
+        goodAttr.name = "goodScript";
+        goodAttr.type = "bool";
+
+        std::string infiniteScript = "while(true) {} return {output: 'never'};";
+        std::string normalScript =
+            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: val ? 'true' : 'false'};";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(badAttr, infiniteScript));
+        ASSERT_TRUE(script->AddAttributeReadMapper(goodAttr, normalScript));
+
+        // Create TLV boolean for both calls
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), false);
+        writer.Finalize();
+
+        // First: run the infinite loop script — should time out
+        {
+            chip::TLV::TLVReader reader;
+            reader.Init(tlvBuffer, writer.GetLengthWritten());
+            reader.Next();
+
+            std::string outValue;
+            EXPECT_FALSE(script->MapAttributeRead(badAttr, reader, outValue));
+        }
+
+        // Second: run a normal script — should succeed, proving context is OK
+        {
+            chip::TLV::TLVReader reader;
+            reader.Init(tlvBuffer, writer.GetLengthWritten());
+            reader.Next();
+
+            std::string outValue;
+            ASSERT_TRUE(script->MapAttributeRead(goodAttr, reader, outValue));
+            EXPECT_EQ(outValue, "false");
+        }
     }
 
 #endif // BCORE_USE_MQUICKJS

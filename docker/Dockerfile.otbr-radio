@@ -23,10 +23,10 @@
 
 #
 # Dockerfile for the optional Thread Border Router container that supports a
-# real Silabs USB radio (e.g., BRD2703 xG24 Explorer Kit).
+# real USB radio.
 #
 # This container runs two daemons:
-#   1. cpcd  - Silicon Labs Co-Processor Communication daemon.  Manages the
+#   1. cpcd  - Co-Processor Communication daemon.  Manages the
 #              USB serial link to the physical radio using the CPC protocol.
 #   2. otbr-agent - OpenThread Border Router agent.  Implements the Thread
 #              network stack and exposes it over D-Bus so Barton can consume it.
@@ -83,11 +83,11 @@ ARG APPLY_PATCHES_PATH="/tmp/patches/applyPatches.sh"
 RUN chmod +x ${APPLY_PATCHES_PATH}
 
 ###############################################################################
-# cpcd — Silicon Labs Co-Processor Communication Daemon
+# cpcd — Co-Processor Communication Daemon
 #
-# cpcd manages the USB serial link to the physical Silabs radio (e.g., BRD2703)
-# using the CPC multiplexing protocol. otbr-agent connects to it via the
-# spinel+cpc:// URI scheme instead of directly to the serial port.
+# cpcd manages the USB serial link to the physical radio using the CPC
+# multiplexing protocol. otbr-agent connects to it via the spinel+cpc:// URI
+# scheme instead of directly to the serial port.
 #
 # Source: https://github.com/SiliconLabs/cpc-daemon
 ###############################################################################
@@ -114,7 +114,7 @@ RUN cd /tmp && \
 ###############################################################################
 ARG GSDK_GIT_BRANCH="gsdk_4.4"
 ARG GSDK_GIT_REV="59d2160fe448b13730a91c0f019a8b4c53c43eb2"
-ARG OTBR_GIT_TAG="731e115257d295a1ec64ea2f60e17a43e43892f6"
+ARG OTBR_GIT_REV="731e115257d295a1ec64ea2f60e17a43e43892f6"
 
 RUN cd /tmp && \
     git clone --depth 1 --branch ${GSDK_GIT_BRANCH} \
@@ -125,8 +125,8 @@ RUN cd /tmp && \
     cd /tmp && \
     git clone --depth 1 https://github.com/openthread/ot-br-posix && \
     cd ot-br-posix && \
-    git fetch --depth 1 origin ${OTBR_GIT_TAG} && \
-    git checkout ${OTBR_GIT_TAG} && \
+    git fetch --depth 1 origin ${OTBR_GIT_REV} && \
+    git checkout ${OTBR_GIT_REV} && \
     ${APPLY_PATCHES_PATH} /tmp/patches/otbr . && \
     cd script && \
     OTBR_MDNS=avahi ./bootstrap && \

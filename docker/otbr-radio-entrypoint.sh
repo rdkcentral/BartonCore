@@ -26,21 +26,33 @@
 # Entrypoint for the otbr-radio container. Starts services in order:
 #   1. D-Bus system bus
 #   2. avahi-daemon  (mDNS/DNS-SD — required by otbr-agent built with OTBR_MDNS=avahi)
-#   3. cpcd  (Silicon Labs CPC daemon — USB serial ↔ CPC socket)
+#   3. cpcd  (CPC daemon — USB serial ↔ CPC socket)
 #   4. otbr-agent  (Thread Border Router — CPC socket ↔ D-Bus API)
 #
-# Environment variables (all have defaults):
-#   RADIO_DEVICE  - host path of the USB serial device, e.g. /dev/ttyACM0
-#   BACKBONE_IF   - network interface to use as the Thread backbone, e.g. eth0
-#   CPCD_CONF     - path to cpcd config file
+# Environment variables:
+#   RADIO_DEVICE              - host path of the USB serial device. The compose
+#                               overlay requires this to be set explicitly.
+#   BACKBONE_IF               - network interface to use as the Thread backbone,
+#                               e.g. eth0
+#   CPCD_CONF                 - path to cpcd config file
+#   DBUS_DIR                  - private shared D-Bus socket directory
+#   DBUS_SOCKET_PATH          - socket path for the private system bus
+#   DBUS_SYSTEM_BUS_ADDRESS   - D-Bus address used by otbr-agent and clients
 #
 # See docs/THREAD_BORDER_ROUTER_SUPPORT.md for USB-IP setup and hardware info.
 #
 
 set -e
 
-RADIO_DEVICE="${RADIO_DEVICE:-/dev/ttyACM0}"
+# RADIO_DEVICE is intentionally not defaulted here.
+# If it is unset or empty the validation section below will exit with a
+# clear error message.
+RADIO_DEVICE="${RADIO_DEVICE}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
+DBUS_DIR="${DBUS_DIR:-/var/run/otbr-dbus}"
+DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
+DBUS_SYSTEM_BUS_ADDRESS="${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=${DBUS_SOCKET_PATH}}"
+export DBUS_SYSTEM_BUS_ADDRESS
 
 # Resolve the backbone interface.
 # 1. Use BACKBONE_IF from the environment if explicitly set and the interface exists.
@@ -61,40 +73,39 @@ else
 fi
 
 ###############################################################################
-# 1. Start D-Bus system bus
+# 1. Start a private D-Bus system bus
 #
-# The /var/run/dbus directory is mounted from the persistent named volume
-# 'dbus-socket'. If the container previously crashed or was restarted, the
-# pid file from the previous run may still be present, causing dbus-daemon to
-# refuse to start. Clean it up if the recorded PID is no longer alive.
+# The shared 'dbus-socket' named volume is mounted at ${DBUS_DIR}. This is a
+# private socket directory used only by the otbr-radio and barton containers;
+# it is not the host's /var/run/dbus.
+#
+# Keep only the socket in the shared volume. Do not create pid files there.
+# If the previous container instance exited uncleanly, remove any stale socket
+# before starting a new private dbus-daemon bound to the explicit address.
 ###############################################################################
-echo "[otbr-radio] Starting D-Bus system bus..."
-mkdir -p /var/run/dbus
-dbusRunning=false
-if [ -f /var/run/dbus/pid ]; then
-    dbusPid=$(cat /var/run/dbus/pid 2>/dev/null || true)
-    if [ -n "${dbusPid}" ] && kill -0 "${dbusPid}" 2>/dev/null; then
-        dbusComm=$(cat "/proc/${dbusPid}/comm" 2>/dev/null || true)
-        if [ "${dbusComm}" = "dbus-daemon" ] && [ -S /var/run/dbus/system_bus_socket ]; then
-            dbusRunning=true
-        fi
-    fi
+echo "[otbr-radio] Starting private D-Bus system bus at ${DBUS_SYSTEM_BUS_ADDRESS}..."
+mkdir -p "${DBUS_DIR}"
+if [ -S "${DBUS_SOCKET_PATH}" ]; then
+    echo "[otbr-radio] Removing stale D-Bus socket ${DBUS_SOCKET_PATH}..."
+    rm -f "${DBUS_SOCKET_PATH}"
 fi
-if [ "${dbusRunning}" = "true" ]; then
-    echo "[otbr-radio] D-Bus already running (PID ${dbusPid}), skipping start."
-else
-    echo "[otbr-radio] Removing stale D-Bus pid/socket files..."
-    rm -f /var/run/dbus/pid /var/run/dbus/system_bus_socket
-    dbus-daemon --system --fork
-fi
-echo "[otbr-radio] D-Bus started."
+dbus-daemon --system --fork --nopidfile --address="${DBUS_SYSTEM_BUS_ADDRESS}"
+echo "[otbr-radio] Private D-Bus started."
 
 ###############################################################################
 # 2. Validate the USB radio device
 ###############################################################################
+if [ -z "${RADIO_DEVICE}" ]; then
+    echo "[otbr-radio] ERROR: RADIO_DEVICE is not set."
+    >&2
+    echo "[otbr-radio]        Set it in docker/.env or export before starting:" >&2
+    echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
+    echo "[otbr-radio]        See docs/THREAD_BORDER_ROUTER_SUPPORT.md for setup instructions." >&2
+    exit 1
+fi
 if [ ! -e "${RADIO_DEVICE}" ]; then
     echo "[otbr-radio] ERROR: USB radio device '${RADIO_DEVICE}' not found." >&2
-    echo "[otbr-radio]        Check that the BRD2703 is connected and USB-IP is attached." >&2
+    echo "[otbr-radio]        Check that the thread radio is connected and USB-IP is attached." >&2
     echo "[otbr-radio]        See docs/THREAD_BORDER_ROUTER_SUPPORT.md for setup instructions." >&2
     exit 1
 fi

@@ -56,7 +56,7 @@ while getopts ":ne:dHT" opt; do
     H) # use host networking (useful for Matter device access)
         HOST_NETWORK="--network host"
         ;;
-    T) # spin up the real Thread radio OTBR container (requires BRD2703 + cpcd)
+    T) # spin up the real Thread radio OTBR container
         OTBR_RADIO_COMPOSE=(-f "${DIR}/docker/compose.otbr-radio.yaml")
         ;;
     esac

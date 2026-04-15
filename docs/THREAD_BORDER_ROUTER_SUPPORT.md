@@ -23,9 +23,10 @@ An optional Docker container (`otbr-radio`) runs two daemons:
 - **`otbr-agent`** — OpenThread Border Router agent. Connects to `cpcd` via
   `spinel+cpc://cpcd_0` and exposes the Thread network on D-Bus.
 
-A named Docker volume (`dbus-socket`) shares `/var/run/dbus` between the
-`otbr-radio` container and the Barton devcontainer so that Barton can reach
-`otbr-agent` over D-Bus with no code changes.
+A named Docker volume (`dbus-socket`) shares a private D-Bus socket directory
+at `/var/run/otbr-dbus` between the `otbr-radio` container and the Barton
+container so that Barton can reach `otbr-agent` over D-Bus with no code
+changes. This is a private container-only bus, not the host's system D-Bus.
 
 ```
 BRD2703 USB Radio
@@ -128,8 +129,9 @@ ls -la /dev/ttyACM*
 # Expected: /dev/ttyACM0
 ```
 
-> **Tip**: If the device appears at `/dev/ttyACM1` or another path, set
-> `RADIO_DEVICE` before starting:
+> **Tip**: Set `RADIO_DEVICE` explicitly before starting, even if the device is
+> at the default-looking path `/dev/ttyACM0`. This avoids silently using the
+> wrong device on shared servers. For example:
 > ```bash
 > export RADIO_DEVICE=/dev/ttyACM1
 > ```
@@ -141,10 +143,12 @@ ls -la /dev/ttyACM*
 ### CLI (`dockerw`)
 
 Use the `-T` flag. This adds `docker/compose.otbr-radio.yaml` to the compose
-stack and starts the `otbr-radio` container alongside the main Barton container:
+stack and starts the `otbr-radio` container alongside the main Barton container.
+Set `RADIO_DEVICE` explicitly before starting, even if the device is
+`/dev/ttyACM0`:
 
 ```bash
-./dockerw -T
+RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T
 ```
 
 To override the radio device or backbone interface:
@@ -218,21 +222,22 @@ docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml rm -sf o
 
 ### Devcontainer (VS Code)
 
-Add `compose.otbr-radio.yaml` to the `dockerComposeFile` array in
-`.devcontainer/devcontainer.json`:
+`compose.otbr-radio.yaml` is included in the devcontainer by default — no
+manual edit to `.devcontainer/devcontainer.json` is required.
 
-```jsonc
-"dockerComposeFile": [
-    "../docker/compose.devcontainer.yaml",
-    "../docker/compose.otbr-radio.yaml"   // add this line
-],
+The `otbr-radio` container will start automatically when the devcontainer
+launches. If `RADIO_DEVICE` is not set it will exit with a clear error in its
+own logs, but **the `barton` devcontainer is unaffected and starts normally**.
+
+To enable Thread radio support, set `RADIO_DEVICE` in `docker/.env` after
+running `docker/setupDockerEnv.sh`, or export it in your host shell before
+opening VS Code. Set it explicitly even if the device path is `/dev/ttyACM0`:
+
+```bash
+export RADIO_DEVICE=/dev/ttyACM0
 ```
 
 Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
-
-To set a non-default radio device, export `RADIO_DEVICE` in your shell before
-opening VS Code, or set it in `docker/.env` after running
-`docker/setupDockerEnv.sh`.
 
 ---
 
@@ -243,7 +248,8 @@ opening VS Code, or set it in `docker/.env` after running
 `gdbus` is available and can be used to query the OTBR D-Bus service:
 
 ```bash
-gdbus introspect --system \
+gdbus introspect \
+    --address unix:path=/var/run/otbr-dbus/system_bus_socket \
     --dest io.openthread.BorderRouter.wpan0 \
     --object-path /io/openthread/BorderRouter/wpan0
 ```
@@ -251,7 +257,8 @@ gdbus introspect --system \
 To read the current Thread device role:
 
 ```bash
-gdbus call --system \
+gdbus call \
+    --address unix:path=/var/run/otbr-dbus/system_bus_socket \
     --dest io.openthread.BorderRouter.wpan0 \
     --object-path /io/openthread/BorderRouter/wpan0 \
     --method org.freedesktop.DBus.Properties.Get \
@@ -260,13 +267,17 @@ gdbus call --system \
 
 ### From inside the Barton container
 
-The `dbus-socket` volume shares `/var/run/dbus` between the two containers, so
-the Barton container can also reach the OTBR D-Bus service:
+The `dbus-socket` volume shares `/var/run/otbr-dbus` between the two
+containers, and the overlay sets `DBUS_SYSTEM_BUS_ADDRESS` so both containers
+talk to the private D-Bus daemon started by `otbr-radio` instead of the host's
+system bus:
 
 ```bash
-gdbus introspect --system \
+gdbus introspect \
+    --address unix:path=/var/run/otbr-dbus/system_bus_socket \
     --dest io.openthread.BorderRouter.wpan0 \
     --object-path /io/openthread/BorderRouter/wpan0
 ```
 If Barton is built with `BCORE_THREAD=ON`, it will automatically discover and
-communicate with the border router over D-Bus on startup.
+communicate with the border router over D-Bus on startup using the private
+container D-Bus address from the overlay.
