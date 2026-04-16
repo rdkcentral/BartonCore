@@ -1,0 +1,52 @@
+# Temperature Sensor SBMD Specification
+# Maps Matter Temperature Sensor device type to Barton sensor device class
+
+# SBMD schema version 1.0
+schemaVersion: "1.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Temperature Sensor"
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "temperatureSensor"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0302  # Temperature Sensor
+  revision: 3
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 2
+    resources:
+      - id: "temperature"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        mapper:
+          read:
+            attribute:
+              clusterId: "0x0402"      # Temperature Measurement cluster
+              attributeId: "0x0000"    # MeasuredValue attribute
+              name: "MeasuredValue"
+              type: "int16"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              // -32768 (0x8000): Matter null for int16 MeasuredValue
+              if (value === null || value === -32768) {
+                return {output: ''};
+              }
+              return {output: value.toString()};

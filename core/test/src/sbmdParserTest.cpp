@@ -252,6 +252,102 @@ static void test_sbmdParserLightFile(void **state)
     assert_false(currentLevel.mapper.writeScript.empty());
 }
 
+static void test_sbmdParserTemperatureHumiditySensorFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "temperature-humidity-sensor.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "Temperature Humidity Sensor");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "temperatureHumiditySensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 2);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0302);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[1], 0x0307);
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "all");
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_string_equal(spec->endpoints[0].id.c_str(), "1");
+    assert_string_equal(spec->endpoints[0].profile.c_str(), "sensor");
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
+
+    auto &temperature = spec->endpoints[0].resources[0];
+    assert_string_equal(temperature.id.c_str(), "temperature");
+    assert_true(temperature.mapper.hasRead);
+    assert_true(temperature.mapper.readAttribute.has_value());
+    assert_int_equal((int) temperature.mapper.readAttribute->clusterId, 0x0402);
+    assert_int_equal((int) temperature.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(temperature.mapper.readScript.empty());
+
+    auto &humidity = spec->endpoints[0].resources[1];
+    assert_string_equal(humidity.id.c_str(), "humidity");
+    assert_true(humidity.mapper.hasRead);
+    assert_true(humidity.mapper.readAttribute.has_value());
+    assert_int_equal((int) humidity.mapper.readAttribute->clusterId, 0x0405);
+    assert_int_equal((int) humidity.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(humidity.mapper.readScript.empty());
+}
+
+static void test_sbmdParserTemperatureSensorFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "temperature-sensor.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "Temperature Sensor");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "temperatureSensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0302);
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &temperature = spec->endpoints[0].resources[0];
+    assert_string_equal(temperature.id.c_str(), "temperature");
+    assert_true(temperature.mapper.hasRead);
+    assert_true(temperature.mapper.readAttribute.has_value());
+    assert_int_equal((int) temperature.mapper.readAttribute->clusterId, 0x0402);
+    assert_false(temperature.mapper.readScript.empty());
+}
+
+static void test_sbmdParserHumiditySensorFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "humidity-sensor.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "Humidity Sensor");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "humiditySensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0307);
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &humidity = spec->endpoints[0].resources[0];
+    assert_string_equal(humidity.id.c_str(), "humidity");
+    assert_true(humidity.mapper.hasRead);
+    assert_true(humidity.mapper.readAttribute.has_value());
+    assert_int_equal((int) humidity.mapper.readAttribute->clusterId, 0x0405);
+    assert_false(humidity.mapper.readScript.empty());
+}
+
 static void test_sbmdParserOptionalResource(void **state)
 {
     (void) state;
@@ -812,6 +908,109 @@ static void test_sbmdParserEmptyString(void **state)
     assert_true(spec->schemaVersion.empty());
 }
 
+static void test_sbmdParserDeviceTypeMatchAny(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  deviceTypeMatch: "any"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+}
+
+static void test_sbmdParserDeviceTypeMatchAll(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+    - "0x0307"
+  revision: 1
+  deviceTypeMatch: "all"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "all");
+}
+
+static void test_sbmdParserDeviceTypeMatchDefault(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_string_equal(spec->matterMeta.deviceTypeMatch.c_str(), "any");
+}
+
+static void test_sbmdParserDeviceTypeMatchInvalid(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  deviceTypeMatch: "invalid"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -821,6 +1020,9 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserEndpointWithStringIds),
         cmocka_unit_test(test_sbmdParserDoorLockFile),
         cmocka_unit_test(test_sbmdParserLightFile),
+        cmocka_unit_test(test_sbmdParserTemperatureHumiditySensorFile),
+        cmocka_unit_test(test_sbmdParserTemperatureSensorFile),
+        cmocka_unit_test(test_sbmdParserHumiditySensorFile),
         cmocka_unit_test(test_sbmdParserOptionalResource),
         cmocka_unit_test(test_sbmdParserResourceIdFields),
         // Negative tests - error handling
@@ -839,6 +1041,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchAny),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchAll),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchDefault),
+        cmocka_unit_test(test_sbmdParserDeviceTypeMatchInvalid),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

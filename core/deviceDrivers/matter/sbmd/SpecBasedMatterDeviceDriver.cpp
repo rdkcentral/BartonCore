@@ -64,6 +64,12 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpe
 {
     icDebug("Created SBMD driver for: %s", this->spec->name.c_str());
 }
+
+bool SpecBasedMatterDeviceDriver::IsCompositeDriver() const
+{
+    return spec->matterMeta.deviceTypeMatch == "all";
+}
+
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
     return spec->matterMeta.deviceTypes;

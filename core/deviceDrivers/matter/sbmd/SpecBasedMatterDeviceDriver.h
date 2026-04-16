@@ -43,6 +43,8 @@ namespace barton
         SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
+        bool IsCompositeDriver() const override;
+
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
     protected:
