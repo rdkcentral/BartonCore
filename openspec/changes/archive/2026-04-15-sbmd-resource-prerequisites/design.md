@@ -145,6 +145,8 @@ For each component (parser, driver), unit tests are written first (in the `core/
 
 **[Risk] Thread safety: `DeviceDataCache` is queried from the `AddDevice()` call** → **Mitigation**: Unchanged from original design — `AddDevice()` runs on the Matter event loop thread, same as all existing cache queries.
 
+**[Consideration] Command presence is not checkable in prerequisites** → `CheckPrerequisites()` checks cluster and attribute presence via `DeviceDataCache`, but there is no equivalent for command presence. Matter clusters expose `AcceptedCommandList` (attribute 0xFFF9), but the commissioning flow does not cache it. Resources that read via `mapper.read.command:` and depend on a specific optional command being present on the device cannot be gated by a prerequisite today — they would need to use `prerequisites: none` and fall back to `optional: true` for bind-time failure tolerance. If command-read resources become widely used in practice, adding `AcceptedCommandList` to the commissioning cache and a corresponding command-presence check path in `CheckPrerequisites()` would close this gap.
+
 ## Migration Plan
 
 1. Add `SbmdAlias` struct, `aliases` field on `SbmdMatterMeta`, and simplified `SbmdPrerequisite` (no `mapperRef`) to `SbmdSpec.h`.

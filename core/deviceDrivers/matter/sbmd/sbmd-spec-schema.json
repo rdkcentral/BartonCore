@@ -157,7 +157,7 @@
     "resource": {
       "type": "object",
       "description": "Device resource definition",
-      "required": ["id", "type", "mapper"],
+      "required": ["id", "type", "mapper", "prerequisites"],
       "properties": {
         "id": {
           "type": "string",
@@ -197,6 +197,7 @@
             {
               "type": "array",
               "description": "List of prerequisite entries; all must be satisfied",
+              "minItems": 1,
               "items": {
                 "$ref": "#/$defs/prerequisite"
               }

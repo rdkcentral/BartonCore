@@ -16,7 +16,7 @@ Each SBMD driver spec MAY declare a `matterMeta.aliases` list. Each alias SHALL 
 - **THEN** the parser SHALL reject the spec with an error
 
 ### Requirement: Prerequisite declaration on SBMD resources
-Each SBMD resource SHALL declare a `prerequisites` field. It SHALL be either the scalar `none` (opt-out) or a non-empty list of prerequisite entries. Each entry SHALL take exactly the form `{alias: <name>}` referencing a name defined in `matterMeta.aliases`. Absence of the field on any resource is a parse-time error regardless of which mappers the resource implements.
+Each SBMD resource SHALL declare a `prerequisites` field. It SHALL be either an explicit opt-out (`none` or `null`, both meaning always register) or a non-empty list of prerequisite entries. Each entry SHALL take exactly the form `{alias: <name>}` referencing a name defined in `matterMeta.aliases`. Absence of the field on any resource is a parse-time error regardless of which mappers the resource implements. The preferred opt-out form is `none` for readability, but `null` is accepted for YAML authors who prefer explicit null syntax.
 
 #### Scenario: Resource with attribute alias prerequisite
 - **WHEN** a resource declares `prerequisites: [{alias: stateValue}]` and the spec defines an attribute alias named `stateValue` with `clusterId: 0x0045`, `attributeId: 0x0000`

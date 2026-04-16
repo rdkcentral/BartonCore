@@ -37,6 +37,7 @@
 #endif
 
 #include <app/ConcreteAttributePath.h>
+#include <cinttypes>
 #include <lib/core/TLVReader.h>
 #include <memory>
 
@@ -520,7 +521,8 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
     if (!cache)
     {
-        icWarn("No device data cache for device %s, skipping prerequisite check", device.GetDeviceId().c_str());
+        icWarn("No device data cache for device %s; prerequisites cannot be evaluated and will be treated as unmet",
+               device.GetDeviceId().c_str());
         return false;
     }
 
@@ -543,7 +545,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
         if (!clusterFound)
         {
-            icDebug("Resource '%s': prerequisite cluster 0x%04x not found on device %s, skipping",
+            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s, skipping",
                     resource.id.c_str(),
                     clusterId,
                     device.GetDeviceId().c_str());
@@ -575,12 +577,12 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
             if (!attributeFound)
             {
-                icDebug(
-                    "Resource '%s': prerequisite attribute 0x%04x on cluster 0x%04x not found on device %s, skipping",
-                    resource.id.c_str(),
-                    attributeId,
-                    clusterId,
-                    device.GetDeviceId().c_str());
+                icDebug("Resource '%s': prerequisite attribute 0x%08" PRIx32 " on cluster 0x%08" PRIx32
+                        " not found on device %s, skipping",
+                        resource.id.c_str(),
+                        attributeId,
+                        clusterId,
+                        device.GetDeviceId().c_str());
                 return false;
             }
         }

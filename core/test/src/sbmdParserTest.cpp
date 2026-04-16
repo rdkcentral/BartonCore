@@ -576,7 +576,7 @@ endpoints: []
     assert_null(spec.get());
 }
 
-static void test_sbmdParserMapperWithBothAttributeAndCommand(void **state)
+static void test_sbmdParserReadMapperRejectsEventAlias(void **state)
 {
     (void) state;
 
@@ -613,6 +613,51 @@ endpoints: []
 
     auto spec = barton::SbmdParser::ParseString(yaml);
     // Parser should fail: read mapper alias must be an attribute alias, not an event alias
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserReadMapperRejectsBothAliasAndCommand(void **state)
+{
+    (void) state;
+
+    // A read mapper must have exactly one of 'alias' or 'command', not both
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0001"
+        attributeId: "0x0002"
+        name: "TestAttr"
+        type: "bool"
+resources:
+  - id: "testResource"
+    type: "boolean"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        command:
+          clusterId: "0x0001"
+          commandId: "0x0000"
+          name: "TestCommand"
+        script: "return value;"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: read mapper cannot have both 'alias' and 'command'
     assert_null(spec.get());
 }
 
@@ -830,6 +875,83 @@ endpoints: []
 
     auto spec = barton::SbmdParser::ParseString(yaml);
     // Parser should fail: alias cannot have both attribute and event
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserDuplicateAliasName(void **state)
+{
+    (void) state;
+
+    // Two aliases with the same name make FindAlias() ambiguous and must be rejected
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: stateValue
+      attribute:
+        clusterId: "0x0045"
+        attributeId: "0x0000"
+        name: "StateValue"
+        type: "bool"
+    - name: stateValue
+      attribute:
+        clusterId: "0x0046"
+        attributeId: "0x0001"
+        name: "OtherValue"
+        type: "uint8"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: duplicate alias name
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserEmptyPrerequisitesList(void **state)
+{
+    (void) state;
+
+    // An empty sequence is not a valid opt-out; 'prerequisites: none' must be used instead
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: stateValue
+      attribute:
+        clusterId: "0x0045"
+        attributeId: "0x0000"
+        name: "StateValue"
+        type: "bool"
+resources:
+  - id: r.state
+    type: SENSOR.BOOLEAN
+    prerequisites: []
+    mapper:
+      read:
+        alias: stateValue
+        script: "return attr"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: empty prerequisites sequence must be rejected
     assert_null(spec.get());
 }
 
@@ -1327,7 +1449,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidBartonMetaType),
         cmocka_unit_test(test_sbmdParserInvalidMatterMetaType),
         cmocka_unit_test(test_sbmdParserInvalidReportingType),
-        cmocka_unit_test(test_sbmdParserMapperWithBothAttributeAndCommand),
+        cmocka_unit_test(test_sbmdParserReadMapperRejectsEventAlias),
+        cmocka_unit_test(test_sbmdParserReadMapperRejectsBothAliasAndCommand),
         cmocka_unit_test(test_sbmdParserMapperWithNeitherAttributeNorCommand),
         cmocka_unit_test(test_sbmdParserReadMapperMissingScript),
         cmocka_unit_test(test_sbmdParserWriteMapperMissingScript),
@@ -1335,6 +1458,8 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidResourceType),
         cmocka_unit_test(test_sbmdParserInvalidEndpointType),
         cmocka_unit_test(test_sbmdParserInvalidAttributeType),
+        cmocka_unit_test(test_sbmdParserDuplicateAliasName),
+        cmocka_unit_test(test_sbmdParserEmptyPrerequisitesList),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
         // Prerequisites tests

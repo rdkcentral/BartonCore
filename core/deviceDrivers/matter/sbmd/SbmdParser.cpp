@@ -377,6 +377,12 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
                 return false;
             }
 
+            if (FindAlias(meta.aliases, alias.name) != nullptr)
+            {
+                icError("Duplicate alias name '%s' in matterMeta.aliases", alias.name.c_str());
+                return false;
+            }
+
             meta.aliases.push_back(std::move(alias));
         }
     }
@@ -537,6 +543,12 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const s
 
         if (readNode["alias"])
         {
+            if (readNode["command"])
+            {
+                icError("read mapper cannot have both 'alias' and 'command'");
+                return false;
+            }
+
             std::string aliasName = readNode["alias"].as<std::string>();
             const SbmdAlias *alias = FindAlias(aliases, aliasName);
 
@@ -895,6 +907,12 @@ bool SbmdParser::ParsePrerequisites(const YAML::Node &node,
     if (!node.IsSequence())
     {
         icError("prerequisites must be a sequence or 'none'");
+        return false;
+    }
+
+    if (node.size() == 0)
+    {
+        icError("prerequisites sequence must not be empty; use 'prerequisites: none' to indicate no prerequisites");
         return false;
     }
 
