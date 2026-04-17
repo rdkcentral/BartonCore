@@ -1081,11 +1081,11 @@ endpoints:
     assert_string_equal(resource.mapper.event->name.c_str(), "LockOperation");
 }
 
-static void test_prerequisiteExplicitClusterOnly(void **state)
+static void test_prerequisiteAttributeAliasResolvesClusterAndAttribute(void **state)
 {
     (void) state;
 
-    // Tests that two aliases can both be used: one as prerequisite, one as mapper
+    // An attribute alias used as a prerequisite resolves both clusterId and attributeId
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -1131,11 +1131,11 @@ endpoints:
     assert_int_equal((int) resource.prerequisites[0].attributeIds[0], 0x0000);
 }
 
-static void test_prerequisiteExplicitClusterAndAttribute(void **state)
+static void test_prerequisiteAliasIndependentOfMapperAlias(void **state)
 {
     (void) state;
 
-    // Two separate aliases used in two prerequisites
+    // The prerequisite alias and the mapper alias may differ; each is resolved independently
     const char *yaml = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
@@ -1465,8 +1465,8 @@ int main(int argc, const char **argv)
         // Prerequisites tests
         cmocka_unit_test(test_prerequisiteFromReadMapper),
         cmocka_unit_test(test_prerequisiteFromEventMapper),
-        cmocka_unit_test(test_prerequisiteExplicitClusterOnly),
-        cmocka_unit_test(test_prerequisiteExplicitClusterAndAttribute),
+        cmocka_unit_test(test_prerequisiteAttributeAliasResolvesClusterAndAttribute),
+        cmocka_unit_test(test_prerequisiteAliasIndependentOfMapperAlias),
         cmocka_unit_test(test_prerequisiteNone),
         cmocka_unit_test(test_prerequisiteMissingOnReadMapper),
         cmocka_unit_test(test_prerequisiteMissingOnEventMapper),
