@@ -545,7 +545,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
         if (!clusterFound)
         {
-            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s, skipping",
+            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s; prerequisite not met",
                     resource.id.c_str(),
                     clusterId,
                     device.GetDeviceId().c_str());
@@ -578,7 +578,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
             if (!attributeFound)
             {
                 icDebug("Resource '%s': prerequisite attribute 0x%08" PRIx32 " on cluster 0x%08" PRIx32
-                        " not found on device %s, skipping",
+                        " not found on device %s; prerequisite not met",
                         resource.id.c_str(),
                         attributeId,
                         clusterId,
