@@ -44,13 +44,8 @@
 #       ./dockerw -T bash
 #
 #   Devcontainer
-#       Add this file to the dockerComposeFile array in
-#       .devcontainer/devcontainer.json:
-#
-#           "dockerComposeFile": [
-#               "../docker/compose.devcontainer.yaml",
-#               "../docker/compose.otbr-radio.yaml"
-#           ]
+#       This overlay is included by default in the devcontainer
+#       compose stack.
 #
 # ─── Environment variables ────────────────────────────────────────────────────
 #
@@ -83,14 +78,15 @@ services:
         #   - configuring iptables rules for Thread border routing
         #   - accessing the USB serial device via /dev/ttyACM*
         privileged: true
-        # Connect to the per-user bridge network so that:
+        # Connect to the same per-user IPv6 bridge network as the barton service so
+        # that:
         #   - each user on a shared server gets an isolated wpan0 interface
         #     (host networking would put all wpan0 interfaces into the same namespace)
         #   - NAT64/iptables rules are scoped to this container's network namespace
         #   - D-Bus communication with the barton container is still via the
         #     dbus-socket volume, so no direct network path is required
         networks:
-            - otbr-net
+            - barton-ip6net
         volumes:
             # Share a private D-Bus socket directory with the barton/devcontainer
             # service so Barton code can talk to otbr-agent over D-Bus without
@@ -118,25 +114,28 @@ services:
         restart: unless-stopped
 
     # Add the shared private D-Bus socket volume to the barton service.
-    # This grants Barton access to the otbr-agent D-Bus API running in the
-    # otbr-radio container without any code changes, while keeping Barton off
-    # the host's system bus.
+    # This makes the otbr-radio container's private D-Bus socket available
+    # to Barton when explicitly requested, without requiring any code changes.
+    # By default Barton continues to use the standard system bus socket so
+    # simulated/default OTBR flows keep working unless the private socket is
+    # explicitly selected by setting DBUS_SYSTEM_BUS_ADDRESS in the compose
+    # environment before startup.
     # In devcontainer mode, this file is layered into the compose stack via
     # devcontainer.json, so this barton service fragment is merged in there.
     barton:
         volumes:
             - dbus-socket:/var/run/otbr-dbus
         environment:
-            - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket
+            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/var/run/dbus/system_bus_socket}
 
 networks:
-    # Per-user/workspace bridge network for the otbr-radio container.
-    # Using the same $BUILDER_USER-$BARTON_WORKSPACE_ID namespace as the
-    # main barton network ensures each user on a shared server gets their
-    # own isolated Thread network namespace.
-    otbr-net:
-        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-otbr-net
-        driver: bridge
+    # Reuse the same per-user IPv6 bridge network defined in compose.yaml so
+    # that otbr-radio is properly segmented from the host network and each
+    # user on a shared server gets their own isolated namespace.
+    barton-ip6net:
+        name: $BUILDER_USER-$BARTON_WORKSPACE_ID-barton-ip6net
+        # Network is created by setupDockerEnv.sh and declared in compose.yaml
+        external: true
 
 volumes:
     # Per-user/workspace named volume that shares /var/run/otbr-dbus between

@@ -33,8 +33,8 @@
 #
 # The container is NOT built or started by default. It is activated by:
 #   - CLI:          ./dockerw -T bash
-#   - Devcontainer: add ../docker/compose.otbr-radio.yaml to dockerComposeFile
-#                   in .devcontainer/devcontainer.json
+#   - Devcontainer: This overlay is included by default in the devcontainer
+#       compose stack.
 #
 # See docs/THREAD_BORDER_ROUTER_SUPPORT.md for full setup instructions,
 # including how to use USB-IP to forward a locally connected radio to a remote

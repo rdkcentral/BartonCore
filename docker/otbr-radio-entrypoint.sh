@@ -96,8 +96,7 @@ echo "[otbr-radio] Private D-Bus started."
 # 2. Validate the USB radio device
 ###############################################################################
 if [ -z "${RADIO_DEVICE}" ]; then
-    echo "[otbr-radio] ERROR: RADIO_DEVICE is not set."
-    >&2
+    echo "[otbr-radio] ERROR: RADIO_DEVICE is not set." >&2
     echo "[otbr-radio]        Set it in docker/.env or export before starting:" >&2
     echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
     echo "[otbr-radio]        See docs/THREAD_BORDER_ROUTER_SUPPORT.md for setup instructions." >&2
