@@ -3,7 +3,7 @@
 ### Requirement: Resource definitions with mappers
 Each resource in an SBMD endpoint SHALL have `id` (string), `type` (string), and a `mapper` object. Resources MAY also specify `modes` (array of mode strings: `"read"`, `"write"`, `"execute"`, `"dynamic"`, `"emitEvents"`, `"lazySaveNext"`, `"sensitive"`) — if omitted, a default set is used. Resources MAY be marked `optional: true`.
 
-Resources with a read mapper or event mapper SHALL declare a `prerequisites` field. The `prerequisites` field SHALL be either the scalar `none` (meaning the resource is always registered) or a list of prerequisite entries, each referencing a named alias in `matterMeta.aliases` (see the `sbmd-resource-prerequisites` capability spec). Absence of `prerequisites` on any resource SHALL be a parse-time error, regardless of which mappers the resource implements.
+Every resource in an SBMD spec SHALL declare a `prerequisites` field. Absence of `prerequisites` on any resource SHALL be a parse-time error. The `prerequisites` field SHALL be either the scalar `none` or `null` (both meaning the resource is always registered; `none` is preferred) or a non-empty list of prerequisite entries, each referencing a named alias in `matterMeta.aliases` (see the `sbmd-resource-prerequisites` capability spec).
 
 Read mappers SHALL reference an alias name via `alias: <name>` in place of an inline `attribute:` block. Event mappers SHALL reference an alias name via `alias: <name>` in place of an inline `event:` block. Named aliases are defined in `matterMeta.aliases`.
 
@@ -39,7 +39,7 @@ The `matterMeta` section MAY contain an `aliases` list. Aliases declare the Matt
 - **THEN** the prerequisite SHALL check that both the alias's cluster and attribute are present in the device's data cache
 
 ### Requirement: Read mapper
-A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). Alternatively, a `command` may be specified instead of `alias`. The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return the Barton string value. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias.
+A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return the Barton string value. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the parser will reject any read mapper that specifies `command`.
 
 #### Scenario: Read alias mapper resolves attribute metadata
 - **WHEN** a read mapper declares `alias: stateValue` and `stateValue` is an attribute alias with `clusterId: 0x0045`, `attributeId: 0x0000`

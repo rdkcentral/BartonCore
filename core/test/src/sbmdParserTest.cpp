@@ -842,7 +842,7 @@ endpoints:
     assert_null(spec.get());
 }
 
-static void test_sbmdParserInvalidAttributeType(void **state)
+static void test_sbmdParserAliasRejectsBothAttributeAndEvent(void **state)
 {
     (void) state;
 
@@ -1457,7 +1457,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserExecuteMapperMissingScript),
         cmocka_unit_test(test_sbmdParserInvalidResourceType),
         cmocka_unit_test(test_sbmdParserInvalidEndpointType),
-        cmocka_unit_test(test_sbmdParserInvalidAttributeType),
+        cmocka_unit_test(test_sbmdParserAliasRejectsBothAttributeAndEvent),
         cmocka_unit_test(test_sbmdParserDuplicateAliasName),
         cmocka_unit_test(test_sbmdParserEmptyPrerequisitesList),
         cmocka_unit_test(test_sbmdParserNonexistentFile),

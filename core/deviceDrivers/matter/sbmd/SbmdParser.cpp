@@ -365,8 +365,14 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
     }
 
     // Parse optional aliases
-    if (node["aliases"] && node["aliases"].IsSequence())
+    if (node["aliases"])
     {
+        if (!node["aliases"].IsSequence())
+        {
+            icError("matterMeta.aliases must be a sequence");
+            return false;
+        }
+
         for (const auto &aliasNode : node["aliases"])
         {
             SbmdAlias alias;
@@ -906,7 +912,7 @@ bool SbmdParser::ParsePrerequisites(const YAML::Node &node,
 
     if (!node.IsSequence())
     {
-        icError("prerequisites must be a sequence or 'none'");
+        icError("prerequisites must be a sequence, 'none', or null");
         return false;
     }
 
