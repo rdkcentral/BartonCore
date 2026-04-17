@@ -680,6 +680,12 @@ bool SbmdParser::ParseAlias(const YAML::Node &node, SbmdAlias &alias)
 
     alias.name = node["name"].as<std::string>();
 
+    if (alias.name.empty())
+    {
+        icError("alias 'name' must not be empty");
+        return false;
+    }
+
     bool hasAttribute = node["attribute"].IsDefined();
     bool hasEvent = node["event"].IsDefined();
 
@@ -928,6 +934,16 @@ bool SbmdParser::ParsePrerequisites(const YAML::Node &node,
         {
             icError("each prerequisite entry must be a map");
             return false;
+        }
+
+        for (const auto &kv : entry)
+        {
+            if (kv.first.as<std::string>() != "alias")
+            {
+                icError("prerequisite entry has unexpected key '%s'; only 'alias' is allowed",
+                        kv.first.as<std::string>().c_str());
+                return false;
+            }
         }
 
         if (!entry["alias"].IsDefined())

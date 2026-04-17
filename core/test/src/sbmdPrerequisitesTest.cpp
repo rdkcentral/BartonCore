@@ -36,6 +36,7 @@
 #include <app/ConcreteAttributePath.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <lib/core/TLV.h>
 #include <lib/support/CHIPMem.h>
 #include <memory>
 

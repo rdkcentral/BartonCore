@@ -916,6 +916,38 @@ endpoints: []
     assert_null(spec.get());
 }
 
+static void test_sbmdParserAliasEmptyName(void **state)
+{
+    (void) state;
+
+    // An alias with an empty string for 'name' must be rejected
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 2
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: ""
+      attribute:
+        clusterId: "0x0045"
+        attributeId: "0x0000"
+        name: "StateValue"
+        type: "bool"
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: alias name must not be empty
+    assert_null(spec.get());
+}
+
 static void test_sbmdParserEmptyPrerequisitesList(void **state)
 {
     (void) state;
@@ -1378,6 +1410,51 @@ endpoints:
     assert_null(spec.get());
 }
 
+static void test_prerequisiteEntryUnknownKey(void **state)
+{
+    (void) state;
+
+    // A prerequisite entry with an unexpected key must be rejected (additionalProperties: false)
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: humidity
+      attribute:
+        clusterId: "0x0405"
+        attributeId: "0x0000"
+        name: "MeasuredValue"
+        type: "uint16"
+endpoints:
+  - id: "1"
+    profile: "sensor"
+    profileVersion: 1
+    resources:
+      - id: "humidity"
+        type: "com.icontrol.humidity"
+        modes: ["read"]
+        prerequisites:
+          - alias: humidity
+            typo: unexpected
+        mapper:
+          read:
+            alias: humidity
+            script: "return {output: 'test'};"
+)";
+
+    // Must fail: prerequisite entry has unexpected key 'typo'
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
 static void test_prerequisiteInvalidBothForms(void **state)
 {
     (void) state;
@@ -1459,6 +1536,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserInvalidEndpointType),
         cmocka_unit_test(test_sbmdParserAliasRejectsBothAttributeAndEvent),
         cmocka_unit_test(test_sbmdParserDuplicateAliasName),
+        cmocka_unit_test(test_sbmdParserAliasEmptyName),
         cmocka_unit_test(test_sbmdParserEmptyPrerequisitesList),
         cmocka_unit_test(test_sbmdParserNonexistentFile),
         cmocka_unit_test(test_sbmdParserEmptyString),
@@ -1472,6 +1550,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_prerequisiteMissingOnEventMapper),
         cmocka_unit_test(test_prerequisiteNotRequiredForWriteMapper),
         cmocka_unit_test(test_prerequisiteNotRequiredForExecuteMapper),
+        cmocka_unit_test(test_prerequisiteEntryUnknownKey),
         cmocka_unit_test(test_prerequisiteInvalidBothForms),
     };
 
