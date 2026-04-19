@@ -523,8 +523,11 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
     {
         icWarn("No device data cache for device %s; prerequisites cannot be evaluated and will be treated as unmet",
                device.GetDeviceId().c_str());
+
         return false;
     }
+
+    const auto endpointIds = cache->GetEndpointIds();
 
     for (const auto &prereq : resource.prerequisites)
     {
@@ -534,7 +537,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
         // Check cluster presence on any endpoint
         bool clusterFound = false;
 
-        for (auto endpointId : cache->GetEndpointIds())
+        for (auto endpointId : endpointIds)
         {
             if (cache->EndpointHasServerCluster(endpointId, clusterId))
             {
@@ -549,6 +552,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
                     resource.id.c_str(),
                     clusterId,
                     device.GetDeviceId().c_str());
+
             return false;
         }
 
@@ -557,7 +561,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
         {
             bool attributeFound = false;
 
-            for (auto endpointId : cache->GetEndpointIds())
+            for (auto endpointId : endpointIds)
             {
                 // find the endpoint with the cluster and then check for the attribute
                 if (!cache->EndpointHasServerCluster(endpointId, clusterId))
@@ -583,6 +587,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
                         attributeId,
                         clusterId,
                         device.GetDeviceId().c_str());
+
                 return false;
             }
         }
