@@ -157,26 +157,26 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return true;
     };
 
-    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
-    for (const auto &resource : spec->resources)
-    {
+    // Helper lambda that evaluates prerequisites and, if satisfied, attempts to configure the resource.
+    // Handles optional/required branching and skip bookkeeping so that the two loops below stay symmetric.
+    // Returns false if commissioning must be aborted (required resource failed), true otherwise.
+    auto processResource = [&](const SbmdResource &resource, std::optional<uint32_t> endpointIndex) -> bool {
         if (!CheckPrerequisites(resource, *device))
         {
             if (resource.optional)
             {
                 icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
                 skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-            }
-            else
-            {
-                icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
-                return false;
+
+                return true;
             }
 
-            continue; // do not attempt to configure resources whose prerequisites are not met
+            icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
+
+            return false;
         }
 
-        if (!configureResource(resource, std::nullopt))
+        if (!configureResource(resource, endpointIndex))
         {
             if (resource.optional)
             {
@@ -184,11 +184,24 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                        resource.id.c_str(),
                        device->GetDeviceId().c_str());
                 skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
+
+                return true;
             }
-            else
-            {
-                return false;
-            }
+
+            icError("Required resource '%s' failed to configure, aborting commissioning", resource.id.c_str());
+
+            return false;
+        }
+
+        return true;
+    };
+
+    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
+    for (const auto &resource : spec->resources)
+    {
+        if (!processResource(resource, std::nullopt))
+        {
+            return false;
         }
     }
 
@@ -199,36 +212,9 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
         for (const auto &resource : endpoint.resources)
         {
-            if (!CheckPrerequisites(resource, *device))
+            if (!processResource(resource, epIdx))
             {
-                if (resource.optional)
-                {
-                    icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
-                    skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-                }
-                else
-                {
-                    icError("Required resource '%s' prerequisites not met, aborting commissioning",
-                            resource.id.c_str());
-                    return false;
-                }
-
-                continue; // do not attempt to configure resources whose prerequisites are not met
-            }
-
-            if (!configureResource(resource, epIdx))
-            {
-                if (resource.optional)
-                {
-                    icWarn("Optional resource %s failed to configure for device %s, skipping",
-                           resource.id.c_str(),
-                           device->GetDeviceId().c_str());
-                    skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-                }
-                else
-                {
-                    return false;
-                }
+                return false;
             }
         }
     }
