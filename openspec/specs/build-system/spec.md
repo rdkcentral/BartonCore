@@ -100,15 +100,19 @@ The build system SHALL support integer configuration via `bcore_int_option()` fo
 - **THEN** `BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS=60` SHALL be defined
 
 ### Requirement: Dependency version constraints
-The build system SHALL enforce minimum versions for required dependencies: GLib/GIO (2.62.4), CMocka (1.1.5, test only), GoogleTest (1.14.0, test only), libcurl (7.82.0), OpenSSL (1.1.1l–1.1.1v), libuuid (1.0.3), libxml2 (2.9.8), mbedcrypto (2.28.4), jsoncpp (1.9.5, when BCORE_MATTER=ON).
+The build system SHALL enforce minimum versions for required dependencies: GLib/GIO (2.62.4), CMocka (1.1.5, test only), GoogleTest (1.14.0, test only), libcurl (7.82.0), OpenSSL (3.0.5+), libuuid (1.0.3), libxml2 (2.9.8), mbedcrypto (2.28.4), jsoncpp (1.9.5, when BCORE_MATTER=ON).
 
 #### Scenario: GLib version check
 - **WHEN** CMake configures with GLib 2.60.0
 - **THEN** configuration SHALL fail because the minimum required version is 2.62.4
 
-#### Scenario: OpenSSL version range
-- **WHEN** OpenSSL 3.0.0 is detected
-- **THEN** configuration SHALL fail because it exceeds the maximum version 1.1.1v
+#### Scenario: OpenSSL minimum version
+- **WHEN** OpenSSL 3.0.4 is detected
+- **THEN** configuration SHALL fail because it is below the required version 3.0.5
+
+#### Scenario: Newer OpenSSL 3.x version
+- **WHEN** OpenSSL 3.1.0 is detected
+- **THEN** configuration SHALL pass OpenSSL version checking
 
 ### Requirement: Stack protection and sanitizer support
 The build system SHALL support optional stack smash protection (`BCORE_BUILD_WITH_SSP`) adding `-fstack-protector-strong`, and AddressSanitizer (`BCORE_BUILD_WITH_ASAN`) adding `-fsanitize=address` to both compiler and linker flags.
