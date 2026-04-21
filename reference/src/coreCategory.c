@@ -1067,10 +1067,12 @@ static bool reloadDatabaseFunc(BCoreClient *client, gint argc, gchar **argv)
     (void) argv; // unused
 
     bool result = b_core_client_reload_database(client);
+
     if (!result)
     {
         emitError("Failed to reload database\n");
     }
+
     return result;
 }
 
@@ -1214,7 +1216,7 @@ Category *buildCoreCategory(void)
     commandAddExample(command, "ddl clearbypass");
     categoryAddCommand(cat, command);
 
-    //reload database (advanced)
+    // reload database (advanced)
     command = commandCreate("reloadDatabase",
                             NULL,
                             NULL,
