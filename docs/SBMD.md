@@ -19,6 +19,13 @@
 > - **No multi-instance cluster support.** Devices that expose multiple instances of
 >   the same cluster on different Matter endpoints (e.g., IKEA BILRESA) are not yet
 >   supported. This will be addressed in the next release.
+>
+> - **Event prerequisites are cluster-level only.** Resource prerequisites that
+>   reference an event alias verify only that the cluster is present on the device —
+>   they cannot confirm that the specific event ID is supported. The Matter `EventList`
+>   attribute (0xFFFA), which would allow per-event-ID verification, is marked
+>   provisional in the current CHIP SDK version and is not reliably available on real
+>   devices. See [Section 3.7](#37-resources) for details.
 
 ## 1. Introduction
 
@@ -140,6 +147,7 @@ matterMeta:                   # Matter-specific metadata (required)
     - 0x000a
   revision: 1                 # Matter device type revision
   featureClusters: []         # Cluster IDs for featureMap access (optional)
+  aliases: []                 # Named Matter element definitions (optional, see Section 3.4)
 reporting:                    # Subscription parameters (optional)
   minSecs: 1                  # Minimum reporting interval
   maxSecs: 3600               # Maximum reporting interval
@@ -186,6 +194,49 @@ the FeatureMap attribute from each listed cluster and makes the values available
 scripts via the `clusterFeatureMaps` object (keyed by decimal cluster ID string).
 If `featureClusters` is omitted, `clusterFeatureMaps` will be empty in all scripts.
 
+#### Matter Element Aliases
+
+The optional `aliases` list defines **named references** to Matter cluster attributes
+and events. All attribute and event metadata used by a driver — in resource mappers
+and in resource prerequisites — must be declared as an alias and referenced by name.
+Inline cluster/attribute/event IDs are not permitted directly in mappers.
+
+Each alias has a unique `name` and declares either an `attribute` block or an `event`
+block (not both):
+
+```yaml
+matterMeta:
+  aliases:
+    # Attribute alias — references a specific cluster attribute
+    - name: "lockState"
+      attribute:
+        clusterId: "0x0101"      # Door Lock cluster
+        attributeId: "0x0000"    # LockState attribute
+        name: "LockState"        # Attribute name (documentation)
+        type: "uint8"            # Matter data type (for TLV decoding context)
+
+    # Event alias — references a specific cluster event
+    - name: "lockOperation"
+      event:
+        clusterId: "0x0101"      # Door Lock cluster
+        eventId: "0x0002"        # LockOperation event
+        name: "LockOperation"    # Event name (documentation)
+```
+
+Aliases serve two purposes:
+
+1. **Mapper binding**: Read mappers and event mappers reference an alias by name via
+   `alias: <name>`. The runtime resolves the alias to determine what cluster and
+   attribute/event to subscribe to, and passes the data to the mapper script.
+
+2. **Prerequisite gates**: Resources declare which aliases must be present in the
+   device's data cache before the resource is registered (see Section 3.7). For
+   attribute aliases, both the cluster and the attribute must be present. For event
+   aliases, only the cluster must be present.
+
+Using aliases eliminates duplication — a cluster/attribute pair is defined once and
+referenced by name wherever it is needed.
+
 ### 3.5 Reporting Configuration
 
 A single wildcarded attribute reporting configuration is maintained on the device.
@@ -221,15 +272,24 @@ Resources define the Barton data model elements and their mapping to Matter:
 resources:
   - id: "locked"              # Resource identifier
     type: "boolean"           # Barton type (boolean, string, number, function, etc.)
+    optional: false           # If true, skip this resource when prerequisites fail (default: false)
     modes:                    # Access modes
       - "read"                # Resource is readable
-      - "write"               # Resource is writable
       - "dynamic"             # Value can change asynchronously
-      - "emitEvents"          # Changes emit events
+      - "emitEvents"          # Changes generate events to subscribers
+    prerequisites:            # Presence gates checked before resource registration (required)
+      - alias: "lockState"    # References a matterMeta alias; cluster+attribute must be in cache
     mapper:                   # Mapping configuration
-      read: {...}             # Read mapper (optional)
-      write: {...}            # Write mapper (optional)
-      execute: {...}          # Execute mapper (optional, for function types)
+      read:
+        alias: "lockState"    # References a matterMeta alias (required for read mappers)
+        script: |             # JavaScript transformation script
+          ...
+      write:                  # Write mapper (optional)
+        script: |
+          ...
+      execute:                # Execute mapper (optional, for function types)
+        script: |
+          ...
 ```
 
 #### Resource Modes
@@ -244,12 +304,69 @@ resources:
 | `lazySaveNext` | Defer persistence to next save cycle |
 | `sensitive` | Value contains sensitive data |
 
+#### Optional Resources
+
+Setting `optional: true` on a resource changes how prerequisite failures and mapper
+bind failures are handled:
+
+| | Required resource (default) | Optional resource |
+|---|---|---|
+| Prerequisites not met | Commissioning fails | Resource is silently skipped |
+| Mapper bind failure | Commissioning fails | Resource is silently skipped |
+
+Use `optional: true` for resources that map to Matter attributes or clusters that
+may not be present on all devices that match the driver's `deviceTypes`.
+
+#### Resource Prerequisites
+
+The `prerequisites` field is **required on every resource**. It acts as a presence
+gate: before registering the resource, the driver checks that the specified Matter
+cluster and/or attribute exists in the device's data cache (populated during
+commissioning).
+
+```yaml
+# Always register this resource — no prerequisite check
+prerequisites: none           # preferred opt-out form
+# or equivalently:
+prerequisites: null
+
+# Require one or more aliases to be present
+prerequisites:
+  - alias: "lockState"        # Both cluster 0x0101 and attribute 0x0000 must be present
+  - alias: "lockOperation"    # Cluster 0x0101 must be present (event alias: cluster check only)
+```
+
+Each prerequisite entry references a `matterMeta` alias by name. The check performed
+depends on the alias type:
+
+| Alias type | Check performed |
+|------------|----------------|
+| `attribute` alias | Cluster **and** attribute must be present in the device's data cache |
+| `event` alias | Cluster must be present in the device's data cache |
+
+All listed prerequisites must be satisfied for the resource to be registered. If
+any prerequisite fails and the resource is required (no `optional: true`), the
+driver aborts commissioning. If the resource is optional, it is silently skipped.
+
+> ⚠️ **Known limitation — event prerequisites are cluster-level only.**
+> The Matter specification defines an `EventList` global attribute (0xFFFA) on every
+> cluster that would allow checking which specific event IDs a device supports before
+> any events have fired. However, `EventList` is marked **provisional** in the version
+> of the CHIP SDK used by Barton and is not reliably present on real devices. As a
+> result, event alias prerequisites can only confirm that the cluster exists on the
+> device — they cannot verify that the specific event ID is supported. A resource
+> gated on an event alias prerequisite will be registered if its cluster is present,
+> even if the device never generates that event. Once `EventList` support is
+> standardized and reliable, event prerequisites should be upgraded to check the
+> specific event ID.
+
 ## 4. Mapper Configuration
 
 Mappers define the transformation between Barton resources and Matter attributes,
-commands, or events. Read mappers may specify an `attribute` or `command`, write and
-execute mappers are script-only, and event mappers specify an `event`. All mapper
-types include a JavaScript `script` for the transformation.
+commands, or events. Read and event mappers reference a named `matterMeta` alias
+to specify what to subscribe to. Write and execute mappers are script-only and
+return the full operation details from their script. All mapper types include a
+JavaScript `script` for the transformation.
 
 ### 4.0 Conversion Overview
 
@@ -297,18 +414,27 @@ Scripts use `SbmdUtils.Tlv.encode*()` helpers for TLV encoding.
 
 ### 4.1 Attribute Mapping
 
-#### Read Mapper with Attribute
+#### Read Mapper
 
-Maps a Matter attribute read to a Barton resource value:
+Maps a Matter attribute to a Barton resource value. The read mapper references a
+`matterMeta` attribute alias by name. The runtime resolves the alias to determine
+which cluster and attribute to subscribe to, then passes the TLV data to the script.
 
 ```yaml
+# In matterMeta:
+matterMeta:
+  aliases:
+    - name: "lockState"
+      attribute:
+        clusterId: "0x0101"     # Door Lock cluster
+        attributeId: "0x0000"   # LockState attribute
+        name: "LockState"
+        type: "enum8"
+
+# In the resource mapper:
 mapper:
   read:
-    attribute:
-      clusterId: "0x0101"     # Matter cluster ID (hex or decimal)
-      attributeId: "0x0000"   # Matter attribute ID
-      name: "LockState"       # Attribute name (for documentation)
-      type: "enum8"           # Matter data type
+    alias: "lockState"          # Resolved to the alias defined in matterMeta
     script: |
       var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
       return {output: lockState === 1 ? 'true' : 'false'};
@@ -400,17 +526,24 @@ which the script decodes using `SbmdUtils.Tlv.decode()` before returning a Barto
 
 #### Event Mapper
 
-Maps a Matter device event to a Barton resource value update. Event mappers bind to a
-specific Matter cluster event and execute a script to transform the event TLV data into
-a Barton resource value:
+Maps a Matter device event to a Barton resource value update. Event mappers reference
+a `matterMeta` event alias by name. The runtime subscribes to the specified event and
+invokes the script when the event fires.
 
 ```yaml
+# In matterMeta:
+matterMeta:
+  aliases:
+    - name: "lockOperation"
+      event:
+        clusterId: "0x0101"      # Door Lock cluster
+        eventId: "0x0002"        # LockOperation event
+        name: "LockOperation"
+
+# In the resource mapper:
 mapper:
   event:
-    event:
-      clusterId: "0x0101"      # Door Lock cluster
-      eventId: "0x0002"        # LockOperation event
-      name: "LockOperation"
+    alias: "lockOperation"       # Resolved to the alias defined in matterMeta
     script: |
       // Decode event TLV struct — lockOperationType is at tag 0
       var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
@@ -427,13 +560,22 @@ The script decodes the data and returns a Barton resource value.
 A single resource can have multiple mappers for different operations:
 
 ```yaml
+# In matterMeta:
+matterMeta:
+  aliases:
+    - name: "identifyTime"
+      attribute:
+        clusterId: "0x0003"
+        attributeId: "0x0000"
+        name: "IdentifyTime"
+        type: "uint16"
+
+# In the resource:
+prerequisites:
+  - alias: "identifyTime"
 mapper:
   read:
-    attribute:
-      clusterId: "0x0003"
-      attributeId: "0x0000"
-      name: "IdentifyTime"
-      type: "uint16"
+    alias: "identifyTime"
     script: |
       var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
       return {output: secs.toString()};
@@ -441,12 +583,12 @@ mapper:
     script: |
       const secs = parseInt(sbmdWriteArgs.input, 10);
       const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-      return {write: {clusterId: 0x0003, attributeId: 0x0000, tlvBase64: tlvBase64}};
+      return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 ```
 
-> **Note:** Read mappers require `attribute:` or `command:` metadata to specify the
-> Matter operation since it is performed first in order to provide data to the script.
-> Write and execute mappers are script-only and return full operation details directly.
+> **Note:** Read and event mappers reference a `matterMeta` alias by name — the
+> alias tells the runtime what to subscribe to. Write and execute mappers are
+> script-only; the script returns the full operation details.
 
 ## 5. JavaScript Script Interfaces
 
@@ -817,7 +959,20 @@ matterMeta:
     - 0x000a
   revision: 1
   featureClusters:
-    - 0x0101  # DoorLock cluster - for featureMap access in scripts
+    - 0x0101  # DoorLock cluster — for featureMap access in scripts
+  aliases:
+    - name: "lockState"
+      attribute:
+        clusterId: "0x0101"    # Door Lock cluster
+        attributeId: "0x0000"  # LockState attribute
+        name: "LockState"
+        type: "uint8"
+    - name: "identifyTime"
+      attribute:
+        clusterId: "0x0003"    # Identify cluster
+        attributeId: "0x0000"  # IdentifyTime attribute
+        name: "IdentifyTime"
+        type: "uint16"
 reporting:
   minSecs: 1
   maxSecs: 3600
@@ -827,13 +982,11 @@ resources:
     modes:
       - "read"
       - "write"
+    prerequisites:
+      - alias: "identifyTime"
     mapper:
       read:
-        attribute:
-          clusterId: "0x0003"
-          attributeId: "0x0000"
-          name: "IdentifyTime"
-          type: "uint16"
+        alias: "identifyTime"
         script: |
           var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
           return {output: secs.toString()};
@@ -853,20 +1006,18 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "lockState"
         mapper:
-          event:
-            event:
-              clusterId: "0x0101"
-              eventId: "0x0002"
-              name: "LockOperation"
+          read:
+            alias: "lockState"
             script: |
-              // Decode LockOperation event struct
-              var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
-              // LockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, ...
-              var isLocked = (eventData.lockOperationType === 0);
-              return { output: isLocked ? 'true' : 'false' };
+              // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return { output: value === 1 ? 'true' : 'false' };
       - id: "lock"
         type: "function"
+        prerequisites: none
         mapper:
           execute:
             script: |
@@ -887,6 +1038,7 @@ endpoints:
                   {timedInvokeTimeoutMs: 10000});
       - id: "unlock"
         type: "function"
+        prerequisites: none
         mapper:
           execute:
             script: |
@@ -905,6 +1057,7 @@ endpoints:
               return SbmdUtils.Response.invoke(0x0101, 0x0001, tlvBase64,
                   {timedInvokeTimeoutMs: 10000});
 ```
+```
 
 ### 7.2 Water Leak Detector
 
@@ -920,6 +1073,13 @@ matterMeta:
   deviceTypes:
     - 0x0043
   revision: 1
+  aliases:
+    - name: "stateValue"
+      attribute:
+        clusterId: "0x0045"    # Boolean State cluster
+        attributeId: "0x0000"  # StateValue attribute
+        name: "StateValue"
+        type: "bool"
 reporting:
   minSecs: 1
   maxSecs: 3600
@@ -934,13 +1094,11 @@ endpoints:
           - "read"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "stateValue"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0045"
-              attributeId: "0x0000"
-              name: "StateValue"
-              type: "bool"
+            alias: "stateValue"
             script: |
               const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               return {output: (value === true) ? 'true' : 'false'};
@@ -956,18 +1114,33 @@ endpoints:
    **must conform to the data model defined by the Barton device class**. The device class
    specifies required endpoints, profiles, and resources that devices of that class must
    provide. Refer to the Barton device class documentation for the expected structure.
-4. **Map resources** - For each Barton resource, identify the corresponding Matter attribute or command
-5. **Write scripts** - Create transformation scripts for non-trivial mappings
-6. **Test** - Validate with actual devices
+4. **Declare `matterMeta` aliases** - For each Matter attribute or event the driver uses,
+   add a named alias to `matterMeta.aliases`. All mapper and prerequisite references
+   must use alias names — inline cluster/attribute/event IDs in mappers are not permitted.
+5. **Map resources** - For each Barton resource, write the mapper using `alias: <name>` for
+   read and event mappers. Write and execute mappers are script-only.
+6. **Declare `prerequisites`** - Every resource must include a `prerequisites` field. Use
+   an alias list for conditional registration, or `prerequisites: none` to always register.
+   Mark resources as `optional: true` if they should be silently skipped when prerequisites
+   are not met, rather than aborting commissioning.
+7. **Write scripts** - Create transformation scripts for non-trivial mappings
+8. **Test** - Validate with actual devices
 
 ### 8.2 Best Practices
 
 1. **Use hex notation** for cluster/attribute/command IDs for consistency with Matter spec
-2. **Document transformations** in comments within scripts
-3. **Check feature maps** before using optional features
-4. **Handle null/undefined** values gracefully in scripts
-5. **Use meaningful names** for attributes and commands (documentation purposes)
-6. **Set appropriate reporting intervals** based on device type (e.g., sensors may need faster reporting)
+2. **Name aliases descriptively and uniquely** — each alias name must be unique within
+   the spec and clearly convey what it represents
+3. **Always declare `prerequisites`** — every resource requires the field. For resources with
+   a read or event mapper, use the same alias as the mapper references. For execute-only
+   resources (functions), use `prerequisites: none` unless a specific cluster presence
+   check is needed
+4. **Mark truly optional resources** with `optional: true` — resources that depend on
+   clusters or attributes that may not be present on every device of the target type
+5. **Document transformations** in comments within scripts
+6. **Check feature maps** before using optional features
+7. **Handle null/undefined** values gracefully in scripts
+8. **Set appropriate reporting intervals** based on device type (e.g., sensors may need faster reporting)
 
 ### 8.3 Common Patterns
 

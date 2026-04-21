@@ -26,6 +26,13 @@ Each SBMD resource SHALL declare a `prerequisites` field. It SHALL be either an 
 - **WHEN** a resource declares `prerequisites: [{alias: lockOperation}]` and the spec defines an event alias named `lockOperation` with `clusterId: 0x0101`
 - **THEN** the parser SHALL produce an `SbmdPrerequisite` with `clusterId = 0x0101` and empty `attributeIds` (cluster-only check)
 
+> **Known limitation**: Event alias prerequisites perform a cluster-presence check only.
+> The Matter `EventList` attribute (0xFFFA), which would allow verifying that a
+> specific event ID is supported before any event fires, is marked provisional in the
+> current CHIP SDK version and is not reliably available on real devices. When
+> `EventList` becomes stable and widely supported, event prerequisites SHOULD be
+> upgraded to also verify the specific event ID.
+
 #### Scenario: Resource with prerequisites: none
 - **WHEN** a resource declares `prerequisites: none`
 - **THEN** the parser SHALL produce an empty `std::vector<SbmdPrerequisite>` (always-register)

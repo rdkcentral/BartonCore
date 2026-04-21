@@ -81,7 +81,12 @@ The `matterMeta` section MAY contain an `aliases` list. Aliases declare the Matt
 - **WHEN** a prerequisite entry declares `alias: <name>` referencing an attribute alias
 - **THEN** the prerequisite SHALL check that both the alias's cluster and attribute are present in the device's data cache
 
-### Requirement: Read mapper
+> **Known limitation**: When a prerequisite references an **event** alias, only cluster
+> presence is checked (not the specific event ID). The Matter `EventList` attribute
+> (0xFFFA), which exposes the set of supported event IDs per cluster, is marked
+> provisional in the current CHIP SDK version and is not reliably present on real
+> devices. Event prerequisites SHOULD be upgraded to check the specific event ID once
+> `EventList` is stable and widely supported.
 A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return the Barton string value. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
 
 #### Scenario: Read alias mapper resolves attribute metadata
