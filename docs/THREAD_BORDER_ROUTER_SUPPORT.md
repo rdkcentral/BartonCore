@@ -268,9 +268,20 @@ gdbus call \
 ### From inside the Barton container
 
 The `dbus-socket` volume shares `/var/run/otbr-dbus` between the two
-containers, and the overlay sets `DBUS_SYSTEM_BUS_ADDRESS` so both containers
-talk to the private D-Bus daemon started by `otbr-radio` instead of the host's
-system bus:
+containers.  To reach the private D-Bus daemon started by `otbr-radio`, Barton
+must be pointed at that socket via `DBUS_SYSTEM_BUS_ADDRESS`.
+
+- **`dockerw -T`**: `DBUS_SYSTEM_BUS_ADDRESS` is injected automatically, so no
+  extra steps are required.
+- **Devcontainer**: export the variable before rebuilding the container:
+
+  ```bash
+  export DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket
+  ```
+
+  Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
+
+Once `DBUS_SYSTEM_BUS_ADDRESS` is set you can verify connectivity:
 
 ```bash
 gdbus introspect \
@@ -278,6 +289,7 @@ gdbus introspect \
     --dest io.openthread.BorderRouter.wpan0 \
     --object-path /io/openthread/BorderRouter/wpan0
 ```
-If Barton is built with `BCORE_THREAD=ON`, it will automatically discover and
-communicate with the border router over D-Bus on startup using the private
-container D-Bus address from the overlay.
+
+If Barton is built with `BCORE_THREAD=ON` and `DBUS_SYSTEM_BUS_ADDRESS` points
+to the private socket, it will automatically discover and communicate with the
+border router over D-Bus on startup.

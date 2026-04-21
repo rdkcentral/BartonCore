@@ -109,9 +109,10 @@ services:
             - RADIO_DEVICE=${RADIO_DEVICE:-}
             - BACKBONE_IF=${BACKBONE_IF:-}
             - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket
-        # Restart automatically if cpcd/otbr-agent crash, unless the container
-        # was explicitly stopped.
-        restart: unless-stopped
+        # Restart automatically if cpcd/otbr-agent crash, but limit retries so
+        # a missing/invalid RADIO_DEVICE does not cause an infinite restart
+        # loop and log spam when this overlay is included without hardware.
+        restart: on-failure:5
 
     # Add the shared private D-Bus socket volume to the barton service.
     # This makes the otbr-radio container's private D-Bus socket available

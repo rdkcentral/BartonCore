@@ -75,12 +75,14 @@ VOLUMES_ARGS="-v $HOME:$HOME
 
 # If the -T flag was given, build and start the otbr-radio container in the
 # background before opening the barton shell.  The container runs cpcd and
-# otbr-agent and shares its D-Bus socket with the barton service so that
-# Barton code can reach otbr-agent without any extra steps inside the shell.
+# otbr-agent and shares its D-Bus socket with the barton service.
+# Inject DBUS_SYSTEM_BUS_ADDRESS so Barton automatically connects to the
+# private bus instead of the host system bus.
 if [ ${#OTBR_RADIO_COMPOSE[@]} -gt 0 ]; then
     notice "Starting otbr-radio container (cpcd + otbr-agent)..."
     docker compose -f "${COMPOSE_FILE}" "${OTBR_RADIO_COMPOSE[@]}" up -d otbr-radio
-    notice "otbr-radio container is up. cpcd and otbr-agent are running in the background."
+    notice "otbr-radio container started in the background."
+    EXTRA_ENV="${EXTRA_ENV} -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket"
 fi
 
 # create a unique container name prefixed with the user id, useful when on a shared machine
