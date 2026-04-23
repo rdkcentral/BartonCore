@@ -81,7 +81,7 @@ Then run with output capture disabled:
 ./testing/py_test.sh -s --no-header testing/test/<test_file>.py
 ```
 
-The `-s` flag is required for `breakpoint()` to work (disables output capture).
+The `-s` flag is required for `breakpoint()` to work (disables output capture). `--no-header` keeps pytest's session header output minimal while stepping in the debugger.
 
 In VS Code, use the Testing panel's debug button or gutter debug icons on test functions. The **Python Debugger: Current File** launch config works for non-pytest Python files.
 
