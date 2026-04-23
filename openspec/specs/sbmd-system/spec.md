@@ -103,11 +103,11 @@ A resource's mapper MAY contain a `read` section with an `alias` (a string namin
 
 #### Scenario: Read boolean attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: bool` and the Matter attribute value is `true`
-- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `{ output: "true" }`
+- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `"true"`
 
 #### Scenario: Read integer attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: uint8` and the Matter attribute value is `254`
-- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return `{ output: "<string representation>" }`
+- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return the appropriate string representation
 
 ### Requirement: Write mapper
 A resource's mapper MAY contain a `write` section with a `script` (JavaScript string). The script SHALL receive the Barton string value via `sbmdWriteArgs.input` (along with `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object describing the operation: `{write: {clusterId, attributeId, tlvBase64}}` for attribute writes, or `{invoke: {clusterId, commandId, tlvBase64}}` for command invocations. Optional `timedInvokeTimeoutMs` for timed commands.
@@ -144,6 +144,23 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 
 ### Requirement: SBMD schema validation
 SBMD spec files SHALL be validated during the build process against the versioned JSON schema selected from the spec's `schemaVersion`, using the repository's versioned schema naming/location convention (for example, `core/deviceDrivers/matter/sbmd/schema/v2/sbmd-spec-schema-v{schemaVersion}.json`, such as `sbmd-spec-schema-v2.1.json`). The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
+#### Scenario: Event script suppresses update by omitting output
+- **WHEN** an event script returns an object without an `output` key (e.g., `{}`)
+- **THEN** the resource SHALL NOT be updated and no error SHALL be logged — this is the standard mechanism for ignoring non-state-change events
+
+### Requirement: seedFrom mapper type
+A resource mapper SHALL support a `seedFrom` section (in addition to the existing `read`, `write`, `execute`, and `event` sections) for populating initial resource values from the attribute cache when the resource's ongoing updates are driven by a `mapper.event`. The `seedFrom` mapper SHALL NOT be used as a substitute for `mapper.read` — if ongoing attribute subscription updates are desired, `mapper.read` remains the correct choice. The `seedFrom` mapper SHALL use the `sbmdReadArgs` script interface (identical to `mapper.read`).
+
+#### Scenario: Event-driven resource has initial value at commission
+- **WHEN** a resource declares `mapper.event` for ongoing updates and `mapper.seedFrom` pointing to a corresponding attribute alias
+- **THEN** the resource SHALL have a non-null value immediately after device commissioning without waiting for the first event to fire
+
+#### Scenario: Event-driven resource has initial value after hub restart
+- **WHEN** the hub restarts and a device with a `seedFrom` resource is synchronized
+- **THEN** the resource SHALL be re-seeded from the attribute cache before any new event arrives
+
+### Requirement: SBMD schema validation
+SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 
 #### Scenario: Schema validation at build time
 - **WHEN** the project is built with SBMD specs present
@@ -219,7 +236,7 @@ The system SHALL provide a built-in JavaScript library `SbmdUtils` (loaded into 
 - **THEN** it SHALL throw a JavaScript `Error` describing the invalid input
 
 ### Requirement: Script context variables
-SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArgs` (with `tlvBase64`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`, `clusterId`, `attributeId`, `attributeName`, `attributeType`), `sbmdWriteArgs` (with `input`, `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`), `sbmdCommandArgs`, `sbmdEventArgs`, and `sbmdCommandResponseArgs`.
+SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArgs` (with `tlvBase64`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`, `clusterId`, `attributeId`, `attributeName`, `attributeType`), `sbmdWriteArgs` (with `input`, `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`), `sbmdExecuteArgs`, `sbmdEventArgs`, and `sbmdCommandResponseArgs`.
 
 #### Scenario: Read script receives feature maps
 - **WHEN** a read script is invoked on a device with FeatureMap data for cluster 6

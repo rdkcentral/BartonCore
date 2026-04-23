@@ -119,3 +119,48 @@ def test_sideband_lock_triggers_barton_update(
 
     # Barton should receive a resource update for the locked resource
     wait_for_resource_value(resource_updated_queue, "true")
+
+
+def test_locked_resource_seeded_on_commission(default_environment, matter_door_lock):
+    """Verify that the locked resource is seeded with the correct initial value at commission.
+
+    The virtual door lock starts in the locked state. After commission, Barton should
+    populate the locked resource from the LockState attribute cache (via seedFrom mapper)
+    without requiring a LockOperation event.
+    """
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "locked")
+
+    _commission_door_lock(default_environment, matter_door_lock)
+
+    # The device starts locked — the seedFrom mapper should emit "true" at configure time
+    wait_for_resource_value(resource_updated_queue, "true", timeout=15)
+
+
+def test_locked_resource_updated_by_event(default_environment, matter_door_lock):
+    """Verify that the locked resource updates when a LockOperation event is received.
+
+    After commission (initial seed), trigger sideband unlock and verify the resource
+    transitions to "false" via the LockOperation event. Then lock and verify "true".
+    """
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "locked")
+
+    _commission_door_lock(default_environment, matter_door_lock)
+
+    # Wait for initial seed (locked state)
+    wait_for_resource_value(resource_updated_queue, "true", timeout=15)
+
+    # Trigger sideband unlock — DoorLockDevice.js emits LockOperation (Unlock) event
+    result = matter_door_lock.sideband.send("unlock")
+    assert result["lockState"] == "unlocked"
+
+    # Barton should receive a resource update driven by the LockOperation event
+    wait_for_resource_value(resource_updated_queue, "false", timeout=10)
+
+    # Trigger sideband lock — DoorLockDevice.js emits LockOperation (Lock) event
+    result = matter_door_lock.sideband.send("lock")
+    assert result["lockState"] == "locked"
+
+    # Barton should receive a resource update driven by the LockOperation event
+    wait_for_resource_value(resource_updated_queue, "true", timeout=10)

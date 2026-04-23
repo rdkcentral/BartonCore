@@ -164,6 +164,13 @@ namespace barton
         // Event mapping - for handling Matter events that update the resource
         std::optional<SbmdEvent> event;
         std::string eventScript;
+
+        // SeedFrom mapping - for seeding initial resource value from the attribute cache
+        // at configure and synchronize time. Only valid alongside an event mapper.
+        // YAML key: seedFrom.
+        bool hasInitialRead = false;
+        std::optional<SbmdAttribute> initialReadAttribute;
+        std::string initialReadScript;
     };
 
     /**

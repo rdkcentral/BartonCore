@@ -39,6 +39,36 @@ import { DoorLock } from "@matter/main/clusters";
 import { VirtualDevice } from "./VirtualDevice.js";
 import { parseArgs } from "./parseArgs.js";
 
+/**
+ * Extends the default DoorLockServer to emit LockOperation events when Matter
+ * LockDoor / UnlockDoor commands are received. The spec-compliant server must
+ * emit these events for every state change regardless of source (Matter 1.5,
+ * section 5.2.6.3), but matter.js does not do so by default.
+ */
+class DoorLockServerWithEvents extends DoorLockRequirements.DoorLockServer {
+    lockDoor() {
+        super.lockDoor();
+        this.events.lockOperation.emit({
+            lockOperationType: DoorLock.LockOperationType.Lock,
+            operationSource: DoorLock.OperationSource.Remote,
+            userIndex: null,
+            fabricIndex: null,
+            sourceNode: null,
+        });
+    }
+
+    unlockDoor() {
+        super.unlockDoor();
+        this.events.lockOperation.emit({
+            lockOperationType: DoorLock.LockOperationType.Unlock,
+            operationSource: DoorLock.OperationSource.Remote,
+            userIndex: null,
+            fabricIndex: null,
+            sourceNode: null,
+        });
+    }
+}
+
 export class DoorLockDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
@@ -58,7 +88,7 @@ export class DoorLockDevice extends VirtualDevice {
 
     createEndpoints()
     {
-        return [new Endpoint(MatterDoorLockDevice.with(DoorLockRequirements.DoorLockServer), {
+        return [new Endpoint(MatterDoorLockDevice.with(DoorLockServerWithEvents), {
             id: "doorlock-ep1",
             doorLock: {
                        lockState: DoorLock.LockState.Locked,
@@ -77,13 +107,37 @@ export class DoorLockDevice extends VirtualDevice {
     }
 
     async handleLock() {
-        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Locked; });
+        await this.endpoints[0].act(async (agent) => {
+            agent.doorLock.state.lockState = DoorLock.LockState.Locked;
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType: DoorLock.LockOperationType.Lock,
+                    operationSource: DoorLock.OperationSource.ProprietaryRemote,
+                    userIndex: null,
+                    fabricIndex: null,
+                    sourceNode: null,
+                },
+                agent.context,
+            );
+        });
 
         return { lockState: "locked" };
     }
 
     async handleUnlock() {
-        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Unlocked; });
+        await this.endpoints[0].act(async (agent) => {
+            agent.doorLock.state.lockState = DoorLock.LockState.Unlocked;
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType: DoorLock.LockOperationType.Unlock,
+                    operationSource: DoorLock.OperationSource.ProprietaryRemote,
+                    userIndex: null,
+                    fabricIndex: null,
+                    sourceNode: null,
+                },
+                agent.context,
+            );
+        });
 
         return { lockState: "unlocked" };
     }
