@@ -78,7 +78,7 @@ breakpoint()
 Then run with output capture disabled:
 
 ```bash
-LD_PRELOAD=$(gcc -print-file-name=libasan.so) pytest -s testing/test/<test_file>.py
+./testing/py_test.sh -s --no-header testing/test/<test_file>.py
 ```
 
 The `-s` flag is required for `breakpoint()` to work (disables output capture).
@@ -105,8 +105,10 @@ set env LD_PRELOAD /path/to/libasan.so
 # shell gcc -print-file-name=libasan.so
 
 # Set breakpoints in C code (symbols load after first run):
-break deviceService_start
-break bartonMatterDriver_init
+break deviceServiceStart
+# For additional breakpoints, use a real symbol from the current target:
+# info functions deviceService
+break Matter::Init
 
 # Run the test:
 run -m pytest testing/test/<test_file>.py

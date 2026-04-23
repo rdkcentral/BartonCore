@@ -62,7 +62,7 @@ BartonCore uses two unit test frameworks:
 | Area | Location |
 |------|----------|
 | Core library tests | `core/test/` |
-| Device library tests | `libs/device/test/` |
+| Device library tests | `libs/device/descriptors/c/test/`, `libs/device/philipsHue/c/test/` |
 | C API tests | `api/c/test/` |
 
 Test files are typically prefixed with `test` or suffixed with `Test`.
