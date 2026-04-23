@@ -304,6 +304,12 @@ bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
 {
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
+    if (JS_IsNull(scriptResult) || JS_IsUndefined(scriptResult) || !JS_IsPtr(scriptResult))
+    {
+        icError("Script returned a non-object where a plain object was expected");
+        return false;
+    }
+
     // Extract the "output" field from the result JSON object
     JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
     if (JS_IsUndefined(outputVal))
@@ -986,7 +992,45 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    // Extract and return the "output" field
+    // A non-object return (undefined, null, a primitive, or a string) is always a script error
+    // — it means the script forgot a return statement or returned the wrong type.
+    // JS_IsPtr matches any heap pointer including strings, so JS_IsString must be excluded
+    // explicitly to avoid misclassifying a string return as a valid (suppressed) object.
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
+    {
+        icError("Event mapper script returned a non-object for cluster 0x%X, event 0x%X",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+
+        return false;
+    }
+
+    // Check whether the script returned an 'output' field.
+    // A missing 'output' on an object return is a valid "suppress" signal — the script ran
+    // successfully but chose not to produce a value (e.g. for non-state-change events).
+    // Return true with empty outValue so the caller can distinguish suppress from failure.
+    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
+
+    if (JS_IsException(outputVal))
+    {
+        icError("Exception reading 'output' field for cluster 0x%X, event 0x%X: %s",
+                eventInfo.clusterId,
+                eventInfo.eventId,
+                GetExceptionString(ctx).c_str());
+
+        return false;
+    }
+
+    if (JS_IsUndefined(outputVal))
+    {
+        icDebug("Event mapper returned no output (suppressed) for cluster 0x%X, event 0x%X",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        outValue.clear();
+
+        return true;
+    }
+
     return ExtractScriptOutputAsString(outJson, outValue);
 }
 

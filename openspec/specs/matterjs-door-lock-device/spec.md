@@ -39,6 +39,32 @@ The door lock SHALL register a side-band operation `unlock` that simulates a use
 - **AND** connected Matter controllers SHALL receive a state change notification
 - **AND** the side-band response SHALL be `{ "success": true, "result": { "lockState": "unlocked" } }`
 
+### Requirement: Matter lock and unlock commands emit LockOperation events
+The door lock virtual device SHALL emit a `LockOperation` event (DoorLock cluster `0x0101`, event `0x0002`) whenever the lock state changes via a Matter `LockDoor` or `UnlockDoor` command, in addition to updating the `LockState` attribute. The `LockOperationType` field SHALL be `0` (Lock) for `LockDoor` and `1` (Unlock) for `UnlockDoor`. This is required so that Matter-command-driven lock/unlock operations are reflected in event-driven SBMD resources.
+
+#### Scenario: LockDoor command emits LockOperation event
+- **WHEN** a Matter `LockDoor` command is sent to the device
+- **THEN** the device SHALL emit a `LockOperation` event with `LockOperationType` = 0 (Lock)
+- **AND** the `LockState` attribute SHALL be updated to `Locked`
+
+#### Scenario: UnlockDoor command emits LockOperation event
+- **WHEN** a Matter `UnlockDoor` command is sent to the device
+- **THEN** the device SHALL emit a `LockOperation` event with `LockOperationType` = 1 (Unlock)
+- **AND** the `LockState` attribute SHALL be updated to `Unlocked`
+
+### Requirement: Side-band operations emit LockOperation events
+The door lock virtual device SHALL emit a `LockOperation` event (DoorLock cluster `0x0101`, event `0x0002`) whenever the lock state changes via a side-band operation, in addition to updating the `LockState` attribute. The `LockOperationType` field in the event SHALL be `0` (Lock) for side-band lock operations and `1` (Unlock) for side-band unlock operations. This is required for SBMD drivers that use event-driven resource updates rather than attribute subscription, such as the `door-lock.sbmd` spec with `mapper.event` on the `locked` resource.
+
+#### Scenario: Side-band lock emits LockOperation event
+- **WHEN** a side-band `lock` operation is sent to the virtual door lock
+- **THEN** the device SHALL emit a `LockOperation` event with `LockOperationType` = 0 (Lock)
+- **AND** the `LockState` attribute SHALL be updated to `Locked`
+
+#### Scenario: Side-band unlock emits LockOperation event
+- **WHEN** a side-band `unlock` operation is sent to the virtual door lock
+- **THEN** the device SHALL emit a `LockOperation` event with `LockOperationType` = 1 (Unlock)
+- **AND** the `LockState` attribute SHALL be updated to `Unlocked`
+
 ### Requirement: Side-band getState operation
 The door lock SHALL register a side-band operation `getState` that returns the current state of the device, including lock state and any configured users/pin codes.
 

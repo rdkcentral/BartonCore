@@ -154,6 +154,9 @@ namespace barton
 
         /**
          * Extract the "output" field from a script result as a string.
+         *
+         * Returns false if scriptResult is not a plain JS object, if the "output" field is
+         * absent, or if the field cannot be converted to a string.
          */
         bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
 

@@ -1372,6 +1372,367 @@ namespace
         }
     }
 
+    // Test: MapAttributeRead with uint8 decoded to boolean (seedFrom script pattern)
+    // Exercises the exact script shape used by the door-lock seedFrom mapper:
+    //   - decode uint8 TLV using SbmdUtils.Tlv.decode()
+    //   - return "true" for value 1 (Locked), "false" for value 2 (Unlocked)
+    TEST_F(SbmdScriptTest, MapAttributeReadUint8ToBoolean)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0101;
+        attr.attributeId = 0x0000;
+        attr.name = "LockState";
+        attr.type = "uint8";
+
+        std::string mapperScript = "var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);"
+                                   "var isLocked = value === 1;"
+                                   "return { output: isLocked ? 'true' : 'false' };";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        // Helper to write a uint8 TLV and run the mapper
+        auto runMapper = [&](uint8_t lockStateValue, const std::string &expectedOutput) {
+            uint8_t tlvBuffer[32];
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuffer, sizeof(tlvBuffer));
+            writer.Put(chip::TLV::AnonymousTag(), lockStateValue);
+            writer.Finalize();
+
+            chip::TLV::TLVReader reader;
+            reader.Init(tlvBuffer, writer.GetLengthWritten());
+            reader.Next();
+
+            std::string outValue;
+            ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
+            EXPECT_EQ(outValue, expectedOutput);
+        };
+
+        runMapper(1, "true");  // DlLockState::Locked
+        runMapper(2, "false"); // DlLockState::Unlocked
+        runMapper(0, "false"); // DlLockState::NotFullyLocked (not == 1, so false)
+    }
+
+    //==============================================================================
+    // MapEvent tests
+    //
+    // MapEvent has a tri-state contract (documented in SbmdScript.h):
+    //   false            = script error (exception, compile error, non-object return)
+    //   true + empty     = suppress (script returned {} without an "output" key)
+    //   true + non-empty = publish (script returned { output: "value" })
+    //==============================================================================
+
+    // Helper: encode a LockOperation TLV struct with a single uint8 at context tag 0.
+    // The door-lock event script reads event[0] as the LockOperationType.
+    //
+    // NOTE: reader is initialized with sizeof(buf) — not just GetLengthWritten() — to match
+    // the production code path where MapEvent receives a reader whose underlying buffer is
+    // the full Matter subscription report (much larger than the struct being read).
+    // MapEvent's CopyElement needs 1 extra byte of headroom beyond GetLengthWritten() due
+    // to tag encoding; using the full buffer size provides that.
+    static void WriteLockOperationTlv(uint8_t (&buf)[64], chip::TLV::TLVReader &reader, uint8_t lockOperationType)
+    {
+        chip::TLV::TLVWriter writer;
+        writer.Init(buf, sizeof(buf));
+        chip::TLV::TLVType structType;
+        writer.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Structure, structType);
+        writer.Put(chip::TLV::ContextTag(0), lockOperationType);
+        writer.EndContainer(structType);
+        writer.Finalize();
+
+        reader.Init(buf, sizeof(buf));
+        reader.Next();
+    }
+
+    // Test: MapEvent returns false when no mapper is registered
+    TEST_F(SbmdScriptTest, MapEventNoMapper)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: AddEventMapper returns false for an empty script
+    TEST_F(SbmdScriptTest, AddEventMapperRejectsEmptyScript)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        EXPECT_FALSE(script->AddEventMapper(event, ""));
+    }
+
+    // Test: MapEvent happy path — LockOperationType 0 (Lock) → "true"
+    TEST_F(SbmdScriptTest, MapEventLockOperationLock)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        // Exact script from door-lock.sbmd
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0 /* Lock */);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "true");
+    }
+
+    // Test: MapEvent happy path — LockOperationType 1 (Unlock) → "false"
+    TEST_F(SbmdScriptTest, MapEventLockOperationUnlock)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 1 /* Unlock */);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "false");
+    }
+
+    // Test: MapEvent suppress path — LockOperationType 2 (NonAccessUserEvent) → true + empty outValue.
+    // The caller must check outValue.empty() and skip updateResource; this is the primary
+    // motivation for the tri-state contract.
+    TEST_F(SbmdScriptTest, MapEventSuppressOnNoOutputKey)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 2 /* NonAccessUserEvent */);
+
+        std::string outValue = "sentinel"; // proves it was cleared, not merely never set
+        bool result = script->MapEvent(event, reader, outValue);
+
+        ASSERT_TRUE(result);           // not a script error
+        EXPECT_TRUE(outValue.empty()); // suppress: caller must not call updateResource
+    }
+
+    // Test: MapEvent returns false when script returns a non-object (primitive string).
+    // A bare string return is always a script error, not a suppress.
+    TEST_F(SbmdScriptTest, MapEventFailsOnPrimitiveStringReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return 'true';"; // string, not object
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false when script returns null.
+    TEST_F(SbmdScriptTest, MapEventFailsOnNullReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return null;";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false when script returns undefined (missing return statement).
+    TEST_F(SbmdScriptTest, MapEventFailsOnUndefinedReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "var x = 1;"; // no return statement → undefined
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false on script syntax error
+    TEST_F(SbmdScriptTest, MapEventFailsOnSyntaxError)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return {output: invalid syntax here";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.deviceUuid to the script
+    TEST_F(SbmdScriptTest, MapEventHasDeviceUuid)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.deviceUuid };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, deviceId);
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.clusterId to the script
+    TEST_F(SbmdScriptTest, MapEventHasClusterId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.clusterId.toString() };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "257"); // 0x0101 = 257
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.eventId to the script
+    TEST_F(SbmdScriptTest, MapEventHasEventId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventId.toString() };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "2"); // 0x0002 = 2
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.eventName to the script
+    TEST_F(SbmdScriptTest, MapEventHasEventName)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventName };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "LockOperation");
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.endpointId to the script
+    TEST_F(SbmdScriptTest, MapEventHasEndpointId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+        event.resourceEndpointId = "ep1";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.endpointId };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "ep1");
+    }
+
 #endif // BCORE_USE_MQUICKJS
 
 } // namespace

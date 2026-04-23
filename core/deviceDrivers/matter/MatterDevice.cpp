@@ -201,9 +201,17 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
 
     // Execute the script to map the event TLV data to a string value
     std::string outValue;
+
     if (!device->script->MapEvent(event, readerCopy, outValue))
     {
         icError("Failed to execute event mapping script for URI: %s", uri.c_str());
+        return;
+    }
+
+    // Empty outValue means the script intentionally suppressed the update (no 'output' key returned)
+    if (outValue.empty())
+    {
+        icDebug("Event mapper suppressed update for URI: %s", uri.c_str());
         return;
     }
 
@@ -632,6 +640,148 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
             event.eventId,
             endpointId);
     return true;
+}
+
+bool MatterDevice::BindResourceSeedFromInfo(const char *uri,
+                                            const SbmdMapper &mapper,
+                                            std::optional<uint32_t> sbmdEndpointIndex)
+{
+    if (uri == nullptr)
+    {
+        icError("URI is null for seedFrom binding");
+        return false;
+    }
+
+    if (!mapper.initialReadAttribute.has_value())
+    {
+        icError("seedFrom mapper has no initialReadAttribute for URI: %s", uri);
+        return false;
+    }
+
+    const auto &attribute = mapper.initialReadAttribute.value();
+    chip::EndpointId endpointId;
+    bool endpointFound = false;
+
+    if (sbmdEndpointIndex.has_value())
+    {
+        endpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
+    }
+    else
+    {
+        endpointFound = GetEndpointForCluster(attribute.clusterId, endpointId);
+    }
+
+    if (!endpointFound)
+    {
+        if (sbmdEndpointIndex.has_value())
+        {
+            icError("No endpoint mapped for SBMD index %u (cluster 0x%x) at URI: %s (seedFrom)",
+                    sbmdEndpointIndex.value(),
+                    attribute.clusterId,
+                    uri);
+        }
+        else
+        {
+            icError("No endpoint found hosting cluster 0x%x at URI: %s (seedFrom)", attribute.clusterId, uri);
+        }
+
+        return false;
+    }
+
+    ResourceBinding binding;
+    binding.type = ResourceBinding::Type::Attribute;
+    binding.attributePath.mEndpointId = endpointId;
+    binding.attributePath.mClusterId = attribute.clusterId;
+    binding.attributePath.mAttributeId = attribute.attributeId;
+    binding.attribute = attribute;
+
+    // Store in seedFromBindings only — NOT in readableAttributeLookup
+    resourceSeedFromBindings[uri] = binding;
+
+    icDebug("Bound seedFrom for URI: %s (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
+            uri,
+            endpointId,
+            attribute.clusterId,
+            attribute.attributeId);
+
+    return true;
+}
+
+void MatterDevice::SeedResourceFromAttribute(const char *uri)
+{
+    if (uri == nullptr)
+    {
+        icError("URI is null for SeedResourceFromAttribute");
+        return;
+    }
+
+    auto it = resourceSeedFromBindings.find(uri);
+
+    if (it == resourceSeedFromBindings.end())
+    {
+        icDebug("No seedFrom binding found for URI: %s", uri);
+        return;
+    }
+
+    const ResourceBinding &binding = it->second;
+
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR err = GetCachedAttributeData(binding.attributePath.mEndpointId,
+                                            binding.attributePath.mClusterId,
+                                            binding.attributePath.mAttributeId,
+                                            reader);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icDebug("seedFrom attribute not in cache for URI: %s (cluster 0x%x, attribute 0x%x): %s",
+                uri,
+                static_cast<uint32_t>(binding.attributePath.mClusterId),
+                static_cast<uint32_t>(binding.attributePath.mAttributeId),
+                err.AsString());
+        return;
+    }
+
+    if (!script)
+    {
+        icError("No script engine available for seedFrom on URI: %s", uri);
+        return;
+    }
+
+    if (!binding.attribute.has_value())
+    {
+        icError("seedFrom binding has no attribute metadata for URI: %s", uri);
+        return;
+    }
+
+    std::string outValue;
+
+    if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+    {
+        icError("seedFrom script failed for URI: %s", uri);
+        return;
+    }
+
+    // Extract resource ID from URI (last component after '/')
+    const char *resourceId = strrchr(uri, '/');
+
+    if (resourceId == nullptr)
+    {
+        icError("seedFrom URI has no '/' separator: %s", uri);
+        return;
+    }
+
+    resourceId++; // Skip the '/'
+
+    const char *resourceEndpointId = nullptr;
+
+    if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+    {
+        resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+    }
+
+    icDebug("Seeding resource %s = %s (from attribute cache)", uri, outValue.c_str());
+
+    updateResource(deviceId.c_str(), resourceEndpointId, resourceId, outValue.c_str(), nullptr);
 }
 
 bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,

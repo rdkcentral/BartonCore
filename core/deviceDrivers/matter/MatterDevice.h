@@ -174,6 +174,31 @@ namespace barton
                                    std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
+         * Bind a resource URI for seedFrom operations.
+         * The seedFrom attribute is read from the cache once at configure and synchronize time
+         * to provide the initial value for an event-driven resource. It is NOT registered in
+         * readableAttributeLookup — it never triggers on live subscription callbacks.
+         *
+         * @param uri The resource URI
+         * @param mapper The mapper containing the seedFrom attribute (initialReadAttribute must be set)
+         * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
+         *                         When nullopt, falls back to GetEndpointForCluster.
+         * @return True if binding was successful, false otherwise.
+         */
+        bool BindResourceSeedFromInfo(const char *uri,
+                                      const SbmdMapper &mapper,
+                                      std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
+
+        /**
+         * Read the seedFrom attribute for a resource from the device data cache and update
+         * the resource value via updateResource(). Called at configure and synchronize time.
+         * Does nothing if no seedFrom binding exists for the URI or the attribute is not in cache.
+         *
+         * @param uri The resource URI
+         */
+        void SeedResourceFromAttribute(const char *uri);
+
+        /**
          * Handle a resource read request by looking up the binding and executing the script.
          * If the related attribute data is in the cache, this is a synchronous operation.
          * Otherwise, it may involve an asynchronous read from the device [NOT YET IMPLEMENTED].
@@ -544,6 +569,7 @@ namespace barton
         std::map<std::string, ResourceBinding> resourceReadBindings;
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
+        std::map<std::string, ResourceBinding> resourceSeedFromBindings;
         // Fast O(1) lookup for readable attributes in OnAttributeData callback
         std::unordered_map<chip::app::ConcreteAttributePath,
                            AttributeReadBinding,

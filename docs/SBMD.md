@@ -555,7 +555,79 @@ mapper:
 Event mappers receive `sbmdEventArgs` containing the base64-encoded TLV event data.
 The script decodes the data and returns a Barton resource value.
 
-### 4.4 Combined Mappers
+> **Note:** If the event script does not return an `output` key (e.g., returns `{}`), the resource is not
+> updated. This allows the script to ignore non-state-change events (e.g. returning
+> `{}` for `LockOperationType` values that do not change lock state).
+
+### 4.4 SeedFrom Mapper
+
+Maps a Matter **attribute cache read** to provide the **initial value** of an
+event-driven resource at device configure and synchronize time. This enables
+resources that use events for live updates (via `mapper.event`) to still have
+their initial state populated from the device attribute cache when the device
+first connects.
+
+**Key constraints:**
+
+- `seedFrom` MUST be paired with an `event` mapper on the same resource.
+- `seedFrom` and `read` are **mutually exclusive** on the same mapper.
+- The `alias` field MUST reference an **attribute alias** (not an event alias).
+- The `script` field is required and must be non-empty.
+- The script uses the same `sbmdReadArgs` input interface as `read` mapper scripts.
+
+**When it is called:**
+
+- Once at device **configure** time (first commission), after the attribute cache is primed.
+- Once at device **synchronize** time (reconnect), after the attribute cache is primed.
+- It is **not** called on live attribute subscription callbacks — the `event` mapper handles live updates.
+
+```yaml
+# In matterMeta:
+matterMeta:
+  aliases:
+    - name: "lockState"
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: "lockOperation"
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+
+# In the resource:
+prerequisites:
+  - alias: "lockState"
+  - alias: "lockOperation"
+mapper:
+  # Live updates via LockOperation events
+  event:
+    alias: "lockOperation"
+    script: |
+      var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+      // LockOperationType: 0=Lock, 1=Unlock, 2+=non-state-change
+      if (event[0] === 0) { return { output: 'true' }; }
+      if (event[0] === 1) { return { output: 'false' }; }
+      return {};  // No output for non-state-change events
+
+  # Initial value from attribute cache at configure/synchronize time
+  seedFrom:
+    alias: "lockState"           # Must be an attribute alias
+    script: |
+      // Same script interface as read mapper (sbmdReadArgs.tlvBase64)
+      var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+      // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
+      return { output: value === 1 ? 'true' : 'false' };
+```
+
+> **C++ field naming**: The YAML key is `seedFrom`. The internal C++ data model uses
+> `hasInitialRead` (bool), `initialReadAttribute` (std::optional<SbmdAttribute>), and
+> `initialReadScript` (std::string) to represent the `seedFrom` configuration. This
+> mirrors the `hasRead`/`readAttribute`/`readScript` naming convention.
+
+### 4.5 Combined Mappers
 
 A single resource can have multiple mappers for different operations:
 
@@ -586,9 +658,9 @@ mapper:
       return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 ```
 
-> **Note:** Read and event mappers reference a `matterMeta` alias by name — the
-> alias tells the runtime what to subscribe to. Write and execute mappers are
-> script-only; the script returns the full operation details.
+> **Note:** Read, event, and seedFrom mappers reference a `matterMeta` alias by name —
+> the alias tells the runtime what to subscribe to or read from the cache. Write and
+> execute mappers are script-only; the script returns the full operation details.
 
 ## 5. JavaScript Script Interfaces
 
