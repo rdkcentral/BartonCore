@@ -108,7 +108,8 @@ set env LD_PRELOAD /path/to/libasan.so
 break deviceServiceStart
 # For additional breakpoints, use a real symbol from the current target:
 # info functions deviceService
-break Matter::Init
+# info functions Matter
+break 'Matter::Init'
 
 # Run the test:
 run -m pytest testing/test/<test_file>.py
