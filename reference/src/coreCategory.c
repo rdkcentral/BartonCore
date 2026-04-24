@@ -1178,7 +1178,6 @@ Category *buildCoreCategory(void)
     // remove devices (advanced)
     command = commandCreate(
         "removeDevices", NULL, "[device class]", "Remove devices (all or by class)", 0, 1, removeDevicesFunc);
-    commandSetAdvanced(command);
     categoryAddCommand(cat, command);
 
     //system prop read
@@ -1224,7 +1223,6 @@ Category *buildCoreCategory(void)
                             0,
                             0,
                             reloadDatabaseFunc);
-    commandSetAdvanced(command);
     categoryAddCommand(cat, command);
 
     return cat;
