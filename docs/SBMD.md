@@ -226,8 +226,8 @@ matterMeta:
 Aliases serve two purposes:
 
 1. **Mapper binding**: Read mappers and event mappers reference an alias by name via
-   `alias: <name>`. The runtime resolves the alias to determine what cluster and
-   attribute/event to subscribe to, and passes the data to the mapper script.
+   `alias: <name>`. The alias is resolved at parse time to determine what cluster and
+   attribute/event to subscribe to, and the data is then passed to the mapper script.
 
 2. **Prerequisite gates**: Resources declare which aliases must be present in the
    device's data cache before the resource is registered (see Section 3.7). For
