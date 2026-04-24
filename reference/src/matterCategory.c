@@ -96,11 +96,16 @@ static bool addMatterDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 
 static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv)
 {
+    g_return_val_if_fail(argc >= 0 && argc <= 2, false);
+    g_return_val_if_fail(argc == 0 || argv != NULL, false);
+    g_return_val_if_fail(argc < 1 || argv[0] != NULL, false);
+    g_return_val_if_fail(argc < 2 || argv[1] != NULL, false);
+
     bool rc = false;
 
     /* If a target device id was provided and it's not the local ("0"), verify
      * the device exists before attempting to open its commissioning window. */
-    if (argc >= 1 && argv[0] != NULL && strcmp(argv[0], "0") != 0)
+    if (argc >= 1 && strcmp(argv[0], "0") != 0)
     {
         g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
         if (device == NULL)
@@ -118,6 +123,8 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 
     BCoreCommissioningInfo *commissioningInfo =
         b_core_client_open_commissioning_window(client, (argc >= 1 ? argv[0] : NULL), timeoutSeconds);
+
+    g_autoptr(BCoreCommissioningInfo) autoCommissioningInfo = commissioningInfo;
 
     if (commissioningInfo == NULL)
     {
@@ -142,9 +149,11 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         }
         else
         {
+            const gchar *manualCodeOutput = manualCode != NULL ? manualCode : "";
+            const gchar *qrCodeOutput = qrCode != NULL ? qrCode : "";
             emitOutput("Commissioning window opened:\n");
-            emitOutput("\tManual code: %s\n", manualCode);
-            emitOutput("\tQR code: %s\n", qrCode);
+            emitOutput("\tManual code: %s\n", manualCodeOutput);
+            emitOutput("\tQR code: %s\n", qrCodeOutput);
 
             rc = true;
         }
