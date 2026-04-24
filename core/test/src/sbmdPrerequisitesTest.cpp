@@ -81,9 +81,9 @@ namespace barton
                 chip::TLV::TLVWriter w;
                 w.Init(buf, sizeof(buf));
                 chip::TLV::TLVType t;
-                w.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, t);
-                w.EndContainer(t);
-                w.Finalize();
+                ASSERT_EQ(w.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, t), CHIP_NO_ERROR);
+                ASSERT_EQ(w.EndContainer(t), CHIP_NO_ERROR);
+                ASSERT_EQ(w.Finalize(), CHIP_NO_ERROR);
 
                 chip::TLV::TLVReader r;
                 r.Init(buf, w.GetLengthWritten());
@@ -114,8 +114,8 @@ namespace barton
             uint8_t buf[32];
             chip::TLV::TLVWriter w;
             w.Init(buf, sizeof(buf));
-            w.PutBoolean(chip::TLV::AnonymousTag(), false);
-            w.Finalize();
+            ASSERT_EQ(w.PutBoolean(chip::TLV::AnonymousTag(), false), CHIP_NO_ERROR);
+            ASSERT_EQ(w.Finalize(), CHIP_NO_ERROR);
 
             chip::TLV::TLVReader r;
             r.Init(buf, w.GetLengthWritten());

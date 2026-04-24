@@ -1057,7 +1057,6 @@ endpoints:
               return SbmdUtils.Response.invoke(0x0101, 0x0001, tlvBase64,
                   {timedInvokeTimeoutMs: 10000});
 ```
-```
 
 ### 7.2 Water Leak Detector
 
