@@ -603,6 +603,8 @@ endpoints: []
     spec = barton::SbmdParser::ParseString(yaml5);
     assert_null(spec.get());
 }
+
+static void test_sbmdParserInvalidBartonMetaType(void **state)
 {
     (void) state;
 
