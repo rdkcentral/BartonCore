@@ -125,7 +125,7 @@ binaries through firmware updates.
 ## 3. SBMD File Schema
 
 SBMD specifications are YAML files with the `.sbmd` extension. The current schema
-version is **1.0**, as specified in the `schemaVersion` field of each SBMD file.
+version is **2.0**, as specified in the `schemaVersion` field of each SBMD file.
 
 > **JSON Schema**: A formal JSON Schema for validating SBMD files is available at
 > [`core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json`](../core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json).
@@ -135,7 +135,7 @@ version is **1.0**, as specified in the `schemaVersion` field of each SBMD file.
 ### 3.1 Top-Level Structure
 
 ```yaml
-schemaVersion: "1.0"          # SBMD schema version (required)
+schemaVersion: "2.0"          # SBMD schema version (required)
 driverVersion: "1.0"          # Driver version (required)
 name: "Driver Name"           # Human-readable name (required)
 scriptType: "JavaScript"      # Script type (see below)
@@ -947,7 +947,7 @@ var tlv = SbmdUtils.Tlv.encodeStruct(args, {
 ### 7.1 Door Lock Driver
 
 ```yaml
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Door Lock"
 scriptType: "JavaScript"
@@ -1062,7 +1062,7 @@ endpoints:
 ### 7.2 Water Leak Detector
 
 ```yaml
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Water Leak Detector"
 scriptType: "JavaScript"
