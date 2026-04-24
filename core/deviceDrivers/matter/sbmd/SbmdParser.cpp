@@ -40,6 +40,8 @@ namespace barton
 
     namespace
     {
+        constexpr const char *kSupportedSchemaVersion = "2.0";
+
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
             for (const auto &alias : aliases)
@@ -174,9 +176,9 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
 
     spec->schemaVersion = root["schemaVersion"].as<std::string>();
 
-    if (spec->schemaVersion != "2.0")
+    if (spec->schemaVersion != kSupportedSchemaVersion)
     {
-        icError("Unsupported SBMD schemaVersion '%s'; expected '2.0'", spec->schemaVersion.c_str());
+        icError("Unsupported SBMD schemaVersion '%s'; expected '%s'", spec->schemaVersion.c_str(), kSupportedSchemaVersion);
 
         return nullptr;
     }
