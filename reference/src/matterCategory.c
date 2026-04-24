@@ -104,13 +104,17 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     bool rc = false;
 
     /* If a target device id was provided and it's not the local ("0"), verify
-     * the device exists before attempting to open its commissioning window. */
+     * the device exists before attempting to open its commissioning window.
+     * Normalize the device ID by zero-padding it to 16 hex characters to ensure
+     * it matches the stored Matter device UUID format. */
     if (argc >= 1 && strcmp(argv[0], "0") != 0)
     {
-        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
+        g_autofree gchar *normalizedId = g_strdup_printf("%016llx",
+            (unsigned long long) g_ascii_strtoull(argv[0], NULL, 16));
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, normalizedId);
         if (device == NULL)
         {
-            emitError("No device with id '%s' found\n", argv[0]);
+            emitError("No device with node id '%s' found\n", argv[0]);
             return false;
         }
     }
