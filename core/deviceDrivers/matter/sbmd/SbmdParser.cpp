@@ -40,6 +40,22 @@ namespace barton
 
     namespace
     {
+        constexpr int kSupportedSchemaMajor = 2;
+        constexpr int kSupportedSchemaMinor = 0;
+
+        const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
+        {
+            for (const auto &alias : aliases)
+            {
+                if (alias.name == name)
+                {
+                    return &alias;
+                }
+            }
+
+            return nullptr;
+        }
+
         bool ValidateMapper(const SbmdMapper &mapper, const std::string &resourceId)
         {
             // Validate read mapper
@@ -152,9 +168,31 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
     auto spec = std::make_shared<SbmdSpec>();
 
     // Parse top-level fields
-    if (root["schemaVersion"])
+    if (!root["schemaVersion"])
     {
-        spec->schemaVersion = root["schemaVersion"].as<std::string>();
+        icError("SBMD spec is missing required 'schemaVersion' field");
+
+        return nullptr;
+    }
+
+    spec->schemaVersion = root["schemaVersion"].as<std::string>();
+
+    {
+        int specMajor = -1;
+        int specMinor = -1;
+        int charsConsumed = 0;
+        int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d%n", &specMajor, &specMinor, &charsConsumed);
+
+        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) ||
+            specMajor != kSupportedSchemaMajor || specMinor < 0 || specMinor > kSupportedSchemaMinor)
+        {
+            icError("Unsupported SBMD schemaVersion '%s'; expected %d.x where x <= %d",
+                    spec->schemaVersion.c_str(),
+                    kSupportedSchemaMajor,
+                    kSupportedSchemaMinor);
+
+            return nullptr;
+        }
     }
 
     if (root["driverVersion"])
@@ -208,7 +246,7 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
         for (const auto &resourceNode : root["resources"])
         {
             SbmdResource resource;
-            if (ParseResource(resourceNode, resource))
+            if (ParseResource(resourceNode, resource, spec->matterMeta.aliases))
             {
                 SetMapperIds(resource);
                 spec->resources.push_back(resource);
@@ -227,7 +265,7 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
         for (const auto &endpointNode : root["endpoints"])
         {
             SbmdEndpoint endpoint;
-            if (ParseEndpoint(endpointNode, endpoint))
+            if (ParseEndpoint(endpointNode, endpoint, spec->matterMeta.aliases))
             {
                 spec->endpoints.push_back(endpoint);
             }
@@ -351,6 +389,35 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
         }
     }
 
+    // Parse optional aliases
+    if (node["aliases"])
+    {
+        if (!node["aliases"].IsSequence())
+        {
+            icError("matterMeta.aliases must be a sequence");
+            return false;
+        }
+
+        for (const auto &aliasNode : node["aliases"])
+        {
+            SbmdAlias alias;
+
+            if (!ParseAlias(aliasNode, alias))
+            {
+                icError("Failed to parse alias in matterMeta");
+                return false;
+            }
+
+            if (FindAlias(meta.aliases, alias.name) != nullptr)
+            {
+                icError("Duplicate alias name '%s' in matterMeta.aliases", alias.name.c_str());
+                return false;
+            }
+
+            meta.aliases.push_back(std::move(alias));
+        }
+    }
+
     return true;
 }
 
@@ -375,7 +442,7 @@ bool SbmdParser::ParseReporting(const YAML::Node &node, SbmdReporting &reporting
     return true;
 }
 
-bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
+bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource, const std::vector<SbmdAlias> &aliases)
 {
     if (!node.IsMap())
     {
@@ -405,7 +472,7 @@ bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
 
     if (node["mapper"])
     {
-        if (!ParseMapper(node["mapper"], resource.mapper))
+        if (!ParseMapper(node["mapper"], resource.mapper, aliases))
         {
             icError("Failed to parse mapper for resource %s", resource.id.c_str());
             return false;
@@ -418,10 +485,36 @@ bool SbmdParser::ParseResource(const YAML::Node &node, SbmdResource &resource)
         }
     }
 
+    // Parse prerequisites if present
+    bool prerequisitesDeclared = false;
+
+    if (node["prerequisites"])
+    {
+        std::vector<SbmdPrerequisite> prereqs;
+
+        if (!ParsePrerequisites(node["prerequisites"], prereqs, aliases))
+        {
+            icError("Failed to parse prerequisites for resource %s", resource.id.c_str());
+            return false;
+        }
+
+        resource.prerequisites = std::move(prereqs);
+        prerequisitesDeclared = true;
+    }
+
+    // Enforce that every resource must declare prerequisites
+    if (!prerequisitesDeclared)
+    {
+        icError("Resource '%s' is missing required 'prerequisites' field "
+                "(use 'prerequisites: none' to explicitly opt out of gating)",
+                resource.id.c_str());
+        return false;
+    }
+
     return true;
 }
 
-bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint)
+bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint, const std::vector<SbmdAlias> &aliases)
 {
     if (!node.IsMap())
     {
@@ -449,7 +542,7 @@ bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint)
         for (const auto &resourceNode : node["resources"])
         {
             SbmdResource resource;
-            if (ParseResource(resourceNode, resource))
+            if (ParseResource(resourceNode, resource, aliases))
             {
                 SetMapperIds(resource, endpoint.id);
                 endpoint.resources.push_back(resource);
@@ -465,7 +558,7 @@ bool SbmdParser::ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint)
     return true;
 }
 
-bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
+bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const std::vector<SbmdAlias> &aliases)
 {
     if (!node.IsMap())
     {
@@ -479,42 +572,46 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
         const YAML::Node &readNode = node["read"];
         mapper.hasRead = true;
 
-        bool hasAttribute = false;
-        bool hasCommand = false;
-
-        if (readNode["attribute"])
+        if (readNode["alias"])
         {
-            SbmdAttribute attr;
-            if (!ParseAttribute(readNode["attribute"], attr))
+            if (readNode["command"])
             {
-                icError("Failed to parse read attribute");
+                icError("read mapper cannot have both 'alias' and 'command'");
                 return false;
             }
-            mapper.readAttribute = attr;
-            hasAttribute = true;
-        }
 
-        if (readNode["command"])
+            std::string aliasName = readNode["alias"].as<std::string>();
+            const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+            if (!alias)
+            {
+                icError("read mapper references unknown alias '%s'", aliasName.c_str());
+                return false;
+            }
+
+            if (!alias->attribute.has_value())
+            {
+                icError("read mapper alias '%s' must be an attribute alias (not event)", aliasName.c_str());
+                return false;
+            }
+
+            mapper.readAttribute = alias->attribute;
+        }
+        else if (readNode["command"])
         {
             SbmdCommand cmd;
+
             if (!ParseCommand(readNode["command"], cmd))
             {
                 icError("Failed to parse read command");
                 return false;
             }
+
             mapper.readCommand = cmd;
-            hasCommand = true;
         }
-
-        if (!hasAttribute && !hasCommand)
+        else
         {
-            icError("read mapper must have either 'attribute' or 'command'");
-            return false;
-        }
-
-        if (hasAttribute && hasCommand)
-        {
-            icError("read mapper cannot have both 'attribute' and 'command'");
+            icError("read mapper must have either 'alias' or 'command'");
             return false;
         }
 
@@ -558,21 +655,100 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper)
     {
         const YAML::Node &eventNode = node["event"];
 
-        if (eventNode["event"])
+        if (eventNode["alias"])
         {
-            SbmdEvent evt;
-            if (!ParseEvent(eventNode["event"], evt))
+            std::string aliasName = eventNode["alias"].as<std::string>();
+            const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+            if (!alias)
             {
-                icError("Failed to parse event");
+                icError("event mapper references unknown alias '%s'", aliasName.c_str());
                 return false;
             }
-            mapper.event = evt;
+
+            if (!alias->event.has_value())
+            {
+                icError("event mapper alias '%s' must be an event alias (not attribute)", aliasName.c_str());
+                return false;
+            }
+
+            mapper.event = alias->event;
+        }
+        else
+        {
+            icError("event mapper must specify 'alias'");
+            return false;
         }
 
         if (eventNode["script"])
         {
             mapper.eventScript = eventNode["script"].as<std::string>();
         }
+    }
+
+    return true;
+}
+
+bool SbmdParser::ParseAlias(const YAML::Node &node, SbmdAlias &alias)
+{
+    if (!node.IsMap())
+    {
+        icError("alias entry is not a map");
+        return false;
+    }
+
+    if (!node["name"])
+    {
+        icError("alias entry is missing required 'name' field");
+        return false;
+    }
+
+    alias.name = node["name"].as<std::string>();
+
+    if (alias.name.empty())
+    {
+        icError("alias 'name' must not be empty");
+        return false;
+    }
+
+    bool hasAttribute = node["attribute"].IsDefined();
+    bool hasEvent = node["event"].IsDefined();
+
+    if (hasAttribute && hasEvent)
+    {
+        icError("alias '%s' must not have both 'attribute' and 'event'", alias.name.c_str());
+        return false;
+    }
+
+    if (!hasAttribute && !hasEvent)
+    {
+        icError("alias '%s' must have either 'attribute' or 'event'", alias.name.c_str());
+        return false;
+    }
+
+    if (hasAttribute)
+    {
+        SbmdAttribute attr;
+
+        if (!ParseAttribute(node["attribute"], attr))
+        {
+            icError("Failed to parse attribute in alias '%s'", alias.name.c_str());
+            return false;
+        }
+
+        alias.attribute = attr;
+    }
+    else
+    {
+        SbmdEvent evt;
+
+        if (!ParseEvent(node["event"], evt))
+        {
+            icError("Failed to parse event in alias '%s'", alias.name.c_str());
+            return false;
+        }
+
+        alias.event = evt;
     }
 
     return true;
@@ -752,6 +928,86 @@ std::vector<std::string> SbmdParser::ParseStringArray(const YAML::Node &node)
     }
 
     return result;
+}
+
+bool SbmdParser::ParsePrerequisites(const YAML::Node &node,
+                                    std::vector<SbmdPrerequisite> &out,
+                                    const std::vector<SbmdAlias> &aliases)
+{
+    // prerequisites: none (null or scalar "none") -> empty vector, always register
+    if (!node.IsDefined() || node.IsNull() || (node.IsScalar() && node.as<std::string>() == "none"))
+    {
+        out.clear();
+        return true;
+    }
+
+    if (!node.IsSequence())
+    {
+        icError("prerequisites must be a sequence, 'none', or null");
+        return false;
+    }
+
+    if (node.size() == 0)
+    {
+        icError("prerequisites sequence must not be empty; use 'prerequisites: none' to indicate no prerequisites");
+        return false;
+    }
+
+    for (const auto &entry : node)
+    {
+        if (!entry.IsMap())
+        {
+            icError("each prerequisite entry must be a map");
+            return false;
+        }
+
+        for (const auto &kv : entry)
+        {
+            if (kv.first.as<std::string>() != "alias")
+            {
+                icError("prerequisite entry has unexpected key '%s'; only 'alias' is allowed",
+                        kv.first.as<std::string>().c_str());
+                return false;
+            }
+        }
+
+        if (!entry["alias"].IsDefined())
+        {
+            icError("prerequisite entry must have an 'alias' key referencing a name in matterMeta.aliases");
+            return false;
+        }
+
+        std::string aliasName = entry["alias"].as<std::string>();
+        const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+        if (!alias)
+        {
+            icError("prerequisite references unknown alias '%s'", aliasName.c_str());
+            return false;
+        }
+
+        SbmdPrerequisite prereq;
+
+        if (alias->attribute.has_value())
+        {
+            prereq.clusterId = alias->attribute->clusterId;
+            prereq.attributeIds = {alias->attribute->attributeId};
+        }
+        else if (alias->event.has_value())
+        {
+            prereq.clusterId = alias->event->clusterId;
+            // event prerequisite: cluster presence is sufficient (no attribute check)
+        }
+        else
+        {
+            icError("alias '%s' has neither attribute nor event (internal error)", aliasName.c_str());
+            return false;
+        }
+
+        out.push_back(std::move(prereq));
+    }
+
+    return true;
 }
 
 } // namespace barton

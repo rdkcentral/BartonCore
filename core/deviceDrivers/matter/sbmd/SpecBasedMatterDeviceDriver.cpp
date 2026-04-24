@@ -36,6 +36,9 @@
 #include "matter/sbmd/quickjs/SbmdScriptImpl.h"
 #endif
 
+#include <app/ConcreteAttributePath.h>
+#include <cinttypes>
+#include <lib/core/TLVReader.h>
 #include <memory>
 
 extern "C" {
@@ -154,10 +157,26 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return true;
     };
 
-    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
-    for (const auto &resource : spec->resources)
-    {
-        if (!configureResource(resource, std::nullopt))
+    // Helper lambda that evaluates prerequisites and, if satisfied, attempts to configure the resource.
+    // Handles optional/required branching and skip bookkeeping so that the two loops below stay symmetric.
+    // Returns false if commissioning must be aborted (required resource failed), true otherwise.
+    auto processResource = [&](const SbmdResource &resource, std::optional<uint32_t> endpointIndex) -> bool {
+        if (!CheckPrerequisites(resource, *device))
+        {
+            if (resource.optional)
+            {
+                icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
+                skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
+
+                return true;
+            }
+
+            icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
+
+            return false;
+        }
+
+        if (!configureResource(resource, endpointIndex))
         {
             if (resource.optional)
             {
@@ -165,11 +184,24 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                        resource.id.c_str(),
                        device->GetDeviceId().c_str());
                 skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
+
+                return true;
             }
-            else
-            {
-                return false;
-            }
+
+            icError("Required resource '%s' failed to configure, aborting commissioning", resource.id.c_str());
+
+            return false;
+        }
+
+        return true;
+    };
+
+    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
+    for (const auto &resource : spec->resources)
+    {
+        if (!processResource(resource, std::nullopt))
+        {
+            return false;
         }
     }
 
@@ -177,21 +209,12 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     for (uint32_t epIdx = 0; epIdx < static_cast<uint32_t>(spec->endpoints.size()); ++epIdx)
     {
         const auto &endpoint = spec->endpoints[epIdx];
+
         for (const auto &resource : endpoint.resources)
         {
-            if (!configureResource(resource, epIdx))
+            if (!processResource(resource, epIdx))
             {
-                if (resource.optional)
-                {
-                    icWarn("Optional resource %s failed to configure for device %s, skipping",
-                           resource.id.c_str(),
-                           device->GetDeviceId().c_str());
-                    skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-                }
-                else
-                {
-                    return false;
-                }
+                return false;
             }
         }
     }
@@ -470,4 +493,91 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
 std::string SpecBasedMatterDeviceDriver::MakeResourceKey(const SbmdResource &resource)
 {
     return resource.resourceEndpointId.value_or("") + ":" + resource.id;
+}
+
+bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device)
+{
+    // Empty prerequisites vector means always attempt to register (declared as "none" in the spec)
+    if (resource.prerequisites.empty())
+    {
+        return true;
+    }
+
+    auto cache = device.GetDeviceDataCache();
+
+    if (!cache)
+    {
+        icWarn("No device data cache for device %s; prerequisites cannot be evaluated and will be treated as unmet",
+               device.GetDeviceId().c_str());
+
+        return false;
+    }
+
+    const auto endpointIds = cache->GetEndpointIds();
+
+    for (const auto &prereq : resource.prerequisites)
+    {
+        uint32_t clusterId = prereq.clusterId;
+        const std::vector<uint32_t> &attributeIds = prereq.attributeIds;
+
+        // Check cluster presence on any endpoint
+        bool clusterFound = false;
+
+        for (auto endpointId : endpointIds)
+        {
+            if (cache->EndpointHasServerCluster(endpointId, clusterId))
+            {
+                clusterFound = true;
+                break;
+            }
+        }
+
+        if (!clusterFound)
+        {
+            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s; prerequisite not met",
+                    resource.id.c_str(),
+                    clusterId,
+                    device.GetDeviceId().c_str());
+
+            return false;
+        }
+
+        // Check attribute presence for each required attribute ID
+        for (uint32_t attributeId : attributeIds)
+        {
+            bool attributeFound = false;
+
+            for (auto endpointId : endpointIds)
+            {
+                // find the endpoint with the cluster and then check for the attribute
+                if (!cache->EndpointHasServerCluster(endpointId, clusterId))
+                {
+                    continue;
+                }
+
+                chip::app::ConcreteDataAttributePath path(endpointId, clusterId, attributeId);
+                chip::TLV::TLVReader reader;
+
+                if (cache->GetAttributeData(path, reader) == CHIP_NO_ERROR)
+                {
+                    attributeFound = true;
+                    break;
+                }
+            }
+
+            if (!attributeFound)
+            {
+                icDebug("Resource '%s': prerequisite attribute 0x%08" PRIx32 " on cluster 0x%08" PRIx32
+                        " not found on device %s; prerequisite not met",
+                        resource.id.c_str(),
+                        attributeId,
+                        clusterId,
+                        device.GetDeviceId().c_str());
+
+                return false;
+            }
+        }
+    }
+
+    return true;
 }

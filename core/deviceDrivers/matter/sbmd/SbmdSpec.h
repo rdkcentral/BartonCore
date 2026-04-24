@@ -167,6 +167,31 @@ namespace barton
     };
 
     /**
+     * A single prerequisite for a resource: the device must have this cluster present, and optionally
+     * one or more specific attributes within that cluster, in order for the resource to be registered.
+     *
+     * Cluster and attribute IDs are resolved from an alias at parse time (see SbmdAlias and
+     * SbmdMatterMeta.aliases).
+     */
+    struct SbmdPrerequisite
+    {
+        uint32_t clusterId = 0;
+        std::vector<uint32_t>
+            attributeIds; // empty = cluster presence sufficient; populated = each attribute must be present
+    };
+
+    /**
+     * A named reference to a Matter cluster attribute or event, defined in matterMeta.aliases.
+     * Each alias binds a spec-author-chosen name to the IDs and type of a single Matter element.
+     */
+    struct SbmdAlias
+    {
+        std::string name;                       // spec-author-chosen identifier, unique within the driver spec
+        std::optional<SbmdAttribute> attribute; // set for attribute aliases
+        std::optional<SbmdEvent> event;         // set for event aliases
+    };
+
+    /**
      * Represents a device resource (property or function)
      */
     struct SbmdResource
@@ -177,6 +202,9 @@ namespace barton
         bool optional = false;               // If true, failure to configure this resource does not block commissioning
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         SbmdMapper mapper;
+        // Empty means always register (declared as "none"). Non-empty means all entries
+        // must be satisfied before the resource is registered.
+        std::vector<SbmdPrerequisite> prerequisites;
     };
 
     /**
@@ -207,6 +235,7 @@ namespace barton
         std::vector<uint16_t> deviceTypes;
         uint32_t revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
+        std::vector<SbmdAlias> aliases;        // Named Matter element definitions referenced by resources
     };
 
     /**
