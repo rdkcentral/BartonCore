@@ -180,9 +180,11 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
     {
         int specMajor = -1;
         int specMinor = -1;
-        int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d", &specMajor, &specMinor);
+        int charsConsumed = 0;
+        int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d%n", &specMajor, &specMinor, &charsConsumed);
 
-        if (parsed != 2 || specMajor != kSupportedSchemaMajor || specMinor > kSupportedSchemaMinor)
+        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) ||
+            specMajor != kSupportedSchemaMajor || specMinor < 0 || specMinor > kSupportedSchemaMinor)
         {
             icError("Unsupported SBMD schemaVersion '%s'; expected %d.x where x <= %d",
                     spec->schemaVersion.c_str(),

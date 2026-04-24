@@ -564,9 +564,45 @@ endpoints: []
 
     spec = barton::SbmdParser::ParseString(yaml3);
     assert_null(spec.get());
-}
 
-static void test_sbmdParserInvalidBartonMetaType(void **state)
+    // Trailing component — "2.0.1" must be rejected (sscanf would ignore ".1" without the %n check)
+    const char *yaml4 = R"(
+schemaVersion: "2.0.1"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    spec = barton::SbmdParser::ParseString(yaml4);
+    assert_null(spec.get());
+
+    // Negative minor — "2.-1" must be rejected (specMinor = -1 would otherwise satisfy specMinor <= 0)
+    const char *yaml5 = R"(
+schemaVersion: "2.-1"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    spec = barton::SbmdParser::ParseString(yaml5);
+    assert_null(spec.get());
+}
 {
     (void) state;
 
