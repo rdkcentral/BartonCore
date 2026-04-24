@@ -32,6 +32,7 @@
 #include "barton-core-reference-io.h"
 #include "reference-network-credentials-provider.h"
 #include <stdio.h>
+#include <string.h>
 
 static bool commissionDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
@@ -95,8 +96,19 @@ static bool addMatterDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 
 static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv)
 {
-    (void) argc; // unused
     bool rc = false;
+
+    /* If a target device id was provided and it's not the local ("0"), verify
+     * the device exists before attempting to open its commissioning window. */
+    if (argc >= 1 && argv[0] != NULL && strcmp(argv[0], "0") != 0)
+    {
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, argv[0]);
+        if (device == NULL)
+        {
+            emitError("No device with id '%s' found\n", argv[0]);
+            return false;
+        }
+    }
 
     guint16 timeoutSeconds = 0; // let device service pick the default
     if (argc == 2)
@@ -105,7 +117,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     }
 
     BCoreCommissioningInfo *commissioningInfo =
-        b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
+        b_core_client_open_commissioning_window(client, (argc >= 1 ? argv[0] : NULL), timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
@@ -113,7 +125,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     }
     else
     {
-        // print the manual and qr codes to stdout.  First get them from the object properties
+        /* print the manual and qr codes to stdout. First get them from the object properties */
         g_autofree gchar *manualCode = NULL;
         g_autofree gchar *qrCode = NULL;
         g_object_get(
@@ -124,11 +136,18 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
             &qrCode,
             NULL);
 
-        emitOutput("Commissioning window opened:\n");
-        emitOutput("\tManual code: %s\n", manualCode);
-        emitOutput("\tQR code: %s\n", qrCode);
+        if ((manualCode == NULL || manualCode[0] == '\0') && (qrCode == NULL || qrCode[0] == '\0'))
+        {
+            emitError("Failed to open commissioning window: no pairing data returned\n");
+        }
+        else
+        {
+            emitOutput("Commissioning window opened:\n");
+            emitOutput("\tManual code: %s\n", manualCode);
+            emitOutput("\tQR code: %s\n", qrCode);
 
-        rc = true;
+            rc = true;
+        }
     }
 
     return rc;
