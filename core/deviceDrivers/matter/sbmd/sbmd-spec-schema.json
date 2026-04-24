@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema.json",
+  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema-v2.0.json",
   "title": "SBMD Specification Schema",
   "description": "JSON Schema for validating Specification-Based Matter Driver (SBMD) YAML files",
   "type": "object",
@@ -9,7 +9,7 @@
     "schemaVersion": {
       "type": "string",
       "description": "SBMD schema version",
-      "pattern": "^[0-9]+\\.[0-9]+$"
+      "const": "2.0"
     },
     "driverVersion": {
       "type": "string",
