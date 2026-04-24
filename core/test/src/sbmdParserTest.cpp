@@ -42,7 +42,7 @@ static void test_sbmdParserReportingSection(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 scriptType: "JavaScript"
@@ -65,7 +65,7 @@ endpoints: []
 
     // Verify basic metadata
     assert_string_equal(spec->name.c_str(), "Test Device");
-    assert_string_equal(spec->schemaVersion.c_str(), "1.0");
+    assert_string_equal(spec->schemaVersion.c_str(), "2.0");
     assert_string_equal(spec->driverVersion.c_str(), "1.0");
     assert_string_equal(spec->scriptType.c_str(), "JavaScript");
 
@@ -83,7 +83,7 @@ static void test_sbmdParserReportingOptional(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -116,7 +116,7 @@ static void test_sbmdParserEndpointWithStringIds(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -259,7 +259,7 @@ static void test_sbmdParserOptionalResource(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -364,7 +364,7 @@ static void test_sbmdParserResourceIdFields(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -478,7 +478,7 @@ static void test_sbmdParserInvalidYamlSyntax(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 name: "Test Device"
   invalid indentation here: "this is broken YAML"
 bartonMeta:
@@ -514,7 +514,7 @@ static void test_sbmdParserInvalidBartonMetaType(void **state)
 
     // bartonMeta should be a map, not a scalar
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta: "this should be a map"
@@ -536,7 +536,7 @@ static void test_sbmdParserInvalidMatterMetaType(void **state)
 
     // matterMeta should be a map, not a scalar
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -557,7 +557,7 @@ static void test_sbmdParserInvalidReportingType(void **state)
 
     // reporting should be a map, not a scalar
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -582,7 +582,7 @@ static void test_sbmdParserReadMapperRejectsEventAlias(void **state)
 
     // A read mapper must reference an attribute alias; referencing an event alias should fail
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -622,7 +622,7 @@ static void test_sbmdParserReadMapperRejectsBothAliasAndCommand(void **state)
 
     // A read mapper must have exactly one of 'alias' or 'command', not both
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -667,7 +667,7 @@ static void test_sbmdParserMapperWithNeitherAttributeNorCommand(void **state)
 
     // A read mapper must have either 'alias' or 'command'
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -699,7 +699,7 @@ static void test_sbmdParserReadMapperMissingScript(void **state)
 
     // Read mapper must have a non-empty script
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -738,7 +738,7 @@ static void test_sbmdParserWriteMapperMissingScript(void **state)
 
     // Write mapper must have a non-empty script (write is script-only now)
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -767,7 +767,7 @@ static void test_sbmdParserExecuteMapperMissingScript(void **state)
 
     // Execute mapper must have a non-empty script (execute is script-only now)
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -796,7 +796,7 @@ static void test_sbmdParserInvalidResourceType(void **state)
 
     // resource should be a map, not a sequence item that's a scalar
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -822,7 +822,7 @@ static void test_sbmdParserInvalidEndpointType(void **state)
 
     // endpoint should be a map, not a scalar
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -848,7 +848,7 @@ static void test_sbmdParserAliasRejectsBothAttributeAndEvent(void **state)
 
     // An alias must have exactly one of 'attribute' or 'event', not both
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -884,7 +884,7 @@ static void test_sbmdParserDuplicateAliasName(void **state)
 
     // Two aliases with the same name make FindAlias() ambiguous and must be rejected
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -922,7 +922,7 @@ static void test_sbmdParserAliasEmptyName(void **state)
 
     // An alias with an empty string for 'name' must be rejected
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -954,7 +954,7 @@ static void test_sbmdParserEmptyPrerequisitesList(void **state)
 
     // An empty sequence is not a valid opt-out; 'prerequisites: none' must be used instead
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1005,7 +1005,7 @@ static void test_prerequisiteFromReadMapper(void **state)
 
     // Renamed intent: prerequisite from attribute alias resolves clusterId + attributeId
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1064,7 +1064,7 @@ static void test_prerequisiteFromEventMapper(void **state)
 
     // Renamed intent: prerequisite from event alias resolves clusterId only (no attribute check)
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1119,7 +1119,7 @@ static void test_prerequisiteAttributeAliasResolvesClusterAndAttribute(void **st
 
     // An attribute alias used as a prerequisite resolves both clusterId and attributeId
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1169,7 +1169,7 @@ static void test_prerequisiteAliasIndependentOfMapperAlias(void **state)
 
     // The prerequisite alias and the mapper alias may differ; each is resolved independently
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1223,7 +1223,7 @@ static void test_prerequisiteNone(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1268,7 +1268,7 @@ static void test_prerequisiteMissingOnReadMapper(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1309,7 +1309,7 @@ static void test_prerequisiteMissingOnEventMapper(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1349,7 +1349,7 @@ static void test_prerequisiteNotRequiredForWriteMapper(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1383,7 +1383,7 @@ static void test_prerequisiteNotRequiredForExecuteMapper(void **state)
     (void) state;
 
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1416,7 +1416,7 @@ static void test_prerequisiteEntryUnknownKey(void **state)
 
     // A prerequisite entry with an unexpected key must be rejected (additionalProperties: false)
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1461,7 +1461,7 @@ static void test_prerequisiteInvalidBothForms(void **state)
 
     // A prerequisite entry that references a nonexistent alias should fail
     const char *yaml = R"(
-schemaVersion: "1.0"
+schemaVersion: "2.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
