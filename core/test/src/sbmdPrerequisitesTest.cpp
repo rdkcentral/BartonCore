@@ -66,8 +66,11 @@ namespace barton
          * Initialise a DeviceDataCache with a ClusterStateCache and populate its PartsList
          * on endpoint 0 so that GetEndpointIds() returns [0].
          * No cluster data is written — the caller must call AddClusterAttribute() separately.
+         *
+         * Returns true on success. Use ASSERT_TRUE at the callsite so that TLV encoding
+         * failures abort the test rather than leaving the cache partially initialised.
          */
-        static void InitCache(std::shared_ptr<DeviceDataCache> &cache)
+        static bool InitCache(std::shared_ptr<DeviceDataCache> &cache)
         {
             cache->clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*cache);
 
@@ -81,9 +84,21 @@ namespace barton
                 chip::TLV::TLVWriter w;
                 w.Init(buf, sizeof(buf));
                 chip::TLV::TLVType t;
-                ASSERT_EQ(w.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, t), CHIP_NO_ERROR);
-                ASSERT_EQ(w.EndContainer(t), CHIP_NO_ERROR);
-                ASSERT_EQ(w.Finalize(), CHIP_NO_ERROR);
+
+                if (w.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Array, t) != CHIP_NO_ERROR)
+                {
+                    return false;
+                }
+
+                if (w.EndContainer(t) != CHIP_NO_ERROR)
+                {
+                    return false;
+                }
+
+                if (w.Finalize() != CHIP_NO_ERROR)
+                {
+                    return false;
+                }
 
                 chip::TLV::TLVReader r;
                 r.Init(buf, w.GetLengthWritten());
@@ -95,14 +110,19 @@ namespace barton
             }
 
             cb.OnReportEnd();
+
+            return true;
         }
 
         /**
          * Add a single boolean attribute to the cache for the given endpoint/cluster/attribute triple.
          * This makes EndpointHasServerCluster(endpointId, clusterId) return true, and
          * GetAttributeData(path, reader) return CHIP_NO_ERROR for that path.
+         *
+         * Returns true on success. Use ASSERT_TRUE at the callsite so that TLV encoding
+         * failures abort the test rather than leaving the cache partially initialised.
          */
-        static void AddClusterAttribute(std::shared_ptr<DeviceDataCache> &cache,
+        static bool AddClusterAttribute(std::shared_ptr<DeviceDataCache> &cache,
                                         chip::EndpointId endpointId,
                                         chip::ClusterId clusterId,
                                         chip::AttributeId attributeId)
@@ -114,8 +134,16 @@ namespace barton
             uint8_t buf[32];
             chip::TLV::TLVWriter w;
             w.Init(buf, sizeof(buf));
-            ASSERT_EQ(w.PutBoolean(chip::TLV::AnonymousTag(), false), CHIP_NO_ERROR);
-            ASSERT_EQ(w.Finalize(), CHIP_NO_ERROR);
+
+            if (w.PutBoolean(chip::TLV::AnonymousTag(), false) != CHIP_NO_ERROR)
+            {
+                return false;
+            }
+
+            if (w.Finalize() != CHIP_NO_ERROR)
+            {
+                return false;
+            }
 
             chip::TLV::TLVReader r;
             r.Init(buf, w.GetLengthWritten());
@@ -125,6 +153,8 @@ namespace barton
             cb.OnAttributeData(path, &r, okStatus);
 
             cb.OnReportEnd();
+
+            return true;
         }
     };
 
@@ -208,9 +238,9 @@ namespace
     // -----------------------------------------------------------------------
     TEST_F(SbmdPrerequisitesTest, ClusterPresentPassesGate)
     {
-        SbmdPrerequisitesTestHelper::InitCache(cache);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::InitCache(cache));
         // Add any attribute on cluster 0x0405 — makes EndpointHasServerCluster(0, 0x0405) true
-        SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000));
 
         auto resource = MakeResourceWithClusterPrereq(0x0405);
 
@@ -222,9 +252,9 @@ namespace
     // -----------------------------------------------------------------------
     TEST_F(SbmdPrerequisitesTest, AttributeAbsentGatesResource)
     {
-        SbmdPrerequisitesTestHelper::InitCache(cache);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::InitCache(cache));
         // Add cluster 0x0405 but only attribute 0x0000 — attribute 0x0003 is absent
-        SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000));
 
         auto resource = MakeResourceWithAttributePrereq(0x0405, 0x0003);
 
@@ -236,8 +266,8 @@ namespace
     // -----------------------------------------------------------------------
     TEST_F(SbmdPrerequisitesTest, ClusterAndAttributePresentPassesGate)
     {
-        SbmdPrerequisitesTestHelper::InitCache(cache);
-        SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0003);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::InitCache(cache));
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0003));
 
         auto resource = MakeResourceWithAttributePrereq(0x0405, 0x0003);
 
@@ -249,8 +279,8 @@ namespace
     // -----------------------------------------------------------------------
     TEST_F(SbmdPrerequisitesTest, AliasResolvedPrerequisitePassesGate)
     {
-        SbmdPrerequisitesTestHelper::InitCache(cache);
-        SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::InitCache(cache));
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000));
 
         SbmdResource resource;
         resource.id = "testResource";
@@ -284,9 +314,9 @@ namespace
     // -----------------------------------------------------------------------
     TEST_F(SbmdPrerequisitesTest, PartialPrerequisitesSatisfiedGatesResource)
     {
-        SbmdPrerequisitesTestHelper::InitCache(cache);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::InitCache(cache));
         // Cluster 0x0405 present, cluster 0x0406 absent
-        SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000);
+        ASSERT_TRUE(SbmdPrerequisitesTestHelper::AddClusterAttribute(cache, 0, 0x0405, 0x0000));
 
         SbmdResource resource;
         resource.id = "testResource";
