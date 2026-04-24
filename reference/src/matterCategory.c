@@ -121,10 +121,8 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         timeoutSeconds = (guint16) g_ascii_strtoull(argv[1], NULL, 10);
     }
 
-    BCoreCommissioningInfo *commissioningInfo =
+    g_autoptr(BCoreCommissioningInfo) commissioningInfo =
         b_core_client_open_commissioning_window(client, (argc >= 1 ? argv[0] : NULL), timeoutSeconds);
-
-    g_autoptr(BCoreCommissioningInfo) autoCommissioningInfo = commissioningInfo;
 
     if (commissioningInfo == NULL)
     {
