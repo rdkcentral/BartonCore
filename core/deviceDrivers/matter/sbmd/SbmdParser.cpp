@@ -165,9 +165,20 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
     auto spec = std::make_shared<SbmdSpec>();
 
     // Parse top-level fields
-    if (root["schemaVersion"])
+    if (!root["schemaVersion"])
     {
-        spec->schemaVersion = root["schemaVersion"].as<std::string>();
+        icError("SBMD spec is missing required 'schemaVersion' field");
+
+        return nullptr;
+    }
+
+    spec->schemaVersion = root["schemaVersion"].as<std::string>();
+
+    if (spec->schemaVersion != "2.0")
+    {
+        icError("Unsupported SBMD schemaVersion '%s'; expected '2.0'", spec->schemaVersion.c_str());
+
+        return nullptr;
     }
 
     if (root["driverVersion"])

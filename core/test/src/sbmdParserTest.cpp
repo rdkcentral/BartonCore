@@ -493,19 +493,38 @@ static void test_sbmdParserMissingRequiredFields(void **state)
 {
     (void) state;
 
-    // Empty YAML should parse but result in empty spec (no validation currently)
-    // This test documents the current behavior
+    // Specs without schemaVersion should now be rejected
     const char *emptyYaml = R"(
 resources: []
 endpoints: []
 )";
 
     auto spec = barton::SbmdParser::ParseString(emptyYaml);
-    // Parser currently allows missing required fields - spec is created but fields are empty
-    assert_non_null(spec.get());
-    assert_true(spec->schemaVersion.empty());
-    assert_true(spec->driverVersion.empty());
-    assert_true(spec->name.empty());
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserWrongSchemaVersion(void **state)
+{
+    (void) state;
+
+    // A spec with a schemaVersion other than "2.0" should be rejected
+    const char *yaml = R"(
+schemaVersion: "1.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
 }
 
 static void test_sbmdParserInvalidBartonMetaType(void **state)
@@ -1504,9 +1523,8 @@ static void test_sbmdParserEmptyString(void **state)
     (void) state;
 
     auto spec = barton::SbmdParser::ParseString("");
-    // Empty string creates a null YAML node, which results in empty spec
-    assert_non_null(spec.get());
-    assert_true(spec->schemaVersion.empty());
+    // Empty string creates a null YAML node; missing schemaVersion causes parse failure
+    assert_null(spec.get());
 }
 
 int main(int argc, const char **argv)
@@ -1523,6 +1541,7 @@ int main(int argc, const char **argv)
         // Negative tests - error handling
         cmocka_unit_test(test_sbmdParserInvalidYamlSyntax),
         cmocka_unit_test(test_sbmdParserMissingRequiredFields),
+        cmocka_unit_test(test_sbmdParserWrongSchemaVersion),
         cmocka_unit_test(test_sbmdParserInvalidBartonMetaType),
         cmocka_unit_test(test_sbmdParserInvalidMatterMetaType),
         cmocka_unit_test(test_sbmdParserInvalidReportingType),
