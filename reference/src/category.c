@@ -147,6 +147,7 @@ void categoryPrint(const Category *category, bool isInteractive)
     g_return_if_fail(category != NULL);
 
     emitOutput("%s:\n", category->name);
+
     for (GList *it = category->commands; it != NULL; it = it->next)
     {
         Command *command = (Command *) it->data;

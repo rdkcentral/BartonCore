@@ -1175,7 +1175,7 @@ Category *buildCoreCategory(void)
     command = commandCreate("removeEndpoint", "re", "<uri>", "Remove an endpoint by uri", 1, 1, removeEndpointFunc);
     categoryAddCommand(cat, command);
 
-    // remove devices (advanced)
+    // remove devices
     command = commandCreate(
         "removeDevices", NULL, "[device class]", "Remove devices (all or by class)", 0, 1, removeDevicesFunc);
     categoryAddCommand(cat, command);
@@ -1215,7 +1215,7 @@ Category *buildCoreCategory(void)
     commandAddExample(command, "ddl clearbypass");
     categoryAddCommand(cat, command);
 
-    // reload database (advanced)
+    // reload database
     command = commandCreate("reloadDatabase",
                             NULL,
                             NULL,
