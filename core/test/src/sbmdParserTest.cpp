@@ -507,8 +507,8 @@ static void test_sbmdParserWrongSchemaVersion(void **state)
 {
     (void) state;
 
-    // A spec with a schemaVersion other than "2.0" should be rejected
-    const char *yaml = R"(
+    // Wrong major version (1.x) — rejected regardless of minor
+    const char *yaml1 = R"(
 schemaVersion: "1.0"
 driverVersion: "1.0"
 name: "Test Device"
@@ -523,7 +523,46 @@ resources: []
 endpoints: []
 )";
 
-    auto spec = barton::SbmdParser::ParseString(yaml);
+    auto spec = barton::SbmdParser::ParseString(yaml1);
+    assert_null(spec.get());
+
+    // Wrong major version (3.x) — rejected regardless of minor
+    const char *yaml2 = R"(
+schemaVersion: "3.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    spec = barton::SbmdParser::ParseString(yaml2);
+    assert_null(spec.get());
+
+    // Correct major but spec minor is newer than the parser supports — rejected
+    // (a spec written for schema 2.1 cannot be loaded by a 2.0 parser)
+    const char *yaml3 = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+resources: []
+endpoints: []
+)";
+
+    spec = barton::SbmdParser::ParseString(yaml3);
     assert_null(spec.get());
 }
 

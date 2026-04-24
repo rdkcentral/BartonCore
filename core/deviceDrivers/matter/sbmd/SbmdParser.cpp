@@ -40,7 +40,8 @@ namespace barton
 
     namespace
     {
-        constexpr const char *kSupportedSchemaVersion = "2.0";
+        constexpr int kSupportedSchemaMajor = 2;
+        constexpr int kSupportedSchemaMinor = 0;
 
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
@@ -176,11 +177,20 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
 
     spec->schemaVersion = root["schemaVersion"].as<std::string>();
 
-    if (spec->schemaVersion != kSupportedSchemaVersion)
     {
-        icError("Unsupported SBMD schemaVersion '%s'; expected '%s'", spec->schemaVersion.c_str(), kSupportedSchemaVersion);
+        int specMajor = -1;
+        int specMinor = -1;
+        int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d", &specMajor, &specMinor);
 
-        return nullptr;
+        if (parsed != 2 || specMajor != kSupportedSchemaMajor || specMinor > kSupportedSchemaMinor)
+        {
+            icError("Unsupported SBMD schemaVersion '%s'; expected %d.x where x <= %d",
+                    spec->schemaVersion.c_str(),
+                    kSupportedSchemaMajor,
+                    kSupportedSchemaMinor);
+
+            return nullptr;
+        }
     }
 
     if (root["driverVersion"])

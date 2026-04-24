@@ -9,7 +9,7 @@
     "schemaVersion": {
       "type": "string",
       "description": "SBMD schema version",
-      "const": "2.0"
+      "pattern": "^2\\.[0-9]+$"
     },
     "driverVersion": {
       "type": "string",
