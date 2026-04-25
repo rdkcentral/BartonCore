@@ -45,7 +45,7 @@ context: |
   - Object system: GObject with GObject Introspection (GIR namespace: BCore)
   - Testing: CMocka (C), Google Test/Mock (C++), pytest (Python integration)
   - Embedded JS: QuickJS (for SBMD spec scripts)
-  - Key deps: GLib/GIO 2.62+, libcurl, OpenSSL 1.1.1, libxml2, yaml-cpp, mbedcrypto, Matter SDK
+  - Key deps: GLib/GIO 2.62+, libcurl, OpenSSL 3.x (>=3.0.5), libxml2, yaml-cpp, mbedcrypto, Matter SDK
   - Formatting: clang-format (LLVM-based, Allman braces, 4-space indent)
   - License: Apache-2.0
 
