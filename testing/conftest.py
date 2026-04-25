@@ -267,14 +267,6 @@ def _run_in_subprocess(item):
 
             if not lines:
                 excerpt = "<no output captured from child pytest process>"
-            elif len(lines) > 160:
-                head = "\n".join(lines[:80])
-                tail = "\n".join(lines[-80:])
-                excerpt = (
-                    f"{head}\n\n"
-                    f"... ({len(lines) - 160} lines omitted) ...\n\n"
-                    f"{tail}"
-                )
             else:
                 excerpt = "\n".join(lines)
 
