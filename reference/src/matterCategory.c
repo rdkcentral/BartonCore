@@ -103,30 +103,57 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 
     bool rc = false;
 
-    /* If a target device id was provided and it's not the local ("0"), verify
-     * the device exists before attempting to open its commissioning window.
-     * Normalize the device ID by zero-padding it to 16 hex characters to ensure
-     * it matches the stored Matter device UUID format. */
-    if (argc >= 1 && strcmp(argv[0], "0") != 0)
+    /* If a target device id was provided, parse and validate it.
+     * Treat nodeId == 0 as local.
+     * Otherwise, verify the device exists after normalizing the ID. */
+    if (argc >= 1)
     {
-        g_autofree gchar *normalizedId = g_strdup_printf("%016llx",
-            (unsigned long long) g_ascii_strtoull(argv[0], NULL, 16));
-        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, normalizedId);
-        if (device == NULL)
+        char *endptr = NULL;
+        unsigned long long nodeId = g_ascii_strtoull(argv[0], &endptr, 16);
+
+        if (endptr == argv[0] || *endptr != '\0')
         {
-            emitError("No device with node id '%s' found\n", argv[0]);
+            emitError("Invalid node id '%s'\n", argv[0]);
             return false;
+        }
+
+        /* If not local (nodeId != 0), verify device exists */
+        if (nodeId != 0)
+        {
+            g_autofree gchar *normalizedId =
+                g_strdup_printf("%016llx", nodeId);
+
+            g_autoptr(BCoreDevice) device =
+                b_core_client_get_device_by_id(client, normalizedId);
+
+            if (device == NULL)
+            {
+                emitError("No device with node id '%s' found\n", argv[0]);
+                return false;
+            }
         }
     }
 
     guint16 timeoutSeconds = 0; // let device service pick the default
     if (argc == 2)
     {
-        timeoutSeconds = (guint16) g_ascii_strtoull(argv[1], NULL, 10);
+        char *endptr = NULL;
+        unsigned long long timeout = g_ascii_strtoull(argv[1], &endptr, 10);
+
+        if (endptr == argv[1] || *endptr != '\0' || timeout > G_MAXUINT16)
+        {
+            emitError("Invalid timeout '%s'\n", argv[1]);
+            return false;
+        }
+
+        timeoutSeconds = (guint16) timeout;
     }
 
     g_autoptr(BCoreCommissioningInfo) commissioningInfo =
-        b_core_client_open_commissioning_window(client, (argc >= 1 ? argv[0] : NULL), timeoutSeconds);
+        b_core_client_open_commissioning_window(
+            client,
+            (argc >= 1 ? argv[0] : NULL),
+            timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
