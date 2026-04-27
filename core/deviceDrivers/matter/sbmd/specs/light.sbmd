@@ -1,8 +1,8 @@
 # Light SBMD Specification
 # Maps Matter light device types to Barton light device class
 
-# SBMD schema version 1.0
-schemaVersion: "1.0"
+# SBMD schema version 2.0
+schemaVersion: "2.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -32,6 +32,19 @@ matterMeta:
     - 0x0104  # Dimmable Light Switch
     - 0x0105  # Color Dimmable Light Switch
   revision: 1
+  aliases:
+    - name: "onOff"
+      attribute:
+        clusterId: "0x0006"      # On/Off cluster
+        attributeId: "0x0000"    # OnOff attribute
+        name: "OnOff"
+        type: "bool"
+    - name: "currentLevel"
+      attribute:
+        clusterId: "0x0008"      # Level Control cluster
+        attributeId: "0x0000"    # CurrentLevel attribute
+        name: "CurrentLevel"
+        type: "uint8"
 
 # Subscription reporting configuration
 reporting:
@@ -50,13 +63,11 @@ endpoints:
           - "write"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "onOff"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0006"      # On/Off cluster
-              attributeId: "0x0000"    # OnOff attribute
-              name: "OnOff"
-              type: "bool"
+            alias: "onOff"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               return {output: (value === true) ? 'true' : 'false'};
@@ -74,13 +85,11 @@ endpoints:
           - "write"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "currentLevel"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0008"      # Level Control cluster
-              attributeId: "0x0000"    # CurrentLevel attribute
-              name: "CurrentLevel"
-              type: "uint8"
+            alias: "currentLevel"
             script: |
               var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               var percent = Math.round(level / 254 * 100);

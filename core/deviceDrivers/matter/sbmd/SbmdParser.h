@@ -66,9 +66,12 @@ namespace barton
         static bool ParseBartonMeta(const YAML::Node &node, SbmdBartonMeta &meta);
         static bool ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta);
         static bool ParseReporting(const YAML::Node &node, SbmdReporting &reporting);
-        static bool ParseResource(const YAML::Node &node, SbmdResource &resource);
-        static bool ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint);
-        static bool ParseMapper(const YAML::Node &node, SbmdMapper &mapper);
+        static bool
+        ParseResource(const YAML::Node &node, SbmdResource &resource, const std::vector<SbmdAlias> &aliases);
+        static bool
+        ParseEndpoint(const YAML::Node &node, SbmdEndpoint &endpoint, const std::vector<SbmdAlias> &aliases);
+        static bool ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const std::vector<SbmdAlias> &aliases);
+        static bool ParseAlias(const YAML::Node &node, SbmdAlias &alias);
         static bool ParseAttribute(const YAML::Node &node, SbmdAttribute &attribute);
         static bool ParseCommand(const YAML::Node &node, SbmdCommand &command);
         static bool ParseEvent(const YAML::Node &node, SbmdEvent &event);
@@ -76,6 +79,9 @@ namespace barton
         // Utility methods
         static uint32_t ParseHexOrDecimal(const std::string &value);
         static std::vector<std::string> ParseStringArray(const YAML::Node &node);
+        static bool ParsePrerequisites(const YAML::Node &node,
+                                       std::vector<SbmdPrerequisite> &out,
+                                       const std::vector<SbmdAlias> &aliases);
     };
 
 } // namespace barton
