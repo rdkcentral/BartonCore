@@ -91,10 +91,11 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     bool rc = false;
 
     /* Parse and validate the node ID.
+     * Accept decimal or hex (0x prefix) format.
      * Treat nodeId == 0 as local.
      * Otherwise, verify the device exists after normalizing the ID. */
     char *endptr = NULL;
-    unsigned long long nodeId = g_ascii_strtoull(argv[0], &endptr, 16);
+    unsigned long long nodeId = g_ascii_strtoull(argv[0], &endptr, 0);
 
     if (endptr == argv[0] || *endptr != '\0')
     {
@@ -172,6 +173,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 static bool setWifiCredsFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     b_reference_network_credentials_provider_set_wifi_network_credentials(argv[0], argv[1]);
+    return true;
 }
 
 Category *buildMatterCategory(void)
