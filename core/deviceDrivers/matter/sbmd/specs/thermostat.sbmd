@@ -1,0 +1,406 @@
+# Thermostat SBMD Specification
+# Maps Matter Thermostat device type to Barton thermostat device class
+
+# SBMD schema version 2.0
+schemaVersion: "2.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Thermostat"
+# Script type (currently only JavaScript is supported)
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "thermostat"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0301  # Thermostat
+  revision: 1
+  featureClusters:
+    - 0x0201  # Thermostat cluster - for featureMap access in scripts
+  aliases:
+    # Thermostat cluster (0x0201) attributes
+    - name: "localTemperature"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0000"
+        name: "LocalTemperature"
+        type: "int16"
+    - name: "absMinHeatSetpointLimit"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0003"
+        name: "AbsMinHeatSetpointLimit"
+        type: "int16"
+    - name: "absMaxHeatSetpointLimit"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0004"
+        name: "AbsMaxHeatSetpointLimit"
+        type: "int16"
+    - name: "absMinCoolSetpointLimit"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0005"
+        name: "AbsMinCoolSetpointLimit"
+        type: "int16"
+    - name: "absMaxCoolSetpointLimit"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0006"
+        name: "AbsMaxCoolSetpointLimit"
+        type: "int16"
+    - name: "occupiedCoolingSetpoint"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0011"
+        name: "OccupiedCoolingSetpoint"
+        type: "int16"
+    - name: "occupiedHeatingSetpoint"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0012"
+        name: "OccupiedHeatingSetpoint"
+        type: "int16"
+    - name: "controlSequenceOfOperation"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x001b"
+        name: "ControlSequenceOfOperation"
+        type: "enum8"
+    - name: "systemMode"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x001c"
+        name: "SystemMode"
+        type: "enum8"
+    - name: "thermostatRunningState"
+      attribute:
+        clusterId: "0x0201"
+        attributeId: "0x0029"
+        name: "ThermostatRunningState"
+        type: "bitmap16"
+    # Fan Control cluster (0x0202) attributes — optional
+    - name: "fanMode"
+      attribute:
+        clusterId: "0x0202"
+        attributeId: "0x0000"
+        name: "FanMode"
+        type: "enum8"
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+# Barton endpoints
+endpoints:
+  - id: "1"
+    profile: "thermostat"
+    profileVersion: 2
+    resources:
+      # --- Mandatory Thermostat cluster resources ---
+
+      # Current temperature reading
+      - id: "localTemperature"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "localTemperature"
+        mapper:
+          read:
+            alias: "localTemperature"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      # Heating setpoint (read/write)
+      - id: "heatSetpoint"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "occupiedHeatingSetpoint"
+        mapper:
+          read:
+            alias: "occupiedHeatingSetpoint"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+          write:
+            script: |
+              var temp = parseInt(sbmdWriteArgs.input, 10);
+              if (isNaN(temp)) {
+                return SbmdUtils.Response.error('Invalid temperature value');
+              }
+              var tlvBase64 = SbmdUtils.Tlv.encode(temp, 'int16');
+              return SbmdUtils.Response.write(0x0201, 0x0012, tlvBase64);
+
+      # Cooling setpoint (read/write)
+      - id: "coolSetpoint"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "occupiedCoolingSetpoint"
+        mapper:
+          read:
+            alias: "occupiedCoolingSetpoint"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+          write:
+            script: |
+              var temp = parseInt(sbmdWriteArgs.input, 10);
+              if (isNaN(temp)) {
+                return SbmdUtils.Response.error('Invalid temperature value');
+              }
+              var tlvBase64 = SbmdUtils.Tlv.encode(temp, 'int16');
+              return SbmdUtils.Response.write(0x0201, 0x0011, tlvBase64);
+
+      # Absolute setpoint limits (read-only)
+      - id: "absoluteMinHeatLimit"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+        prerequisites:
+          - alias: "absMinHeatSetpointLimit"
+        mapper:
+          read:
+            alias: "absMinHeatSetpointLimit"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      - id: "absoluteMaxHeatLimit"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+        prerequisites:
+          - alias: "absMaxHeatSetpointLimit"
+        mapper:
+          read:
+            alias: "absMaxHeatSetpointLimit"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      - id: "absoluteMinCoolLimit"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+        prerequisites:
+          - alias: "absMinCoolSetpointLimit"
+        mapper:
+          read:
+            alias: "absMinCoolSetpointLimit"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      - id: "absoluteMaxCoolLimit"
+        type: "com.icontrol.temperature"
+        modes:
+          - "read"
+        prerequisites:
+          - alias: "absMaxCoolSetpointLimit"
+        mapper:
+          read:
+            alias: "absMaxCoolSetpointLimit"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      # Control sequence of operation
+      - id: "controlSequenceOfOperation"
+        type: "com.icontrol.tstatCtrlSeqOp"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "controlSequenceOfOperation"
+        mapper:
+          read:
+            alias: "controlSequenceOfOperation"
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value.toString()};
+
+      # System mode (read/write)
+      - id: "systemMode"
+        type: "com.icontrol.tstatSystemMode"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "systemMode"
+        mapper:
+          read:
+            alias: "systemMode"
+            # SystemMode enum: 0=Off, 1=Auto, 3=Cool, 4=Heat,
+            #   5=EmergencyHeat, 6=Precooling, 7=FanOnly
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var modeMap = {
+                0: 'off',
+                1: 'auto',
+                3: 'cool',
+                4: 'heat',
+                5: 'emergencyHeat',
+                6: 'precooling',
+                7: 'fanOnly'
+              };
+              var mode = modeMap[value];
+              if (mode === undefined) {
+                mode = value.toString();
+              }
+              return {output: mode};
+          write:
+            script: |
+              var reverseModeMap = {
+                'off': 0,
+                'auto': 1,
+                'cool': 3,
+                'heat': 4,
+                'emergencyHeat': 5,
+                'precooling': 6,
+                'fanOnly': 7
+              };
+              var modeValue = reverseModeMap[sbmdWriteArgs.input];
+              if (modeValue === undefined) {
+                return SbmdUtils.Response.error('Unknown system mode: ' + sbmdWriteArgs.input);
+              }
+              var tlvBase64 = SbmdUtils.Tlv.encode(modeValue, 'enum8');
+              return SbmdUtils.Response.write(0x0201, 0x001c, tlvBase64);
+
+      # System state / running state (optional — not mandatory in Matter)
+      - id: "systemState"
+        type: "com.icontrol.tstatSystemState"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "thermostatRunningState"
+        mapper:
+          read:
+            alias: "thermostatRunningState"
+            # ThermostatRunningState bitmap16:
+            #   bit 0 = Heat State On
+            #   bit 1 = Cool State On
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value & 0x0001) {
+                return {output: 'heating'};
+              } else if (value & 0x0002) {
+                return {output: 'cooling'};
+              }
+              return {output: 'off'};
+
+      # --- Optional Fan Control cluster resources ---
+      # Present only when the device supports Fan Control cluster (0x0202).
+
+      # Fan mode
+      - id: "fanMode"
+        type: "com.icontrol.tstatFanMode"
+        optional: true
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "fanMode"
+        mapper:
+          read:
+            alias: "fanMode"
+            # FanMode enum: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto, 6=Smart
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var modeMap = {
+                0: 'off',
+                1: 'on',
+                2: 'on',
+                3: 'on',
+                4: 'on',
+                5: 'auto',
+                6: 'auto'
+              };
+              var mode = modeMap[value];
+              if (mode === undefined) {
+                mode = 'unknown';
+              }
+              return {output: mode};
+          write:
+            script: |
+              var reverseModeMap = {
+                'off': 0,
+                'on': 4,
+                'auto': 5
+              };
+              var modeValue = reverseModeMap[sbmdWriteArgs.input];
+              if (modeValue === undefined) {
+                return SbmdUtils.Response.error('Unknown fan mode: ' + sbmdWriteArgs.input);
+              }
+              var tlvBase64 = SbmdUtils.Tlv.encode(modeValue, 'enum8');
+              return SbmdUtils.Response.write(0x0202, 0x0000, tlvBase64);
+
+      # Fan running state (derived from fanMode — on if mode != off)
+      - id: "fanOn"
+        type: "boolean"
+        optional: true
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "fanMode"
+        mapper:
+          read:
+            alias: "fanMode"
+            # FanMode enum: 0=Off → fanOn=false; anything else → fanOn=true
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var isOn = (value !== 0);
+              return {output: isOn ? 'true' : 'false'};
