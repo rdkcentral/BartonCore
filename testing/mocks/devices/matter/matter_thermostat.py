@@ -43,10 +43,11 @@ class MatterThermostat(MatterDevice):
         self,
         vendor_id: int = 0,
         product_id: int = 0,
+        matterjs_entry_point: str = "ThermostatDevice.js",
     ):
         super().__init__(
             device_class="thermostat",
-            matterjs_entry_point="ThermostatDevice.js",
+            matterjs_entry_point=matterjs_entry_point,
             vendor_id=vendor_id,
             product_id=product_id,
         )

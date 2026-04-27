@@ -101,6 +101,12 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         return;
     }
 
+    if (cache == nullptr)
+    {
+        icError("Null cache pointer for device %s", device->deviceId.c_str());
+        return;
+    }
+
     for (auto it = range.first; it != range.second; ++it)
     {
         const auto &uri = it->second.uri;
@@ -110,10 +116,10 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
 
         // Get the attribute data from the cache (re-read for each binding since TLVReader is consumed)
         chip::TLV::TLVReader reader;
-        if (cache == nullptr || cache->Get(aPath, reader) != CHIP_NO_ERROR)
+        if (cache->Get(aPath, reader) != CHIP_NO_ERROR)
         {
-            icError("Failed to get attribute data from cache for device %s", device->deviceId.c_str());
-            return;
+            icError("Failed to get attribute data from cache for URI: %s", uri.c_str());
+            continue;
         }
 
         // Execute the script to map the TLV data to a string value

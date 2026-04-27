@@ -47,8 +47,8 @@ class MatterThermostatWithFan(MatterThermostat):
         super().__init__(
             vendor_id=vendor_id,
             product_id=product_id,
+            matterjs_entry_point="ThermostatWithFanDevice.js",
         )
-        self._matterjs_entry_point = "ThermostatWithFanDevice.js"
 
 
 @pytest.fixture
