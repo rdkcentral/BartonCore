@@ -88,6 +88,10 @@ void commandSetAdvanced(Command *command);
 /**
  * Execute a Command.
  *
+ * Validates that argc is within the command's minArgs and maxArgs bounds,
+ * and that argv is not NULL when argc > 0. Arguments are validated before
+ * the command's function is executed, ensuring consistency across all commands.
+ *
  * @param client
  * @param command
  * @param argc

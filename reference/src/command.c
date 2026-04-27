@@ -118,7 +118,14 @@ bool commandExecute(BCoreClient *client, const Command *command, gint argc, gcha
     {
         if (argc >= command->minArgs && (command->maxArgs == -1 || argc <= command->maxArgs))
         {
-            result = command->func(client, argc, argv);
+            if (argc == 0 || argv != NULL)
+            {
+                result = command->func(client, argc, argv);
+            }
+            else
+            {
+                emitError("Invalid args\n");
+            }
         }
         else
         {
