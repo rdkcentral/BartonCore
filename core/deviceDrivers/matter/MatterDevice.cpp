@@ -86,18 +86,13 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             aPath.mClusterId,
             aPath.mAttributeId);
 
-    // Fast O(1) lookup for readable attributes
-    auto it = device->readableAttributeLookup.find(aPath);
-    if (it == device->readableAttributeLookup.end())
+    // Fast O(1) lookup for readable attributes (may have multiple bindings per path)
+    auto range = device->readableAttributeLookup.equal_range(aPath);
+    if (range.first == range.second)
     {
         // Not a readable attribute with a mapper - this is the common case
         return;
     }
-
-    const auto &uri = it->second.uri;
-    const auto &binding = it->second.binding;
-
-    icDebug("Found readable attribute match for URI: %s", uri.c_str());
 
     // Check if we have a script engine
     if (!device->script)
@@ -106,47 +101,55 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         return;
     }
 
-    // Get the attribute data from the cache
-    chip::TLV::TLVReader reader;
-    if (cache == nullptr || cache->Get(aPath, reader) != CHIP_NO_ERROR)
+    for (auto it = range.first; it != range.second; ++it)
     {
-        icError("Failed to get attribute data from cache for device %s", device->deviceId.c_str());
-        return;
-    }
+        const auto &uri = it->second.uri;
+        const auto &binding = it->second.binding;
 
-    // Execute the script to map the TLV data to a string value
-    std::string outValue;
-    if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
-    {
-        icError("Failed to execute read mapping script for URI: %s", uri.c_str());
-        return;
-    }
+        icDebug("Found readable attribute match for URI: %s", uri.c_str());
 
-    icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
-
-    // Extract the resource ID from the URI
-    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
-    const char *resourceId = strrchr(uri.c_str(), '/');
-    if (resourceId != nullptr)
-    {
-        resourceId++; // Skip the '/'
-
-        const char *resourceEndpointId = nullptr;
-        if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+        // Get the attribute data from the cache (re-read for each binding since TLVReader is consumed)
+        chip::TLV::TLVReader reader;
+        if (cache == nullptr || cache->Get(aPath, reader) != CHIP_NO_ERROR)
         {
-            resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+            icError("Failed to get attribute data from cache for device %s", device->deviceId.c_str());
+            return;
         }
 
-        // Call updateResource to notify DeviceService of the change
-        updateResource(device->deviceId.c_str(),
-                       resourceEndpointId,
-                       resourceId,
-                       outValue.c_str(),
-                       nullptr); // No additional metadata for now
-    }
-    else
-    {
-        icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        // Execute the script to map the TLV data to a string value
+        std::string outValue;
+        if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        {
+            icError("Failed to execute read mapping script for URI: %s", uri.c_str());
+            continue;
+        }
+
+        icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
+
+        // Extract the resource ID from the URI
+        // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+        const char *resourceId = strrchr(uri.c_str(), '/');
+        if (resourceId != nullptr)
+        {
+            resourceId++; // Skip the '/'
+
+            const char *resourceEndpointId = nullptr;
+            if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+            {
+                resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+            }
+
+            // Call updateResource to notify DeviceService of the change
+            updateResource(device->deviceId.c_str(),
+                           resourceEndpointId,
+                           resourceId,
+                           outValue.c_str(),
+                           nullptr); // No additional metadata for now
+        }
+        else
+        {
+            icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        }
     }
 }
 
@@ -439,7 +442,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
         AttributeReadBinding readBinding;
         readBinding.uri = uri;
         readBinding.binding = binding;
-        readableAttributeLookup[binding.attributePath] = std::move(readBinding);
+        readableAttributeLookup.emplace(binding.attributePath, std::move(readBinding));
         icDebug("Added readable attribute to fast lookup (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
                 endpointId,
                 attribute.clusterId,
