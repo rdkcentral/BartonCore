@@ -99,8 +99,20 @@ namespace barton
          */
         static std::string MakeResourceKey(const SbmdResource &resource);
 
+        /**
+         * Check whether all prerequisites declared by a resource are satisfied by the device's data cache.
+         * Resources with an empty prerequisites vector (prerequisites: none) always satisfy the check.
+         *
+         * @param resource The resource whose prerequisites to evaluate
+         * @param device   The commissioned device whose data cache is queried
+         * @return true if all prerequisites are met, false if any prerequisite is unmet
+         */
+        static bool CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device);
+
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
          * configuration */
         std::map<std::string, std::set<std::string>> skippedOptionalResources;
+
+        friend class TestableSpecBasedMatterDeviceDriver;
     };
 } // namespace barton
