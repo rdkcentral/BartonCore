@@ -101,16 +101,14 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         emitError("Invalid node id '%s'\n", argv[0]);
         return false;
     }
-    g_autofree gchar *nodeIdArg = NULL;
     if (nodeId != 0)
     {
-        nodeIdArg = g_strdup_printf("%016llx", nodeId);
-
-        /* Verify device exists.
+        /* Verify device exists by checking device lookup with zero-padded hex format.
          * NOTE: This lookup assumes Matter node IDs are used as device IDs.
          * If the internal mapping between Matter node IDs and Barton device IDs
          * changes, this lookup method may no longer be reliable. */
-        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdArg);
+        g_autofree gchar *nodeIdHex = g_strdup_printf("%016llx", nodeId);
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdHex);
         if (device == NULL)
         {
             emitError("No device with node id '%s' found\n", argv[0]);
@@ -133,8 +131,10 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         timeoutSeconds = (guint16) timeout;
     }
 
+    /* Pass original argv[0] to downstream parsing (stringToUint64 uses base 0).
+     * Bare zero-padded hex like "0000000000001234" would be misinterpreted as octal. */
     g_autoptr(BCoreCommissioningInfo) commissioningInfo =
-        b_core_client_open_commissioning_window(client, nodeIdArg, timeoutSeconds);
+        b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
