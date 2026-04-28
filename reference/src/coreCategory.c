@@ -1061,6 +1061,21 @@ static bool ddlFunc(BCoreClient *client, gint argc, gchar **argv)
     return result;
 }
 
+static bool reloadDatabaseFunc(BCoreClient *client, gint argc, gchar **argv)
+{
+    (void) argc; // unused
+    (void) argv; // unused
+
+    bool result = b_core_client_reload_database(client);
+
+    if (!result)
+    {
+        emitError("Failed to reload database\n");
+    }
+
+    return result;
+}
+
 Category *buildCoreCategory(void)
 {
     Category *cat = categoryCreate("Core", "Core/standard commands");
@@ -1160,10 +1175,9 @@ Category *buildCoreCategory(void)
     command = commandCreate("removeEndpoint", "re", "<uri>", "Remove an endpoint by uri", 1, 1, removeEndpointFunc);
     categoryAddCommand(cat, command);
 
-    // remove devices (advanced)
+    // remove devices
     command = commandCreate(
         "removeDevices", NULL, "[device class]", "Remove devices (all or by class)", 0, 1, removeDevicesFunc);
-    commandSetAdvanced(command);
     categoryAddCommand(cat, command);
 
     //system prop read
@@ -1199,6 +1213,16 @@ Category *buildCoreCategory(void)
     commandAddExample(command, "ddl process");
     commandAddExample(command, "ddl bypass");
     commandAddExample(command, "ddl clearbypass");
+    categoryAddCommand(cat, command);
+
+    // reload database
+    command = commandCreate("reloadDatabase",
+                            NULL,
+                            NULL,
+                            "Instruct device service to reload its device database",
+                            0,
+                            0,
+                            reloadDatabaseFunc);
     categoryAddCommand(cat, command);
 
     return cat;
