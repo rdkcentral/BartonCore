@@ -120,6 +120,7 @@ bool commandExecute(BCoreClient *client, const Command *command, gint argc, gcha
         {
             /* Validate argv: not NULL when argc > 0, and each argv[i] is non-NULL */
             bool argsValid = (argc == 0 || argv != NULL);
+
             if (argsValid && argc > 0)
             {
                 for (gint i = 0; i < argc && argsValid; i++)

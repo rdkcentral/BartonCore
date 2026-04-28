@@ -94,13 +94,14 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
      * Treat nodeId == 0 as local.
      * Otherwise, verify the device exists after normalizing the ID. */
     char *endptr = NULL;
-    unsigned long long nodeId = g_ascii_strtoull(argv[0], &endptr, 0);
+    guint64 nodeId = g_ascii_strtoull(argv[0], &endptr, 0);
 
     if (endptr == argv[0] || *endptr != '\0')
     {
         emitError("Invalid node id '%s'\n", argv[0]);
         return false;
     }
+
     if (nodeId != 0)
     {
         /* Verify device exists by checking device lookup with zero-padded hex format.
@@ -109,6 +110,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
          * changes, this lookup method may no longer be reliable. */
         g_autofree gchar *nodeIdHex = g_strdup_printf("%016llx", nodeId);
         g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdHex);
+
         if (device == NULL)
         {
             emitError("No device with node id '%s' found\n", argv[0]);
@@ -120,7 +122,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     if (argc == 2)
     {
         char *endptr = NULL;
-        unsigned long long timeout = g_ascii_strtoull(argv[1], &endptr, 10);
+        guint64 timeout = g_ascii_strtoull(argv[1], &endptr, 10);
 
         if (endptr == argv[1] || *endptr != '\0' || timeout > G_MAXUINT16)
         {
@@ -131,8 +133,6 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         timeoutSeconds = (guint16) timeout;
     }
 
-    /* Pass original argv[0] to downstream parsing (stringToUint64 uses base 0).
-     * Bare zero-padded hex like "0000000000001234" would be misinterpreted as octal. */
     g_autoptr(BCoreCommissioningInfo) commissioningInfo =
         b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
 
@@ -172,6 +172,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 static bool setWifiCredsFunc(BCoreClient *client, gint argc, gchar **argv)
 {
     b_reference_network_credentials_provider_set_wifi_network_credentials(argv[0], argv[1]);
+
     return true;
 }
 
