@@ -89,12 +89,9 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 {
     bool rc = false;
 
-    /* Parse and validate the node ID.
-     * Accept decimal or hex (0x prefix) format.
-     * Treat nodeId == 0 as local.
-     * Otherwise, verify the device exists after normalizing the ID. */
+    /* Parse and validate the node ID as hexadecimal*/
     char *endptr = NULL;
-    guint64 nodeId = g_ascii_strtoull(argv[0], &endptr, 0);
+    guint64 nodeId = g_ascii_strtoull(argv[0], &endptr, 16);
 
     if (endptr == argv[0] || *endptr != '\0')
     {
@@ -102,14 +99,16 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
         return false;
     }
 
+    /* Convert the validated nodeId to zero-padded hex string format */
+    g_autofree gchar *nodeIdStr = g_strdup_printf("%016llx", nodeId);
+
     if (nodeId != 0)
     {
         /* Verify device exists by checking device lookup with zero-padded hex format.
          * NOTE: This lookup assumes Matter node IDs are used as device IDs.
          * If the internal mapping between Matter node IDs and Barton device IDs
          * changes, this lookup method may no longer be reliable. */
-        g_autofree gchar *nodeIdHex = g_strdup_printf("%016llx", nodeId);
-        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdHex);
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdStr);
 
         if (device == NULL)
         {
@@ -134,7 +133,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     }
 
     g_autoptr(BCoreCommissioningInfo) commissioningInfo =
-        b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
+        b_core_client_open_commissioning_window(client, nodeIdStr, timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
