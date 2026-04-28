@@ -48,6 +48,7 @@ namespace barton
     {
         // Allow test subclass to access private members for cache population in tests
         friend class TestableMatterDevice;
+        friend class SbmdPrerequisitesTestHelper;
 
     public:
         DeviceDataCache(const std::string &deviceUuid,

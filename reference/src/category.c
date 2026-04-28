@@ -36,7 +36,6 @@ struct _Category
 {
     gchar *name;
     gchar *description;
-    bool isAdvanced;
     GList *commands; // less efficient, but we want ordered.
 };
 
@@ -61,13 +60,6 @@ void categoryDestroy(Category *category)
     free(category->description);
     g_list_free_full(category->commands, commandEntryFreeFunc);
     free(category);
-}
-
-void categorySetAdvanced(Category *category)
-{
-    g_return_if_fail(category != NULL);
-
-    category->isAdvanced = true;
 }
 
 void categoryAddCommand(Category *category, Command *command)
@@ -150,18 +142,16 @@ GList *categoryGetCompletions(const Category *category, const gchar *buf)
     return result;
 }
 
-void categoryPrint(const Category *category, bool isInteractive, bool showAdvanced)
+void categoryPrint(const Category *category, bool isInteractive)
 {
     g_return_if_fail(category != NULL);
 
-    if (category->isAdvanced == false || showAdvanced == true)
+    emitOutput("%s:\n", category->name);
+
+    for (GList *it = category->commands; it != NULL; it = it->next)
     {
-        emitOutput("%s:\n", category->name);
-        for (GList *it = category->commands; it != NULL; it = it->next)
-        {
-            Command *command = (Command *) it->data;
-            commandPrintUsage(command, isInteractive, showAdvanced);
-        }
+        Command *command = (Command *) it->data;
+        commandPrintUsage(command, isInteractive);
     }
 }
 
