@@ -50,6 +50,13 @@ namespace barton
 
         bool DoRegisterResources(icDevice *device) override;
 
+        bool DevicePersisted(icDevice *device) override;
+
+        void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                 const std::string &deviceId,
+                                 chip::Messaging::ExchangeManager &exchangeMgr,
+                                 const chip::SessionHandle &sessionHandle) override;
+
         void DoReadResource(std::forward_list<std::promise<bool>> &promises,
                             const std::string &deviceId,
                             icDeviceResource *resource,
@@ -90,6 +97,14 @@ namespace barton
          * @param resource The resource containing mapper configurations
          */
         void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
+
+        /**
+         * Seed the initial values of all seedFrom resources for a device from the attribute cache.
+         * Called at configure and synchronize time, after bindings are established and the cache is primed.
+         * Skips resources that were marked as optional and not registered.
+         * @param deviceId The device ID
+         */
+        void SeedInitialResourceValues(const std::string &deviceId);
 
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
 

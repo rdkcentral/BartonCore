@@ -187,16 +187,23 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
     assert_string_equal(spec->endpoints[0].profile.c_str(), "doorLock");
 
-    // Verify locked resource uses read mapper (LockState attribute)
+    // Verify locked resource uses event + seedFrom mapper (not read)
     assert_true(spec->endpoints[0].resources.size() >= 1);
     auto &locked = spec->endpoints[0].resources[0];
     assert_string_equal(locked.id.c_str(), "locked");
-    assert_true(locked.mapper.hasRead);
-    assert_true(locked.mapper.readAttribute.has_value());
-    assert_int_equal((int) locked.mapper.readAttribute->clusterId, 0x0101);
-    assert_int_equal((int) locked.mapper.readAttribute->attributeId, 0x0000);
-    assert_string_equal(locked.mapper.readAttribute->name.c_str(), "LockState");
-    assert_false(locked.mapper.readScript.empty());
+    assert_false(locked.mapper.hasRead);
+    assert_false(locked.mapper.readAttribute.has_value());
+    assert_true(locked.mapper.event.has_value());
+    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
+    assert_string_equal(locked.mapper.event->name.c_str(), "LockOperation");
+    assert_false(locked.mapper.eventScript.empty());
+    assert_true(locked.mapper.hasInitialRead);
+    assert_true(locked.mapper.initialReadAttribute.has_value());
+    assert_int_equal((int) locked.mapper.initialReadAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.initialReadAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.initialReadAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.initialReadScript.empty());
 }
 
 static void test_sbmdParserLightFile(void **state)
@@ -1604,6 +1611,273 @@ static void test_sbmdParserEmptyString(void **state)
     assert_null(spec.get());
 }
 
+static void test_sbmdParserSeedFromValidSpec(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read", "dynamic"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: |
+              var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+              return { output: event[0] === 0 ? 'true' : 'false' };
+          seedFrom:
+            alias: lockState
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return { output: value === 1 ? 'true' : 'false' };
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &locked = spec->endpoints[0].resources[0];
+    assert_string_equal(locked.id.c_str(), "locked");
+    assert_false(locked.mapper.hasRead);
+    assert_true(locked.mapper.event.has_value());
+    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
+    assert_false(locked.mapper.eventScript.empty());
+    assert_true(locked.mapper.hasInitialRead);
+    assert_true(locked.mapper.initialReadAttribute.has_value());
+    assert_int_equal((int) locked.mapper.initialReadAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.initialReadAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.initialReadAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.initialReadScript.empty());
+}
+
+static void test_sbmdParserSeedFromWithoutEvent(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0043"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+resources:
+  - id: "testResource"
+    type: "boolean"
+    modes: ["read"]
+    prerequisites:
+      - alias: lockState
+    mapper:
+      seedFrom:
+        alias: lockState
+        script: "return { output: 'true' };"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom requires event on the same mapper
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromMissingScript(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockState
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom requires a non-empty script
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromWithRead(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          read:
+            alias: lockState
+            script: "return { output: 'true' };"
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockState
+            script: "return { output: 'true' };"
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: read and seedFrom are mutually exclusive
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromEventAliasRejected(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom alias must be an attribute alias, not an event alias
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -1648,6 +1922,12 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_prerequisiteNotRequiredForExecuteMapper),
         cmocka_unit_test(test_prerequisiteEntryUnknownKey),
         cmocka_unit_test(test_prerequisiteInvalidBothForms),
+        // seedFrom mapper tests
+        cmocka_unit_test(test_sbmdParserSeedFromValidSpec),
+        cmocka_unit_test(test_sbmdParserSeedFromWithoutEvent),
+        cmocka_unit_test(test_sbmdParserSeedFromMissingScript),
+        cmocka_unit_test(test_sbmdParserSeedFromWithRead),
+        cmocka_unit_test(test_sbmdParserSeedFromEventAliasRejected),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

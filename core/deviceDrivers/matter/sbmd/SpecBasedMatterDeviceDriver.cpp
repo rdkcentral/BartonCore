@@ -154,6 +154,16 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                 return false;
             }
         }
+
+        if (sbmdResource.mapper.hasInitialRead && sbmdResource.mapper.initialReadAttribute.has_value())
+        {
+            if (!device->BindResourceSeedFromInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
+            {
+                icError("  Failed to bind seedFrom for resource %s", sbmdResource.id.c_str());
+                return false;
+            }
+        }
+
         return true;
     };
 
@@ -279,6 +289,13 @@ void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const S
         // Event mappers convert event TLV to resource values
         script.AddEventMapper(resource.mapper.event.value(), resource.mapper.eventScript);
     }
+
+    if (resource.mapper.hasInitialRead && resource.mapper.initialReadAttribute.has_value() &&
+        !resource.mapper.initialReadScript.empty())
+    {
+        // SeedFrom mappers reuse the attribute read mapper interface — same script shape as read mappers
+        script.AddAttributeReadMapper(resource.mapper.initialReadAttribute.value(), resource.mapper.initialReadScript);
+    }
 }
 
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()
@@ -381,6 +398,26 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
     }
 
     return result;
+}
+
+bool SpecBasedMatterDeviceDriver::DevicePersisted(icDevice *device)
+{
+    // At this point the device has been added to the database and DEVICE_ADDED has been emitted,
+    // so resources exist and updateResource() will find them. Schedule seeding on the Matter thread
+    // so that GetCachedAttributeData() is called from the correct thread context.
+    const std::string deviceId = device->uuid;
+
+    RunOnMatterSync([this, deviceId] { SeedInitialResourceValues(deviceId); });
+
+    return true;
+}
+
+void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                                      const std::string &deviceId,
+                                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                                      const chip::SessionHandle &sessionHandle)
+{
+    SeedInitialResourceValues(deviceId);
 }
 
 void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
@@ -493,6 +530,60 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
 std::string SpecBasedMatterDeviceDriver::MakeResourceKey(const SbmdResource &resource)
 {
     return resource.resourceEndpointId.value_or("") + ":" + resource.id;
+}
+
+void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &deviceId)
+{
+    icDebug("Seeding initial resource values for device %s", deviceId.c_str());
+
+    auto device = GetDevice(deviceId);
+
+    if (device == nullptr)
+    {
+        icError("Device %s not found for seedFrom seeding", deviceId.c_str());
+        return;
+    }
+
+    auto skipIt = skippedOptionalResources.find(deviceId);
+    const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
+
+    // Seed device-level resources
+    for (const auto &resource : spec->resources)
+    {
+        if (!resource.mapper.hasInitialRead)
+        {
+            continue;
+        }
+
+        if (skipped && skipped->count(MakeResourceKey(resource)))
+        {
+            continue;
+        }
+
+        g_autofree char *uri = createDeviceResourceUri(deviceId.c_str(), resource.id.c_str());
+        device->SeedResourceFromAttribute(uri);
+    }
+
+    // Seed endpoint-level resources
+    for (const auto &endpoint : spec->endpoints)
+    {
+        for (const auto &resource : endpoint.resources)
+        {
+            if (!resource.mapper.hasInitialRead)
+            {
+                continue;
+            }
+
+            if (skipped && skipped->count(MakeResourceKey(resource)))
+            {
+                continue;
+            }
+
+            g_autofree char *uri = createEndpointResourceUri(
+                deviceId.c_str(), resource.resourceEndpointId.value_or("").c_str(), resource.id.c_str());
+            device->SeedResourceFromAttribute(uri);
+        }
+    }
 }
 
 bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device)

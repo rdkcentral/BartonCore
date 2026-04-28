@@ -225,6 +225,9 @@
         },
         "event": {
           "$ref": "#/$defs/eventMapper"
+        },
+        "seedFrom": {
+          "$ref": "#/$defs/seedFromMapper"
         }
       },
       "additionalProperties": false
@@ -301,6 +304,24 @@
         "script": {
           "type": "string",
           "description": "JavaScript mapper script for processing event TLV data",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "seedFromMapper": {
+      "type": "object",
+      "description": "SeedFrom mapper configuration: reads an attribute from the device data cache once at configure and synchronize time to seed the initial value of an event-driven resource. Must be used alongside an event mapper; mutually exclusive with read mapper.",
+      "required": ["alias", "script"],
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Name of the matterMeta alias (must be an attribute alias) whose cached value seeds the resource",
+          "minLength": 1
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script for converting the attribute TLV to a resource value (uses sbmdReadArgs, same as read mapper scripts)",
           "minLength": 1
         }
       },

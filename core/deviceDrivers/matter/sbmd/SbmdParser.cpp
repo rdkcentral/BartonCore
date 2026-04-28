@@ -114,6 +114,24 @@ namespace barton
                 }
             }
 
+            // Validate seedFrom mapper cross-field constraints
+            if (mapper.hasInitialRead)
+            {
+                if (!mapper.event.has_value())
+                {
+                    icError("Resource %s has seedFrom mapper but no event mapper — seedFrom requires event",
+                            resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.hasRead)
+                {
+                    icError("Resource %s has both read and seedFrom mappers — they are mutually exclusive",
+                            resourceId.c_str());
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -152,6 +170,11 @@ namespace barton
             {
                 setAttrIds(resource.mapper.readAttribute);
                 setCmdIds(resource.mapper.readCommand);
+            }
+
+            if (resource.mapper.hasInitialRead)
+            {
+                setAttrIds(resource.mapper.initialReadAttribute);
             }
 
             if (resource.mapper.event.has_value())
@@ -684,6 +707,43 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const s
         {
             mapper.eventScript = eventNode["script"].as<std::string>();
         }
+    }
+
+    // Parse seedFrom mapping - one-shot attribute cache read for seeding event-driven resources
+    if (node["seedFrom"])
+    {
+        const YAML::Node &seedFromNode = node["seedFrom"];
+
+        if (!seedFromNode["alias"])
+        {
+            icError("seedFrom mapper must specify 'alias'");
+            return false;
+        }
+
+        std::string aliasName = seedFromNode["alias"].as<std::string>();
+        const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+        if (!alias)
+        {
+            icError("seedFrom mapper references unknown alias '%s'", aliasName.c_str());
+            return false;
+        }
+
+        if (!alias->attribute.has_value())
+        {
+            icError("seedFrom mapper alias '%s' must be an attribute alias (not event)", aliasName.c_str());
+            return false;
+        }
+
+        if (!seedFromNode["script"] || seedFromNode["script"].as<std::string>().empty())
+        {
+            icError("seedFrom mapper must have a non-empty 'script'");
+            return false;
+        }
+
+        mapper.hasInitialRead = true;
+        mapper.initialReadAttribute = alias->attribute;
+        mapper.initialReadScript = seedFromNode["script"].as<std::string>();
     }
 
     return true;

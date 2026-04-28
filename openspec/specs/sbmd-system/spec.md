@@ -124,7 +124,7 @@ A resource's mapper MAY contain an `execute` section with a `script` and optiona
 - **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script's return value SHALL be the execute response string
 
 ### Requirement: Event mapper
-A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return the updated resource value. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
+A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return an object with the updated resource value under the `output` key. If the script omits the `output` key (e.g., returns `{}`), the event SHALL be silently suppressed — the resource is not updated and no error is logged. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
 
 #### Scenario: Event alias mapper resolves event metadata
 - **WHEN** an event mapper declares `alias: lockOperation` and `lockOperation` is an event alias with `clusterId: 0x0101`, `eventId: 0x0002`
@@ -133,6 +133,21 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 #### Scenario: Matter event updates resource
 - **WHEN** a Matter event fires for a cluster/event matching an event mapper
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
+
+#### Scenario: Event script suppresses update by omitting output
+- **WHEN** an event script returns an object without an `output` key (e.g., `{}`)
+- **THEN** the resource SHALL NOT be updated and no error SHALL be logged — this is the standard mechanism for ignoring non-state-change events
+
+### Requirement: seedFrom mapper type
+A resource mapper SHALL support a `seedFrom` section (in addition to the existing `read`, `write`, `execute`, and `event` sections) for populating initial resource values from the attribute cache when the resource's ongoing updates are driven by a `mapper.event`. The `seedFrom` mapper SHALL NOT be used as a substitute for `mapper.read` — if ongoing attribute subscription updates are desired, `mapper.read` remains the correct choice. The `seedFrom` mapper SHALL use the `sbmdReadArgs` script interface (identical to `mapper.read`).
+
+#### Scenario: Event-driven resource has initial value at commission
+- **WHEN** a resource declares `mapper.event` for ongoing updates and `mapper.seedFrom` pointing to a corresponding attribute alias
+- **THEN** the resource SHALL have a non-null value immediately after device commissioning without waiting for the first event to fire
+
+#### Scenario: Event-driven resource has initial value after hub restart
+- **WHEN** the hub restarts and a device with a `seedFrom` resource is synchronized
+- **THEN** the resource SHALL be re-seeded from the attribute cache before any new event arrives
 
 ### Requirement: SBMD schema validation
 SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
