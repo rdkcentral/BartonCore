@@ -304,7 +304,8 @@ bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
 {
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
-    if (JS_IsNull(scriptResult) || JS_IsUndefined(scriptResult) || !JS_IsPtr(scriptResult))
+    if (JS_IsNull(scriptResult) || JS_IsUndefined(scriptResult) || !JS_IsPtr(scriptResult) ||
+        JS_IsString(ctx, scriptResult))
     {
         icError("Script returned a non-object where a plain object was expected");
         return false;
@@ -1031,7 +1032,23 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return true;
     }
 
-    return ExtractScriptOutputAsString(outJson, outValue);
+    JSCStringBuf buf;
+    const char *resultStr = JS_ToCString(ctx, outputVal, &buf);
+
+    if (!resultStr)
+    {
+        icError("Failed to convert event output to string for cluster 0x%X, event 0x%X: %s",
+                eventInfo.clusterId,
+                eventInfo.eventId,
+                GetExceptionString(ctx).c_str());
+
+        return false;
+    }
+
+    outValue = resultStr;
+    icDebug("Event mapper output: %s", outValue.c_str());
+
+    return true;
 }
 
 } // namespace barton
