@@ -32,7 +32,6 @@
 #include "barton-core-reference-io.h"
 #include "reference-network-credentials-provider.h"
 #include <stdio.h>
-#include <string.h>
 
 static bool commissionDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
