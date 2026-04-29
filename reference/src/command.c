@@ -37,7 +37,6 @@ struct _Command
     gchar *shortInteractiveName;
     gchar *argUsage;
     gchar *help;
-    bool isAdvanced;
     gint minArgs;
     gint maxArgs; // -1 for unlimited
     commandExecFunc func;
@@ -102,14 +101,6 @@ gchar *commandGetShortName(const Command *command)
     return NULL;
 }
 
-void commandSetAdvanced(Command *command)
-{
-    if (command != NULL)
-    {
-        command->isAdvanced = true;
-    }
-}
-
 bool commandExecute(BCoreClient *client, const Command *command, gint argc, gchar **argv)
 {
     bool result = false;
@@ -118,7 +109,25 @@ bool commandExecute(BCoreClient *client, const Command *command, gint argc, gcha
     {
         if (argc >= command->minArgs && (command->maxArgs == -1 || argc <= command->maxArgs))
         {
-            result = command->func(client, argc, argv);
+            /* Validate argv: not NULL when argc > 0, and each argv[i] is non-NULL */
+            bool argsValid = (argc == 0 || argv != NULL);
+
+            if (argsValid && argc > 0)
+            {
+                for (gint i = 0; i < argc && argsValid; i++)
+                {
+                    argsValid = (argv[i] != NULL);
+                }
+            }
+
+            if (argsValid)
+            {
+                result = command->func(client, argc, argv);
+            }
+            else
+            {
+                emitError("Invalid args\n");
+            }
         }
         else
         {
@@ -137,9 +146,9 @@ void commandAddExample(Command *command, const gchar *example)
     }
 }
 
-void commandPrintUsage(const Command *command, bool isInteractive, bool showAdvanced)
+void commandPrintUsage(const Command *command, bool isInteractive)
 {
-    if (command != NULL && (command->isAdvanced == false || showAdvanced == true))
+    if (command != NULL)
     {
         if (isInteractive)
         {
