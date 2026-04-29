@@ -454,6 +454,13 @@ gboolean b_core_client_execute_resource(BCoreClient *self,
     return deviceServiceExecuteResource(uri, payload, response) ? TRUE : FALSE;
 }
 
+gboolean b_core_client_reload_database(BCoreClient *self)
+{
+    g_return_val_if_fail(self != NULL, FALSE);
+
+    return deviceServiceReloadDatabase() ? TRUE : FALSE;
+}
+
 gboolean b_core_client_remove_device(BCoreClient *self, const gchar *uuid)
 {
     g_return_val_if_fail(self != NULL, FALSE);

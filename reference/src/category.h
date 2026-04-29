@@ -47,13 +47,6 @@ Category *categoryCreate(const gchar *name, const gchar *description);
 void categoryDestroy(Category *category);
 
 /**
- * Mark this Category as advanced (only showing when advanced mode is enabled).
- *
- * @param category
- */
-void categorySetAdvanced(Category *category);
-
-/**
  * Add a Command instance to this Category.
  *
  * @param category
@@ -83,6 +76,5 @@ GList *categoryGetCompletions(const Category *category, const gchar *buf);
  *
  * @param category
  * @param isInteractive true if we are in interactive mode
- * @param showAdvanced true if we are in advanced mode
  */
-void categoryPrint(const Category *category, bool isInteractive, bool showAdvanced);
+void categoryPrint(const Category *category, bool isInteractive);

@@ -60,8 +60,6 @@ static gchar *wifi_password = NULL;
 static gchar *storage_dir = NULL;
 static gchar *sbmd_dirs = NULL;
 
-static bool showAdvanced = false;
-
 static GList *categories = NULL;
 
 static GOptionEntry entries[] = {
@@ -93,7 +91,7 @@ static void showInteractiveHelp(bool isInteractive)
     for (GList *it = categories; it != NULL; it = it->next)
     {
         Category *category = (Category *) it->data;
-        categoryPrint(category, isInteractive, showAdvanced);
+        categoryPrint(category, isInteractive);
     }
 }
 
@@ -130,7 +128,7 @@ static bool handleInteractiveCommand(BCoreClient *client, char **args, int numAr
                 Command *command = findCommand(args[1]);
                 if (command != NULL)
                 {
-                    commandPrintUsage(command, true, showAdvanced);
+                    commandPrintUsage(command, true);
                 }
                 else
                 {

@@ -223,6 +223,7 @@ icLinkedList *__wrap_zigbeeSubsystemPerformEnergyScan(const uint8_t *channelsToS
                                                       uint32_t scanDurationMillis,
                                                       uint32_t numScans);
 bool __wrap_deviceServiceRestoreConfig(const char *tempRestoreDir);
+bool __wrap_deviceServiceReloadDatabase(void);
 
 // Mock Signal Handlers
 #define DECLARE_MOCK_EVENT_HANDLER(eventType)                                                                          \
@@ -1448,6 +1449,29 @@ static void test_b_core_client_remove_device(void **state)
 
     bool result3 = b_core_client_remove_device(client, id);
     assert_true(result3);
+}
+
+static void test_b_core_client_reload_database(void **state)
+{
+    BCoreClient *client = *state;
+
+    // NULL client
+    bool result1 = b_core_client_reload_database(NULL);
+    assert_false(result1);
+
+    // valid client, success
+    expect_function_call(__wrap_deviceServiceReloadDatabase);
+    will_return(__wrap_deviceServiceReloadDatabase, true);
+
+    bool result2 = b_core_client_reload_database(client);
+    assert_true(result2);
+
+    // valid client, failure
+    expect_function_call(__wrap_deviceServiceReloadDatabase);
+    will_return(__wrap_deviceServiceReloadDatabase, false);
+
+    bool result3 = b_core_client_reload_database(client);
+    assert_false(result3);
 }
 
 static void test_b_core_client_get_system_property(void **state)
@@ -5379,6 +5403,12 @@ bool __wrap_deviceServiceRestoreConfig(const char *tempRestoreDir)
     return (bool) mock();
 }
 
+bool __wrap_deviceServiceReloadDatabase(void)
+{
+    function_called();
+    return (bool) mock();
+}
+
 #define DEFINE_MOCK_EVENT_HANDLER(eventType)                                                                           \
     static void mockHandle##eventType(GObject *source, BCore##eventType *event)                               \
     {                                                                                                                  \
@@ -5435,6 +5465,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_b_core_client_write_resource),
         cmocka_unit_test(test_b_core_client_execute_resource),
         cmocka_unit_test(test_b_core_client_remove_device),
+        cmocka_unit_test(test_b_core_client_reload_database),
         cmocka_unit_test(test_b_core_client_get_system_property),
         cmocka_unit_test(test_b_core_client_set_system_property),
         cmocka_unit_test(test_b_core_client_remove_endpoint_by_id),
