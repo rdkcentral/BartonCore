@@ -376,7 +376,8 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     tcpdump \
     lcov \
     rsync \
-    bash-completion
+    bash-completion \
+    bluez
 
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr

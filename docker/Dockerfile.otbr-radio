@@ -75,6 +75,7 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     ipset \
     udev \
     libglib2.0-bin \
+    bluez \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy over the third party patches (shared with the main Dockerfile)
@@ -91,7 +92,7 @@ RUN chmod +x ${APPLY_PATCHES_PATH}
 #
 # Source: https://github.com/SiliconLabs/cpc-daemon
 ###############################################################################
-ARG CPCD_GIT_TAG="v4.5.2"
+ARG CPCD_GIT_TAG="v4.4.6"
 
 RUN cd /tmp && \
     git clone --depth 1 --branch ${CPCD_GIT_TAG} \
@@ -174,7 +175,22 @@ RUN cd /tmp && \
     cd ../build/otbr/ && \
     ninja install && \
     cp -a /tmp/ot-br-posix/third_party/openthread/repo/include/openthread /usr/local/include && \
-    rm -rf /tmp/ot-br-posix /tmp/gecko_sdk
+    rm -rf /tmp/ot-br-posix
+
+###############################################################################
+# bt_host_cpc_hci_bridge — CPC-to-HCI bridge for Bluetooth
+#
+# Connects to cpcd via CPC and exposes a virtual HCI serial device (pts) that
+# BlueZ can attach to via btattach.  This enables bluetoothd / bluetoothctl
+# to use the Bluetooth radio on the multiprotocol EFR32 co-processor.
+#
+# Source: gecko_sdk/app/bluetooth/example_host/bt_host_cpc_hci_bridge
+# Docs:   https://docs.silabs.com/bluetooth/9.1.1/multiprotocol-solution-linux/running-local-processes-concurrently
+###############################################################################
+RUN cd /tmp/gecko_sdk/app/bluetooth/example_host/bt_host_cpc_hci_bridge && \
+    make -j$(nproc) && \
+    cp exe/bt_host_cpc_hci_bridge /usr/local/bin/ && \
+    rm -rf /tmp/gecko_sdk
 
 # D-Bus policy allowing otbr-agent to own its well-known bus name
 COPY otbr-agent.conf /etc/dbus-1/system.d/

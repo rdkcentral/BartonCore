@@ -100,6 +100,12 @@ services:
             # (common on shared build servers with multiple USB-IP users).
             # The privileged: true above grants the necessary device access.
             - /dev:/dev
+            # Bind-mount the host's network namespace so that btattach and
+            # bluetoothd can be run via nsenter --net=/run/host-netns.
+            # AF_BLUETOOTH sockets only work in the initial (host) network
+            # namespace; this avoids requiring network_mode: host on the
+            # entire container.
+            - /proc/1/ns/net:/run/host-netns:ro
         environment:
             # RADIO_DEVICE must be set explicitly before starting this overlay.
             # On a shared build server each user's radio may attach at a

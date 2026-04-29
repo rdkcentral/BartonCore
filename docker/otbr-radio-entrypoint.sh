@@ -164,7 +164,71 @@ done
 echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
 
 ###############################################################################
-# 5. Start otbr-agent
+# 5. Start bt_host_cpc_hci_bridge (CPC → virtual HCI serial device)
+#
+# Connects to cpcd, opens a CPC Bluetooth endpoint, and creates a numbered
+# virtual serial device (e.g. /dev/pts/6) plus a convenience symlink
+# 'pts_hci' in the working directory.  BlueZ attaches to this device via
+# btattach in the next step.
+###############################################################################
+echo "[otbr-radio] Starting bt_host_cpc_hci_bridge..."
+BT_BRIDGE_DIR="/var/run/bt-hci-bridge"
+mkdir -p "${BT_BRIDGE_DIR}"
+cd "${BT_BRIDGE_DIR}"
+bt_host_cpc_hci_bridge &
+BT_BRIDGE_PID=$!
+
+# Wait for the pts_hci symlink that bt_host_cpc_hci_bridge creates once ready.
+BT_BRIDGE_WAIT_MAX=15
+btBridgeWaitCount=0
+while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; do
+    if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
+        echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge exited unexpectedly." >&2
+        exit 1
+    fi
+
+    if [ ${btBridgeWaitCount} -ge ${BT_BRIDGE_WAIT_MAX} ]; then
+        echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge did not create pts_hci after ${BT_BRIDGE_WAIT_MAX}s." >&2
+        exit 1
+    fi
+    sleep 1
+    btBridgeWaitCount=$((btBridgeWaitCount + 1))
+done
+PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
+echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID}, pts: ${PTS_DEVICE}, waited ${btBridgeWaitCount}s)."
+
+###############################################################################
+# 6. Attach the virtual HCI device and start bluetoothd
+#
+# AF_BLUETOOTH sockets (needed by btattach and bluetoothd) only work in the
+# initial (host) network namespace.  We use nsenter --net to enter the host
+# network namespace for these two processes while keeping everything else on
+# the container's bridge network.
+#
+# bluetoothd inherits the container's DBUS_SYSTEM_BUS_ADDRESS so it registers
+# on our private D-Bus, not the host's.  This avoids conflicts with any
+# host-side bluetoothd that may be managing hci0.
+###############################################################################
+HOST_NETNS="/run/host-netns"
+if [ ! -e "${HOST_NETNS}" ]; then
+    echo "[otbr-radio] WARNING: Host network namespace not mounted at ${HOST_NETNS}." >&2
+    echo "[otbr-radio]          Bluetooth support will not be available." >&2
+    echo "[otbr-radio]          Add '- /proc/1/ns/net:/run/host-netns:ro' to volumes." >&2
+else
+    echo "[otbr-radio] Attaching HCI device ${PTS_DEVICE} via btattach (host netns)..."
+    nsenter --net="${HOST_NETNS}" btattach -B "${PTS_DEVICE}" -S 115200 &
+    BTATTACH_PID=$!
+    sleep 2
+    echo "[otbr-radio] btattach started (PID ${BTATTACH_PID})."
+
+    echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
+    nsenter --net="${HOST_NETNS}" bluetoothd &
+    sleep 1
+    echo "[otbr-radio] bluetoothd started."
+fi
+
+###############################################################################
+# 7. Start otbr-agent
 #
 # Uses spinel+cpc:// instead of the simulated spinel+hdlc+forkpty:// URI
 # that is used by scripts/start-simulated-otbr.sh.
