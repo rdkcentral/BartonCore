@@ -27,6 +27,5 @@ Scope includes:
 - Cluster server hosting pattern (`WebRtcTransportRequestorServer`) — first server-side cluster in Barton's Matter subsystem
 - SDP offer/answer exchange and ICE candidate negotiation
 - WebRTC media stack integration (libdatachannel or alternative)
-- Thread marshalling from CHIP event loop to GLib main loop
 - Integration test infrastructure: matter.js virtual camera device, Python test fixtures (`MatterCamera`) following the existing `MatterLight`/`MatterDoorLock` pattern
 
