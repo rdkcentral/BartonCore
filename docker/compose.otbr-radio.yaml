@@ -101,10 +101,9 @@ services:
             # The privileged: true above grants the necessary device access.
             - /dev:/dev
             # Bind-mount the host's network namespace so that btattach and
-            # bluetoothd can be run via nsenter --net=/run/host-netns.
-            # AF_BLUETOOTH sockets only work in the initial (host) network
-            # namespace; this avoids requiring network_mode: host on the
-            # entire container.
+            # bluetoothd can run via nsenter --net=/run/host-netns.
+            # AF_BLUETOOTH sockets are only available in the initial (host)
+            # network namespace.
             - /proc/1/ns/net:/run/host-netns:ro
         environment:
             # RADIO_DEVICE must be set explicitly before starting this overlay.
@@ -132,8 +131,11 @@ services:
     barton:
         volumes:
             - dbus-socket:/var/run/otbr-dbus
+            # Expose the host network namespace so that tools requiring
+            # AF_BLUETOOTH (e.g. bluetoothctl) can run via nsenter.
+            - /proc/1/ns/net:/run/host-netns:ro
         environment:
-            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/var/run/dbus/system_bus_socket}
+            - DBUS_SYSTEM_BUS_ADDRESS=${DBUS_SYSTEM_BUS_ADDRESS:-unix:path=/var/run/otbr-dbus/system_bus_socket}
 
 networks:
     # Reuse the same per-user IPv6 bridge network defined in compose.yaml so

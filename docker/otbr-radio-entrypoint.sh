@@ -200,14 +200,17 @@ echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID}, pts: ${PT
 ###############################################################################
 # 6. Attach the virtual HCI device and start bluetoothd
 #
-# AF_BLUETOOTH sockets (needed by btattach and bluetoothd) only work in the
-# initial (host) network namespace.  We use nsenter --net to enter the host
-# network namespace for these two processes while keeping everything else on
-# the container's bridge network.
+# AF_BLUETOOTH sockets are only available in the initial (host) network
+# namespace.  btattach and bluetoothd must run in the host netns via nsenter.
 #
 # bluetoothd inherits the container's DBUS_SYSTEM_BUS_ADDRESS so it registers
 # on our private D-Bus, not the host's.  This avoids conflicts with any
-# host-side bluetoothd that may be managing hci0.
+# host-side bluetoothd that may be running on the host system bus.
+#
+# The host machine may have its own built-in Bluetooth adapter (e.g. hci0).
+# btattach creates a new HCI device for the radio (e.g. hci1).  We detect
+# its index and write it to the shared D-Bus volume so Barton can read it
+# at runtime to configure the Matter SDK's BLE adapter selection.
 ###############################################################################
 HOST_NETNS="/run/host-netns"
 if [ ! -e "${HOST_NETNS}" ]; then
@@ -215,11 +218,38 @@ if [ ! -e "${HOST_NETNS}" ]; then
     echo "[otbr-radio]          Bluetooth support will not be available." >&2
     echo "[otbr-radio]          Add '- /proc/1/ns/net:/run/host-netns:ro' to volumes." >&2
 else
+    # Snapshot existing HCI devices before btattach creates a new one.
+    HCI_BEFORE=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
+
     echo "[otbr-radio] Attaching HCI device ${PTS_DEVICE} via btattach (host netns)..."
     nsenter --net="${HOST_NETNS}" btattach -B "${PTS_DEVICE}" -S 115200 &
     BTATTACH_PID=$!
     sleep 2
     echo "[otbr-radio] btattach started (PID ${BTATTACH_PID})."
+
+    # Identify the new HCI device created by btattach.
+    HCI_AFTER=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
+    RADIO_HCI=""
+
+    for hci in ${HCI_AFTER}; do
+        if ! echo "${HCI_BEFORE}" | grep -qw "${hci}"; then
+            RADIO_HCI="${hci}"
+            break
+        fi
+    done
+
+    if [ -z "${RADIO_HCI}" ]; then
+        echo "[otbr-radio] WARNING: Could not identify new HCI device; falling back to last in list." >&2
+        RADIO_HCI=$(echo "${HCI_AFTER}" | tail -1)
+    fi
+
+    RADIO_HCI_INDEX=${RADIO_HCI#hci}
+    echo "[otbr-radio] Radio HCI device: ${RADIO_HCI} (index ${RADIO_HCI_INDEX})"
+
+    # Write the radio's HCI index to the shared volume so Barton can
+    # discover which adapter to use at runtime.
+    echo "${RADIO_HCI_INDEX}" > "${DBUS_DIR}/ble_adapter_id"
+    echo "[otbr-radio] Wrote BLE adapter index ${RADIO_HCI_INDEX} to ${DBUS_DIR}/ble_adapter_id"
 
     echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
     nsenter --net="${HOST_NETNS}" bluetoothd &
