@@ -154,7 +154,7 @@ export class DoorLockDevice extends VirtualDevice {
      * Barton was in comm-fail.  If omitted the lock remains in its current state.
      */
     async handleComeOnline({ lockState } = {}) {
-        if (this.endpoint) {
+        if (this.endpoint && lockState !== undefined) {
             const targetState =
                 lockState === "unlocked"
                     ? DoorLock.LockState.Unlocked

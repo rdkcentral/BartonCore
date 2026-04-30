@@ -25,7 +25,6 @@
 import logging
 
 import pytest
-from testing.mocks.devices.matter.matter_door_lock import MatterDoorLock
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
@@ -151,9 +150,12 @@ def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_
     goOffline abruptly kills all Matter sessions via initiateForceClose()
     without sending any Matter messages (no SessionClose, no StatusReport).
     After forcing comm-fail and updating the device state via comeOnline,
-    bartonMatterDeviceForceResubscription closes the ReadClient with
-    CHIP_ERROR_TIMEOUT, which triggers DefaultResubscribePolicy to schedule
-    a new CASE session.  When the priming report arrives with
+    bartonMatterDeviceForceResubscription is called to cut test time: without
+    it, the test would have to wait for the full negotiated liveness window
+    (potentially tens of seconds) before the ReadClient detects the timeout
+    and resubscribes.  The call overrides the liveness timeout to 1 ms so
+    the timeout fires immediately, triggering DefaultResubscribePolicy to
+    schedule a new CASE session.  When the priming report arrives with
     LockState=Unlocked, the watchdog pet fires communicationRestored →
     synchronizeDevice → SeedInitialResourceValues which reads Unlocked from
     the cache and writes "false".
@@ -180,10 +182,14 @@ def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_
     # Update the device's lock state attribute before Barton reconnects.
     matter_door_lock.sideband.send("comeOnline", {"lockState": "unlocked"})
 
-    # Close the ReadClient with CHIP_ERROR_TIMEOUT, triggering immediate
-    # auto-resubscription via DefaultResubscribePolicy (ForceCASE=true).
-    # A fresh priming report with LockState=Unlocked will follow, causing
-    # communicationRestored → synchronizeDevice → SeedInitialResourceValues.
+    # Without this call the test would wait for the full negotiated liveness
+    # window (potentially tens of seconds) before the ReadClient notices the
+    # timeout and triggers resubscription.  bartonMatterDeviceForceResubscription
+    # overrides the liveness timeout to 1 ms so the timeout fires on the next
+    # Matter event-loop tick, triggering immediate auto-resubscription via
+    # DefaultResubscribePolicy (ForceCASE=true).  A fresh priming report with
+    # LockState=Unlocked follows, causing communicationRestored →
+    # synchronizeDevice → SeedInitialResourceValues.
     libbarton.bartonMatterDeviceForceResubscription.argtypes = [ctypes.c_char_p]
     libbarton.bartonMatterDeviceForceResubscription.restype = None
     libbarton.bartonMatterDeviceForceResubscription(lock.props.uuid.encode())
