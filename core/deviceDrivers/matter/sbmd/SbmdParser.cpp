@@ -115,7 +115,7 @@ namespace barton
             }
 
             // Validate seedFrom mapper cross-field constraints
-            if (mapper.hasInitialRead)
+            if (mapper.seedFromAttribute.has_value())
             {
                 if (!mapper.event.has_value())
                 {
@@ -172,9 +172,9 @@ namespace barton
                 setCmdIds(resource.mapper.readCommand);
             }
 
-            if (resource.mapper.hasInitialRead)
+            if (resource.mapper.seedFromAttribute.has_value())
             {
-                setAttrIds(resource.mapper.initialReadAttribute);
+                setAttrIds(resource.mapper.seedFromAttribute);
             }
 
             if (resource.mapper.event.has_value())
@@ -774,9 +774,8 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const s
             return false;
         }
 
-        mapper.hasInitialRead = true;
-        mapper.initialReadAttribute = alias->attribute;
-        mapper.initialReadScript = seedFromNode["script"].as<std::string>();
+        mapper.seedFromAttribute = alias->attribute;
+        mapper.seedFromScript = seedFromNode["script"].as<std::string>();
     }
 
     return true;

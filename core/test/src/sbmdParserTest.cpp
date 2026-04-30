@@ -198,12 +198,11 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
     assert_string_equal(locked.mapper.event->name.c_str(), "LockOperation");
     assert_false(locked.mapper.eventScript.empty());
-    assert_true(locked.mapper.hasInitialRead);
-    assert_true(locked.mapper.initialReadAttribute.has_value());
-    assert_int_equal((int) locked.mapper.initialReadAttribute->clusterId, 0x0101);
-    assert_int_equal((int) locked.mapper.initialReadAttribute->attributeId, 0x0000);
-    assert_string_equal(locked.mapper.initialReadAttribute->name.c_str(), "LockState");
-    assert_false(locked.mapper.initialReadScript.empty());
+    assert_true(locked.mapper.seedFromAttribute.has_value());
+    assert_int_equal((int) locked.mapper.seedFromAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.seedFromAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.seedFromAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.seedFromScript.empty());
 }
 
 static void test_sbmdParserLightFile(void **state)
@@ -2056,11 +2055,11 @@ resources: []
     assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
     assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
     assert_false(locked.mapper.eventScript.empty());
-    assert_true(locked.mapper.initialReadAttribute.has_value());
-    assert_int_equal((int) locked.mapper.initialReadAttribute->clusterId, 0x0101);
-    assert_int_equal((int) locked.mapper.initialReadAttribute->attributeId, 0x0000);
-    assert_string_equal(locked.mapper.initialReadAttribute->name.c_str(), "LockState");
-    assert_false(locked.mapper.initialReadScript.empty());
+    assert_true(locked.mapper.seedFromAttribute.has_value());
+    assert_int_equal((int) locked.mapper.seedFromAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.seedFromAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.seedFromAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.seedFromScript.empty());
 }
 
 static void test_sbmdParserSeedFromWithoutEvent(void **state)

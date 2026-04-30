@@ -382,7 +382,7 @@ bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
 
     // Extract the "output" field from the result JSON object
     JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, scriptResultGuard.get(), "output"));
-    if (JS_IsUndefined(outputValGuard.get()))
+    if (JS_IsUndefined(outputValGuard.get()) || JS_IsNull(outputValGuard.get()))
     {
         icError("Script result missing 'output' field");
         return false;

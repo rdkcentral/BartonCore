@@ -5,7 +5,7 @@ A resource's mapper MAY contain a `seedFrom` section with an `alias` (a string n
 
 #### Scenario: Valid seedFrom mapper
 - **WHEN** a mapper declares `seedFrom.alias: lockState` and `lockState` is an attribute alias, and `seedFrom.script` is present, and `mapper.event` is also present
-- **THEN** the parser SHALL populate `hasInitialRead = true`, `initialReadAttribute` with the resolved cluster/attribute/type, and `initialReadScript` with the script text
+- **THEN** the parser SHALL populate `seedFromAttribute` with the resolved cluster/attribute/type and `seedFromScript` with the script text
 
 #### Scenario: seedFrom with event alias rejected
 - **WHEN** a mapper declares `seedFrom.alias: lockOperation` and `lockOperation` is an event alias (not an attribute alias)
@@ -38,25 +38,25 @@ Attributes referenced by `mapper.seedFrom` SHALL NOT be registered in the device
 - **THEN** a live attribute subscription update for the seedFrom attribute SHALL NOT update the resource value
 
 ### Requirement: seedFrom seeds resource at configure time
-When a device is configured (during commissioning), the driver SHALL read each resource's `seedFrom` attribute from the device data cache and update the resource value via `updateResource()`. This SHALL occur after the attribute cache has been fully primed (i.e., after `DeviceDataCache::Start()` completes). Resources in `skippedOptionalResources` SHALL be skipped. If the attribute is absent from the cache, the resource SHALL NOT be updated.
+When a device is configured (during commissioning), the driver SHALL compute each resource's `seedFrom` value from the device data cache during resource registration (`DoRegisterResources`) and pass it as the initial value to `createDeviceResource()`/`createEndpointResource()`. This SHALL occur on the Matter thread (which is where `DoRegisterResources` executes) and before the device is persisted or `DEVICE_ADDED` is emitted, so the resource SHALL have the correct initial value when `DEVICE_ADDED` fires. Resources in `skippedOptionalResources` SHALL be skipped. If the attribute is absent from the cache, the resource SHALL be created with a null initial value.
 
 #### Scenario: Locked resource seeded at commissioning
 - **WHEN** a door lock device is commissioned and `LockState` (cluster `0x0101`, attribute `0x0000`) is present in the attribute cache
-- **THEN** the `locked` resource SHALL receive a value from the `seedFrom` script at configure time before any event has fired
+- **THEN** the `locked` resource SHALL have a non-null value when `DEVICE_ADDED` fires — no intermediate null state SHALL be visible to clients
 
 #### Scenario: Optional resource not seeded when skipped
 - **WHEN** a resource is marked `optional: true` and was skipped due to absent cluster
-- **THEN** `SeedInitialResourceValues()` SHALL NOT attempt to read its seedFrom attribute
+- **THEN** `DoRegisterResources()` SHALL NOT attempt to read its seedFrom attribute
 
-#### Scenario: Cache miss — resource not updated
+#### Scenario: Cache miss — resource created with null value
 - **WHEN** the seedFrom attribute is absent from the device data cache at configure time
-- **THEN** `updateResource()` SHALL NOT be called for that resource
+- **THEN** `createDeviceResource()` SHALL be called with a null initial value for that resource
 
 ### Requirement: seedFrom seeds resource at synchronize time
-When a device is synchronized (at hub restart or communication restoration), the driver SHALL re-read each resource's `seedFrom` attribute from the device data cache and update the resource value via `updateResource()`. This SHALL use the same `SeedInitialResourceValues()` helper as configure time and apply the same guards (skipped resources, cache miss).
+When a device is synchronized (at Barton restart or communication restoration), the driver SHALL re-read each resource's `seedFrom` attribute from the device data cache and update the resource value via `updateResource()`. This SHALL use the same `SeedInitialResourceValues()` helper as configure time and apply the same guards (skipped resources, cache miss).
 
-#### Scenario: Locked resource re-seeded at hub restart
-- **WHEN** the hub restarts and `SynchronizeDevice()` is called for a commissioned door lock
+#### Scenario: Locked resource re-seeded at device synchronization
+- **WHEN** `SynchronizeDevice()` is called for a commissioned door lock (e.g., after a comm-fail restore or Barton restart)
 - **THEN** the `locked` resource SHALL be re-seeded from the `LockState` attribute cache before any event fires
 
 ### Requirement: seedFrom script interface

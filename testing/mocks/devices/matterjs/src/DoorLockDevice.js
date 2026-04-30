@@ -76,6 +76,8 @@ export class DoorLockDevice extends VirtualDevice {
             ...options,
         });
 
+        this.initialLockState = DoorLock.LockState.Locked;
+
         this.registerOperation("lock", () => this.handleLock());
         this.registerOperation("unlock", () => this.handleUnlock());
         this.registerOperation("getState", () => this.handleGetState());
@@ -91,7 +93,7 @@ export class DoorLockDevice extends VirtualDevice {
         return [new Endpoint(MatterDoorLockDevice.with(DoorLockServerWithEvents), {
             id: "doorlock-ep1",
             doorLock: {
-                       lockState: DoorLock.LockState.Locked,
+                       lockState: this.initialLockState,
                        lockType: DoorLock.LockType.DeadBolt,
                        actuatorEnabled: true,
                        operatingMode: DoorLock.OperatingMode.Normal,
@@ -140,6 +142,30 @@ export class DoorLockDevice extends VirtualDevice {
         });
 
         return { lockState: "unlocked" };
+    }
+
+    /**
+     * Override handleComeOnline to accept an optional lockState parameter.
+     * Updates the door lock attribute directly on the running endpoint so that
+     * when Barton's ReadClient resubscribes (after its liveness timer fires),
+     * the primed subscription report reflects the new state.
+     *
+     * Pass lockState: "unlocked" to simulate a state change that occurred while
+     * Barton was in comm-fail.  If omitted the lock remains in its current state.
+     */
+    async handleComeOnline({ lockState } = {}) {
+        if (this.endpoint) {
+            const targetState =
+                lockState === "unlocked"
+                    ? DoorLock.LockState.Unlocked
+                    : DoorLock.LockState.Locked;
+
+            await this.endpoint.act(async (agent) => {
+                agent.doorLock.state.lockState = targetState;
+            });
+        }
+
+        return super.handleComeOnline();
     }
 
     async handleGetState() {

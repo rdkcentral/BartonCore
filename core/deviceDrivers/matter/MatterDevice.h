@@ -190,8 +190,18 @@ namespace barton
                                       std::optional<uint32_t> sbmdEndpointIndex = std::nullopt);
 
         /**
+         * Compute the seeded value for a resource from the device data cache without writing it
+         * anywhere. Returns the mapped string value if the seedFrom binding exists and the
+         * attribute is present in cache; returns std::nullopt otherwise.
+         *
+         * @param uri The resource URI
+         * @return The computed seed value, or std::nullopt if unavailable
+         */
+        std::optional<std::string> ReadSeedValueFromAttribute(const char *uri);
+
+        /**
          * Read the seedFrom attribute for a resource from the device data cache and update
-         * the resource value via updateResource(). Called at configure and synchronize time.
+         * the resource value via updateResource(). Called at synchronize time.
          * Does nothing if no seedFrom binding exists for the URI or the attribute is not in cache.
          *
          * @param uri The resource URI

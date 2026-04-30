@@ -38,6 +38,7 @@
 
 import "@matter/nodejs";
 import { ServerNode, Environment, Logger } from "@matter/main";
+import { SessionManager } from "@matter/protocol";
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
@@ -58,6 +59,7 @@ export class VirtualDevice {
         passcode = 20202021,
         discriminator = 3840,
         port = 0,
+        maxInterval = 3000,
     } = {}) {
         this.deviceName = deviceName;
         this.vendorId = vendorId;
@@ -65,11 +67,54 @@ export class VirtualDevice {
         this.passcode = passcode;
         this.discriminator = discriminator;
         this.port = port;
+        this.maxInterval = maxInterval;
         this.operations = new Map();
         this.serverNode = null;
         this.httpServer = null;
         this.endpoints = [];
         this.storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "matterjs-device-"));
+        // Fixed at construction time so they remain consistent across goOffline/comeOnline cycles
+        this.serialNumber = `BCORE-TEST-${Date.now()}`;
+        this.uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        this.registerOperation("goOffline", () => this.handleGoOffline());
+        this.registerOperation("comeOnline", (params) => this.handleComeOnline(params));
+    }
+
+    /**
+     * Build the ServerNode configuration object.  Extracted so that
+     * start() and handleComeOnline() use identical parameters.
+     */
+    _createServerNodeConfig() {
+        return {
+            id: this.deviceName.replace(/\s+/g, "-").toLowerCase(),
+            network: {
+                port: this.port,
+                subscriptionOptions: {
+                    maxInterval: this.maxInterval,
+                    minInterval: 1000,
+                    randomizationWindow: 0,
+                },
+            },
+            commissioning: {
+                passcode: this.passcode,
+                discriminator: this.discriminator,
+            },
+            productDescription: {
+                name: this.deviceName,
+                deviceType: this.getDeviceType(),
+            },
+            basicInformation: {
+                vendorName: "BartonCore Test",
+                vendorId: this.vendorId,
+                nodeLabel: this.deviceName,
+                productName: this.deviceName,
+                productLabel: this.deviceName,
+                productId: this.productId,
+                serialNumber: this.serialNumber,
+                uniqueId: this.uniqueId,
+            },
+        };
     }
 
     /**
@@ -97,44 +142,7 @@ export class VirtualDevice {
         // Configure matter.js to use our temp storage directory
         const env = Environment.default;
         env.vars.set("path.root", this.storageDir);
-        // Create the ServerNode with commissioning parameters
-        this.serverNode = await ServerNode.create({
-            // Derive a stable, filesystem-safe ID from the device name so
-            // matter.js can persist state without path issues.
-            id: this.deviceName.replace(/\s+/g, "-").toLowerCase(),
-
-            network: {
-                port: this.port,
-                // Use short subscription intervals so event reports arrive
-                // promptly during testing (default is ~3 minutes).
-                subscriptionOptions: {
-                    maxInterval: 3000,
-                    minInterval: 1000,
-                    randomizationWindow: 0,
-                },
-            },
-
-            commissioning: {
-                passcode: this.passcode,
-                discriminator: this.discriminator,
-            },
-
-            productDescription: {
-                name: this.deviceName,
-                deviceType: this.getDeviceType(),
-            },
-
-            basicInformation: {
-                vendorName: "BartonCore Test",
-                vendorId: this.vendorId,
-                nodeLabel: this.deviceName,
-                productName: this.deviceName,
-                productLabel: this.deviceName,
-                productId: this.productId,
-                serialNumber: `BCORE-TEST-${Date.now()}`,
-                uniqueId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            },
-        });
+        this.serverNode = await ServerNode.create(this._createServerNodeConfig());
 
         // Create and add device endpoint(s)
         this.endpoints = this.createEndpoints();
@@ -249,6 +257,38 @@ export class VirtualDevice {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ success: false, error: error.message }));
         }
+    }
+
+    /**
+     * Abruptly drop all Matter sessions without sending any Matter messages
+     * (no SessionClose, no StatusReport).  The ServerNode itself stays running
+     * so mDNS advertisement continues and Barton can reconnect once its
+     * liveness timer fires.  Subclasses may override to update device state
+     * before Barton reconnects (see handleComeOnline).
+     *
+     * This is the correct simulation of an abrupt connectivity loss (e.g.,
+     * power failure on the network interface):  Barton's ReadClient liveness
+     * timer will fire with CHIP_ERROR_TIMEOUT, which triggers auto-resubscription.
+     */
+    async handleGoOffline() {
+        if (this.serverNode) {
+            const sessionManager = this.serverNode.env.get(SessionManager);
+
+            for (const session of sessionManager.sessions) {
+                await session.initiateForceClose();
+            }
+        }
+
+        return { offline: true };
+    }
+
+    /**
+     * Base implementation is intentionally empty.  The ServerNode remains
+     * running after handleGoOffline(); subclasses override this method to
+     * update device state (e.g., attribute values) before Barton reconnects.
+     */
+    async handleComeOnline() {
+        return { online: true };
     }
 
     /**

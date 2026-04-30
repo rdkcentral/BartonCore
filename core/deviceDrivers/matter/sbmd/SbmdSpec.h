@@ -168,9 +168,8 @@ namespace barton
         // SeedFrom mapping - for seeding initial resource value from the attribute cache
         // at configure and synchronize time. Only valid alongside an event mapper.
         // YAML key: seedFrom.
-        bool hasInitialRead = false;
-        std::optional<SbmdAttribute> initialReadAttribute;
-        std::string initialReadScript;
+        std::optional<SbmdAttribute> seedFromAttribute;
+        std::string seedFromScript;
     };
 
     /**

@@ -313,7 +313,7 @@ bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
 
     // Extract the "output" field from the result JSON object
     JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
-    if (JS_IsUndefined(outputVal))
+    if (JS_IsUndefined(outputVal) || JS_IsNull(outputVal))
     {
         icError("Script result missing 'output' field");
         return false;
@@ -1022,7 +1022,7 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    if (JS_IsUndefined(outputVal))
+    if (JS_IsUndefined(outputVal) || JS_IsNull(outputVal))
     {
         icDebug("Event mapper returned no output (suppressed) for cluster 0x%X, event 0x%X",
                 eventInfo.clusterId,

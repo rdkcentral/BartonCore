@@ -66,6 +66,7 @@ extern "C" {
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
 #include "deviceDescriptor.h"
+#include "deviceDriverManager.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
 #include "glib.h"
@@ -1664,4 +1665,65 @@ static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *v
 
     *version = self->GetDeviceClassVersion();
     return true;
+}
+
+// =============================================================================
+// FOR INTEGRATION TEST USE ONLY
+//
+// The functions below (MatterDeviceDriver::ForceResubscription and
+// bartonMatterDeviceForceResubscription) exist solely to support integration
+// tests that need to exercise the communicationRestored → synchronizeDevice
+// path quickly, without waiting for the full negotiated liveness window.
+//
+// MUST NOT be called from production code or any Barton client application.
+// The public test API is declared in api/c/public/private/bartonMatterTestHelpers.h.
+// =============================================================================
+
+void MatterDeviceDriver::ForceResubscription(const std::string &deviceUuid)
+{
+    auto cache = GetDeviceDataCache(deviceUuid);
+
+    if (!cache)
+    {
+        icLogError(LOG_TAG, "%s: no DeviceDataCache for device %s", __FUNCTION__, deviceUuid.c_str());
+        return;
+    }
+
+    auto *cachePtr = cache.get();
+
+    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([cachePtr]() { cachePtr->ForceResubscription(); });
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icLogError(LOG_TAG, "%s: failed to schedule force resubscription: %s", __FUNCTION__, err.AsString());
+    }
+}
+
+extern "C" void bartonMatterDeviceForceResubscription(const char *uuid)
+{
+    if (uuid == nullptr)
+    {
+        icLogError(LOG_TAG, "%s: invalid arguments", __FUNCTION__);
+        return;
+    }
+
+    icLogDebug(LOG_TAG, "%s: forcing resubscription for %s", __FUNCTION__, uuid);
+
+    scoped_icDevice *device = deviceServiceGetDevice(uuid);
+
+    if (device == nullptr)
+    {
+        icLogError(LOG_TAG, "%s: device %s not found", __FUNCTION__, uuid);
+        return;
+    }
+
+    const DeviceDriver *drv = deviceDriverManagerGetDeviceDriver(device->managingDeviceDriver);
+
+    if (drv == nullptr || drv->callbackContext == nullptr)
+    {
+        icLogError(LOG_TAG, "%s: no driver for device %s", __FUNCTION__, uuid);
+        return;
+    }
+
+    static_cast<MatterDeviceDriver *>(drv->callbackContext)->ForceResubscription(std::string(uuid));
 }

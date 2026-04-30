@@ -293,6 +293,19 @@ namespace barton
 
         void SynchronizeDevice(icDevice *device);
 
+        /**
+         * [FOR INTEGRATION TEST USE ONLY — see bartonMatterTestHelpers.h]
+         *
+         * Schedules DeviceDataCache::ForceResubscription() on the Matter
+         * event-loop thread for the given device.  See that method for full
+         * semantics.
+         *
+         * MUST NOT be called from production code or any Barton client application.
+         *
+         * @param deviceUuid UUID of the commissioned device.
+         */
+        void ForceResubscription(const std::string &deviceUuid);
+
         bool ConfigureDevice(icDevice *device, DeviceDescriptor *descriptor);
 
     protected:

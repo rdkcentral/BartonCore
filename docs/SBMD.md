@@ -577,7 +577,7 @@ first connects.
 
 **When it is called:**
 
-- Once at device **configure** time (first commission), after the attribute cache is primed.
+- Once at device **commission** time, during resource registration — before the device is persisted and before `DEVICE_ADDED` is emitted, so `DEVICE_ADDED` carries the correct initial value.
 - Once at device **synchronize** time (reconnect), after the attribute cache is primed.
 - It is **not** called on live attribute subscription callbacks — the `event` mapper handles live updates.
 
@@ -623,9 +623,9 @@ mapper:
 ```
 
 > **C++ field naming**: The YAML key is `seedFrom`. The internal C++ data model uses
-> `hasInitialRead` (bool), `initialReadAttribute` (std::optional<SbmdAttribute>), and
-> `initialReadScript` (std::string) to represent the `seedFrom` configuration. This
-> mirrors the `hasRead`/`readAttribute`/`readScript` naming convention.
+> `seedFromAttribute` (std::optional<SbmdAttribute>) and `seedFromScript` (std::string)
+> to represent the `seedFrom` configuration. Presence of `seedFrom` is indicated by
+> `seedFromAttribute.has_value()`, consistent with how `event` is represented.
 
 ### 4.5 Combined Mappers
 

@@ -731,6 +731,9 @@ void DeviceDataCache::OnReportEnd()
 void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId)
 {
     icDebug("Subscription established with ID: %" PRIu32, aSubscriptionId);
+
+    // Ensure that, once a subscription is established, the naturally negotiated liveness timeout is used
+    readClient->OverrideLivenessTimeout(chip::System::Clock::kZero);
 }
 
 void DeviceDataCache::OnError(CHIP_ERROR aError)
@@ -846,9 +849,20 @@ void DeviceDataCache::OnDeviceConnectionFailure(const chip::ScopedNodeId &peerId
     icDebug();
     icError("Device connection failed: %s", error.AsString());
     std::lock_guard<std::mutex> lock(startupPromiseMutex);
+
     if (startupPromise)
     {
         startupPromise->set_value(false);
         startupPromise.reset();
     }
+}
+
+void DeviceDataCache::ForceResubscription()
+{
+    if (!readClient)
+    {
+        return;
+    }
+
+    readClient->OverrideLivenessTimeout(chip::System::Clock::Milliseconds32(1));
 }

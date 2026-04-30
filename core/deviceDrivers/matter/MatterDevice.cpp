@@ -678,13 +678,13 @@ bool MatterDevice::BindResourceSeedFromInfo(const char *uri,
         return false;
     }
 
-    if (!mapper.initialReadAttribute.has_value())
+    if (!mapper.seedFromAttribute.has_value())
     {
         icError("seedFrom mapper has no initialReadAttribute for URI: %s", uri);
         return false;
     }
 
-    const auto &attribute = mapper.initialReadAttribute.value();
+    const auto &attribute = mapper.seedFromAttribute.value();
     chip::EndpointId endpointId;
     bool endpointFound = false;
 
@@ -733,12 +733,18 @@ bool MatterDevice::BindResourceSeedFromInfo(const char *uri,
     return true;
 }
 
-void MatterDevice::SeedResourceFromAttribute(const char *uri)
+std::optional<std::string> MatterDevice::ReadSeedValueFromAttribute(const char *uri)
 {
     if (uri == nullptr)
     {
-        icError("URI is null for SeedResourceFromAttribute");
-        return;
+        icError("URI is null for ReadSeedValueFromAttribute");
+        return std::nullopt;
+    }
+
+    if (!script)
+    {
+        icError("No script engine available for seedFrom on URI: %s", uri);
+        return std::nullopt;
     }
 
     auto it = resourceSeedFromBindings.find(uri);
@@ -746,10 +752,16 @@ void MatterDevice::SeedResourceFromAttribute(const char *uri)
     if (it == resourceSeedFromBindings.end())
     {
         icDebug("No seedFrom binding found for URI: %s", uri);
-        return;
+        return std::nullopt;
     }
 
     const ResourceBinding &binding = it->second;
+
+    if (!binding.attribute.has_value())
+    {
+        icError("seedFrom binding has no attribute metadata for URI: %s", uri);
+        return std::nullopt;
+    }
 
     chip::TLV::TLVReader reader;
     CHIP_ERROR err = GetCachedAttributeData(binding.attributePath.mEndpointId,
@@ -764,19 +776,7 @@ void MatterDevice::SeedResourceFromAttribute(const char *uri)
                 static_cast<uint32_t>(binding.attributePath.mClusterId),
                 static_cast<uint32_t>(binding.attributePath.mAttributeId),
                 err.AsString());
-        return;
-    }
-
-    if (!script)
-    {
-        icError("No script engine available for seedFrom on URI: %s", uri);
-        return;
-    }
-
-    if (!binding.attribute.has_value())
-    {
-        icError("seedFrom binding has no attribute metadata for URI: %s", uri);
-        return;
+        return std::nullopt;
     }
 
     std::string outValue;
@@ -784,8 +784,29 @@ void MatterDevice::SeedResourceFromAttribute(const char *uri)
     if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
     {
         icError("seedFrom script failed for URI: %s", uri);
+        return std::nullopt;
+    }
+
+    return outValue;
+}
+
+void MatterDevice::SeedResourceFromAttribute(const char *uri)
+{
+    if (uri == nullptr)
+    {
+        icError("URI is null for SeedResourceFromAttribute");
         return;
     }
+
+    auto seedValue = ReadSeedValueFromAttribute(uri);
+
+    if (!seedValue.has_value())
+    {
+        return;
+    }
+
+    auto it = resourceSeedFromBindings.find(uri);
+    const ResourceBinding &binding = it->second;
 
     // Extract resource ID from URI (last component after '/')
     const char *resourceId = strrchr(uri, '/');
@@ -805,9 +826,9 @@ void MatterDevice::SeedResourceFromAttribute(const char *uri)
         resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
     }
 
-    icDebug("Seeding resource %s = %s (from attribute cache)", uri, outValue.c_str());
+    icDebug("Seeding resource %s = %s (from attribute cache)", uri, seedValue->c_str());
 
-    updateResource(deviceId.c_str(), resourceEndpointId, resourceId, outValue.c_str(), nullptr);
+    updateResource(deviceId.c_str(), resourceEndpointId, resourceId, seedValue->c_str(), nullptr);
 }
 
 bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,

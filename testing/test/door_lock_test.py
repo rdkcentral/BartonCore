@@ -25,6 +25,7 @@
 import logging
 
 import pytest
+from testing.mocks.devices.matter.matter_door_lock import MatterDoorLock
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
@@ -124,32 +125,93 @@ def test_sideband_lock_triggers_barton_update(
 def test_locked_resource_seeded_on_commission(default_environment, matter_door_lock):
     """Verify that the locked resource is seeded with the correct initial value at commission.
 
-    The virtual door lock starts in the locked state. After commission, Barton should
-    populate the locked resource from the LockState attribute cache (via seedFrom mapper)
-    without requiring a LockOperation event.
+    The virtual door lock starts in the locked state. The seedFrom mapper runs inside
+    DoRegisterResources (before DEVICE_ADDED fires), so the value is baked directly into
+    createEndpointResource. Verify by reading the resource value directly after commission.
     """
+
+    lock = _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
-    resource_updated_queue = resource_update_listener(client, "locked")
 
-    _commission_door_lock(default_environment, matter_door_lock)
+    resource = client.get_resource_by_uri(resource_uri(lock, "locked", endpoint_id=1))
+    assert resource is not None, "locked resource not found after commission"
+    assert resource.props.value == "true", (
+        f"Expected locked resource to be seeded to 'true' at commission time, "
+        f"got '{resource.props.value}'"
+    )
 
-    # The device starts locked — the seedFrom mapper should emit "true" at configure time
-    wait_for_resource_value(resource_updated_queue, "true", timeout=15)
+
+def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_lock):
+    """Verify that the locked resource is re-seeded at synchronize time.
+
+    Simulates a real-world scenario: Barton loses communication with the
+    device, the device state changes while Barton is in comm-fail, and Barton
+    learns about the new state when the device comes back online.
+
+    goOffline abruptly kills all Matter sessions via initiateForceClose()
+    without sending any Matter messages (no SessionClose, no StatusReport).
+    After forcing comm-fail and updating the device state via comeOnline,
+    bartonMatterDeviceForceResubscription closes the ReadClient with
+    CHIP_ERROR_TIMEOUT, which triggers DefaultResubscribePolicy to schedule
+    a new CASE session.  When the priming report arrives with
+    LockState=Unlocked, the watchdog pet fires communicationRestored →
+    synchronizeDevice → SeedInitialResourceValues which reads Unlocked from
+    the cache and writes "false".
+    """
+    import ctypes
+
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
+
+    # Abruptly kill all Matter sessions without sending any Matter messages.
+    # The ServerNode stays running so Barton can reconnect once asked to.
+    matter_door_lock.sideband.send("goOffline")
+
+    # Force comm-fail immediately — device is genuinely unreachable at this point.
+    libbarton = ctypes.CDLL(None)
+    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail.argtypes = [
+        ctypes.c_char_p
+    ]
+    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail.restype = None
+    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail(lock.props.uuid.encode())
+
+    seed_queue = resource_update_listener(client, "locked")
+
+    # Update the device's lock state attribute before Barton reconnects.
+    matter_door_lock.sideband.send("comeOnline", {"lockState": "unlocked"})
+
+    # Close the ReadClient with CHIP_ERROR_TIMEOUT, triggering immediate
+    # auto-resubscription via DefaultResubscribePolicy (ForceCASE=true).
+    # A fresh priming report with LockState=Unlocked will follow, causing
+    # communicationRestored → synchronizeDevice → SeedInitialResourceValues.
+    libbarton.bartonMatterDeviceForceResubscription.argtypes = [ctypes.c_char_p]
+    libbarton.bartonMatterDeviceForceResubscription.restype = None
+    libbarton.bartonMatterDeviceForceResubscription(lock.props.uuid.encode())
+
+    wait_for_resource_value(seed_queue, "false", timeout=10)
 
 
 def test_locked_resource_updated_by_event(default_environment, matter_door_lock):
     """Verify that the locked resource updates when a LockOperation event is received.
 
-    After commission (initial seed), trigger sideband unlock and verify the resource
-    transitions to "false" via the LockOperation event. Then lock and verify "true".
+    Confirm the initial seeded value via direct read (the seedFrom mapper runs inside
+    DoRegisterResources and bakes the value in without emitting RESOURCE_UPDATED), then
+    trigger sideband unlock and verify the resource transitions to "false" via the
+    LockOperation event. Then lock and verify "true".
     """
+    lock = _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
+
+    # Confirm initial seed via direct read — no RESOURCE_UPDATED fires for this.
+    resource = client.get_resource_by_uri(resource_uri(lock, "locked", endpoint_id=1))
+    assert resource is not None, "locked resource not found after commission"
+    assert resource.props.value == "true", (
+        f"Expected locked resource to be seeded to 'true' at commission time, "
+        f"got '{resource.props.value}'"
+    )
+
+    # From here, use event-driven updates via RESOURCE_UPDATED.
     resource_updated_queue = resource_update_listener(client, "locked")
-
-    _commission_door_lock(default_environment, matter_door_lock)
-
-    # Wait for initial seed (locked state)
-    wait_for_resource_value(resource_updated_queue, "true", timeout=15)
 
     # Trigger sideband unlock — DoorLockDevice.js emits LockOperation (Unlock) event
     result = matter_door_lock.sideband.send("unlock")

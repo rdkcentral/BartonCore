@@ -2,7 +2,7 @@
 
 SBMD (Spec-Based Matter Drivers) is a declarative system for mapping Matter device clusters to the Barton resource model using YAML specs and embedded JavaScript scripts. Currently, four mapper types exist: `read` (attribute subscription), `write` (writable attribute), `execute` (Matter commands), and `event` (Matter event subscription).
 
-The `read` mapper works by registering the attribute in `MatterDevice::readableAttributeLookup`, so that when `RegenerateAttributeReport()` replays the cached `ClusterStateCache` at hub startup and `SynchronizeDevice()` time, the attribute value is dispatched through the same callback path that handles live subscription updates. This gives `read`-based resources their initial values automatically.
+The `read` mapper works by registering the attribute in `MatterDevice::readableAttributeLookup`, so that when `RegenerateAttributeReport()` replays the cached `ClusterStateCache` at Barton startup and `SynchronizeDevice()` time, the attribute value is dispatched through the same callback path that handles live subscription updates. This gives `read`-based resources their initial values automatically.
 
 The `event` mapper registers in `MatterDevice::eventLookup` and receives values only when live events arrive via `OnEventData`. There is no equivalent replay mechanism for events. During the priming subscription (which populates the attribute cache before `MatterDevice::CacheCallback` is installed), events flow through `DeviceDataCache` with a null callback and are discarded. Even though `DeviceDataCache` stores events in `mEventDataCache`, there is no current `ReplayEventCache()` equivalent and replay semantics for events are complex (distinguishing initial state from historical transitions). As a result, event-driven resources are `null` until the first physical event fires.
 
@@ -12,7 +12,7 @@ For resources whose current value is best expressed by an event (e.g., `LockOper
 
 **Goals:**
 - Allow an SBMD resource with `mapper.event` to declare an attribute alias as its initial-value source via `mapper.seedFrom`.
-- Seed the resource value at both device configure time (commissioning) and device synchronize time (hub restart / communication restoration), because the attribute cache is populated in both contexts before the relevant driver methods run.
+- Seed the resource value at both device configure time (commissioning) and device synchronize time (Barton restart / communication restoration), because the attribute cache is populated in both contexts before the relevant driver methods run.
 - Reuse the existing `AddAttributeReadMapper`/`MapAttributeRead` script engine interface — `seedFrom` uses the same JS callback shape as `read`, keeping the SBMD author experience consistent.
 - Fail loudly at parse time for invalid `seedFrom` combinations.
 
@@ -27,15 +27,17 @@ For resources whose current value is best expressed by an event (e.g., `LockOper
 
 ### Decision 1: `seedFrom` fires at commission AND synchronize time
 
-**Chosen:** Override `DevicePersisted()` in `SpecBasedMatterDeviceDriver` to seed at commission time, and override `DoSynchronizeDevice()` to seed at synchronize time, both calling the shared `SeedInitialResourceValues()` helper.
+**Chosen:** Seed at commission time inside `DoRegisterResources()`, and override `DoSynchronizeDevice()` to seed at synchronize time via the shared `SeedInitialResourceValues()` helper.
 
-**Why `DevicePersisted` at commission (not `DoConfigureDevice`):**
-`DoConfigureDevice()` fires before `registerResources()` and `finalizeNewDevice()` in the commissioning sequence, so `updateResource()` would fail silently because the resource has not yet been written to the database. `DevicePersisted()` is called after the device is fully persisted and `DEVICE_ADDED` has been emitted — at that point resources exist in the database and `updateResource()` succeeds. `DevicePersisted()` is also on the commissioning thread, not the Matter thread; since `GetCachedAttributeData()` must be called from the Matter thread, `DevicePersisted()` schedules the seed synchronously via `RunOnMatterSync()`.
+**Why `DoRegisterResources` at commission:**
+`MatterDeviceDriver::RegisterResources()` dispatches `DoRegisterResources()` onto the Matter event loop thread via `RunOnMatterSync()`, so `GetCachedAttributeData()` is safe to call there directly — no additional `RunOnMatterSync()` is needed. More importantly, `DoRegisterResources()` runs *before* `finalizeNewDevice()` persists the device and fires `DEVICE_ADDED`, which means the seeded value must be passed directly as the `value` argument to `createDeviceResource()`/`createEndpointResource()`. The value is then baked into the `icDevice` struct before `jsonDatabaseAddDevice()` writes it, so `DEVICE_ADDED` carries the correct initial value. Clients observing `DEVICE_ADDED` never see a null value for any seeded resource.
 
 **Why `DoSynchronizeDevice` at synchronize time:**
-At synchronize time the device already has resources in the database (they were persisted at commission). `DoSynchronizeDevice()` is called from inside `ConnectAndExecute`, which already runs on the Matter thread, so `GetCachedAttributeData()` is safe to call directly. Skipping `DoSynchronizeDevice` would leave the resource stale after a hub restart until the next physical event.
+At synchronize time the device already has resources in the database (they were persisted at commission). `DoSynchronizeDevice()` is called from inside `ConnectAndExecute`, which already runs on the Matter thread, so `GetCachedAttributeData()` is safe to call directly, and `updateResource()` succeeds because the resources are already in the DB. Skipping `DoSynchronizeDevice` would leave the resource stale after a Barton restart until the next physical event.
 
 **Alternative considered for commission:** Fire only at `DoSynchronizeDevice`. Rejected: this creates a window between commission and first event where the resource value is unknown.
+
+**Alternative considered for commission:** Use `DevicePersisted`. Rejected: fires after `DEVICE_ADDED`, so clients observe a null resource value at commission. Also requires an extra `RunOnMatterSync()` call to get onto the Matter thread.
 
 **Alternative considered for commission:** Use `DoConfigureDevice`. Rejected: resources do not exist in the database yet at that point; `updateResource()` silently fails.
 
@@ -87,47 +89,62 @@ SbmdParser::ParseMapper()
     ├── reads "seedFrom.alias" (attribute alias only)
     ├── reads "seedFrom.script"
     ├── validates: event present, read absent, alias is attribute type
-    └── populates: hasInitialRead, initialReadAttribute, initialReadScript
+    └── populates: seedFromAttribute, seedFromScript
     │
     ▼
 SbmdSpec / SbmdMapper (data model, SbmdSpec.h)
     │
     ▼
 SpecBasedMatterDeviceDriver::AddResourceMappers()
-    └── script.AddAttributeReadMapper(initialReadAttribute, initialReadScript)
+    └── script.AddAttributeReadMapper(seedFromAttribute, seedFromScript)
                   │
                   ▼
           MQuickJS / QuickJS runtime
           (same path as mapper.read scripts)
 
 SpecBasedMatterDeviceDriver::configureResource() lambda
-    └── device->BindResourceSeedFromInfo(uri, initialReadAttribute, endpointIndex)
+    └── device->BindResourceSeedFromInfo(uri, seedFromAttribute, endpointIndex)
                   │
                   ▼
           MatterDevice::resourceSeedFromBindings
           (NOT in readableAttributeLookup — one-shot only)
 
-                  ┌───────────────────────────────────────────┐
-                  │  DevicePersisted() [at commission]          │
-                  │  DoSynchronizeDevice() [at restart]         │
-                  └──────────────┬────────────────────────────-─┘
-                                 │ calls
-                                 ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  DoRegisterResources() [at commission — already on Matter    │
+  │  thread via RunOnMatterSync in RegisterResources()]          │
+  │                                                              │
+  │  for each resource with seedFromAttribute:                  │
+  │      skip if in skippedOptionalResources                     │
+  │      MatterDevice::ReadSeedValueFromAttribute(uri)                     │
+  │          ├─> GetCachedAttributeData()                        │
+  │          │       └─> DeviceDataCache / ClusterStateCache     │
+  │          └─> script->MapAttributeRead(attribute, tlvData)    │
+  │                  └─> JS script returns string value          │
+  │      createDeviceResource(device, id, value, ...)            │
+  │          └─> value baked in before DEVICE_ADDED fires        │
+  └──────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │  DoSynchronizeDevice() [at restart — already on Matter      │
+  │  thread via ConnectAndExecute]                               │
+  └──────────────┬───────────────────────────────────────────────┘
+                 │ calls
+                 ▼
           SeedInitialResourceValues(deviceId)
-              for each resource with hasInitialRead:
+              for each resource with seedFromAttribute:
                   skip if in skippedOptionalResources
-                  MatterDevice::GetCachedAttributeData()
-                      └─> DeviceDataCache / ClusterStateCache
-                  script->MapAttributeRead(attribute, tlvData)
-                      └─> JS script returns string value
-                  updateResource(deviceUuid, endpointId, resourceId, value, nullptr)
+                  MatterDevice::SeedResourceFromAttribute(uri)
+                      ├─> ReadSeedValueFromAttribute(uri)
+                      │       ├─> GetCachedAttributeData()
+                      │       └─> script->MapAttributeRead()
+                      └─> updateResource(deviceUuid, endpointId, resourceId, value, nullptr)
 ```
 
 ## Thread Safety
 
 `DoSynchronizeDevice()` is called from the Matter event loop thread (the same thread that runs `OnAttributeChanged` and `OnEventData`), so `GetCachedAttributeData()` and `updateResource()` are safe to call directly.
 
-`DevicePersisted()` is called from the commissioning thread, not the Matter thread. Because `GetCachedAttributeData()` requires the Matter thread (it reads from `ClusterStateCache`), `DevicePersisted()` dispatches the seed work synchronously via `RunOnMatterSync()`. The `updateResource()` call also happens inside that block, on the Matter thread.
+`DoRegisterResources()` is dispatched onto the Matter event loop thread by `MatterDeviceDriver::RegisterResources()` via `RunOnMatterSync()` before calling the override. Therefore `GetCachedAttributeData()` is safe to call directly inside `DoRegisterResources()` — no additional `RunOnMatterSync()` is required. The seeded value is passed to `createDeviceResource()`/`createEndpointResource()` on the same thread.
 
 In both cases the seed execution is fully serial with respect to incoming events on the same thread, eliminating any race between the initial seed and the first arriving `LockOperation` event.
 
@@ -164,3 +181,38 @@ The iteration pattern mirrors `DoRegisterResources()` but must replicate the res
 ## Open Questions
 
 None. All design decisions have been resolved.
+
+## Integration Test Infrastructure
+
+### `bartonMatterDeviceForceResubscription` (test-only C API)
+
+`test_locked_resource_seeded_on_synchronize` needs to trigger the
+`communicationRestored` → `DoSynchronizeDevice` path without waiting for the
+full negotiated liveness window (which can be tens of seconds and would make
+the test suite impractically slow).
+
+The implementation uses `ReadClient::OverrideLivenessTimeout(1ms)`, a public
+Matter SDK API that bypasses the `mMaxInterval + roundTripTimeout` liveness
+formula.  When the 1 ms timer fires, the ReadClient terminates with
+`CHIP_ERROR_TIMEOUT`, which is the only termination cause that sets
+`ForceCASE = true` in `DefaultResubscribePolicy` — ensuring a new CASE
+session is established (not just a reconnect attempt on an existing session).
+
+To prevent the 1 ms override from persisting into subsequent resubscriptions
+and causing an infinite rapid-resubscription loop,
+`DeviceDataCache::OnSubscriptionEstablished` resets `mLivenessTimeoutOverride`
+to `Clock::kZero` after each successful subscription.  `Clock::kZero` is the
+sentinel value the Matter SDK uses to mean "no override; use the negotiated
+liveness window".  This reset is semantically correct production behaviour
+(not merely test scaffolding) because a stale override from a previous
+test-triggered timeout should never influence the liveness timing of an
+established subscription.
+
+All callers of `OverrideLivenessTimeout` must be on the Matter event-loop
+thread.  `DeviceDataCache::ForceResubscription()` is therefore always invoked
+via `chip::DeviceLayer::SystemLayer().ScheduleLambda()`.
+
+The public C API (`bartonMatterDeviceForceResubscription`) is declared in
+`api/c/public/private/bartonMatterTestHelpers.h`, which carries prominent
+warnings that it is EXCLUSIVELY for integration test use and MUST NOT be
+called from production code or any Barton client application.

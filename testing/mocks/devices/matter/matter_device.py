@@ -78,11 +78,13 @@ class MatterDevice(BaseDevice):
         matterjs_entry_point: str,
         vendor_id: int = 0,
         product_id: int = 0,
+        extra_args: list = None,
     ):
         self._matterjs_entry_point = matterjs_entry_point
         self._device_class = device_class
         self._vendor_id = vendor_id
         self._product_id = product_id
+        self._extra_args = extra_args or []
         self._passcode = self._set_passcode()
         self._discriminator = self._set_discriminator()
         self._commissioning_code = self._set_commissioning_code()
@@ -174,6 +176,9 @@ class MatterDevice(BaseDevice):
 
         if self._product_id:
             cmd.extend(["--product-id", str(self._product_id)])
+
+        if self._extra_args:
+            cmd.extend(self._extra_args)
 
         # Keep LD_PRELOAD for Python (ASAN-instrumented Barton libs), but do
         # not inject it into Node.js virtual devices to avoid cross-runtime

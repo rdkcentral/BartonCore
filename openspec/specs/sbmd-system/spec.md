@@ -155,8 +155,8 @@ A resource mapper SHALL support a `seedFrom` section (in addition to the existin
 - **WHEN** a resource declares `mapper.event` for ongoing updates and `mapper.seedFrom` pointing to a corresponding attribute alias
 - **THEN** the resource SHALL have a non-null value immediately after device commissioning without waiting for the first event to fire
 
-#### Scenario: Event-driven resource has initial value after hub restart
-- **WHEN** the hub restarts and a device with a `seedFrom` resource is synchronized
+#### Scenario: Event-driven resource has initial value after Barton restart
+- **WHEN** Barton restarts and a device with a `seedFrom` resource is synchronized
 - **THEN** the resource SHALL be re-seeded from the attribute cache before any new event arrives
 
 ### Requirement: SBMD schema validation
