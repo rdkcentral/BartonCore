@@ -11,7 +11,7 @@ The team has agreed on an architecture: an abstract camera endpoint drives strea
 - **OpenHome endpoint profile** (`profile: "openhome"`): Protocol-specific endpoint with `getStreamUrl` [execute] and `streamUrl` [events]. This endpoint exists only on devices that use OpenHome media tunnels.
 - **Stream coordination via `updateResource()` event metadata**: Reuse the existing `cJSON *metadata` mechanism already used by door lock, sensor, and link quality drivers. The metadata carries stream state as a JSON convention between driver and client — not enforced by Barton's type system. Events are the source of truth for stream state, not resource values. Protocol-specific data (SDP answers, ICE candidates, URLs) is emitted on protocol endpoint resources, not on `streamStatus`.
 - **Driver-determined protocol selection**: The driver inspects which protocol endpoints exist on the device to determine the signaling flow. For MVP, this is hardcoded per driver (Matter camera driver → WebRTC, OpenHome camera driver → openhome).
-- **Existing camera profile constants**: The existing `CAMERA_PROFILE_*` definitions in `commonDeviceDefs.h` are retained where practical. Since we own the clients, a clean break is acceptable if it simplifies the design — backward compatibility is preferred but not a hard constraint.
+- **Existing camera profile constants**: The existing `CAMERA_PROFILE_*` definitions in `commonDeviceDefs.h` are expected to be removed. We own the clients and would rather not carry forward legacy naming just for compatibility. The clean break decision is confirmed at implementation time once the client migration cost is understood.
 
 ## Non-goals
 

@@ -24,7 +24,7 @@ Implement the Matter 1.5 WebRTC camera driver and signaling flow on top of the s
 Scope includes:
 - `webrtc` endpoint profile with `offerSdp`, `remoteSdp`, `offerIceCandidates`, `remoteIceCandidates` resources and `WEBRTC_PROFILE_*` constants
 - Matter camera driver via SBMD — the key architectural challenge is SBMD composition: how to reuse the shared camera stream manager (stream lifecycle, status events, cleanup) from within an SBMD driver. Options to explore include SBMD class dependencies and exposing the stream manager via JS bindings in the SBMD context.
-- Cluster server hosting pattern (`WebRtcTransportRequestorServer`) — first server-side cluster in Barton's Matter subsystem
+- Cluster server hosting pattern (`WebRTCTransportRequestorServer`) — first server-side cluster in Barton's Matter subsystem
 - SDP offer/answer exchange and ICE candidate negotiation
 - WebRTC media stack integration (libdatachannel or alternative)
 - Integration test infrastructure: matter.js virtual camera device, Python test fixtures (`MatterCamera`) following the existing `MatterLight`/`MatterDoorLock` pattern

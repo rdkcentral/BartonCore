@@ -1,6 +1,6 @@
 ## Context
 
-BartonCore provides protocol-agnostic IoT device management through a URI-based resource model (`/deviceId/ep/N/r/resourceName`). Devices have endpoints with profiles (e.g., `doorLock`, `sensor`, `light`) that define mandatory and optional resources. Drivers communicate state changes via `updateResource()`, which can carry optional `cJSON *metadata` — a pattern already used by door lock (source, userId), sensor (test flag), and link quality drivers.
+BartonCore provides protocol-agnostic IoT device management through a URI-based resource model (`/deviceId/ep/<endpointId>/r/<resourceName>`). Devices have endpoints with profiles (e.g., `doorLock`, `sensor`, `light`) that define mandatory and optional resources. Drivers communicate state changes via `updateResource()`, which can carry optional `cJSON *metadata` — a pattern already used by door lock (source, userId), sensor (test flag), and link quality drivers.
 
 Barton currently supports cameras only through the OpenHome IP camera model. The existing `camera` profile in `commonDeviceDefs.h` defines resources tightly coupled to that model: credentials (`adminUserId`, `adminPassword`), media tunnels (`createMediaTunnel`, `destroyMediaTunnel`), and snapshot URLs (`pictureURL`). There is no shared stream lifecycle that works across camera technologies.
 
@@ -15,7 +15,7 @@ Matter 1.5 introduces WebRTC-based cameras with a fundamentally different signal
 - Design the WebRTC endpoint profile to be reusable beyond cameras (e.g., ssh, binary transfer, audio streaming)
 - Use `updateResource()` event metadata as the stream coordination mechanism — no new infrastructure needed
 - Keep events as the source of truth for stream state, with per-stream correlation via `streamId`
-- Maintain full backward compatibility with existing OpenHome camera clients
+- Provide a clear migration path for existing OpenHome camera clients as legacy OpenHome-specific resources are deprecated or removed by default
 - Ensure the pattern extends naturally to future technologies (RTSP, HTTP, etc.)
 
 **Non-Goals:**
@@ -67,10 +67,10 @@ Doorbell Camera device (deviceClass: "doorbellCamera")
 
 **Stream status values**: `setup`, `done`, `error` — intentionally minimal to work across all camera types regardless of protocol complexity.
 
-**Metadata schema** (JSON convention):
+**Metadata schema** (JSON convention — `streamId` is a driver-generated counter, unique per device):
 ```json
 {
-  "streamId": "<uint64>",
+  "streamId": 1,
   "nextAction": "/deviceId/ep/webrtc/r/offerSdp"
 }
 ```
@@ -78,7 +78,7 @@ Doorbell Camera device (deviceClass: "doorbellCamera")
 On error:
 ```json
 {
-  "streamId": "<uint64>",
+  "streamId": 1,
   "error": "<description>"
 }
 ```
@@ -118,7 +118,7 @@ Client                        Driver                    Camera
   |                             |                          |
   | ◄── streamStatus event ───  |                          |
   |   value: "setup"            |                          |
-  |   meta: {streamId, nextAction: "ep/webrtc/r/offerSdp"} |
+  |   meta: {streamId, nextAction: "/deviceId/ep/webrtc/r/offerSdp"} |
   |                             |                          |
   |── executeResource           |                          |
   |   (offerSdp, sdpOffer) ──►  |── (SDP offer) ────────►  |
@@ -129,7 +129,7 @@ Client                        Driver                    Camera
   |                             |                          |
   | ◄── streamStatus event ───  |                          |
   |   value: "setup"            |                          |
-  |   meta: {streamId, nextAction: "ep/webrtc/r/offerIceCandidates"}
+  |   meta: {streamId, nextAction: "/deviceId/ep/webrtc/r/offerIceCandidates"}
   |                             |                          |
   |── executeResource           |                          |
   |   (offerIceCandidates) ──►  |── (ICE candidates) ───►  |
@@ -151,7 +151,7 @@ Client                        Driver                    Camera
   |                             |                          |
   | ◄── streamStatus event ───  |                          |
   |   value: "setup"            |                          |
-  |   meta: {streamId, nextAction: "ep/openhome/r/getStreamUrl"}
+  |   meta: {streamId, nextAction: "/deviceId/ep/openhome/r/getStreamUrl"}
   |                             |                          |
   |── executeResource           |                          |
   |   (getStreamUrl) ──────►    |── createMediaTunnel() ─► |
@@ -174,7 +174,7 @@ Client                        Driver                    Camera
 - Protocol field on the device: Would require a new device-level property and introduce a code path distinct from the natural "what endpoints does this device have?" query.
 - Client-specified protocol: Clients shouldn't need to know which protocol a camera uses — that defeats protocol agnosticism.
 
-### D5: Backward compatibility with existing OpenHome camera profile
+### D5: Legacy camera profile removal
 
 **Decision**: The new stream resources (`stream`, `streamStatus`) are added to the camera endpoint. The `openhome` endpoint is new. Legacy resources (`createMediaTunnel`, `adminUserId`, etc.) are expected to be removed unless there's a compelling reason to keep them — we own the clients and would rather not carry forward ugly naming just for compatibility.
 
@@ -206,7 +206,6 @@ Client                        Driver                    Camera
 
 ## Open Questions
 
-1. **Should `nextAction` be a full URI or a relative path?** Full URI (`/deviceId/ep/webrtc/r/offerSdp`) is more self-contained. Relative path (`ep/webrtc/r/offerSdp`) is shorter. Recommendation: full URI for unambiguity.
-2. **What happens to in-flight streams on driver restart?** The driver should emit `streamStatus: "error"` for all active streams on shutdown. Detail in the parallel stream management task.
-3. **How does the driver ensure `streamId` is returned before the first `streamStatus` event fires?** The client needs the correlation ID in hand before events arrive. The exact mechanism (scheduled delay, deferred emit, etc.) is TBD at implementation time.
-4. **Do clients need explicit stream teardown, and if so, how?** The driver self-manages lifecycle (timeouts, disconnects), so explicit stop may not be necessary. If it is, whether it's a payload on the existing `stream` resource, a separate resource, or something else is TBD.
+1. **What happens to in-flight streams on driver restart?** The driver should emit `streamStatus: "error"` for all active streams on shutdown. Detail in the parallel stream management task.
+2. **How does the driver ensure `streamId` is returned before the first `streamStatus` event fires?** The client needs the correlation ID in hand before events arrive. The exact mechanism (scheduled delay, deferred emit, etc.) is TBD at implementation time.
+3. **Do clients need explicit stream teardown, and if so, how?** The driver self-manages lifecycle (timeouts, disconnects), so explicit stop may not be necessary. If it is, whether it's a payload on the existing `stream` resource, a separate resource, or something else is TBD.
