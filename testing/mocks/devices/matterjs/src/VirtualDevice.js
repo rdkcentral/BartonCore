@@ -59,7 +59,6 @@ export class VirtualDevice {
         passcode = 20202021,
         discriminator = 3840,
         port = 0,
-        maxInterval = 3000,
     } = {}) {
         this.deviceName = deviceName;
         this.vendorId = vendorId;
@@ -67,7 +66,6 @@ export class VirtualDevice {
         this.passcode = passcode;
         this.discriminator = discriminator;
         this.port = port;
-        this.maxInterval = maxInterval;
         this.operations = new Map();
         this.serverNode = null;
         this.httpServer = null;
@@ -91,7 +89,7 @@ export class VirtualDevice {
             network: {
                 port: this.port,
                 subscriptionOptions: {
-                    maxInterval: this.maxInterval,
+                    maxInterval: 3000,
                     minInterval: 1000,
                     randomizationWindow: 0,
                 },

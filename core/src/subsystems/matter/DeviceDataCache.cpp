@@ -857,12 +857,12 @@ void DeviceDataCache::OnDeviceConnectionFailure(const chip::ScopedNodeId &peerId
     }
 }
 
-void DeviceDataCache::ForceResubscription()
+void DeviceDataCache::OverrideLiveness(uint32_t ms)
 {
     if (!readClient)
     {
         return;
     }
 
-    readClient->OverrideLivenessTimeout(chip::System::Clock::Milliseconds32(1));
+    readClient->OverrideLivenessTimeout(chip::System::Clock::Milliseconds32(ms));
 }

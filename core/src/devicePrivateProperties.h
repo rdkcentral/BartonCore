@@ -41,6 +41,7 @@
 #define ZIGBEE_PROPS_PREFIX                                   "cpe.zigbee."
 #define TELEMETRY_PROPS_PREFIX                                "telemetry."
 #define FAST_COMM_FAIL_PROP                                   "zigbee.testing.fastCommFail.flag"
+#define COMM_FAIL_MONITOR_INTERVAL_SECS_PROP                  "barton.commFail.monitorIntervalSecs"
 #define CPE_ZIGBEE_REPORT_DEVICE_INFO_ENABLED                 "cpe.zigbee.reportDeviceInfo.enabled"
 #define CPE_DIAGNOSTIC_ZIGBEEDATA_ENABLED                     "cpe.diagnostics.zigBeeData.enabled"
 #define CPE_DIAGNOSTIC_ZIGBEEDATA_PER_CHANNEL_NUMBER_OF_SCANS "cpe.diagnostics.zigBeeData.numberOfScansPerChannel"

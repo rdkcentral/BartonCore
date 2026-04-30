@@ -38,8 +38,7 @@ export function parseArgs(argv) {
         "--discriminator",
         "--port",
         "--vendor-id",
-        "--product-id",
-        "--max-interval"
+        "--product-id"
     ]);
 
     for (let i = 2; i < argv.length; i += 2) {
@@ -76,9 +75,6 @@ export function parseArgs(argv) {
                 break;
             case "--product-id":
                 args.productId = parsedValue;
-                break;
-            case "--max-interval":
-                args.maxInterval = parsedValue;
                 break;
         }
     }

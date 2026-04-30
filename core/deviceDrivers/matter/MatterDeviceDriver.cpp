@@ -128,6 +128,58 @@ MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *devic
     driver.commFailTimeoutSecsChanged = [](DeviceDriver *driver, const icDevice *device, uint32_t timeoutSecs) {
         static_cast<MatterDeviceDriver *>(driver->callbackContext)->commFailTimeoutSecs = timeoutSecs;
     };
+
+    driver.metadataUpdated = [](DeviceDriver *driver, const icDevice *device, const char *key, const char *value) {
+        if (strcmp(key, MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS) != 0)
+        {
+            return;
+        }
+
+        uint64_t ms = 0;
+        g_autoptr(GError) parseError = NULL;
+        g_ascii_string_to_unsigned(value, 10, 0, UINT32_MAX, &ms, &parseError);
+
+        if (parseError != NULL)
+        {
+            icLogWarn(LOG_TAG,
+                      "%s: could not parse %s value '%s' for device %s: %s",
+                      __FUNCTION__,
+                      MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS,
+                      value,
+                      device->uuid,
+                      parseError->message);
+            return;
+        }
+
+        if (ms == 0)
+        {
+            return;
+        }
+
+        auto *self = static_cast<MatterDeviceDriver *>(driver->callbackContext);
+        auto cache = self->GetDeviceDataCache(std::string(device->uuid));
+
+        if (!cache)
+        {
+            icLogError(LOG_TAG, "%s: no DeviceDataCache for device %s", __FUNCTION__, device->uuid);
+            return;
+        }
+
+        auto *cachePtr = cache.get();
+        auto overrideMs = static_cast<uint32_t>(ms);
+
+        auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda(
+            [cachePtr, overrideMs]() { cachePtr->OverrideLiveness(overrideMs); });
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icLogError(LOG_TAG,
+                       "%s: failed to schedule liveness override for device %s: %s",
+                       __FUNCTION__,
+                       device->uuid,
+                       err.AsString());
+        }
+    };
 }
 
 MatterDeviceDriver::~MatterDeviceDriver()
@@ -1665,65 +1717,4 @@ static bool getDeviceClassVersion(void *ctx, const char *deviceClass, uint8_t *v
 
     *version = self->GetDeviceClassVersion();
     return true;
-}
-
-// =============================================================================
-// FOR INTEGRATION TEST USE ONLY
-//
-// The functions below (MatterDeviceDriver::ForceResubscription and
-// bartonMatterDeviceForceResubscription) exist solely to support integration
-// tests that need to exercise the communicationRestored → synchronizeDevice
-// path quickly, without waiting for the full negotiated liveness window.
-//
-// MUST NOT be called from production code or any Barton client application.
-// The public test API is declared in api/c/public/private/bartonMatterTestHelpers.h.
-// =============================================================================
-
-void MatterDeviceDriver::ForceResubscription(const std::string &deviceUuid)
-{
-    auto cache = GetDeviceDataCache(deviceUuid);
-
-    if (!cache)
-    {
-        icLogError(LOG_TAG, "%s: no DeviceDataCache for device %s", __FUNCTION__, deviceUuid.c_str());
-        return;
-    }
-
-    auto *cachePtr = cache.get();
-
-    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([cachePtr]() { cachePtr->ForceResubscription(); });
-
-    if (err != CHIP_NO_ERROR)
-    {
-        icLogError(LOG_TAG, "%s: failed to schedule force resubscription: %s", __FUNCTION__, err.AsString());
-    }
-}
-
-extern "C" void bartonMatterDeviceForceResubscription(const char *uuid)
-{
-    if (uuid == nullptr)
-    {
-        icLogError(LOG_TAG, "%s: invalid arguments", __FUNCTION__);
-        return;
-    }
-
-    icLogDebug(LOG_TAG, "%s: forcing resubscription for %s", __FUNCTION__, uuid);
-
-    scoped_icDevice *device = deviceServiceGetDevice(uuid);
-
-    if (device == nullptr)
-    {
-        icLogError(LOG_TAG, "%s: device %s not found", __FUNCTION__, uuid);
-        return;
-    }
-
-    const DeviceDriver *drv = deviceDriverManagerGetDeviceDriver(device->managingDeviceDriver);
-
-    if (drv == nullptr || drv->callbackContext == nullptr)
-    {
-        icLogError(LOG_TAG, "%s: no driver for device %s", __FUNCTION__, uuid);
-        return;
-    }
-
-    static_cast<MatterDeviceDriver *>(drv->callbackContext)->ForceResubscription(std::string(uuid));
 }

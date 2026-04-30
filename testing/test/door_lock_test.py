@@ -25,6 +25,9 @@
 import logging
 
 import pytest
+from testing.environment.default_environment_orchestrator import (
+    DefaultEnvironmentOrchestrator,
+)
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
@@ -36,6 +39,28 @@ from testing.utils.barton_utils import (
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
+
+
+@pytest.fixture
+def fast_commfail_environment():
+    """Like default_environment but with barton.commFail.monitorIntervalSecs=1.
+
+    This property must be set before start_client() because it is read by
+    deviceServiceStart() immediately after deviceServiceCommFailInit(). It
+    shortens the watchdog check interval from 60 s to 1 s, allowing a 3 s
+    commFailOverrideSeconds timeout to be detected promptly. Only
+    test_locked_resource_seeded_on_synchronize requires this.
+    """
+    env = DefaultEnvironmentOrchestrator()
+    env._barton_client_params.get_property_provider().set_property_string(
+        "barton.commFail.monitorIntervalSecs", "1"
+    )
+    env.start_client()
+    env.wait_for_client_to_be_ready()
+    try:
+        yield env
+    finally:
+        env._cleanup()
 
 
 def _commission_door_lock(default_environment, matter_door_lock):
@@ -140,7 +165,9 @@ def test_locked_resource_seeded_on_commission(default_environment, matter_door_l
     )
 
 
-def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_lock):
+def test_locked_resource_seeded_on_synchronize(
+    fast_commfail_environment, matter_door_lock
+):
     """Verify that the locked resource is re-seeded at synchronize time.
 
     Simulates a real-world scenario: Barton loses communication with the
@@ -149,52 +176,64 @@ def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_
 
     goOffline abruptly kills all Matter sessions via initiateForceClose()
     without sending any Matter messages (no SessionClose, no StatusReport).
-    After forcing comm-fail and updating the device state via comeOnline,
-    bartonMatterDeviceForceResubscription is called to cut test time: without
-    it, the test would have to wait for the full negotiated liveness window
-    (potentially tens of seconds) before the ReadClient detects the timeout
-    and resubscribes.  The call overrides the liveness timeout to 1 ms so
-    the timeout fires immediately, triggering DefaultResubscribePolicy to
-    schedule a new CASE session.  When the priming report arrives with
-    LockState=Unlocked, the watchdog pet fires communicationRestored →
-    synchronizeDevice → SeedInitialResourceValues which reads Unlocked from
-    the cache and writes "false".
-    """
-    import ctypes
 
-    lock = _commission_door_lock(default_environment, matter_door_lock)
-    client = default_environment.get_client()
+    Two device metadata properties are used to keep the test fast:
+
+    commFailOverrideSeconds=3: shortens the comm-fail watchdog timeout from
+    its default (~56 min) to 3 s.  Writing this metadata also immediately
+    reprograms the running watchdog timer (deviceServiceCommFailSetDeviceTimeoutSecs
+    is called from setMetadata() in deviceService.c).  The fast_commfail_environment
+    fixture sets barton.commFail.monitorIntervalSecs=1 so the watchdog thread
+    checks every second rather than every 60 s; without that, the 3 s timeout
+    would expire undetected until the next 60 s check.  Together these two
+    settings cause the communicationFailure resource to become "true" within
+    ~4 s of goOffline.
+
+    matterLivenessTimeoutOverrideMs=1: after the device comes back online and
+    comm-fail is confirmed, the ReadClient's subscription is still logically
+    active from Barton's perspective (the liveness timer has ~14 s remaining).
+    Setting this property causes MatterDeviceDriver to call
+    ReadClient::OverrideLivenessTimeout(1ms) via ScheduleLambda so the
+    liveness timer fires on the next Matter event-loop tick. This triggers
+    DefaultResubscribePolicy to open a new CASE session (ForceCASE=true).
+    When the priming report arrives with LockState=Unlocked, the watchdog pet
+    fires communicationRestored → synchronizeDevice → SeedInitialResourceValues
+    which reads Unlocked from the cache and writes "false".
+
+    Both properties are set via the standard b_core_client_write_metadata API.
+    """
+
+    lock = _commission_door_lock(fast_commfail_environment, matter_door_lock)
+    client = fast_commfail_environment.get_client()
+
+    # Shorten the comm-fail watchdog so it fires in ~3 s instead of ~56 min.
+    metadata_base = f"/{lock.props.uuid}/m"
+    client.write_metadata(f"{metadata_base}/commFailOverrideSeconds", "3")
+
+    commfail_queue = resource_update_listener(client, "communicationFailure")
 
     # Abruptly kill all Matter sessions without sending any Matter messages.
     # The ServerNode stays running so Barton can reconnect once asked to.
     matter_door_lock.sideband.send("goOffline")
 
-    # Force comm-fail immediately — device is genuinely unreachable at this point.
-    libbarton = ctypes.CDLL(None)
-    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail.argtypes = [
-        ctypes.c_char_p
-    ]
-    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail.restype = None
-    libbarton.deviceCommunicationWatchdogForceDeviceInCommFail(lock.props.uuid.encode())
+    # Wait for Barton to detect comm-fail via the watchdog (~3 s).
+    wait_for_resource_value(commfail_queue, "true", timeout=10)
 
     seed_queue = resource_update_listener(client, "locked")
 
     # Update the device's lock state attribute before Barton reconnects.
     matter_door_lock.sideband.send("comeOnline", {"lockState": "unlocked"})
 
-    # Without this call the test would wait for the full negotiated liveness
-    # window (potentially tens of seconds) before the ReadClient notices the
-    # timeout and triggers resubscription.  bartonMatterDeviceForceResubscription
-    # overrides the liveness timeout to 1 ms so the timeout fires on the next
-    # Matter event-loop tick, triggering immediate auto-resubscription via
-    # DefaultResubscribePolicy (ForceCASE=true).  A fresh priming report with
-    # LockState=Unlocked follows, causing communicationRestored →
-    # synchronizeDevice → SeedInitialResourceValues.
-    libbarton.bartonMatterDeviceForceResubscription.argtypes = [ctypes.c_char_p]
-    libbarton.bartonMatterDeviceForceResubscription.restype = None
-    libbarton.bartonMatterDeviceForceResubscription(lock.props.uuid.encode())
+    # The ReadClient's liveness timer still has ~14 s remaining at this point.
+    # Setting matterLivenessTimeoutOverrideMs=1 causes MatterDeviceDriver to
+    # apply ReadClient::OverrideLivenessTimeout(1ms) via ScheduleLambda, so
+    # the liveness fires immediately, triggering DefaultResubscribePolicy to
+    # open a new CASE session.  Since the device is now online, CASE succeeds,
+    # the priming report delivers LockState=Unlocked, and synchronizeDevice
+    # seeds locked="false".
+    client.write_metadata(f"{metadata_base}/matterLivenessTimeoutOverrideMs", "1")
 
-    wait_for_resource_value(seed_queue, "false", timeout=10)
+    wait_for_resource_value(seed_queue, "false", timeout=15)
 
 
 def test_locked_resource_updated_by_event(default_environment, matter_door_lock):

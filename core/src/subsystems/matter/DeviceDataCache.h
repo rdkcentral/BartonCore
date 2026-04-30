@@ -202,21 +202,21 @@ namespace barton
         CHIP_ERROR RegenerateAttributeReport();
 
         /**
-         * [FOR INTEGRATION TEST USE ONLY — see bartonMatterTestHelpers.h]
+         * Overrides the ReadClient liveness timeout to the given number of milliseconds.
          *
-         * Overrides the ReadClient liveness timeout to 1 ms so the liveness
-         * timer fires on the next Matter event-loop tick, triggering
-         * DefaultResubscribePolicy to schedule a new CASE session.  This drives
-         * the communicationRestored → synchronizeDevice path without waiting for
-         * the full negotiated liveness window.
+         * When ms > 0, the liveness timer fires after exactly ms milliseconds
+         * instead of using the negotiated maxInterval + roundTripTimeout formula.
+         * Setting ms=1 causes CHIP_ERROR_TIMEOUT on the next Matter event-loop
+         * tick, which triggers DefaultResubscribePolicy to schedule a new CASE
+         * session (ForceCASE=true) — driving the communicationRestored →
+         * synchronizeDevice path without waiting for the full negotiated window.
          *
          * OnSubscriptionEstablished resets the override to Clock::kZero so
          * subsequent subscriptions use the naturally negotiated liveness window.
          *
          * Must be called on the Matter event-loop thread.
-         * MUST NOT be called from production code or any Barton client application.
          */
-        void ForceResubscription();
+        void OverrideLiveness(uint32_t ms);
 
     private:
         static void OnDeviceConnectedCallback(void *context,

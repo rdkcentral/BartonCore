@@ -184,35 +184,68 @@ None. All design decisions have been resolved.
 
 ## Integration Test Infrastructure
 
-### `bartonMatterDeviceForceResubscription` (test-only C API)
+### `commFailOverrideSeconds` + `matterLivenessTimeoutOverrideMs`
 
-`test_locked_resource_seeded_on_synchronize` needs to trigger the
-`communicationRestored` → `DoSynchronizeDevice` path without waiting for the
-full negotiated liveness window (which can be tens of seconds and would make
-the test suite impractically slow).
+`test_locked_resource_seeded_on_synchronize` needs to exercise the
+`communicationRestored` → `DoSynchronizeDevice` path at test-friendly speed.
+Two device metadata properties work together; both are set via
+`b_core_client_write_metadata` — the standard Barton client API.
 
-The implementation uses `ReadClient::OverrideLivenessTimeout(1ms)`, a public
-Matter SDK API that bypasses the `mMaxInterval + roundTripTimeout` liveness
-formula.  When the 1 ms timer fires, the ReadClient terminates with
-`CHIP_ERROR_TIMEOUT`, which is the only termination cause that sets
-`ForceCASE = true` in `DefaultResubscribePolicy` — ensuring a new CASE
-session is established (not just a reconnect attempt on an existing session).
+**`commFailOverrideSeconds=3`** shortens the comm-fail watchdog timeout from
+its default (~56 min) to 3 s.  Writing this metadata via `write_metadata`
+immediately reprograms the running per-device watchdog timer because
+`setMetadata()` in `deviceService.c` calls `deviceServiceCommFailSetDeviceTimeoutSecs`
+whenever `COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS` is persisted.  This
+makes the metadata "live" — no device reconnect or service restart is needed
+for the new timeout to take effect.
 
-To prevent the 1 ms override from persisting into subsequent resubscriptions
-and causing an infinite rapid-resubscription loop,
-`DeviceDataCache::OnSubscriptionEstablished` resets `mLivenessTimeoutOverride`
-to `Clock::kZero` after each successful subscription.  `Clock::kZero` is the
-sentinel value the Matter SDK uses to mean "no override; use the negotiated
-liveness window".  This reset is semantically correct production behaviour
-(not merely test scaffolding) because a stale override from a previous
-test-triggered timeout should never influence the liveness timing of an
-established subscription.
+However, the watchdog *check loop* sleeps for 60 s between passes by default.
+Even with a 3 s per-device timeout the device would not be declared in
+comm-fail until the next 60 s wakeup.  To fix this, the
+`barton.commFail.monitorIntervalSecs` property (read in `deviceService.c`
+immediately after `deviceServiceCommFailInit()`, applied via
+`deviceCommunicationWatchdogSetMonitorInterval()`) overrides the check
+interval.  `barton.commFail.monitorIntervalSecs=1` is set in a dedicated `fast_commfail_environment`
+fixture in `door_lock_test.py` (not in `DefaultEnvironmentOrchestrator`, since only
+`test_locked_resource_seeded_on_synchronize` requires it). The fixture instantiates
+`DefaultEnvironmentOrchestrator`, sets the property on the provider before `start_client()`
+(it must be set before `deviceServiceStart()` reads it after `deviceServiceCommFailInit()`),
+then starts and yields the environment.
+In production this property is
+absent and the 60 s default is unchanged.
 
-All callers of `OverrideLivenessTimeout` must be on the Matter event-loop
-thread.  `DeviceDataCache::ForceResubscription()` is therefore always invoked
-via `chip::DeviceLayer::SystemLayer().ScheduleLambda()`.
+After `goOffline` kills the device-side Matter stack the watchdog stops
+receiving pets (no `OnMessageReceived` → no pet) and fires naturally after
+~3 s.  The test waits for the `communicationFailure` resource to become
+`"true"` before proceeding.  This replaces a previous iteration that called
+`deviceCommunicationWatchdogForceDeviceInCommFail` via ctypes; PR feedback
+noted that speeding up detection (like ZITH does for Zigbee) is preferable to
+forcing internal state transitions from test code.
 
-The public C API (`bartonMatterDeviceForceResubscription`) is declared in
-`api/c/public/private/bartonMatterTestHelpers.h`, which carries prominent
-warnings that it is EXCLUSIVELY for integration test use and MUST NOT be
-called from production code or any Barton client application.
+**`matterLivenessTimeoutOverrideMs=1`** collapses the remaining liveness
+window after `comeOnline`.  When `goOffline` kills the device-side Matter
+stack, Barton's `ReadClient` is unaware: from its perspective the subscription
+is still active and its liveness timer has the full `maxInterval +
+roundTripTimeout` (~17 s) remaining.  The `commFailOverrideSeconds` watchdog
+fires after ~3 s, but by the time the test confirms comm-fail and calls
+`comeOnline`, the `ReadClient` is still in "active subscription" state with
+~14 s of liveness remaining.  Setting `matterLivenessTimeoutOverrideMs=1`
+causes `MatterDeviceDriver` to call `DeviceDataCache::OverrideLiveness(1)` via
+`chip::DeviceLayer::SystemLayer().ScheduleLambda()`, which calls
+`ReadClient::OverrideLivenessTimeout(1ms)` on the Matter event-loop thread.
+The liveness timer fires on the next tick, terminating the `ReadClient` with
+`CHIP_ERROR_TIMEOUT` — the only termination cause that sets `ForceCASE = true`
+in `DefaultResubscribePolicy`.  Since the device is online at this point, the
+new CASE session succeeds immediately.
+
+The `metadataUpdated` callback on `DeviceDriver` (new, parallel to
+`commFailTimeoutSecsChanged`) is what delivers the property change from
+`setMetadata()` in `deviceService.c` to the `MatterDeviceDriver` lambda
+without requiring any GObject signal subscription or test-only hooks.
+
+To prevent the liveness override from persisting into subsequent subscriptions
+and causing a rapid-resubscription loop, `DeviceDataCache::OnSubscriptionEstablished`
+resets `mLivenessTimeoutOverride` to `Clock::kZero` after each successful
+subscription.  `Clock::kZero` is the sentinel the SDK uses to mean "no
+override; use the negotiated window".  This reset is correct production
+behaviour regardless of how the override was set.

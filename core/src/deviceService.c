@@ -1886,6 +1886,20 @@ bool deviceServiceStart(void)
 
     deviceServiceCommFailInit();
 
+    // Allow the watchdog check interval to be modified via property for environments where e.g. devices need
+    // a short commFailOverrideSeconds.
+    // If this property is not set, then the default 60s interval is unchanged.
+    {
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        guint32 monitorIntervalSecs =
+            b_core_property_provider_get_property_as_uint32(propertyProvider, COMM_FAIL_MONITOR_INTERVAL_SECS_PROP, 0);
+
+        if (monitorIntervalSecs > 0)
+        {
+            deviceCommunicationWatchdogSetMonitorInterval(monitorIntervalSecs);
+        }
+    }
+
     deviceStorageMonitorStart();
 
     if (deviceServiceConfigDir != NULL)
@@ -2940,6 +2954,30 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
     {
         jsonDatabaseSaveMetadata(metadata);
         sendMetadataUpdatedEvent(metadata);
+
+        scoped_icDevice *device = jsonDatabaseGetDeviceById(metadata->deviceUuid);
+
+        if (device != NULL)
+        {
+            DeviceDriver *driver = deviceDriverManagerGetDeviceDriver(device->managingDeviceDriver);
+
+            if (driver != NULL && driver->metadataUpdated != NULL)
+            {
+                driver->metadataUpdated(driver, device, metadata->id, metadata->value);
+            }
+
+            // When commFailOverrideSeconds is written, the running per-device watchdog
+            // timer must be reprogrammed immediately — persisting the value alone is not
+            // enough. We do this directly here rather than via the metadata-updated GObject
+            // signal because subscribing to that signal would require threading BCoreClient
+            // through to commFail init and an extra device lookup in the handler, for no
+            // behavioral gain: g_signal_emit is synchronous and icDevice* is already in
+            // hand here.
+            if (strcmp(metadata->id, COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS) == 0)
+            {
+                deviceServiceCommFailSetDeviceTimeoutSecs(device, deviceServiceCommFailGetTimeoutSecs());
+            }
+        }
     }
 
     metadataDestroy(metadata);

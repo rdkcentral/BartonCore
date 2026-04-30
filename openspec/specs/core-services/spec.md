@@ -54,7 +54,7 @@ The `subsystemManager` SHALL track registered subsystems, support pre-registrati
 - **THEN** the subsystem manager SHALL invoke `checkSubsystemForMigration()` to run the subsystem's `migrate` callback
 
 ### Requirement: Communication watchdog
-The `deviceCommunicationWatchdog` SHALL monitor per-device communication health with configurable per-device timeouts. A monitor thread SHALL wake every 60 seconds to check timers.
+The `deviceCommunicationWatchdog` SHALL monitor per-device communication health with configurable per-device timeouts. A monitor thread SHALL wake every 60 seconds to check timers. The check interval MAY be overridden via the `barton.commFail.monitorIntervalSecs` property (read at startup); when non-zero this value replaces the 60-second default.
 
 #### Scenario: Default timeout
 - **WHEN** a Zigbee device is registered with the watchdog without a custom timeout
@@ -79,6 +79,10 @@ The `deviceCommunicationWatchdog` SHALL monitor per-device communication health 
 #### Scenario: Fast comm-fail mode
 - **WHEN** fast comm-fail mode is activated
 - **THEN** the watchdog thread SHALL use an accelerated check interval via condition variable signaling
+
+#### Scenario: Live commFailOverrideSeconds reprogramming
+- **WHEN** the `commFailOverrideSeconds` metadata key is written for a device via `setMetadata()`
+- **THEN** the running per-device watchdog timer SHALL be reprogrammed immediately to the new timeout without requiring a device reconnect or service restart
 
 ### Requirement: JSON database persistence
 The `jsonDatabase` SHALL persist all device data, endpoints, resources, metadata, and system properties as JSON files in the configured storage directory. One file per device, plus a `systemProperties` file.

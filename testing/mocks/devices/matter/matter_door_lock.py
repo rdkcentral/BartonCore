@@ -43,17 +43,12 @@ class MatterDoorLock(MatterDevice):
         self,
         vendor_id: int = 0,
         product_id: int = 0,
-        max_interval: int = None,
     ):
-        extra_args = (
-            ["--max-interval", str(max_interval)] if max_interval is not None else None
-        )
         super().__init__(
             device_class="doorLock",
             matterjs_entry_point="DoorLockDevice.js",
             vendor_id=vendor_id,
             product_id=product_id,
-            extra_args=extra_args,
         )
 
 
