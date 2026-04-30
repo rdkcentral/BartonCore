@@ -180,7 +180,7 @@ namespace barton
          * readableAttributeLookup — it never triggers on live subscription callbacks.
          *
          * @param uri The resource URI
-         * @param mapper The mapper containing the seedFrom attribute (initialReadAttribute must be set)
+         * @param mapper The mapper containing the seedFrom attribute (seedFromAttribute must be set)
          * @param sbmdEndpointIndex The 0-based SBMD endpoint index for endpoint resolution.
          *                         When nullopt, falls back to GetEndpointForCluster.
          * @return True if binding was successful, false otherwise.

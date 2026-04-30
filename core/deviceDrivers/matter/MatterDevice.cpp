@@ -680,7 +680,7 @@ bool MatterDevice::BindResourceSeedFromInfo(const char *uri,
 
     if (!mapper.seedFromAttribute.has_value())
     {
-        icError("seedFrom mapper has no initialReadAttribute for URI: %s", uri);
+        icError("seedFrom mapper has no seedFromAttribute for URI: %s", uri);
         return false;
     }
 

@@ -165,20 +165,9 @@ MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *devic
             return;
         }
 
-        auto *cachePtr = cache.get();
         auto overrideMs = static_cast<uint32_t>(ms);
 
-        auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda(
-            [cachePtr, overrideMs]() { cachePtr->OverrideLiveness(overrideMs); });
-
-        if (err != CHIP_NO_ERROR)
-        {
-            icLogError(LOG_TAG,
-                       "%s: failed to schedule liveness override for device %s: %s",
-                       __FUNCTION__,
-                       device->uuid,
-                       err.AsString());
-        }
+        self->RunOnMatterSync([cache, overrideMs]() { cache->OverrideLiveness(overrideMs); });
     };
 }
 
