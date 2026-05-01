@@ -89,7 +89,23 @@ namespace barton
                                       chip::AttributeId attributeId,
                                       std::string &outValue) const;
 
+        /**
+         * Get a uint16 attribute value from the cache.
+         *
+         * @param endpointId The endpoint ID.
+         * @param clusterId The cluster ID.
+         * @param attributeId The attribute ID.
+         * @param[out] outValue The value if found.
+         * @return CHIP_NO_ERROR on success, error code otherwise.
+         */
+        CHIP_ERROR GetUint16Attribute(chip::EndpointId endpointId,
+                                      chip::ClusterId clusterId,
+                                      chip::AttributeId attributeId,
+                                      uint16_t &outValue) const;
+
         // Some simple accessors for common Basic Information Cluster attributes
+        CHIP_ERROR GetVendorId(uint16_t &outValue) const;
+        CHIP_ERROR GetProductId(uint16_t &outValue) const;
         CHIP_ERROR GetVendorName(std::string &outValue) const;
         CHIP_ERROR GetProductName(std::string &outValue) const;
         CHIP_ERROR GetHardwareVersionString(std::string &outValue) const;

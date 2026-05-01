@@ -546,9 +546,9 @@ endpoints: []
     assert_null(spec.get());
 
     // Correct major but spec minor is newer than the parser supports — rejected
-    // (a spec written for schema 2.1 cannot be loaded by a 2.0 parser)
+    // (a spec written for schema 2.2 cannot be loaded by a 2.1 parser)
     const char *yaml3 = R"(
-schemaVersion: "2.1"
+schemaVersion: "2.2"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1604,6 +1604,181 @@ static void test_sbmdParserEmptyString(void **state)
     assert_null(spec.get());
 }
 
+static void test_sbmdParserVendorProductBothSet(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+    - "0x0307"
+  revision: 1
+  vendorId: "0x117C"
+  productId: "0x1002"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_true(spec->matterMeta.vendorId.has_value());
+    assert_true(spec->matterMeta.productId.has_value());
+    assert_int_equal(spec->matterMeta.vendorId.value(), 0x117C);
+    assert_int_equal(spec->matterMeta.productId.value(), 0x1002);
+}
+
+static void test_sbmdParserVendorProductNeitherSet(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_false(spec->matterMeta.vendorId.has_value());
+    assert_false(spec->matterMeta.productId.has_value());
+}
+
+static void test_sbmdParserVendorIdOnlySetError(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  vendorId: "0x117C"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserProductIdOnlySetError(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  productId: "0x1002"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -1648,6 +1823,11 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_prerequisiteNotRequiredForExecuteMapper),
         cmocka_unit_test(test_prerequisiteEntryUnknownKey),
         cmocka_unit_test(test_prerequisiteInvalidBothForms),
+        // Vendor/product ID tests
+        cmocka_unit_test(test_sbmdParserVendorProductBothSet),
+        cmocka_unit_test(test_sbmdParserVendorProductNeitherSet),
+        cmocka_unit_test(test_sbmdParserVendorIdOnlySetError),
+        cmocka_unit_test(test_sbmdParserProductIdOnlySetError),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
