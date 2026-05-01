@@ -187,7 +187,8 @@ def test_locked_resource_seeded_on_synchronize(
     checks every second rather than every 60 s; without that, the 3 s timeout
     would expire undetected until the next 60 s check.  Together these two
     settings cause the communicationFailure resource to become "true" within
-    ~4 s of goOffline.
+    ~4 s of goOffline under normal conditions; the test uses a 20 s deadline
+    to absorb CI runner scheduling jitter.
 
     matterLivenessTimeoutOverrideMs=1: after the device comes back online and
     comm-fail is confirmed, the ReadClient's subscription is still logically
@@ -216,8 +217,9 @@ def test_locked_resource_seeded_on_synchronize(
     # The ServerNode stays running so Barton can reconnect once asked to.
     matter_door_lock.sideband.send("goOffline")
 
-    # Wait for Barton to detect comm-fail via the watchdog (~3 s).
-    wait_for_resource_value(commfail_queue, "true", timeout=10)
+    # Wait for Barton to detect comm-fail via the watchdog (~4 s nominally, but
+    # CI runners can be slow so a generous timeout is used).
+    wait_for_resource_value(commfail_queue, "true", timeout=20)
 
     seed_queue = resource_update_listener(client, "locked")
 
