@@ -80,8 +80,7 @@ export class VirtualDevice {
     }
 
     /**
-     * Build the ServerNode configuration object.  Extracted so that
-     * start() and handleComeOnline() use identical parameters.
+     * Build the ServerNode configuration object used by start().
      */
     _createServerNodeConfig() {
         return {

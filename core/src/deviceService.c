@@ -1854,6 +1854,34 @@ bool deviceServiceInitialize(BCoreClient *service)
     return true;
 }
 
+static void OnCommFailMonitorIntervalPropertyChanged(BCorePropertyProvider *provider,
+                                                      const gchar *propertyName,
+                                                      const gchar *oldValue,
+                                                      const gchar *newValue,
+                                                      gpointer userData)
+{
+    (void) provider;
+    (void) oldValue;
+    (void) userData;
+
+    if (g_strcmp0(propertyName, COMM_FAIL_MONITOR_INTERVAL_SECS_PROP) != 0)
+    {
+        return;
+    }
+
+    if (newValue == NULL)
+    {
+        return;
+    }
+
+    guint64 secs = g_ascii_strtoull(newValue, NULL, 10);
+
+    if (secs > 0)
+    {
+        deviceCommunicationWatchdogSetMonitorInterval((uint32_t) secs);
+    }
+}
+
 // TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
 // TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
 //       callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
@@ -1889,6 +1917,7 @@ bool deviceServiceStart(void)
     // Allow the watchdog check interval to be modified via property for environments where e.g. devices need
     // a short commFailOverrideSeconds.
     // If this property is not set, then the default 60s interval is unchanged.
+    // The signal handler also applies the property when it is written after startup.
     {
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         guint32 monitorIntervalSecs =
@@ -1898,6 +1927,11 @@ bool deviceServiceStart(void)
         {
             deviceCommunicationWatchdogSetMonitorInterval(monitorIntervalSecs);
         }
+
+        g_signal_connect(propertyProvider,
+                         B_CORE_PROPERTY_PROVIDER_SIGNAL_PROPERTY_CHANGED,
+                         G_CALLBACK(OnCommFailMonitorIntervalPropertyChanged),
+                         NULL);
     }
 
     deviceStorageMonitorStart();

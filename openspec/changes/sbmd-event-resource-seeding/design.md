@@ -191,32 +191,35 @@ None. All design decisions have been resolved.
 Two device metadata properties work together; both are set via
 `b_core_client_write_metadata` — the standard Barton client API.
 
-**`commFailOverrideSeconds=3`** shortens the comm-fail watchdog timeout from
-its default (~56 min) to 3 s.  Writing this metadata via `write_metadata`
-immediately reprograms the running per-device watchdog timer because
-`setMetadata()` in `deviceService.c` calls `deviceServiceCommFailSetDeviceTimeoutSecs`
-whenever `COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS` is persisted.  This
-makes the metadata "live" — no device reconnect or service restart is needed
-for the new timeout to take effect.
+**`commFailOverrideSeconds=1`** shortens the comm-fail watchdog timeout from
+its default (~56 min) to 1 s.  The `commFailOverrideSeconds` metadata key
+pre-existed, but the hook that makes it effective at runtime is added by this
+PR (task 11.4): `setMetadata()` in `deviceService.c` now calls
+`deviceServiceCommFailSetDeviceTimeoutSecs` whenever
+`COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS` is persisted, so the running
+per-device watchdog timer is reprogrammed immediately — no device reconnect or
+service restart is needed.
 
 However, the watchdog *check loop* sleeps for 60 s between passes by default.
-Even with a 3 s per-device timeout the device would not be declared in
-comm-fail until the next 60 s wakeup.  To fix this, the
-`barton.commFail.monitorIntervalSecs` property (read in `deviceService.c`
-immediately after `deviceServiceCommFailInit()`, applied via
-`deviceCommunicationWatchdogSetMonitorInterval()`) overrides the check
-interval.  `barton.commFail.monitorIntervalSecs=1` is set in a dedicated `fast_commfail_environment`
-fixture in `door_lock_test.py` (not in `DefaultEnvironmentOrchestrator`, since only
-`test_locked_resource_seeded_on_synchronize` requires it). The fixture instantiates
-`DefaultEnvironmentOrchestrator`, sets the property on the provider before `start_client()`
-(it must be set before `deviceServiceStart()` reads it after `deviceServiceCommFailInit()`),
-then starts and yields the environment.
-In production this property is
-absent and the 60 s default is unchanged.
+Even with a 1 s per-device timeout the device would not be declared in
+comm-fail until the next 60 s wakeup.  To fix this, this PR (task 11.5) adds
+the `barton.commFail.monitorIntervalSecs` property to override the check
+interval.  It is applied via `deviceCommunicationWatchdogSetMonitorInterval()`
+in two ways: (a) a one-shot read in `deviceService.c` immediately after
+`deviceServiceCommFailInit()` for values already persisted to the DB from a
+prior session; and (b) an `OnCommFailMonitorIntervalPropertyChanged` callback
+wired on the `BCorePropertyProvider`'s `property-changed` signal so that
+writes made after startup take effect immediately
+(`deviceCommunicationWatchdogSetMonitorInterval` also broadcasts `controlCond`
+to wake the thread without waiting for the current sleep to expire).
+`barton.commFail.monitorIntervalSecs=1` is set inline in
+`test_locked_resource_seeded_on_synchronize` in `door_lock_test.py` after
+commissioning the device, just before triggering the comm-fail sequence.
+In production this property is absent and the 60 s default is unchanged.
 
 After `goOffline` kills the device-side Matter stack the watchdog stops
 receiving pets (no `OnMessageReceived` → no pet) and fires naturally after
-~3 s.  The test waits for the `communicationFailure` resource to become
+~1 s.  The test waits for the `communicationFailure` resource to become
 `"true"` before proceeding.  This replaces a previous iteration that called
 `deviceCommunicationWatchdogForceDeviceInCommFail` via ctypes; PR feedback
 noted that speeding up detection (like ZITH does for Zigbee) is preferable to

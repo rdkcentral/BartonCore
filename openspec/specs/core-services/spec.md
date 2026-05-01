@@ -54,7 +54,7 @@ The `subsystemManager` SHALL track registered subsystems, support pre-registrati
 - **THEN** the subsystem manager SHALL invoke `checkSubsystemForMigration()` to run the subsystem's `migrate` callback
 
 ### Requirement: Communication watchdog
-The `deviceCommunicationWatchdog` SHALL monitor per-device communication health with configurable per-device timeouts. A monitor thread SHALL wake every 60 seconds to check timers. The check interval MAY be overridden via the `barton.commFail.monitorIntervalSecs` property (read at startup); when non-zero this value replaces the 60-second default.
+The `deviceCommunicationWatchdog` SHALL monitor per-device communication health with configurable per-device timeouts. A monitor thread SHALL wake every 60 seconds to check timers. The check interval MAY be overridden via the `barton.commFail.monitorIntervalSecs` property; when non-zero this value replaces the 60-second default. The override SHALL be applied both at startup (one-shot read after `deviceServiceCommFailInit()`) and at runtime (via the `BCorePropertyProvider` `property-changed` signal), so that a write made after service start takes effect on the next watchdog loop iteration.
 
 #### Scenario: Default timeout
 - **WHEN** a Zigbee device is registered with the watchdog without a custom timeout

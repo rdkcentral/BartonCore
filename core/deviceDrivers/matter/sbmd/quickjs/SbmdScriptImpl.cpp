@@ -1188,15 +1188,26 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    // A missing or null 'output' field on an object return is a valid suppress signal —
-    // the script ran successfully but chose not to produce a value (e.g. for
-    // non-state-change event sub-types). Return true with empty outValue.
+    // A missing 'output' key (undefined) is a valid suppress signal — the script ran
+    // successfully but chose not to produce a value (e.g. for non-state-change event
+    // sub-types). Return true with empty outValue.
+    // An explicitly null 'output' is a script bug: the script intended to publish but
+    // produced null. Treat it as an error so the author is notified.
     JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, outJson, "output"));
-    if (JS_IsUndefined(outputValGuard.get()) || JS_IsNull(outputValGuard.get()))
+    if (JS_IsUndefined(outputValGuard.get()))
     {
         icDebug("Event mapper suppressed update for cluster 0x%X, event 0x%X", eventInfo.clusterId, eventInfo.eventId);
         outValue.clear();
         return true;
+    }
+
+    if (JS_IsNull(outputValGuard.get()))
+    {
+        icError("Event mapper returned {output: null} for cluster 0x%X, event 0x%X — "
+                "use {} or omit 'output' to suppress; null is not a valid value",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
     }
 
     JsCStringGuard resultStrGuard(ctx, JS_ToCString(ctx, outputValGuard.get()));

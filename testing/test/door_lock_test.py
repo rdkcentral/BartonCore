@@ -25,9 +25,6 @@
 import logging
 
 import pytest
-from testing.environment.default_environment_orchestrator import (
-    DefaultEnvironmentOrchestrator,
-)
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
@@ -39,28 +36,6 @@ from testing.utils.barton_utils import (
 logger = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.requires_matterjs
-
-
-@pytest.fixture
-def fast_commfail_environment():
-    """Like default_environment but with barton.commFail.monitorIntervalSecs=1.
-
-    This property must be set before start_client() because it is read by
-    deviceServiceStart() immediately after deviceServiceCommFailInit(). It
-    shortens the watchdog check interval from 60 s to 1 s, allowing a 3 s
-    commFailOverrideSeconds timeout to be detected promptly. Only
-    test_locked_resource_seeded_on_synchronize requires this.
-    """
-    env = DefaultEnvironmentOrchestrator()
-    env._barton_client_params.get_property_provider().set_property_string(
-        "barton.commFail.monitorIntervalSecs", "1"
-    )
-    env.start_client()
-    env.wait_for_client_to_be_ready()
-    try:
-        yield env
-    finally:
-        env._cleanup()
 
 
 def _commission_door_lock(default_environment, matter_door_lock):
@@ -165,9 +140,7 @@ def test_locked_resource_seeded_on_commission(default_environment, matter_door_l
     )
 
 
-def test_locked_resource_seeded_on_synchronize(
-    fast_commfail_environment, matter_door_lock
-):
+def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_lock):
     """Verify that the locked resource is re-seeded at synchronize time.
 
     Simulates a real-world scenario: Barton loses communication with the
@@ -179,16 +152,16 @@ def test_locked_resource_seeded_on_synchronize(
 
     Two device metadata properties are used to keep the test fast:
 
-    commFailOverrideSeconds=3: shortens the comm-fail watchdog timeout from
-    its default (~56 min) to 3 s.  Writing this metadata also immediately
+    commFailOverrideSeconds=1: shortens the comm-fail watchdog timeout from
+    its default (~56 min) to 1 s.  Writing this metadata also immediately
     reprograms the running watchdog timer (deviceServiceCommFailSetDeviceTimeoutSecs
-    is called from setMetadata() in deviceService.c).  The fast_commfail_environment
-    fixture sets barton.commFail.monitorIntervalSecs=1 so the watchdog thread
-    checks every second rather than every 60 s; without that, the 3 s timeout
-    would expire undetected until the next 60 s check.  Together these two
-    settings cause the communicationFailure resource to become "true" within
-    ~4 s of goOffline under normal conditions; the test uses a 20 s deadline
-    to absorb CI runner scheduling jitter.
+    is called from setMetadata() in deviceService.c).  barton.commFail.monitorIntervalSecs
+    is set to 1 so the watchdog thread checks every second rather than every 60 s;
+    a property-changed signal handler in deviceService.c calls
+    deviceCommunicationWatchdogSetMonitorInterval() and wakes the thread immediately.
+    Together these two settings cause the communicationFailure resource to become
+    "true" within ~2 s of goOffline under normal conditions; the test uses a 5 s
+    deadline.
 
     matterLivenessTimeoutOverrideMs=1: after the device comes back online and
     comm-fail is confirmed, the ReadClient's subscription is still logically
@@ -204,12 +177,18 @@ def test_locked_resource_seeded_on_synchronize(
     Both properties are set via the standard b_core_client_write_metadata API.
     """
 
-    lock = _commission_door_lock(fast_commfail_environment, matter_door_lock)
-    client = fast_commfail_environment.get_client()
+    lock = _commission_door_lock(default_environment, matter_door_lock)
+    client = default_environment.get_client()
 
-    # Shorten the comm-fail watchdog so it fires in ~3 s instead of ~56 min.
+    # Shorten the watchdog check interval from 60s to 1s so the 1s
+    # commFailOverrideSeconds timeout is detected promptly.
+    default_environment._barton_client_params.get_property_provider().set_property_string(
+        "barton.commFail.monitorIntervalSecs", "1"
+    )
+
+    # Shorten the comm-fail watchdog so it fires in ~1s instead of ~56 min.
     metadata_base = f"/{lock.props.uuid}/m"
-    client.write_metadata(f"{metadata_base}/commFailOverrideSeconds", "3")
+    client.write_metadata(f"{metadata_base}/commFailOverrideSeconds", "1")
 
     commfail_queue = resource_update_listener(client, "communicationFailure")
 
@@ -217,16 +196,15 @@ def test_locked_resource_seeded_on_synchronize(
     # The ServerNode stays running so Barton can reconnect once asked to.
     matter_door_lock.sideband.send("goOffline")
 
-    # Wait for Barton to detect comm-fail via the watchdog (~4 s nominally, but
-    # CI runners can be slow so a generous timeout is used).
-    wait_for_resource_value(commfail_queue, "true", timeout=20)
+    # Wait for Barton to detect comm-fail via the watchdog (~4s nominally).
+    wait_for_resource_value(commfail_queue, "true", timeout=5)
 
     seed_queue = resource_update_listener(client, "locked")
 
     # Update the device's lock state attribute before Barton reconnects.
     matter_door_lock.sideband.send("comeOnline", {"lockState": "unlocked"})
 
-    # The ReadClient's liveness timer still has ~14 s remaining at this point.
+    # The ReadClient's liveness timer still has ~14s remaining at this point.
     # Setting matterLivenessTimeoutOverrideMs=1 causes MatterDeviceDriver to
     # apply ReadClient::OverrideLivenessTimeout(1ms) via ScheduleLambda, so
     # the liveness fires immediately, triggering DefaultResubscribePolicy to
