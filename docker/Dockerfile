@@ -298,6 +298,7 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     git clone --branch ${MATTER_REF} --depth 1 https://github.com/project-chip/connectedhomeip.git matter && \
     cd matter && \
     ./scripts/checkout_submodules.py --shallow --platform linux && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/matter . && \
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH && \
     . ./scripts/activate.sh && \
     ./scripts/build/build_examples.py \
