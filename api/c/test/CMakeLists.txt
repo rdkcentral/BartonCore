@@ -258,6 +258,7 @@ bcore_add_cmocka_test(
         zhalTest
         zigbeeSubsystemPerformEnergyScan
         deviceServiceRestoreConfig
+        deviceServiceReloadDatabase
     LINK_LIBRARIES BartonCoreStatic
     INCLUDES ${PRIVATE_API_INCLUDES} ${PROJECT_SOURCE_DIR}/core/src
 )

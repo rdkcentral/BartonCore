@@ -79,14 +79,13 @@ gchar *commandGetName(const Command *command);
 gchar *commandGetShortName(const Command *command);
 
 /**
- * Mark this Command as advanced (it will only appear to the user if advanced mode is enabled)
- *
- * @param command
- */
-void commandSetAdvanced(Command *command);
-
-/**
  * Execute a Command.
+ *
+ * Validates that argc is within the command's minArgs and maxArgs bounds,
+ * and that argv is not NULL when argc > 0. Additionally validates that each
+ * individual argv[i] is non-NULL for i in [0, argc). Arguments are validated
+ * before the command's function is executed, ensuring consistency across all
+ * commands.
  *
  * @param client
  * @param command
@@ -108,6 +107,5 @@ void commandAddExample(Command *command, const gchar *example);
  *
  * @param command
  * @param isInteractive true if we are in interactive mode
- * @param showAdvanced true if we are in advanced mode
  */
-void commandPrintUsage(const Command *command, bool isInteractive, bool showAdvanced);
+void commandPrintUsage(const Command *command, bool isInteractive);
