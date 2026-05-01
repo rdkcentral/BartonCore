@@ -178,6 +178,16 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
+    bcore_add_cpp_test(
+        NAME testSbmdPrerequisites
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdPrerequisitesTest.cpp
+        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/api/c/public
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
     # Select engine-specific sources and libraries for the SbmdScript test
     if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
         set(SBMD_SCRIPT_TEST_ENGINE_SOURCES

@@ -35,10 +35,6 @@
 
 static bool commissionDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
-    g_return_val_if_fail(argc == 1, false);
-    g_return_val_if_fail(argv != NULL, false);
-    g_return_val_if_fail(argv[0] != NULL, false);
-
     bool rc = true;
 
     g_autoptr(GError) error = NULL;
@@ -64,10 +60,6 @@ static bool commissionDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 
 static bool addMatterDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 {
-    g_return_val_if_fail(argc == 1, false);
-    g_return_val_if_fail(argv != NULL, false);
-    g_return_val_if_fail(argv[0] != NULL, false);
-
     uint64_t nodeId = g_ascii_strtoull(argv[0], NULL, 10);
 
     bool rc = true;
@@ -95,17 +87,53 @@ static bool addMatterDeviceFunc(BCoreClient *client, gint argc, gchar **argv)
 
 static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv)
 {
-    (void) argc; // unused
     bool rc = false;
+
+    /* Parse and validate the node ID as hexadecimal*/
+    char *endptr = NULL;
+    guint64 nodeId = g_ascii_strtoull(argv[0], &endptr, 16);
+
+    if (endptr == argv[0] || *endptr != '\0')
+    {
+        emitError("Invalid node id '%s'\n", argv[0]);
+        return false;
+    }
+
+    /* Convert the validated nodeId to zero-padded hex string format */
+    g_autofree gchar *nodeIdStr = g_strdup_printf("%016llx", nodeId);
+
+    if (nodeId != 0)
+    {
+        /* Verify device exists by checking device lookup with zero-padded hex format.
+         * NOTE: This lookup assumes Matter node IDs are used as device IDs.
+         * If the internal mapping between Matter node IDs and Barton device IDs
+         * changes, this lookup method may no longer be reliable. */
+        g_autoptr(BCoreDevice) device = b_core_client_get_device_by_id(client, nodeIdStr);
+
+        if (device == NULL)
+        {
+            emitError("No device with node id '%s' found\n", argv[0]);
+            return false;
+        }
+    }
 
     guint16 timeoutSeconds = 0; // let device service pick the default
     if (argc == 2)
     {
-        timeoutSeconds = (guint16) g_ascii_strtoull(argv[1], NULL, 10);
+        char *endptr = NULL;
+        guint64 timeout = g_ascii_strtoull(argv[1], &endptr, 10);
+
+        if (endptr == argv[1] || *endptr != '\0' || timeout > G_MAXUINT16)
+        {
+            emitError("Invalid timeout '%s'\n", argv[1]);
+            return false;
+        }
+
+        timeoutSeconds = (guint16) timeout;
     }
 
-    BCoreCommissioningInfo *commissioningInfo =
-        b_core_client_open_commissioning_window(client, argv[0], timeoutSeconds);
+    g_autoptr(BCoreCommissioningInfo) commissioningInfo =
+        b_core_client_open_commissioning_window(client, nodeIdStr, timeoutSeconds);
 
     if (commissioningInfo == NULL)
     {
@@ -113,7 +141,7 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
     }
     else
     {
-        // print the manual and qr codes to stdout.  First get them from the object properties
+        /* print the manual and qr codes to stdout. First get them from the object properties */
         g_autofree gchar *manualCode = NULL;
         g_autofree gchar *qrCode = NULL;
         g_object_get(
@@ -124,11 +152,17 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
             &qrCode,
             NULL);
 
-        emitOutput("Commissioning window opened:\n");
-        emitOutput("\tManual code: %s\n", manualCode);
-        emitOutput("\tQR code: %s\n", qrCode);
-
-        rc = true;
+        if ((manualCode == NULL || manualCode[0] == '\0') && (qrCode == NULL || qrCode[0] == '\0'))
+        {
+            emitError("Failed to open commissioning window: no pairing data returned\n");
+        }
+        else
+        {
+            emitOutput("Commissioning window opened:\n");
+            emitOutput("\tManual code: %s\n", manualCode != NULL ? manualCode : "");
+            emitOutput("\tQR code: %s\n", qrCode != NULL ? qrCode : "");
+            rc = true;
+        }
     }
 
     return rc;
@@ -136,12 +170,9 @@ static bool openCommissioningWindow(BCoreClient *client, gint argc, gchar **argv
 
 static bool setWifiCredsFunc(BCoreClient *client, gint argc, gchar **argv)
 {
-    g_return_val_if_fail(argc == 2, false);
-    g_return_val_if_fail(argv != NULL, false);
-    g_return_val_if_fail(argv[0] != NULL, false);
-    g_return_val_if_fail(argv[1] != NULL, false);
-
     b_reference_network_credentials_provider_set_wifi_network_credentials(argv[0], argv[1]);
+
+    return true;
 }
 
 Category *buildMatterCategory(void)

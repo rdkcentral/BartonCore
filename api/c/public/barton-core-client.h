@@ -476,6 +476,16 @@ gboolean b_core_client_execute_resource(BCoreClient *self, const gchar *uri, con
 gboolean b_core_client_write_resource(BCoreClient *self, const gchar *uri, const gchar *resourceValue);
 
 /**
+ * b_core_client_reload_database
+ * @self: the BCoreClient instance.
+ *
+ * @brief Reload the database.
+ *
+ * Returns: gboolean - true if the database was reloaded successfully, false otherwise.
+ */
+gboolean b_core_client_reload_database(BCoreClient *self);
+
+/**
  * b_core_client_get_devices_by_subsystem
  * @self: the BCoreClient instance.
  * @subsystem: the subsystem to search for.
