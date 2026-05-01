@@ -1,0 +1,32 @@
+From a70f28fbfe0b9f6694cd7c8e79fb7d893c883a18 Mon Sep 17 00:00:00 2001
+From: Kevin Funderburg <kevin_funderburg@comcast.com>
+Date: Thu, 30 Apr 2026 20:00:21 +0000
+Subject: [PATCH] Fix: exit with non-zero status on compile error
+
+When compiling with -o, if JS_Parse() fails (syntax error), the
+compile_file() function would return without setting a non-zero exit
+code. This made it impossible for callers to detect compilation
+failures via the process exit status.
+
+Change the 'return' to 'exit(1)' to match the other error paths in
+the same function.
+---
+ mqjs.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mqjs.c b/mqjs.c
+index 46ad953..2ec7d03 100644
+--- a/mqjs.c
++++ b/mqjs.c
+@@ -389,7 +389,7 @@ static void compile_file(const char *filename, const char *outfilename,
+     free(eval_str);
+     if (JS_IsException(val)) {
+         dump_error(ctx);
+-        return;
++        exit(1);
+     }
+ 
+ #if JSW == 8 
+-- 
+2.43.0
+
