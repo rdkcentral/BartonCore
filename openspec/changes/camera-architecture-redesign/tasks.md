@@ -10,9 +10,9 @@ Scope includes:
 - Session lifecycle resources (`createSession` [execute, returns sessionId], `destroySession` [execute], `sessionStatus` [events only, non-readable]) and metadata constants (`sessionId`, `protocol`, `nextAction`, status values `setup`/`done`/`error`) in `commonDeviceDefs.h`
 - Event ordering guarantee: the client must receive the `sessionId` from the `createSession` execute response before the first `sessionStatus` event fires. Mechanism TBD (scheduled delay, deferred emit, etc.)
 - Clean up existing `CAMERA_PROFILE_*` definitions — legacy resources are removed unless there's a compelling reason to keep them (we own the clients)
-- `openhome` endpoint profile with `getMediaUrl` [execute] and `mediaUrl` [events] resources and `OPENHOME_PROFILE_*` constants
-- OpenHome camera driver adaptation: `createSession` execute internally calls `createMediaTunnel`, emits `sessionStatus` events with metadata. Existing `createMediaTunnel` path may be retained or removed depending on whether a clean break simplifies the implementation.
-- Session ID lifecycle (client calls `destroySession` to clean up; driver cleans up on device removal/restart)
+ - `openhome` endpoint profile with `getMediaUrl` [execute] and `mediaUrl` [events] resources and `OPENHOME_PROFILE_*` constants; `getMediaUrl` is the resource that initiates OpenHome tunnel creation for an existing session
+ - OpenHome camera driver adaptation: `createSession` establishes and tracks the session only; `getMediaUrl` on the `openhome` endpoint invokes `createMediaTunnel` for that session, emits `mediaUrl`, and updates `sessionStatus` metadata as needed. Existing direct `createMediaTunnel` entry points may be retained as an internal implementation detail or removed if a clean break simplifies the implementation, but the external contract must remain `getMediaUrl`-driven.
+ - Session ID lifecycle (client calls `destroySession` to clean up the session and any associated media tunnel; driver cleans up on device removal/restart)
 
 ## 2. Matter camera support via WebRTC
 

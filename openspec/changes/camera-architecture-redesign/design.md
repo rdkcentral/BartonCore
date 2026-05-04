@@ -23,7 +23,7 @@ Matter 1.5 introduces WebRTC-based cameras with a fundamentally different signal
 - SBMD feasibility evaluation for Matter cameras (separate investigation)
 - Video rendering, decoding, or media pipeline integration
 - WebRTC media stack selection (libdatachannel vs. alternatives — deferred to webrtc-endpoint-profile design)
-- Broadening sessions beyond video/media — sessions could become a general-purpose handle for any camera interaction (snapshots, configuration, etc.) with multiple possible next actions after creation. The team is aware of this direction but is not tackling it in this phase.
+- Broadening actions beyond streaming — the camera endpoint currently defines `stream` and `takePicture`. Future actions (e.g., PTZ control, two-way audio) may be added to the profile as needed. The session contract supports this naturally since each action triggers its own `sessionStatus` flow.
 
 ## Decisions
 
@@ -42,6 +42,8 @@ Matter 1.5 introduces WebRTC-based cameras with a fundamentally different signal
 Camera device (deviceClass: "camera")
 ├── ep/camera  (profile: "camera")         ← abstract session lifecycle
 │   ├── r/createSession   [execute]        ← returns sessionId
+│   ├── r/stream          [execute]        ← start streaming (takes sessionId)
+│   ├── r/takePicture     [execute]        ← take snapshot (takes sessionId)
 │   ├── r/destroySession  [execute]        ← client cleanup
 │   └── r/sessionStatus   [events only]    ← traffic controller
 │
@@ -125,6 +127,9 @@ Client                        Driver                    Camera
   |   (createSession, {}) ───►  |                          |
   |   ◄── returns sessionId     |                          |
   |                             |                          |
+  |── executeResource           |                          |
+  |   (stream, {sessionId}) ──► |                          |
+  |                             |                          |
   | ◄── sessionStatus event ──  |                          |
   |   value: "setup"            |                          |
   |   meta: {sessionId, protocol: "webrtc", nextAction: "/deviceId/ep/webrtc/r/offerSdp"}
@@ -161,6 +166,9 @@ Client                        Driver                    Camera
   |   (createSession, {}) ───►  |                          |
   |   ◄── returns sessionId     |                          |
   |                             |                          |
+  |── executeResource           |                          |
+  |   (stream, {sessionId}) ──► |                          |
+  |                             |                          |
   | ◄── sessionStatus event ──  |                          |
   |   value: "setup"            |                          |
   |   meta: {sessionId, protocol: "openhome", nextAction: "/deviceId/ep/openhome/r/getMediaUrl"}
@@ -186,6 +194,9 @@ Client                        Driver                    Camera
   |── executeResource           |                          |
   |   (createSession, {}) ───►  |                          |
   |   ◄── returns sessionId     |                          |
+  |                             |                          |
+  |── executeResource           |                          |
+  |   (stream, {sessionId}) ──► |                          |
   |                             |                          |
   | ◄── sessionStatus event ──  |                          |
   |   value: "setup"            |                          |
@@ -263,7 +274,7 @@ Client                        Driver                    Camera
 
 - **[Metadata is untyped]** → Mitigation: Well-documented JSON schema, string constants in `commonDeviceDefs.h`, and integration tests that verify metadata content. Strongly typed metadata is a future capability.
 - **[SBMD composition for Matter cameras]** → Mitigation: The Matter camera driver should be SBMD, but SBMD doesn't currently support class dependencies. The key challenge is making the shared camera session manager available in the SBMD JS context. This is scoped to the webrtc-endpoint-profile task.
-- **[OpenHome adapter complexity]** → Mitigation: The OpenHome driver already implements `createMediaTunnel`. The adapter wraps this in the session contract — `createSession` execute calls `createMediaTunnel` internally and emits `sessionStatus` events. The URL is delivered via `mediaUrl` on the openhome endpoint. Incremental, low-risk change.
+- **[OpenHome adapter complexity]** → Mitigation: The OpenHome driver already implements `createMediaTunnel`. The adapter wraps this in the session contract: `createSession` establishes Barton session state and emits `sessionStatus` events, while `getMediaUrl` initiates the existing OpenHome `createMediaTunnel` flow for that session and returns the resulting URL. Incremental, low-risk change.
 
 ## Open Questions
 
