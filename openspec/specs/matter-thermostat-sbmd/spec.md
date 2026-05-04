@@ -137,7 +137,7 @@ The driver SHALL include a `fanMode` resource with type `com.icontrol.tstatFanMo
 - **THEN** the write SHALL succeed
 
 ### Requirement: Optional fanOn resource
-The driver SHALL include a `fanOn` resource with type `boolean` as an optional resource derived from the Fan Control cluster (0x0202). The resource SHALL only be present when the device supports the Fan Control cluster, using a prerequisite gate on the `fanMode` alias.
+The driver SHALL include a `fanOn` resource with type `boolean` as an optional resource derived from the Fan Control cluster (0x0202) PercentCurrent attribute (0x0006). The resource SHALL only be present when the device supports the Fan Control cluster, using a prerequisite gate on the `fanPercentCurrent` alias. The value SHALL be `"true"` when PercentCurrent is nonzero and `"false"` when PercentCurrent is zero.
 
 #### Scenario: fanOn resource present with fan control cluster
 - **WHEN** a Matter thermostat with Fan Control cluster (0x0202) is commissioned

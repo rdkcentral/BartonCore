@@ -61,14 +61,13 @@ def test_commission_thermostat(default_environment, matter_thermostat):
 
 def test_read_initial_temperature(default_environment, matter_thermostat):
     """Verify the initial local temperature is reported correctly after commissioning."""
-    thermostat = _commission_thermostat(default_environment, matter_thermostat)
-    client = default_environment.get_client()
 
-    resource = client.get_resource_by_uri(
-        resource_uri(thermostat, "localTemperature", endpoint_id=1)
-    )
-    assert resource is not None
-    assert resource.props.value == "2100"
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "localTemperature")
+
+    _commission_thermostat(default_environment, matter_thermostat)
+
+    wait_for_resource_value(resource_updated_queue, "2100")
 
 
 def test_write_heat_setpoint(default_environment, matter_thermostat):

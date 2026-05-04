@@ -546,7 +546,7 @@ namespace barton
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
         // Fast O(1) lookup for readable attributes in OnAttributeData callback
         // Uses a multimap because multiple resources may read from the same attribute
-        // (e.g., fanMode and fanOn both read from cluster 0x202 attribute 0x0)
+        // (e.g., fanMode and fanOn both read from cluster 0x0202 attribute 0x0)
         std::unordered_multimap<chip::app::ConcreteAttributePath,
                                 AttributeReadBinding,
                                 AttributePathHash,

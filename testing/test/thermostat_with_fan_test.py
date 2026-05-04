@@ -90,7 +90,8 @@ def test_read_fan_mode(default_environment, matter_thermostat_with_fan):
 
 
 def test_read_fan_on(default_environment, matter_thermostat_with_fan):
-    """Verify fanOn resource is readable with initial value 'true' (fan mode is Auto)."""
+    """Verify fanOn resource is readable with initial value 'false' (PercentCurrent is 0)."""
+
     client = default_environment.get_client()
     resource_updated_queue = resource_update_listener(client, "fanOn")
 
@@ -98,4 +99,4 @@ def test_read_fan_on(default_environment, matter_thermostat_with_fan):
         default_environment, matter_thermostat_with_fan
     )
 
-    wait_for_resource_value(resource_updated_queue, "true")
+    wait_for_resource_value(resource_updated_queue, "false")

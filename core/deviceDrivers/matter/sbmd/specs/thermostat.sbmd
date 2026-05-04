@@ -91,6 +91,12 @@ matterMeta:
         attributeId: "0x0000"
         name: "FanMode"
         type: "enum8"
+    - name: "fanPercentCurrent"
+      attribute:
+        clusterId: "0x0202"
+        attributeId: "0x0006"
+        name: "PercentCurrent"
+        type: "uint8"
 
 # Subscription reporting configuration
 reporting:
@@ -281,6 +287,9 @@ endpoints:
             #   5=EmergencyHeat, 6=Precooling, 7=FanOnly
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
               var modeMap = {
                 0: 'off',
                 1: 'auto',
@@ -331,6 +340,9 @@ endpoints:
             #   bit 1 = Cool State On
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
               if (value & 0x0001) {
                 return {output: 'heating'};
               } else if (value & 0x0002) {
@@ -358,6 +370,9 @@ endpoints:
             # FanMode enum: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto, 6=Smart
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              if (value === null) {
+                return {output: null};
+              }
               var modeMap = {
                 0: 'off',
                 1: 'on',
@@ -386,7 +401,7 @@ endpoints:
               var tlvBase64 = SbmdUtils.Tlv.encode(modeValue, 'enum8');
               return SbmdUtils.Response.write(0x0202, 0x0000, tlvBase64);
 
-      # Fan running state (derived from fanMode — on if mode != off)
+      # Fan running state (derived from PercentCurrent — nonzero means fan is on)
       - id: "fanOn"
         type: "boolean"
         optional: true
@@ -395,12 +410,14 @@ endpoints:
           - "dynamic"
           - "emitEvents"
         prerequisites:
-          - alias: "fanMode"
+          - alias: "fanPercentCurrent"
         mapper:
           read:
-            alias: "fanMode"
-            # FanMode enum: 0=Off → fanOn=false; anything else → fanOn=true
+            alias: "fanPercentCurrent"
+            # PercentCurrent: 0 = fan off, nonzero = fan on
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              var isOn = (value !== 0);
-              return {output: isOn ? 'true' : 'false'};
+              if (value === null) {
+                return {output: null};
+              }
+              return {output: value !== 0 ? 'true' : 'false'};
