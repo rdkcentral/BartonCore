@@ -89,6 +89,20 @@ def test_read_fan_mode(default_environment, matter_thermostat_with_fan):
     wait_for_resource_value(resource_updated_queue, "auto")
 
 
+def test_write_fan_mode(default_environment, matter_thermostat_with_fan):
+    """Write the fan mode and verify it is updated."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "fanMode")
+
+    uri = resource_uri(thermostat, "fanMode", endpoint_id=1)
+    assert client.write_resource(uri, "on")
+    wait_for_resource_value(resource_updated_queue, "on")
+
+
 def test_read_fan_on(default_environment, matter_thermostat_with_fan):
     """Verify fanOn resource is readable with initial value 'false' (PercentCurrent is 0)."""
 

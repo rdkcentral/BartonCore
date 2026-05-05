@@ -52,7 +52,7 @@ The driver SHALL map the following read-only attributes to resources with type `
 
 #### Scenario: Read absolute heat limits
 - **WHEN** the Matter device reports AbsMinHeatSetpointLimit as 700 and AbsMaxHeatSetpointLimit as 3000
-- **THEN** the `absoluteMinHeatLimit` resource SHALL be `"700"` and `absoluteMaxHeatLimit` SHALL be `"3000"`
+- **THEN** the `absoluteMinHeatLimit` resource SHALL be `"0700"` and `absoluteMaxHeatLimit` SHALL be `"3000"`
 
 #### Scenario: Read absolute cool limits
 - **WHEN** the Matter device reports AbsMinCoolSetpointLimit as 1600 and AbsMaxCoolSetpointLimit as 3200
@@ -69,7 +69,7 @@ Read mapping (Matter enum → Barton string):
 | 0x01        | auto          |
 | 0x03        | cool          |
 | 0x04        | heat          |
-| 0x05        | emergencyHeat |
+| 0x05        | heat          |
 | 0x06        | precooling    |
 | 0x07        | fanOnly       |
 
@@ -88,11 +88,28 @@ Write mapping (Barton string → Matter enum): reverse of the above table.
 - **THEN** the driver SHALL write enum8 value 0x03 to SystemMode attribute (0x001c) on the Thermostat cluster
 
 ### Requirement: ControlSequenceOfOperation attribute mapping
-The driver SHALL map ControlSequenceOfOperation (0x001b, enum8) to the `controlSequenceOfOperation` resource with type `com.icontrol.tstatCtrlSeqOp`, modes [read, dynamic, emitEvents].
+The driver SHALL map ControlSequenceOfOperation (0x001b, enum8) to the `controlSequenceOfOperation` resource with type `com.icontrol.tstatCtrlSeqOp`, modes [read, write, dynamic, emitEvents].
+
+Read mapping (Matter enum → Barton string):
+
+| Matter Value | Barton String                       |
+|-------------|-------------------------------------|
+| 0x00        | coolingOnly                         |
+| 0x01        | coolingWithReheat                   |
+| 0x02        | heatingOnly                         |
+| 0x03        | heatingWithReheat                   |
+| 0x04        | coolingAndHeatingFourPipes           |
+| 0x05        | coolingAndHeatingFourPipesWithReheat |
+
+Write mapping (Barton string → Matter enum): reverse of the above table.
 
 #### Scenario: Read control sequence of operation
 - **WHEN** the Matter device reports ControlSequenceOfOperation as 0x04
-- **THEN** the `controlSequenceOfOperation` resource value SHALL be `"4"`
+- **THEN** the `controlSequenceOfOperation` resource value SHALL be `"coolingAndHeatingFourPipes"`
+
+#### Scenario: Write control sequence of operation
+- **WHEN** a client writes `"heatingOnly"` to the `controlSequenceOfOperation` resource
+- **THEN** the driver SHALL write enum8 value 0x02 to ControlSequenceOfOperation attribute (0x001b) on the Thermostat cluster
 
 ### Requirement: ThermostatRunningState attribute mapping
 The driver SHALL map ThermostatRunningState (0x0029, map16) to the `systemState` resource with type `com.icontrol.tstatSystemState`, modes [read, dynamic, emitEvents]. This resource SHALL be marked as optional since ThermostatRunningState is optional in the Matter specification.

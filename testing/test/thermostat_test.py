@@ -80,7 +80,7 @@ def test_write_heat_setpoint(default_environment, matter_thermostat):
     uri = resource_uri(thermostat, "heatSetpoint", endpoint_id=1)
     assert client.write_resource(uri, "2200")
     wait_for_resource_value(resource_updated_queue, "2200")
-
+    assert client.read_resource(uri) == "2200"
 
 def test_write_cool_setpoint(default_environment, matter_thermostat):
     """Write a cooling setpoint and verify it is updated."""
@@ -92,7 +92,8 @@ def test_write_cool_setpoint(default_environment, matter_thermostat):
     uri = resource_uri(thermostat, "coolSetpoint", endpoint_id=1)
     assert client.write_resource(uri, "2500")
     wait_for_resource_value(resource_updated_queue, "2500")
-
+    sideband_state = matter_thermostat.sideband.send("getState", {})
+    assert sideband_state["occupiedCoolingSetpoint"] == 2500
 
 def test_write_system_mode(default_environment, matter_thermostat):
     """Write the system mode and verify it is updated."""

@@ -819,13 +819,96 @@
         },
 
         /**
-         * Encode a JavaScript value to base64 TLV
-         * @param {any} value - Value to encode
-         * @param {string} [type] - Optional Matter type hint
-         * @returns {string} Base64 encoded TLV
+         * Encode a JavaScript value to base64 TLV.
+         *
+         * Accepts either a number or a string.  For integer/enum types, a
+         * string value is parsed using parseInt with the given base (default
+         * 10).  For type 'string', the value is encoded as a TLV UTF-8
+         * string (coerced via String() if not already a string).
+         *
+         * Range checking is performed for all non-string types: the value
+         * must be a whole number within the type's bounds (e.g. int16:
+         * -32768..32767, uint8: 0..255, enum8: 0..255).  Returns null when
+         * the value cannot be parsed or is out of range.
+         *
+         * @param {any} value - Value to encode (number or parseable string)
+         * @param {string} type - Matter type name (e.g. 'int16', 'uint8', 'enum8', 'string')
+         * @param {number} [base=10] - Radix for string-to-integer parsing (invalid with type 'string')
+         * @returns {string|null} Base64 encoded TLV, or null on parse/range error
+         * @throws {Error} If type is omitted (undefined)
+         * @throws {Error} If base is provided when type is 'string'
          */
-        encode: function(value, type)
+        encode: function(value, type, base)
         {
+            if (type === undefined)
+            {
+                throw new Error('SbmdUtils.Tlv.encode: type argument is required');
+            }
+
+            if (type === 'string')
+            {
+                if (base !== undefined)
+                {
+                    throw new Error('SbmdUtils.Tlv.encode: base cannot be used with string type');
+                }
+
+                if (typeof value !== 'string')
+                {
+                    value = String(value);
+                }
+
+                var writer = new TlvWriter();
+                writer.writeElement(null, value);
+                return writer.toBase64();
+            }
+
+            if (base === undefined)
+            {
+                base = 10;
+            }
+
+            // Type-specific ranges (min, max inclusive)
+            var integerRanges = {
+                'int8':    [-128, 127],
+                'int16':   [-32768, 32767],
+                'int32':   [-2147483648, 2147483647],
+                'uint8':   [0, 0xFF],
+                'uint16':  [0, 0xFFFF],
+                'uint32':  [0, 0xFFFFFFFF],
+                'enum8':   [0, 0xFF],
+                'enum16':  [0, 0xFFFF],
+                'percent': [0, 0xFF],
+                'percent100ths': [0, 0xFFFF],
+                'bitmap8':  [0, 0xFF],
+                'bitmap16': [0, 0xFFFF],
+                'bitmap32': [0, 0xFFFFFFFF]
+            };
+
+            var range = integerRanges[type];
+
+            // If value is a string and the type is an integer kind, parse it
+            if (typeof value === 'string' && range)
+            {
+                var trimmed = value.trim();
+                var parsed = parseInt(trimmed, base);
+
+                if (isNaN(parsed) || parsed.toString(base) !== trimmed.toLowerCase())
+                {
+                    return null;
+                }
+
+                value = parsed;
+            }
+
+            // Range-check numeric values when a type with known bounds is given
+            if (typeof value === 'number' && range)
+            {
+                if (value !== Math.floor(value) || value < range[0] || value > range[1])
+                {
+                    return null;
+                }
+            }
+
             var writer = new TlvWriter();
             writer.writeElement(null, value, type);
             return writer.toBase64();

@@ -128,7 +128,10 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
 
       # Heating setpoint (read/write)
       - id: "heatSetpoint"
@@ -148,14 +151,16 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
           write:
             script: |
-              var temp = parseInt(sbmdWriteArgs.input, 10);
-              if (isNaN(temp)) {
+              var tlvBase64 = SbmdUtils.Tlv.encode(sbmdWriteArgs.input, 'int16');
+              if (tlvBase64 === null) {
                 return SbmdUtils.Response.error('Invalid temperature value');
               }
-              var tlvBase64 = SbmdUtils.Tlv.encode(temp, 'int16');
               return SbmdUtils.Response.write(0x0201, 0x0012, tlvBase64);
 
       # Cooling setpoint (read/write)
@@ -176,14 +181,16 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
           write:
             script: |
-              var temp = parseInt(sbmdWriteArgs.input, 10);
-              if (isNaN(temp)) {
+              var tlvBase64 = SbmdUtils.Tlv.encode(sbmdWriteArgs.input, 'int16');
+              if (tlvBase64 === null) {
                 return SbmdUtils.Response.error('Invalid temperature value');
               }
-              var tlvBase64 = SbmdUtils.Tlv.encode(temp, 'int16');
               return SbmdUtils.Response.write(0x0201, 0x0011, tlvBase64);
 
       # Absolute setpoint limits (read-only)
@@ -201,7 +208,10 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
 
       - id: "absoluteMaxHeatLimit"
         type: "com.icontrol.temperature"
@@ -217,7 +227,10 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
 
       - id: "absoluteMinCoolLimit"
         type: "com.icontrol.temperature"
@@ -233,7 +246,10 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
 
       - id: "absoluteMaxCoolLimit"
         type: "com.icontrol.temperature"
@@ -249,13 +265,17 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var neg = value < 0;
+              var s = Math.abs(value).toString();
+              while (s.length < (neg ? 3 : 4)) s = '0' + s;
+              return {output: (neg ? '-' : '') + s};
 
       # Control sequence of operation
       - id: "controlSequenceOfOperation"
         type: "com.icontrol.tstatCtrlSeqOp"
         modes:
           - "read"
+          - "write"
           - "dynamic"
           - "emitEvents"
         prerequisites:
@@ -263,12 +283,45 @@ endpoints:
         mapper:
           read:
             alias: "controlSequenceOfOperation"
+            # ControlSequenceOfOperation enum:
+            #   0x00=coolingOnly, 0x01=coolingWithReheat,
+            #   0x02=heatingOnly, 0x03=heatingWithReheat,
+            #   0x04=coolingAndHeatingFourPipes,
+            #   0x05=coolingAndHeatingFourPipesWithReheat
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
                 return {output: null};
               }
-              return {output: value.toString()};
+              var seqMap = {
+                0: 'coolingOnly',
+                1: 'coolingWithReheat',
+                2: 'heatingOnly',
+                3: 'heatingWithReheat',
+                4: 'coolingAndHeatingFourPipes',
+                5: 'coolingAndHeatingFourPipesWithReheat'
+              };
+              var seq = seqMap[value];
+              if (seq === undefined) {
+                seq = 'coolingOnly';
+              }
+              return {output: seq};
+          write:
+            script: |
+              var reverseSeqMap = {
+                'coolingOnly': 0,
+                'coolingWithReheat': 1,
+                'heatingOnly': 2,
+                'heatingWithReheat': 3,
+                'coolingAndHeatingFourPipes': 4,
+                'coolingAndHeatingFourPipesWithReheat': 5
+              };
+              var seqValue = reverseSeqMap[sbmdWriteArgs.input];
+              if (seqValue === undefined) {
+                return SbmdUtils.Response.error('Unknown control sequence: ' + sbmdWriteArgs.input);
+              }
+              var tlvBase64 = SbmdUtils.Tlv.encode(seqValue, 'enum8');
+              return SbmdUtils.Response.write(0x0201, 0x001b, tlvBase64);
 
       # System mode (read/write)
       - id: "systemMode"
@@ -295,7 +348,7 @@ endpoints:
                 1: 'auto',
                 3: 'cool',
                 4: 'heat',
-                5: 'emergencyHeat',
+                5: 'heat',
                 6: 'precooling',
                 7: 'fanOnly'
               };
@@ -338,14 +391,16 @@ endpoints:
             # ThermostatRunningState bitmap16:
             #   bit 0 = Heat State On
             #   bit 1 = Cool State On
+            #   bit 3 = Second Stage Heat On
+            #   bit 4 = Second Stage Cool On
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
                 return {output: null};
               }
-              if (value & 0x0001) {
+              if ((value & 0x0001) || (value & 0x0008)) {
                 return {output: 'heating'};
-              } else if (value & 0x0002) {
+              } else if ((value & 0x0002) || (value & 0x0010)) {
                 return {output: 'cooling'};
               }
               return {output: 'off'};
@@ -379,8 +434,8 @@ endpoints:
                 2: 'on',
                 3: 'on',
                 4: 'on',
-                5: 'auto',
-                6: 'auto'
+                5: 'auto'
+                // 6: Smart is not yet supported, so fall back to unknown
               };
               var mode = modeMap[value];
               if (mode === undefined) {
