@@ -293,31 +293,31 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              var seqMap = {
-                0: 'coolingOnly',
-                1: 'coolingWithReheat',
-                2: 'heatingOnly',
-                3: 'heatingWithReheat',
-                4: 'coolingAndHeatingFourPipes',
-                5: 'coolingAndHeatingFourPipesWithReheat'
-              };
-              var seq = seqMap[value];
+              var seqValues = [
+                'coolingOnly',
+                'coolingWithReheat',
+                'heatingOnly',
+                'heatingWithReheat',
+                'coolingAndHeatingFourPipes',
+                'coolingAndHeatingFourPipesWithReheat'
+              ];
+              var seq = seqValues[value];
               if (seq === undefined) {
                 seq = 'coolingOnly';
               }
               return {output: seq};
           write:
             script: |
-              var reverseSeqMap = {
-                'coolingOnly': 0,
-                'coolingWithReheat': 1,
-                'heatingOnly': 2,
-                'heatingWithReheat': 3,
-                'coolingAndHeatingFourPipes': 4,
-                'coolingAndHeatingFourPipesWithReheat': 5
-              };
-              var seqValue = reverseSeqMap[sbmdWriteArgs.input];
-              if (seqValue === undefined) {
+              var seqValues = [
+                'coolingOnly',
+                'coolingWithReheat',
+                'heatingOnly',
+                'heatingWithReheat',
+                'coolingAndHeatingFourPipes',
+                'coolingAndHeatingFourPipesWithReheat'
+              ];
+              var seqValue = seqValues.indexOf(sbmdWriteArgs.input);
+              if (seqValue < 0) {
                 return SbmdUtils.Response.error('Unknown control sequence: ' + sbmdWriteArgs.input);
               }
               var tlvBase64 = SbmdUtils.Tlv.encode(seqValue, 'enum8');
