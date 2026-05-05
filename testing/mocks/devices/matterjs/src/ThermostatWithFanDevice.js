@@ -93,7 +93,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
             return { error: `Unknown fan mode: ${mode}` };
         }
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.fanControl.state.fanMode = modeValue;
         });
 
@@ -103,7 +103,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
     async handleGetFanState() {
         let state = {};
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             const fan = agent.fanControl.state;
 
             const modeNames = {

@@ -89,7 +89,7 @@ export class ThermostatDevice extends VirtualDevice {
             return { error: "temperature parameter required" };
         }
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.thermostat.state.localTemperature = temperature;
         });
 
@@ -112,7 +112,7 @@ export class ThermostatDevice extends VirtualDevice {
             return { error: `Unknown mode: ${mode}` };
         }
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.thermostat.state.systemMode = modeValue;
         });
 
@@ -122,7 +122,7 @@ export class ThermostatDevice extends VirtualDevice {
     async handleGetState() {
         let state = {};
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             const tstat = agent.thermostat.state;
 
             const modeNames = {
