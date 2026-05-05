@@ -86,7 +86,7 @@ namespace barton
          * Seed the ClusterStateCache with a single uint16 attribute value.
          * Used by OnAttributeChanged tests to ensure cache->Get() returns data.
          */
-        static void SeedCacheWithUint16(std::shared_ptr<DeviceDataCache> &cache,
+        static void SeedCacheWithUint16(const std::shared_ptr<DeviceDataCache> &cache,
                                         const chip::app::ConcreteDataAttributePath &path,
                                         uint16_t value)
         {
@@ -95,11 +95,12 @@ namespace barton
                 cache->clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*cache);
             }
 
+            constexpr size_t kTlvUint16BufferSize = 16;
             auto &cb = cache->clusterStateCache->GetBufferedCallback();
             chip::app::StatusIB okStatus;
             cb.OnReportBegin();
             {
-                uint8_t buffer[16];
+                uint8_t buffer[kTlvUint16BufferSize];
                 chip::TLV::TLVWriter writer;
                 writer.Init(buffer, sizeof(buffer));
                 writer.Put(chip::TLV::AnonymousTag(), value);
@@ -348,6 +349,10 @@ namespace
     // Matter cluster IDs
     constexpr chip::ClusterId kTemperatureMeasurementCluster = 0x0402;
     constexpr chip::ClusterId kRelativeHumidityMeasurementCluster = 0x0405;
+
+    // Constants for OnAttributeChanged fan-out tests
+    constexpr chip::EndpointId kFanOutTestEndpointId = 1;
+    constexpr chip::AttributeId kMeasuredValueAttributeId = 0x0000;
 
     class MatterDeviceEndpointMapTest : public ::testing::Test
     {
@@ -964,7 +969,8 @@ namespace
 
             // Seed the ClusterStateCache with a uint16 value at (ep=1, cluster=0x0402, attr=0x0000)
             // so that cache->Get() succeeds when OnAttributeChanged iterates bindings.
-            chip::app::ConcreteDataAttributePath dataPath(1, kTemperatureMeasurementCluster, 0x0000);
+            chip::app::ConcreteDataAttributePath dataPath(
+                kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
             TestableMatterDevice::SeedCacheWithUint16(cache, dataPath, 2100);
         }
 
@@ -984,11 +990,12 @@ namespace
     // introduced with unordered_multimap).
     TEST_F(OnAttributeChangedFanOutTest, TwoResourcesSameAttributeBothUpdated)
     {
-        chip::app::ConcreteAttributePath sharedPath(1, kTemperatureMeasurementCluster, 0x0000);
+        chip::app::ConcreteAttributePath sharedPath(
+            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
 
         SbmdAttribute attr;
         attr.clusterId = kTemperatureMeasurementCluster;
-        attr.attributeId = 0x0000;
+        attr.attributeId = kMeasuredValueAttributeId;
         attr.name = "MeasuredValue";
         attr.type = "int16s";
 
@@ -1010,11 +1017,12 @@ namespace
     // the callback continues and still processes the next binding.
     TEST_F(OnAttributeChangedFanOutTest, PartialScriptFailureDoesNotAbortOtherBindings)
     {
-        chip::app::ConcreteAttributePath sharedPath(1, kTemperatureMeasurementCluster, 0x0000);
+        chip::app::ConcreteAttributePath sharedPath(
+            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
 
         SbmdAttribute attr;
         attr.clusterId = kTemperatureMeasurementCluster;
-        attr.attributeId = 0x0000;
+        attr.attributeId = kMeasuredValueAttributeId;
         attr.name = "MeasuredValue";
         attr.type = "int16s";
 
