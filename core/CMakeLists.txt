@@ -124,11 +124,7 @@ if (BCORE_MATTER)
 
     pkg_check_modules(OPENSSL REQUIRED openssl)
 
-    list(APPEND CMAKE_BUILD_RPATH "/usr/local/openssl/lib")
-    list(APPEND CMAKE_INSTALL_RPATH "/usr/local/openssl/lib")
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
     bcore_find_include(
         MATTER_INCLUDE_DIR
@@ -392,7 +388,7 @@ if (BCORE_GEN_GIR)
 
     add_custom_command(
         TARGET BartonCore POST_BUILD
-        COMMAND env LSAN_OPTIONS=detect_leaks=0 LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
+        COMMAND env LSAN_OPTIONS=detect_leaks=0 /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
 
