@@ -1,8 +1,8 @@
 # Thermostat SBMD Specification
 # Maps Matter Thermostat device type to Barton thermostat device class
 
-# SBMD schema version 2.0
-schemaVersion: "2.0"
+# SBMD schema version 2.1
+schemaVersion: "2.1"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name

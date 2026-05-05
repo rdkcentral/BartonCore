@@ -135,7 +135,7 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         // Extract the resource ID from the URI
         // URI format is expected to be something like "/ep/deviceId/r/resourceId"
         const char *resourceId = strrchr(uri.c_str(), '/');
-        if (resourceId != nullptr)
+        if (resourceId != nullptr && *(resourceId + 1) != '\0')
         {
             resourceId++; // Skip the '/'
 

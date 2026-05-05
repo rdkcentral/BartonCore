@@ -78,8 +78,8 @@ export class ThermostatDevice extends VirtualDevice {
         };
     }
 
-    createEndpoint() {
-        return new Endpoint(this.getDeviceTypeDefinition(), this.getEndpointConfig());
+    createEndpoints() {
+        return [new Endpoint(this.getDeviceTypeDefinition(), this.getEndpointConfig())];
     }
 
     async handleSetTemperature(params) {
