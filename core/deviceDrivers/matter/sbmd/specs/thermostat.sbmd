@@ -475,4 +475,5 @@ endpoints:
               if (value === null) {
                 return {output: null};
               }
-              return {output: value !== 0 ? 'true' : 'false'};
+
+              return {output: String(value !== 0)};
