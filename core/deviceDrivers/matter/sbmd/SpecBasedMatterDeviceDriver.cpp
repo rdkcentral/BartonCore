@@ -67,6 +67,22 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpe
 {
     icDebug("Created SBMD driver for: %s", this->spec->name.c_str());
 }
+
+uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const
+{
+    return spec->matterMeta.vendorId.value_or(0);
+}
+
+uint16_t SpecBasedMatterDeviceDriver::GetSupportedProductId() const
+{
+    return spec->matterMeta.productId.value_or(0);
+}
+
+bool SpecBasedMatterDeviceDriver::IsVendorSpecificDriver() const
+{
+    return spec->matterMeta.vendorId.has_value() && spec->matterMeta.productId.has_value();
+}
+
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
     return spec->matterMeta.deviceTypes;

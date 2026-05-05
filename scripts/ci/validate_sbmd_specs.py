@@ -32,11 +32,16 @@ SBMD Specification Validator
 Validates .sbmd YAML files against the SBMD JSON Schema and validates
 embedded JavaScript scripts using the configured JS engine (mquickjs or quickjs).
 
+The schema argument can be a single JSON schema file (all specs validated against
+that one schema) or a directory of versioned schemas (each spec is validated
+against the schema matching its schemaVersion field, resolved as
+sbmd-spec-schema-v{version}.json).
+
 Usage:
-    validate_sbmd_specs.py [--js-engine ENGINE] <schema_file> <sbmd_file> [<sbmd_file> ...]
+    validate_sbmd_specs.py [--js-engine ENGINE] <schema_file_or_dir> <sbmd_file> [<sbmd_file> ...]
 
 Example:
-    validate_sbmd_specs.py schema.json specs/light.sbmd specs/door-lock.sbmd
+    validate_sbmd_specs.py schema/v2/ specs/light.sbmd specs/door-lock.sbmd
     validate_sbmd_specs.py --js-engine quickjs schema.json specs/light.sbmd
 """
 
@@ -63,6 +68,13 @@ except ImportError:
     print("ERROR: jsonschema is required. Install with: apt install python3-jsonschema", file=sys.stderr)
     sys.exit(2)
 
+# Cache of compiled JSON schema validators: {schema_path: Draft202012Validator}
+# Supports multiple schema versions (2.0, 2.1, 3.0, etc.) coexisting across
+# subdirectories. Populated by validate_sbmd_file() on first encounter of each
+# version, so repeated validations against the same schema don't reload and
+# recompile it each time.
+validators = {}
+
 
 def load_stubs(stubs_file: str) -> dict:
     """Load JavaScript stubs from a generated JSON file."""
@@ -78,6 +90,33 @@ def load_schema(schema_path: str) -> dict:
     """Load and return the JSON schema."""
     with open(schema_path, 'r') as f:
         return json.load(f)
+
+
+def resolve_schema_for_version(schema_arg: str, schema_version: str) -> Optional[str]:
+    """
+    Resolve the schema file path for a given schemaVersion.
+
+    Args:
+        schema_arg: Path to a JSON schema file or a directory containing versioned schemas.
+            If a file, it is used as-is (single-schema mode).
+            If a directory, searches recursively for sbmd-spec-schema-v{version}.json.
+        schema_version: The schemaVersion string from the spec (e.g. "2.0").
+
+    Returns:
+        The resolved schema file path, or None if no matching schema was found.
+    """
+    ret_val = None
+
+    if os.path.isfile(schema_arg):
+        ret_val = schema_arg
+    elif os.path.isdir(schema_arg):
+        filename = f"sbmd-spec-schema-v{schema_version}.json"
+
+        for candidate in Path(schema_arg).rglob(filename):
+            ret_val = str(candidate)
+            break
+
+    return ret_val
 
 
 def load_sbmd_file(sbmd_path: str) -> dict:
@@ -299,12 +338,92 @@ def find_qjsc() -> Optional[str]:
     return None
 
 
+def validate_sbmd_file(
+    sbmd_file: str,
+    schema_arg: str,
+    js_compiler_path: Optional[str],
+    stubs: dict,
+    quiet: bool,
+) -> int:
+    """
+    Validate a single .sbmd file against the appropriate schema and optionally its scripts.
+
+    Args:
+        sbmd_file: Path to the .sbmd YAML file to validate.
+        schema_arg: Path to a JSON schema file or directory of versioned schemas.
+        js_compiler_path: Path to the JS compiler executable (mqjs/qjsc), or None to skip script validation.
+        stubs: Dict of stub declarations keyed by script type (e.g. 'read', 'execute').
+        quiet: If True, suppress OK messages and only print errors.
+
+    Returns the number of errors found.
+    """
+    try:
+        spec_data = load_sbmd_file(sbmd_file)
+    except FileNotFoundError:
+        print(f"ERROR: File not found: {sbmd_file}", file=sys.stderr)
+        return 1
+    except yaml.YAMLError as e:
+        print(f"ERROR: Invalid YAML in {sbmd_file}: {e}", file=sys.stderr)
+        return 1
+
+    if spec_data is None:
+        print(f"ERROR: Empty file: {sbmd_file}", file=sys.stderr)
+        return 1
+
+    # Resolve the correct schema for this spec's schemaVersion.
+    # In single-file mode every spec uses the same schema; in directory
+    # mode the version string selects sbmd-spec-schema-v{version}.json.
+    schema_version = spec_data.get("schemaVersion", "")
+    schema_path = resolve_schema_for_version(schema_arg, schema_version)
+
+    if not schema_path:
+        print(f"FAIL: {sbmd_file}")
+        print(
+            f"  Schema: No schema found for schemaVersion '{schema_version}' in {schema_arg}"
+        )
+        return 1
+
+    # Cache the schema on first encounter; subsequent specs with the
+    # same version reuse the cached validator.
+    if schema_path not in validators:
+        try:
+            schema = load_schema(schema_path)
+            validators[schema_path] = Draft202012Validator(schema)
+        except FileNotFoundError:
+            print(f"ERROR: Schema file not found: {schema_path}", file=sys.stderr)
+            return 1
+        except json.JSONDecodeError as e:
+            print(
+                f"ERROR: Invalid JSON in schema file {schema_path}: {e}",
+                file=sys.stderr,
+            )
+            return 1
+
+    validator = validators[schema_path]
+
+    # Schema validation
+    errors = validate_spec(spec_data, validator, sbmd_file)
+
+    # Script validation (only if schema is valid and JS compiler available)
+    if not errors and js_compiler_path:
+        errors.extend(validate_scripts(spec_data, js_compiler_path, stubs))
+
+    if errors:
+        print(f"FAIL: {sbmd_file}")
+        for error in errors:
+            print(error)
+    elif not quiet:
+        print(f"OK: {sbmd_file}")
+
+    return len(errors)
+
+
 def main():
     default_engine = os.environ.get('BCORE_MATTER_SBMD_JS_ENGINE', 'mquickjs')
     parser = argparse.ArgumentParser(
         description='Validate SBMD specification files against the JSON schema and validate scripts'
     )
-    parser.add_argument('schema', help='Path to the JSON schema file')
+    parser.add_argument('schema', help='Path to the JSON schema file or schema directory')
     parser.add_argument('specs', nargs='+', help='Path(s) to .sbmd files to validate')
     parser.add_argument('-q', '--quiet', action='store_true', help='Only show errors')
     parser.add_argument('--no-scripts', action='store_true', help='Skip JavaScript validation')
@@ -342,18 +461,10 @@ def main():
                 print("WARNING: mqjs not found, skipping JavaScript validation", file=sys.stderr)
                 print("         Build and install from: https://github.com/bellard/mquickjs", file=sys.stderr)
 
-    # Load schema
-    try:
-        schema = load_schema(args.schema)
-    except FileNotFoundError:
-        print(f"ERROR: Schema file not found: {args.schema}", file=sys.stderr)
+    # Validate schema argument exists
+    if not os.path.exists(args.schema):
+        print(f"ERROR: Schema path not found: {args.schema}", file=sys.stderr)
         return 1
-    except json.JSONDecodeError as e:
-        print(f"ERROR: Invalid JSON in schema file: {e}", file=sys.stderr)
-        return 1
-
-    # Create validator
-    validator = Draft202012Validator(schema)
 
     # Collect .sbmd files from arguments
     sbmd_files = collect_sbmd_files(args.specs)
@@ -363,41 +474,15 @@ def main():
 
     if not args.quiet:
         validation_type = "schema and scripts" if js_compiler_path else "schema only"
-        print(f"Validating {len(sbmd_files)} SBMD file(s) ({validation_type})...")
+        schema_mode = "directory" if os.path.isdir(args.schema) else "file"
+        print(f"Validating {len(sbmd_files)} SBMD file(s) ({validation_type}, schema {schema_mode})...")
 
     # Validate each file
     total_errors = 0
     for sbmd_file in sbmd_files:
-        try:
-            spec_data = load_sbmd_file(sbmd_file)
-        except FileNotFoundError:
-            print(f"ERROR: File not found: {sbmd_file}", file=sys.stderr)
-            total_errors += 1
-            continue
-        except yaml.YAMLError as e:
-            print(f"ERROR: Invalid YAML in {sbmd_file}: {e}", file=sys.stderr)
-            total_errors += 1
-            continue
-
-        if spec_data is None:
-            print(f"ERROR: Empty file: {sbmd_file}", file=sys.stderr)
-            total_errors += 1
-            continue
-
-        # Schema validation
-        errors = validate_spec(spec_data, validator, sbmd_file)
-
-        # Script validation (only if schema is valid and JS compiler available)
-        if not errors and js_compiler_path:
-            errors.extend(validate_scripts(spec_data, js_compiler_path, stubs))
-
-        if errors:
-            print(f"FAIL: {sbmd_file}")
-            for error in errors:
-                print(error)
-            total_errors += len(errors)
-        elif not args.quiet:
-            print(f"OK: {sbmd_file}")
+        total_errors += validate_sbmd_file(
+            sbmd_file, args.schema, js_compiler_path, stubs, args.quiet
+        )
 
     # Summary
     if total_errors > 0:

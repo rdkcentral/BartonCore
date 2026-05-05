@@ -22,6 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "deviceDrivers/matter/MatterDevice.h"
+#include "deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include <app-common/zap-generated/cluster-objects.h>
 #include <app/data-model/Decode.h>
@@ -61,9 +62,11 @@ namespace barton
          * @param partsList Endpoint IDs to include in the root endpoint's PartsList
          * @param endpointDeviceTypes Map of endpoint ID → device type IDs for each endpoint
          */
-        static void PopulateTestCache(std::shared_ptr<DeviceDataCache> &cache,
-                                      const std::vector<chip::EndpointId> &partsList,
-                                      const std::map<chip::EndpointId, std::vector<uint16_t>> &endpointDeviceTypes)
+        static void
+        PopulateTestCache(std::shared_ptr<DeviceDataCache> &cache,
+                          const std::vector<chip::EndpointId> &partsList,
+                          const std::map<chip::EndpointId, std::vector<uint16_t>> &endpointDeviceTypes,
+                          const std::map<chip::EndpointId, std::vector<chip::ClusterId>> &endpointServerClusters = {})
         {
             // Create the ClusterStateCache (normally done in OnDeviceConnected)
             cache->clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*cache);
@@ -125,6 +128,82 @@ namespace barton
                 cb.OnAttributeData(path, &reader, okStatus);
             }
 
+            // Inject a dummy attribute for each server cluster on each endpoint so that
+            // ForEachCluster (used by EndpointHasServerCluster) will find them.
+            for (const auto &[endpointId, clusters] : endpointServerClusters)
+            {
+                for (auto clusterId : clusters)
+                {
+                    uint8_t buffer[16];
+                    chip::TLV::TLVWriter writer;
+                    writer.Init(buffer, sizeof(buffer));
+                    writer.Put(chip::TLV::AnonymousTag(), static_cast<uint16_t>(0));
+                    writer.Finalize();
+
+                    chip::TLV::TLVReader reader;
+                    reader.Init(buffer, writer.GetLengthWritten());
+                    reader.Next();
+
+                    chip::app::ConcreteDataAttributePath path(endpointId, clusterId, 0x0000);
+                    cb.OnAttributeData(path, &reader, okStatus);
+                }
+            }
+
+            cb.OnReportEnd();
+        }
+
+        /**
+         * Inject BasicInformation VendorID and ProductID into an existing test cache.
+         * Separated from PopulateTestCache so that tests which only need endpoint/device-type
+         * data don't carry unnecessary vendor identity.
+         * Must be called after PopulateTestCache (which creates the ClusterStateCache).
+         */
+        static void InjectVendorProduct(std::shared_ptr<DeviceDataCache> &cache, uint16_t vendorId, uint16_t productId)
+        {
+            // Feed data through the same buffered callback path that a real Matter
+            // subscription report would use, so the ClusterStateCache stores it.
+            auto &cb = cache->clusterStateCache->GetBufferedCallback();
+            chip::app::StatusIB okStatus;
+            cb.OnReportBegin();
+
+            // Encode VendorID as TLV and inject it on endpoint 0, BasicInformation cluster
+            {
+                uint8_t buffer[16];
+                chip::TLV::TLVWriter writer;
+                writer.Init(buffer, sizeof(buffer));
+                writer.Put(chip::TLV::AnonymousTag(), vendorId);
+                writer.Finalize();
+
+                chip::TLV::TLVReader reader;
+                reader.Init(buffer, writer.GetLengthWritten());
+                reader.Next();
+
+                chip::app::ConcreteDataAttributePath path(
+                    0,
+                    chip::app::Clusters::BasicInformation::Id,
+                    chip::app::Clusters::BasicInformation::Attributes::VendorID::Id);
+                cb.OnAttributeData(path, &reader, okStatus);
+            }
+
+            // Encode ProductID as TLV and inject it on endpoint 0, BasicInformation cluster
+            {
+                uint8_t buffer[16];
+                chip::TLV::TLVWriter writer;
+                writer.Init(buffer, sizeof(buffer));
+                writer.Put(chip::TLV::AnonymousTag(), productId);
+                writer.Finalize();
+
+                chip::TLV::TLVReader reader;
+                reader.Init(buffer, writer.GetLengthWritten());
+                reader.Next();
+
+                chip::app::ConcreteDataAttributePath path(
+                    0,
+                    chip::app::Clusters::BasicInformation::Id,
+                    chip::app::Clusters::BasicInformation::Attributes::ProductID::Id);
+                cb.OnAttributeData(path, &reader, okStatus);
+            }
+
             cb.OnReportEnd();
         }
     };
@@ -142,6 +221,15 @@ namespace
     };
 
     ::testing::Environment *const chipEnv = ::testing::AddGlobalTestEnvironment(new ChipPlatformEnvironment);
+
+    // Matter device type IDs
+    constexpr uint16_t kDimmableLightDeviceType = 0x0100;
+    constexpr uint16_t kTemperatureSensorDeviceType = 0x0302;
+    constexpr uint16_t kHumiditySensorDeviceType = 0x0307;
+
+    // Matter cluster IDs
+    constexpr chip::ClusterId kTemperatureMeasurementCluster = 0x0402;
+    constexpr chip::ClusterId kRelativeHumidityMeasurementCluster = 0x0405;
 
     class MatterDeviceEndpointMapTest : public ::testing::Test
     {
@@ -325,6 +413,15 @@ namespace
     // Endpoint-level read binding: uses endpoint map
     TEST_F(MatterDeviceEndpointMapTest, BindReadInfoEndpointLevelUsesMap)
     {
+        // ResolveEndpointForCluster verifies the mapped endpoint actually hosts
+        // the requested cluster, so we must populate the cache with cluster data.
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1, 3
+        },
+                                                {{1, {kDimmableLightDeviceType}}, {3, {kDimmableLightDeviceType}}},
+                                                {{1, {0x0006}}, {3, {0x0006}}});
+
         device->GetSbmdEndpointMap()[0] = 1;
         device->GetSbmdEndpointMap()[1] = 3;
 
@@ -393,6 +490,14 @@ namespace
     // Endpoint-level read binding with command: uses endpoint map
     TEST_F(MatterDeviceEndpointMapTest, BindReadInfoEndpointLevelCommand)
     {
+        // Cache must confirm endpoint 2 hosts cluster 0x0006 for resolve to succeed.
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    2
+        },
+                                                {{2, {kDimmableLightDeviceType}}},
+                                                {{2, {0x0006}}});
+
         device->GetSbmdEndpointMap()[0] = 2;
 
         SbmdMapper mapper;
@@ -413,6 +518,14 @@ namespace
     // Endpoint-level event binding: uses endpoint map
     TEST_F(MatterDeviceEndpointMapTest, BindEventInfoEndpointLevelUsesMap)
     {
+        // Cache must confirm endpoint 1 hosts cluster 0x0006 for resolve to succeed.
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {
+                                                    1
+        },
+                                                {{1, {kDimmableLightDeviceType}}},
+                                                {{1, {0x0006}}});
+
         device->GetSbmdEndpointMap()[0] = 1;
 
         SbmdEvent event;
@@ -561,4 +674,157 @@ namespace
 
         EXPECT_FALSE(device->BindResourceEventInfo(nullptr, event, 0));
     }
+
+    // ================================================================
+    // Tests for ResolveEndpointForCluster fallback
+    // ================================================================
+
+    // Composite device: EP 1 has temperature measurement, EP 2 has humidity measurement.
+    // SBMD index 0 maps to EP 1. Reading temperature resolves directly to EP 1.
+    // Reading humidity falls back to EP 2 because EP 1 doesn't host that cluster.
+    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoFallsBackToClusterWhenNotOnMappedEndpoint)
+    {
+        // Simulates a temperature/humidity sensor:
+        // Matter EP 1: Temperature Sensor, has Temperature Measurement cluster
+        // Matter EP 2: Humidity Sensor, has Relative Humidity Measurement cluster
+        std::vector<chip::EndpointId> partsList = {1, 2};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {kTemperatureSensorDeviceType}},
+            {2,    {kHumiditySensorDeviceType}},
+        };
+        std::map<chip::EndpointId, std::vector<chip::ClusterId>> serverClusters = {
+            {1,      {kTemperatureMeasurementCluster}},
+            {2, {kRelativeHumidityMeasurementCluster}},
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes, serverClusters);
+
+        ASSERT_TRUE(device->ResolveEndpointMap({kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+
+        // Temperature with SBMD index 0 → EP 1 directly (EP 1 has the cluster)
+        SbmdMapper tempMapper;
+        tempMapper.hasRead = true;
+        SbmdAttribute tempAttr;
+        tempAttr.clusterId = kTemperatureMeasurementCluster;
+        tempAttr.attributeId = 0x0000;
+        tempMapper.readAttribute = tempAttr;
+
+        EXPECT_TRUE(device->BindResourceReadInfo("/test/temperature", tempMapper, 0));
+        EXPECT_EQ(device->GetReadBindings().at("/test/temperature").attributePath.mEndpointId, 1);
+
+        // Humidity with SBMD index 0 → EP 1 doesn't have that cluster → falls back to EP 2
+        SbmdMapper humMapper;
+        humMapper.hasRead = true;
+        SbmdAttribute humAttr;
+        humAttr.clusterId = kRelativeHumidityMeasurementCluster;
+        humAttr.attributeId = 0x0000;
+        humMapper.readAttribute = humAttr;
+
+        EXPECT_TRUE(device->BindResourceReadInfo("/test/humidity", humMapper, 0));
+        EXPECT_EQ(device->GetReadBindings().at("/test/humidity").attributePath.mEndpointId, 2);
+    }
+
+    // Endpoint-level event binding: falls back to cluster-based lookup when
+    // SBMD-mapped endpoint doesn't host the event cluster
+    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoFallsBackToClusterWhenNotOnMappedEndpoint)
+    {
+        std::vector<chip::EndpointId> partsList = {1, 2};
+        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
+            {1, {kTemperatureSensorDeviceType}},
+            {2,    {kHumiditySensorDeviceType}},
+        };
+        std::map<chip::EndpointId, std::vector<chip::ClusterId>> serverClusters = {
+            {1,      {kTemperatureMeasurementCluster}},
+            {2, {kRelativeHumidityMeasurementCluster}},
+        };
+        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes, serverClusters);
+
+        ASSERT_TRUE(device->ResolveEndpointMap({kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+
+        // Event on humidity cluster with SBMD index 0 → EP 1 doesn't have it → falls back to EP 2
+        SbmdEvent event;
+        event.clusterId = kRelativeHumidityMeasurementCluster;
+        event.eventId = 0x0000;
+
+        EXPECT_TRUE(device->BindResourceEventInfo("/test/humidity-event", event, 0));
+    }
+
+    // ================================================================
+    // Tests for ClaimDevice with vendor/product ID matching
+    // ================================================================
+
+    class VendorProductClaimTest : public ::testing::Test
+    {
+    protected:
+        static constexpr uint16_t kTestVendorId = 0x1234;
+        static constexpr uint16_t kTestProductId = 0x5678;
+
+        void SetUp() override
+        {
+            cache = std::make_shared<DeviceDataCache>("test-device", nullptr);
+            PopulateCacheWithVendorProduct();
+        }
+
+        void TearDown() override { cache.reset(); }
+
+        std::shared_ptr<SbmdSpec>
+        MakeVendorSpec(uint16_t vendorId, uint16_t productId, std::vector<uint16_t> deviceTypes = {})
+        {
+            auto spec = std::make_shared<SbmdSpec>();
+            spec->name = "vendor-test";
+            spec->bartonMeta.deviceClass = "testClass";
+            spec->bartonMeta.deviceClassVersion = 1;
+            spec->matterMeta.deviceTypes = std::move(deviceTypes);
+            spec->matterMeta.vendorId = vendorId;
+            spec->matterMeta.productId = productId;
+            return spec;
+        }
+
+        void PopulateCacheWithVendorProduct()
+        {
+            std::vector<chip::EndpointId> partsList = {1, 2};
+            std::map<chip::EndpointId, std::vector<uint16_t>> endpointDeviceTypes = {
+                {1, {kTemperatureSensorDeviceType}},
+                {2,    {kHumiditySensorDeviceType}},
+            };
+            TestableMatterDevice::PopulateTestCache(cache, partsList, endpointDeviceTypes);
+            TestableMatterDevice::InjectVendorProduct(cache, kTestVendorId, kTestProductId);
+        }
+
+        std::shared_ptr<DeviceDataCache> cache;
+    };
+
+    TEST_F(VendorProductClaimTest, VendorProductMatch)
+    {
+        SpecBasedMatterDeviceDriver driver(
+            MakeVendorSpec(kTestVendorId, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        EXPECT_TRUE(driver.ClaimDevice(cache.get()));
+    }
+
+    TEST_F(VendorProductClaimTest, WrongProductIdFails)
+    {
+        SpecBasedMatterDeviceDriver driver(
+            MakeVendorSpec(kTestVendorId, 0x9999, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        EXPECT_FALSE(driver.ClaimDevice(cache.get()));
+    }
+
+    TEST_F(VendorProductClaimTest, WrongVendorIdFails)
+    {
+        SpecBasedMatterDeviceDriver driver(
+            MakeVendorSpec(0x0001, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        EXPECT_FALSE(driver.ClaimDevice(cache.get()));
+    }
+
+    TEST_F(VendorProductClaimTest, NoVendorSetFallsThroughToDeviceTypeMatching)
+    {
+        // Driver without vendorId/productId uses device-type matching
+        auto spec = std::make_shared<SbmdSpec>();
+        spec->name = "generic-test";
+        spec->bartonMeta.deviceClass = "testClass";
+        spec->bartonMeta.deviceClassVersion = 1;
+        spec->matterMeta.deviceTypes = {kTemperatureSensorDeviceType};
+
+        SpecBasedMatterDeviceDriver driver(spec);
+        EXPECT_TRUE(driver.ClaimDevice(cache.get()));
+    }
+
 } // namespace
