@@ -56,38 +56,34 @@ export class DoorLockDevice extends VirtualDevice {
         return 0x000a;
     }
 
-    createEndpoint() {
-        return new Endpoint(MatterDoorLockDevice.with(DoorLockRequirements.DoorLockServer), {
+    createEndpoints()
+    {
+        return [new Endpoint(MatterDoorLockDevice.with(DoorLockRequirements.DoorLockServer), {
             id: "doorlock-ep1",
             doorLock: {
-                lockState: DoorLock.LockState.Locked,
-                lockType: DoorLock.LockType.DeadBolt,
-                actuatorEnabled: true,
-                operatingMode: DoorLock.OperatingMode.Normal,
-                supportedOperatingModes: {
+                       lockState: DoorLock.LockState.Locked,
+                       lockType: DoorLock.LockType.DeadBolt,
+                       actuatorEnabled: true,
+                       operatingMode: DoorLock.OperatingMode.Normal,
+                       supportedOperatingModes: {
                     normal: true,
                     vacation: true,
                     privacy: true,
                     noRemoteLockUnlock: true,
                     passage: true,
                     alwaysSet: 2047,
-                },
-            },
-        });
+                }, },
+        })];
     }
 
     async handleLock() {
-        await this.endpoint.act(async (agent) => {
-            agent.doorLock.state.lockState = DoorLock.LockState.Locked;
-        });
+        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Locked; });
 
         return { lockState: "locked" };
     }
 
     async handleUnlock() {
-        await this.endpoint.act(async (agent) => {
-            agent.doorLock.state.lockState = DoorLock.LockState.Unlocked;
-        });
+        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Unlocked; });
 
         return { lockState: "unlocked" };
     }
@@ -95,11 +91,12 @@ export class DoorLockDevice extends VirtualDevice {
     async handleGetState() {
         let lockState;
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             const state = agent.doorLock.state;
             const lockStateValue = state.lockState;
 
-            switch (lockStateValue) {
+            switch (lockStateValue)
+            {
                 case DoorLock.LockState.Locked:
                     lockState = "locked";
                     break;
