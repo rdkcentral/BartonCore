@@ -266,29 +266,6 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/linenoise
 
-# Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
-RUN cd /tmp && \
-    wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1v/openssl-1.1.1v.tar.gz && \
-    tar -xzvf openssl-1.1.1v.tar.gz && \
-    cd openssl-1.1.1v && \
-    ./config --prefix=/usr/local/openssl --openssldir=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/openssl-1.1.1v.tar.gz /tmp/openssl-1.1.1v
-COPY openssl.conf /etc/ld.so.conf.d/
-RUN ldconfig
-
-# Download, build, and install libcurl, but link against OpenSSL 1.1.1v specifically
-RUN cd /tmp && \
-    wget https://curl.se/download/curl-7.82.0.tar.gz && \
-    tar -xzvf curl-7.82.0.tar.gz && \
-    cd curl-7.82.0 && \
-    ./configure --with-ssl=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
-
-
 # Matter sample apps for use as test targets
 # MATTER_REF is passed as a build arg, sourced from matter-version file
 ARG MATTER_REF
@@ -326,7 +303,7 @@ RUN cd /tmp && \
     git fetch --depth 1 origin ${MQUICKJS_GIT_TAG} && \
     git checkout ${MQUICKJS_GIT_TAG} && \
     cp /tmp/patches/mquickjs/CMakeLists.txt . && \
-    git apply /tmp/patches/mquickjs/0001-add-memory-usage-api.patch && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/mquickjs . && \
     mkdir build && \
     cd build && \
     cmake .. && \
@@ -336,9 +313,6 @@ RUN cd /tmp && \
 
 # Clean up our patches
 RUN rm -rf /tmp/patches
-
-# Ensure the system uses OpenSSL 3 by default
-ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
 
 ###############################################################################
 # Node.js for virtual test devices (matter.js deps installed at runtime)

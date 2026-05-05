@@ -32,7 +32,7 @@
  *
  * Subclasses should:
  *   1. Call super() with their device config
- *   2. Override createEndpoint() to return their device endpoint
+ *   2. Override createEndpoints() to return their device endpoint(s)
  *   3. Call registerOperation() to register side-band operations
  */
 
@@ -68,7 +68,7 @@ export class VirtualDevice {
         this.operations = new Map();
         this.serverNode = null;
         this.httpServer = null;
-        this.endpoint = null;
+        this.endpoints = [];
         this.storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "matterjs-device-"));
     }
 
@@ -82,11 +82,11 @@ export class VirtualDevice {
     }
 
     /**
-     * Create the device endpoint. Subclasses must override this.
-     * @returns {Endpoint} The matter.js Endpoint for this device
+     * Create the device endpoints. Subclasses must override this.
+     * @returns {Endpoint[]} Array of matter.js Endpoints for this device
      */
-    createEndpoint() {
-        throw new Error("Subclasses must implement createEndpoint()");
+    createEndpoints() {
+        throw new Error("Subclasses must implement createEndpoints()");
     }
 
     /**
@@ -136,9 +136,11 @@ export class VirtualDevice {
             },
         });
 
-        // Create and add the device endpoint
-        this.endpoint = this.createEndpoint();
-        await this.serverNode.add(this.endpoint);
+        // Create and add device endpoint(s)
+        this.endpoints = this.createEndpoints();
+        for (const ep of this.endpoints) {
+            await this.serverNode.add(ep);
+        }
 
         // Start the side-band HTTP server
         const sidebandPort = await this.startSidebandServer();

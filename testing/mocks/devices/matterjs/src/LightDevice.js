@@ -57,29 +57,31 @@ export class LightDevice extends VirtualDevice {
         return 0x0101;
     }
 
-    createEndpoint() {
-        return new Endpoint(
-            DimmableLightDevice.with(
-                DimmableLightRequirements.OnOffServer,
-                DimmableLightRequirements.LevelControlServer,
-            ),
-            {
-                id: "light-ep1",
-                onOff: {
-                    onOff: false,
+    createEndpoints() {
+        return [
+            new Endpoint(
+                DimmableLightDevice.with(
+                    DimmableLightRequirements.OnOffServer,
+                    DimmableLightRequirements.LevelControlServer,
+                ),
+                {
+                    id: "light-ep1",
+                    onOff: {
+                        onOff: false,
+                    },
+                    levelControl: {
+                        currentLevel: 1,
+                        minLevel: 1,
+                        maxLevel: 254,
+                        onLevel: 254,
+                    },
                 },
-                levelControl: {
-                    currentLevel: 1,
-                    minLevel: 1,
-                    maxLevel: 254,
-                    onLevel: 254,
-                },
-            },
-        );
+            )
+        ];
     }
 
     async handleOn() {
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.onOff.state.onOff = true;
         });
 
@@ -87,7 +89,7 @@ export class LightDevice extends VirtualDevice {
     }
 
     async handleOff() {
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.onOff.state.onOff = false;
         });
 
@@ -97,7 +99,7 @@ export class LightDevice extends VirtualDevice {
     async handleToggle() {
         let newState;
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             newState = !agent.onOff.state.onOff;
             agent.onOff.state.onOff = newState;
         });
@@ -109,7 +111,7 @@ export class LightDevice extends VirtualDevice {
         let onOff;
         let currentLevel;
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             onOff = agent.onOff.state.onOff;
             currentLevel = agent.levelControl.state.currentLevel;
         });
@@ -125,7 +127,7 @@ export class LightDevice extends VirtualDevice {
             throw new Error(`Invalid identifyTime: ${identifyTime}. Must be a uint16 (0-65535).`);
         }
 
-        await this.endpoint.act(async (agent) => {
+        await this.endpoints[0].act(async (agent) => {
             agent.identify.state.identifyTime = identifyTime;
         });
 

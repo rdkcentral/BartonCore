@@ -41,7 +41,7 @@ namespace barton
     namespace
     {
         constexpr int kSupportedSchemaMajor = 2;
-        constexpr int kSupportedSchemaMinor = 0;
+        constexpr int kSupportedSchemaMinor = 1;
 
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
@@ -416,6 +416,39 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
 
             meta.aliases.push_back(std::move(alias));
         }
+    }
+
+    // Parse optional vendorId/productId (both or neither required)
+    bool hasVendorId = node["vendorId"].IsDefined();
+    bool hasProductId = node["productId"].IsDefined();
+
+    if (hasVendorId != hasProductId)
+    {
+        icError("vendorId and productId must both be set or both be omitted");
+        return false;
+    }
+
+    if (hasVendorId)
+    {
+        std::string vendorStr = node["vendorId"].as<std::string>();
+        std::string productStr = node["productId"].as<std::string>();
+        uint32_t vendorVal = ParseHexOrDecimal(vendorStr);
+        uint32_t productVal = ParseHexOrDecimal(productStr);
+
+        if (vendorVal > UINT16_MAX)
+        {
+            icError("vendorId value '%s' exceeds uint16 range", vendorStr.c_str());
+            return false;
+        }
+
+        if (productVal > UINT16_MAX)
+        {
+            icError("productId value '%s' exceeds uint16 range", productStr.c_str());
+            return false;
+        }
+
+        meta.vendorId = static_cast<uint16_t>(vendorVal);
+        meta.productId = static_cast<uint16_t>(productVal);
     }
 
     return true;
