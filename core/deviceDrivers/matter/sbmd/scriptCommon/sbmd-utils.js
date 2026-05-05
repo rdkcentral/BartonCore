@@ -890,9 +890,39 @@
             if (typeof value === 'string' && range)
             {
                 var trimmed = value.trim();
+                var integerPattern;
+
+                if (trimmed.length === 0)
+                {
+                    return null;
+                }
+
+                switch (base)
+                {
+                    case 2:
+                        integerPattern = /^[-+]?[01]+$/;
+                        break;
+                    case 8:
+                        integerPattern = /^[-+]?[0-7]+$/;
+                        break;
+                    case 10:
+                        integerPattern = /^[-+]?[0-9]+$/;
+                        break;
+                    case 16:
+                        integerPattern = /^[-+]?[0-9a-fA-F]+$/;
+                        break;
+                    default:
+                        return null;
+                }
+
+                if (!integerPattern.test(trimmed))
+                {
+                    return null;
+                }
+
                 var parsed = parseInt(trimmed, base);
 
-                if (isNaN(parsed) || parsed.toString(base) !== trimmed.toLowerCase())
+                if (isNaN(parsed))
                 {
                     return null;
                 }
