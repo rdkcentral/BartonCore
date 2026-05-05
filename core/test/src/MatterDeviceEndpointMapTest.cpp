@@ -50,6 +50,69 @@ namespace barton
         const std::map<std::string, ResourceBinding> &GetReadBindings() { return resourceReadBindings; }
         const std::map<std::string, ResourceBinding> &GetWriteBindings() { return resourceWriteBindings; }
         const std::map<std::string, ResourceBinding> &GetExecuteBindings() { return resourceExecuteBindings; }
+        CacheCallback *GetCacheCallback() { return cacheCallback.get(); }
+
+        /**
+         * Get the raw ClusterStateCache pointer from the DeviceDataCache.
+         * Used by tests to pass to OnAttributeChanged.
+         */
+        chip::app::ClusterStateCache *GetClusterStateCache()
+        {
+            return deviceDataCache ? deviceDataCache->clusterStateCache.get() : nullptr;
+        }
+
+        /**
+         * Directly insert an attribute read binding into the fast lookup map.
+         * Used by tests to set up multi-binding fan-out scenarios without going
+         * through the full BindResourceReadInfo() path.
+         */
+        void InsertReadableAttributeBinding(const chip::app::ConcreteAttributePath &path,
+                                            const std::string &uri,
+                                            const SbmdAttribute &attr)
+        {
+            ResourceBinding binding;
+            binding.type = ResourceBinding::Type::Attribute;
+            binding.attributePath = path;
+            binding.attribute = attr;
+
+            AttributeReadBinding readBinding;
+            readBinding.uri = uri;
+            readBinding.binding = std::move(binding);
+
+            readableAttributeLookup.emplace(path, std::move(readBinding));
+        }
+
+        /**
+         * Seed the ClusterStateCache with a single uint16 attribute value.
+         * Used by OnAttributeChanged tests to ensure cache->Get() returns data.
+         */
+        static void SeedCacheWithUint16(std::shared_ptr<DeviceDataCache> &cache,
+                                        const chip::app::ConcreteDataAttributePath &path,
+                                        uint16_t value)
+        {
+            if (!cache->clusterStateCache)
+            {
+                cache->clusterStateCache = std::make_unique<chip::app::ClusterStateCache>(*cache);
+            }
+
+            auto &cb = cache->clusterStateCache->GetBufferedCallback();
+            chip::app::StatusIB okStatus;
+            cb.OnReportBegin();
+            {
+                uint8_t buffer[16];
+                chip::TLV::TLVWriter writer;
+                writer.Init(buffer, sizeof(buffer));
+                writer.Put(chip::TLV::AnonymousTag(), value);
+                writer.Finalize();
+
+                chip::TLV::TLVReader reader;
+                reader.Init(buffer, writer.GetLengthWritten());
+                reader.Next();
+
+                cb.OnAttributeData(path, &reader, okStatus);
+            }
+            cb.OnReportEnd();
+        }
 
         using MatterDevice::GetEndpointForSbmdIndex;
         using MatterDevice::ResolveEndpointMap;
@@ -206,6 +269,61 @@ namespace barton
 
             cb.OnReportEnd();
         }
+    };
+
+    /**
+     * Mock SbmdScript for testing OnAttributeChanged fan-out without a real JS engine.
+     */
+    class MockSbmdScript : public SbmdScript
+    {
+    public:
+        using SbmdScript::SbmdScript;
+
+        MOCK_METHOD(void, SetClusterFeatureMaps, (const std::map<uint32_t, uint32_t> &), (override));
+        MOCK_METHOD(bool,
+                    AddAttributeReadMapper,
+                    (const SbmdAttribute &attributeInfo, const std::string &script),
+                    (override));
+        MOCK_METHOD(bool,
+                    AddCommandExecuteResponseMapper,
+                    (const SbmdCommand &commandInfo, const std::string &script),
+                    (override));
+        MOCK_METHOD(bool,
+                    MapAttributeRead,
+                    (const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader, std::string &outValue),
+                    (override));
+        MOCK_METHOD(bool,
+                    MapCommandExecuteResponse,
+                    (const SbmdCommand &commandInfo, chip::TLV::TLVReader &reader, std::string &outValue),
+                    (override));
+        MOCK_METHOD(bool, AddWriteMapper, (const std::string &resourceKey, const std::string &script), (override));
+        MOCK_METHOD(bool,
+                    AddExecuteMapper,
+                    (const std::string &resourceKey,
+                     const std::string &script,
+                     const std::optional<std::string> &responseScript),
+                    (override));
+        MOCK_METHOD(bool,
+                    MapWrite,
+                    (const std::string &resourceKey,
+                     const std::string &endpointId,
+                     const std::string &resourceId,
+                     const std::string &inValue,
+                     ScriptWriteResult &result),
+                    (override));
+        MOCK_METHOD(bool,
+                    MapExecute,
+                    (const std::string &resourceKey,
+                     const std::string &endpointId,
+                     const std::string &resourceId,
+                     const std::string &inValue,
+                     ScriptWriteResult &result),
+                    (override));
+        MOCK_METHOD(bool, AddEventMapper, (const SbmdEvent &eventInfo, const std::string &script), (override));
+        MOCK_METHOD(bool,
+                    MapEvent,
+                    (const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader, std::string &outValue),
+                    (override));
     };
 } // namespace barton
 
@@ -825,6 +943,96 @@ namespace
 
         SpecBasedMatterDeviceDriver driver(spec);
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
+    }
+
+    // ================================================================
+    // Tests for OnAttributeChanged multi-binding fan-out
+    // ================================================================
+
+    class OnAttributeChangedFanOutTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            cache = std::make_shared<DeviceDataCache>("test-device", nullptr);
+            device = std::make_unique<TestableMatterDevice>("test-device", cache);
+
+            // Create and inject mock script
+            auto mockScript = std::make_unique<MockSbmdScript>("test-device");
+            mockScriptPtr = mockScript.get();
+            device->SetScript(std::move(mockScript));
+
+            // Seed the ClusterStateCache with a uint16 value at (ep=1, cluster=0x0402, attr=0x0000)
+            // so that cache->Get() succeeds when OnAttributeChanged iterates bindings.
+            chip::app::ConcreteDataAttributePath dataPath(1, kTemperatureMeasurementCluster, 0x0000);
+            TestableMatterDevice::SeedCacheWithUint16(cache, dataPath, 2100);
+        }
+
+        void TearDown() override
+        {
+            device.reset();
+            cache.reset();
+        }
+
+        std::shared_ptr<DeviceDataCache> cache;
+        std::unique_ptr<TestableMatterDevice> device;
+        MockSbmdScript *mockScriptPtr = nullptr; // non-owning, owned by device
+    };
+
+    // Verify that when two resources share the same attribute path, one attribute
+    // change fires the read mapper for both resources (the multi-binding fan-out path
+    // introduced with unordered_multimap).
+    TEST_F(OnAttributeChangedFanOutTest, TwoResourcesSameAttributeBothUpdated)
+    {
+        chip::app::ConcreteAttributePath sharedPath(1, kTemperatureMeasurementCluster, 0x0000);
+
+        SbmdAttribute attr;
+        attr.clusterId = kTemperatureMeasurementCluster;
+        attr.attributeId = 0x0000;
+        attr.name = "MeasuredValue";
+        attr.type = "int16s";
+
+        attr.resourceId = "temperature";
+        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperature", attr);
+
+        attr.resourceId = "temperatureF";
+        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperatureF", attr);
+
+        // The mock script should be called once per binding (twice total)
+        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_, ::testing::_))
+            .Times(2)
+            .WillRepeatedly(::testing::DoAll(::testing::SetArgReferee<2>("21.00"), ::testing::Return(true)));
+
+        device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath);
+    }
+
+    // Verify that when a binding is registered but MapAttributeRead fails for it,
+    // the callback continues and still processes the next binding.
+    TEST_F(OnAttributeChangedFanOutTest, PartialScriptFailureDoesNotAbortOtherBindings)
+    {
+        chip::app::ConcreteAttributePath sharedPath(1, kTemperatureMeasurementCluster, 0x0000);
+
+        SbmdAttribute attr;
+        attr.clusterId = kTemperatureMeasurementCluster;
+        attr.attributeId = 0x0000;
+        attr.name = "MeasuredValue";
+        attr.type = "int16s";
+
+        attr.resourceId = "temperature";
+        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperature", attr);
+
+        attr.resourceId = "temperatureF";
+        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperatureF", attr);
+
+        // First call fails, second succeeds — both should still be attempted
+        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_, ::testing::_))
+            .Times(2)
+            .WillOnce(::testing::Return(false))
+            .WillOnce(::testing::DoAll(::testing::SetArgReferee<2>("21.00"), ::testing::Return(true)));
+
+        // Should not crash or abort early when the first binding's script fails
+        EXPECT_NO_FATAL_FAILURE(
+            device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath));
     }
 
 } // namespace

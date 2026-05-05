@@ -364,7 +364,6 @@ endpoints:
                 'auto': 1,
                 'cool': 3,
                 'heat': 4,
-                'emergencyHeat': 5,
                 'precooling': 6,
                 'fanOnly': 7
               };
