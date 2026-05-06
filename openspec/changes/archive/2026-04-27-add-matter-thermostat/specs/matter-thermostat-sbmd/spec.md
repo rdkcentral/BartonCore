@@ -52,7 +52,7 @@ The driver SHALL map the following read-only attributes to resources with type `
 
 #### Scenario: Read absolute heat limits
 - **WHEN** the Matter device reports AbsMinHeatSetpointLimit as 700 and AbsMaxHeatSetpointLimit as 3000
-- **THEN** the `absoluteMinHeatLimit` resource SHALL be `"700"` and `absoluteMaxHeatLimit` SHALL be `"3000"`
+- **THEN** the `absoluteMinHeatLimit` resource SHALL be `"0700"` and `absoluteMaxHeatLimit` SHALL be `"3000"`
 
 #### Scenario: Read absolute cool limits
 - **WHEN** the Matter device reports AbsMinCoolSetpointLimit as 1600 and AbsMaxCoolSetpointLimit as 3200
