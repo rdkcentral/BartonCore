@@ -101,7 +101,7 @@ The driver SHALL map ControlSequenceOfOperation (0x001b, enum8) to the `controlS
 
 #### Scenario: Read control sequence of operation
 - **WHEN** the Matter device reports ControlSequenceOfOperation as 0x04
-- **THEN** the `controlSequenceOfOperation` resource value SHALL be `"4"`
+- **THEN** the `controlSequenceOfOperation` resource value SHALL be `"coolingAndHeatingFourPipes"`
 
 ### Requirement: ThermostatRunningState attribute mapping
 The driver SHALL map ThermostatRunningState (0x0029, map16) to the `systemState` resource with type `com.icontrol.tstatSystemState`, modes [read, dynamic, emitEvents]. This resource SHALL be marked as optional since ThermostatRunningState is optional in the Matter specification.
