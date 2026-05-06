@@ -107,6 +107,8 @@ def test_write_system_mode(default_environment, matter_thermostat):
     uri = resource_uri(thermostat, "systemMode", endpoint_id=1)
     assert client.write_resource(uri, "heat")
     wait_for_resource_value(resource_updated_queue, "heat")
+    sideband_state = matter_thermostat.sideband.send("getState", {})
+    assert sideband_state["systemMode"] == "heat"
 
 
 def test_sideband_temperature_change(default_environment, matter_thermostat):
