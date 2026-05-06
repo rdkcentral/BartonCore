@@ -73,7 +73,17 @@ Read mapping (Matter enum → Barton string):
 | 0x06        | precooling    |
 | 0x07        | fanOnly       |
 
-Write mapping (Barton string → Matter enum): reverse of the above table.
+Write mapping (Barton string → Matter enum):
+
+| Barton String | Matter Value |
+|---------------|--------------|
+| off           | 0x00         |
+| auto          | 0x01         |
+| cool          | 0x03         |
+| heat          | 0x04         |
+| emergencyHeat | 0x05         |
+| precooling    | 0x06         |
+| fanOnly       | 0x07         |
 
 #### Scenario: Read system mode off
 - **WHEN** the Matter device reports SystemMode as 0x00
