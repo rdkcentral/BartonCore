@@ -81,7 +81,6 @@ Write mapping (Barton string → Matter enum):
 | auto          | 0x01         |
 | cool          | 0x03         |
 | heat          | 0x04         |
-| emergencyHeat | 0x05         |
 | precooling    | 0x06         |
 | fanOnly       | 0x07         |
 
