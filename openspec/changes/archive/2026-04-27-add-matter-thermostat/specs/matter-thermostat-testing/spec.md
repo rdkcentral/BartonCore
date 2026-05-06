@@ -20,7 +20,7 @@ A matter.js virtual thermostat device (`ThermostatDevice.js`) SHALL be created e
 
 #### Scenario: Side-band get state
 - **WHEN** the `getState` side-band operation is called
-- **THEN** it SHALL return the current thermostat state including localTemperature, heatingSetpoint, coolingSetpoint, and systemMode
+- **THEN** it SHALL return the current thermostat state including localTemperature, occupiedHeatingSetpoint, occupiedCoolingSetpoint, and systemMode
 
 ### Requirement: matter.js virtual thermostat with fan control device
 A matter.js virtual thermostat with fan control device (`ThermostatWithFanDevice.js`) SHALL be created by subclassing `ThermostatDevice` to add:
