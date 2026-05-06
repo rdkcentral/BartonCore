@@ -475,7 +475,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
                 attribute.clusterId,
                 attribute.attributeId);
 
-        // Add to fast lookup map for OnAttributeData callback
+        // Add to fast lookup map for CacheCallback::OnAttributeChanged callback
         AttributeReadBinding readBinding;
         readBinding.uri = uri;
         readBinding.binding = binding;

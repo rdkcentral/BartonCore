@@ -50,7 +50,16 @@ namespace barton
         const std::map<std::string, ResourceBinding> &GetReadBindings() { return resourceReadBindings; }
         const std::map<std::string, ResourceBinding> &GetWriteBindings() { return resourceWriteBindings; }
         const std::map<std::string, ResourceBinding> &GetExecuteBindings() { return resourceExecuteBindings; }
-        CacheCallback *GetCacheCallback() { return cacheCallback.get(); }
+
+        CacheCallback *GetCacheCallback()
+        {
+            if (!deviceDataCache || !deviceDataCache->callback)
+            {
+                return nullptr;
+            }
+
+            return static_cast<CacheCallback *>(deviceDataCache->callback.get());
+        }
 
         /**
          * Get the raw ClusterStateCache pointer from the DeviceDataCache.
@@ -280,7 +289,7 @@ namespace barton
     public:
         using SbmdScript::SbmdScript;
 
-        MOCK_METHOD(void, SetClusterFeatureMaps, (const std::map<uint32_t, uint32_t> &), (override));
+        MOCK_METHOD(void, SetClusterFeatureMaps, ((const std::map<uint32_t, uint32_t> &) ), (override));
         MOCK_METHOD(bool,
                     AddAttributeReadMapper,
                     (const SbmdAttribute &attributeInfo, const std::string &script),
@@ -1041,6 +1050,53 @@ namespace
         // Should not crash or abort early when the first binding's script fails
         EXPECT_NO_FATAL_FAILURE(
             device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath));
+    }
+
+    // Verify the full production path: BindResourceReadInfo called twice with
+    // different URIs but the same ConcreteAttributePath populates the multimap
+    // so that OnAttributeChanged fans out to both resources.
+    TEST_F(OnAttributeChangedFanOutTest, BindResourceReadInfoSamePathTwoUrisFanOut)
+    {
+        // PopulateTestCache replaces the ClusterStateCache created by SetUp,
+        // so we must re-seed the attribute value afterward.
+        TestableMatterDevice::PopulateTestCache(cache,
+                                                {kFanOutTestEndpointId},
+                                                {{kFanOutTestEndpointId, {kTemperatureSensorDeviceType}}},
+                                                {{kFanOutTestEndpointId, {kTemperatureMeasurementCluster}}});
+
+        chip::app::ConcreteDataAttributePath dataPath(
+            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
+        TestableMatterDevice::SeedCacheWithUint16(cache, dataPath, 2100);
+
+        // Map SBMD index 0 → Matter endpoint kFanOutTestEndpointId
+        device->GetSbmdEndpointMap()[0] = kFanOutTestEndpointId;
+
+        SbmdMapper mapper;
+        mapper.hasRead = true;
+        SbmdAttribute attr;
+        attr.clusterId = kTemperatureMeasurementCluster;
+        attr.attributeId = kMeasuredValueAttributeId;
+        attr.name = "MeasuredValue";
+        attr.type = "int16s";
+
+        // Bind the first resource via the production code path
+        attr.resourceId = "temperature";
+        mapper.readAttribute = attr;
+        ASSERT_TRUE(device->BindResourceReadInfo("/ep/ep1/r/temperature", mapper, 0));
+
+        // Bind a second resource to the exact same attribute path
+        attr.resourceId = "temperatureF";
+        mapper.readAttribute = attr;
+        ASSERT_TRUE(device->BindResourceReadInfo("/ep/ep1/r/temperatureF", mapper, 0));
+
+        // OnAttributeChanged must invoke the mapper once per binding (twice total)
+        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_, ::testing::_))
+            .Times(2)
+            .WillRepeatedly(::testing::DoAll(::testing::SetArgReferee<2>("21.00"), ::testing::Return(true)));
+
+        chip::app::ConcreteAttributePath sharedPath(
+            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
+        device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath);
     }
 
 } // namespace

@@ -90,7 +90,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
         const modeValue = modeMap[mode];
 
         if (modeValue === undefined) {
-            return { error: `Unknown fan mode: ${mode}` };
+            throw new Error(`Unknown fan mode: ${mode}`);
         }
 
         await this.endpoints[0].act(async (agent) => {

@@ -25,6 +25,7 @@
 import logging
 
 import pytest
+from testing.mocks.devices.matter.matter_thermostat import matter_thermostat
 from testing.utils.barton_utils import (
     assert_device_has_common_resources,
     commission_device,
@@ -109,6 +110,22 @@ def test_write_system_mode(default_environment, matter_thermostat):
     wait_for_resource_value(resource_updated_queue, "heat")
     sideband_state = matter_thermostat.sideband.send("getState", {})
     assert sideband_state["systemMode"] == "heat"
+
+
+def test_write_control_sequence_of_operation(default_environment, matter_thermostat):
+    """Write controlSequenceOfOperation and verify the enum round-trips correctly."""
+    thermostat = _commission_thermostat(default_environment, matter_thermostat)
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(
+        client, "controlSequenceOfOperation"
+    )
+
+    uri = resource_uri(thermostat, "controlSequenceOfOperation", endpoint_id=1)
+
+    assert client.write_resource(uri, "heatingOnly")
+    wait_for_resource_value(resource_updated_queue, "heatingOnly")
+    assert client.read_resource(uri) == "heatingOnly"
 
 
 def test_sideband_temperature_change(default_environment, matter_thermostat):

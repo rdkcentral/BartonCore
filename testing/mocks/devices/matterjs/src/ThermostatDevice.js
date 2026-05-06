@@ -86,7 +86,7 @@ export class ThermostatDevice extends VirtualDevice {
         const temperature = params.temperature;
 
         if (temperature === undefined || temperature === null) {
-            return { error: "temperature parameter required" };
+            throw new Error("temperature parameter required");
         }
 
         await this.endpoints[0].act(async (agent) => {
@@ -109,7 +109,7 @@ export class ThermostatDevice extends VirtualDevice {
         const modeValue = modeMap[mode];
 
         if (modeValue === undefined) {
-            return { error: `Unknown mode: ${mode}` };
+            throw new Error(`Unknown mode: ${mode}`);
         }
 
         await this.endpoints[0].act(async (agent) => {
