@@ -28,7 +28,7 @@ This generates stubs from TypeScript definitions and validates all `.sbmd` files
 
 ```bash
 python3 scripts/ci/validate_sbmd_specs.py \
-    core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json \
+    core/deviceDrivers/matter/sbmd/schema \
     core/deviceDrivers/matter/sbmd/specs/*.sbmd \
     --stubs build/sbmd-stubs.json
 ```
@@ -36,6 +36,7 @@ python3 scripts/ci/validate_sbmd_specs.py \
 This checks:
 - YAML structure against the JSON schema
 - Embedded JavaScript syntax using a JS engine
+- Schema version resolution using each spec's `schemaVersion`
 
 ### Regenerate TypeScript Stubs
 
@@ -54,7 +55,7 @@ This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitio
 | Item | Location |
 |------|----------|
 | SBMD spec files | `core/deviceDrivers/matter/sbmd/specs/*.sbmd` |
-| JSON schema | `core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json` |
+| JSON schemas | `core/deviceDrivers/matter/sbmd/schema/` (e.g., `schema/v2/sbmd-spec-schema-v2.1.json`) |
 | TypeScript definitions | `core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts` |
 | Generated stubs | `build/sbmd-stubs.json` |
 | Validation script | `scripts/ci/validate_sbmd_specs.py` |
@@ -70,7 +71,10 @@ This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitio
 | `contact-sensor.sbmd` | Contact Sensor |
 | `occupancy-sensor.sbmd` | Occupancy Sensor |
 | `air-quality-sensor.sbmd` | Air Quality Sensor |
+| `humidity-sensor.sbmd` | Humidity Sensor |
+| `temperature-sensor.sbmd` | Temperature Sensor |
 | `water-leak-detector.sbmd` | Water Leak Detector |
+| `ikea-timmerflotte.sbmd` | IKEA Timmerflotte Air Quality Sensor |
 
 ## Error Recovery
 

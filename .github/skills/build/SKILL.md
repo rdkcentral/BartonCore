@@ -86,7 +86,7 @@ Pass these with `-D` to cmake or appended to `./build.sh`:
 | `BCORE_BUILD_REFERENCE` | ON | Build the reference application |
 | `BCORE_BUILD_WITH_SSP` | OFF | Stack smash protection |
 | `BCORE_BUILD_WITH_ASAN` | OFF | Address Sanitizer |
-| `BCORE_GEN_GIR` | ON | Generate GObject Introspection files |
+| `BCORE_GEN_GIR` | OFF | Generate GObject Introspection files (enabled by the dev profile) |
 | `BCORE_TEST_COVERAGE` | OFF | Enable code coverage |
 | `BCORE_MATTER_VALIDATE_SCHEMAS` | ON | Validate SBMD specs during build |
 | `BCORE_MATTER_USE_RANDOM_PORT` | OFF | Use random Matter operational port |

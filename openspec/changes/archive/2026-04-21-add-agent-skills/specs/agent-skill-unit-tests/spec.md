@@ -23,7 +23,7 @@ The skill SHALL explain how to run a subset of tests using `ctest -R <pattern> -
 - **THEN** the skill SHALL instruct the agent to use `ctest -R <pattern> --output-on-failure --test-dir build`
 
 ### Requirement: Unit test skill documents test frameworks
-The skill SHALL note that C tests use CMocka and C++ tests use Google Test/Google Mock. The skill SHALL explain that tests are defined in CMakeLists.txt files using `bcore_add_cmocka_test()` and `bcore_add_cpp_test()` macros, located under `core/test/`, `libs/device/test/`, and `api/c/test/`.
+The skill SHALL note that C tests use CMocka and C++ tests use Google Test/Google Mock. The skill SHALL explain that tests are defined in CMakeLists.txt files using `bcore_add_cmocka_test()` and `bcore_add_cpp_test()` macros, located under `core/test/`, `libs/device/descriptors/c/test/`, `libs/device/philipsHue/c/test/` when enabled, and `api/c/test/`.
 
 #### Scenario: Agent understands test framework context
 - **WHEN** the agent reads the unit test skill
