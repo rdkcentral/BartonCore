@@ -354,7 +354,7 @@ endpoints:
               };
               var mode = modeMap[value];
               if (mode === undefined) {
-                mode = value.toString();
+                mode = 'unknown';
               }
               return {output: mode};
           write:
