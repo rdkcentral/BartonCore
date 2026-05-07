@@ -226,7 +226,7 @@ SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArg
 - **THEN** `sbmdReadArgs.clusterFeatureMaps` SHALL contain an object mapping cluster IDs to their feature map values
 
 ### Requirement: Current SBMD spec catalog
-The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript).
+The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript), `temperature-sensor` (JavaScript), `humidity-sensor` (JavaScript), and `ikea-timmerflotte` (JavaScript).
 
 All specs SHALL use `scriptType: "JavaScript"` and the `SbmdUtils` built-in library for TLV encoding/decoding.
 
