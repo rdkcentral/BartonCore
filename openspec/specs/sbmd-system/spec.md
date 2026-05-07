@@ -9,7 +9,7 @@ The system SHALL support declarative device driver specifications in YAML format
 
 #### Scenario: Missing required field
 - **WHEN** an `.sbmd` file is missing `bartonMeta` or `matterMeta`
-- **THEN** the parser SHALL reject the file with an error
+- **THEN** validation SHALL reject the file with an error
 
 ### Requirement: Barton metadata in SBMD
 Each SBMD spec SHALL define a `bartonMeta` section containing `deviceClass` (string, e.g., `"light"`, `"doorLock"`, `"sensor"`) and `deviceClassVersion` (integer).
@@ -19,7 +19,7 @@ Each SBMD spec SHALL define a `bartonMeta` section containing `deviceClass` (str
 - **THEN** the resulting driver SHALL claim devices matching the light device class with version 1
 
 ### Requirement: Matter metadata in SBMD
-Each SBMD spec SHALL define a `matterMeta` section containing `revision` (integer, the Matter device revision) and `deviceTypes` (flat list of Matter device type IDs as hex or decimal values, e.g., `- 0x0100`). Optionally, `featureClusters` (list of cluster IDs whose FeatureMap attributes to read at init time). Optionally, `vendorId` (unsigned 16-bit integer) and `productId` (unsigned 16-bit integer) for vendor-specific device claiming. When `vendorId` and `productId` are set, the driver claims by vendor/product identity rather than by device types.
+Each SBMD spec SHALL define a `matterMeta` section containing `deviceTypes` (flat list of Matter device type IDs as hex or decimal values, e.g., `- 0x0100`). Optionally, `revision` (integer, the Matter device revision); when omitted, the SBMD spec does not declare an explicit Matter device revision. Optionally, `featureClusters` (list of cluster IDs whose FeatureMap attributes to read at init time). Optionally, `vendorId` (unsigned 16-bit integer) and `productId` (unsigned 16-bit integer) for vendor-specific device claiming. When `vendorId` and `productId` are set, the driver claims by vendor/product identity rather than by device types.
 
 #### Scenario: Multiple device type support
 - **WHEN** an SBMD spec lists `deviceTypes` with IDs `0x0100` and `0x010a`
@@ -121,11 +121,11 @@ A resource's mapper MAY contain a `write` section with a `script` (JavaScript st
 - **THEN** the driver SHALL send the command as a Matter timed invoke with the specified timeout
 
 ### Requirement: Execute mapper
-A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdExecuteArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL process the command response TLV.
+A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdExecuteArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL receive the command response TLV via `sbmdExecuteArgs.tlvBase64` and SHALL return a JSON object of the form `{ output: <string> }`. If `scriptResponse` throws, returns an invalid value, or otherwise fails, the execute operation SHALL fail and the script error SHALL be surfaced to the caller.
 
 #### Scenario: Execute resource with response
 - **WHEN** an execute mapper with `scriptResponse` is invoked and the Matter command returns a response
-- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script's return value SHALL be the execute response string
+- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ output: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
 
 ### Requirement: Event mapper
 A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return the updated resource value. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
@@ -139,7 +139,7 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
 
 ### Requirement: SBMD schema validation
-SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
+SBMD spec files SHALL be validated during the build process against the versioned JSON schema selected from the spec's `schemaVersion`, using the repository's versioned schema naming/location convention (for example, `core/deviceDrivers/matter/sbmd/schema/v2/sbmd-spec-schema-v{schemaVersion}.json`, such as `sbmd-spec-schema-v2.1.json`). The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 
 #### Scenario: Schema validation at build time
 - **WHEN** the project is built with SBMD specs present
