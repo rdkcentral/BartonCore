@@ -110,18 +110,21 @@ def test_read_initial_cool_setpoint(default_environment, matter_thermostat_with_
 def test_read_absolute_heat_limits(default_environment, matter_thermostat_with_fan):
     """Verify the absolute heat setpoint limits are reported correctly."""
     client = default_environment.get_client()
-    min_queue = resource_update_listener(client, "absoluteMinHeatLimit")
-    max_queue = resource_update_listener(client, "absoluteMaxHeatLimit")
+
+    # Use heatSetpoint (which has emitEvents) as a sync point to confirm the
+    # thermostat cluster attributes have all been read from the device.  The
+    # absolute limit resources are read-only without emitEvents, so they do not
+    # emit update events; we verify them via direct read_resource() after the
+    # cluster data has arrived.
+    heat_setpoint_queue = resource_update_listener(client, "heatSetpoint")
 
     thermostat = _commission_thermostat_with_fan(
         default_environment, matter_thermostat_with_fan
     )
 
-    # absMinHeatSetpointLimit=700 -> "0700", absMaxHeatSetpointLimit=3000 -> "3000"
-    wait_for_resource_value(min_queue, "0700")
-    wait_for_resource_value(max_queue, "3000")
+    wait_for_resource_value(heat_setpoint_queue, "2000")
 
-    # Verify readable via direct resource read
+    # absMinHeatSetpointLimit=700 -> "0700", absMaxHeatSetpointLimit=3000 -> "3000"
     assert client.read_resource(
         resource_uri(thermostat, "absoluteMinHeatLimit", endpoint_id=1)
     ) == "0700"
@@ -133,17 +136,18 @@ def test_read_absolute_heat_limits(default_environment, matter_thermostat_with_f
 def test_read_absolute_cool_limits(default_environment, matter_thermostat_with_fan):
     """Verify the absolute cool setpoint limits are reported correctly."""
     client = default_environment.get_client()
-    min_queue = resource_update_listener(client, "absoluteMinCoolLimit")
-    max_queue = resource_update_listener(client, "absoluteMaxCoolLimit")
+
+    # Use coolSetpoint (which has emitEvents) as a sync point to confirm the
+    # thermostat cluster attributes have all been read from the device.
+    cool_setpoint_queue = resource_update_listener(client, "coolSetpoint")
 
     thermostat = _commission_thermostat_with_fan(
         default_environment, matter_thermostat_with_fan
     )
 
-    # absMinCoolSetpointLimit=1600 -> "1600", absMaxCoolSetpointLimit=3200 -> "3200"
-    wait_for_resource_value(min_queue, "1600")
-    wait_for_resource_value(max_queue, "3200")
+    wait_for_resource_value(cool_setpoint_queue, "2600")
 
+    # absMinCoolSetpointLimit=1600 -> "1600", absMaxCoolSetpointLimit=3200 -> "3200"
     assert client.read_resource(
         resource_uri(thermostat, "absoluteMinCoolLimit", endpoint_id=1)
     ) == "1600"
