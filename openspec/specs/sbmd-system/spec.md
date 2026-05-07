@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: SBMD spec file format
-The system SHALL support declarative device driver specifications in YAML format with the `.sbmd` file extension. Each spec SHALL define: `schemaVersion` (string, e.g., `"1.0"`), `driverVersion` (string, e.g., `"1.0"`), `name` (string), `bartonMeta` (device class mapping), `matterMeta` (Matter device type matching), optional `reporting` (subscription intervals), and `endpoints` (resource definitions with mappers).
+The system SHALL support declarative device driver specifications in YAML format with the `.sbmd` file extension. Each spec SHALL define: `schemaVersion` (string, e.g., `"1.0"`), `driverVersion` (string, e.g., `"1.0"`), `name` (string), `bartonMeta` (device class mapping), `matterMeta` (Matter device type matching), optional `reporting` (subscription intervals), optional `endpoints` (endpoint-scoped resource definitions with mappers), and optional top-level `resources` (device-level resources not associated with a specific endpoint).
 
 #### Scenario: Valid SBMD spec
 - **WHEN** an `.sbmd` file contains all required top-level fields with valid values
@@ -41,14 +41,18 @@ SBMD specs MAY define a `reporting` section with `minSecs` and `maxSecs` control
 - **THEN** the driver SHALL configure Matter subscriptions with those min/max intervals
 
 ### Requirement: Endpoint definitions
-Each SBMD spec SHALL define one or more `endpoints`, each with `id` (string), `profile` (string), `profileVersion` (integer), and `resources` (list of resource definitions).
+An SBMD spec MAY define `endpoints`, each with `id` (string), `profile` (string), `profileVersion` (integer), and `resources` (list of resource definitions). Endpoint resources are scoped to a specific endpoint. Separately, an SBMD spec MAY define top-level `resources` for device-level resources not associated with any endpoint. A spec may use either or both.
 
 #### Scenario: Single endpoint spec
 - **WHEN** an SBMD spec defines one endpoint with id `"1"` and profile `"light"`
 - **THEN** the driver SHALL create one Barton endpoint with that profile on the device
 
+#### Scenario: Top-level device resources
+- **WHEN** an SBMD spec defines top-level `resources` without `endpoints`
+- **THEN** the driver SHALL register those resources at the device level without endpoint association
+
 ### Requirement: Resource definitions with mappers
-Each resource in an SBMD endpoint SHALL have `id` (string), `type` (string), and a `mapper` object. Resources MAY also specify `modes` (array of mode strings: `"read"`, `"write"`, `"execute"`, `"dynamic"`, `"emitEvents"`, `"lazySaveNext"`, `"sensitive"`) — if omitted, a default set is used. Note: there is no `"dynamicCapable"` mode string because the core automatically sets the `DYNAMIC_CAPABLE` bit whenever `DYNAMIC` is set (see `deviceModelHelper.c`). Resources MAY be marked `optional: true`.
+Each resource (whether in an endpoint or at the top level) SHALL have `id` (string), `type` (string), and a `mapper` object. Resources MAY also specify `modes` (array of mode strings: `"read"`, `"write"`, `"execute"`, `"dynamic"`, `"emitEvents"`, `"lazySaveNext"`, `"sensitive"`) — if omitted, a default set is used. Note: there is no `"dynamicCapable"` mode string because the core automatically sets the `DYNAMIC_CAPABLE` bit whenever `DYNAMIC` is set (see `deviceModelHelper.c`). Resources MAY be marked `optional: true`.
 
 Each resource SHALL declare a `prerequisites` field. The `prerequisites` field SHALL be either an explicit opt-out (`none` or `null`, both meaning the resource is always registered) or a non-empty list of prerequisite entries, each referencing a named alias in `matterMeta.aliases` (see the `sbmd-resource-prerequisites` capability spec). Absence of `prerequisites` on any resource SHALL be a parse-time error, regardless of which mappers the resource implements. The preferred opt-out form is `none` for readability, but `null` is accepted for YAML authors who prefer explicit null syntax.
 
@@ -91,7 +95,7 @@ The `matterMeta` section MAY contain an `aliases` list. Aliases declare the Matt
 > provisional in the current CHIP SDK version and is not reliably present on real
 > devices. Event prerequisites SHOULD be upgraded to check the specific event ID once
 > `EventList` is stable and widely supported.
-A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return the Barton string value. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
+A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the read mapper SHALL fail. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
 
 #### Scenario: Read alias mapper resolves attribute metadata
 - **WHEN** a read mapper declares `alias: stateValue` and `stateValue` is an attribute alias with `clusterId: 0x0045`, `attributeId: 0x0000`
@@ -128,7 +132,7 @@ A resource's mapper MAY contain an `execute` section with a `script` and optiona
 - **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ output: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
 
 ### Requirement: Event mapper
-A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return the updated resource value. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
+A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the event mapper SHALL fail. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
 
 #### Scenario: Event alias mapper resolves event metadata
 - **WHEN** an event mapper declares `alias: lockOperation` and `lockOperation` is an event alias with `clusterId: 0x0101`, `eventId: 0x0002`
