@@ -43,6 +43,10 @@ namespace barton
         SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
+        uint16_t GetSupportedVendorId() const override;
+        uint16_t GetSupportedProductId() const override;
+        bool IsVendorSpecificDriver() const override;
+
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
     protected:

@@ -100,6 +100,37 @@ namespace barton
 
         virtual bool ClaimDevice(const DeviceDataCache *deviceDataCache);
 
+        /**
+         * @brief Get the vendor ID this driver targets.
+         * @return 0: driver is generic and claims devices by device type alone.
+         *         Matter reserves 0x0000 as invalid, so 0 is safe as a sentinel.
+         * @return non-zero: driver is vendor-specific and ClaimDevice will match
+         *         this value against the device's BasicInformation vendorId.
+         */
+        virtual uint16_t GetSupportedVendorId() const { return 0; }
+
+        /**
+         * @brief Get the product ID this driver targets.
+         * @return 0: driver is generic (no vendor/product constraint).
+         *         As with vendorId, Matter reserves 0x0000.
+         * @return non-zero: ClaimDevice will match this value against the device's
+         *         BasicInformation productId alongside the vendorId.
+         */
+        virtual uint16_t GetSupportedProductId() const { return 0; }
+
+        /**
+         * @brief Check if this driver is vendor-specific. A vendor-specific driver
+         *        targets an exact device model identified by its Matter BasicInformation
+         *        vendor and product IDs, rather than matching by endpoint device types.
+         *        This is used for devices that need custom handling beyond what a
+         *        generic device-type driver provides. Subclasses override this to
+         *        indicate they target a specific vendor/product pair.
+         *
+         * @return true if the driver targets a specific vendor/product pair
+         * @return false if the driver matches by device type (generic, the default)
+         */
+        virtual bool IsVendorSpecificDriver() const { return false; }
+
         DeviceDriver *GetDriver() { return &driver; }
         uint8_t GetDeviceClassVersion() const { return deviceClassVersion; }
         const char *GetDeviceClass() const;

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema-v2.0.json",
+  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema-v2.1.json",
   "title": "SBMD Specification Schema",
   "description": "JSON Schema for validating Specification-Based Matter Driver (SBMD) YAML files",
   "type": "object",
@@ -9,7 +9,7 @@
     "schemaVersion": {
       "type": "string",
       "description": "SBMD schema version",
-      "pattern": "^2\\.0$"
+      "const": "2.1"
     },
     "driverVersion": {
       "type": "string",
@@ -73,7 +73,7 @@
     "matterMeta": {
       "type": "object",
       "description": "Matter device type support",
-      "required": ["deviceTypes", "revision"],
+      "required": ["deviceTypes"],
       "properties": {
         "deviceTypes": {
           "type": "array",
@@ -103,7 +103,19 @@
           "items": {
             "$ref": "#/$defs/alias"
           }
+        },
+        "vendorId": {
+          "type": ["integer", "string"],
+          "description": "Matter vendor ID for vendor-specific claiming (hex or decimal)"
+        },
+        "productId": {
+          "type": ["integer", "string"],
+          "description": "Matter product ID for vendor-specific claiming (hex or decimal)"
         }
+      },
+      "dependentRequired": {
+        "vendorId": ["productId"],
+        "productId": ["vendorId"]
       },
       "additionalProperties": false
     },

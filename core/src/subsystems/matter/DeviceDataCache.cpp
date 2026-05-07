@@ -169,6 +169,44 @@ CHIP_ERROR DeviceDataCache::GetStringAttribute(chip::EndpointId endpointId,
     return CHIP_NO_ERROR;
 }
 
+CHIP_ERROR DeviceDataCache::GetUint16Attribute(chip::EndpointId endpointId,
+                                               chip::ClusterId clusterId,
+                                               chip::AttributeId attributeId,
+                                               uint16_t &outValue) const
+{
+    if (!clusterStateCache)
+    {
+        return CHIP_ERROR_INCORRECT_STATE;
+    }
+
+    chip::app::ConcreteAttributePath attributePath(endpointId, clusterId, attributeId);
+
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR err = clusterStateCache->Get(attributePath, reader);
+    if (err != CHIP_NO_ERROR)
+    {
+        return err;
+    }
+
+    return reader.Get(outValue);
+}
+
+CHIP_ERROR DeviceDataCache::GetVendorId(uint16_t &outValue) const
+{
+    return GetUint16Attribute(0,
+                              chip::app::Clusters::BasicInformation::Id,
+                              chip::app::Clusters::BasicInformation::Attributes::VendorID::Id,
+                              outValue);
+}
+
+CHIP_ERROR DeviceDataCache::GetProductId(uint16_t &outValue) const
+{
+    return GetUint16Attribute(0,
+                              chip::app::Clusters::BasicInformation::Id,
+                              chip::app::Clusters::BasicInformation::Attributes::ProductID::Id,
+                              outValue);
+}
+
 CHIP_ERROR DeviceDataCache::GetVendorName(std::string &outValue) const
 {
     return GetStringAttribute(0,

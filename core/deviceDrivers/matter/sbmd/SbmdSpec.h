@@ -233,9 +233,11 @@ namespace barton
     struct SbmdMatterMeta
     {
         std::vector<uint16_t> deviceTypes;
-        uint32_t revision;
+        std::optional<uint32_t> revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
         std::vector<SbmdAlias> aliases;        // Named Matter element definitions referenced by resources
+        std::optional<uint16_t> vendorId;
+        std::optional<uint16_t> productId;
     };
 
     /**
