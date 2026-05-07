@@ -77,12 +77,87 @@ def test_commission_thermostat_with_fan(
     assert fan_on is not None, "fanOn resource should exist on thermostat with Fan Control cluster"
 
 
+def test_read_initial_temperature(default_environment, matter_thermostat_with_fan):
+    """Verify the initial local temperature is reported correctly after commissioning."""
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "localTemperature")
+
+    _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan)
+
+    wait_for_resource_value(resource_updated_queue, "2100")
+
+
+def test_read_initial_heat_setpoint(default_environment, matter_thermostat_with_fan):
+    """Verify the initial heating setpoint is reported correctly after commissioning."""
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "heatSetpoint")
+
+    _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan)
+
+    wait_for_resource_value(resource_updated_queue, "2000")
+
+
+def test_read_initial_cool_setpoint(default_environment, matter_thermostat_with_fan):
+    """Verify the initial cooling setpoint is reported correctly after commissioning."""
+    client = default_environment.get_client()
+    resource_updated_queue = resource_update_listener(client, "coolSetpoint")
+
+    _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan)
+
+    wait_for_resource_value(resource_updated_queue, "2600")
+
+
+def test_read_absolute_heat_limits(default_environment, matter_thermostat_with_fan):
+    """Verify the absolute heat setpoint limits are reported correctly."""
+    client = default_environment.get_client()
+    min_queue = resource_update_listener(client, "absoluteMinHeatLimit")
+    max_queue = resource_update_listener(client, "absoluteMaxHeatLimit")
+
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+
+    # absMinHeatSetpointLimit=700 -> "0700", absMaxHeatSetpointLimit=3000 -> "3000"
+    wait_for_resource_value(min_queue, "0700")
+    wait_for_resource_value(max_queue, "3000")
+
+    # Verify readable via direct resource read
+    assert client.read_resource(
+        resource_uri(thermostat, "absoluteMinHeatLimit", endpoint_id=1)
+    ) == "0700"
+    assert client.read_resource(
+        resource_uri(thermostat, "absoluteMaxHeatLimit", endpoint_id=1)
+    ) == "3000"
+
+
+def test_read_absolute_cool_limits(default_environment, matter_thermostat_with_fan):
+    """Verify the absolute cool setpoint limits are reported correctly."""
+    client = default_environment.get_client()
+    min_queue = resource_update_listener(client, "absoluteMinCoolLimit")
+    max_queue = resource_update_listener(client, "absoluteMaxCoolLimit")
+
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+
+    # absMinCoolSetpointLimit=1600 -> "1600", absMaxCoolSetpointLimit=3200 -> "3200"
+    wait_for_resource_value(min_queue, "1600")
+    wait_for_resource_value(max_queue, "3200")
+
+    assert client.read_resource(
+        resource_uri(thermostat, "absoluteMinCoolLimit", endpoint_id=1)
+    ) == "1600"
+    assert client.read_resource(
+        resource_uri(thermostat, "absoluteMaxCoolLimit", endpoint_id=1)
+    ) == "3200"
+
+
 def test_read_fan_mode(default_environment, matter_thermostat_with_fan):
     """Verify fanMode resource is readable with initial value 'auto'."""
     client = default_environment.get_client()
     resource_updated_queue = resource_update_listener(client, "fanMode")
 
-    thermostat = _commission_thermostat_with_fan(
+    _commission_thermostat_with_fan(
         default_environment, matter_thermostat_with_fan
     )
 
@@ -90,7 +165,7 @@ def test_read_fan_mode(default_environment, matter_thermostat_with_fan):
 
 
 def test_write_fan_mode(default_environment, matter_thermostat_with_fan):
-    """Write the fan mode and verify it is updated."""
+    """Write the fan mode and verify it is updated on both Barton and the virtual device."""
     thermostat = _commission_thermostat_with_fan(
         default_environment, matter_thermostat_with_fan
     )
@@ -102,6 +177,44 @@ def test_write_fan_mode(default_environment, matter_thermostat_with_fan):
     assert client.write_resource(uri, "on")
     wait_for_resource_value(resource_updated_queue, "on")
 
+    # Verify the device-side fan mode changed
+    fan_state = matter_thermostat_with_fan.sideband.send("getFanState", {})
+    assert fan_state["fanMode"] == "on"
+
+
+def test_write_fan_mode_off(default_environment, matter_thermostat_with_fan):
+    """Write fan mode to 'off' and verify it is updated on both Barton and the device."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "fanMode")
+
+    uri = resource_uri(thermostat, "fanMode", endpoint_id=1)
+    assert client.write_resource(uri, "off")
+    wait_for_resource_value(resource_updated_queue, "off")
+
+    fan_state = matter_thermostat_with_fan.sideband.send("getFanState", {})
+    assert fan_state["fanMode"] == "off"
+
+
+def test_write_fan_mode_cycle(default_environment, matter_thermostat_with_fan):
+    """Cycle through all writable fan modes and verify each updates the device."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+    uri = resource_uri(thermostat, "fanMode", endpoint_id=1)
+
+    for mode in ("off", "on", "auto"):
+        queue = resource_update_listener(client, "fanMode")
+        assert client.write_resource(uri, mode)
+        wait_for_resource_value(queue, mode)
+
+        fan_state = matter_thermostat_with_fan.sideband.send("getFanState", {})
+        assert fan_state["fanMode"] == mode
+
 
 def test_read_fan_on(default_environment, matter_thermostat_with_fan):
     """Verify fanOn resource is readable with initial value 'false' (PercentCurrent is 0)."""
@@ -109,8 +222,193 @@ def test_read_fan_on(default_environment, matter_thermostat_with_fan):
     client = default_environment.get_client()
     resource_updated_queue = resource_update_listener(client, "fanOn")
 
-    thermostat = _commission_thermostat_with_fan(
+    _commission_thermostat_with_fan(
         default_environment, matter_thermostat_with_fan
     )
 
     wait_for_resource_value(resource_updated_queue, "false")
+
+
+def test_write_heat_setpoint(default_environment, matter_thermostat_with_fan):
+    """Write the heating setpoint and verify it is updated on both Barton and the device."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "heatSetpoint")
+
+    uri = resource_uri(thermostat, "heatSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "2200")
+    wait_for_resource_value(resource_updated_queue, "2200")
+    assert client.read_resource(uri) == "2200"
+
+    # Verify device-side setpoint changed
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedHeatingSetpoint"] == 2200
+
+
+def test_write_cool_setpoint(default_environment, matter_thermostat_with_fan):
+    """Write the cooling setpoint and verify it is updated on both Barton and the device."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "coolSetpoint")
+
+    uri = resource_uri(thermostat, "coolSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "2700")
+    wait_for_resource_value(resource_updated_queue, "2700")
+
+    # Verify device-side setpoint changed
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedCoolingSetpoint"] == 2700
+
+
+def test_write_system_mode(default_environment, matter_thermostat_with_fan):
+    """Write the system mode and verify it is updated on both Barton and the device."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "systemMode")
+
+    uri = resource_uri(thermostat, "systemMode", endpoint_id=1)
+    assert client.write_resource(uri, "cool")
+    wait_for_resource_value(resource_updated_queue, "cool")
+
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["systemMode"] == "cool"
+
+
+def test_sideband_temperature_change(default_environment, matter_thermostat_with_fan):
+    """Change local temperature via side-band and verify Barton receives the update."""
+    _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan)
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "localTemperature")
+
+    result = matter_thermostat_with_fan.sideband.send(
+        "setTemperature", {"temperature": 2350}
+    )
+    assert result["localTemperature"] == 2350
+
+    wait_for_resource_value(resource_updated_queue, "2350", timeout=10)
+
+
+def test_sideband_fan_mode_change(default_environment, matter_thermostat_with_fan):
+    """Change fan mode via side-band and verify Barton receives the update."""
+    _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan)
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "fanMode")
+
+    result = matter_thermostat_with_fan.sideband.send("setFanMode", {"mode": "off"})
+    assert result["fanMode"] == "off"
+
+    wait_for_resource_value(resource_updated_queue, "off", timeout=10)
+
+
+def test_write_heat_setpoint_near_min_limit(
+    default_environment, matter_thermostat_with_fan
+):
+    """Write heating setpoint near the absolute minimum limit and verify it is accepted."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "heatSetpoint")
+
+    # absMinHeatSetpointLimit is 700 (0700); write a value just above it
+    uri = resource_uri(thermostat, "heatSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "0800")
+    wait_for_resource_value(resource_updated_queue, "0800")
+
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedHeatingSetpoint"] == 800
+
+
+def test_write_heat_setpoint_near_max_limit(
+    default_environment, matter_thermostat_with_fan
+):
+    """Write heating setpoint near the absolute maximum limit and verify it is accepted."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "heatSetpoint")
+
+    # absMaxHeatSetpointLimit is 3000; write a value just below it
+    uri = resource_uri(thermostat, "heatSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "2900")
+    wait_for_resource_value(resource_updated_queue, "2900")
+
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedHeatingSetpoint"] == 2900
+
+
+def test_write_cool_setpoint_near_min_limit(
+    default_environment, matter_thermostat_with_fan
+):
+    """Write cooling setpoint near the absolute minimum limit and verify it is accepted."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "coolSetpoint")
+
+    # absMinCoolSetpointLimit is 1600; write a value just above it
+    uri = resource_uri(thermostat, "coolSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "1700")
+    wait_for_resource_value(resource_updated_queue, "1700")
+
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedCoolingSetpoint"] == 1700
+
+
+def test_write_cool_setpoint_near_max_limit(
+    default_environment, matter_thermostat_with_fan
+):
+    """Write cooling setpoint near the absolute maximum limit and verify it is accepted."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    resource_updated_queue = resource_update_listener(client, "coolSetpoint")
+
+    # absMaxCoolSetpointLimit is 3200; write a value just below it
+    uri = resource_uri(thermostat, "coolSetpoint", endpoint_id=1)
+    assert client.write_resource(uri, "3100")
+    wait_for_resource_value(resource_updated_queue, "3100")
+
+    state = matter_thermostat_with_fan.sideband.send("getState", {})
+    assert state["occupiedCoolingSetpoint"] == 3100
+
+
+def test_write_control_sequence_of_operation(
+    default_environment, matter_thermostat_with_fan
+):
+    """Write controlSequenceOfOperation and verify the enum round-trips correctly."""
+    thermostat = _commission_thermostat_with_fan(
+        default_environment, matter_thermostat_with_fan
+    )
+    client = default_environment.get_client()
+
+    uri = resource_uri(thermostat, "controlSequenceOfOperation", endpoint_id=1)
+
+    for seq_value in (
+        "coolingOnly",
+        "heatingOnly",
+        "coolingAndHeatingFourPipes",
+    ):
+        queue = resource_update_listener(client, "controlSequenceOfOperation")
+        assert client.write_resource(uri, seq_value)
+        wait_for_resource_value(queue, seq_value)
+        assert client.read_resource(uri) == seq_value
+
