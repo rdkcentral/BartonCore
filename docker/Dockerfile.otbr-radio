@@ -36,7 +36,7 @@
 #   - Devcontainer: This overlay is included by default in the devcontainer
 #       compose stack.
 #
-# See docs/THREAD_BORDER_ROUTER_SUPPORT.md for full setup instructions,
+# See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for full setup instructions,
 # including how to use USB-IP to forward a locally connected radio to a remote
 # dev server.
 #

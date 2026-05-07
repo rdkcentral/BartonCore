@@ -39,7 +39,7 @@
 #   DBUS_SOCKET_PATH          - socket path for the private system bus
 #   DBUS_SYSTEM_BUS_ADDRESS   - D-Bus address used by otbr-agent and clients
 #
-# See docs/THREAD_BORDER_ROUTER_SUPPORT.md for USB-IP setup and hardware info.
+# See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for USB-IP setup and hardware info.
 #
 
 set -e
@@ -99,13 +99,13 @@ if [ -z "${RADIO_DEVICE}" ]; then
     echo "[otbr-radio] ERROR: RADIO_DEVICE is not set." >&2
     echo "[otbr-radio]        Set it in docker/.env or export before starting:" >&2
     echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
-    echo "[otbr-radio]        See docs/THREAD_BORDER_ROUTER_SUPPORT.md for setup instructions." >&2
+    echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
     exit 1
 fi
 if [ ! -e "${RADIO_DEVICE}" ]; then
     echo "[otbr-radio] ERROR: USB radio device '${RADIO_DEVICE}' not found." >&2
     echo "[otbr-radio]        Check that the thread radio is connected and USB-IP is attached." >&2
-    echo "[otbr-radio]        See docs/THREAD_BORDER_ROUTER_SUPPORT.md for setup instructions." >&2
+    echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
     exit 1
 fi
 echo "[otbr-radio] Using USB radio device: ${RADIO_DEVICE}"
@@ -211,50 +211,133 @@ echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID}, pts: ${PT
 # btattach creates a new HCI device for the radio (e.g. hci1).  We detect
 # its index and write it to the shared D-Bus volume so Barton can read it
 # at runtime to configure the Matter SDK's BLE adapter selection.
+#
+# A background monitor watches btattach and restarts the BLE stack if it
+# exits (e.g. after a USB-IP disconnect/reconnect cycle).
 ###############################################################################
 HOST_NETNS="/run/host-netns"
+
+# ble_attach — run btattach in the host network namespace against the
+# pts_hci device and identify the new HCI adapter.  On success, starts
+# bluetoothd and writes ble_adapter_id so Barton picks the right adapter.
+# Sets BTATTACH_PID in the caller's scope.
+ble_attach() {
+    # Snapshot existing HCI devices before btattach creates a new one.
+    local hciBefore
+    hciBefore=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
+
+    local ptsDevice
+    ptsDevice=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
+
+    echo "[otbr-radio] Attaching HCI device ${ptsDevice} via btattach (host netns)..."
+    nsenter --net="${HOST_NETNS}" btattach -B "${ptsDevice}" -S 115200 &
+    BTATTACH_PID=$!
+
+    # Wait up to 5 seconds for a new HCI device to appear.
+    local waited=0
+
+    while [ ${waited} -lt 5 ]; do
+        sleep 1
+        waited=$((waited + 1))
+
+        local hciAfter
+        hciAfter=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
+        local radioHci=""
+
+        for hci in ${hciAfter}; do
+
+            if ! echo "${hciBefore}" | grep -qw "${hci}"; then
+                radioHci="${hci}"
+                break
+            fi
+        done
+
+        if [ -n "${radioHci}" ]; then
+            local radioHciIndex="${radioHci#hci}"
+            echo "[otbr-radio] Radio HCI device: ${radioHci} (index ${radioHciIndex})"
+            echo "${radioHciIndex}" > "${DBUS_DIR}/ble_adapter_id"
+            echo "[otbr-radio] Wrote BLE adapter index ${radioHciIndex} to ${DBUS_DIR}/ble_adapter_id"
+
+            # Kill any stale bluetoothd before starting a fresh instance.
+            pkill -x bluetoothd 2>/dev/null || true
+            sleep 0.5
+            echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
+            nsenter --net="${HOST_NETNS}" bluetoothd &
+            sleep 1
+            echo "[otbr-radio] bluetoothd started."
+
+            return 0
+        fi
+    done
+
+    echo "[otbr-radio] WARNING: btattach did not create a new HCI device within 5s." >&2
+
+    if ! kill -0 ${BTATTACH_PID} 2>/dev/null; then
+        echo "[otbr-radio] WARNING: btattach (PID ${BTATTACH_PID}) already exited." >&2
+    fi
+
+    return 1
+}
+
+# ble_monitor — background loop that restarts btattach (and bluetoothd)
+# whenever btattach exits.  This handles USB-IP disconnect/reconnect
+# cycles where cpcd and bt_host_cpc_hci_bridge survive but btattach
+# loses the HCI device and exits.
+ble_monitor() {
+    local backoff=2
+
+    while true; do
+
+        if ! kill -0 ${BTATTACH_PID} 2>/dev/null; then
+            echo "[otbr-radio] btattach (PID ${BTATTACH_PID}) exited — restarting BLE stack..." >&2
+
+            # If bt_host_cpc_hci_bridge also died, wait for it to come back.
+            if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
+                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; waiting for it to restart..." >&2
+                sleep "${backoff}"
+                continue
+            fi
+
+            # pts_hci must still be valid.
+            if [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+                echo "[otbr-radio] pts_hci symlink missing; waiting..." >&2
+                sleep "${backoff}"
+                continue
+            fi
+
+            if ble_attach; then
+                echo "[otbr-radio] BLE stack restarted successfully."
+                backoff=2
+            else
+                echo "[otbr-radio] BLE stack restart failed; retrying in ${backoff}s..." >&2
+
+                if [ ${backoff} -lt 30 ]; then
+                    backoff=$((backoff * 2))
+                fi
+            fi
+        fi
+
+        sleep "${backoff}"
+    done
+}
+
 if [ ! -e "${HOST_NETNS}" ]; then
     echo "[otbr-radio] WARNING: Host network namespace not mounted at ${HOST_NETNS}." >&2
     echo "[otbr-radio]          Bluetooth support will not be available." >&2
     echo "[otbr-radio]          Add '- /proc/1/ns/net:/run/host-netns:ro' to volumes." >&2
 else
-    # Snapshot existing HCI devices before btattach creates a new one.
-    HCI_BEFORE=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
+    BTATTACH_PID=0
 
-    echo "[otbr-radio] Attaching HCI device ${PTS_DEVICE} via btattach (host netns)..."
-    nsenter --net="${HOST_NETNS}" btattach -B "${PTS_DEVICE}" -S 115200 &
-    BTATTACH_PID=$!
-    sleep 2
-    echo "[otbr-radio] btattach started (PID ${BTATTACH_PID})."
-
-    # Identify the new HCI device created by btattach.
-    HCI_AFTER=$(ls /sys/class/bluetooth/ 2>/dev/null | sort)
-    RADIO_HCI=""
-
-    for hci in ${HCI_AFTER}; do
-        if ! echo "${HCI_BEFORE}" | grep -qw "${hci}"; then
-            RADIO_HCI="${hci}"
-            break
-        fi
-    done
-
-    if [ -z "${RADIO_HCI}" ]; then
-        echo "[otbr-radio] WARNING: Could not identify new HCI device; falling back to last in list." >&2
-        RADIO_HCI=$(echo "${HCI_AFTER}" | tail -1)
+    if ble_attach; then
+        echo "[otbr-radio] BLE stack initialized."
+    else
+        echo "[otbr-radio] WARNING: Initial BLE attach failed; monitor will retry." >&2
     fi
 
-    RADIO_HCI_INDEX=${RADIO_HCI#hci}
-    echo "[otbr-radio] Radio HCI device: ${RADIO_HCI} (index ${RADIO_HCI_INDEX})"
-
-    # Write the radio's HCI index to the shared volume so Barton can
-    # discover which adapter to use at runtime.
-    echo "${RADIO_HCI_INDEX}" > "${DBUS_DIR}/ble_adapter_id"
-    echo "[otbr-radio] Wrote BLE adapter index ${RADIO_HCI_INDEX} to ${DBUS_DIR}/ble_adapter_id"
-
-    echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
-    nsenter --net="${HOST_NETNS}" bluetoothd &
-    sleep 1
-    echo "[otbr-radio] bluetoothd started."
+    # Start background monitor to handle USB-IP reconnects.
+    ble_monitor &
+    BLE_MONITOR_PID=$!
+    echo "[otbr-radio] BLE monitor started (PID ${BLE_MONITOR_PID})."
 fi
 
 ###############################################################################

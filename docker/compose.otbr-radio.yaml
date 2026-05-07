@@ -64,7 +64,7 @@
 # ─── USB-IP (remote radio forwarding) ────────────────────────────────────────
 #
 #   If your dev server is remote and the radio is on your local workstation,
-#   see docs/THREAD_BORDER_ROUTER_SUPPORT.md for USB-IP setup instructions.
+#   see docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for USB-IP setup instructions.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 

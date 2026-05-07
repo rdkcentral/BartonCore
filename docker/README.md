@@ -41,7 +41,7 @@ It always includes `compose.yaml` as the base, and accepts flags to layer on ove
 | `-e <env>` | Pass extra environment variables |
 | `-d` | Mount development volumes |
 | `-n` | Disable TTY (non-interactive mode) |
-| `-T` | Start the optional `otbr-radio` container for real USB Thread radio support (see `docs/THREAD_BORDER_ROUTER_SUPPORT.md`) |
+| `-T` | Start the optional `otbr-radio` container for real USB Thread radio support (see `docs/REMOTE_RADIO_FOR_DEVELOPMENT.md`) |
 
 Example:
 
