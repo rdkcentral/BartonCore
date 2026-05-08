@@ -142,8 +142,6 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 - **WHEN** a Matter event fires for a cluster/event matching an event mapper
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
 
-### Requirement: SBMD schema validation
-SBMD spec files SHALL be validated during the build process against the versioned JSON schema selected from the spec's `schemaVersion`, using the repository's versioned schema naming/location convention (for example, `core/deviceDrivers/matter/sbmd/schema/v2/sbmd-spec-schema-v{schemaVersion}.json`, such as `sbmd-spec-schema-v2.1.json`). The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 #### Scenario: Event script suppresses update by omitting output
 - **WHEN** an event script returns an object without an `output` key (e.g., `{}`)
 - **THEN** the resource SHALL NOT be updated and no error SHALL be logged — this is the standard mechanism for ignoring non-state-change events
@@ -160,7 +158,7 @@ A resource mapper SHALL support a `seedFrom` section (in addition to the existin
 - **THEN** the resource SHALL be re-seeded from the attribute cache before any new event arrives
 
 ### Requirement: SBMD schema validation
-SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
+SBMD spec files SHALL be validated during the build process against the versioned JSON schema selected from the spec's `schemaVersion`, using the repository's versioned schema naming/location convention (for example, `core/deviceDrivers/matter/sbmd/schema/v2/sbmd-spec-schema-v{schemaVersion}.json`, such as `sbmd-spec-schema-v2.1.json`). The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 
 #### Scenario: Schema validation at build time
 - **WHEN** the project is built with SBMD specs present
