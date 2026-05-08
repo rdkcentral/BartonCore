@@ -95,12 +95,19 @@ chip-tool doorlock read lock-state 0x1234 1
 
 The integration test framework uses matter.js virtual devices backed by Node.js. These offer programmatic control via a sideband API.
 
-### Available Device Types
+### Discovering Available Device Types
 
-| Python Class | JS Entry Point | Location |
-|---|---|---|
-| `MatterLight` | `LightDevice.js` | `testing/mocks/devices/matter/matter_light.py` |
-| `MatterDoorLock` | `DoorLockDevice.js` | `testing/mocks/devices/matter/matter_door_lock.py` |
+To see current virtual device wrappers and their Python classes:
+
+```bash
+ls testing/mocks/devices/matter/
+```
+
+To see current matter.js device entry points:
+
+```bash
+ls testing/mocks/devices/matterjs/src/
+```
 
 ### How They Work
 

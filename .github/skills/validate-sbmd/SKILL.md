@@ -62,19 +62,13 @@ This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitio
 | Stub generator | `scripts/ci/generate_sbmd_stubs.py` |
 | JS embedding script | `scripts/embed-js-as-header.py` |
 
-## Current SBMD Specs
+## Discovering Available SBMD Specs
 
-| Spec File | Device Type |
-|-----------|-------------|
-| `light.sbmd` | Light (OnOff, LevelControl, ColorControl) |
-| `door-lock.sbmd` | Door Lock |
-| `contact-sensor.sbmd` | Contact Sensor |
-| `occupancy-sensor.sbmd` | Occupancy Sensor |
-| `air-quality-sensor.sbmd` | Air Quality Sensor |
-| `humidity-sensor.sbmd` | Humidity Sensor |
-| `temperature-sensor.sbmd` | Temperature Sensor |
-| `water-leak-detector.sbmd` | Water Leak Detector |
-| `ikea-timmerflotte.sbmd` | IKEA Timmerflotte Air Quality Sensor |
+To see the current set of specs in the repository, list the directory contents:
+
+```bash
+ls core/deviceDrivers/matter/sbmd/specs/
+```
 
 ## Error Recovery
 
