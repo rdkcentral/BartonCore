@@ -150,7 +150,7 @@ bcore_add_cmocka_test(
         ${CMAKE_CURRENT_SOURCE_DIR}/src/deviceServiceHashTest.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/deviceServiceHash.c
     WRAPPED_FUNCTIONS fread ferror
-    LINK_LIBRARIES BartonCommon::xhLog
+    LINK_LIBRARIES BartonCommon::xhLog BartonCommon::xhUtil
 )
 
 if (BCORE_MATTER)

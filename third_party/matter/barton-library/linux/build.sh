@@ -96,7 +96,7 @@ LDFLAGS="${LDFLAGS%,}]"
 PROJECT_INCLUDE_DIRS="${PROJECT_INCLUDE_DIRS%,}]"
 
 pushd $CHIP_ROOT
-. scripts/activate.sh
+. scripts/activate.sh -p none
 popd
 
 # Grab the semantic version from the nearest git tag

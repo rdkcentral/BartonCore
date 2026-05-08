@@ -124,11 +124,7 @@ if (BCORE_MATTER)
 
     pkg_check_modules(OPENSSL REQUIRED openssl)
 
-    list(APPEND CMAKE_BUILD_RPATH "/usr/local/openssl/lib")
-    list(APPEND CMAKE_INSTALL_RPATH "/usr/local/openssl/lib")
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-rpath,/usr/local/openssl/lib")
 
     bcore_find_include(
         MATTER_INCLUDE_DIR
@@ -166,8 +162,12 @@ if (BCORE_MATTER)
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
-        # Validates all .sbmd files against the JSON schema during build
-        set(SBMD_SCHEMA_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/sbmd-spec-schema.json")
+        
+        # Validates all .sbmd files against the versioned JSON schemas during build.
+        # SBMD_SCHEMA_DIR points to the top-level schema directory; the validator
+        # recursively searches subdirectories (e.g. v2/, v3/) for a schema file
+        # matching each spec's declared schemaVersion.
+        set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
         set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts")
         set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
         set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
@@ -178,6 +178,10 @@ if (BCORE_MATTER)
 
         # Collect all .sbmd files for dependency tracking and validation
         file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
+
+        # Collect all schema files recursively so CMake re-runs validation when
+        # any schema changes, including schemas added in new version subdirectories.
+        file(GLOB_RECURSE SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
 
         # Generate stubs from .d.ts file
         add_custom_command(
@@ -190,10 +194,10 @@ if (BCORE_MATTER)
 
         # Create a custom target that validates SBMD specs
         add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_FILE} ${SBMD_SPEC_FILES}
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
                     --stubs ${SBMD_STUBS_FILE}
                     --js-engine ${BCORE_MATTER_SBMD_JS_ENGINE}
-            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILE} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
+            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             COMMENT "Validating SBMD specification files against schema..."
         )
@@ -392,7 +396,7 @@ if (BCORE_GEN_GIR)
 
     add_custom_command(
         TARGET BartonCore POST_BUILD
-        COMMAND env LSAN_OPTIONS=detect_leaks=0 LD_LIBRARY_PATH=/usr/local/openssl/lib /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
+        COMMAND env LSAN_OPTIONS=detect_leaks=0 /bin/sh ${CMAKE_CURRENT_BINARY_DIR}/run_g-ir
         COMMENT "Invoking gobject introspection"
     )
 

@@ -83,17 +83,41 @@ bool MatterDriverFactory::RegisterDriver(std::unique_ptr<MatterDeviceDriver> dri
 MatterDeviceDriver *barton::MatterDriverFactory::GetDriver(const DeviceDataCache *dataCache)
 {
     MatterDeviceDriver *result = nullptr;
+    std::string driverName;
 
-    // iterate over the drivers and allow them to claim the device.  First one to claim it gets it.  Order
-    // of drivers is deterministic since we store in std::map.
+    // Two-pass claiming priority:
+    // 1. Vendor-specific drivers get higher priority since they are tailored to
+    //    a specific device model (vendorId/productId match)
+    // 2. Generic device-type drivers get lower priority
+
+    // First pass: try vendor-specific drivers
     for (auto const &entry : drivers)
     {
-        if (entry.second->ClaimDevice(dataCache))
+        if (entry.second->IsVendorSpecificDriver() && entry.second->ClaimDevice(dataCache))
         {
-            icInfo("%s claimed the device", entry.first.c_str());
+            driverName = entry.first;
             result = entry.second;
             break;
         }
+    }
+
+    // Second pass: try generic device-type drivers
+    if (result == nullptr)
+    {
+        for (auto const &entry : drivers)
+        {
+            if (!entry.second->IsVendorSpecificDriver() && entry.second->ClaimDevice(dataCache))
+            {
+                driverName = entry.first;
+                result = entry.second;
+                break;
+            }
+        }
+    }
+
+    if (result)
+    {
+        icInfo("%s claimed the device", driverName.c_str());
     }
 
     return result;

@@ -86,18 +86,13 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             aPath.mClusterId,
             aPath.mAttributeId);
 
-    // Fast O(1) lookup for readable attributes
-    auto it = device->readableAttributeLookup.find(aPath);
-    if (it == device->readableAttributeLookup.end())
+    // Fast O(1) lookup for readable attributes (may have multiple bindings per path)
+    auto range = device->readableAttributeLookup.equal_range(aPath);
+    if (range.first == range.second)
     {
         // Not a readable attribute with a mapper - this is the common case
         return;
     }
-
-    const auto &uri = it->second.uri;
-    const auto &binding = it->second.binding;
-
-    icDebug("Found readable attribute match for URI: %s", uri.c_str());
 
     // Check if we have a script engine
     if (!device->script)
@@ -106,47 +101,61 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         return;
     }
 
-    // Get the attribute data from the cache
-    chip::TLV::TLVReader reader;
-    if (cache == nullptr || cache->Get(aPath, reader) != CHIP_NO_ERROR)
+    if (cache == nullptr)
     {
-        icError("Failed to get attribute data from cache for device %s", device->deviceId.c_str());
+        icError("Null cache pointer for device %s", device->deviceId.c_str());
         return;
     }
 
-    // Execute the script to map the TLV data to a string value
-    std::string outValue;
-    if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+    for (auto it = range.first; it != range.second; ++it)
     {
-        icError("Failed to execute read mapping script for URI: %s", uri.c_str());
-        return;
-    }
+        const auto &uri = it->second.uri;
+        const auto &binding = it->second.binding;
 
-    icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
+        icDebug("Found readable attribute match for URI: %s", uri.c_str());
 
-    // Extract the resource ID from the URI
-    // URI format is expected to be something like "/ep/deviceId/r/resourceId"
-    const char *resourceId = strrchr(uri.c_str(), '/');
-    if (resourceId != nullptr)
-    {
-        resourceId++; // Skip the '/'
-
-        const char *resourceEndpointId = nullptr;
-        if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+        // Get the attribute data from the cache (re-read for each binding since TLVReader is consumed)
+        chip::TLV::TLVReader reader;
+        if (cache->Get(aPath, reader) != CHIP_NO_ERROR)
         {
-            resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+            icError("Failed to get attribute data from cache for URI: %s", uri.c_str());
+            continue;
         }
 
-        // Call updateResource to notify DeviceService of the change
-        updateResource(device->deviceId.c_str(),
-                       resourceEndpointId,
-                       resourceId,
-                       outValue.c_str(),
-                       nullptr); // No additional metadata for now
-    }
-    else
-    {
-        icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        // Execute the script to map the TLV data to a string value
+        std::string outValue;
+        if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        {
+            icError("Failed to execute read mapping script for URI: %s", uri.c_str());
+            continue;
+        }
+
+        icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
+
+        // Extract the resource ID from the URI
+        // URI format is expected to be something like "/ep/deviceId/r/resourceId"
+        const char *resourceId = strrchr(uri.c_str(), '/');
+        if (resourceId != nullptr && *(resourceId + 1) != '\0')
+        {
+            resourceId++; // Skip the '/'
+
+            const char *resourceEndpointId = nullptr;
+            if (binding.attribute->resourceEndpointId.has_value() && !binding.attribute->resourceEndpointId->empty())
+            {
+                resourceEndpointId = binding.attribute->resourceEndpointId->c_str();
+            }
+
+            // Call updateResource to notify DeviceService of the change
+            updateResource(device->deviceId.c_str(),
+                           resourceEndpointId,
+                           resourceId,
+                           outValue.c_str(),
+                           nullptr); // No additional metadata for now
+        }
+        else
+        {
+            icError("Failed to extract resource ID from URI: %s", uri.c_str());
+        }
     }
 }
 
@@ -253,6 +262,43 @@ bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::Endpoi
     }
 
     return false;
+}
+
+bool MatterDevice::ResolveEndpointForCluster(chip::ClusterId clusterId,
+                                             std::optional<uint32_t> sbmdEndpointIndex,
+                                             chip::EndpointId &outEndpointId)
+{
+    if (!deviceDataCache)
+    {
+        icError("No device data cache for device %s", deviceId.c_str());
+        return false;
+    }
+
+    if (sbmdEndpointIndex.has_value())
+    {
+        if (!GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), outEndpointId))
+        {
+            return false;
+        }
+
+        // The endpoint map provides a default Matter endpoint for this SBMD
+        // index, but the SBMD endpoint's resources may reference clusters
+        // hosted on other Matter endpoints. Check whether the mapped endpoint
+        // hosts the requested cluster; if not, scan all endpoints.
+        if (deviceDataCache->EndpointHasServerCluster(outEndpointId, clusterId))
+        {
+            return true;
+        }
+
+        // Mapped endpoint doesn't host this cluster — scan all endpoints.
+        icDebug("SBMD endpoint %u (Matter EP %u) does not host cluster 0x%x, "
+                "falling back to cluster-based lookup",
+                sbmdEndpointIndex.value(),
+                outEndpointId,
+                clusterId);
+    }
+
+    return GetEndpointForCluster(clusterId, outEndpointId);
 }
 
 bool MatterDevice::ResolveEndpointMap(const std::vector<uint16_t> &driverSupportedDeviceTypes)
@@ -398,15 +444,8 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
     {
         const auto &attribute = mapper.readAttribute.value();
 
-        bool endpointFound = false;
-        if (sbmdEndpointIndex.has_value())
-        {
-            endpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-        }
-        else
-        {
-            endpointFound = GetEndpointForCluster(attribute.clusterId, endpointId);
-        }
+        bool endpointFound = ResolveEndpointForCluster(attribute.clusterId, sbmdEndpointIndex, endpointId);
+
         if (!endpointFound)
         {
             if (sbmdEndpointIndex.has_value())
@@ -420,6 +459,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
             {
                 icError("No endpoint found hosting cluster 0x%x at URI: %s", attribute.clusterId, uri);
             }
+
             return false;
         }
 
@@ -435,11 +475,11 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
                 attribute.clusterId,
                 attribute.attributeId);
 
-        // Add to fast lookup map for OnAttributeData callback
+        // Add to fast lookup map for CacheCallback::OnAttributeChanged callback
         AttributeReadBinding readBinding;
         readBinding.uri = uri;
         readBinding.binding = binding;
-        readableAttributeLookup[binding.attributePath] = std::move(readBinding);
+        readableAttributeLookup.emplace(binding.attributePath, std::move(readBinding));
         icDebug("Added readable attribute to fast lookup (endpoint: %u, cluster: 0x%x, attribute: 0x%x)",
                 endpointId,
                 attribute.clusterId,
@@ -452,15 +492,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
 
         // Populate feature map for the command
         SbmdCommand &cmd = binding.command.value();
-        bool cmdEndpointFound = false;
-        if (sbmdEndpointIndex.has_value())
-        {
-            cmdEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-        }
-        else
-        {
-            cmdEndpointFound = GetEndpointForCluster(cmd.clusterId, endpointId);
-        }
+        bool cmdEndpointFound = ResolveEndpointForCluster(cmd.clusterId, sbmdEndpointIndex, endpointId);
         if (!cmdEndpointFound)
         {
             if (sbmdEndpointIndex.has_value())
@@ -478,6 +510,7 @@ bool MatterDevice::BindResourceReadInfo(const char *uri,
                         cmd.name.c_str(),
                         uri);
             }
+
             return false;
         }
 
@@ -593,15 +626,7 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
 
     // Find the endpoint using the SBMD endpoint index, or fall back to cluster lookup
     chip::EndpointId endpointId;
-    bool eventEndpointFound = false;
-    if (sbmdEndpointIndex.has_value())
-    {
-        eventEndpointFound = GetEndpointForSbmdIndex(sbmdEndpointIndex.value(), endpointId);
-    }
-    else
-    {
-        eventEndpointFound = GetEndpointForCluster(event.clusterId, endpointId);
-    }
+    bool eventEndpointFound = ResolveEndpointForCluster(event.clusterId, sbmdEndpointIndex, endpointId);
     if (!eventEndpointFound)
     {
         if (sbmdEndpointIndex.has_value())
@@ -615,6 +640,7 @@ bool MatterDevice::BindResourceEventInfo(const char *uri,
         {
             icError("No endpoint found hosting cluster 0x%X for URI: %s", event.clusterId, uri);
         }
+
         return false;
     }
 

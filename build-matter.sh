@@ -82,9 +82,6 @@ else
 
     ./scripts/checkout_submodules.py --shallow --platform linux
 
-    # Ensure that the older OpenSSL version is used for the build
-    export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH
-
     git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_REF} && exit 1)
     ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
 

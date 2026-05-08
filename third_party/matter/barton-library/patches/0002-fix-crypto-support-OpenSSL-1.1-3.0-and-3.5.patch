@@ -1,0 +1,35 @@
+From 00a2fb5d67e8351116cbdfda48cebdc86acb1806 Mon Sep 17 00:00:00 2001
+From: Thomas Lea <thomas_lea@comcast.com>
+Date: Tue, 5 May 2026 11:36:35 -0500
+Subject: [PATCH] fix(crypto): support OpenSSL 1.1, 3.0, and 3.5 in
+ ExtractPubkeyFromX509Cert
+
+EVP_PKEY_base_id() and EVP_PKEY_bits() were deprecated in OpenSSL 3.0
+and removed in OpenSSL 3.5. Use preprocessor guards to call the legacy
+APIs on OpenSSL < 3.0 and the replacement EVP_PKEY_get_base_id() /
+EVP_PKEY_get_bits() on OpenSSL >= 3.0.
+---
+ src/crypto/CHIPCryptoPALOpenSSL.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/crypto/CHIPCryptoPALOpenSSL.cpp b/src/crypto/CHIPCryptoPALOpenSSL.cpp
+index d787bc1c..f232eb36 100644
+--- a/src/crypto/CHIPCryptoPALOpenSSL.cpp
++++ b/src/crypto/CHIPCryptoPALOpenSSL.cpp
+@@ -1538,8 +1538,13 @@ CHIP_ERROR ExtractPubkeyFromX509Cert(const ByteSpan & certificate, Crypto::P256P
+ 
+     pkey = X509_get_pubkey(x509certificate);
+     VerifyOrExit(pkey != nullptr, err = CHIP_ERROR_INTERNAL);
++#if defined(OPENSSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER < 0x30000000L
+     VerifyOrExit(EVP_PKEY_base_id(pkey) == EVP_PKEY_EC, err = CHIP_ERROR_INTERNAL);
+     VerifyOrExit(EVP_PKEY_bits(pkey) == 256, err = CHIP_ERROR_INTERNAL);
++#else
++    VerifyOrExit(EVP_PKEY_get_base_id(pkey) == EVP_PKEY_EC, err = CHIP_ERROR_INTERNAL);
++    VerifyOrExit(EVP_PKEY_get_bits(pkey) == 256, err = CHIP_ERROR_INTERNAL);
++#endif
+ 
+     ec_key = EVP_PKEY_get1_EC_KEY(pkey);
+     VerifyOrExit(ec_key != nullptr, err = CHIP_ERROR_NO_MEMORY);
+-- 
+2.51.0
+
