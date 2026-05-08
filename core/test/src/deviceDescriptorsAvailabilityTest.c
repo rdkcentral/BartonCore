@@ -75,15 +75,6 @@ gchar *__wrap_b_core_property_provider_get_property_as_string(BCorePropertyProvi
                                                               const char *propName,
                                                               const char *defValue)
 {
-    // not great but this unit test erroneously runs in different threads which is a big no-no
-    // in cmocka. When it tries to ask about sslVerify prop stuff, it's a different thread
-    // context and so we can't rely on mocked types. Just return "none" - we don't care about
-    // TLS for any of this.
-    if (stringCompare(propName, "cpe.sslCert.validateForHttpsToServer", false) == 0)
-    {
-        return strdup("none");
-    }
-
     char *val = mock_ptr_type(char *);
     if (val != NULL)
     {
