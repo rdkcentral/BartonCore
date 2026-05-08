@@ -29,6 +29,11 @@ matterMeta:
         attributeId: "0x0000"    # LockState attribute
         name: "LockState"
         type: "uint8"            # DlLockState enum (uint8)
+    - name: "lockOperation"
+      event:
+        clusterId: "0x0101"      # Door Lock cluster
+        eventId: "0x0002"        # LockOperation event
+        name: "LockOperation"
 
 # Subscription reporting configuration, controlling min/max for wildcard attribute reporting configuration
 reporting:
@@ -51,9 +56,30 @@ endpoints:
           - "emitEvents"  # Changes generate events to subscribers
         prerequisites:
           - alias: "lockState"
+          - alias: "lockOperation"
         mapper:
-          # Read mapper: Matter LockState attribute -> Barton boolean
-          read:
+          # Event mapper: Matter LockOperation event -> Barton boolean
+          event:
+            alias: "lockOperation"
+
+            # LockOperation event TLV struct fields:
+            #   Tag 0: LockOperationType (enum8)
+            #     0 = Lock, 1 = Unlock, 2 = NonAccessUserEvent, 3 = ForcedUserEvent, 4 = Unlatch
+            script: |
+              var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+              var opType = event[0];
+              if (opType === 0) {
+                return { output: 'true' };
+              } else if (opType === 1) {
+                return { output: 'false' };
+              } else {
+                // Non-state-change event (2=NonAccessUserEvent, 3=ForcedUserEvent, 4=Unlatch)
+                // Do not update the resource
+                return {};
+              }
+
+          # SeedFrom mapper: seed locked resource initial value from LockState attribute cache
+          seedFrom:
             alias: "lockState"
 
             # LockState enum values:

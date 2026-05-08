@@ -279,7 +279,7 @@ namespace barton
         /**
          * Convert a Matter event TLV to a Barton resource string value.
          *
-         * Script input JSON:
+         * Script input JSON (available as `sbmdEventArgs` in the script):
          * {
          *     "tlvBase64": <base64-encoded TLV event data>,
          *     "deviceUuid": <device UUID>,
@@ -295,10 +295,23 @@ namespace barton
          *     "output": <Barton string representation of the event data>
          * }
          *
+         * If the script omits the "output" key but returns a plain object (e.g., returns {}),
+         * the event is intentionally suppressed: MapEvent returns true with outValue left empty.
+         * The caller MUST check outValue.empty() and skip updateResource in that case.
+         * This is useful when an event type carries multiple operation sub-types, only some of
+         * which represent a resource state change. For example, a LockOperation event may carry
+         * a lock, unlock, or door-sense operation; a script can return {} for sub-types it does
+         * not need to propagate, avoiding spurious resource updates.
+         *
+         * If the script returns a non-object (undefined, null, a primitive), that is always
+         * treated as a script error regardless of any missing "output" key — MapEvent returns false.
+         *
          * @param eventInfo Information about the Matter event
          * @param reader TLV reader positioned at the event data
-         * @param outValue Will contain the Barton string representation
-         * @return true if mapping was successful, false otherwise
+         * @param outValue Will contain the Barton string representation on success.
+         *                 Empty when the script intentionally suppressed the update.
+         * @return true if mapping ran successfully (including intentional suppression),
+         *         false if the script itself failed (exception, compile error, etc.)
          */
         virtual bool MapEvent(const SbmdEvent &eventInfo,
                               chip::TLV::TLVReader &reader,

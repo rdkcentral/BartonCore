@@ -153,3 +153,4 @@ Drivers MAY implement these additional callbacks:
 - `subsystemInitialized(ctx)` — notification that the driver's subsystem has been initialized
 - `serviceStatusChanged(ctx, status)` — notification when the device service status changes
 - `commFailTimeoutSecsChanged(driver, device, commFailTimeoutSecs)` — notification when the comm-fail timeout has changed
+- `metadataUpdated(driver, device, key, value)` — notification when a metadata key is persisted for a device managed by this driver; called synchronously from `setMetadata()` after each persisted change

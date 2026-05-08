@@ -39,12 +39,44 @@ import { DoorLock } from "@matter/main/clusters";
 import { VirtualDevice } from "./VirtualDevice.js";
 import { parseArgs } from "./parseArgs.js";
 
+/**
+ * Extends the default DoorLockServer to emit LockOperation events when Matter
+ * LockDoor / UnlockDoor commands are received. The spec-compliant server must
+ * emit these events for every state change regardless of source (Matter 1.5,
+ * section 5.2.6.3), but matter.js does not do so by default.
+ */
+class DoorLockServerWithEvents extends DoorLockRequirements.DoorLockServer {
+    lockDoor() {
+        super.lockDoor();
+        this.events.lockOperation.emit({
+            lockOperationType: DoorLock.LockOperationType.Lock,
+            operationSource: DoorLock.OperationSource.Remote,
+            userIndex: null,
+            fabricIndex: null,
+            sourceNode: null,
+        });
+    }
+
+    unlockDoor() {
+        super.unlockDoor();
+        this.events.lockOperation.emit({
+            lockOperationType: DoorLock.LockOperationType.Unlock,
+            operationSource: DoorLock.OperationSource.Remote,
+            userIndex: null,
+            fabricIndex: null,
+            sourceNode: null,
+        });
+    }
+}
+
 export class DoorLockDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
             deviceName: "Virtual Door Lock",
             ...options,
         });
+
+        this.initialLockState = DoorLock.LockState.Locked;
 
         this.registerOperation("lock", () => this.handleLock());
         this.registerOperation("unlock", () => this.handleUnlock());
@@ -58,10 +90,10 @@ export class DoorLockDevice extends VirtualDevice {
 
     createEndpoints()
     {
-        return [new Endpoint(MatterDoorLockDevice.with(DoorLockRequirements.DoorLockServer), {
+        return [new Endpoint(MatterDoorLockDevice.with(DoorLockServerWithEvents), {
             id: "doorlock-ep1",
             doorLock: {
-                       lockState: DoorLock.LockState.Locked,
+                       lockState: this.initialLockState,
                        lockType: DoorLock.LockType.DeadBolt,
                        actuatorEnabled: true,
                        operatingMode: DoorLock.OperatingMode.Normal,
@@ -77,15 +109,63 @@ export class DoorLockDevice extends VirtualDevice {
     }
 
     async handleLock() {
-        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Locked; });
+        await this.endpoints[0].act(async (agent) => {
+            agent.doorLock.state.lockState = DoorLock.LockState.Locked;
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType: DoorLock.LockOperationType.Lock,
+                    operationSource: DoorLock.OperationSource.ProprietaryRemote,
+                    userIndex: null,
+                    fabricIndex: null,
+                    sourceNode: null,
+                },
+                agent.context,
+            );
+        });
 
         return { lockState: "locked" };
     }
 
     async handleUnlock() {
-        await this.endpoints[0].act(async (agent) => { agent.doorLock.state.lockState = DoorLock.LockState.Unlocked; });
+        await this.endpoints[0].act(async (agent) => {
+            agent.doorLock.state.lockState = DoorLock.LockState.Unlocked;
+            await this.endpoints[0].events.doorLock.lockOperation.emit(
+                {
+                    lockOperationType: DoorLock.LockOperationType.Unlock,
+                    operationSource: DoorLock.OperationSource.ProprietaryRemote,
+                    userIndex: null,
+                    fabricIndex: null,
+                    sourceNode: null,
+                },
+                agent.context,
+            );
+        });
 
         return { lockState: "unlocked" };
+    }
+
+    /**
+     * Override handleComeOnline to accept an optional lockState parameter.
+     * Updates the door lock attribute directly on the running endpoint so that
+     * when Barton's ReadClient resubscribes (after its liveness timer fires),
+     * the primed subscription report reflects the new state.
+     *
+     * Pass lockState: "unlocked" to simulate a state change that occurred while
+     * Barton was in comm-fail.  If omitted the lock remains in its current state.
+     */
+    async handleComeOnline({ lockState } = {}) {
+        if (this.endpoints && this.endpoints[0] && lockState !== undefined) {
+            const targetState =
+                lockState === "unlocked"
+                    ? DoorLock.LockState.Unlocked
+                    : DoorLock.LockState.Locked;
+
+            await this.endpoints[0].act(async (agent) => {
+                agent.doorLock.state.lockState = targetState;
+            });
+        }
+
+        return super.handleComeOnline();
     }
 
     async handleGetState() {
