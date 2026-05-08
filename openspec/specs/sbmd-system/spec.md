@@ -103,11 +103,11 @@ A resource's mapper MAY contain a `read` section with an `alias` (a string namin
 
 #### Scenario: Read boolean attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: bool` and the Matter attribute value is `true`
-- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `"true"`
+- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `{ output: "true" }`
 
 #### Scenario: Read integer attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: uint8` and the Matter attribute value is `254`
-- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return the appropriate string representation
+- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return `{ output: "254" }` (or any appropriate string representation)
 
 ### Requirement: Write mapper
 A resource's mapper MAY contain a `write` section with a `script` (JavaScript string). The script SHALL receive the Barton string value via `sbmdWriteArgs.input` (along with `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object describing the operation: `{write: {clusterId, attributeId, tlvBase64}}` for attribute writes, or `{invoke: {clusterId, commandId, tlvBase64}}` for command invocations. Optional `timedInvokeTimeoutMs` for timed commands.

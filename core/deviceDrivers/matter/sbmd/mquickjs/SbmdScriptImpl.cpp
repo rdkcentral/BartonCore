@@ -1022,14 +1022,22 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    if (JS_IsUndefined(outputVal) || JS_IsNull(outputVal))
+    if (JS_IsUndefined(outputVal))
     {
-        icDebug("Event mapper returned no output (suppressed) for cluster 0x%X, event 0x%X",
-                eventInfo.clusterId,
-                eventInfo.eventId);
+        icDebug("Event mapper suppressed update for cluster 0x%X, event 0x%X", eventInfo.clusterId, eventInfo.eventId);
         outValue.clear();
 
         return true;
+    }
+
+    if (JS_IsNull(outputVal))
+    {
+        icError("Event mapper returned {output: null} for cluster 0x%X, event 0x%X — "
+                "use {} or omit 'output' to suppress; null is not a valid value",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+
+        return false;
     }
 
     JSCStringBuf buf;

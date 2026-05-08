@@ -58,11 +58,11 @@ When a device is synchronized (at Barton restart or communication restoration), 
 - **THEN** the `locked` resource SHALL be re-seeded from the `LockState` attribute cache before any event fires
 
 ### Requirement: seedFrom script interface
-The JavaScript script in `mapper.seedFrom` SHALL receive attribute value data via the same `sbmdReadArgs` interface used by `mapper.read` scripts: `sbmdReadArgs.tlvBase64` (base64-encoded TLV of the attribute value), `sbmdReadArgs.clusterId`, `sbmdReadArgs.attributeId`, `sbmdReadArgs.attributeName`, `sbmdReadArgs.attributeType`, `sbmdReadArgs.endpointId`, `sbmdReadArgs.deviceUuid`, and `sbmdReadArgs.clusterFeatureMaps`. The script SHALL return the Barton string value for the resource.
+The JavaScript script in `mapper.seedFrom` SHALL receive attribute value data via the same `sbmdReadArgs` interface used by `mapper.read` scripts: `sbmdReadArgs.tlvBase64` (base64-encoded TLV of the attribute value), `sbmdReadArgs.clusterId`, `sbmdReadArgs.attributeId`, `sbmdReadArgs.attributeName`, `sbmdReadArgs.attributeType`, `sbmdReadArgs.endpointId`, `sbmdReadArgs.deviceUuid`, and `sbmdReadArgs.clusterFeatureMaps`. The script SHALL return a JSON object of the form `{ output: <string> }`, identical to the return contract of `mapper.read` scripts.
 
 #### Scenario: seedFrom script decodes uint8 to boolean
 - **WHEN** a `seedFrom` script receives a `uint8` TLV for the `LockState` attribute (value `1` = locked)
-- **THEN** the script SHALL decode the value and return `"true"` for the `locked` resource
+- **THEN** the script SHALL decode the value and return `{ output: "true" }` for the `locked` resource
 
 #### Scenario: seedFrom script receives same args as read script
 - **WHEN** a `seedFrom` script is invoked

@@ -1933,6 +1933,27 @@ namespace
         EXPECT_FALSE(script->MapEvent(event, reader, outValue));
     }
 
+    // Test: MapEvent returns false when script returns {output: null}.
+    // null is not a valid suppress signal — use {} or omit 'output' instead.
+    TEST_F(SbmdScriptTest, MapEventFailsOnOutputNull)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return { output: null };";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
     // Test: MapEvent returns false when script returns undefined (missing return statement).
     TEST_F(SbmdScriptTest, MapEventFailsOnUndefinedReturn)
     {
