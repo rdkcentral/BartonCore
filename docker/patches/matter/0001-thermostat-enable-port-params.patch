@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Barton <barton@rdkcentral.com>
+Date: Thu, 01 May 2026 00:00:00 +0000
+Subject: [PATCH] thermostat: enable --secured-device-port CLI option
+
+Add CHIPProjectAppConfig.h for the thermostat linux example that defines
+CHIP_DEVICE_ENABLE_PORT_PARAMS, and wire the config include dirs in
+args.gni so the build picks it up. This brings the thermostat app in
+line with other example apps (e.g. lighting) that already expose
+--secured-device-port and --unsecured-commissioner-port.
+
+---
+ examples/thermostat/linux/args.gni                        | 9 ++++++++-
+ examples/thermostat/linux/include/CHIPProjectAppConfig.h  | 30 ++++++++++++++++++++++++++++++
+ 2 files changed, 38 insertions(+), 1 deletion(-)
+ create mode 100644 examples/thermostat/linux/include/CHIPProjectAppConfig.h
+
+diff --git a/examples/thermostat/linux/args.gni b/examples/thermostat/linux/args.gni
+index 1111111..2222222 100644
+--- a/examples/thermostat/linux/args.gni
++++ b/examples/thermostat/linux/args.gni
+@@ -15,5 +15,12 @@
+
+ import("//build_overrides/chip.gni")
+
+ import("${chip_root}/config/standalone/args.gni")
+-matter_enable_tracing_support = true
++
++chip_device_project_config_include = "<CHIPProjectAppConfig.h>"
++chip_project_config_include = "<CHIPProjectAppConfig.h>"
++
++chip_project_config_include_dirs = [ "${chip_root}/examples/thermostat/linux/include" ]
++chip_project_config_include_dirs += [ "${chip_root}/config/standalone" ]
++
++matter_enable_tracing_support = true
+diff --git a/examples/thermostat/linux/include/CHIPProjectAppConfig.h b/examples/thermostat/linux/include/CHIPProjectAppConfig.h
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/examples/thermostat/linux/include/CHIPProjectAppConfig.h
+@@ -0,0 +1,31 @@
++/*
++ *
++ *    Copyright (c) 2020 Project CHIP Authors
++ *    All rights reserved.
++ *
++ *    Licensed under the Apache License, Version 2.0 (the "License");
++ *    you may not use this file except in compliance with the License.
++ *    You may obtain a copy of the License at
++ *
++ *        http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *    Unless required by applicable law or agreed to in writing, software
++ *    distributed under the License is distributed on an "AS IS" BASIS,
++ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *    See the License for the specific language governing permissions and
++ *    limitations under the License.
++ */
++
++/**
++ *    @file
++ *          Example project configuration file for CHIP.
++ *
++ *          This is a place to put application or project-specific overrides
++ *          to the default configuration values for general CHIP features.
++ */
++
++#pragma once
++
++#include <CHIPProjectConfig.h>
++
++#define CHIP_DEVICE_ENABLE_PORT_PARAMS 1
+--
+2.39.0

@@ -1055,6 +1055,342 @@ namespace
     }
 
     //--------------------------------------------------------------------------
+    // SbmdUtils.Tlv.encode tests
+    //
+    // These tests exercise the encode path: type argument requirement,
+    // integer types with range checks, string parsing with radix, string
+    // type, and round-trip encode→decode consistency.
+    //--------------------------------------------------------------------------
+
+    // Helper: run a script via an attribute read mapper (the TLV input is
+    // ignored by the script – we just need a valid TLV to satisfy the API).
+    // Returns the output string on success, std::nullopt on failure.
+    static std::optional<std::string> RunEncodeScript(SbmdScript &script, const std::string &js)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0xFFFF;
+        attr.attributeId = 0xFFFF;
+        attr.name = "encodeTest";
+        attr.type = "bool";
+
+        if (!script.AddAttributeReadMapper(attr, js))
+        {
+            return std::nullopt;
+        }
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+
+        if (!script.MapAttributeRead(attr, reader, outValue))
+        {
+            return std::nullopt;
+        }
+
+        return outValue;
+    }
+
+    // Encode uint8 and round-trip via decode
+    TEST_F(SbmdScriptTest, TlvEncodeUint8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(42, 'uint8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "42");
+    }
+
+    // Encode uint16 and round-trip via decode
+    TEST_F(SbmdScriptTest, TlvEncodeUint16RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(1000, 'uint16');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "1000");
+    }
+
+    // Encode uint32 max value
+    TEST_F(SbmdScriptTest, TlvEncodeUint32MaxRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(4294967295, 'uint32');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "4294967295");
+    }
+
+    // Encode int16 negative value
+    TEST_F(SbmdScriptTest, TlvEncodeInt16NegativeRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-100, 'int16');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "-100");
+    }
+
+    // Encode int8 boundary values
+    TEST_F(SbmdScriptTest, TlvEncodeInt8BoundaryRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var lo = SbmdUtils.Tlv.encode(-128, 'int8');
+            var hi = SbmdUtils.Tlv.encode(127, 'int8');
+            var dLo = SbmdUtils.Tlv.decode(lo);
+            var dHi = SbmdUtils.Tlv.decode(hi);
+            return {output: dLo + ',' + dHi};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "-128,127");
+    }
+
+    // Encode enum8 round-trip
+    TEST_F(SbmdScriptTest, TlvEncodeEnum8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(3, 'enum8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "3");
+    }
+
+    // Encode string type
+    TEST_F(SbmdScriptTest, TlvEncodeStringRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('hello', 'string');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "hello");
+    }
+
+    // Encode string type coerces non-string value via String()
+    TEST_F(SbmdScriptTest, TlvEncodeStringCoercesNumber)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(99, 'string');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "99");
+    }
+
+    // Encode boolean true
+    TEST_F(SbmdScriptTest, TlvEncodeBoolTrueRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(true, 'bool');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded === true ? 'true' : 'false'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "true");
+    }
+
+    // Encode boolean false
+    TEST_F(SbmdScriptTest, TlvEncodeBoolFalseRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(false, 'bool');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded === false ? 'false' : 'true'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "false");
+    }
+
+    // Parse string value as integer (decimal)
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsDecimal)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('200', 'uint8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "200");
+    }
+
+    // Parse string value as hex integer
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsHex)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('FF', 'uint8', 16);
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "255");
+    }
+
+    // Parse string value as binary integer
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsBinary)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('1010', 'uint8', 2);
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "10");
+    }
+
+    // Range check: uint8 out of range (256) returns null
+    TEST_F(SbmdScriptTest, TlvEncodeUint8OutOfRangeReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(256, 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: int8 out of range (-129) returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInt8BelowMinReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-129, 'int8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: uint16 negative returns null
+    TEST_F(SbmdScriptTest, TlvEncodeUint16NegativeReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-1, 'uint16');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: non-integer number returns null
+    TEST_F(SbmdScriptTest, TlvEncodeFloatReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(3.5, 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Encode with missing type throws Error (script fails)
+    TEST_F(SbmdScriptTest, TlvEncodeMissingTypeThrows)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(42);
+            return {output: 'unreachable'};
+        )");
+        // Script should fail due to uncaught exception
+        EXPECT_FALSE(result.has_value());
+    }
+
+    // Encode string type with base argument throws Error
+    TEST_F(SbmdScriptTest, TlvEncodeStringWithBaseThrows)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('hello', 'string', 16);
+            return {output: 'unreachable'};
+        )");
+        // Script should fail due to uncaught exception
+        EXPECT_FALSE(result.has_value());
+    }
+
+    // Empty string input returns null for integer types
+    TEST_F(SbmdScriptTest, TlvEncodeEmptyStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('', 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Non-numeric string returns null for integer types
+    TEST_F(SbmdScriptTest, TlvEncodeNonNumericStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('abc', 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Invalid hex string returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInvalidHexStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('GG', 'uint8', 16);
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Invalid base returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInvalidBaseReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('42', 'uint8', 7);
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // percent type range 0..255
+    TEST_F(SbmdScriptTest, TlvEncodePercentRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(100, 'percent');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "100");
+    }
+
+    // bitmap8 type round-trip
+    TEST_F(SbmdScriptTest, TlvEncodeBitmap8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(0xAB, 'bitmap8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "171"); // 0xAB = 171
+    }
+
+    //--------------------------------------------------------------------------
     // Out-of-memory handling tests (mquickjs-specific)
     //
     // These tests artificially restrict the mquickjs arena to verify that
