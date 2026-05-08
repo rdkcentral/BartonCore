@@ -352,6 +352,113 @@ static void test_sbmdParserHumiditySensorFile(void **state)
     assert_false(humidity.mapper.readScript.empty());
 }
 
+static void test_sbmdParserThermostatFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "thermostat.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    // Verify basic metadata
+    assert_string_equal(spec->name.c_str(), "Thermostat");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "thermostat");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    // Verify matterMeta deviceTypes — 0x0301 is Thermostat
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0301);
+
+    // Verify featureClusters includes Thermostat cluster
+    assert_int_equal((int) spec->matterMeta.featureClusters.size(), 1);
+    assert_int_equal((int) spec->matterMeta.featureClusters[0], 0x0201);
+
+    // Verify reporting section
+    assert_int_equal((int) spec->reporting.minSecs, 1);
+    assert_int_equal((int) spec->reporting.maxSecs, 3600);
+
+    // Verify single endpoint
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_string_equal(spec->endpoints[0].id.c_str(), "1");
+    assert_string_equal(spec->endpoints[0].profile.c_str(), "thermostat");
+    assert_int_equal((int) spec->endpoints[0].profileVersion, 2);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 12);
+
+    // localTemperature — read-only from Thermostat cluster
+    auto &localTemp = spec->endpoints[0].resources[0];
+    assert_string_equal(localTemp.id.c_str(), "localTemperature");
+    assert_false(localTemp.optional);
+    assert_true(localTemp.mapper.hasRead);
+    assert_false(localTemp.mapper.hasWrite);
+    assert_true(localTemp.mapper.readAttribute.has_value());
+    assert_int_equal((int) localTemp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) localTemp.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(localTemp.mapper.readScript.empty());
+
+    // heatSetpoint — read/write from Thermostat cluster
+    auto &heatSp = spec->endpoints[0].resources[1];
+    assert_string_equal(heatSp.id.c_str(), "heatSetpoint");
+    assert_false(heatSp.optional);
+    assert_true(heatSp.mapper.hasRead);
+    assert_true(heatSp.mapper.hasWrite);
+    assert_true(heatSp.mapper.readAttribute.has_value());
+    assert_int_equal((int) heatSp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) heatSp.mapper.readAttribute->attributeId, 0x0012);
+    assert_false(heatSp.mapper.readScript.empty());
+    assert_false(heatSp.mapper.writeScript.empty());
+
+    // coolSetpoint — read/write from Thermostat cluster
+    auto &coolSp = spec->endpoints[0].resources[2];
+    assert_string_equal(coolSp.id.c_str(), "coolSetpoint");
+    assert_false(coolSp.optional);
+    assert_true(coolSp.mapper.hasRead);
+    assert_true(coolSp.mapper.hasWrite);
+    assert_true(coolSp.mapper.readAttribute.has_value());
+    assert_int_equal((int) coolSp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) coolSp.mapper.readAttribute->attributeId, 0x0011);
+
+    // systemMode — read/write from Thermostat cluster
+    auto &sysMode = spec->endpoints[0].resources[8];
+    assert_string_equal(sysMode.id.c_str(), "systemMode");
+    assert_false(sysMode.optional);
+    assert_true(sysMode.mapper.hasRead);
+    assert_true(sysMode.mapper.hasWrite);
+    assert_true(sysMode.mapper.readAttribute.has_value());
+    assert_int_equal((int) sysMode.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) sysMode.mapper.readAttribute->attributeId, 0x001c);
+
+    // systemState — optional, from ThermostatRunningState
+    auto &sysState = spec->endpoints[0].resources[9];
+    assert_string_equal(sysState.id.c_str(), "systemState");
+    assert_true(sysState.optional);
+    assert_true(sysState.mapper.hasRead);
+    assert_false(sysState.mapper.hasWrite);
+    assert_true(sysState.mapper.readAttribute.has_value());
+    assert_int_equal((int) sysState.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) sysState.mapper.readAttribute->attributeId, 0x0029);
+
+    // fanMode — optional, from Fan Control cluster
+    auto &fanMode = spec->endpoints[0].resources[10];
+    assert_string_equal(fanMode.id.c_str(), "fanMode");
+    assert_true(fanMode.optional);
+    assert_true(fanMode.mapper.hasRead);
+    assert_true(fanMode.mapper.hasWrite);
+    assert_true(fanMode.mapper.readAttribute.has_value());
+    assert_int_equal((int) fanMode.mapper.readAttribute->clusterId, 0x0202);
+    assert_int_equal((int) fanMode.mapper.readAttribute->attributeId, 0x0000);
+
+    // fanOn — optional, from Fan Control PercentCurrent
+    auto &fanOn = spec->endpoints[0].resources[11];
+    assert_string_equal(fanOn.id.c_str(), "fanOn");
+    assert_true(fanOn.optional);
+    assert_true(fanOn.mapper.hasRead);
+    assert_false(fanOn.mapper.hasWrite);
+    assert_true(fanOn.mapper.readAttribute.has_value());
+    assert_int_equal((int) fanOn.mapper.readAttribute->clusterId, 0x0202);
+    assert_int_equal((int) fanOn.mapper.readAttribute->attributeId, 0x0006);
+}
+
 static void test_sbmdParserOptionalResource(void **state)
 {
     (void) state;
@@ -1889,6 +1996,7 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserIkeaTimmerflotteFile),
         cmocka_unit_test(test_sbmdParserTemperatureSensorFile),
         cmocka_unit_test(test_sbmdParserHumiditySensorFile),
+        cmocka_unit_test(test_sbmdParserThermostatFile),
         cmocka_unit_test(test_sbmdParserOptionalResource),
         cmocka_unit_test(test_sbmdParserResourceIdFields),
         // Negative tests - error handling

@@ -560,10 +560,13 @@ namespace barton
         std::map<std::string, ResourceBinding> resourceWriteBindings;
         std::map<std::string, ResourceBinding> resourceExecuteBindings;
         // Fast O(1) lookup for readable attributes in OnAttributeData callback
-        std::unordered_map<chip::app::ConcreteAttributePath,
-                           AttributeReadBinding,
-                           AttributePathHash,
-                           AttributePathEqual> readableAttributeLookup;
+        // Uses a multimap because multiple resources may read from the same attribute
+        // when different SBMD resources are backed by a shared Matter attribute path.
+        std::unordered_multimap<chip::app::ConcreteAttributePath,
+                                AttributeReadBinding,
+                                AttributePathHash,
+                                AttributePathEqual>
+            readableAttributeLookup;
         // Fast O(1) lookup for events in OnEventData callback
         std::unordered_map<EventPath, EventBinding, EventPathHash> eventLookup;
 
