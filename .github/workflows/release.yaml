@@ -44,6 +44,9 @@ jobs:
           fetch-depth: 0
           ssh-key: ${{ secrets.RDKCM_DEPLOY_KEY }}
 
+      # NOTE: cocogitto-action@v3 installs cocogitto 6.3.0. The Dockerfile pins
+      # the same version via COCOGITTO_VERSION. If this action version changes,
+      # update COCOGITTO_VERSION in docker/Dockerfile to match.
       - name: Semver release
         id: release
         uses: cocogitto/cocogitto-action@v3

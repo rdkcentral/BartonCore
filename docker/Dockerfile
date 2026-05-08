@@ -356,6 +356,20 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
 
+# Cocogitto (conventional commit tooling)
+# NOTE: This version must match the cocogitto-action version used in
+# .github/workflows/release.yaml and .github/workflows/check-pr-title.yaml.
+# If you upgrade here, upgrade the action version there too (and vice versa).
+ARG COCOGITTO_VERSION="6.3.0"
+# Cocogitto does not publish checksums; this was computed from the release artifact.
+# Update when changing COCOGITTO_VERSION.
+ARG COCOGITTO_SHA256="046dbc0ea190528f5a028a64ed761d605f4be85de3a6e469174139331eb058bb"
+RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    -o /tmp/cocogitto.tar.gz && \
+    echo "${COCOGITTO_SHA256}  /tmp/cocogitto.tar.gz" | sha256sum --check && \
+    tar xzf /tmp/cocogitto.tar.gz -C /usr/local/bin --strip-components=1 --wildcards '*/cog' && \
+    rm /tmp/cocogitto.tar.gz
+
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.
 RUN chmod -R +777 /usr/local && \
