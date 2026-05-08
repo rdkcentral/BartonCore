@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [4.2.0](https://github.com/rdkcentral/BartonCore/compare/ddd7fdbe4470d410da0d3d4f438f62ac1b02a8cd..4.2.0) - 2026-05-08
+#### Bug Fixes
+- remove cpe.sslCert.validateFor* property lookups (#217) - ([757c910](https://github.com/rdkcentral/BartonCore/commit/757c910b704d9110268d4fd1ea66760115fbcb74)) - Christian Leithner
+#### Documentation
+- **(openspec)** restore sbmd-system spec content (#216) - ([b4ba0a1](https://github.com/rdkcentral/BartonCore/commit/b4ba0a1466fe0dd895dd7ddbfd75515e59633169)) - Kevin Funderburg
+#### Features
+- **(matter)** add SBMD thermostat driver with optional fan control (#213) - ([ddd7fdb](https://github.com/rdkcentral/BartonCore/commit/ddd7fdbe4470d410da0d3d4f438f62ac1b02a8cd)) - Thomas Lea
+
+- - -
+
 ## [4.1.0](https://github.com/rdkcentral/BartonCore/compare/a8be7a666cfc90814de2cb75f7c63baa97e2ae00..4.1.0) - 2026-05-05
 #### Bug Fixes
 - **(ref)** validate device exists before opening commissioning window (#212) - ([8f7603e](https://github.com/rdkcentral/BartonCore/commit/8f7603e654c0ad3ea4a5833e18d25c8b6a63608b)) - Srividhya-23
