@@ -121,7 +121,7 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 #  Subprocess isolation for all tests.
 #
-#  Every test is re-invoked in its own subprocess.  This provides:
+#  Every test is invoked in its own subprocess.  This provides:
 #    1. Output isolation — C library log output (written directly to fd 1/2 by
 #       background threads) is captured by the subprocess pipe and only shown
 #       when a test fails.
