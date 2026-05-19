@@ -40,4 +40,6 @@ echo "End of installation, starting tests"
 echo "***********************************"
 echo ""
 
+export LSAN_OPTIONS="${LSAN_OPTIONS}:log_threads=1:verbosity=1"
+
 $BARTON_TOP/testing/py_test.sh $BARTON_TOP/testing
