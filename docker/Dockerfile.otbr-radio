@@ -192,8 +192,9 @@ RUN cd /tmp/gecko_sdk/app/bluetooth/example_host/bt_host_cpc_hci_bridge && \
     cp exe/bt_host_cpc_hci_bridge /usr/local/bin/ && \
     rm -rf /tmp/gecko_sdk
 
-# D-Bus policy allowing otbr-agent to own its well-known bus name
-COPY otbr-agent.conf /etc/dbus-1/system.d/
+# Standalone D-Bus config for the private daemon (used with --config-file,
+# not --system, to bypass Ubuntu's mandatory deny policy in system.conf).
+COPY otbr-agent.conf /etc/otbr-dbus.conf
 
 # Clean up patches
 RUN rm -rf /tmp/patches

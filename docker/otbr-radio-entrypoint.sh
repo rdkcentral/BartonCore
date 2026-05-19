@@ -89,7 +89,7 @@ if [ -S "${DBUS_SOCKET_PATH}" ]; then
     echo "[otbr-radio] Removing stale D-Bus socket ${DBUS_SOCKET_PATH}..."
     rm -f "${DBUS_SOCKET_PATH}"
 fi
-dbus-daemon --system --fork --nopidfile --address="${DBUS_SYSTEM_BUS_ADDRESS}"
+dbus-daemon --config-file=/etc/otbr-dbus.conf --fork --nopidfile
 echo "[otbr-radio] Private D-Bus started."
 
 ###############################################################################
@@ -261,8 +261,8 @@ ble_attach() {
             # Kill any stale bluetoothd before starting a fresh instance.
             pkill -x bluetoothd 2>/dev/null || true
             sleep 0.5
-            echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
-            nsenter --net="${HOST_NETNS}" bluetoothd &
+            echo "[otbr-radio] Starting bluetoothd (host netns, host system D-Bus)..."
+            nsenter --net="${HOST_NETNS}" env -u DBUS_SYSTEM_BUS_ADDRESS bluetoothd &
             sleep 1
             echo "[otbr-radio] bluetoothd started."
 

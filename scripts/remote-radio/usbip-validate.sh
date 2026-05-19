@@ -273,7 +273,9 @@ fi
 info "Checking BLE controller via bluetoothctl..."
 
 if [[ -e "${HOST_NETNS}" ]] && command -v bluetoothctl &>/dev/null; then
-    BT_LIST=$(sudo nsenter --net="${HOST_NETNS}" bluetoothctl list 2>/dev/null || true)
+    # bluetoothctl uses D-Bus; unset the private otbr-dbus address so it reaches
+    # the host system bus where bluetoothd registered itself.
+    BT_LIST=$(sudo nsenter --net="${HOST_NETNS}" env -u DBUS_SYSTEM_BUS_ADDRESS bluetoothctl list 2>/dev/null || true)
 
     if [[ -n "${BT_LIST}" ]]; then
         CONTROLLER_COUNT=$(echo "${BT_LIST}" | wc -l)
