@@ -78,8 +78,12 @@ fi
 HIGHEST_BUILDER_TAG=$(cat "$VERSION_FILE")
 IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
+existingRadioDevice=""
+existingBackboneIf=""
 
 if [ -f "$OUTFILE" ]; then
+    existingRadioDevice=$(grep '^RADIO_DEVICE=' "$OUTFILE" | sed 's/^RADIO_DEVICE=//' || true)
+    existingBackboneIf=$(grep '^BACKBONE_IF=' "$OUTFILE" | sed 's/^BACKBONE_IF=//' || true)
 
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
@@ -180,6 +184,42 @@ echo "LSAN_OPTIONS=suppressions=$BARTON_TOP/testing/lsan.supp" >> $OUTFILE
 echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/dist-packages:$BARTON_TOP" >> $OUTFILE
 # path to libbCore.so
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
+##############################################################################
+
+##############################################################################
+# Optional Thread real-radio variables (used by docker/compose.otbr-radio.yaml).
+#
+# RADIO_DEVICE: host path of the USB radio serial device.
+#   - Must be set explicitly when using the real-radio overlay.
+#   - On shared build servers the forwarded radio may appear at a non-default
+#     path (e.g. /dev/ttyACM8), so silently defaulting to /dev/ttyACM0 is not
+#     safe.
+#   - If already present in docker/.env, preserve that value unless overridden
+#     by exporting RADIO_DEVICE before running setupDockerEnv.sh or dockerw.
+#
+# BACKBONE_IF: network interface used by otbr-agent for Thread backbone routing.
+#   - Defaults to the host default-route interface when detectable.
+#   - Left empty if detection fails; the container entrypoint will re-detect at
+#     runtime and exit with an error if no interface can be found.
+#   - If already present in docker/.env, preserve that value unless overridden
+#     by exporting BACKBONE_IF before running setupDockerEnv.sh or dockerw,
+#     e.g.: export BACKBONE_IF=enp6s0
+#
+# These variables are only consumed when compose.otbr-radio.yaml is included
+# in the compose stack (dockerw -T, or devcontainer override).
+# Auto-detect the default-route network interface for the Thread backbone.
+# The entrypoint will also re-detect at runtime, so this is only used when
+# BACKBONE_IF is not already set in the environment.
+detectedBackboneIf=""
+if command -v ip >/dev/null 2>&1; then
+    detectedBackboneIf=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+fi
+
+radioDeviceValue="${RADIO_DEVICE:-$existingRadioDevice}"
+backboneIfValue="${BACKBONE_IF:-${existingBackboneIf:-$detectedBackboneIf}}"
+
+echo "RADIO_DEVICE=$radioDeviceValue" >> $OUTFILE
+echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
 ##############################################################################
 
 # Ensure the container network exists
