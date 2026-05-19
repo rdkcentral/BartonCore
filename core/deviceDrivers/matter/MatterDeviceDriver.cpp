@@ -66,6 +66,7 @@ extern "C" {
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
 #include "deviceDescriptor.h"
+#include "deviceDriverManager.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
 #include "glib.h"
@@ -127,6 +128,47 @@ MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *devic
     driver.commFailTimeoutSecsChanged = [](DeviceDriver *driver, const icDevice *device, uint32_t timeoutSecs) {
         static_cast<MatterDeviceDriver *>(driver->callbackContext)->commFailTimeoutSecs = timeoutSecs;
     };
+
+    driver.metadataUpdated = [](DeviceDriver *driver, const icDevice *device, const char *key, const char *value) {
+        if (strcmp(key, MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS) != 0)
+        {
+            return;
+        }
+
+        uint64_t ms = 0;
+        g_autoptr(GError) parseError = NULL;
+        g_ascii_string_to_unsigned(value, 10, 0, UINT32_MAX, &ms, &parseError);
+
+        if (parseError != NULL)
+        {
+            icLogWarn(LOG_TAG,
+                      "%s: could not parse %s value '%s' for device %s: %s",
+                      __FUNCTION__,
+                      MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS,
+                      value,
+                      device->uuid,
+                      parseError->message);
+            return;
+        }
+
+        if (ms == 0)
+        {
+            return;
+        }
+
+        auto *self = static_cast<MatterDeviceDriver *>(driver->callbackContext);
+        auto cache = self->GetDeviceDataCache(std::string(device->uuid));
+
+        if (!cache)
+        {
+            icLogError(LOG_TAG, "%s: no DeviceDataCache for device %s", __FUNCTION__, device->uuid);
+            return;
+        }
+
+        auto overrideMs = static_cast<uint32_t>(ms);
+
+        self->RunOnMatterSync([cache, overrideMs]() { cache->OverrideLiveness(overrideMs); });
+    };
 }
 
 MatterDeviceDriver::~MatterDeviceDriver()
@@ -138,47 +180,92 @@ MatterDeviceDriver::~MatterDeviceDriver()
 
 bool MatterDeviceDriver::ClaimDevice(const DeviceDataCache *deviceDataCache)
 {
-    std::vector<uint16_t> deviceTypes = GetSupportedDeviceTypes();
+    bool claimed = false;
 
     if (!deviceDataCache)
     {
         icError("deviceDataCache is null");
-        return false;
+        return claimed;
     }
 
-    // Get all endpoints from the device (excluding root endpoint 0)
-    std::vector<chip::EndpointId> endpointIds = deviceDataCache->GetEndpointIds();
-
-    for (chip::EndpointId endpointId : endpointIds)
+    // Vendor/product ID drivers target a specific device model and take priority
+    // over generic device-type drivers, which match broadly by endpoint device types.
+    if (IsVendorSpecificDriver())
     {
-        // Skip root endpoint 0
-        if (endpointId == 0)
-        {
-            continue;
-        }
+        uint16_t deviceVendorId = 0;
+        uint16_t deviceProductId = 0;
+        uint16_t expectedVendorId = GetSupportedVendorId();
+        uint16_t expectedProductId = GetSupportedProductId();
 
-        std::vector<uint16_t> deviceTypes;
-        if (deviceDataCache->GetDeviceTypes(endpointId, deviceTypes) != CHIP_NO_ERROR)
+        if (deviceDataCache->GetVendorId(deviceVendorId) == CHIP_NO_ERROR &&
+            deviceDataCache->GetProductId(deviceProductId) == CHIP_NO_ERROR)
         {
-            continue;
+            claimed = (deviceVendorId == expectedVendorId) && (deviceProductId == expectedProductId);
+
+            if (claimed)
+            {
+                icDebug("Device claimed: vendor 0x%04x product 0x%04x match", deviceVendorId, deviceProductId);
+            }
+            else
+            {
+                icDebug("Device not claimed: vendor 0x%04x/product 0x%04x != expected 0x%04x/0x%04x",
+                        deviceVendorId,
+                        deviceProductId,
+                        expectedVendorId,
+                        expectedProductId);
+            }
         }
+        else
+        {
+            icError("Device not claimed: could not read vendor/product ID from cache");
+        }
+    }
+    else
+    {
+        // Get all endpoints from the device (excluding root endpoint 0)
+        std::vector<chip::EndpointId> endpointIds = deviceDataCache->GetEndpointIds();
 
         auto supportedDeviceTypes = GetSupportedDeviceTypes();
 
-        // Check if any device type on this endpoint matches our supported types
-        for (uint16_t deviceTypeId : deviceTypes)
+        for (chip::EndpointId endpointId : endpointIds)
         {
-            if (std::find(supportedDeviceTypes.begin(), supportedDeviceTypes.end(), deviceTypeId) !=
-                supportedDeviceTypes.end())
+            // Skip root endpoint 0
+            if (endpointId == 0)
             {
-                icDebug("Device claimed: endpoint %d has matching device type 0x%04x", endpointId, deviceTypeId);
-                return true;
+                continue;
             }
+
+            std::vector<uint16_t> deviceTypes;
+            if (deviceDataCache->GetDeviceTypes(endpointId, deviceTypes) != CHIP_NO_ERROR)
+            {
+                continue;
+            }
+
+            // Check if any device type on this endpoint matches our supported types
+            for (uint16_t deviceTypeId : deviceTypes)
+            {
+                if (std::find(supportedDeviceTypes.begin(), supportedDeviceTypes.end(), deviceTypeId) !=
+                    supportedDeviceTypes.end())
+                {
+                    icDebug("Device claimed: endpoint %d has matching device type 0x%04x", endpointId, deviceTypeId);
+                    claimed = true;
+                    break;
+                }
+            }
+
+            if (claimed)
+            {
+                break;
+            }
+        }
+
+        if (!claimed)
+        {
+            icDebug("Device not claimed: no matching device types found");
         }
     }
 
-    icDebug("Device not claimed: no matching device types found");
-    return false;
+    return claimed;
 }
 
 const char *MatterDeviceDriver::GetDeviceClass() const

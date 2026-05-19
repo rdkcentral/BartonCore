@@ -113,7 +113,10 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
 
 void deviceCommunicationWatchdogSetMonitorInterval(uint32_t seconds)
 {
+    pthread_mutex_lock(&controlMutex);
     monitorThreadSleepSeconds = seconds;
+    pthread_cond_broadcast(&controlCond);
+    pthread_mutex_unlock(&controlMutex);
 }
 
 void deviceCommunicationWatchdogTerm()

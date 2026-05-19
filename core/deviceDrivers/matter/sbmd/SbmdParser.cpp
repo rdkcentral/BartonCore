@@ -41,7 +41,7 @@ namespace barton
     namespace
     {
         constexpr int kSupportedSchemaMajor = 2;
-        constexpr int kSupportedSchemaMinor = 0;
+        constexpr int kSupportedSchemaMinor = 1;
 
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
@@ -114,6 +114,24 @@ namespace barton
                 }
             }
 
+            // Validate seedFrom mapper cross-field constraints
+            if (mapper.seedFromAttribute.has_value())
+            {
+                if (!mapper.event.has_value())
+                {
+                    icError("Resource %s has seedFrom mapper but no event mapper — seedFrom requires event",
+                            resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.hasRead)
+                {
+                    icError("Resource %s has both read and seedFrom mappers — they are mutually exclusive",
+                            resourceId.c_str());
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -152,6 +170,11 @@ namespace barton
             {
                 setAttrIds(resource.mapper.readAttribute);
                 setCmdIds(resource.mapper.readCommand);
+            }
+
+            if (resource.mapper.seedFromAttribute.has_value())
+            {
+                setAttrIds(resource.mapper.seedFromAttribute);
             }
 
             if (resource.mapper.event.has_value())
@@ -416,6 +439,39 @@ bool SbmdParser::ParseMatterMeta(const YAML::Node &node, SbmdMatterMeta &meta)
 
             meta.aliases.push_back(std::move(alias));
         }
+    }
+
+    // Parse optional vendorId/productId (both or neither required)
+    bool hasVendorId = node["vendorId"].IsDefined();
+    bool hasProductId = node["productId"].IsDefined();
+
+    if (hasVendorId != hasProductId)
+    {
+        icError("vendorId and productId must both be set or both be omitted");
+        return false;
+    }
+
+    if (hasVendorId)
+    {
+        std::string vendorStr = node["vendorId"].as<std::string>();
+        std::string productStr = node["productId"].as<std::string>();
+        uint32_t vendorVal = ParseHexOrDecimal(vendorStr);
+        uint32_t productVal = ParseHexOrDecimal(productStr);
+
+        if (vendorVal > UINT16_MAX)
+        {
+            icError("vendorId value '%s' exceeds uint16 range", vendorStr.c_str());
+            return false;
+        }
+
+        if (productVal > UINT16_MAX)
+        {
+            icError("productId value '%s' exceeds uint16 range", productStr.c_str());
+            return false;
+        }
+
+        meta.vendorId = static_cast<uint16_t>(vendorVal);
+        meta.productId = static_cast<uint16_t>(productVal);
     }
 
     return true;
@@ -684,6 +740,42 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const s
         {
             mapper.eventScript = eventNode["script"].as<std::string>();
         }
+    }
+
+    // Parse seedFrom mapping - one-shot attribute cache read for seeding event-driven resources
+    if (node["seedFrom"])
+    {
+        const YAML::Node &seedFromNode = node["seedFrom"];
+
+        if (!seedFromNode["alias"])
+        {
+            icError("seedFrom mapper must specify 'alias'");
+            return false;
+        }
+
+        std::string aliasName = seedFromNode["alias"].as<std::string>();
+        const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+        if (!alias)
+        {
+            icError("seedFrom mapper references unknown alias '%s'", aliasName.c_str());
+            return false;
+        }
+
+        if (!alias->attribute.has_value())
+        {
+            icError("seedFrom mapper alias '%s' must be an attribute alias (not event)", aliasName.c_str());
+            return false;
+        }
+
+        if (!seedFromNode["script"] || seedFromNode["script"].as<std::string>().empty())
+        {
+            icError("seedFrom mapper must have a non-empty 'script'");
+            return false;
+        }
+
+        mapper.seedFromAttribute = alias->attribute;
+        mapper.seedFromScript = seedFromNode["script"].as<std::string>();
     }
 
     return true;

@@ -382,7 +382,7 @@ bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::str
 
     // Extract the "output" field from the result JSON object
     JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, scriptResultGuard.get(), "output"));
-    if (JS_IsUndefined(outputValGuard.get()))
+    if (JS_IsUndefined(outputValGuard.get()) || JS_IsNull(outputValGuard.get()))
     {
         icError("Script result missing 'output' field");
         return false;
@@ -1175,8 +1175,54 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
         return false;
     }
 
-    // Extract and return the "output" field
-    return ExtractScriptOutputAsString(outJson, outValue);
+    JsValueGuard outJsonGuard(ctx, outJson);
+
+    // A non-object return (undefined, null, or a primitive) is always a script error —
+    // the script forgot a return statement or returned the wrong type.
+    if (JS_IsUndefined(outJson) || JS_IsNull(outJson) || !JS_IsObject(outJson))
+    {
+        icError("Event mapper script returned a non-object value for cluster 0x%X, event 0x%X — "
+                "scripts must return an object (e.g. {} to suppress, {output: value} to publish)",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
+    }
+
+    // A missing 'output' key (undefined) is a valid suppress signal — the script ran
+    // successfully but chose not to produce a value (e.g. for non-state-change event
+    // sub-types). Return true with empty outValue.
+    // An explicitly null 'output' is a script bug: the script intended to publish but
+    // produced null. Treat it as an error so the author is notified.
+    JsValueGuard outputValGuard(ctx, JS_GetPropertyStr(ctx, outJson, "output"));
+    if (JS_IsUndefined(outputValGuard.get()))
+    {
+        icDebug("Event mapper suppressed update for cluster 0x%X, event 0x%X", eventInfo.clusterId, eventInfo.eventId);
+        outValue.clear();
+        return true;
+    }
+
+    if (JS_IsNull(outputValGuard.get()))
+    {
+        icError("Event mapper returned {output: null} for cluster 0x%X, event 0x%X — "
+                "use {} or omit 'output' to suppress; null is not a valid value",
+                eventInfo.clusterId,
+                eventInfo.eventId);
+        return false;
+    }
+
+    JsCStringGuard resultStrGuard(ctx, JS_ToCString(ctx, outputValGuard.get()));
+    if (!resultStrGuard)
+    {
+        icError("Failed to convert event output to string for cluster 0x%X, event 0x%X: %s",
+                eventInfo.clusterId,
+                eventInfo.eventId,
+                GetExceptionString(ctx).c_str());
+        return false;
+    }
+
+    outValue = resultStrGuard.get();
+    icDebug("Event mapper output: %s", outValue.c_str());
+    return true;
 }
 
 } // namespace barton
