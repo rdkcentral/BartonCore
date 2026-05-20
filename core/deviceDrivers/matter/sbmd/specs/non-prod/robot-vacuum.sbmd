@@ -1,0 +1,110 @@
+# Robot Vacuum Cleaner SBMD Specification
+# Maps Matter Robotic Vacuum Cleaner device type to Barton "robotVacuum" device class
+
+# SBMD schema version 2.0
+schemaVersion: "2.0"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Robot Vacuum Cleaner"
+# Script type
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "robotVacuum"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0074  # Robotic Vacuum Cleaner
+  revision: 1
+  aliases:
+    - name: "runMode"
+      attribute:
+        clusterId: "0x0054"      # RVC Run Mode cluster
+        attributeId: "0x0001"    # CurrentMode attribute
+        name: "CurrentMode"
+        type: "uint8"
+    - name: "cleanMode"
+      attribute:
+        clusterId: "0x0055"      # RVC Clean Mode cluster
+        attributeId: "0x0001"    # CurrentMode attribute
+        name: "CurrentMode"
+        type: "uint8"
+    - name: "operationalState"
+      attribute:
+        clusterId: "0x0061"      # RVC Operational State cluster
+        attributeId: "0x0004"    # OperationalState attribute
+        name: "OperationalState"
+        type: "uint8"            # 0=Stopped, 1=Running, 2=Paused, 3=Error
+
+# Subscription reporting configuration
+reporting:
+  minSecs: 1
+  maxSecs: 3600
+
+endpoints:
+  - id: "1"
+    profile: "robotVacuum"
+    profileVersion: 1
+    resources:
+      - id: "operationalState"
+        type: "enum"
+        modes:
+          - "read"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "operationalState"
+        mapper:
+          read:
+            alias: "operationalState"
+            script: |
+              var state = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var states = ['stopped', 'running', 'paused', 'error'];
+              var result = (state >= 0 && state < states.length) ? states[state] : 'unknown';
+              return {output: result};
+
+      - id: "runMode"
+        type: "integer"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "runMode"
+        mapper:
+          read:
+            alias: "runMode"
+            script: |
+              var mode = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: mode.toString()};
+          write:
+            script: |
+              var mode = parseInt(sbmdWriteArgs.input, 10);
+              if (isNaN(mode)) mode = 0;
+              return SbmdUtils.Response.invoke(0x0054, 0x0000, {NewMode: mode});
+
+      - id: "cleanMode"
+        type: "integer"
+        modes:
+          - "read"
+          - "write"
+          - "dynamic"
+          - "emitEvents"
+        prerequisites:
+          - alias: "cleanMode"
+        mapper:
+          read:
+            alias: "cleanMode"
+            script: |
+              var mode = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {output: mode.toString()};
+          write:
+            script: |
+              var mode = parseInt(sbmdWriteArgs.input, 10);
+              if (isNaN(mode)) mode = 0;
+              return SbmdUtils.Response.invoke(0x0055, 0x0000, {NewMode: mode});

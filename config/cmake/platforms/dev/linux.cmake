@@ -38,6 +38,7 @@ set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
 include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
 
 set(BCORE_MATTER_USE_RANDOM_PORT ON CACHE BOOL "Use random port")
+set(BCORE_INCLUDE_NON_PROD_SBMD_SPECS ON CACHE BOOL "Include non-prod SBMD specs")
 
 bcore_matter_helper_delegate_add_implementation(
     DEV SelfSignedCertifierOperationalCredentialsIssuer

@@ -190,6 +190,9 @@ bcore_option(NAME BCORE_M1LTE
 bcore_option(NAME BCORE_SUPPORT_ZIGBEE_TELEMETRY
            DEFINITION BARTON_CONFIG_SUPPORT_ZIGBEE_TELEMETRY
            DESCRIPTION "Support for old zigbee telemetry feature.")
+bcore_option(NAME BCORE_INCLUDE_NON_PROD_SBMD_SPECS
+           DEFINITION BARTON_CONFIG_INCLUDE_NON_PROD_SBMD_SPECS
+           DESCRIPTION "Include non-prod SBMD specs in the build.")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
