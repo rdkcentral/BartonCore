@@ -258,13 +258,52 @@ ble_attach() {
             echo "${radioHciIndex}" > "${DBUS_DIR}/ble_adapter_id"
             echo "[otbr-radio] Wrote BLE adapter index ${radioHciIndex} to ${DBUS_DIR}/ble_adapter_id"
 
+            # Allow the kernel's initial HCI probe to complete before we send
+            # any commands.  The kernel sends HCI_Reset, Read_Local_Features,
+            # etc. immediately after btattach registers the device.  Sending
+            # our own commands too early races with those and can leave the
+            # Silicon Labs CPC-BLE bridge in a broken state where LE scanning
+            # returns "Command Disallowed" or I/O errors.
+            echo "[otbr-radio] Waiting for kernel HCI initialization to settle..."
+            sleep 3
+
+            # Bring the device up cleanly.  Do NOT use hcitool here — it uses
+            # the legacy HCI socket which permanently poisons the MGMT layer.
+            echo "[otbr-radio] Bringing ${radioHci} up..."
+            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
+            sleep 1
+
+            # Verify the adapter is accessible.
+            if ! ble_verify_scan "${radioHci}"; then
+                echo "[otbr-radio] WARNING: HCI verification failed after initial up." >&2
+                echo "[otbr-radio] Attempting down/up recovery cycle..." >&2
+                nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" down 2>/dev/null || true
+                sleep 2
+                nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
+                sleep 2
+
+                if ! ble_verify_scan "${radioHci}"; then
+                    echo "[otbr-radio] ERROR: HCI still not accessible after recovery." >&2
+                    return 1
+                fi
+            fi
+
+            echo "[otbr-radio] LE scan verification passed for ${radioHci}."
+
             # Kill any stale bluetoothd before starting a fresh instance.
             pkill -x bluetoothd 2>/dev/null || true
             sleep 0.5
-            echo "[otbr-radio] Starting bluetoothd (host netns, host system D-Bus)..."
-            nsenter --net="${HOST_NETNS}" env -u DBUS_SYSTEM_BUS_ADDRESS bluetoothd &
+            echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
+            nsenter --net="${HOST_NETNS}" bluetoothd &
+            BLUETOOTHD_PID=$!
             sleep 1
-            echo "[otbr-radio] bluetoothd started."
+
+            if ! kill -0 ${BLUETOOTHD_PID} 2>/dev/null; then
+                echo "[otbr-radio] ERROR: bluetoothd (PID ${BLUETOOTHD_PID}) exited immediately." >&2
+                return 1
+            fi
+
+            echo "[otbr-radio] bluetoothd started (PID ${BLUETOOTHD_PID})."
 
             return 0
         fi
@@ -279,12 +318,99 @@ ble_attach() {
     return 1
 }
 
-# ble_monitor — background loop that restarts btattach (and bluetoothd)
-# whenever btattach exits.  This handles USB-IP disconnect/reconnect
-# cycles where cpcd and bt_host_cpc_hci_bridge survive but btattach
-# loses the HCI device and exits.
+# ble_verify_scan — test that the HCI adapter exists and is responsive.
+# Returns 0 if the adapter is detected by hciconfig, 1 if it fails.
+# Uses a hard 4-second timeout to avoid blocking if the CPC-BLE bridge is
+# completely unresponsive.
+# IMPORTANT: Do NOT use hcitool lescan here.  hcitool uses the legacy HCI socket
+# interface which permanently conflicts with bluetoothd's MGMT socket — starting
+# an LE scan via hcitool and killing it leaves the MGMT layer stuck, causing all
+# subsequent StartDiscovery calls to fail with "InProgress".
+ble_verify_scan() {
+    local hciDev="$1"
+    local output
+    output=$(timeout 4 nsenter --net="${HOST_NETNS}" hciconfig "${hciDev}" 2>&1) || true
+
+    if echo "${output}" | grep -qi "no such device"; then
+        echo "[otbr-radio] ble_verify_scan: device not found — ${output}" >&2
+        return 1
+    fi
+
+    # As long as hciconfig recognizes the device, the btattach→HCI chain
+    # is functional.  bluetoothd will power it on via MGMT when it starts.
+    if ! echo "${output}" | grep -qi "Bus:"; then
+        echo "[otbr-radio] ble_verify_scan: unexpected output — ${output}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+# ble_health_check — Passive D-Bus-based health check suitable for use while
+# bluetoothd is running.  Verifies the adapter is reachable and powered via
+# D-Bus property reads.  Does NOT start/stop discovery to avoid conflicting
+# with Matter SDK BLE scans.  Returns 0 if the adapter is powered, 1 on failure.
+ble_health_check() {
+    local adapterPath="/org/bluez/${1}"
+
+    # Verify bluetoothd is reachable and adapter is powered.
+    local powered
+    powered=$(timeout 5 dbus-send --system --dest=org.bluez \
+        --print-reply "${adapterPath}" \
+        org.freedesktop.DBus.Properties.Get \
+        string:org.bluez.Adapter1 string:Powered 2>&1) || true
+
+    if echo "${powered}" | grep -qi "error\|no reply\|not found"; then
+        echo "[otbr-radio] ble_health_check: adapter not reachable on D-Bus" >&2
+        return 1
+    fi
+
+    if ! echo "${powered}" | grep -q "boolean true"; then
+        echo "[otbr-radio] ble_health_check: adapter not powered" >&2
+        return 1
+    fi
+
+    # Verify adapter address is resolvable (validates HCI transport).
+    local address
+    address=$(timeout 5 dbus-send --system --dest=org.bluez \
+        --print-reply "${adapterPath}" \
+        org.freedesktop.DBus.Properties.Get \
+        string:org.bluez.Adapter1 string:Address 2>&1) || true
+
+    if echo "${address}" | grep -qi "error\|no reply\|not found"; then
+        echo "[otbr-radio] ble_health_check: cannot read adapter address" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+# ble_monitor — background loop that monitors BLE health and restarts the
+# stack when needed.  Handles two failure modes:
+#   1. btattach exits (e.g. USB-IP disconnect/reconnect cycle)
+#   2. btattach alive but CPC-BLE bridge in broken state (scan fails)
+#
+# The health check runs every BLE_HEALTH_INTERVAL seconds and verifies that
+# LE scanning works.  If scanning fails, it kills the BLE chain and restarts
+# it from the CPC bridge level.
+#
+# A startup grace period (BLE_HEALTH_GRACE) allows Thread traffic to settle
+# after otbr-agent forms/joins the network before the first health check.
+# During initial Thread establishment, CPC bandwidth is saturated and BLE
+# commands may time out — this is transient, not a real failure.
+BLE_HEALTH_INTERVAL=60
+BLE_HEALTH_GRACE=90
+
 ble_monitor() {
     local backoff=2
+    local healthCounter=0
+    local radioHci=""
+    local graceRemaining=${BLE_HEALTH_GRACE}
+
+    # Resolve the radio HCI device name from the adapter index file.
+    if [ -f "${DBUS_DIR}/ble_adapter_id" ]; then
+        radioHci="hci$(cat "${DBUS_DIR}/ble_adapter_id" | tr -d '[:space:]')"
+    fi
 
     while true; do
 
@@ -293,9 +419,19 @@ ble_monitor() {
 
             # If bt_host_cpc_hci_bridge also died, wait for it to come back.
             if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; waiting for it to restart..." >&2
-                sleep "${backoff}"
-                continue
+                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; restarting bridge..." >&2
+                ble_restart_bridge
+
+                if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
+                    echo "[otbr-radio] Bridge restart failed; retrying in ${backoff}s..." >&2
+                    sleep "${backoff}"
+
+                    if [ ${backoff} -lt 30 ]; then
+                        backoff=$((backoff * 2))
+                    fi
+
+                    continue
+                fi
             fi
 
             # pts_hci must still be valid.
@@ -308,6 +444,12 @@ ble_monitor() {
             if ble_attach; then
                 echo "[otbr-radio] BLE stack restarted successfully."
                 backoff=2
+                healthCounter=0
+
+                # Update the HCI device name after restart (index may change).
+                if [ -f "${DBUS_DIR}/ble_adapter_id" ]; then
+                    radioHci="hci$(cat "${DBUS_DIR}/ble_adapter_id" | tr -d '[:space:]')"
+                fi
             else
                 echo "[otbr-radio] BLE stack restart failed; retrying in ${backoff}s..." >&2
 
@@ -315,10 +457,82 @@ ble_monitor() {
                     backoff=$((backoff * 2))
                 fi
             fi
+        else
+            # btattach is alive — periodically verify scanning still works.
+            # Skip health checks during the startup grace period.
+            if [ ${graceRemaining} -gt 0 ]; then
+                graceRemaining=$((graceRemaining - 1))
+            else
+                healthCounter=$((healthCounter + 1))
+
+                if [ ${healthCounter} -ge ${BLE_HEALTH_INTERVAL} ] && [ -n "${radioHci}" ]; then
+                    healthCounter=0
+
+                    if ! ble_health_check "${radioHci}"; then
+                        echo "[otbr-radio] BLE health check FAILED — scan broken. Restarting full BLE chain..." >&2
+                        # Kill the entire BLE chain.
+                        kill ${BTATTACH_PID} 2>/dev/null || true
+                        pkill -x bluetoothd 2>/dev/null || true
+                        kill ${BT_BRIDGE_PID} 2>/dev/null || true
+                        sleep 5
+
+                        # Restart the bridge with retries.
+                        ble_restart_bridge
+                        sleep 1
+                        continue
+                    fi
+                fi
+            fi
         fi
 
-        sleep "${backoff}"
+        sleep 1
     done
+}
+
+# ble_restart_bridge — restart bt_host_cpc_hci_bridge with retries.
+# cpcd may take 5-20s to release the BLE endpoint after the old bridge exits.
+# Retry up to 4 times with increasing pre-delays (5s, 10s, 15s, 20s).
+ble_restart_bridge() {
+    local attempt=0
+    local maxAttempts=4
+
+    while [ ${attempt} -lt ${maxAttempts} ]; do
+        attempt=$((attempt + 1))
+        local delay=$((attempt * 5))
+        echo "[otbr-radio] Restarting bt_host_cpc_hci_bridge (attempt ${attempt}/${maxAttempts}, pre-delay ${delay}s)..."
+
+        # Wait for cpcd to release the BLE endpoint.  First attempt gets a
+        # short delay; subsequent attempts wait longer.
+        sleep ${delay}
+        rm -f "${BT_BRIDGE_DIR}/pts_hci"
+        cd "${BT_BRIDGE_DIR}"
+        bt_host_cpc_hci_bridge &
+        BT_BRIDGE_PID=$!
+
+        # Wait for pts_hci symlink.
+        local bridgeWait=0
+
+        while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ] && [ ${bridgeWait} -lt 10 ]; do
+
+            if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
+                break
+            fi
+
+            sleep 1
+            bridgeWait=$((bridgeWait + 1))
+        done
+
+        if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+            echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID})."
+            return 0
+        fi
+
+        echo "[otbr-radio] bt_host_cpc_hci_bridge attempt ${attempt} failed." >&2
+        kill ${BT_BRIDGE_PID} 2>/dev/null || true
+    done
+
+    echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge failed after ${maxAttempts} attempts." >&2
+    return 1
 }
 
 if [ ! -e "${HOST_NETNS}" ]; then

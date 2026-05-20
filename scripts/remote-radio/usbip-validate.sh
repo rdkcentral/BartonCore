@@ -94,8 +94,8 @@ fi
 info "Checking otbr-radio container..."
 
 OTBR_CONTAINER_ID=""
-EXPECTED_PROCS=("cpcd" "otbr-agent")
-OPTIONAL_PROCS=("bt_host_cpc_hci_bridge" "btattach" "bluetoothd")
+EXPECTED_PROCS=("cpcd" "otbr-agent" "bt_host_cpc_hci_bridge" "btattach" "bluetoothd")
+OPTIONAL_PROCS=()
 
 if [[ -S "${DOCKER_SOCK}" ]]; then
     # Find the otbr-radio container
@@ -170,7 +170,7 @@ fi
 info "Checking D-Bus connectivity to otbr-agent..."
 
 if [[ -S "${DBUS_SOCKET}" ]] && command -v gdbus &>/dev/null; then
-    DBUS_INTROSPECT=$(gdbus introspect \
+    DBUS_INTROSPECT=$(timeout 10 gdbus introspect \
         --address "unix:path=${DBUS_SOCKET}" \
         --dest io.openthread.BorderRouter.wpan0 \
         --object-path /io/openthread/BorderRouter/wpan0 2>&1 || true)
@@ -179,7 +179,7 @@ if [[ -S "${DBUS_SOCKET}" ]] && command -v gdbus &>/dev/null; then
         pass "otbr-agent D-Bus interface is reachable"
 
         # Try to read Thread device role
-        DEVICE_ROLE=$(gdbus call \
+        DEVICE_ROLE=$(timeout 10 gdbus call \
             --address "unix:path=${DBUS_SOCKET}" \
             --dest io.openthread.BorderRouter.wpan0 \
             --object-path /io/openthread/BorderRouter/wpan0 \
@@ -273,16 +273,17 @@ fi
 info "Checking BLE controller via bluetoothctl..."
 
 if [[ -e "${HOST_NETNS}" ]] && command -v bluetoothctl &>/dev/null; then
-    # bluetoothctl uses D-Bus; unset the private otbr-dbus address so it reaches
-    # the host system bus where bluetoothd registered itself.
-    BT_LIST=$(sudo nsenter --net="${HOST_NETNS}" env -u DBUS_SYSTEM_BUS_ADDRESS bluetoothctl list 2>/dev/null || true)
+    # bluetoothctl uses D-Bus; bluetoothd registers on our private D-Bus so
+    # we use the same DBUS_SYSTEM_BUS_ADDRESS that the container inherits.
+    # Use timeout because bluetoothctl blocks if bluetoothd is not running.
+    BT_LIST=$(timeout 5 sudo nsenter --net="${HOST_NETNS}" bluetoothctl list 2>/dev/null || true)
 
     if [[ -n "${BT_LIST}" ]]; then
         CONTROLLER_COUNT=$(echo "${BT_LIST}" | wc -l)
         pass "bluetoothctl sees ${CONTROLLER_COUNT} controller(s)"
         echo "${BT_LIST}" | sed 's/^/         /'
     else
-        warn "bluetoothctl returned no controllers"
+        fail "bluetoothctl returned no controllers"
     fi
 else
     skip "Cannot run bluetoothctl in host network namespace"
