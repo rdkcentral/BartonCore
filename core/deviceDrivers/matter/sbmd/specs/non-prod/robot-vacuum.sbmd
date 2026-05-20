@@ -51,7 +51,7 @@ endpoints:
     profileVersion: 1
     resources:
       - id: "operationalState"
-        type: "enum"
+        type: "string"
         modes:
           - "read"
           - "dynamic"
