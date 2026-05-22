@@ -180,6 +180,13 @@ echo "LSAN_OPTIONS=suppressions=$BARTON_TOP/testing/lsan.supp" >> $OUTFILE
 echo "BARTON_PYTHONPATH=/usr/local/lib/python3.x/dist-packages:/usr/lib/python3/dist-packages:$BARTON_TOP" >> $OUTFILE
 # path to libbCore.so
 echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
+# debuginfod cache: if the host has a cache directory, record its path so it can be
+# bind-mounted into the container via the compose.debuginfod-cache.yaml overlay.
+HOST_DEBUGINFOD_CACHE="${DEBUGINFOD_CACHE_PATH:-$HOME/.cache/debuginfod_client}"
+if [ -d "$HOST_DEBUGINFOD_CACHE" ]; then
+    echo "HOST_DEBUGINFOD_CACHE=$HOST_DEBUGINFOD_CACHE" >> $OUTFILE
+    echo "DEBUGINFOD_CACHE_PATH=$HOST_DEBUGINFOD_CACHE" >> $OUTFILE
+fi
 ##############################################################################
 
 # Ensure the container network exists
