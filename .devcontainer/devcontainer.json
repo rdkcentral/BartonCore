@@ -52,7 +52,11 @@
         // when loaded via GObject introspection in Python. Without this, VS Code's pytest
         // discovery crashes because ASAN kills the process. This is harmless for non-ASAN
         // processes — they simply ignore the option.
-        "ASAN_OPTIONS": "verify_asan_link_order=0"
+        "ASAN_OPTIONS": "verify_asan_link_order=0",
+
+        // Disable debuginfod URL lookups — GDB hangs trying to download symbols from
+        // the Ubuntu debuginfod server when this is set.
+        "DEBUGINFOD_URLS": ""
     },
 
     // specify the non-root user to use in the container

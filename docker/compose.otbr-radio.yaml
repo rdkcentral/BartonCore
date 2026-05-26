@@ -105,15 +105,29 @@ services:
             # AF_BLUETOOTH sockets are only available in the initial (host)
             # network namespace.
             - /proc/1/ns/net:/run/host-netns:ro
+            # Mount the CPC socket proxy script for remote CPC mode.
+            - ../scripts/remote-radio/cpc_socket_proxy.py:/opt/cpc-proxy/cpc_socket_proxy.py:ro
+            # Mount the HCI PTY proxy that strips Extended Advertising from
+            # the LE features response, working around a CPC firmware bug.
+            - ../scripts/remote-radio/hci_pty_proxy.py:/opt/cpc-proxy/hci_pty_proxy.py:ro
+            # Bind-mount the entrypoint for development iteration without
+            # rebuilding the Docker image.
+            - ./otbr-radio-entrypoint.sh:/entrypoint.sh:ro
         environment:
             # RADIO_DEVICE must be set explicitly before starting this overlay.
             # On a shared build server each user's radio may attach at a
             # different path (e.g. /dev/ttyACM8). The entrypoint validates the
             # path at runtime and exits with a clear error if it is unset or
             # the device does not exist.
+            # Not required when CPC_REMOTE_HOST is set.
             - RADIO_DEVICE=${RADIO_DEVICE:-}
             - BACKBONE_IF=${BACKBONE_IF:-}
             - DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/otbr-dbus/system_bus_socket
+            # Remote CPC mode: set CPC_REMOTE_HOST to connect to a remote cpcd
+            # via the CPC socket proxy instead of running cpcd locally.
+            - CPC_REMOTE_HOST=${CPC_REMOTE_HOST:-}
+            - CPC_REMOTE_PORT=${CPC_REMOTE_PORT:-15000}
+            - CPC_INSTANCE=${CPC_INSTANCE:-cpcd_0}
         # Restart automatically if cpcd/otbr-agent crash, but limit retries so
         # a missing/invalid RADIO_DEVICE does not cause an infinite restart
         # loop and log spam when this overlay is included without hardware.

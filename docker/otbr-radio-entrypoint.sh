@@ -27,11 +27,20 @@
 #   1. D-Bus system bus
 #   2. avahi-daemon  (mDNS/DNS-SD — required by otbr-agent built with OTBR_MDNS=avahi)
 #   3. cpcd  (CPC daemon — USB serial ↔ CPC socket)
+#      OR CPC socket proxy client (when CPC_REMOTE_HOST is set)
 #   4. otbr-agent  (Thread Border Router — CPC socket ↔ D-Bus API)
 #
 # Environment variables:
 #   RADIO_DEVICE              - host path of the USB serial device. The compose
 #                               overlay requires this to be set explicitly.
+#                               Not required when CPC_REMOTE_HOST is set.
+#   CPC_REMOTE_HOST           - when set, connect to a remote cpcd via the CPC
+#                               socket proxy instead of running cpcd locally.
+#                               The remote host must be running
+#                               cpc_remote_access.sh in server mode.
+#   CPC_REMOTE_PORT           - base port for the CPC socket proxy
+#                               (default: 15000)
+#   CPC_INSTANCE              - CPC daemon instance name (default: cpcd_0)
 #   BACKBONE_IF               - network interface to use as the Thread backbone,
 #                               e.g. eth0
 #   CPCD_CONF                 - path to cpcd config file
@@ -46,8 +55,11 @@ set -e
 
 # RADIO_DEVICE is intentionally not defaulted here.
 # If it is unset or empty the validation section below will exit with a
-# clear error message.
+# clear error message (unless CPC_REMOTE_HOST is set).
 RADIO_DEVICE="${RADIO_DEVICE}"
+CPC_REMOTE_HOST="${CPC_REMOTE_HOST:-}"
+CPC_REMOTE_PORT="${CPC_REMOTE_PORT:-15000}"
+CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
 DBUS_DIR="${DBUS_DIR:-/var/run/otbr-dbus}"
 DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
@@ -93,22 +105,104 @@ dbus-daemon --config-file=/etc/otbr-dbus.conf --fork --nopidfile
 echo "[otbr-radio] Private D-Bus started."
 
 ###############################################################################
-# 2. Validate the USB radio device
+# 2. Validate radio access and start CPC
+#
+# Two modes are supported:
+#   a) Local radio (default): RADIO_DEVICE must point to a USB serial device.
+#      cpcd is started locally to manage the CPC link.
+#   b) Remote CPC: CPC_REMOTE_HOST is set.  A CPC socket proxy client connects
+#      to a remote cpcd over TCP, creating local Unix sockets that libcpc
+#      applications (bt_host_cpc_hci_bridge, otbr-agent) use transparently.
 ###############################################################################
-if [ -z "${RADIO_DEVICE}" ]; then
-    echo "[otbr-radio] ERROR: RADIO_DEVICE is not set." >&2
-    echo "[otbr-radio]        Set it in docker/.env or export before starting:" >&2
-    echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
-    echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
-    exit 1
+CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
+
+if [ -n "${CPC_REMOTE_HOST}" ]; then
+    #--------------------------------------------------------------------------
+    # Remote CPC mode — connect to cpcd running on a remote host via the
+    # CPC socket proxy.
+    #--------------------------------------------------------------------------
+    echo "[otbr-radio] Remote CPC mode: connecting to cpcd on ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT}"
+
+    CPC_PROXY_SCRIPT="/opt/cpc-proxy/cpc_socket_proxy.py"
+    CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
+    mkdir -p "${CPC_SOCKET_BASE}"
+
+    # Start proxy for the control socket.
+    echo "[otbr-radio] Starting CPC proxy: ctrl.cpcd.sock (port ${CPC_REMOTE_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/ctrl.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_REMOTE_PORT}" &
+
+    # Start proxy for the reset socket.
+    CPC_RESET_PORT=$((CPC_REMOTE_PORT + 1))
+    echo "[otbr-radio] Starting CPC proxy: reset.cpcd.sock (port ${CPC_RESET_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/reset.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_RESET_PORT}" &
+
+    # Start proxies for the Bluetooth RCP endpoint.
+    # bt_host_cpc_hci_bridge opens SL_CPC_ENDPOINT_BLUETOOTH_RCP which is 14
+    # in cpcd v4.4.6 (host library sl_cpc.h).
+    CPC_BT_EP=14
+    CPC_BT_DATA_PORT=$((CPC_REMOTE_PORT + 100 + CPC_BT_EP))
+    CPC_BT_EVENT_PORT=$((CPC_REMOTE_PORT + 400 + CPC_BT_EP))
+    echo "[otbr-radio] Starting CPC proxy: ep${CPC_BT_EP}.cpcd.sock (port ${CPC_BT_DATA_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/ep${CPC_BT_EP}.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_BT_DATA_PORT}" &
+    echo "[otbr-radio] Starting CPC proxy: ep${CPC_BT_EP}.event.cpcd.sock (port ${CPC_BT_EVENT_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/ep${CPC_BT_EP}.event.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_BT_EVENT_PORT}" &
+
+    # Start proxies for the OpenThread/Spinel endpoint.
+    # otbr-agent uses spinel+cpc://cpcd_0 which maps to
+    # SL_CPC_ENDPOINT_15_4 (12) in cpcd v4.4.6 for multi-PAN RCP firmware.
+    CPC_SPINEL_EP=12
+    CPC_SPINEL_DATA_PORT=$((CPC_REMOTE_PORT + 100 + CPC_SPINEL_EP))
+    CPC_SPINEL_EVENT_PORT=$((CPC_REMOTE_PORT + 400 + CPC_SPINEL_EP))
+    echo "[otbr-radio] Starting CPC proxy: ep${CPC_SPINEL_EP}.cpcd.sock (port ${CPC_SPINEL_DATA_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/ep${CPC_SPINEL_EP}.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_SPINEL_DATA_PORT}" &
+    echo "[otbr-radio] Starting CPC proxy: ep${CPC_SPINEL_EP}.event.cpcd.sock (port ${CPC_SPINEL_EVENT_PORT})"
+    python3 "${CPC_PROXY_SCRIPT}" client \
+        -s "${CPC_SOCKET_BASE}/ep${CPC_SPINEL_EP}.event.cpcd.sock" \
+        -H "${CPC_REMOTE_HOST}" -p "${CPC_SPINEL_EVENT_PORT}" &
+
+    # Give the proxies a moment to establish connections.
+    sleep 2
+
+    # Verify the control socket was created.
+    if [ ! -S "${CPC_SOCKET_BASE}/ctrl.cpcd.sock" ]; then
+        echo "[otbr-radio] ERROR: CPC proxy failed to create ctrl.cpcd.sock." >&2
+        echo "[otbr-radio]        Check that ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT} is reachable" >&2
+        echo "[otbr-radio]        and cpc_remote_access.sh server is running." >&2
+        exit 1
+    fi
+    echo "[otbr-radio] CPC proxy client connected to ${CPC_REMOTE_HOST}."
+
+else
+    #--------------------------------------------------------------------------
+    # Local radio mode — validate RADIO_DEVICE and start cpcd.
+    #--------------------------------------------------------------------------
+    if [ -z "${RADIO_DEVICE}" ]; then
+        echo "[otbr-radio] ERROR: Neither RADIO_DEVICE nor CPC_REMOTE_HOST is set." >&2
+        echo "[otbr-radio]        Set RADIO_DEVICE for a local radio:" >&2
+        echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
+        echo "[otbr-radio]        Or set CPC_REMOTE_HOST for a remote cpcd:" >&2
+        echo "[otbr-radio]            export CPC_REMOTE_HOST=10.0.0.1" >&2
+        exit 1
+    fi
+
+    if [ ! -e "${RADIO_DEVICE}" ]; then
+        echo "[otbr-radio] ERROR: USB radio device '${RADIO_DEVICE}' not found." >&2
+        echo "[otbr-radio]        Check that the thread radio is connected and USB-IP is attached." >&2
+        echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
+        exit 1
+    fi
+    echo "[otbr-radio] Using USB radio device: ${RADIO_DEVICE}"
 fi
-if [ ! -e "${RADIO_DEVICE}" ]; then
-    echo "[otbr-radio] ERROR: USB radio device '${RADIO_DEVICE}' not found." >&2
-    echo "[otbr-radio]        Check that the thread radio is connected and USB-IP is attached." >&2
-    echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
-    exit 1
-fi
-echo "[otbr-radio] Using USB radio device: ${RADIO_DEVICE}"
 
 ###############################################################################
 # 3. Start Avahi daemon (required by otbr-agent — built with OTBR_MDNS=avahi)
@@ -119,49 +213,53 @@ avahi-daemon --daemonize --no-chroot
 echo "[otbr-radio] avahi-daemon started."
 
 ###############################################################################
-# 4. Configure and start cpcd
+# 4. Configure and start cpcd (local radio mode only)
 #
 # Always write a fresh config so we fully control all keys.
 # The cpcd installed config uses 'uart_device_file' (not 'uart_device'), so
 # patching the existing file would silently fail leaving the wrong device path.
+#
+# Skipped when CPC_REMOTE_HOST is set — the CPC proxy handles connectivity.
 ###############################################################################
-echo "[otbr-radio] Writing cpcd config to ${CPCD_CONF}..."
-mkdir -p "$(dirname "${CPCD_CONF}")"
-cat > "${CPCD_CONF}" <<EOF
+if [ -z "${CPC_REMOTE_HOST}" ]; then
+    echo "[otbr-radio] Writing cpcd config to ${CPCD_CONF}..."
+    mkdir -p "$(dirname "${CPCD_CONF}")"
+    cat > "${CPCD_CONF}" <<EOF
 # cpcd configuration — written at container startup by otbr-radio-entrypoint.sh
-instance_name: cpcd_0
+instance_name: ${CPC_INSTANCE}
 bus_type: UART
 uart_device_file: ${RADIO_DEVICE}
 uart_device_baud: 115200
 uart_hardflow: true
 EOF
 
-echo "[otbr-radio] Starting cpcd (instance: cpcd_0, device: ${RADIO_DEVICE})..."
-CPCD_LOG="/tmp/cpcd.log"
-: > "${CPCD_LOG}"
-cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
-CPCD_PID=$!
+    echo "[otbr-radio] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
+    CPCD_LOG="/tmp/cpcd.log"
+    : > "${CPCD_LOG}"
+    cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
+    CPCD_PID=$!
 
-# Wait until cpcd logs its ready message, meaning it has fully connected to the
-# secondary and is accepting client connections.
-CPCD_WAIT_MAX=30
-cpcdWaitCount=0
-echo "[otbr-radio] Waiting for cpcd to be ready..."
-while ! grep -q "Daemon startup was successful" "${CPCD_LOG}" 2>/dev/null; do
-    if ! kill -0 ${CPCD_PID} 2>/dev/null; then
-        echo "[otbr-radio] ERROR: cpcd exited before becoming ready. Check device and firmware." >&2
-        cat "${CPCD_LOG}" >&2
-        exit 1
-    fi
-    if [ ${cpcdWaitCount} -ge ${CPCD_WAIT_MAX} ]; then
-        echo "[otbr-radio] ERROR: cpcd did not become ready after ${CPCD_WAIT_MAX}s." >&2
-        cat "${CPCD_LOG}" >&2
-        exit 1
-    fi
-    sleep 1
-    cpcdWaitCount=$((cpcdWaitCount + 1))
-done
-echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
+    # Wait until cpcd logs its ready message, meaning it has fully connected to the
+    # secondary and is accepting client connections.
+    CPCD_WAIT_MAX=30
+    cpcdWaitCount=0
+    echo "[otbr-radio] Waiting for cpcd to be ready..."
+    while ! grep -q "Daemon startup was successful" "${CPCD_LOG}" 2>/dev/null; do
+        if ! kill -0 ${CPCD_PID} 2>/dev/null; then
+            echo "[otbr-radio] ERROR: cpcd exited before becoming ready. Check device and firmware." >&2
+            cat "${CPCD_LOG}" >&2
+            exit 1
+        fi
+        if [ ${cpcdWaitCount} -ge ${CPCD_WAIT_MAX} ]; then
+            echo "[otbr-radio] ERROR: cpcd did not become ready after ${CPCD_WAIT_MAX}s." >&2
+            cat "${CPCD_LOG}" >&2
+            exit 1
+        fi
+        sleep 1
+        cpcdWaitCount=$((cpcdWaitCount + 1))
+    done
+    echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
+fi
 
 ###############################################################################
 # 5. Start bt_host_cpc_hci_bridge (CPC → virtual HCI serial device)
@@ -174,6 +272,9 @@ echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
 echo "[otbr-radio] Starting bt_host_cpc_hci_bridge..."
 BT_BRIDGE_DIR="/var/run/bt-hci-bridge"
 mkdir -p "${BT_BRIDGE_DIR}"
+# Remove any stale symlink from a previous run so the wait loop below
+# blocks until bt_host_cpc_hci_bridge creates a fresh one.
+rm -f "${BT_BRIDGE_DIR}/pts_hci"
 cd "${BT_BRIDGE_DIR}"
 bt_host_cpc_hci_bridge &
 BT_BRIDGE_PID=$!
@@ -196,6 +297,38 @@ while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; do
 done
 PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
 echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID}, pts: ${PTS_DEVICE}, waited ${btBridgeWaitCount}s)."
+
+###############################################################################
+# 5b. Start HCI PTY proxy (strip LE Extended Advertising feature bit)
+#
+# The Silicon Labs CPC BLE firmware reports Extended Advertising support but
+# responds to Extended Scan Disable (0x2042) with the legacy opcode (0x200c).
+# The kernel treats this as unexpected, times out, and cannot stop scanning —
+# which prevents LE connections from being established.
+#
+# This proxy sits between bt_host_cpc_hci_bridge and btattach, modifying the
+# LE Read Local Supported Features response to clear the Extended Advertising
+# bit.  The kernel then uses legacy BLE commands that the firmware handles
+# correctly.
+###############################################################################
+HCI_PROXY_SCRIPT="/opt/cpc-proxy/hci_pty_proxy.py"
+
+if [ -f "${HCI_PROXY_SCRIPT}" ]; then
+    echo "[otbr-radio] Starting HCI PTY proxy (strip Extended Advertising)..."
+    python3 "${HCI_PROXY_SCRIPT}" "${PTS_DEVICE}" "${BT_BRIDGE_DIR}/pts_hci" &
+    HCI_PROXY_PID=$!
+    sleep 1
+
+    if ! kill -0 ${HCI_PROXY_PID} 2>/dev/null; then
+        echo "[otbr-radio] WARNING: HCI PTY proxy exited early — continuing without it." >&2
+    else
+        # btattach will now open the proxy's PTY instead of the original.
+        PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
+        echo "[otbr-radio] HCI PTY proxy ready (PID ${HCI_PROXY_PID}, new pts: ${PTS_DEVICE})."
+    fi
+else
+    echo "[otbr-radio] HCI PTY proxy not found — skipping (Extended BLE commands may fail)."
+fi
 
 ###############################################################################
 # 6. Attach the virtual HCI device and start bluetoothd
@@ -258,52 +391,36 @@ ble_attach() {
             echo "${radioHciIndex}" > "${DBUS_DIR}/ble_adapter_id"
             echo "[otbr-radio] Wrote BLE adapter index ${radioHciIndex} to ${DBUS_DIR}/ble_adapter_id"
 
-            # Allow the kernel's initial HCI probe to complete before we send
-            # any commands.  The kernel sends HCI_Reset, Read_Local_Features,
-            # etc. immediately after btattach registers the device.  Sending
-            # our own commands too early races with those and can leave the
-            # Silicon Labs CPC-BLE bridge in a broken state where LE scanning
-            # returns "Command Disallowed" or I/O errors.
-            echo "[otbr-radio] Waiting for kernel HCI initialization to settle..."
-            sleep 3
-
-            # Bring the device up cleanly.  Do NOT use hcitool here — it uses
-            # the legacy HCI socket which permanently poisons the MGMT layer.
-            echo "[otbr-radio] Bringing ${radioHci} up..."
-            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
-            sleep 1
-
-            # Verify the adapter is accessible.
-            if ! ble_verify_scan "${radioHci}"; then
-                echo "[otbr-radio] WARNING: HCI verification failed after initial up." >&2
-                echo "[otbr-radio] Attempting down/up recovery cycle..." >&2
-                nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" down 2>/dev/null || true
-                sleep 2
-                nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
-                sleep 2
-
-                if ! ble_verify_scan "${radioHci}"; then
-                    echo "[otbr-radio] ERROR: HCI still not accessible after recovery." >&2
-                    return 1
-                fi
-            fi
-
-            echo "[otbr-radio] LE scan verification passed for ${radioHci}."
-
             # Kill any stale bluetoothd before starting a fresh instance.
             pkill -x bluetoothd 2>/dev/null || true
             sleep 0.5
+
+            # Fix the Silicon Labs CPC BLE controller initialization issue.
+            #
+            # Problem: the kernel's initial HCI probe (triggered by btattach)
+            # sends commands that the CPC firmware responds to with malformed
+            # responses, leaving the controller in a state where LE scanning
+            # returns "Command Disallowed" (0x0C).
+            #
+            # Solution: cycle the adapter down→up to clear the kernel's stale
+            # HCI state, then send a raw HCI Reset to fix the controller.
+            # After that, the adapter is in a clean state and bluetoothd can
+            # start without conflicts.  Starting bluetoothd AFTER the reset
+            # is critical — if bluetoothd runs when the HCI Reset is sent,
+            # bluetoothd's internal state becomes inconsistent (InProgress
+            # errors on StartDiscovery).
+            echo "[otbr-radio] Resetting ${radioHci} (down/up/HCI Reset)..."
+            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" down 2>/dev/null || true
+            sleep 0.5
+            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
+            sleep 0.5
+            nsenter --net="${HOST_NETNS}" hcitool -i "${radioHci}" cmd 0x03 0x0003 >/dev/null 2>&1 || true
+            sleep 0.5
+
             echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
             nsenter --net="${HOST_NETNS}" bluetoothd &
-            BLUETOOTHD_PID=$!
-            sleep 1
-
-            if ! kill -0 ${BLUETOOTHD_PID} 2>/dev/null; then
-                echo "[otbr-radio] ERROR: bluetoothd (PID ${BLUETOOTHD_PID}) exited immediately." >&2
-                return 1
-            fi
-
-            echo "[otbr-radio] bluetoothd started (PID ${BLUETOOTHD_PID})."
+            sleep 3
+            echo "[otbr-radio] BLE stack ready (${radioHci})."
 
             return 0
         fi
@@ -318,99 +435,12 @@ ble_attach() {
     return 1
 }
 
-# ble_verify_scan — test that the HCI adapter exists and is responsive.
-# Returns 0 if the adapter is detected by hciconfig, 1 if it fails.
-# Uses a hard 4-second timeout to avoid blocking if the CPC-BLE bridge is
-# completely unresponsive.
-# IMPORTANT: Do NOT use hcitool lescan here.  hcitool uses the legacy HCI socket
-# interface which permanently conflicts with bluetoothd's MGMT socket — starting
-# an LE scan via hcitool and killing it leaves the MGMT layer stuck, causing all
-# subsequent StartDiscovery calls to fail with "InProgress".
-ble_verify_scan() {
-    local hciDev="$1"
-    local output
-    output=$(timeout 4 nsenter --net="${HOST_NETNS}" hciconfig "${hciDev}" 2>&1) || true
-
-    if echo "${output}" | grep -qi "no such device"; then
-        echo "[otbr-radio] ble_verify_scan: device not found — ${output}" >&2
-        return 1
-    fi
-
-    # As long as hciconfig recognizes the device, the btattach→HCI chain
-    # is functional.  bluetoothd will power it on via MGMT when it starts.
-    if ! echo "${output}" | grep -qi "Bus:"; then
-        echo "[otbr-radio] ble_verify_scan: unexpected output — ${output}" >&2
-        return 1
-    fi
-
-    return 0
-}
-
-# ble_health_check — Passive D-Bus-based health check suitable for use while
-# bluetoothd is running.  Verifies the adapter is reachable and powered via
-# D-Bus property reads.  Does NOT start/stop discovery to avoid conflicting
-# with Matter SDK BLE scans.  Returns 0 if the adapter is powered, 1 on failure.
-ble_health_check() {
-    local adapterPath="/org/bluez/${1}"
-
-    # Verify bluetoothd is reachable and adapter is powered.
-    local powered
-    powered=$(timeout 5 dbus-send --system --dest=org.bluez \
-        --print-reply "${adapterPath}" \
-        org.freedesktop.DBus.Properties.Get \
-        string:org.bluez.Adapter1 string:Powered 2>&1) || true
-
-    if echo "${powered}" | grep -qi "error\|no reply\|not found"; then
-        echo "[otbr-radio] ble_health_check: adapter not reachable on D-Bus" >&2
-        return 1
-    fi
-
-    if ! echo "${powered}" | grep -q "boolean true"; then
-        echo "[otbr-radio] ble_health_check: adapter not powered" >&2
-        return 1
-    fi
-
-    # Verify adapter address is resolvable (validates HCI transport).
-    local address
-    address=$(timeout 5 dbus-send --system --dest=org.bluez \
-        --print-reply "${adapterPath}" \
-        org.freedesktop.DBus.Properties.Get \
-        string:org.bluez.Adapter1 string:Address 2>&1) || true
-
-    if echo "${address}" | grep -qi "error\|no reply\|not found"; then
-        echo "[otbr-radio] ble_health_check: cannot read adapter address" >&2
-        return 1
-    fi
-
-    return 0
-}
-
-# ble_monitor — background loop that monitors BLE health and restarts the
-# stack when needed.  Handles two failure modes:
-#   1. btattach exits (e.g. USB-IP disconnect/reconnect cycle)
-#   2. btattach alive but CPC-BLE bridge in broken state (scan fails)
-#
-# The health check runs every BLE_HEALTH_INTERVAL seconds and verifies that
-# LE scanning works.  If scanning fails, it kills the BLE chain and restarts
-# it from the CPC bridge level.
-#
-# A startup grace period (BLE_HEALTH_GRACE) allows Thread traffic to settle
-# after otbr-agent forms/joins the network before the first health check.
-# During initial Thread establishment, CPC bandwidth is saturated and BLE
-# commands may time out — this is transient, not a real failure.
-BLE_HEALTH_INTERVAL=60
-BLE_HEALTH_GRACE=90
-
+# ble_monitor — background loop that restarts btattach (and bluetoothd)
+# whenever btattach exits.  This handles USB-IP disconnect/reconnect
+# cycles where cpcd and bt_host_cpc_hci_bridge survive but btattach
+# loses the HCI device and exits.
 ble_monitor() {
     local backoff=2
-    local healthCounter=0
-    local radioHci=""
-    local graceRemaining=${BLE_HEALTH_GRACE}
-
-    # Resolve the radio HCI device name from the adapter index file.
-    if [ -f "${DBUS_DIR}/ble_adapter_id" ]; then
-        radioHci="hci$(cat "${DBUS_DIR}/ble_adapter_id" | tr -d '[:space:]')"
-    fi
 
     while true; do
 
@@ -419,19 +449,9 @@ ble_monitor() {
 
             # If bt_host_cpc_hci_bridge also died, wait for it to come back.
             if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; restarting bridge..." >&2
-                ble_restart_bridge
-
-                if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-                    echo "[otbr-radio] Bridge restart failed; retrying in ${backoff}s..." >&2
-                    sleep "${backoff}"
-
-                    if [ ${backoff} -lt 30 ]; then
-                        backoff=$((backoff * 2))
-                    fi
-
-                    continue
-                fi
+                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; waiting for it to restart..." >&2
+                sleep "${backoff}"
+                continue
             fi
 
             # pts_hci must still be valid.
@@ -444,12 +464,6 @@ ble_monitor() {
             if ble_attach; then
                 echo "[otbr-radio] BLE stack restarted successfully."
                 backoff=2
-                healthCounter=0
-
-                # Update the HCI device name after restart (index may change).
-                if [ -f "${DBUS_DIR}/ble_adapter_id" ]; then
-                    radioHci="hci$(cat "${DBUS_DIR}/ble_adapter_id" | tr -d '[:space:]')"
-                fi
             else
                 echo "[otbr-radio] BLE stack restart failed; retrying in ${backoff}s..." >&2
 
@@ -457,82 +471,10 @@ ble_monitor() {
                     backoff=$((backoff * 2))
                 fi
             fi
-        else
-            # btattach is alive — periodically verify scanning still works.
-            # Skip health checks during the startup grace period.
-            if [ ${graceRemaining} -gt 0 ]; then
-                graceRemaining=$((graceRemaining - 1))
-            else
-                healthCounter=$((healthCounter + 1))
-
-                if [ ${healthCounter} -ge ${BLE_HEALTH_INTERVAL} ] && [ -n "${radioHci}" ]; then
-                    healthCounter=0
-
-                    if ! ble_health_check "${radioHci}"; then
-                        echo "[otbr-radio] BLE health check FAILED — scan broken. Restarting full BLE chain..." >&2
-                        # Kill the entire BLE chain.
-                        kill ${BTATTACH_PID} 2>/dev/null || true
-                        pkill -x bluetoothd 2>/dev/null || true
-                        kill ${BT_BRIDGE_PID} 2>/dev/null || true
-                        sleep 5
-
-                        # Restart the bridge with retries.
-                        ble_restart_bridge
-                        sleep 1
-                        continue
-                    fi
-                fi
-            fi
         fi
 
-        sleep 1
+        sleep "${backoff}"
     done
-}
-
-# ble_restart_bridge — restart bt_host_cpc_hci_bridge with retries.
-# cpcd may take 5-20s to release the BLE endpoint after the old bridge exits.
-# Retry up to 4 times with increasing pre-delays (5s, 10s, 15s, 20s).
-ble_restart_bridge() {
-    local attempt=0
-    local maxAttempts=4
-
-    while [ ${attempt} -lt ${maxAttempts} ]; do
-        attempt=$((attempt + 1))
-        local delay=$((attempt * 5))
-        echo "[otbr-radio] Restarting bt_host_cpc_hci_bridge (attempt ${attempt}/${maxAttempts}, pre-delay ${delay}s)..."
-
-        # Wait for cpcd to release the BLE endpoint.  First attempt gets a
-        # short delay; subsequent attempts wait longer.
-        sleep ${delay}
-        rm -f "${BT_BRIDGE_DIR}/pts_hci"
-        cd "${BT_BRIDGE_DIR}"
-        bt_host_cpc_hci_bridge &
-        BT_BRIDGE_PID=$!
-
-        # Wait for pts_hci symlink.
-        local bridgeWait=0
-
-        while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ] && [ ${bridgeWait} -lt 10 ]; do
-
-            if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-                break
-            fi
-
-            sleep 1
-            bridgeWait=$((bridgeWait + 1))
-        done
-
-        if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
-            echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID})."
-            return 0
-        fi
-
-        echo "[otbr-radio] bt_host_cpc_hci_bridge attempt ${attempt} failed." >&2
-        kill ${BT_BRIDGE_PID} 2>/dev/null || true
-    done
-
-    echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge failed after ${maxAttempts} attempts." >&2
-    return 1
 }
 
 if [ ! -e "${HOST_NETNS}" ]; then
@@ -566,4 +508,4 @@ exec otbr-agent \
     -B "${BACKBONE_IF}" \
     -d 7 \
     -v \
-    "spinel+cpc://cpcd_0?iid=1&iid-list=0"
+    "spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0"
