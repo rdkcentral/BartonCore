@@ -783,11 +783,32 @@ bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
         return false;
     }
 
-    // Check for 'invoke' operation (command invocation) - the only valid operation for execute
+    // Check for 'output' operation (local-only, no Matter interaction)
+    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
+    if (!JS_IsUndefined(outputVal) && !JS_IsNull(outputVal))
+    {
+        result.type = ScriptWriteResult::OperationType::Output;
+
+        JSCStringBuf buf;
+        const char *outputStr = JS_ToCString(ctx, outputVal, &buf);
+        if (outputStr)
+        {
+            result.output = std::string(outputStr);
+        }
+        else
+        {
+            result.output = "";
+        }
+
+        icDebug("execute mapped to output: \"%s\"", result.output.value().c_str());
+        return true;
+    }
+
+    // Check for 'invoke' operation (command invocation)
     JSValue invokeVal = JS_GetPropertyStr(ctx, outJson, "invoke");
     if (JS_IsUndefined(invokeVal) || JS_IsNull(invokeVal))
     {
-        icError("Execute script result missing required 'invoke' field");
+        icError("Execute script result missing required 'invoke' or 'output' field");
         return false;
     }
 

@@ -170,7 +170,17 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     checkinstall \
     zlib1g-dev \
     socat \
-    libyaml-cpp-dev
+    libyaml-cpp-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev
 
 # Fake Function Framework (FFF)
 #
@@ -284,12 +294,16 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     --target linux-x64-thermostat \
     --target linux-x64-contact-sensor \
     --target linux-x64-chip-tool \
+    --target linux-x64-camera \
+    --target linux-x64-camera-controller \
     build && \
     cp out/linux-x64-light-rpc/chip-lighting-app /usr/local/bin && \
     cp out/linux-x64-lock/chip-lock-app /usr/local/bin && \
     cp out/linux-x64-thermostat/thermostat-app /usr/local/bin && \
     cp out/linux-x64-contact-sensor/contact-sensor-app /usr/local/bin && \
     cp out/linux-x64-chip-tool/chip-tool /usr/local/bin && \
+    cp out/linux-x64-camera/chip-camera-app /usr/local/bin && \
+    cp out/linux-x64-camera-controller/chip-camera-controller /usr/local/bin && \
     rm -rf out && \
     cd /tmp && \
     rm -rf /tmp/matter && \

@@ -2090,6 +2090,219 @@ namespace
         EXPECT_EQ(outValue, "ep1");
     }
 
+    // =========================================================================
+    // MapExecute output-only tests (no Matter interaction)
+    // =========================================================================
+
+    // Test: MapExecute returns Output type with simple output string
+    TEST_F(SbmdScriptTest, MapExecuteOutputSimple)
+    {
+        std::string resourceKey = "camera:createSession";
+        std::string executeScript = "return {output: 'hello'};";
+
+        ASSERT_TRUE(script->AddExecuteMapper(resourceKey, executeScript, std::nullopt));
+
+        ScriptWriteResult result;
+        ASSERT_TRUE(script->MapExecute(resourceKey, "camera", "createSession", "", result));
+        EXPECT_EQ(result.type, ScriptWriteResult::OperationType::Output);
+        ASSERT_TRUE(result.output.has_value());
+        EXPECT_EQ(result.output.value(), "hello");
+    }
+
+    // Test: MapExecute output from SbmdUtils.Response.output()
+    TEST_F(SbmdScriptTest, MapExecuteOutputViaResponseHelper)
+    {
+        std::string resourceKey = "camera:createSession";
+        std::string executeScript = "return SbmdUtils.Response.output('42');";
+
+        ASSERT_TRUE(script->AddExecuteMapper(resourceKey, executeScript, std::nullopt));
+
+        ScriptWriteResult result;
+        ASSERT_TRUE(script->MapExecute(resourceKey, "camera", "createSession", "", result));
+        EXPECT_EQ(result.type, ScriptWriteResult::OperationType::Output);
+        ASSERT_TRUE(result.output.has_value());
+        EXPECT_EQ(result.output.value(), "42");
+    }
+
+    // Test: MapExecute still supports invoke responses
+    TEST_F(SbmdScriptTest, MapExecuteInvokeStillWorks)
+    {
+        std::string resourceKey = "ep:lock";
+        std::string executeScript =
+            "return {invoke: {clusterId: 0x0101, commandId: 0x0000}};";
+
+        ASSERT_TRUE(script->AddExecuteMapper(resourceKey, executeScript, std::nullopt));
+
+        ScriptWriteResult result;
+        ASSERT_TRUE(script->MapExecute(resourceKey, "ep", "lock", "", result));
+        EXPECT_EQ(result.type, ScriptWriteResult::OperationType::Invoke);
+        EXPECT_EQ(result.clusterId, 0x0101u);
+        EXPECT_EQ(result.commandId, 0x0000u);
+    }
+
+    // Test: SessionManager.getForDevice creates per-device sessions
+    TEST_F(SbmdScriptTest, MapExecuteSessionManagerCreateSession)
+    {
+        std::string resourceKey = "camera:createSession";
+        std::string executeScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var id = sessions.create({});"
+            "return SbmdUtils.Response.output(id.toString());";
+
+        ASSERT_TRUE(script->AddExecuteMapper(resourceKey, executeScript, std::nullopt));
+
+        ScriptWriteResult result;
+        ASSERT_TRUE(script->MapExecute(resourceKey, "camera", "createSession", "", result));
+        EXPECT_EQ(result.type, ScriptWriteResult::OperationType::Output);
+        ASSERT_TRUE(result.output.has_value());
+        EXPECT_EQ(result.output.value(), "1");
+
+        // Second call should return 2
+        ScriptWriteResult result2;
+        ASSERT_TRUE(script->MapExecute(resourceKey, "camera", "createSession", "", result2));
+        EXPECT_EQ(result2.output.value(), "2");
+    }
+
+    // Test: SessionManager get returns data for valid session
+    TEST_F(SbmdScriptTest, MapExecuteSessionManagerGetValid)
+    {
+        std::string createKey = "camera:createSession";
+        std::string createScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var id = sessions.create({});"
+            "return SbmdUtils.Response.output(id.toString());";
+
+        std::string streamKey = "camera:stream";
+        std::string streamScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var sessionId = parseInt(sbmdCommandArgs.input, 10);"
+            "var session = sessions.get(sessionId);"
+            "if (!session) { return SbmdUtils.Response.output('error:invalidSession'); }"
+            "return SbmdUtils.Response.output('ok');";
+
+        ASSERT_TRUE(script->AddExecuteMapper(createKey, createScript, std::nullopt));
+        ASSERT_TRUE(script->AddExecuteMapper(streamKey, streamScript, std::nullopt));
+
+        // Create a session
+        ScriptWriteResult createResult;
+        ASSERT_TRUE(script->MapExecute(createKey, "camera", "createSession", "", createResult));
+        std::string sessionId = createResult.output.value();
+
+        // Use it
+        ScriptWriteResult streamResult;
+        ASSERT_TRUE(script->MapExecute(streamKey, "camera", "stream", sessionId, streamResult));
+        EXPECT_EQ(streamResult.output.value(), "ok");
+    }
+
+    // Test: SessionManager get returns error for invalid session
+    TEST_F(SbmdScriptTest, MapExecuteSessionManagerGetInvalid)
+    {
+        std::string streamKey = "camera:stream";
+        std::string streamScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var sessionId = parseInt(sbmdCommandArgs.input, 10);"
+            "var session = sessions.get(sessionId);"
+            "if (!session) { return SbmdUtils.Response.output('error:invalidSession'); }"
+            "return SbmdUtils.Response.output('ok');";
+
+        ASSERT_TRUE(script->AddExecuteMapper(streamKey, streamScript, std::nullopt));
+
+        ScriptWriteResult result;
+        ASSERT_TRUE(script->MapExecute(streamKey, "camera", "stream", "999", result));
+        EXPECT_EQ(result.output.value(), "error:invalidSession");
+    }
+
+    // Test: SessionManager destroy removes session
+    TEST_F(SbmdScriptTest, MapExecuteSessionManagerDestroy)
+    {
+        std::string createKey = "camera:createSession";
+        std::string createScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var id = sessions.create({});"
+            "return SbmdUtils.Response.output(id.toString());";
+
+        std::string destroyKey = "camera:destroySession";
+        std::string destroyScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var sessionId = parseInt(sbmdCommandArgs.input, 10);"
+            "if (!sessions.destroy(sessionId)) { return SbmdUtils.Response.output('error:invalidSession'); }"
+            "return SbmdUtils.Response.output('ok');";
+
+        std::string streamKey = "camera:stream";
+        std::string streamScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var sessionId = parseInt(sbmdCommandArgs.input, 10);"
+            "var session = sessions.get(sessionId);"
+            "if (!session) { return SbmdUtils.Response.output('error:invalidSession'); }"
+            "return SbmdUtils.Response.output('ok');";
+
+        ASSERT_TRUE(script->AddExecuteMapper(createKey, createScript, std::nullopt));
+        ASSERT_TRUE(script->AddExecuteMapper(destroyKey, destroyScript, std::nullopt));
+        ASSERT_TRUE(script->AddExecuteMapper(streamKey, streamScript, std::nullopt));
+
+        // Create session
+        ScriptWriteResult createResult;
+        ASSERT_TRUE(script->MapExecute(createKey, "camera", "createSession", "", createResult));
+        std::string sessionId = createResult.output.value();
+
+        // Destroy it
+        ScriptWriteResult destroyResult;
+        ASSERT_TRUE(script->MapExecute(destroyKey, "camera", "destroySession", sessionId, destroyResult));
+        EXPECT_EQ(destroyResult.output.value(), "ok");
+
+        // Trying to use it after destroy should fail
+        ScriptWriteResult streamResult;
+        ASSERT_TRUE(script->MapExecute(streamKey, "camera", "stream", sessionId, streamResult));
+        EXPECT_EQ(streamResult.output.value(), "error:invalidSession");
+
+        // Destroying again should also fail
+        ScriptWriteResult destroyResult2;
+        ASSERT_TRUE(script->MapExecute(destroyKey, "camera", "destroySession", sessionId, destroyResult2));
+        EXPECT_EQ(destroyResult2.output.value(), "error:invalidSession");
+    }
+
+    // Test: SessionManager getForDevice isolates sessions between devices
+    TEST_F(SbmdScriptTest, MapExecuteSessionManagerPerDevice)
+    {
+        // Create two script instances for different devices
+        auto script2 = CreateScript("other-device-uuid");
+        ASSERT_NE(script2, nullptr);
+
+        std::string createKey = "camera:createSession";
+        std::string createScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var id = sessions.create({});"
+            "return SbmdUtils.Response.output(id.toString());";
+
+        std::string streamKey = "camera:stream";
+        std::string streamScript =
+            "var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);"
+            "var sessionId = parseInt(sbmdCommandArgs.input, 10);"
+            "var session = sessions.get(sessionId);"
+            "if (!session) { return SbmdUtils.Response.output('error:invalidSession'); }"
+            "return SbmdUtils.Response.output('ok');";
+
+        ASSERT_TRUE(script->AddExecuteMapper(createKey, createScript, std::nullopt));
+        ASSERT_TRUE(script->AddExecuteMapper(streamKey, streamScript, std::nullopt));
+        ASSERT_TRUE(script2->AddExecuteMapper(createKey, createScript, std::nullopt));
+        ASSERT_TRUE(script2->AddExecuteMapper(streamKey, streamScript, std::nullopt));
+
+        // Create session on device 1
+        ScriptWriteResult createResult;
+        ASSERT_TRUE(script->MapExecute(createKey, "camera", "createSession", "", createResult));
+        std::string sessionId = createResult.output.value();
+
+        // Device 1 can use it
+        ScriptWriteResult streamResult;
+        ASSERT_TRUE(script->MapExecute(streamKey, "camera", "stream", sessionId, streamResult));
+        EXPECT_EQ(streamResult.output.value(), "ok");
+
+        // Device 2 cannot use device 1's session (different deviceUuid in args)
+        ScriptWriteResult streamResult2;
+        ASSERT_TRUE(script2->MapExecute(streamKey, "camera", "stream", sessionId, streamResult2));
+        EXPECT_EQ(streamResult2.output.value(), "error:invalidSession");
+    }
+
 #endif // BCORE_USE_MQUICKJS
 
 } // namespace

@@ -1242,6 +1242,20 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
             return;
         }
 
+        if (result.type == ScriptWriteResult::OperationType::Output)
+        {
+            // Local-only execute: return output string without a Matter interaction
+            if (response != nullptr && result.output.has_value())
+            {
+                *response = strdup(result.output.value().c_str());
+            }
+
+            std::promise<bool> operationOK;
+            operationOK.set_value(true);
+            promises.push_front(std::move(operationOK));
+            return;
+        }
+
         // Determine the endpoint to use
         chip::EndpointId endpointId;
         if (result.endpointId.has_value())

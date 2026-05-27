@@ -48,7 +48,8 @@ namespace barton
         {
             None,
             Invoke, // Command invocation
-            Write   // Attribute write
+            Write,  // Attribute write
+            Output  // Local-only: return output string without a Matter operation
         };
 
         OperationType type = OperationType::None;
@@ -67,6 +68,9 @@ namespace barton
         // TLV encoded payload (decoded from base64)
         chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
         size_t tlvLength = 0;
+
+        // For Output operations (local-only execute, no Matter interaction)
+        std::optional<std::string> output;
     };
 
     /**

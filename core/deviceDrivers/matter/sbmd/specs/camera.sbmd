@@ -1,0 +1,96 @@
+# Camera SBMD Specification
+# Maps Matter camera device type to Barton camera device class.
+# Provides abstract camera session lifecycle endpoint per the
+# camera-architecture-redesign spec (D1).
+
+# SBMD schema version 2.1
+schemaVersion: "2.1"
+# Driver version for this specification
+driverVersion: "1.0"
+# Human-readable driver name
+name: "Camera"
+scriptType: "JavaScript"
+
+# Barton device class mapping
+bartonMeta:
+  deviceClass: "camera"
+  deviceClassVersion: 1
+
+# Matter device type support
+matterMeta:
+  deviceTypes:
+    - 0x0142  # Camera
+  revision: 1
+
+endpoints:
+  # Abstract camera session lifecycle endpoint
+  - id: "camera"
+    profile: "camera"
+    profileVersion: 1
+    resources:
+      # Creates a new session, returns sessionId
+      - id: "createSession"
+        type: "function"
+        prerequisites: none
+        mapper:
+          execute:
+            script: |
+              var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);
+              var sessionId = sessions.create({});
+              return SbmdUtils.Response.output(sessionId.toString());
+
+      # Start streaming for an existing session
+      - id: "stream"
+        type: "function"
+        prerequisites: none
+        mapper:
+          execute:
+            script: |
+              var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);
+              var sessionId = parseInt(sbmdCommandArgs.input, 10);
+              var session = sessions.get(sessionId);
+              if (!session) {
+                return SbmdUtils.Response.output('error:invalidSession');
+              }
+
+              return SbmdUtils.Response.output('ok');
+
+      # Take a snapshot for an existing session
+      - id: "takePicture"
+        type: "function"
+        prerequisites: none
+        mapper:
+          execute:
+            script: |
+              var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);
+              var sessionId = parseInt(sbmdCommandArgs.input, 10);
+              var session = sessions.get(sessionId);
+              if (!session) {
+                return SbmdUtils.Response.output('error:invalidSession');
+              }
+
+              return SbmdUtils.Response.output('ok');
+
+      # Destroy an existing session and release resources
+      - id: "destroySession"
+        type: "function"
+        prerequisites: none
+        mapper:
+          execute:
+            script: |
+              var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);
+              var sessionId = parseInt(sbmdCommandArgs.input, 10);
+              if (!sessions.destroy(sessionId)) {
+                return SbmdUtils.Response.output('error:invalidSession');
+              }
+              return SbmdUtils.Response.output('ok');
+
+      # Session status event resource - traffic controller
+      # Emits events with metadata: {sessionId, protocol, nextAction}
+      - id: "sessionStatus"
+        type: "com.icontrol.string"
+        modes:
+          - "dynamic"
+          - "emitEvents"
+        prerequisites: none
+        mapper: {}

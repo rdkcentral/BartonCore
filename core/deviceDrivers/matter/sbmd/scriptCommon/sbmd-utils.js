@@ -981,8 +981,7 @@
     /**
      * Response helpers for SBMD scripts
      */
-    var Response =
-    {
+    var Response = {
         /**
          * Create an invoke (command) response
          * @param {number} clusterId - Matter cluster ID
@@ -992,8 +991,7 @@
          * @param {Object} [options] - Optional settings: endpointId, timedInvokeTimeoutMs
          * @returns {Object} Invoke response object
          */
-        invoke: function(clusterId, commandId, tlvBase64, options)
-        {
+        invoke: function(clusterId, commandId, tlvBase64, options) {
             var result =
             {
                 invoke:
@@ -1031,8 +1029,7 @@
          * @param {Object} [options] - Optional settings: endpointId
          * @returns {Object} Write response object
          */
-        write: function(clusterId, attributeId, tlvBase64, options)
-        {
+        write: function(clusterId, attributeId, tlvBase64, options) {
             var result =
             {
                 write:
@@ -1049,15 +1046,86 @@
             }
 
             return result;
+        },
+
+        /**
+         * Create a local-only output response (no Matter interaction)
+         * @param {string} value - The output string to return to the caller
+         * @returns {Object} Output response object
+         */
+        output: function(value) { return {output: value}; }
+    };
+
+    /**
+     * Simple session manager with auto-incrementing IDs.
+     * Stores opaque data per session, retrievable by ID.
+     */
+    function SessionManager()
+    {
+        this.nextId = 1;
+        this.sessions = {};
+    }
+
+    /**
+     * Start a new session with optional opaque data.
+     * @param {*} data - Opaque data to associate with the session
+     * @returns {number} The new session ID
+     */
+    SessionManager.prototype.create = function(data) {
+        var id = this.nextId++;
+        this.sessions[id] = data;
+
+        return id;
+    };
+
+    /**
+     * Retrieve the opaque data for a session.
+     * @param {number} id - Session ID
+     * @returns {*} The session data, or undefined if not found
+     */
+    SessionManager.prototype.get = function(id) {
+        return this.sessions[id];
+    };
+
+    /**
+     * Destroy a session, releasing its data.
+     * @param {number} id - Session ID
+     * @returns {boolean} true if the session existed and was removed
+     */
+    SessionManager.prototype.destroy = function(id) {
+        if (this.sessions.hasOwnProperty(id))
+        {
+            delete this.sessions[id];
+
+            return true;
         }
+
+        return false;
+    };
+
+    // Registry of per-device session managers
+    var sessionManagers = {};
+
+    /**
+     * Get or create a SessionManager for the given device UUID.
+     * @param {string} deviceUuid - Device identifier
+     * @returns {SessionManager} The session manager for this device
+     */
+    SessionManager.getForDevice = function(deviceUuid) {
+        if (!sessionManagers[deviceUuid])
+        {
+            sessionManagers[deviceUuid] = new SessionManager();
+        }
+
+        return sessionManagers[deviceUuid];
     };
 
     // Export the SbmdUtils object to globalThis
-    globalThis.SbmdUtils =
-    {
+    globalThis.SbmdUtils = {
         Base64: Base64,
         Tlv: Tlv,
         Response: Response,
+        SessionManager: SessionManager,
         TLV_TYPE: TLV_TYPE
     };
 
