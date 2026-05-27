@@ -280,21 +280,28 @@ bt_host_cpc_hci_bridge &
 BT_BRIDGE_PID=$!
 
 # Wait for the pts_hci symlink that bt_host_cpc_hci_bridge creates once ready.
-BT_BRIDGE_WAIT_MAX=15
+# Remote CPC (over TCP proxy) may take longer to negotiate the endpoint.
+BT_BRIDGE_WAIT_MAX=30
 btBridgeWaitCount=0
 while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; do
     if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-        echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge exited unexpectedly." >&2
-        exit 1
+        echo "[otbr-radio] WARNING: bt_host_cpc_hci_bridge exited during startup — BLE monitor will retry." >&2
+        break
     fi
 
     if [ ${btBridgeWaitCount} -ge ${BT_BRIDGE_WAIT_MAX} ]; then
-        echo "[otbr-radio] ERROR: bt_host_cpc_hci_bridge did not create pts_hci after ${BT_BRIDGE_WAIT_MAX}s." >&2
-        exit 1
+        echo "[otbr-radio] WARNING: bt_host_cpc_hci_bridge did not create pts_hci after ${BT_BRIDGE_WAIT_MAX}s — BLE monitor will retry." >&2
+        kill ${BT_BRIDGE_PID} 2>/dev/null || true
+        break
     fi
     sleep 1
     btBridgeWaitCount=$((btBridgeWaitCount + 1))
 done
+
+# Only proceed with the proxy if the bridge actually created pts_hci.
+# If the bridge failed during startup, the BLE monitor will retry later.
+if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+
 PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
 echo "[otbr-radio] bt_host_cpc_hci_bridge ready (PID ${BT_BRIDGE_PID}, pts: ${PTS_DEVICE}, waited ${btBridgeWaitCount}s)."
 
@@ -315,7 +322,7 @@ HCI_PROXY_SCRIPT="/opt/cpc-proxy/hci_pty_proxy.py"
 
 if [ -f "${HCI_PROXY_SCRIPT}" ]; then
     echo "[otbr-radio] Starting HCI PTY proxy (strip Extended Advertising)..."
-    python3 "${HCI_PROXY_SCRIPT}" "${PTS_DEVICE}" "${BT_BRIDGE_DIR}/pts_hci" &
+    python3 -u "${HCI_PROXY_SCRIPT}" "${PTS_DEVICE}" "${BT_BRIDGE_DIR}/pts_hci" &
     HCI_PROXY_PID=$!
     sleep 1
 
@@ -330,6 +337,8 @@ else
     echo "[otbr-radio] HCI PTY proxy not found — skipping (Extended BLE commands may fail)."
 fi
 
+fi  # end: bridge created pts_hci successfully
+
 ###############################################################################
 # 6. Attach the virtual HCI device and start bluetoothd
 #
@@ -341,12 +350,16 @@ fi
 # host-side bluetoothd that may be running on the host system bus.
 #
 # The host machine may have its own built-in Bluetooth adapter (e.g. hci0).
-# btattach creates a new HCI device for the radio (e.g. hci1).  We detect
+# btattach creates a new HCI device for the CPC radio (e.g. hci1).  We detect
 # its index and write it to the shared D-Bus volume so Barton can read it
 # at runtime to configure the Matter SDK's BLE adapter selection.
 #
-# A background monitor watches btattach and restarts the BLE stack if it
-# exits (e.g. after a USB-IP disconnect/reconnect cycle).
+# To prevent Matter/bluetoothd from accidentally using the host's built-in
+# adapter, we explicitly power down every non-CPC HCI device in the host
+# network namespace after btattach creates the CPC device.
+#
+# A background monitor watches the full BLE chain (bridge, proxy, btattach)
+# and restarts it if any component dies.
 ###############################################################################
 HOST_NETNS="/run/host-netns"
 
@@ -395,27 +408,14 @@ ble_attach() {
             pkill -x bluetoothd 2>/dev/null || true
             sleep 0.5
 
-            # Fix the Silicon Labs CPC BLE controller initialization issue.
-            #
-            # Problem: the kernel's initial HCI probe (triggered by btattach)
-            # sends commands that the CPC firmware responds to with malformed
-            # responses, leaving the controller in a state where LE scanning
-            # returns "Command Disallowed" (0x0C).
-            #
-            # Solution: cycle the adapter down→up to clear the kernel's stale
-            # HCI state, then send a raw HCI Reset to fix the controller.
-            # After that, the adapter is in a clean state and bluetoothd can
-            # start without conflicts.  Starting bluetoothd AFTER the reset
-            # is critical — if bluetoothd runs when the HCI Reset is sent,
-            # bluetoothd's internal state becomes inconsistent (InProgress
-            # errors on StartDiscovery).
-            echo "[otbr-radio] Resetting ${radioHci} (down/up/HCI Reset)..."
-            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" down 2>/dev/null || true
-            sleep 0.5
-            nsenter --net="${HOST_NETNS}" hciconfig "${radioHci}" up 2>/dev/null || true
-            sleep 0.5
-            nsenter --net="${HOST_NETNS}" hcitool -i "${radioHci}" cmd 0x03 0x0003 >/dev/null 2>&1 || true
-            sleep 0.5
+            # Log any non-CPC adapters present.  We do NOT disable them
+            # (that would be disruptive to the host).  Instead we rely on
+            # ble_adapter_id to steer Matter/bluetoothd to the right one.
+            for hostHci in $(ls /sys/class/bluetooth/ 2>/dev/null); do
+                if [ "${hostHci}" != "${radioHci}" ]; then
+                    echo "[otbr-radio] NOTE: host adapter ${hostHci} also present (not CPC bridge)."
+                fi
+            done
 
             echo "[otbr-radio] Starting bluetoothd (host netns, private D-Bus)..."
             nsenter --net="${HOST_NETNS}" bluetoothd &
@@ -435,41 +435,215 @@ ble_attach() {
     return 1
 }
 
-# ble_monitor — background loop that restarts btattach (and bluetoothd)
-# whenever btattach exits.  This handles USB-IP disconnect/reconnect
-# cycles where cpcd and bt_host_cpc_hci_bridge survive but btattach
-# loses the HCI device and exits.
-ble_monitor() {
-    local backoff=2
+# ble_restart_bridge — restart the entire BLE chain from the CPC bridge
+# onwards (bridge → HCI proxy → btattach → bluetoothd).  Called by the
+# monitor when bt_host_cpc_hci_bridge dies.
+ble_restart_bridge() {
+    echo "[otbr-radio] Restarting full BLE chain (bridge → proxy → btattach)..."
 
-    while true; do
+    # Tear down everything downstream and reap zombies.
+    [ -n "${BTATTACH_PID:-}" ] && kill ${BTATTACH_PID} 2>/dev/null || true
+    [ -n "${HCI_PROXY_PID:-}" ] && kill ${HCI_PROXY_PID} 2>/dev/null || true
+    pkill -x bluetoothd 2>/dev/null || true
+    wait ${BT_BRIDGE_PID} 2>/dev/null || true
+    [ -n "${BTATTACH_PID:-}" ] && wait ${BTATTACH_PID} 2>/dev/null || true
+    [ -n "${HCI_PROXY_PID:-}" ] && wait ${HCI_PROXY_PID} 2>/dev/null || true
+    sleep 1
 
-        if ! kill -0 ${BTATTACH_PID} 2>/dev/null; then
-            echo "[otbr-radio] btattach (PID ${BTATTACH_PID}) exited — restarting BLE stack..." >&2
+    # Bring down any stale HCI devices that were created by previous
+    # btattach instances.  This prevents hci index accumulation
+    # (hci1, hci2, hci3...) across restarts.
+    local adapterFile="${DBUS_DIR}/ble_adapter_id"
+    if [ -f "$adapterFile" ]; then
+        local oldIdx
+        oldIdx=$(cat "$adapterFile" 2>/dev/null)
+        if [ -n "$oldIdx" ]; then
+            nsenter --net="${HOST_NETNS}" hciconfig "hci${oldIdx}" down 2>/dev/null || true
+        fi
+    fi
 
-            # If bt_host_cpc_hci_bridge also died, wait for it to come back.
+    # Start a fresh bridge.  The CPC endpoint (ep14) may take time to be
+    # released by cpcd after the previous session ended.  Retry up to
+    # BT_BRIDGE_RETRY_MAX times with a short delay to ride out transient
+    # EAGAIN / "Resource temporarily unavailable" failures.
+    local BT_BRIDGE_RETRY_MAX=5
+    local bridgeAttempt=0
+
+    while [ ${bridgeAttempt} -lt ${BT_BRIDGE_RETRY_MAX} ]; do
+        rm -f "${BT_BRIDGE_DIR}/pts_hci"
+        cd "${BT_BRIDGE_DIR}"
+        bt_host_cpc_hci_bridge &
+        BT_BRIDGE_PID=$!
+
+        local waited=0
+
+        while [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; do
+
             if ! kill -0 ${BT_BRIDGE_PID} 2>/dev/null; then
-                echo "[otbr-radio] bt_host_cpc_hci_bridge also exited; waiting for it to restart..." >&2
-                sleep "${backoff}"
-                continue
+                break
             fi
 
-            # pts_hci must still be valid.
-            if [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
-                echo "[otbr-radio] pts_hci symlink missing; waiting..." >&2
-                sleep "${backoff}"
-                continue
+            if [ ${waited} -ge ${BT_BRIDGE_WAIT_MAX} ]; then
+                kill ${BT_BRIDGE_PID} 2>/dev/null || true
+                break
+            fi
+
+            sleep 1
+            waited=$((waited + 1))
+        done
+
+        if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+            break  # Bridge started successfully.
+        fi
+
+        # Bridge failed — wait for zombie and retry.
+        wait ${BT_BRIDGE_PID} 2>/dev/null || true
+        bridgeAttempt=$((bridgeAttempt + 1))
+
+        if [ ${bridgeAttempt} -lt ${BT_BRIDGE_RETRY_MAX} ]; then
+            local retryDelay=$((bridgeAttempt * 3))
+            echo "[otbr-radio] Bridge attempt ${bridgeAttempt}/${BT_BRIDGE_RETRY_MAX} failed (EAGAIN?); retrying in ${retryDelay}s..." >&2
+            sleep "${retryDelay}"
+        fi
+    done
+
+    if [ ! -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+        echo "[otbr-radio] bt_host_cpc_hci_bridge failed after ${BT_BRIDGE_RETRY_MAX} attempts." >&2
+        return 1
+    fi
+
+    PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
+    echo "[otbr-radio] Bridge restarted (PID ${BT_BRIDGE_PID}, pts: ${PTS_DEVICE})."
+
+    # Restart the HCI PTY proxy if the script is available.
+    if [ -f "${HCI_PROXY_SCRIPT}" ]; then
+        python3 -u "${HCI_PROXY_SCRIPT}" "${PTS_DEVICE}" "${BT_BRIDGE_DIR}/pts_hci" &
+        HCI_PROXY_PID=$!
+        sleep 1
+
+        if kill -0 ${HCI_PROXY_PID} 2>/dev/null; then
+            PTS_DEVICE=$(readlink -f "${BT_BRIDGE_DIR}/pts_hci")
+            echo "[otbr-radio] HCI proxy restarted (PID ${HCI_PROXY_PID}, pts: ${PTS_DEVICE})."
+        else
+            echo "[otbr-radio] WARNING: HCI proxy exited during restart." >&2
+        fi
+    fi
+
+    return 0
+}
+
+# is_process_alive — check if a process is alive and not a zombie.
+# kill -0 returns true for zombie processes, which misleads the monitor
+# into thinking a dead bridge is still running.
+is_process_alive() {
+    local pid=$1
+    kill -0 "$pid" 2>/dev/null || return 1
+    local state
+    state=$(awk '/^State:/ {print $2}' /proc/"$pid"/status 2>/dev/null)
+    [[ "$state" != "Z" ]]
+}
+
+# hci_transport_healthy — verify the HCI transport is responsive by
+# sending a Read BD ADDR command (0x04|0x0009) and checking for a
+# valid response.  Returns non-zero if the adapter doesn't respond
+# within 5 seconds (dead transport or hung CPC endpoint).
+#
+# NOTE: The Silicon Labs CPC BLE firmware does NOT support some common
+# HCI commands like Read Local Name (0x03|0x0014).  Using those would
+# cause false "unhealthy" results.  Read BD ADDR is always supported.
+hci_transport_healthy() {
+    local adapterFile="${DBUS_DIR}/ble_adapter_id"
+    [ -f "$adapterFile" ] || return 1
+    local idx
+    idx=$(cat "$adapterFile" 2>/dev/null)
+    [ -n "$idx" ] || return 1
+    # Timeout protects against hung transports.
+    timeout 5 nsenter --net="${HOST_NETNS}" \
+        hcitool -i "hci${idx}" cmd 0x04 0x0009 >/dev/null 2>&1
+}
+
+# ble_monitor — background loop that watches the full BLE chain
+# (bridge, HCI proxy, btattach) and restarts from the point of failure.
+# If the bridge dies, the entire chain is restarted.  If only btattach
+# dies (e.g. USB-IP reconnect), only the attach step is retried.
+# Additionally performs periodic HCI transport health checks to catch
+# cases where the bridge process is alive but the CPC endpoint died.
+ble_monitor() {
+    local backoff=2
+    local healthCheckInterval=0
+    local healthFailCount=0
+    # Grace period — skip health checks for the first 30 seconds after
+    # startup or a successful restart to let the adapter stabilise.
+    local graceUntil=$((SECONDS + 30))
+
+    while true; do
+        local needRestart=false
+        local bridgeDied=false
+
+        if ! is_process_alive ${BT_BRIDGE_PID}; then
+            needRestart=true
+            bridgeDied=true
+        elif [ -n "${HCI_PROXY_PID:-}" ] && ! is_process_alive ${HCI_PROXY_PID}; then
+            # The proxy owns the PTY that btattach is connected to.
+            # If the proxy dies, the PTY becomes invalid — full restart.
+            echo "[otbr-radio] HCI PTY proxy (PID ${HCI_PROXY_PID}) died." >&2
+            needRestart=true
+            bridgeDied=true
+            kill ${BT_BRIDGE_PID} 2>/dev/null || true
+        elif [ -n "${BTATTACH_PID:-}" ] && ! is_process_alive ${BTATTACH_PID}; then
+            needRestart=true
+        elif [ ${SECONDS} -ge ${graceUntil} ] && [ ${healthCheckInterval} -ge 5 ]; then
+            # Every ~10s (5 iterations × 2s sleep), verify the HCI
+            # transport is actually responsive.  This catches dead CPC
+            # endpoints where the bridge PID is still alive.
+            # Require 3 consecutive failures to avoid false positives
+            # from transient slowness.
+            healthCheckInterval=0
+
+            if ! hci_transport_healthy; then
+                healthFailCount=$((healthFailCount + 1))
+
+                if [ ${healthFailCount} -ge 3 ]; then
+                    echo "[otbr-radio] HCI transport unresponsive (${healthFailCount} consecutive failures) — restarting BLE chain." >&2
+                    needRestart=true
+                    bridgeDied=true
+                    healthFailCount=0
+                    # Kill the stale bridge so ble_restart_bridge can start fresh.
+                    kill ${BT_BRIDGE_PID} 2>/dev/null || true
+                else
+                    echo "[otbr-radio] HCI health check failed (${healthFailCount}/3)." >&2
+                fi
+            else
+                healthFailCount=0
+            fi
+        else
+            healthCheckInterval=$((healthCheckInterval + 1))
+        fi
+
+        if ${needRestart}; then
+            healthCheckInterval=0
+            healthFailCount=0
+
+            if ${bridgeDied}; then
+                echo "[otbr-radio] bt_host_cpc_hci_bridge (PID ${BT_BRIDGE_PID}) died." >&2
+
+                if ! ble_restart_bridge; then
+                    backoff=$((backoff < 30 ? backoff * 2 : 30))
+                    echo "[otbr-radio] Bridge restart failed; retrying in ${backoff}s..." >&2
+                    sleep "${backoff}"
+                    continue
+                fi
+            else
+                echo "[otbr-radio] btattach (PID ${BTATTACH_PID}) died — restarting BLE attach..." >&2
             fi
 
             if ble_attach; then
                 echo "[otbr-radio] BLE stack restarted successfully."
                 backoff=2
+                graceUntil=$((SECONDS + 30))
             else
-                echo "[otbr-radio] BLE stack restart failed; retrying in ${backoff}s..." >&2
-
-                if [ ${backoff} -lt 30 ]; then
-                    backoff=$((backoff * 2))
-                fi
+                backoff=$((backoff < 30 ? backoff * 2 : 30))
+                echo "[otbr-radio] BLE restart failed; retrying in ${backoff}s..." >&2
             fi
         fi
 
@@ -482,30 +656,63 @@ if [ ! -e "${HOST_NETNS}" ]; then
     echo "[otbr-radio]          Bluetooth support will not be available." >&2
     echo "[otbr-radio]          Add '- /proc/1/ns/net:/run/host-netns:ro' to volumes." >&2
 else
-    BTATTACH_PID=0
+    BTATTACH_PID=
+    HCI_PROXY_PID=${HCI_PROXY_PID:-}
 
-    if ble_attach; then
-        echo "[otbr-radio] BLE stack initialized."
+    if [ -L "${BT_BRIDGE_DIR}/pts_hci" ]; then
+
+        if ble_attach; then
+            echo "[otbr-radio] BLE stack initialized."
+        else
+            echo "[otbr-radio] WARNING: Initial BLE attach failed; monitor will retry." >&2
+        fi
     else
-        echo "[otbr-radio] WARNING: Initial BLE attach failed; monitor will retry." >&2
+        echo "[otbr-radio] WARNING: Bridge did not create pts_hci during startup; monitor will retry." >&2
     fi
 
-    # Start background monitor to handle USB-IP reconnects.
+    # Start background monitor to handle bridge/btattach failures.
     ble_monitor &
     BLE_MONITOR_PID=$!
     echo "[otbr-radio] BLE monitor started (PID ${BLE_MONITOR_PID})."
 fi
 
 ###############################################################################
-# 7. Start otbr-agent
+# 7. Start otbr-agent with auto-restart
 #
 # Uses spinel+cpc:// instead of the simulated spinel+hdlc+forkpty:// URI
 # that is used by scripts/start-simulated-otbr.sh.
+#
+# otbr-agent runs in the foreground inside a restart loop so the container
+# survives transient CPC failures (e.g. cpcd restart, firmware EAGAIN).
+# The loop backs off exponentially up to 30 seconds between retries.
 ###############################################################################
 echo "[otbr-radio] Starting otbr-agent (backbone: ${BACKBONE_IF})..."
-exec otbr-agent \
-    -I wpan0 \
-    -B "${BACKBONE_IF}" \
-    -d 7 \
-    -v \
-    "spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0"
+
+otbr_backoff=2
+
+while true; do
+    otbr_start=$(date +%s)
+    otbr-agent \
+        -I wpan0 \
+        -B "${BACKBONE_IF}" \
+        -d 7 \
+        -v \
+        "spinel+cpc://${CPC_INSTANCE}?iid=1&iid-list=0" &
+    OTBR_PID=$!
+    set +e
+    wait ${OTBR_PID} 2>/dev/null
+    otbr_exit=$?
+    set -e
+
+    # Reset backoff if otbr-agent ran for at least 60 seconds (not a
+    # crash loop).
+    otbr_elapsed=$(( $(date +%s) - otbr_start ))
+
+    if [ "${otbr_elapsed}" -ge 60 ]; then
+        otbr_backoff=2
+    fi
+
+    echo "[otbr-radio] otbr-agent exited (code ${otbr_exit}) after ${otbr_elapsed}s; restarting in ${otbr_backoff}s..." >&2
+    sleep "${otbr_backoff}"
+    otbr_backoff=$((otbr_backoff < 30 ? otbr_backoff * 2 : 30))
+done

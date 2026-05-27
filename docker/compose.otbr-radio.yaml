@@ -110,6 +110,8 @@ services:
             # Mount the HCI PTY proxy that strips Extended Advertising from
             # the LE features response, working around a CPC firmware bug.
             - ../scripts/remote-radio/hci_pty_proxy.py:/opt/cpc-proxy/hci_pty_proxy.py:ro
+            # Validation/diagnostic script for the full CPC + BLE chain.
+            - ../scripts/remote-radio/cpc_validate.sh:/opt/cpc-proxy/cpc_validate.sh:ro
             # Bind-mount the entrypoint for development iteration without
             # rebuilding the Docker image.
             - ./otbr-radio-entrypoint.sh:/entrypoint.sh:ro

@@ -135,7 +135,26 @@ start_server() {
         done
     }
 
-    # Proxy any endpoint sockets that already exist.
+    # Pre-start TCP listeners for well-known CPC endpoints that remote
+    # clients need.  cpcd creates endpoint sockets on-demand when a client
+    # opens them, but the proxy TCP listener must be ready BEFORE the
+    # remote client tries to connect.  The proxy server retries the local
+    # unix socket connection, giving cpcd time to create it after the
+    # remote client opens the endpoint via the control socket.
+    #
+    # Silicon Labs CPC v4.4.x well-known endpoints:
+    #   12  SL_CPC_ENDPOINT_15_4       (802.15.4 / Spinel / OpenThread)
+    #   14  SL_CPC_ENDPOINT_BLUETOOTH   (Bluetooth RCP / HCI bridge)
+    WELL_KNOWN_ENDPOINTS="12 14"
+    echo ""
+    echo "Starting well-known endpoint proxies:"
+
+    for ep in ${WELL_KNOWN_ENDPOINTS}; do
+        start_proxy "$socket_base/ep${ep}.cpcd.sock" "$((BASE_PORT + 100 + ep))"
+        start_proxy "$socket_base/ep${ep}.event.cpcd.sock" "$((BASE_PORT + 400 + ep))"
+    done
+
+    # Proxy any other endpoint sockets that already exist.
     proxy_endpoint_sockets
 
     echo ""
@@ -144,11 +163,40 @@ start_server() {
     echo "On the remote client, run:"
     echo "  $0 client <this-host-ip> $INSTANCE $BASE_PORT"
 
+    # check_wellknown_proxies — restart pre-started endpoint proxies if dead.
+    # Unlike proxy_endpoint_sockets (which only checks existing socket files),
+    # this always checks the well-known endpoints regardless of whether the
+    # socket file exists on disk.
+    check_wellknown_proxies() {
+        for ep in ${WELL_KNOWN_ENDPOINTS}; do
+
+            for suffix in ".cpcd.sock" ".event.cpcd.sock"; do
+                local filename="ep${ep}${suffix}"
+                [[ -n "${PROXIED_PIDS[$filename]+x}" ]] || continue
+                local pid="${PROXIED_PIDS[$filename]}"
+
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    echo "Well-known proxy for $filename (PID $pid) died — restarting"
+                    unset 'PROXIED_PIDS[$filename]'
+                    local port
+
+                    if [[ "$suffix" == ".event.cpcd.sock" ]]; then
+                        port=$((BASE_PORT + 400 + ep))
+                    else
+                        port=$((BASE_PORT + 100 + ep))
+                    fi
+                    start_proxy "$socket_base/$filename" "$port"
+                fi
+            done
+        done
+    }
+
     # Poll for new endpoint sockets and restart dead proxies.
     while true; do
         sleep 2
         proxy_endpoint_sockets
         check_core_proxies
+        check_wellknown_proxies
     done
 }
 

@@ -169,53 +169,62 @@ def run_server(socket_path: str, port: int, bind_addr: str = '0.0.0.0'):
     """
     Server mode: accept TCP clients and relay to the local CPC Unix socket.
 
-    CPC only allows one client per endpoint socket, so when a new TCP client
-    connects we kill the previous session first.  This handles client-side
-    container restarts cleanly — the new client evicts the stale session.
+    Multiple clients may connect concurrently (e.g. both the HCI bridge and
+    otbr-agent need their own ctrl session).  Each TCP client gets its own
+    independent Unix socket connection to cpcd and a dedicated relay pair.
     """
+
     name = os.path.basename(socket_path)
     print(f"[{name}] Server: TCP :{port} <-> {socket_path}", flush=True)
 
     tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     tcp_server.bind((bind_addr, port))
-    tcp_server.listen(1)
-
-    # Mutable container so the accept loop can evict a stale session.
-    active = {'unix': None, 'tcp': None, 'thread': None}
-    active_lock = threading.Lock()
+    tcp_server.listen(5)
 
     while True:
         tcp_client, addr = tcp_server.accept()
         enable_tcp_keepalive(tcp_client)
         print(f"[{name}] TCP connection from {addr}", flush=True)
 
-        # Evict any stale session — close its sockets so relay threads exit.
-        with active_lock:
+        # cpcd creates endpoint sockets on-demand when a client opens
+        # them via the control socket.  In the remote-access scenario the
+        # open-endpoint command arrives over the proxied ctrl socket, so
+        # the endpoint socket may not exist yet when the TCP client for
+        # that endpoint connects moments later.  Retry with backoff to
+        # give cpcd time to create the socket (the firmware can take
+        # several seconds to make an endpoint available after a reset).
+        unix_sock = None
+        max_attempts = 20
+        retry_delay = 0.5
 
-            if active['thread'] and active['thread'].is_alive():
-                print(f"[{name}] Evicting stale session", flush=True)
-                close_sockets(active['unix'], active['tcp'])
-                active['thread'].join(timeout=5)
+        for attempt in range(max_attempts):
 
-        try:
-            unix_sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-            unix_sock.connect(socket_path)
-        except Exception as e:
-            print(f"[{name}] Unix connect failed: {e}", flush=True)
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+                s.connect(socket_path)
+                unix_sock = s
+                break
+            except Exception as e:
+                s.close()
+
+                if attempt < max_attempts - 1:
+                    time.sleep(retry_delay)
+                else:
+                    print(
+                        f"[{name}] Unix connect to {socket_path} "
+                        f"failed after {attempt + 1} attempts: {e}",
+                        flush=True,
+                    )
+
+        if unix_sock is None:
             tcp_client.close()
             continue
 
         def session(us=unix_sock, ts=tcp_client, n=name):
             run_relay_pair(us, ts, n)
 
-        t = threading.Thread(target=session, daemon=True)
-        t.start()
-
-        with active_lock:
-            active['unix'] = unix_sock
-            active['tcp'] = tcp_client
-            active['thread'] = t
+        threading.Thread(target=session, daemon=True).start()
 
 
 def run_client(socket_path: str, host: str, port: int):

@@ -80,10 +80,16 @@ IMAGE_TAG=$HIGHEST_BUILDER_TAG
 BUILDER_TAG_CHANGED=false
 existingRadioDevice=""
 existingBackboneIf=""
+existingCpcRemoteHost=""
+existingCpcRemotePort=""
+existingCpcInstance=""
 
 if [ -f "$OUTFILE" ]; then
     existingRadioDevice=$(grep '^RADIO_DEVICE=' "$OUTFILE" | sed 's/^RADIO_DEVICE=//' || true)
     existingBackboneIf=$(grep '^BACKBONE_IF=' "$OUTFILE" | sed 's/^BACKBONE_IF=//' || true)
+    existingCpcRemoteHost=$(grep '^CPC_REMOTE_HOST=' "$OUTFILE" | sed 's/^CPC_REMOTE_HOST=//' || true)
+    existingCpcRemotePort=$(grep '^CPC_REMOTE_PORT=' "$OUTFILE" | sed 's/^CPC_REMOTE_PORT=//' || true)
+    existingCpcInstance=$(grep '^CPC_INSTANCE=' "$OUTFILE" | sed 's/^CPC_INSTANCE=//' || true)
 
     CURRENT_BUILDER_TAG=$(grep "CURRENT_BUILDER_TAG=" "$OUTFILE" | sed 's/CURRENT_BUILDER_TAG=//')
 
@@ -205,6 +211,16 @@ echo "LIB_BARTON_SHARED_PATH=/usr/local/lib" >> $OUTFILE
 #     by exporting BACKBONE_IF before running setupDockerEnv.sh or dockerw,
 #     e.g.: export BACKBONE_IF=enp6s0
 #
+# CPC_REMOTE_HOST: when set, connect to a remote cpcd via the CPC socket proxy.
+#   - If already present in docker/.env, preserve that value unless overridden
+#     by exporting CPC_REMOTE_HOST before running setupDockerEnv.sh or dockerw.
+#
+# CPC_REMOTE_PORT: base port for the CPC socket proxy (default: 15000).
+#   - If already present in docker/.env, preserve that value unless overridden.
+#
+# CPC_INSTANCE: CPC daemon instance name (default: cpcd_0).
+#   - If already present in docker/.env, preserve that value unless overridden.
+#
 # These variables are only consumed when compose.otbr-radio.yaml is included
 # in the compose stack (dockerw -T, or devcontainer override).
 # Auto-detect the default-route network interface for the Thread backbone.
@@ -217,9 +233,15 @@ fi
 
 radioDeviceValue="${RADIO_DEVICE:-$existingRadioDevice}"
 backboneIfValue="${BACKBONE_IF:-${existingBackboneIf:-$detectedBackboneIf}}"
+cpcRemoteHostValue="${CPC_REMOTE_HOST:-$existingCpcRemoteHost}"
+cpcRemotePortValue="${CPC_REMOTE_PORT:-${existingCpcRemotePort:-15000}}"
+cpcInstanceValue="${CPC_INSTANCE:-${existingCpcInstance:-cpcd_0}}"
 
 echo "RADIO_DEVICE=$radioDeviceValue" >> $OUTFILE
 echo "BACKBONE_IF=$backboneIfValue" >> $OUTFILE
+echo "CPC_REMOTE_HOST=$cpcRemoteHostValue" >> $OUTFILE
+echo "CPC_REMOTE_PORT=$cpcRemotePortValue" >> $OUTFILE
+echo "CPC_INSTANCE=$cpcInstanceValue" >> $OUTFILE
 ##############################################################################
 
 # Ensure the container network exists

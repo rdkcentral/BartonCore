@@ -370,12 +370,6 @@ namespace barton
                 peerId.GetNodeId(),
                 StageToString(stageCompleted),
                 ErrorStr(error));
-
-        if (stageCompleted == chip::Controller::CommissioningStage::kThreadNetworkEnable && error == CHIP_NO_ERROR)
-        {
-            icInfo("Closing BLE connection after ThreadNetworkEnable to free CPC radio for Thread");
-            Matter::GetInstance().GetCommissioner()->CloseBleConnection();
-        }
     }
 
     void CommissioningOrchestrator::OnReadCommissioningInfo(const chip::Controller::ReadCommissioningInfo &info)
