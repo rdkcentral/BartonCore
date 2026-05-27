@@ -2,7 +2,7 @@
 # Maps Matter light device types to Barton light device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -70,7 +70,7 @@ endpoints:
             alias: "onOff"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return {output: (value === true) ? 'true' : 'false'};
+              return {value: (value === true) ? 'true' : 'false'};
           write:
             script: |
               // On/Off commands have no arguments
@@ -93,7 +93,7 @@ endpoints:
             script: |
               var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               var percent = Math.round(level / 254 * 100);
-              return {output: percent.toString()};
+              return {value: percent.toString()};
           write:
             script: |
               var percent = parseInt(sbmdWriteArgs.input, 10);

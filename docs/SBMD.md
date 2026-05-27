@@ -9,10 +9,9 @@
 >   `identifySeconds` resource inline. This resource (and others common to all devices)
 >   will be refactored into common/base driver code in a future release.
 >
-> - **No formal "skip update" mechanism for scripts.** Currently, a script block
->   indicates that the related resource should not be updated by returning a `null`
->   output or an invalid JSON object (which causes an error). This behavior will be
->   formalized and corrected in a future release.
+> - **No formal "skip update" mechanism for scripts.** A script can suppress a
+>   resource update by returning `{}` (empty object). Returning `{ error: "msg" }`
+>   signals an error and fails the operation.
 > - **Verbose logging.** Logging output is very verbose at the moment, especially the
 >   frequent dumps of the entire device data cache JSON. This will be reduced.
 >
@@ -125,17 +124,22 @@ binaries through firmware updates.
 ## 3. SBMD File Schema
 
 SBMD specifications are YAML files with the `.sbmd` extension. The current schema
-version is **2.0**, as specified in the `schemaVersion` field of each SBMD file.
+version is **3.0**, as specified in the `schemaVersion` field of each SBMD file.
 
-> **JSON Schema**: A formal JSON Schema for validating SBMD files is available at
-> [`core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json`](../core/deviceDrivers/matter/sbmd/sbmd-spec-schema.json).
+> **JSON Schema**: A formal JSON Schema for validating SBMD files is available in
+> [`core/deviceDrivers/matter/sbmd/schema/`](../core/deviceDrivers/matter/sbmd/schema/).
 > All `.sbmd` files in the `specs/` directory are automatically validated against
 > this schema during the build process.
+
+**Schema version history:**
+- `2.0`: Initial release
+- `2.1`: Added `vendorId`/`productId` support
+- `3.0`: Script return contract changed — use `{ value: "..." }` instead of `{ output: "..." }` (see [Section 5](#5-javascript-script-interfaces))
 
 ### 3.1 Top-Level Structure
 
 ```yaml
-schemaVersion: "2.0"          # SBMD schema version (required)
+schemaVersion: "3.0"          # SBMD schema version (required)
 driverVersion: "1.0"          # Driver version (required)
 name: "Driver Name"           # Human-readable name (required)
 scriptType: "JavaScript"      # Script type (see below)
@@ -437,7 +441,7 @@ mapper:
     alias: "lockState"          # Resolved to the alias defined in matterMeta
     script: |
       var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-      return {output: lockState === 1 ? 'true' : 'false'};
+      return {value: lockState === 1 ? 'true' : 'false'};
 ```
 
 #### Write Mapper
@@ -514,9 +518,9 @@ mapper:
       // Decode GetUserResponse TLV and return userName
       var user = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
       if (user.userName) {
-        return {output: user.userName};
+        return {value: user.userName};
       }
-      return {output: ""};
+      return {value: ""};
 ```
 
 The `scriptResponse` receives the command response in `sbmdCommandResponseArgs.tlvBase64`
@@ -549,13 +553,13 @@ mapper:
       var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
       // LockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, ...
       var isLocked = (eventData.lockOperationType === 0);
-      return { output: isLocked ? 'true' : 'false' };
+      return { value: isLocked ? 'true' : 'false' };
 ```
 
 Event mappers receive `sbmdEventArgs` containing the base64-encoded TLV event data.
 The script decodes the data and returns a Barton resource value.
 
-> **Note:** If the event script does not return an `output` key (e.g., returns `{}`), the resource is not
+> **Note:** If the event script returns an empty object `{}` or `{ value: null }`, the resource is not
 > updated. This allows the script to ignore non-state-change events (e.g. returning
 > `{}` for `LockOperationType` values that do not change lock state).
 
@@ -608,9 +612,9 @@ mapper:
     script: |
       var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
       // LockOperationType: 0=Lock, 1=Unlock, 2+=non-state-change
-      if (event[0] === 0) { return { output: 'true' }; }
-      if (event[0] === 1) { return { output: 'false' }; }
-      return {};  // No output for non-state-change events
+      if (event[0] === 0) { return {value: 'true' }; }
+      if (event[0] === 1) { return {value: 'false' }; }
+      return {};  // Suppress — no update for non-state-change events
 
   # Initial value from attribute cache at configure/synchronize time
   seedFrom:
@@ -619,7 +623,7 @@ mapper:
       // Same script interface as read mapper (sbmdReadArgs.tlvBase64)
       var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
       // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-      return { output: value === 1 ? 'true' : 'false' };
+      return { value: value === 1 ? 'true' : 'false' };
 ```
 
 > **C++ field naming**: The YAML key is `seedFrom`. The internal C++ data model uses
@@ -650,7 +654,7 @@ mapper:
     alias: "identifyTime"
     script: |
       var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-      return {output: secs.toString()};
+      return {value: secs.toString()};
   write:
     script: |
       const secs = parseInt(sbmdWriteArgs.input, 10);
@@ -692,9 +696,21 @@ sbmdReadArgs = {
 
 #### Expected Output
 
+The script must return one of:
+
+| Return value | Meaning |
+|---|---|
+| `{ value: "..." }` | Update the Barton resource with the given string value |
+| `{}` (empty object) | Suppress — do not update the resource |
+| `{ error: "msg" }` | Signal an error |
+
+`SbmdUtils.Response` helpers are available:
+- `SbmdUtils.Response.value(v)` — returns `{ value: String(v) }`
+- `SbmdUtils.Response.error(msg)` — returns `{ error: msg }`
+
 ```javascript
 return {
-    output: <barton_value>    // String value for the Barton resource
+    value: <barton_value>    // String value for the Barton resource
 };
 ```
 
@@ -704,14 +720,14 @@ return {
 ```javascript
 // Decode TLV boolean and return as string
 var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {output: val ? 'true' : 'false'};
+return SbmdUtils.Response.value(val);
 ```
 
 **Enum to boolean conversion (Door Lock state):**
 ```javascript
 // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
 var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {output: lockState === 1 ? 'true' : 'false'};
+return {value: lockState === 1 ? 'true' : 'false'};
 ```
 
 **Percentage conversion (Level Control):**
@@ -719,7 +735,7 @@ return {output: lockState === 1 ? 'true' : 'false'};
 // Decode level (0-254) and convert to percentage string
 var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
 var percent = Math.round(level / 254 * 100);
-return {output: percent.toString()};
+return {value: percent.toString()};
 ```
 
 ### 5.2 Write Mapper Script Interface
@@ -910,9 +926,17 @@ sbmdCommandResponseArgs = {
 
 #### Expected Output
 
+The script must return one of:
+
+| Return value | Meaning |
+|---|---|
+| `{ value: "..." }` | Return the response string to Barton |
+| `{}` (empty object) | Suppress — no response value |
+| `{ error: "msg" }` | Signal an error |
+
 ```javascript
 return {
-    output: <barton_response> // String response for Barton
+    value: <barton_response> // String response for Barton
 };
 ```
 
@@ -937,9 +961,19 @@ sbmdEventArgs = {
 
 #### Expected Output
 
+The script must return one of:
+
+| Return value | Meaning |
+|---|---|
+| `{ value: "..." }` | Update the Barton resource with the given string value |
+| `{}` (empty object) | Suppress — do not update the resource |
+| `{ error: "msg" }` | Signal an error |
+
+`SbmdUtils.Response.value(v)` and `SbmdUtils.Response.error(msg)` helpers are available.
+
 ```javascript
 return {
-    output: <barton_value>    // String value for the Barton resource
+    value: <barton_value>    // String value for the Barton resource
 };
 ```
 
@@ -951,7 +985,7 @@ return {
 var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
 // LockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, ...
 var isLocked = (eventData.lockOperationType === 0);
-return { output: isLocked ? 'true' : 'false' };
+return { value: isLocked ? 'true' : 'false' };
 ```
 
 ## 6. Matter Data Types
@@ -1019,7 +1053,7 @@ var tlv = SbmdUtils.Tlv.encodeStruct(args, {
 ### 7.1 Door Lock Driver
 
 ```yaml
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 driverVersion: "1.0"
 name: "Door Lock"
 scriptType: "JavaScript"
@@ -1061,7 +1095,7 @@ resources:
         alias: "identifyTime"
         script: |
           var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-          return {output: secs.toString()};
+          return {value: secs.toString()};
       write:
         script: |
           var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
@@ -1086,7 +1120,7 @@ endpoints:
             script: |
               // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return { output: value === 1 ? 'true' : 'false' };
+              return { value: value === 1 ? 'true' : 'false' };
       - id: "lock"
         type: "function"
         prerequisites: none
@@ -1133,7 +1167,7 @@ endpoints:
 ### 7.2 Water Leak Detector
 
 ```yaml
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 driverVersion: "1.0"
 name: "Water Leak Detector"
 scriptType: "JavaScript"
@@ -1172,7 +1206,7 @@ endpoints:
             alias: "stateValue"
             script: |
               const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return {output: (value === true) ? 'true' : 'false'};
+              return {value: (value === true) ? 'true' : 'false'};
 ```
 
 ## 8. Authoring Guidelines
@@ -1218,20 +1252,20 @@ endpoints:
 **Identity passthrough (no transformation):**
 ```javascript
 var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {output: val.toString()};
+return {value: val.toString()};
 ```
 
 **Boolean enum conversion:**
 ```javascript
 var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {output: val === <expected_value> ? 'true' : 'false'};
+return {value: val === <expected_value> ? 'true' : 'false'};
 ```
 
 **Numeric scaling:**
 ```javascript
 var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
 var scaled = Math.round(val * <scale_factor>);
-return {output: scaled.toString()};
+return {value: scaled.toString()};
 ```
 
 **Feature-conditional logic:**
@@ -1302,7 +1336,7 @@ Scripts that fail will:
 
 Common error causes:
 - Syntax errors in JavaScript
-- Missing `output` field in return value
+- Missing `value` field in return value (returned `{}` where a value was expected)
 - Type mismatches in TLV conversion
 - Undefined variables or properties
 - Invalid Base64 input passed to `SbmdUtils.Tlv.decode()` or `SbmdUtils.Base64.decode()`

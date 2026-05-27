@@ -2,7 +2,7 @@
 # Maps Matter Humidity Sensor device type to Barton sensor device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -52,8 +52,8 @@ endpoints:
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // 0xFFFF: Matter null for uint16 MeasuredValue
               if (value === null || value === 0xFFFF) {
-                return {output: ''};
+                return {value: ''};
               }
               // Matter humidity is in hundredths of percent, convert to whole percent
               var percent = Math.round(value / 100);
-              return {output: percent.toString()};
+              return {value: percent.toString()};

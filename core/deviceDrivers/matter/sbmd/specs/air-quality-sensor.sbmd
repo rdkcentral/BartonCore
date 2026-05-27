@@ -2,7 +2,7 @@
 # Maps Matter Air Quality Sensor device type to Barton "airQualitySensor" device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -82,7 +82,7 @@ endpoints:
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // Map enum values to human-readable strings
               var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
-              return {output: levels[value] || 'unknown'};
+              return {value: levels[value] || 'unknown'};
 
       # Temperature measurement - in degrees Celsius (hundredths)
       - id: "temperature"
@@ -100,10 +100,10 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return {value: null};
               }
               // Matter temperature is in hundredths of degrees C (e.g. 23°C = 2300)
-              return {output: value.toString()};
+              return {value: value.toString()};
 
       # Relative humidity measurement - percentage
       - id: "humidity"
@@ -121,11 +121,11 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return {value: null};
               }
               // Matter humidity is in hundredths of percent, convert to whole percent
               var percent = Math.round(value / 100);
-              return {output: percent.toString()};
+              return {value: percent.toString()};
 
       # CO2 concentration - parts per million (ppm)
       - id: "co2Concentration"
@@ -143,10 +143,10 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return {value: null};
               }
               // Round to whole ppm
-              return {output: Math.round(value).toString()};
+              return {value: Math.round(value).toString()};
 
       # PM2.5 concentration - micrograms per cubic meter (μg/m³)
       - id: "pm25Concentration"
@@ -164,7 +164,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return {value: null};
               }
               // Round to 1 decimal place
-              return {output: value.toFixed(1)};
+              return {value: value.toFixed(1)};

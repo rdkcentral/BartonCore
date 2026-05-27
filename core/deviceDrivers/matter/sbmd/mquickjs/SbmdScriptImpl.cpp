@@ -28,11 +28,13 @@
 #define LOG_TAG "SbmdScriptImpl"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "../SbmdSpec.h"
-#include "MQuickJsRuntime.h"
 #include "SbmdScriptImpl.h"
+#include "../SbmdSpec.h"
+#include "../ScriptResult.h"
+#include "MQuickJsRuntime.h"
 #include "SbmdUtilsLoader.h"
 #include <cstring>
+#include <json/json.h>
 
 #include <lib/core/CHIPError.h>
 #include <lib/core/TLVWriter.h>
@@ -60,6 +62,9 @@ namespace barton
          */
         std::string GetExceptionString(JSContext *ctx)
         {
+            // JS_GetException transfers ownership of the exception and clears it from
+            // the context. The exception is consumed in all code paths below — the context
+            // has no pending exception regardless of which return path is taken.
             JSValue ex = JS_GetException(ctx);
 
             // First try direct string conversion (works for string exceptions)
@@ -88,6 +93,155 @@ namespace barton
             }
 
             return "unknown error";
+        }
+
+        // Convert the script output JSValue to a ScriptResult.
+        // Caller must have validated outJson is a non-null, non-string JS object.
+        ScriptResult ScriptResultFromMqJsValue(JSContext *ctx, JSValue outJson)
+        {
+            Json::Value jv(Json::objectValue);
+
+            // Helper: extract a named uint32_t property from a JSValue object.
+            auto getPropertyUint = [ctx](JSValue obj, const char *key) -> std::optional<uint32_t> {
+                JSValue fv = JS_GetPropertyStr(ctx, obj, key);
+
+                if (JS_IsUndefined(fv) || JS_IsNull(fv))
+                {
+                    return std::nullopt;
+                }
+
+                uint32_t v = 0;
+
+                if (JS_ToUint32(ctx, &v, fv) < 0)
+                {
+                    return std::nullopt;
+                }
+
+                return v;
+            };
+
+            // Helper: extract a named string property from a JSValue object.
+            auto getPropertyStr = [ctx](JSValue obj, const char *key) -> std::optional<std::string> {
+                JSValue fv = JS_GetPropertyStr(ctx, obj, key);
+
+                if (JS_IsUndefined(fv) || JS_IsNull(fv))
+                {
+                    return std::nullopt;
+                }
+
+                JSCStringBuf buf;
+                const char *s = JS_ToCString(ctx, fv, &buf);
+
+                if (!s)
+                {
+                    return std::nullopt;
+                }
+
+                return std::string(s);
+            };
+
+            // Extract "error" key
+            {
+                JSValue ev = JS_GetPropertyStr(ctx, outJson, "error");
+
+                if (!JS_IsUndefined(ev) && !JS_IsNull(ev))
+                {
+                    JSCStringBuf buf;
+                    const char *s = JS_ToCString(ctx, ev, &buf);
+
+                    if (s)
+                    {
+                        jv["error"] = std::string(s);
+                    }
+                }
+            }
+
+            // Extract "value" key (JS_ToCString coerces booleans/numbers to strings)
+            {
+                JSValue vv = JS_GetPropertyStr(ctx, outJson, "value");
+
+                if (!JS_IsUndefined(vv) && !JS_IsNull(vv))
+                {
+                    JSCStringBuf buf;
+                    const char *s = JS_ToCString(ctx, vv, &buf);
+
+                    if (s)
+                    {
+                        jv["value"] = std::string(s);
+                    }
+                }
+            }
+
+            // Extract "invoke" sub-object
+            {
+                JSValue iv = JS_GetPropertyStr(ctx, outJson, "invoke");
+
+                if (!JS_IsUndefined(iv) && !JS_IsNull(iv) && JS_IsPtr(iv) && !JS_IsString(ctx, iv))
+                {
+                    Json::Value invokeJv(Json::objectValue);
+
+                    if (auto v = getPropertyUint(iv, "clusterId"))
+                    {
+                        invokeJv["clusterId"] = *v;
+                    }
+
+                    if (auto v = getPropertyUint(iv, "commandId"))
+                    {
+                        invokeJv["commandId"] = *v;
+                    }
+
+                    if (auto v = getPropertyUint(iv, "endpointId"))
+                    {
+                        invokeJv["endpointId"] = *v;
+                    }
+
+                    if (auto v = getPropertyUint(iv, "timedInvokeTimeoutMs"))
+                    {
+                        invokeJv["timedInvokeTimeoutMs"] = *v;
+                    }
+
+                    if (auto v = getPropertyStr(iv, "tlvBase64"))
+                    {
+                        invokeJv["tlvBase64"] = *v;
+                    }
+
+                    jv["invoke"] = invokeJv;
+                }
+            }
+
+            // Extract "write" sub-object
+            {
+                JSValue wv = JS_GetPropertyStr(ctx, outJson, "write");
+
+                if (!JS_IsUndefined(wv) && !JS_IsNull(wv) && JS_IsPtr(wv) && !JS_IsString(ctx, wv))
+                {
+                    Json::Value writeJv(Json::objectValue);
+
+                    if (auto v = getPropertyUint(wv, "clusterId"))
+                    {
+                        writeJv["clusterId"] = *v;
+                    }
+
+                    if (auto v = getPropertyUint(wv, "attributeId"))
+                    {
+                        writeJv["attributeId"] = *v;
+                    }
+
+                    if (auto v = getPropertyUint(wv, "endpointId"))
+                    {
+                        writeJv["endpointId"] = *v;
+                    }
+
+                    if (auto v = getPropertyStr(wv, "tlvBase64"))
+                    {
+                        writeJv["tlvBase64"] = *v;
+                    }
+
+                    jv["write"] = writeJv;
+                }
+            }
+
+            return ScriptResult::FromJsonValue(jv);
         }
 
     } // anonymous namespace
@@ -299,53 +453,19 @@ bool SbmdScriptImpl::ExecuteScript(const std::string &script,
     return true;
 }
 
-// Requires MQuickJsRuntime::GetMutex() to be held by caller.
-bool SbmdScriptImpl::ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue)
-{
-    JSContext *ctx = MQuickJsRuntime::GetSharedContext();
-
-    if (JS_IsNull(scriptResult) || JS_IsUndefined(scriptResult) || !JS_IsPtr(scriptResult) ||
-        JS_IsString(ctx, scriptResult))
-    {
-        icError("Script returned a non-object where a plain object was expected");
-        return false;
-    }
-
-    // Extract the "output" field from the result JSON object
-    JSValue outputVal = JS_GetPropertyStr(ctx, scriptResult, "output");
-    if (JS_IsUndefined(outputVal) || JS_IsNull(outputVal))
-    {
-        icError("Script result missing 'output' field");
-        return false;
-    }
-
-    JSCStringBuf buf;
-    const char *resultStr = JS_ToCString(ctx, outputVal, &buf);
-    if (!resultStr)
-    {
-        icError("Failed to convert output value to string: %s", GetExceptionString(ctx).c_str());
-        return false;
-    }
-
-    outValue = resultStr;
-    icDebug("Script output string: %s", outValue.c_str());
-    return true;
-}
-
-bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
-                                     chip::TLV::TLVReader &reader,
-                                     std::string &outValue)
+ScriptResult SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = attributeReadScripts.find(attributeInfo);
+
     if (it == attributeReadScripts.end())
     {
         icError("No read mapper found for cluster 0x%X, attribute 0x%X",
                 attributeInfo.clusterId,
                 attributeInfo.attributeId);
-        return false;
+        return ScriptResult::MakeError("No read mapper found for attribute");
     }
 
     // Copy TLV element to a buffer for base64 encoding
@@ -359,7 +479,7 @@ bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
         icError("Failed to copy TLV element for attribute '%s': %" CHIP_ERROR_FORMAT,
                 attributeInfo.name.c_str(),
                 err.Format());
-        return false;
+        return ScriptResult::MakeError("Failed to copy TLV data for attribute " + attributeInfo.name);
     }
 
     size_t tlvLength = writer.GetLengthWritten();
@@ -367,7 +487,7 @@ bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
     if (tlvLength > UINT16_MAX)
     {
         icError("Attribute TLV data too large for base64 encoding: %zu bytes", tlvLength);
-        return false;
+        return ScriptResult::MakeError("Attribute TLV data too large");
     }
 
     // Base64 encode the TLV bytes
@@ -385,28 +505,36 @@ bool SbmdScriptImpl::MapAttributeRead(const SbmdAttribute &attributeInfo,
     JS_SetPropertyStr(ctx, jsonArg, "attributeType", JS_NewString(ctx, attributeInfo.type.c_str()));
 
     JSValue outJson;
+
     if (!ExecuteScript(it->second, "sbmdReadArgs", jsonArg, outJson))
     {
-        return false;
+        return ScriptResult::MakeError("Script execution failed for attribute " + attributeInfo.name);
     }
 
-    return ExtractScriptOutputAsString(outJson, outValue);
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
+    {
+        icError("Attribute mapper script returned a non-object for cluster 0x%X, attribute 0x%X",
+                attributeInfo.clusterId,
+                attributeInfo.attributeId);
+        return ScriptResult::MakeError("Attribute mapper script returned a non-object");
+    }
+
+    return ScriptResultFromMqJsValue(ctx, outJson);
 }
 
-bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
-                                              chip::TLV::TLVReader &reader,
-                                              std::string &outValue)
+ScriptResult SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo, chip::TLV::TLVReader &reader)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = commandExecuteResponseScripts.find(commandInfo);
+
     if (it == commandExecuteResponseScripts.end())
     {
         icError("No execute response mapper found for cluster 0x%X, command 0x%X",
                 commandInfo.clusterId,
                 commandInfo.commandId);
-        return false;
+        return ScriptResult::MakeError("No execute response mapper found for command");
     }
 
     // Copy TLV element to a buffer for base64 encoding
@@ -420,7 +548,7 @@ bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
         icError("Failed to copy TLV element for command response '%s': %" CHIP_ERROR_FORMAT,
                 commandInfo.name.c_str(),
                 err.Format());
-        return false;
+        return ScriptResult::MakeError("Failed to copy TLV data for command response " + commandInfo.name);
     }
 
     size_t tlvLength = writer.GetLengthWritten();
@@ -428,7 +556,7 @@ bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     if (tlvLength > UINT16_MAX)
     {
         icError("Command response TLV data too large for base64 encoding: %zu bytes", tlvLength);
-        return false;
+        return ScriptResult::MakeError("Command response TLV data too large");
     }
 
     // Base64 encode the TLV bytes
@@ -445,12 +573,21 @@ bool SbmdScriptImpl::MapCommandExecuteResponse(const SbmdCommand &commandInfo,
     JS_SetPropertyStr(ctx, jsonArg, "commandName", JS_NewString(ctx, commandInfo.name.c_str()));
 
     JSValue outJson;
+
     if (!ExecuteScript(it->second, "sbmdCommandResponseArgs", jsonArg, outJson))
     {
-        return false;
+        return ScriptResult::MakeError("Script execution failed for command response " + commandInfo.name);
     }
 
-    return ExtractScriptOutputAsString(outJson, outValue);
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
+    {
+        icError("Command response mapper script returned a non-object for cluster 0x%X, command 0x%X",
+                commandInfo.clusterId,
+                commandInfo.commandId);
+        return ScriptResult::MakeError("Command response mapper script returned a non-object");
+    }
+
+    return ScriptResultFromMqJsValue(ctx, outJson);
 }
 
 bool SbmdScriptImpl::AddWriteMapper(const std::string &resourceKey, const std::string &script)
@@ -501,396 +638,74 @@ bool SbmdScriptImpl::AddExecuteMapper(const std::string &resourceKey,
     return true;
 }
 
-bool SbmdScriptImpl::MapWrite(const std::string &resourceKey,
-                             const std::string &endpointId,
-                             const std::string &resourceId,
-                             const std::string &inValue,
-                             ScriptWriteResult &result)
+ScriptResult SbmdScriptImpl::MapWrite(const std::string &resourceKey,
+                                      const std::string &endpointId,
+                                      const std::string &resourceId,
+                                      const std::string &inValue)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = writeScripts.find(resourceKey);
+
     if (it == writeScripts.end())
     {
         icError("No write mapper found for resource %s", resourceKey.c_str());
-        return false;
+        return ScriptResult::MakeError("No write mapper found for resource " + resourceKey);
     }
 
     // Build the sbmdWriteArgs object
     JSValue jsonArg = BuildBaseArgs(endpointId, std::nullopt, resourceId, inValue);
 
     JSValue outJson;
+
     if (!ExecuteScript(it->second, "sbmdWriteArgs", jsonArg, outJson))
     {
-        icError("Failed to execute write script for resource %s", resourceKey.c_str());
-        return false;
+        return ScriptResult::MakeError("Script execution failed for write " + resourceKey);
     }
 
-    // Validate that the script result is a non-null object
-    if (JS_IsException(outJson))
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
     {
-        icError("Script execution returned an exception: %s", GetExceptionString(ctx).c_str());
-        return false;
+        icError("Write mapper script returned a non-object for resource %s", resourceKey.c_str());
+        return ScriptResult::MakeError("Write mapper script returned a non-object");
     }
 
-    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson))
-    {
-        icError("Script result is not an object; expected 'invoke' or 'write' object");
-        return false;
-    }
-
-    // Check for 'invoke' operation (command invocation)
-    JSValue invokeVal = JS_GetPropertyStr(ctx, outJson, "invoke");
-    if (!JS_IsUndefined(invokeVal) && !JS_IsNull(invokeVal))
-    {
-        result.type = ScriptWriteResult::OperationType::Invoke;
-
-        if (!JS_IsPtr(invokeVal))
-        {
-            icError("'invoke' field must be an object");
-            return false;
-        }
-
-        // Extract clusterId (required)
-        JSValue clusterIdVal = JS_GetPropertyStr(ctx, invokeVal, "clusterId");
-        if (JS_IsUndefined(clusterIdVal))
-        {
-            icError("'invoke' missing required 'clusterId' field");
-            return false;
-        }
-        uint32_t clusterId;
-        if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
-        {
-            icError("Failed to convert 'clusterId' to number");
-            return false;
-        }
-        result.clusterId = static_cast<chip::ClusterId>(clusterId);
-
-        // Extract commandId (required)
-        JSValue commandIdVal = JS_GetPropertyStr(ctx, invokeVal, "commandId");
-        if (JS_IsUndefined(commandIdVal))
-        {
-            icError("'invoke' missing required 'commandId' field");
-            return false;
-        }
-        uint32_t commandId;
-        if (JS_ToUint32(ctx, &commandId, commandIdVal) < 0)
-        {
-            icError("Failed to convert 'commandId' to number");
-            return false;
-        }
-        result.commandId = static_cast<chip::CommandId>(commandId);
-
-        // Extract optional endpointId
-        JSValue epIdVal = JS_GetPropertyStr(ctx, invokeVal, "endpointId");
-        if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
-        {
-            uint32_t epId;
-            if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
-            {
-                result.endpointId = static_cast<chip::EndpointId>(epId);
-            }
-        }
-
-        // Extract optional timedInvokeTimeoutMs
-        JSValue timedVal = JS_GetPropertyStr(ctx, invokeVal, "timedInvokeTimeoutMs");
-        if (!JS_IsUndefined(timedVal) && !JS_IsNull(timedVal))
-        {
-            uint32_t timedMs;
-            if (JS_ToUint32(ctx, &timedMs, timedVal) >= 0)
-            {
-                result.timedInvokeTimeoutMs = static_cast<uint16_t>(timedMs);
-            }
-        }
-
-        // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
-        JSValue tlvBase64Val = JS_GetPropertyStr(ctx, invokeVal, "tlvBase64");
-        if (!JS_IsUndefined(tlvBase64Val) && !JS_IsNull(tlvBase64Val))
-        {
-            JSCStringBuf buf;
-            const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
-            if (!base64Str)
-            {
-                icError("Failed to convert 'tlvBase64' to string");
-                return false;
-            }
-            std::string base64String(base64Str);
-
-            // Only decode if non-empty
-            if (!base64String.empty())
-            {
-                // Decode base64 to TLV bytes
-                size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
-                if (!result.tlvBuffer.Alloc(maxDecodedLen))
-                {
-                    icError("Failed to allocate buffer for TLV decoding");
-                    return false;
-                }
-
-                uint16_t decodedLen = chip::Base64Decode(
-                    base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
-                if (decodedLen == UINT16_MAX)
-                {
-                    icError("Failed to decode base64 TLV data for invoke");
-                    return false;
-                }
-                result.tlvLength = decodedLen;
-            }
-        }
-
-        icDebug("write mapped to invoke: cluster=0x%X, command=0x%X, tlvLen=%zu",
-                result.clusterId,
-                result.commandId,
-                result.tlvLength);
-        return true;
-    }
-
-    // Check for 'write' operation (attribute write)
-    JSValue writeVal = JS_GetPropertyStr(ctx, outJson, "write");
-    if (!JS_IsUndefined(writeVal) && !JS_IsNull(writeVal))
-    {
-        result.type = ScriptWriteResult::OperationType::Write;
-
-        if (!JS_IsPtr(writeVal))
-        {
-            icError("'write' field must be an object");
-            return false;
-        }
-
-        // Extract clusterId (required)
-        JSValue clusterIdVal = JS_GetPropertyStr(ctx, writeVal, "clusterId");
-        if (JS_IsUndefined(clusterIdVal))
-        {
-            icError("'write' missing required 'clusterId' field");
-            return false;
-        }
-        uint32_t clusterId;
-        if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
-        {
-            icError("Failed to convert 'clusterId' to number");
-            return false;
-        }
-        result.clusterId = static_cast<chip::ClusterId>(clusterId);
-
-        // Extract attributeId (required)
-        JSValue attrIdVal = JS_GetPropertyStr(ctx, writeVal, "attributeId");
-        if (JS_IsUndefined(attrIdVal))
-        {
-            icError("'write' missing required 'attributeId' field");
-            return false;
-        }
-        uint32_t attrId;
-        if (JS_ToUint32(ctx, &attrId, attrIdVal) < 0)
-        {
-            icError("Failed to convert 'attributeId' to number");
-            return false;
-        }
-        result.attributeId = static_cast<chip::AttributeId>(attrId);
-
-        // Extract optional endpointId
-        JSValue epIdVal = JS_GetPropertyStr(ctx, writeVal, "endpointId");
-        if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
-        {
-            uint32_t epId;
-            if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
-            {
-                result.endpointId = static_cast<chip::EndpointId>(epId);
-            }
-        }
-
-        // Extract tlvBase64 (required)
-        JSValue tlvBase64Val = JS_GetPropertyStr(ctx, writeVal, "tlvBase64");
-        if (JS_IsUndefined(tlvBase64Val) || JS_IsNull(tlvBase64Val))
-        {
-            icError("'write' missing required 'tlvBase64' field");
-            return false;
-        }
-
-        JSCStringBuf buf;
-        const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
-        if (!base64Str)
-        {
-            icError("Failed to convert 'tlvBase64' to string");
-            return false;
-        }
-
-        // Decode base64 to TLV bytes
-        std::string base64String(base64Str);
-        size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
-        if (!result.tlvBuffer.Alloc(maxDecodedLen))
-        {
-            icError("Failed to allocate buffer for TLV decoding");
-            return false;
-        }
-
-        uint16_t decodedLen = chip::Base64Decode(
-            base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
-        if (decodedLen == UINT16_MAX)
-        {
-            icError("Failed to decode base64 TLV data for write");
-            return false;
-        }
-        result.tlvLength = decodedLen;
-
-        icDebug("write mapped to attribute write: cluster=0x%X, attribute=0x%X, tlvLen=%zu",
-                result.clusterId,
-                result.attributeId,
-                result.tlvLength);
-        return true;
-    }
-
-    icError("Script result missing 'invoke' or 'write' field");
-    return false;
+    return ScriptResultFromMqJsValue(ctx, outJson);
 }
 
-bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
-                               const std::string &endpointId,
-                               const std::string &resourceId,
-                               const std::string &inValue,
-                               ScriptWriteResult &result)
+ScriptResult SbmdScriptImpl::MapExecute(const std::string &resourceKey,
+                                        const std::string &endpointId,
+                                        const std::string &resourceId,
+                                        const std::string &inValue)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = executeScripts.find(resourceKey);
+
     if (it == executeScripts.end())
     {
         icError("No execute mapper found for resource %s", resourceKey.c_str());
-        return false;
+        return ScriptResult::MakeError("No execute mapper found for resource " + resourceKey);
     }
 
     // Build the sbmdCommandArgs object
     JSValue jsonArg = BuildBaseArgs(endpointId, std::nullopt, resourceId, inValue);
 
     JSValue outJson;
+
     if (!ExecuteScript(it->second, "sbmdCommandArgs", jsonArg, outJson))
     {
-        icError("Failed to execute script for resource %s", resourceKey.c_str());
-        return false;
+        return ScriptResult::MakeError("Script execution failed for execute " + resourceKey);
     }
 
-    // Validate that the script result is a non-null object
-    if (JS_IsException(outJson))
+    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
     {
-        icError("Script execution returned an exception: %s", GetExceptionString(ctx).c_str());
-        return false;
+        icError("Execute mapper script returned a non-object for resource %s", resourceKey.c_str());
+        return ScriptResult::MakeError("Execute mapper script returned a non-object");
     }
 
-    if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson))
-    {
-        icError("Script result is not an object; expected 'invoke' object");
-        return false;
-    }
-
-    // Check for 'invoke' operation (command invocation) - the only valid operation for execute
-    JSValue invokeVal = JS_GetPropertyStr(ctx, outJson, "invoke");
-    if (JS_IsUndefined(invokeVal) || JS_IsNull(invokeVal))
-    {
-        icError("Execute script result missing required 'invoke' field");
-        return false;
-    }
-
-    result.type = ScriptWriteResult::OperationType::Invoke;
-
-    if (!JS_IsPtr(invokeVal))
-    {
-        icError("'invoke' field must be an object");
-        return false;
-    }
-
-    // Extract clusterId (required)
-    JSValue clusterIdVal = JS_GetPropertyStr(ctx, invokeVal, "clusterId");
-    if (JS_IsUndefined(clusterIdVal))
-    {
-        icError("'invoke' missing required 'clusterId' field");
-        return false;
-    }
-    uint32_t clusterId;
-    if (JS_ToUint32(ctx, &clusterId, clusterIdVal) < 0)
-    {
-        icError("Failed to convert 'clusterId' to number");
-        return false;
-    }
-    result.clusterId = static_cast<chip::ClusterId>(clusterId);
-
-    // Extract commandId (required)
-    JSValue commandIdVal = JS_GetPropertyStr(ctx, invokeVal, "commandId");
-    if (JS_IsUndefined(commandIdVal))
-    {
-        icError("'invoke' missing required 'commandId' field");
-        return false;
-    }
-    uint32_t commandId;
-    if (JS_ToUint32(ctx, &commandId, commandIdVal) < 0)
-    {
-        icError("Failed to convert 'commandId' to number");
-        return false;
-    }
-    result.commandId = static_cast<chip::CommandId>(commandId);
-
-    // Extract optional endpointId
-    JSValue epIdVal = JS_GetPropertyStr(ctx, invokeVal, "endpointId");
-    if (!JS_IsUndefined(epIdVal) && !JS_IsNull(epIdVal))
-    {
-        uint32_t epId;
-        if (JS_ToUint32(ctx, &epId, epIdVal) >= 0)
-        {
-            result.endpointId = static_cast<chip::EndpointId>(epId);
-        }
-    }
-
-    // Extract optional timedInvokeTimeoutMs
-    JSValue timedVal = JS_GetPropertyStr(ctx, invokeVal, "timedInvokeTimeoutMs");
-    if (!JS_IsUndefined(timedVal) && !JS_IsNull(timedVal))
-    {
-        uint32_t timedMs;
-        if (JS_ToUint32(ctx, &timedMs, timedVal) >= 0)
-        {
-            result.timedInvokeTimeoutMs = static_cast<uint16_t>(timedMs);
-        }
-    }
-
-    // Extract tlvBase64 (optional for invoke - empty/missing means no command args)
-    JSValue tlvBase64Val = JS_GetPropertyStr(ctx, invokeVal, "tlvBase64");
-    if (!JS_IsUndefined(tlvBase64Val) && !JS_IsNull(tlvBase64Val))
-    {
-        JSCStringBuf buf;
-        const char *base64Str = JS_ToCString(ctx, tlvBase64Val, &buf);
-        if (!base64Str)
-        {
-            icError("Failed to convert 'tlvBase64' to string");
-            return false;
-        }
-        std::string base64String(base64Str);
-
-        // Only decode if non-empty
-        if (!base64String.empty())
-        {
-            // Decode base64 to TLV bytes
-            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64String.length());
-            if (!result.tlvBuffer.Alloc(maxDecodedLen))
-            {
-                icError("Failed to allocate buffer for TLV decoding");
-                return false;
-            }
-
-            uint16_t decodedLen = chip::Base64Decode(
-                base64String.c_str(), static_cast<uint16_t>(base64String.length()), result.tlvBuffer.Get());
-            if (decodedLen == UINT16_MAX)
-            {
-                icError("Failed to decode base64 TLV data for invoke");
-                return false;
-            }
-            result.tlvLength = decodedLen;
-        }
-    }
-
-    icDebug("execute mapped to invoke: cluster=0x%X, command=0x%X, tlvLen=%zu",
-            result.clusterId,
-            result.commandId,
-            result.tlvLength);
-    return true;
+    return ScriptResultFromMqJsValue(ctx, outJson);
 }
 
 bool SbmdScriptImpl::AddEventMapper(const SbmdEvent &eventInfo, const std::string &script)
@@ -912,20 +727,19 @@ bool SbmdScriptImpl::AddEventMapper(const SbmdEvent &eventInfo, const std::strin
     return true;
 }
 
-bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
-                             chip::TLV::TLVReader &reader,
-                             std::string &outValue)
+ScriptResult SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     JSContext *ctx = MQuickJsRuntime::GetSharedContext();
 
     auto it = eventScripts.find(eventInfo);
+
     if (it == eventScripts.end())
     {
         icError("No event mapper found for cluster 0x%X, event 0x%X",
                 eventInfo.clusterId,
                 eventInfo.eventId);
-        return false;
+        return ScriptResult::MakeError("No event mapper found");
     }
 
     // Build the sbmdEventArgs object
@@ -934,37 +748,35 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
     JS_SetPropertyStr(ctx, jsonArg, "eventName", JS_NewString(ctx, eventInfo.name.c_str()));
 
     // Convert TLV to base64 for script to use
-    // Make a copy of the reader since encoding may consume it
     chip::TLV::TLVReader readerCopy;
     readerCopy.Init(reader);
 
-    // Get the size needed for encoding
     chip::TLV::TLVReader sizingReader;
     sizingReader.Init(reader);
     uint32_t tlvLen = sizingReader.GetRemainingLength();
 
-    // Use a reasonable buffer size
     if (tlvLen == 0)
     {
         tlvLen = 256;
     }
 
     chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
+
     if (!tlvBuffer.Calloc(tlvLen))
     {
         icError("Failed to allocate TLV buffer for event 0x%X", eventInfo.eventId);
-        return false;
+        return ScriptResult::MakeError("Failed to allocate TLV buffer for event");
     }
 
-    // Write the TLV data to buffer
     chip::TLV::TLVWriter writer;
     writer.Init(tlvBuffer.Get(), tlvLen);
 
     CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+
     if (err != CHIP_NO_ERROR)
     {
         icError("Failed to copy event TLV data: %s", chip::ErrorStr(err));
-        return false;
+        return ScriptResult::MakeError("Failed to copy event TLV data");
     }
 
     uint32_t encodedLen = writer.GetLengthWritten();
@@ -972,10 +784,9 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
     if (encodedLen > UINT16_MAX)
     {
         icError("Event TLV data too large for base64 encoding: %u bytes", encodedLen);
-        return false;
+        return ScriptResult::MakeError("Event TLV data too large");
     }
 
-    // Encode to base64
     size_t base64Size = ((encodedLen + 2) / 3) * 4 + 1;
     std::unique_ptr<char[]> base64Buffer(new char[base64Size]);
     uint16_t base64Len = chip::Base64Encode(tlvBuffer.Get(), static_cast<uint16_t>(encodedLen), base64Buffer.get());
@@ -985,78 +796,24 @@ bool SbmdScriptImpl::MapEvent(const SbmdEvent &eventInfo,
 
     // Execute the mapper script
     JSValue outJson;
+
     if (!ExecuteScript(it->second, "sbmdEventArgs", jsonArg, outJson))
     {
         icError("Failed to execute event mapper script for cluster 0x%X, event 0x%X",
                 eventInfo.clusterId,
                 eventInfo.eventId);
-        return false;
+        return ScriptResult::MakeError("Script execution failed for event");
     }
 
-    // A non-object return (undefined, null, a primitive, or a string) is always a script error
-    // — it means the script forgot a return statement or returned the wrong type.
-    // JS_IsPtr matches any heap pointer including strings, so JS_IsString must be excluded
-    // explicitly to avoid misclassifying a string return as a valid (suppressed) object.
     if (JS_IsNull(outJson) || JS_IsUndefined(outJson) || !JS_IsPtr(outJson) || JS_IsString(ctx, outJson))
     {
         icError("Event mapper script returned a non-object for cluster 0x%X, event 0x%X",
                 eventInfo.clusterId,
                 eventInfo.eventId);
-
-        return false;
+        return ScriptResult::MakeError("Event mapper script returned a non-object");
     }
 
-    // Check whether the script returned an 'output' field.
-    // A missing 'output' on an object return is a valid "suppress" signal — the script ran
-    // successfully but chose not to produce a value (e.g. for non-state-change events).
-    // Return true with empty outValue so the caller can distinguish suppress from failure.
-    JSValue outputVal = JS_GetPropertyStr(ctx, outJson, "output");
-
-    if (JS_IsException(outputVal))
-    {
-        icError("Exception reading 'output' field for cluster 0x%X, event 0x%X: %s",
-                eventInfo.clusterId,
-                eventInfo.eventId,
-                GetExceptionString(ctx).c_str());
-
-        return false;
-    }
-
-    if (JS_IsUndefined(outputVal))
-    {
-        icDebug("Event mapper suppressed update for cluster 0x%X, event 0x%X", eventInfo.clusterId, eventInfo.eventId);
-        outValue.clear();
-
-        return true;
-    }
-
-    if (JS_IsNull(outputVal))
-    {
-        icError("Event mapper returned {output: null} for cluster 0x%X, event 0x%X — "
-                "use {} or omit 'output' to suppress; null is not a valid value",
-                eventInfo.clusterId,
-                eventInfo.eventId);
-
-        return false;
-    }
-
-    JSCStringBuf buf;
-    const char *resultStr = JS_ToCString(ctx, outputVal, &buf);
-
-    if (!resultStr)
-    {
-        icError("Failed to convert event output to string for cluster 0x%X, event 0x%X: %s",
-                eventInfo.clusterId,
-                eventInfo.eventId,
-                GetExceptionString(ctx).c_str());
-
-        return false;
-    }
-
-    outValue = resultStr;
-    icDebug("Event mapper output: %s", outValue.c_str());
-
-    return true;
+    return ScriptResultFromMqJsValue(ctx, outJson);
 }
 
 } // namespace barton

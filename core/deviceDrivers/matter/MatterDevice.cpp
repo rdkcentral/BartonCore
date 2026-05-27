@@ -123,12 +123,23 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         }
 
         // Execute the script to map the TLV data to a string value
-        std::string outValue;
-        if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        auto readResult = device->script->MapAttributeRead(binding.attribute.value(), reader);
+
+        if (readResult.IsError())
         {
-            icError("Failed to execute read mapping script for URI: %s", uri.c_str());
+            icError("Failed to execute read mapping script for URI: %s: %s",
+                    uri.c_str(),
+                    readResult.ErrorMessage().c_str());
             continue;
         }
+
+        if (readResult.IsSuppressed())
+        {
+            icDebug("Read mapper suppressed update for URI: %s", uri.c_str());
+            continue;
+        }
+
+        std::string outValue = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
 
         icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
 
@@ -209,20 +220,23 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
     readerCopy.Init(*apData);
 
     // Execute the script to map the event TLV data to a string value
-    std::string outValue;
+    auto eventResult = device->script->MapEvent(event, readerCopy);
 
-    if (!device->script->MapEvent(event, readerCopy, outValue))
+    if (eventResult.IsError())
     {
-        icError("Failed to execute event mapping script for URI: %s", uri.c_str());
+        icError(
+            "Failed to execute event mapping script for URI: %s: %s", uri.c_str(), eventResult.ErrorMessage().c_str());
         return;
     }
 
-    // Empty outValue means the script intentionally suppressed the update (no 'output' key returned)
-    if (outValue.empty())
+    // IsSuppressed means the script intentionally produced no value (e.g. {} return)
+    if (eventResult.IsSuppressed())
     {
         icDebug("Event mapper suppressed update for URI: %s", uri.c_str());
         return;
     }
+
+    std::string outValue = std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value;
 
     icDebug("Updating resource %s from event to value: %s", uri.c_str(), outValue.c_str());
 
@@ -781,11 +795,21 @@ std::optional<std::string> MatterDevice::ReadSeedValueFromAttribute(const char *
 
     std::string outValue;
 
-    if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+    auto seedResult = script->MapAttributeRead(binding.attribute.value(), reader);
+
+    if (seedResult.IsError())
     {
-        icError("seedFrom script failed for URI: %s", uri);
+        icError("seedFrom script failed for URI: %s: %s", uri, seedResult.ErrorMessage().c_str());
         return std::nullopt;
     }
+
+    if (seedResult.IsSuppressed())
+    {
+        icDebug("seedFrom script suppressed value for URI: %s", uri);
+        return std::nullopt;
+    }
+
+    outValue = std::get<ScriptResult::ResourceUpdate>(seedResult.Operation()).value;
 
     return outValue;
 }
@@ -1019,12 +1043,25 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
         }
 
         // Execute the script to map the TLV data to a string value using the stored mapper
-        if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        auto readResult2 = script->MapAttributeRead(binding.attribute.value(), reader);
+
+        if (readResult2.IsError())
         {
-            icError("Failed to execute read mapping script for URI: %s", resource->uri);
+            icError("Failed to execute read mapping script for URI: %s: %s",
+                    resource->uri,
+                    readResult2.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
+
+        if (readResult2.IsSuppressed())
+        {
+            icError("Read mapper unexpectedly suppressed value for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        outValue = std::get<ScriptResult::ResourceUpdate>(readResult2.Operation()).value;
     }
     else
     {
@@ -1074,17 +1111,26 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
     if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
         // Execute the script to get the full operation details
-        ScriptWriteResult result;
-        if (!script->MapWrite(binding.resourceKey,
-                              binding.endpointId,
-                              binding.resourceId,
-                              newValue != nullptr ? newValue : "",
-                              result))
+        auto writeScriptResult = script->MapWrite(
+            binding.resourceKey, binding.endpointId, binding.resourceId, newValue != nullptr ? newValue : "");
+
+        if (writeScriptResult.IsError())
         {
-            icError("Failed to execute write mapping script for URI: %s", resource->uri);
+            icError("Failed to execute write mapping script for URI: %s: %s",
+                    resource->uri,
+                    writeScriptResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
+
+        if (!writeScriptResult.HasOperation())
+        {
+            icError("Write mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        const ScriptWriteResult &result = std::get<ScriptWriteResult>(writeScriptResult.Operation());
 
         // Determine the endpoint to use
         chip::EndpointId endpointId;
@@ -1230,17 +1276,28 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
     if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
         // Execute using script that returns full operation details
-        ScriptWriteResult result;
-
-        // Parse the input argument(s)
         std::string inputValue = (arg != nullptr) ? arg : "";
 
-        if (!script->MapExecute(binding.resourceKey, binding.endpointId, binding.resourceId, inputValue, result))
+        auto executeScriptResult =
+            script->MapExecute(binding.resourceKey, binding.endpointId, binding.resourceId, inputValue);
+
+        if (executeScriptResult.IsError())
         {
-            icError("Failed to execute mapping script for URI: %s", resource->uri);
+            icError("Failed to execute mapping script for URI: %s: %s",
+                    resource->uri,
+                    executeScriptResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
+
+        if (!executeScriptResult.HasOperation())
+        {
+            icError("Execute mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        const ScriptWriteResult &result = std::get<ScriptWriteResult>(executeScriptResult.Operation());
 
         // Determine the endpoint to use
         chip::EndpointId endpointId;
@@ -1439,15 +1496,19 @@ void MatterDevice::OnResponse(chip::app::CommandSender *apCommandSender,
         responseReader.Init(*aResponseData.data);
 
         // Use the script to map the response TLV to a Barton string
-        std::string responseValue;
-        if (script->MapCommandExecuteResponse(context.commandInfo, responseReader, responseValue))
+        auto cmdRespResult = script->MapCommandExecuteResponse(context.commandInfo, responseReader);
+
+        if (!cmdRespResult.IsError() && cmdRespResult.HasOperation())
         {
+            std::string responseValue = std::get<ScriptResult::ResourceUpdate>(cmdRespResult.Operation()).value;
             icDebug("Mapped command response to value: %s", responseValue.c_str());
             *context.response = strdup(responseValue.c_str());
         }
-        else
+        else if (cmdRespResult.IsError())
         {
-            icWarn("Failed to map command response for device %s", deviceId.c_str());
+            icWarn("Failed to map command response for device %s: %s",
+                   deviceId.c_str(),
+                   cmdRespResult.ErrorMessage().c_str());
         }
     }
 }

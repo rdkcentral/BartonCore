@@ -1049,7 +1049,23 @@
             }
 
             return result;
-        }
+        },
+
+        /**
+         * Create a resource-value response (v3.0 format).
+         * Use in read, event, and command-response mappers to return a Barton resource value.
+         * @param {string|number|boolean} v - Resource value (coerced to string)
+         * @returns {Object} Value response object: { value: string }
+         */
+        value: function(v) { return { value: String(v) }; },
+
+        /**
+         * Create an error response.
+         * The engine logs the message and skips the resource update.
+         * @param {string} msg - Human-readable error message
+         * @returns {Object} Error response object: { error: string }
+         */
+        error: function(msg) { return { error: msg }; }
     };
 
     // Export the SbmdUtils object to globalThis
