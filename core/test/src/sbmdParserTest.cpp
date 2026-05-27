@@ -187,16 +187,22 @@ static void test_sbmdParserDoorLockFile(void **state)
     assert_string_equal(spec->endpoints[0].id.c_str(), "1");
     assert_string_equal(spec->endpoints[0].profile.c_str(), "doorLock");
 
-    // Verify locked resource uses read mapper (LockState attribute)
+    // Verify locked resource uses event + seedFrom mapper (not read)
     assert_true(spec->endpoints[0].resources.size() >= 1);
     auto &locked = spec->endpoints[0].resources[0];
     assert_string_equal(locked.id.c_str(), "locked");
-    assert_true(locked.mapper.hasRead);
-    assert_true(locked.mapper.readAttribute.has_value());
-    assert_int_equal((int) locked.mapper.readAttribute->clusterId, 0x0101);
-    assert_int_equal((int) locked.mapper.readAttribute->attributeId, 0x0000);
-    assert_string_equal(locked.mapper.readAttribute->name.c_str(), "LockState");
-    assert_false(locked.mapper.readScript.empty());
+    assert_false(locked.mapper.hasRead);
+    assert_false(locked.mapper.readAttribute.has_value());
+    assert_true(locked.mapper.event.has_value());
+    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
+    assert_string_equal(locked.mapper.event->name.c_str(), "LockOperation");
+    assert_false(locked.mapper.eventScript.empty());
+    assert_true(locked.mapper.seedFromAttribute.has_value());
+    assert_int_equal((int) locked.mapper.seedFromAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.seedFromAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.seedFromAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.seedFromScript.empty());
 }
 
 static void test_sbmdParserLightFile(void **state)
@@ -252,6 +258,211 @@ static void test_sbmdParserLightFile(void **state)
     assert_int_equal((int) currentLevel.mapper.readAttribute->attributeId, 0x0000);
     // Write uses script-only approach
     assert_false(currentLevel.mapper.writeScript.empty());
+}
+
+static void test_sbmdParserIkeaTimmerflotteFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "ikea-timmerflotte.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "IKEA TIMMERFLOTTE");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "environmentalSensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_true(spec->matterMeta.vendorId.has_value());
+    assert_int_equal(spec->matterMeta.vendorId.value(), 0x117C);
+    assert_true(spec->matterMeta.productId.has_value());
+    assert_int_equal(spec->matterMeta.productId.value(), 0x8005);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 2);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0302);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[1], 0x0307);
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_string_equal(spec->endpoints[0].id.c_str(), "1");
+    assert_string_equal(spec->endpoints[0].profile.c_str(), "sensor");
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 2);
+
+    auto &temperature = spec->endpoints[0].resources[0];
+    assert_string_equal(temperature.id.c_str(), "temperature");
+    assert_true(temperature.mapper.hasRead);
+    assert_true(temperature.mapper.readAttribute.has_value());
+    assert_int_equal((int) temperature.mapper.readAttribute->clusterId, 0x0402);
+    assert_int_equal((int) temperature.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(temperature.mapper.readScript.empty());
+
+    auto &humidity = spec->endpoints[0].resources[1];
+    assert_string_equal(humidity.id.c_str(), "humidity");
+    assert_true(humidity.mapper.hasRead);
+    assert_true(humidity.mapper.readAttribute.has_value());
+    assert_int_equal((int) humidity.mapper.readAttribute->clusterId, 0x0405);
+    assert_int_equal((int) humidity.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(humidity.mapper.readScript.empty());
+}
+
+static void test_sbmdParserTemperatureSensorFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "temperature-sensor.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "Temperature Sensor");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "environmentalSensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0302);
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &temperature = spec->endpoints[0].resources[0];
+    assert_string_equal(temperature.id.c_str(), "temperature");
+    assert_true(temperature.mapper.hasRead);
+    assert_true(temperature.mapper.readAttribute.has_value());
+    assert_int_equal((int) temperature.mapper.readAttribute->clusterId, 0x0402);
+    assert_false(temperature.mapper.readScript.empty());
+}
+
+static void test_sbmdParserHumiditySensorFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "humidity-sensor.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    assert_string_equal(spec->name.c_str(), "Humidity Sensor");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "environmentalSensor");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0307);
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &humidity = spec->endpoints[0].resources[0];
+    assert_string_equal(humidity.id.c_str(), "humidity");
+    assert_true(humidity.mapper.hasRead);
+    assert_true(humidity.mapper.readAttribute.has_value());
+    assert_int_equal((int) humidity.mapper.readAttribute->clusterId, 0x0405);
+    assert_false(humidity.mapper.readScript.empty());
+}
+
+static void test_sbmdParserThermostatFile(void **state)
+{
+    (void) state;
+
+    const char *filePath = SBMD_SPEC_DIR "thermostat.sbmd";
+
+    auto spec = barton::SbmdParser::ParseFile(filePath);
+    assert_non_null(spec.get());
+
+    // Verify basic metadata
+    assert_string_equal(spec->name.c_str(), "Thermostat");
+    assert_string_equal(spec->bartonMeta.deviceClass.c_str(), "thermostat");
+    assert_int_equal((int) spec->bartonMeta.deviceClassVersion, 1);
+
+    // Verify matterMeta deviceTypes — 0x0301 is Thermostat
+    assert_int_equal((int) spec->matterMeta.deviceTypes.size(), 1);
+    assert_int_equal((int) spec->matterMeta.deviceTypes[0], 0x0301);
+
+    // Verify featureClusters includes Thermostat cluster
+    assert_int_equal((int) spec->matterMeta.featureClusters.size(), 1);
+    assert_int_equal((int) spec->matterMeta.featureClusters[0], 0x0201);
+
+    // Verify reporting section
+    assert_int_equal((int) spec->reporting.minSecs, 1);
+    assert_int_equal((int) spec->reporting.maxSecs, 3600);
+
+    // Verify single endpoint
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_string_equal(spec->endpoints[0].id.c_str(), "1");
+    assert_string_equal(spec->endpoints[0].profile.c_str(), "thermostat");
+    assert_int_equal((int) spec->endpoints[0].profileVersion, 2);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 12);
+
+    // localTemperature — read-only from Thermostat cluster
+    auto &localTemp = spec->endpoints[0].resources[0];
+    assert_string_equal(localTemp.id.c_str(), "localTemperature");
+    assert_false(localTemp.optional);
+    assert_true(localTemp.mapper.hasRead);
+    assert_false(localTemp.mapper.hasWrite);
+    assert_true(localTemp.mapper.readAttribute.has_value());
+    assert_int_equal((int) localTemp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) localTemp.mapper.readAttribute->attributeId, 0x0000);
+    assert_false(localTemp.mapper.readScript.empty());
+
+    // heatSetpoint — read/write from Thermostat cluster
+    auto &heatSp = spec->endpoints[0].resources[1];
+    assert_string_equal(heatSp.id.c_str(), "heatSetpoint");
+    assert_false(heatSp.optional);
+    assert_true(heatSp.mapper.hasRead);
+    assert_true(heatSp.mapper.hasWrite);
+    assert_true(heatSp.mapper.readAttribute.has_value());
+    assert_int_equal((int) heatSp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) heatSp.mapper.readAttribute->attributeId, 0x0012);
+    assert_false(heatSp.mapper.readScript.empty());
+    assert_false(heatSp.mapper.writeScript.empty());
+
+    // coolSetpoint — read/write from Thermostat cluster
+    auto &coolSp = spec->endpoints[0].resources[2];
+    assert_string_equal(coolSp.id.c_str(), "coolSetpoint");
+    assert_false(coolSp.optional);
+    assert_true(coolSp.mapper.hasRead);
+    assert_true(coolSp.mapper.hasWrite);
+    assert_true(coolSp.mapper.readAttribute.has_value());
+    assert_int_equal((int) coolSp.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) coolSp.mapper.readAttribute->attributeId, 0x0011);
+
+    // systemMode — read/write from Thermostat cluster
+    auto &sysMode = spec->endpoints[0].resources[8];
+    assert_string_equal(sysMode.id.c_str(), "systemMode");
+    assert_false(sysMode.optional);
+    assert_true(sysMode.mapper.hasRead);
+    assert_true(sysMode.mapper.hasWrite);
+    assert_true(sysMode.mapper.readAttribute.has_value());
+    assert_int_equal((int) sysMode.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) sysMode.mapper.readAttribute->attributeId, 0x001c);
+
+    // systemState — optional, from ThermostatRunningState
+    auto &sysState = spec->endpoints[0].resources[9];
+    assert_string_equal(sysState.id.c_str(), "systemState");
+    assert_true(sysState.optional);
+    assert_true(sysState.mapper.hasRead);
+    assert_false(sysState.mapper.hasWrite);
+    assert_true(sysState.mapper.readAttribute.has_value());
+    assert_int_equal((int) sysState.mapper.readAttribute->clusterId, 0x0201);
+    assert_int_equal((int) sysState.mapper.readAttribute->attributeId, 0x0029);
+
+    // fanMode — optional, from Fan Control cluster
+    auto &fanMode = spec->endpoints[0].resources[10];
+    assert_string_equal(fanMode.id.c_str(), "fanMode");
+    assert_true(fanMode.optional);
+    assert_true(fanMode.mapper.hasRead);
+    assert_true(fanMode.mapper.hasWrite);
+    assert_true(fanMode.mapper.readAttribute.has_value());
+    assert_int_equal((int) fanMode.mapper.readAttribute->clusterId, 0x0202);
+    assert_int_equal((int) fanMode.mapper.readAttribute->attributeId, 0x0000);
+
+    // fanOn — optional, from Fan Control PercentCurrent
+    auto &fanOn = spec->endpoints[0].resources[11];
+    assert_string_equal(fanOn.id.c_str(), "fanOn");
+    assert_true(fanOn.optional);
+    assert_true(fanOn.mapper.hasRead);
+    assert_false(fanOn.mapper.hasWrite);
+    assert_true(fanOn.mapper.readAttribute.has_value());
+    assert_int_equal((int) fanOn.mapper.readAttribute->clusterId, 0x0202);
+    assert_int_equal((int) fanOn.mapper.readAttribute->attributeId, 0x0006);
 }
 
 static void test_sbmdParserOptionalResource(void **state)
@@ -546,9 +757,9 @@ endpoints: []
     assert_null(spec.get());
 
     // Correct major but spec minor is newer than the parser supports — rejected
-    // (a spec written for schema 2.1 cannot be loaded by a 2.0 parser)
+    // (a spec written for schema 2.2 cannot be loaded by a 2.1 parser)
     const char *yaml3 = R"(
-schemaVersion: "2.1"
+schemaVersion: "2.2"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -1604,6 +1815,447 @@ static void test_sbmdParserEmptyString(void **state)
     assert_null(spec.get());
 }
 
+static void test_sbmdParserVendorProductBothSet(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+    - "0x0307"
+  revision: 1
+  vendorId: "0x117C"
+  productId: "0x1002"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_true(spec->matterMeta.vendorId.has_value());
+    assert_true(spec->matterMeta.productId.has_value());
+    assert_int_equal(spec->matterMeta.vendorId.value(), 0x117C);
+    assert_int_equal(spec->matterMeta.productId.value(), 0x1002);
+}
+
+static void test_sbmdParserVendorProductNeitherSet(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+    assert_false(spec->matterMeta.vendorId.has_value());
+    assert_false(spec->matterMeta.productId.has_value());
+}
+
+static void test_sbmdParserVendorIdOnlySetError(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  vendorId: "0x117C"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserProductIdOnlySetError(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.1"
+driverVersion: "1.0"
+name: "Test"
+scriptType: "JavaScript"
+bartonMeta:
+  deviceClass: "sensor"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x0302"
+  revision: 1
+  productId: "0x1002"
+  aliases:
+    - name: testAttr
+      attribute:
+        clusterId: "0x0402"
+        attributeId: "0x0000"
+        name: "TestAttr"
+        type: "int16"
+resources:
+  - id: "testResource"
+    type: "com.icontrol.test"
+    modes: ["read"]
+    prerequisites:
+      - alias: testAttr
+    mapper:
+      read:
+        alias: testAttr
+        script: |
+          return {output: ''};
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromValidSpec(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read", "dynamic"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: |
+              var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+              return { output: event[0] === 0 ? 'true' : 'false' };
+          seedFrom:
+            alias: lockState
+            script: |
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return { output: value === 1 ? 'true' : 'false' };
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    assert_non_null(spec.get());
+
+    assert_int_equal((int) spec->endpoints.size(), 1);
+    assert_int_equal((int) spec->endpoints[0].resources.size(), 1);
+
+    auto &locked = spec->endpoints[0].resources[0];
+    assert_string_equal(locked.id.c_str(), "locked");
+    assert_false(locked.mapper.hasRead);
+    assert_true(locked.mapper.event.has_value());
+    assert_int_equal((int) locked.mapper.event->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.event->eventId, 0x0002);
+    assert_false(locked.mapper.eventScript.empty());
+    assert_true(locked.mapper.seedFromAttribute.has_value());
+    assert_int_equal((int) locked.mapper.seedFromAttribute->clusterId, 0x0101);
+    assert_int_equal((int) locked.mapper.seedFromAttribute->attributeId, 0x0000);
+    assert_string_equal(locked.mapper.seedFromAttribute->name.c_str(), "LockState");
+    assert_false(locked.mapper.seedFromScript.empty());
+}
+
+static void test_sbmdParserSeedFromWithoutEvent(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+      - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+resources:
+  - id: "testResource"
+    type: "boolean"
+    modes: ["read"]
+    prerequisites:
+      - alias: lockState
+    mapper:
+      seedFrom:
+        alias: lockState
+        script: "return { output: 'true' };"
+endpoints: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom requires event on the same mapper
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromMissingScript(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockState
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom requires a non-empty script
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromWithRead(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockState
+      attribute:
+        clusterId: "0x0101"
+        attributeId: "0x0000"
+        name: "LockState"
+        type: "uint8"
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockState
+          - alias: lockOperation
+        mapper:
+          read:
+            alias: lockState
+            script: "return { output: 'true' };"
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockState
+            script: "return { output: 'true' };"
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: read and seedFrom are mutually exclusive
+    assert_null(spec.get());
+}
+
+static void test_sbmdParserSeedFromEventAliasRejected(void **state)
+{
+    (void) state;
+
+    const char *yaml = R"(
+schemaVersion: "2.0"
+driverVersion: "1.0"
+name: "Test Device"
+bartonMeta:
+  deviceClass: "doorLock"
+  deviceClassVersion: 1
+matterMeta:
+  deviceTypes:
+    - "0x000a"
+  revision: 1
+  aliases:
+    - name: lockOperation
+      event:
+        clusterId: "0x0101"
+        eventId: "0x0002"
+        name: "LockOperation"
+endpoints:
+  - id: "1"
+    profile: "doorLock"
+    profileVersion: 1
+    resources:
+      - id: "locked"
+        type: "boolean"
+        modes: ["read"]
+        prerequisites:
+          - alias: lockOperation
+        mapper:
+          event:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+          seedFrom:
+            alias: lockOperation
+            script: "return { output: 'true' };"
+resources: []
+)";
+
+    auto spec = barton::SbmdParser::ParseString(yaml);
+    // Parser should fail: seedFrom alias must be an attribute alias, not an event alias
+    assert_null(spec.get());
+}
+
 int main(int argc, const char **argv)
 {
     const struct CMUnitTest tests[] = {
@@ -1613,6 +2265,10 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_sbmdParserEndpointWithStringIds),
         cmocka_unit_test(test_sbmdParserDoorLockFile),
         cmocka_unit_test(test_sbmdParserLightFile),
+        cmocka_unit_test(test_sbmdParserIkeaTimmerflotteFile),
+        cmocka_unit_test(test_sbmdParserTemperatureSensorFile),
+        cmocka_unit_test(test_sbmdParserHumiditySensorFile),
+        cmocka_unit_test(test_sbmdParserThermostatFile),
         cmocka_unit_test(test_sbmdParserOptionalResource),
         cmocka_unit_test(test_sbmdParserResourceIdFields),
         // Negative tests - error handling
@@ -1648,6 +2304,17 @@ int main(int argc, const char **argv)
         cmocka_unit_test(test_prerequisiteNotRequiredForExecuteMapper),
         cmocka_unit_test(test_prerequisiteEntryUnknownKey),
         cmocka_unit_test(test_prerequisiteInvalidBothForms),
+        // Vendor/product ID tests
+        cmocka_unit_test(test_sbmdParserVendorProductBothSet),
+        cmocka_unit_test(test_sbmdParserVendorProductNeitherSet),
+        cmocka_unit_test(test_sbmdParserVendorIdOnlySetError),
+        cmocka_unit_test(test_sbmdParserProductIdOnlySetError),
+        // seedFrom mapper tests
+        cmocka_unit_test(test_sbmdParserSeedFromValidSpec),
+        cmocka_unit_test(test_sbmdParserSeedFromWithoutEvent),
+        cmocka_unit_test(test_sbmdParserSeedFromMissingScript),
+        cmocka_unit_test(test_sbmdParserSeedFromWithRead),
+        cmocka_unit_test(test_sbmdParserSeedFromEventAliasRejected),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

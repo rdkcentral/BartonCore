@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: SBMD spec file format
-The system SHALL support declarative device driver specifications in YAML format with the `.sbmd` file extension. Each spec SHALL define: `schemaVersion` (string, e.g., `"1.0"`), `driverVersion` (string, e.g., `"1.0"`), `name` (string), `bartonMeta` (device class mapping), `matterMeta` (Matter device type matching), optional `reporting` (subscription intervals), and `endpoints` (resource definitions with mappers).
+The system SHALL support declarative device driver specifications in YAML format with the `.sbmd` file extension. Each spec SHALL define: `schemaVersion` (string, e.g., `"1.0"`), `driverVersion` (string, e.g., `"1.0"`), `name` (string), `bartonMeta` (device class mapping), `matterMeta` (Matter device type matching), optional `reporting` (subscription intervals), optional `endpoints` (endpoint-scoped resource definitions with mappers), and optional top-level `resources` (device-level resources not associated with a specific endpoint).
 
 #### Scenario: Valid SBMD spec
 - **WHEN** an `.sbmd` file contains all required top-level fields with valid values
@@ -9,7 +9,7 @@ The system SHALL support declarative device driver specifications in YAML format
 
 #### Scenario: Missing required field
 - **WHEN** an `.sbmd` file is missing `bartonMeta` or `matterMeta`
-- **THEN** the parser SHALL reject the file with an error
+- **THEN** validation SHALL reject the file with an error
 
 ### Requirement: Barton metadata in SBMD
 Each SBMD spec SHALL define a `bartonMeta` section containing `deviceClass` (string, e.g., `"light"`, `"doorLock"`, `"sensor"`) and `deviceClassVersion` (integer).
@@ -19,7 +19,7 @@ Each SBMD spec SHALL define a `bartonMeta` section containing `deviceClass` (str
 - **THEN** the resulting driver SHALL claim devices matching the light device class with version 1
 
 ### Requirement: Matter metadata in SBMD
-Each SBMD spec SHALL define a `matterMeta` section containing `revision` (integer, the Matter device revision) and `deviceTypes` (flat list of Matter device type IDs as hex or decimal values, e.g., `- 0x0100`). Optionally, `featureClusters` (list of cluster IDs whose FeatureMap attributes to read at init time).
+Each SBMD spec SHALL define a `matterMeta` section containing `deviceTypes` (flat list of Matter device type IDs as hex or decimal values, e.g., `- 0x0100`). Optionally, `revision` (integer, the Matter device revision); when omitted, the SBMD spec does not declare an explicit Matter device revision. Optionally, `featureClusters` (list of cluster IDs whose FeatureMap attributes to read at init time). Optionally, `vendorId` (unsigned 16-bit integer) and `productId` (unsigned 16-bit integer) for vendor-specific device claiming. When `vendorId` and `productId` are set, the driver claims by vendor/product identity rather than by device types.
 
 #### Scenario: Multiple device type support
 - **WHEN** an SBMD spec lists `deviceTypes` with IDs `0x0100` and `0x010a`
@@ -29,6 +29,10 @@ Each SBMD spec SHALL define a `matterMeta` section containing `revision` (intege
 - **WHEN** an SBMD spec includes `featureClusters: [0x0006, 0x0008]`
 - **THEN** the driver SHALL read the FeatureMap attribute from clusters 6 and 8 at device initialization and make the feature maps available to scripts
 
+#### Scenario: Vendor-specific claiming
+- **WHEN** an SBMD spec includes `vendorId: 0x117C` and `productId: 0x0001`
+- **THEN** the driver SHALL claim devices by matching BasicInformation VendorID and ProductID instead of device types
+
 ### Requirement: Reporting configuration
 SBMD specs MAY define a `reporting` section with `minSecs` and `maxSecs` controlling Matter subscription intervals.
 
@@ -37,14 +41,18 @@ SBMD specs MAY define a `reporting` section with `minSecs` and `maxSecs` control
 - **THEN** the driver SHALL configure Matter subscriptions with those min/max intervals
 
 ### Requirement: Endpoint definitions
-Each SBMD spec SHALL define one or more `endpoints`, each with `id` (string), `profile` (string), `profileVersion` (integer), and `resources` (list of resource definitions).
+An SBMD spec MAY define `endpoints`, each with `id` (string), `profile` (string), `profileVersion` (integer), and `resources` (list of resource definitions). Endpoint resources are scoped to a specific endpoint. Separately, an SBMD spec MAY define top-level `resources` for device-level resources not associated with any endpoint. A spec may use either or both.
 
 #### Scenario: Single endpoint spec
 - **WHEN** an SBMD spec defines one endpoint with id `"1"` and profile `"light"`
 - **THEN** the driver SHALL create one Barton endpoint with that profile on the device
 
+#### Scenario: Top-level device resources
+- **WHEN** an SBMD spec defines top-level `resources` without `endpoints`
+- **THEN** the driver SHALL register those resources at the device level without endpoint association
+
 ### Requirement: Resource definitions with mappers
-Each resource in an SBMD endpoint SHALL have `id` (string), `type` (string), and a `mapper` object. Resources MAY also specify `modes` (array of mode strings: `"read"`, `"write"`, `"execute"`, `"dynamic"`, `"emitEvents"`, `"lazySaveNext"`, `"sensitive"`) — if omitted, a default set is used. Note: there is no `"dynamicCapable"` mode string because the core automatically sets the `DYNAMIC_CAPABLE` bit whenever `DYNAMIC` is set (see `deviceModelHelper.c`). Resources MAY be marked `optional: true`.
+Each resource (whether in an endpoint or at the top level) SHALL have `id` (string), `type` (string), and a `mapper` object. Resources MAY also specify `modes` (array of mode strings: `"read"`, `"write"`, `"execute"`, `"dynamic"`, `"emitEvents"`, `"lazySaveNext"`, `"sensitive"`) — if omitted, a default set is used. Note: there is no `"dynamicCapable"` mode string because the core automatically sets the `DYNAMIC_CAPABLE` bit whenever `DYNAMIC` is set (see `deviceModelHelper.c`). Resources MAY be marked `optional: true`.
 
 Each resource SHALL declare a `prerequisites` field. The `prerequisites` field SHALL be either an explicit opt-out (`none` or `null`, both meaning the resource is always registered) or a non-empty list of prerequisite entries, each referencing a named alias in `matterMeta.aliases` (see the `sbmd-resource-prerequisites` capability spec). Absence of `prerequisites` on any resource SHALL be a parse-time error, regardless of which mappers the resource implements. The preferred opt-out form is `none` for readability, but `null` is accepted for YAML authors who prefer explicit null syntax.
 
@@ -87,7 +95,7 @@ The `matterMeta` section MAY contain an `aliases` list. Aliases declare the Matt
 > provisional in the current CHIP SDK version and is not reliably present on real
 > devices. Event prerequisites SHOULD be upgraded to check the specific event ID once
 > `EventList` is stable and widely supported.
-A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return the Barton string value. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
+A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the read mapper SHALL fail. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
 
 #### Scenario: Read alias mapper resolves attribute metadata
 - **WHEN** a read mapper declares `alias: stateValue` and `stateValue` is an attribute alias with `clusterId: 0x0045`, `attributeId: 0x0000`
@@ -95,11 +103,11 @@ A resource's mapper MAY contain a `read` section with an `alias` (a string namin
 
 #### Scenario: Read boolean attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: bool` and the Matter attribute value is `true`
-- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `"true"`
+- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `{ output: "true" }`
 
 #### Scenario: Read integer attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: uint8` and the Matter attribute value is `254`
-- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return the appropriate string representation
+- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return `{ output: "254" }` (or any appropriate string representation)
 
 ### Requirement: Write mapper
 A resource's mapper MAY contain a `write` section with a `script` (JavaScript string). The script SHALL receive the Barton string value via `sbmdWriteArgs.input` (along with `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object describing the operation: `{write: {clusterId, attributeId, tlvBase64}}` for attribute writes, or `{invoke: {clusterId, commandId, tlvBase64}}` for command invocations. Optional `timedInvokeTimeoutMs` for timed commands.
@@ -117,14 +125,14 @@ A resource's mapper MAY contain a `write` section with a `script` (JavaScript st
 - **THEN** the driver SHALL send the command as a Matter timed invoke with the specified timeout
 
 ### Requirement: Execute mapper
-A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdExecuteArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL process the command response TLV.
+A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdCommandArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL receive the command response TLV via `sbmdCommandResponseArgs.tlvBase64` and SHALL return a JSON object of the form `{ output: <string> }`. If `scriptResponse` throws, returns an invalid value, or otherwise fails, the execute operation SHALL fail and the script error SHALL be surfaced to the caller.
 
 #### Scenario: Execute resource with response
 - **WHEN** an execute mapper with `scriptResponse` is invoked and the Matter command returns a response
-- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script's return value SHALL be the execute response string
+- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ output: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
 
 ### Requirement: Event mapper
-A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return the updated resource value. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
+A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the event mapper SHALL fail. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
 
 #### Scenario: Event alias mapper resolves event metadata
 - **WHEN** an event mapper declares `alias: lockOperation` and `lockOperation` is an event alias with `clusterId: 0x0101`, `eventId: 0x0002`
@@ -134,8 +142,23 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 - **WHEN** a Matter event fires for a cluster/event matching an event mapper
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
 
+#### Scenario: Event script suppresses update by omitting output
+- **WHEN** an event script returns an object without an `output` key (e.g., `{}`)
+- **THEN** the resource SHALL NOT be updated and no error SHALL be logged — this is the standard mechanism for ignoring non-state-change events
+
+### Requirement: seedFrom mapper type
+A resource mapper SHALL support a `seedFrom` section (in addition to the existing `read`, `write`, `execute`, and `event` sections) for populating initial resource values from the attribute cache when the resource's ongoing updates are driven by a `mapper.event`. The `seedFrom` mapper SHALL NOT be used as a substitute for `mapper.read` — if ongoing attribute subscription updates are desired, `mapper.read` remains the correct choice. The `seedFrom` mapper SHALL use the `sbmdReadArgs` script interface (identical to `mapper.read`).
+
+#### Scenario: Event-driven resource has initial value at commission
+- **WHEN** a resource declares `mapper.event` for ongoing updates and `mapper.seedFrom` pointing to a corresponding attribute alias
+- **THEN** the resource SHALL have a non-null value immediately after device commissioning without waiting for the first event to fire
+
+#### Scenario: Event-driven resource has initial value after Barton restart
+- **WHEN** Barton restarts and a device with a `seedFrom` resource is synchronized
+- **THEN** the resource SHALL be re-seeded from the attribute cache before any new event arrives
+
 ### Requirement: SBMD schema validation
-SBMD spec files SHALL be validated against the JSON schema defined in `sbmd-spec-schema.json` during the build process. The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
+SBMD spec files SHALL be validated during the build process against the versioned JSON schema selected from the spec's `schemaVersion`, using the repository's versioned schema naming/location convention (for example, `core/deviceDrivers/matter/sbmd/schema/v2/sbmd-spec-schema-v{schemaVersion}.json`, such as `sbmd-spec-schema-v2.1.json`). The schema SHALL enforce required fields, valid `matterType` enumerations, and structural constraints. The `scriptType` field SHALL only accept the value `"JavaScript"`.
 
 #### Scenario: Schema validation at build time
 - **WHEN** the project is built with SBMD specs present
@@ -218,7 +241,7 @@ SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArg
 - **THEN** `sbmdReadArgs.clusterFeatureMaps` SHALL contain an object mapping cluster IDs to their feature map values
 
 ### Requirement: Current SBMD spec catalog
-The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript).
+The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript), `temperature-sensor` (JavaScript), `humidity-sensor` (JavaScript), `thermostat` (JavaScript), and `ikea-timmerflotte` (JavaScript).
 
 All specs SHALL use `scriptType: "JavaScript"` and the `SbmdUtils` built-in library for TLV encoding/decoding.
 

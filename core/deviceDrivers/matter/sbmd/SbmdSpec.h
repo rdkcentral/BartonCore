@@ -164,6 +164,12 @@ namespace barton
         // Event mapping - for handling Matter events that update the resource
         std::optional<SbmdEvent> event;
         std::string eventScript;
+
+        // SeedFrom mapping - for seeding initial resource value from the attribute cache
+        // at configure and synchronize time. Only valid alongside an event mapper.
+        // YAML key: seedFrom.
+        std::optional<SbmdAttribute> seedFromAttribute;
+        std::string seedFromScript;
     };
 
     /**
@@ -233,9 +239,11 @@ namespace barton
     struct SbmdMatterMeta
     {
         std::vector<uint16_t> deviceTypes;
-        uint32_t revision;
+        std::optional<uint32_t> revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
         std::vector<SbmdAlias> aliases;        // Named Matter element definitions referenced by resources
+        std::optional<uint16_t> vendorId;
+        std::optional<uint16_t> productId;
     };
 
     /**

@@ -266,29 +266,6 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/linenoise
 
-# Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
-RUN cd /tmp && \
-    wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1v/openssl-1.1.1v.tar.gz && \
-    tar -xzvf openssl-1.1.1v.tar.gz && \
-    cd openssl-1.1.1v && \
-    ./config --prefix=/usr/local/openssl --openssldir=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/openssl-1.1.1v.tar.gz /tmp/openssl-1.1.1v
-COPY openssl.conf /etc/ld.so.conf.d/
-RUN ldconfig
-
-# Download, build, and install libcurl, but link against OpenSSL 1.1.1v specifically
-RUN cd /tmp && \
-    wget https://curl.se/download/curl-7.82.0.tar.gz && \
-    tar -xzvf curl-7.82.0.tar.gz && \
-    cd curl-7.82.0 && \
-    ./configure --with-ssl=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
-
-
 # Matter sample apps for use as test targets
 # MATTER_REF is passed as a build arg, sourced from matter-version file
 ARG MATTER_REF
@@ -298,6 +275,7 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     git clone --branch ${MATTER_REF} --depth 1 https://github.com/project-chip/connectedhomeip.git matter && \
     cd matter && \
     ./scripts/checkout_submodules.py --shallow --platform linux && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/matter . && \
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH && \
     . ./scripts/activate.sh && \
     ./scripts/build/build_examples.py \
@@ -325,7 +303,7 @@ RUN cd /tmp && \
     git fetch --depth 1 origin ${MQUICKJS_GIT_TAG} && \
     git checkout ${MQUICKJS_GIT_TAG} && \
     cp /tmp/patches/mquickjs/CMakeLists.txt . && \
-    git apply /tmp/patches/mquickjs/0001-add-memory-usage-api.patch && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/mquickjs . && \
     mkdir build && \
     cd build && \
     cmake .. && \
@@ -335,9 +313,6 @@ RUN cd /tmp && \
 
 # Clean up our patches
 RUN rm -rf /tmp/patches
-
-# Ensure the system uses OpenSSL 3 by default
-ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
 
 ###############################################################################
 # Node.js for virtual test devices (matter.js deps installed at runtime)
@@ -380,6 +355,20 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
+
+# Cocogitto (conventional commit tooling)
+# NOTE: This version must match the cocogitto-action version used in
+# .github/workflows/release.yaml and .github/workflows/check-pr-title.yaml.
+# If you upgrade here, upgrade the action version there too (and vice versa).
+ARG COCOGITTO_VERSION="6.3.0"
+# Cocogitto does not publish checksums; this was computed from the release artifact.
+# Update when changing COCOGITTO_VERSION.
+ARG COCOGITTO_SHA256="046dbc0ea190528f5a028a64ed761d605f4be85de3a6e469174139331eb058bb"
+RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    -o /tmp/cocogitto.tar.gz && \
+    echo "${COCOGITTO_SHA256}  /tmp/cocogitto.tar.gz" | sha256sum --check && \
+    tar xzf /tmp/cocogitto.tar.gz -C /usr/local/bin --strip-components=1 --wildcards '*/cog' && \
+    rm /tmp/cocogitto.tar.gz
 
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.

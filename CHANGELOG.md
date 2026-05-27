@@ -2,6 +2,39 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [4.2.0](https://github.com/rdkcentral/BartonCore/compare/ddd7fdbe4470d410da0d3d4f438f62ac1b02a8cd..4.2.0) - 2026-05-08
+#### Bug Fixes
+- remove cpe.sslCert.validateFor* property lookups (#217) - ([757c910](https://github.com/rdkcentral/BartonCore/commit/757c910b704d9110268d4fd1ea66760115fbcb74)) - Christian Leithner
+#### Documentation
+- **(openspec)** restore sbmd-system spec content (#216) - ([b4ba0a1](https://github.com/rdkcentral/BartonCore/commit/b4ba0a1466fe0dd895dd7ddbfd75515e59633169)) - Kevin Funderburg
+#### Features
+- **(matter)** add SBMD thermostat driver with optional fan control (#213) - ([ddd7fdb](https://github.com/rdkcentral/BartonCore/commit/ddd7fdbe4470d410da0d3d4f438f62ac1b02a8cd)) - Thomas Lea
+
+- - -
+
+## [4.1.0](https://github.com/rdkcentral/BartonCore/compare/a8be7a666cfc90814de2cb75f7c63baa97e2ae00..4.1.0) - 2026-05-05
+#### Bug Fixes
+- **(ref)** validate device exists before opening commissioning window (#212) - ([8f7603e](https://github.com/rdkcentral/BartonCore/commit/8f7603e654c0ad3ea4a5833e18d25c8b6a63608b)) - Srividhya-23
+- Handle bad inputs in Sbmd.Base64.decode() (#204) - ([bcec0cf](https://github.com/rdkcentral/BartonCore/commit/bcec0cff07526ef7e05adbd4cbd070453745c3df)) - rchowdcmcsa
+#### Build system
+- **(crypto)** upgrade OpenSSL to 3.x (#208) - ([f71d303](https://github.com/rdkcentral/BartonCore/commit/f71d303474202e566ec7173f80a974d92e96e870)) - NaeemKK
+- **(matter)** Move to Matter 1.5.1.0 (#205) - ([4480c10](https://github.com/rdkcentral/BartonCore/commit/4480c108c74f9c71e7d022bbd4356a01ed93f2ce)) - Christian Leithner
+- **(sbmd)** support versioned schema directories - ([c8255de](https://github.com/rdkcentral/BartonCore/commit/c8255de9662136de59b2a02c6787a85b3581718f)) - Kevin Funderburg
+#### Continuous Integration
+- improve release workflow and regenerate full CHANGELOG (#200) - ([c4066e6](https://github.com/rdkcentral/BartonCore/commit/c4066e68f016ff879fceacfd4da3aa185e4a4572)) - Christian Leithner
+#### Documentation
+- **(openspec)** archive temp/humidity change - ([f71c567](https://github.com/rdkcentral/BartonCore/commit/f71c56708d799a234c0e75d46036da941bd6d091)) - Kevin Funderburg
+- **(openspec)** add temp/humidity sensor change - ([2e996fa](https://github.com/rdkcentral/BartonCore/commit/2e996fa457a072990f3480c15c7302b294f2347a)) - Kevin Funderburg
+- propose camera architecture redesign (#197) - ([ae65b40](https://github.com/rdkcentral/BartonCore/commit/ae65b40708b73f13124e345168acfa875fb68d20)) - Kevin Funderburg
+#### Features
+- **(ref)** reloadDatabase command support (#209) - ([f01de18](https://github.com/rdkcentral/BartonCore/commit/f01de185cff20cb937d7491737aab4835be2a8f7)) - Munilakshmi97
+- **(sbmd)** add temperature, humidity, and IKEA TIMMERFLOTTE sensor drivers - ([d2eec84](https://github.com/rdkcentral/BartonCore/commit/d2eec8453bb1338c3654b998b564f1b79c2b9400)) - Kevin Funderburg
+- **(sbmd)** add vendor/product ID claiming and endpoint fallback - ([8be3d48](https://github.com/rdkcentral/BartonCore/commit/8be3d48383a816a2eceafd62c58c5bff0699b7a6)) - Kevin Funderburg
+- **(sbmd)** add alias-based resource prereqs for conditional registration (#207) - ([09c7814](https://github.com/rdkcentral/BartonCore/commit/09c7814b878ac41301fae3b11742ece0f9c17881)) - rchowdcmcsa
+- **(sbmd)** add script execution timeout for mquickjs engine (#203) - ([96e5e4f](https://github.com/rdkcentral/BartonCore/commit/96e5e4fda99890494cd56d972461772f6a6848e5)) - Christian Leithner
+
+- - -
+
 ## [4.0.0](https://github.com/rdkcentral/BartonCore/compare/3.1.1..4.0.0) - 2026-04-06
 #### Breaking Changes
 - **(matter)** Remove Matter.js support from SBMD (#190) - ([7c1c6bd](https://github.com/rdkcentral/BartonCore/commit/7c1c6bd5991a8cf2e58b3b436c32fbefd901254e)) - Thomas Lea

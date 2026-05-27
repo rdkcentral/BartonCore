@@ -89,7 +89,23 @@ namespace barton
                                       chip::AttributeId attributeId,
                                       std::string &outValue) const;
 
+        /**
+         * Get a uint16 attribute value from the cache.
+         *
+         * @param endpointId The endpoint ID.
+         * @param clusterId The cluster ID.
+         * @param attributeId The attribute ID.
+         * @param[out] outValue The value if found.
+         * @return CHIP_NO_ERROR on success, error code otherwise.
+         */
+        CHIP_ERROR GetUint16Attribute(chip::EndpointId endpointId,
+                                      chip::ClusterId clusterId,
+                                      chip::AttributeId attributeId,
+                                      uint16_t &outValue) const;
+
         // Some simple accessors for common Basic Information Cluster attributes
+        CHIP_ERROR GetVendorId(uint16_t &outValue) const;
+        CHIP_ERROR GetProductId(uint16_t &outValue) const;
         CHIP_ERROR GetVendorName(std::string &outValue) const;
         CHIP_ERROR GetProductName(std::string &outValue) const;
         CHIP_ERROR GetHardwareVersionString(std::string &outValue) const;
@@ -184,6 +200,23 @@ namespace barton
          * @return CHIP_NO_ERROR on success
          */
         CHIP_ERROR RegenerateAttributeReport();
+
+        /**
+         * Overrides the ReadClient liveness timeout to the given number of milliseconds.
+         *
+         * When ms > 0, the liveness timer fires after exactly ms milliseconds
+         * instead of using the negotiated maxInterval + roundTripTimeout formula.
+         * Setting ms=1 causes CHIP_ERROR_TIMEOUT on the next Matter event-loop
+         * tick, which triggers DefaultResubscribePolicy to schedule a new CASE
+         * session (ForceCASE=true) — driving the communicationRestored →
+         * synchronizeDevice path without waiting for the full negotiated window.
+         *
+         * OnSubscriptionEstablished resets the override to Clock::kZero so
+         * subsequent subscriptions use the naturally negotiated liveness window.
+         *
+         * Must be called on the Matter event-loop thread.
+         */
+        void OverrideLiveness(uint32_t ms);
 
     private:
         static void OnDeviceConnectedCallback(void *context,

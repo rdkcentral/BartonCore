@@ -1055,6 +1055,342 @@ namespace
     }
 
     //--------------------------------------------------------------------------
+    // SbmdUtils.Tlv.encode tests
+    //
+    // These tests exercise the encode path: type argument requirement,
+    // integer types with range checks, string parsing with radix, string
+    // type, and round-trip encode→decode consistency.
+    //--------------------------------------------------------------------------
+
+    // Helper: run a script via an attribute read mapper (the TLV input is
+    // ignored by the script – we just need a valid TLV to satisfy the API).
+    // Returns the output string on success, std::nullopt on failure.
+    static std::optional<std::string> RunEncodeScript(SbmdScript &script, const std::string &js)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0xFFFF;
+        attr.attributeId = 0xFFFF;
+        attr.name = "encodeTest";
+        attr.type = "bool";
+
+        if (!script.AddAttributeReadMapper(attr, js))
+        {
+            return std::nullopt;
+        }
+
+        uint8_t tlvBuffer[32];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuffer, sizeof(tlvBuffer));
+        writer.PutBoolean(chip::TLV::AnonymousTag(), true);
+        writer.Finalize();
+
+        chip::TLV::TLVReader reader;
+        reader.Init(tlvBuffer, writer.GetLengthWritten());
+        reader.Next();
+
+        std::string outValue;
+
+        if (!script.MapAttributeRead(attr, reader, outValue))
+        {
+            return std::nullopt;
+        }
+
+        return outValue;
+    }
+
+    // Encode uint8 and round-trip via decode
+    TEST_F(SbmdScriptTest, TlvEncodeUint8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(42, 'uint8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "42");
+    }
+
+    // Encode uint16 and round-trip via decode
+    TEST_F(SbmdScriptTest, TlvEncodeUint16RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(1000, 'uint16');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "1000");
+    }
+
+    // Encode uint32 max value
+    TEST_F(SbmdScriptTest, TlvEncodeUint32MaxRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(4294967295, 'uint32');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "4294967295");
+    }
+
+    // Encode int16 negative value
+    TEST_F(SbmdScriptTest, TlvEncodeInt16NegativeRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-100, 'int16');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "-100");
+    }
+
+    // Encode int8 boundary values
+    TEST_F(SbmdScriptTest, TlvEncodeInt8BoundaryRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var lo = SbmdUtils.Tlv.encode(-128, 'int8');
+            var hi = SbmdUtils.Tlv.encode(127, 'int8');
+            var dLo = SbmdUtils.Tlv.decode(lo);
+            var dHi = SbmdUtils.Tlv.decode(hi);
+            return {output: dLo + ',' + dHi};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "-128,127");
+    }
+
+    // Encode enum8 round-trip
+    TEST_F(SbmdScriptTest, TlvEncodeEnum8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(3, 'enum8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "3");
+    }
+
+    // Encode string type
+    TEST_F(SbmdScriptTest, TlvEncodeStringRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('hello', 'string');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "hello");
+    }
+
+    // Encode string type coerces non-string value via String()
+    TEST_F(SbmdScriptTest, TlvEncodeStringCoercesNumber)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(99, 'string');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "99");
+    }
+
+    // Encode boolean true
+    TEST_F(SbmdScriptTest, TlvEncodeBoolTrueRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(true, 'bool');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded === true ? 'true' : 'false'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "true");
+    }
+
+    // Encode boolean false
+    TEST_F(SbmdScriptTest, TlvEncodeBoolFalseRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(false, 'bool');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded === false ? 'false' : 'true'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "false");
+    }
+
+    // Parse string value as integer (decimal)
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsDecimal)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('200', 'uint8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "200");
+    }
+
+    // Parse string value as hex integer
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsHex)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('FF', 'uint8', 16);
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "255");
+    }
+
+    // Parse string value as binary integer
+    TEST_F(SbmdScriptTest, TlvEncodeStringParsedAsBinary)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('1010', 'uint8', 2);
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "10");
+    }
+
+    // Range check: uint8 out of range (256) returns null
+    TEST_F(SbmdScriptTest, TlvEncodeUint8OutOfRangeReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(256, 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: int8 out of range (-129) returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInt8BelowMinReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-129, 'int8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: uint16 negative returns null
+    TEST_F(SbmdScriptTest, TlvEncodeUint16NegativeReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(-1, 'uint16');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Range check: non-integer number returns null
+    TEST_F(SbmdScriptTest, TlvEncodeFloatReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(3.5, 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Encode with missing type throws Error (script fails)
+    TEST_F(SbmdScriptTest, TlvEncodeMissingTypeThrows)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(42);
+            return {output: 'unreachable'};
+        )");
+        // Script should fail due to uncaught exception
+        EXPECT_FALSE(result.has_value());
+    }
+
+    // Encode string type with base argument throws Error
+    TEST_F(SbmdScriptTest, TlvEncodeStringWithBaseThrows)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('hello', 'string', 16);
+            return {output: 'unreachable'};
+        )");
+        // Script should fail due to uncaught exception
+        EXPECT_FALSE(result.has_value());
+    }
+
+    // Empty string input returns null for integer types
+    TEST_F(SbmdScriptTest, TlvEncodeEmptyStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('', 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Non-numeric string returns null for integer types
+    TEST_F(SbmdScriptTest, TlvEncodeNonNumericStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('abc', 'uint8');
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Invalid hex string returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInvalidHexStringReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('GG', 'uint8', 16);
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // Invalid base returns null
+    TEST_F(SbmdScriptTest, TlvEncodeInvalidBaseReturnsNull)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode('42', 'uint8', 7);
+            return {output: encoded === null ? 'null' : 'not-null'};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "null");
+    }
+
+    // percent type range 0..255
+    TEST_F(SbmdScriptTest, TlvEncodePercentRoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(100, 'percent');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "100");
+    }
+
+    // bitmap8 type round-trip
+    TEST_F(SbmdScriptTest, TlvEncodeBitmap8RoundTrip)
+    {
+        auto result = RunEncodeScript(*script, R"(
+            var encoded = SbmdUtils.Tlv.encode(0xAB, 'bitmap8');
+            var decoded = SbmdUtils.Tlv.decode(encoded);
+            return {output: decoded.toString()};
+        )");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, "171"); // 0xAB = 171
+    }
+
+    //--------------------------------------------------------------------------
     // Out-of-memory handling tests (mquickjs-specific)
     //
     // These tests artificially restrict the mquickjs arena to verify that
@@ -1370,6 +1706,388 @@ namespace
             ASSERT_TRUE(script->MapAttributeRead(goodAttr, reader, outValue));
             EXPECT_EQ(outValue, "false");
         }
+    }
+
+    // Test: MapAttributeRead with uint8 decoded to boolean (seedFrom script pattern)
+    // Exercises the exact script shape used by the door-lock seedFrom mapper:
+    //   - decode uint8 TLV using SbmdUtils.Tlv.decode()
+    //   - return "true" for value 1 (Locked), "false" for value 2 (Unlocked)
+    TEST_F(SbmdScriptTest, MapAttributeReadUint8ToBoolean)
+    {
+        SbmdAttribute attr;
+        attr.clusterId = 0x0101;
+        attr.attributeId = 0x0000;
+        attr.name = "LockState";
+        attr.type = "uint8";
+
+        std::string mapperScript = "var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);"
+                                   "var isLocked = value === 1;"
+                                   "return { output: isLocked ? 'true' : 'false' };";
+
+        ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
+
+        // Helper to write a uint8 TLV and run the mapper
+        auto runMapper = [&](uint8_t lockStateValue, const std::string &expectedOutput) {
+            uint8_t tlvBuffer[32];
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuffer, sizeof(tlvBuffer));
+            writer.Put(chip::TLV::AnonymousTag(), lockStateValue);
+            writer.Finalize();
+
+            chip::TLV::TLVReader reader;
+            reader.Init(tlvBuffer, writer.GetLengthWritten());
+            reader.Next();
+
+            std::string outValue;
+            ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
+            EXPECT_EQ(outValue, expectedOutput);
+        };
+
+        runMapper(1, "true");  // DlLockState::Locked
+        runMapper(2, "false"); // DlLockState::Unlocked
+        runMapper(0, "false"); // DlLockState::NotFullyLocked (not == 1, so false)
+    }
+
+    //==============================================================================
+    // MapEvent tests
+    //
+    // MapEvent has a tri-state contract (documented in SbmdScript.h):
+    //   false            = script error (exception, compile error, non-object return)
+    //   true + empty     = suppress (script returned {} without an "output" key)
+    //   true + non-empty = publish (script returned { output: "value" })
+    //==============================================================================
+
+    // Helper: encode a LockOperation TLV struct with a single uint8 at context tag 0.
+    // The door-lock event script reads event[0] as the LockOperationType.
+    //
+    // NOTE: reader is initialized with sizeof(buf) — not just GetLengthWritten() — to match
+    // the production code path where MapEvent receives a reader whose underlying buffer is
+    // the full Matter subscription report (much larger than the struct being read).
+    // MapEvent's CopyElement needs 1 extra byte of headroom beyond GetLengthWritten() due
+    // to tag encoding; using the full buffer size provides that.
+    static void WriteLockOperationTlv(uint8_t (&buf)[64], chip::TLV::TLVReader &reader, uint8_t lockOperationType)
+    {
+        chip::TLV::TLVWriter writer;
+        writer.Init(buf, sizeof(buf));
+        chip::TLV::TLVType structType;
+        writer.StartContainer(chip::TLV::AnonymousTag(), chip::TLV::kTLVType_Structure, structType);
+        writer.Put(chip::TLV::ContextTag(0), lockOperationType);
+        writer.EndContainer(structType);
+        writer.Finalize();
+
+        reader.Init(buf, sizeof(buf));
+        reader.Next();
+    }
+
+    // Test: MapEvent returns false when no mapper is registered
+    TEST_F(SbmdScriptTest, MapEventNoMapper)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: AddEventMapper returns false for an empty script
+    TEST_F(SbmdScriptTest, AddEventMapperRejectsEmptyScript)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        EXPECT_FALSE(script->AddEventMapper(event, ""));
+    }
+
+    // Test: MapEvent happy path — LockOperationType 0 (Lock) → "true"
+    TEST_F(SbmdScriptTest, MapEventLockOperationLock)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        // Exact script from door-lock.sbmd
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0 /* Lock */);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "true");
+    }
+
+    // Test: MapEvent happy path — LockOperationType 1 (Unlock) → "false"
+    TEST_F(SbmdScriptTest, MapEventLockOperationUnlock)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 1 /* Unlock */);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "false");
+    }
+
+    // Test: MapEvent suppress path — LockOperationType 2 (NonAccessUserEvent) → true + empty outValue.
+    // The caller must check outValue.empty() and skip updateResource; this is the primary
+    // motivation for the tri-state contract.
+    TEST_F(SbmdScriptTest, MapEventSuppressOnNoOutputKey)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = R"(
+            var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+            var opType = event[0];
+            if (opType === 0) { return { output: 'true' }; }
+            if (opType === 1) { return { output: 'false' }; }
+            return {};
+        )";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 2 /* NonAccessUserEvent */);
+
+        std::string outValue = "sentinel"; // proves it was cleared, not merely never set
+        bool result = script->MapEvent(event, reader, outValue);
+
+        ASSERT_TRUE(result);           // not a script error
+        EXPECT_TRUE(outValue.empty()); // suppress: caller must not call updateResource
+    }
+
+    // Test: MapEvent returns false when script returns a non-object (primitive string).
+    // A bare string return is always a script error, not a suppress.
+    TEST_F(SbmdScriptTest, MapEventFailsOnPrimitiveStringReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return 'true';"; // string, not object
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false when script returns null.
+    TEST_F(SbmdScriptTest, MapEventFailsOnNullReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return null;";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false when script returns {output: null}.
+    // null is not a valid suppress signal — use {} or omit 'output' instead.
+    TEST_F(SbmdScriptTest, MapEventFailsOnOutputNull)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return { output: null };";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false when script returns undefined (missing return statement).
+    TEST_F(SbmdScriptTest, MapEventFailsOnUndefinedReturn)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "var x = 1;"; // no return statement → undefined
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent returns false on script syntax error
+    TEST_F(SbmdScriptTest, MapEventFailsOnSyntaxError)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        std::string mapperScript = "return {output: invalid syntax here";
+
+        ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.deviceUuid to the script
+    TEST_F(SbmdScriptTest, MapEventHasDeviceUuid)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.deviceUuid };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, deviceId);
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.clusterId to the script
+    TEST_F(SbmdScriptTest, MapEventHasClusterId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.clusterId.toString() };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "257"); // 0x0101 = 257
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.eventId to the script
+    TEST_F(SbmdScriptTest, MapEventHasEventId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventId.toString() };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "2"); // 0x0002 = 2
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.eventName to the script
+    TEST_F(SbmdScriptTest, MapEventHasEventName)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventName };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "LockOperation");
+    }
+
+    // Test: MapEvent exposes sbmdEventArgs.endpointId to the script
+    TEST_F(SbmdScriptTest, MapEventHasEndpointId)
+    {
+        SbmdEvent event;
+        event.clusterId = 0x0101;
+        event.eventId = 0x0002;
+        event.name = "LockOperation";
+        event.resourceEndpointId = "ep1";
+
+        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.endpointId };"));
+
+        uint8_t buf[64];
+        chip::TLV::TLVReader reader;
+        WriteLockOperationTlv(buf, reader, 0);
+
+        std::string outValue;
+        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
+        EXPECT_EQ(outValue, "ep1");
     }
 
 #endif // BCORE_USE_MQUICKJS

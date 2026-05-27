@@ -97,9 +97,7 @@ static bool localAllowlistIsValid(void);
 static bool localDenylistIsValid(void);
 static bool checkAndSetReadyForPairing(void);
 
-// FIXME: Copy Paste Tech Debt (duplicated in zigbeeDriverCommon)
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal);
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat);
+
 
 static deviceDescriptorsReadyForPairingFunc readyForPairingCB;
 static deviceDescriptorsUpdatedFunc descriptorsUpdatedCB;
@@ -606,13 +604,7 @@ static bool downloadFile(const char *url, const char *destFile, deviceDescriptor
     // Write to a temp file so we don't end up with a bogus allowlist in case of any failure
     AUTO_CLEAN(free_generic__auto) char *tmpfilename = stringBuilder("%s.tmp", destFile);
 
-    const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *propValue = b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
-
-    sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
-
-    fileSize = urlHelperDownloadFile(url, &httpCode, NULL, NULL, DOWNLOAD_TIMEOUT_SECS, verifyFlag, true, tmpfilename);
+    fileSize = urlHelperDownloadFile(url, &httpCode, NULL, NULL, DOWNLOAD_TIMEOUT_SECS, SSL_VERIFY_BOTH, true, tmpfilename);
 
     if (fileSize > 0 && (httpCode == 200 || httpCode == 0))
     {
@@ -735,60 +727,4 @@ static bool fileNeedsUpdating(const char *currentUrlSystemKey,
     return result;
 }
 
-// FIXME: Copy Paste Tech Debt (duplicated in zigbeeDriverCommon)
 
-#define DEFAULT_SSL_VERIFY_MODE               SSL_VERIFY_BOTH
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER "cpe.sslCert.validateForHttpsToServer"
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE "cpe.sslCert.validateForHttpsToDevice"
-#define SSL_VERIFICATION_TYPE_NONE            "none"
-#define SSL_VERIFICATION_TYPE_HOST            "host"
-#define SSL_VERIFICATION_TYPE_PEER            "peer"
-#define SSL_VERIFICATION_TYPE_BOTH            "both"
-
-static const char *sslVerifyCategoryToProp[] = {
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER,
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE,
-};
-
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal)
-{
-    sslVerify retVal = DEFAULT_SSL_VERIFY_MODE;
-    if (strVal == NULL || strlen(strVal) == 0 || strcasecmp(strVal, SSL_VERIFICATION_TYPE_NONE) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_NONE option");
-        retVal = SSL_VERIFY_NONE;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_HOST) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_HOST option");
-        retVal = SSL_VERIFY_HOST;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_PEER) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_PEER option");
-        retVal = SSL_VERIFY_PEER;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_BOTH) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_BOTH option");
-        retVal = SSL_VERIFY_BOTH;
-    }
-    else
-    {
-        icLogDebug(LOG_TAG, "using default option [%d]", retVal);
-    }
-
-    return retVal;
-}
-
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat)
-{
-    const char *propKey = NULL;
-
-    if (cat >= SSL_VERIFY_CATEGORY_FIRST && cat <= SSL_VERIFY_CATEGORY_LAST)
-    {
-        propKey = sslVerifyCategoryToProp[cat];
-    }
-
-    return propKey;
-}
