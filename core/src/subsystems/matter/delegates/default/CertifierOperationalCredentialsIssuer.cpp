@@ -262,9 +262,17 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
         return CHIP_ERROR_INTERNAL;
     }
 
-    if (httpCode >= 400)
+    if (httpCode >= 400 && httpCode < 500)
     {
-        ChipLogError(Controller, "Certifier: HTTP %ld \n8<---\n%s\n8<---\n", httpCode,
+        ChipLogError(Controller, "Certifier: HTTP %ld (client error) \n8<---\n%s\n8<---\n", httpCode,
+                     responseBody != nullptr ? responseBody.get() : "");
+
+        return CHIP_ERROR_INTERNAL;
+    }
+
+    if (httpCode >= 500)
+    {
+        ChipLogError(Controller, "Certifier: HTTP %ld (server error) \n8<---\n%s\n8<---\n", httpCode,
                      responseBody != nullptr ? responseBody.get() : "");
 
         return CHIP_ERROR_INTERNAL;
