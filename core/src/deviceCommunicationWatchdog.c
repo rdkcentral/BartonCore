@@ -521,10 +521,16 @@ static void *commFailWatchdogThreadProc(void *arg)
         while (iter < uuidsInCommFail->len)
         {
             gchar *commFailUuid = g_ptr_array_index(uuidsInCommFail, iter);
-            if (failedCallback != NULL)
+            void (*failedCb)(const char *) = NULL;
+
+            pthread_mutex_lock(&controlMutex);
+            failedCb = failedCallback;
+            pthread_mutex_unlock(&controlMutex);
+
+            if (failedCb != NULL)
             {
                 icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
-                failedCallback(commFailUuid);
+                failedCb(commFailUuid);
             }
             iter++;
         }
