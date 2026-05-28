@@ -132,6 +132,12 @@ void deviceCommunicationWatchdogTerm()
 
     running = false;
 
+    // NULL out callbacks while still holding controlMutex — prevents other
+    // threads (PetDevice, ForceDeviceInCommFail) from invoking callbacks
+    // into half-torn-down subsystems during shutdown.
+    failedCallback = NULL;
+    restoredCallback = NULL;
+
     pthread_cond_broadcast(&controlCond);
 
     pthread_mutex_unlock(&controlMutex);
@@ -145,9 +151,6 @@ void deviceCommunicationWatchdogTerm()
     g_hash_table_destroy(monitoredDevices);
     monitoredDevices = NULL;
     pthread_mutex_unlock(&monitoredDevicesMutex);
-
-    failedCallback = NULL;
-    restoredCallback = NULL;
 }
 
 void deviceCommunicationWatchdogMonitorDevice(const char *uuid, const uint32_t commFailTimeoutSeconds, bool inCommFail)
@@ -238,7 +241,10 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
 
     if (doNotify == true)
     {
-        restoredCallback(uuid);
+        if (restoredCallback != NULL)
+        {
+            restoredCallback(uuid);
+        }
     }
 }
 
@@ -292,7 +298,10 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
 
     if (doNotify == true)
     {
-        failedCallback(uuid);
+        if (failedCallback != NULL)
+        {
+            failedCallback(uuid);
+        }
     }
 }
 
@@ -450,6 +459,16 @@ static void *commFailWatchdogThreadProc(void *arg)
             incrementalCondTimedWaitMillis(&controlCond, &controlMutex, monitorThreadSleepSeconds);
         }
 
+        // Re-check running after wakeup — if Term() signaled us, exit
+        // immediately rather than iterating devices and calling into
+        // potentially half-torn-down subsystems.
+        if (running == false)
+        {
+            icLogInfo(LOG_TAG, "%s exiting after Term signal", __FUNCTION__);
+            pthread_mutex_unlock(&controlMutex);
+            break;
+        }
+
         bool isCommfailFast = fastCommFailTimer;
 
         pthread_mutex_unlock(&controlMutex);
@@ -502,8 +521,11 @@ static void *commFailWatchdogThreadProc(void *arg)
         while (iter < uuidsInCommFail->len)
         {
             gchar *commFailUuid = g_ptr_array_index(uuidsInCommFail, iter);
-            icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
-            failedCallback(commFailUuid);
+            if (failedCallback != NULL)
+            {
+                icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
+                failedCallback(commFailUuid);
+            }
             iter++;
         }
 
