@@ -839,6 +839,11 @@ sbmdCommandArgs = {
 
 #### Expected Output
 
+Execute mappers must return either an `invoke` object (to send a Matter command)
+or an `output` object (for local-only operations that return a value without
+any Matter interaction).
+
+**Invoke (sends a Matter command):**
 ```javascript
 return {
     invoke: {
@@ -849,6 +854,17 @@ return {
     }
 };
 ```
+
+**Output (local-only, no Matter interaction):**
+```javascript
+return {
+    output: <string>  // Value returned directly to the caller
+};
+```
+
+Use `SbmdUtils.Response.invoke()` or `SbmdUtils.Response.output()` helpers.
+The `SessionManager` utility (`SbmdUtils.SessionManager.getForDevice(deviceUuid)`)
+provides per-device session lifecycle management for output-based execute mappers.
 
 #### Examples
 

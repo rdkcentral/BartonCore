@@ -944,15 +944,35 @@ bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
 
     if (JS_IsNull(resultGuard.get()) || JS_IsUndefined(resultGuard.get()) || !JS_IsObject(resultGuard.get()))
     {
-        icError("Script result is not an object; expected 'invoke' object");
+        icError("Script result is not an object; expected 'invoke' or 'output' object");
         return false;
     }
 
-    // Check for 'invoke' operation (command invocation) - the only valid operation for execute
+    // Check for 'output' operation (local-only, no Matter interaction)
+    JsValueGuard outputGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "output"));
+    if (!JS_IsUndefined(outputGuard.get()) && !JS_IsNull(outputGuard.get()))
+    {
+        result.type = ScriptWriteResult::OperationType::Output;
+
+        JsCStringGuard outputStrGuard(ctx, JS_ToCString(ctx, outputGuard.get()));
+        if (outputStrGuard)
+        {
+            result.output = std::string(outputStrGuard.get());
+        }
+        else
+        {
+            result.output = "";
+        }
+
+        icDebug("execute mapped to output: \"%s\"", result.output.value().c_str());
+        return true;
+    }
+
+    // Check for 'invoke' operation (command invocation)
     JsValueGuard invokeGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "invoke"));
     if (JS_IsUndefined(invokeGuard.get()) || JS_IsNull(invokeGuard.get()))
     {
-        icError("Execute script result missing required 'invoke' field");
+        icError("Execute script result missing required 'invoke' or 'output' field");
         return false;
     }
 

@@ -1073,7 +1073,7 @@
      */
     SessionManager.prototype.create = function(data) {
         var id = this.nextId++;
-        this.sessions[id] = data;
+        this.sessions[String(id)] = data;
 
         return id;
     };
@@ -1084,7 +1084,7 @@
      * @returns {*} The session data, or undefined if not found
      */
     SessionManager.prototype.get = function(id) {
-        return this.sessions[id];
+        return this.sessions[String(id)];
     };
 
     /**
@@ -1093,9 +1093,11 @@
      * @returns {boolean} true if the session existed and was removed
      */
     SessionManager.prototype.destroy = function(id) {
-        if (this.sessions.hasOwnProperty(id))
+        var key = String(id);
+
+        if (this.sessions.hasOwnProperty(key))
         {
-            delete this.sessions[id];
+            delete this.sessions[key];
 
             return true;
         }
@@ -1118,6 +1120,14 @@
         }
 
         return sessionManagers[deviceUuid];
+    };
+
+    /**
+     * Remove the SessionManager for a device (cleanup on device removal).
+     * @param {string} deviceUuid - Device identifier
+     */
+    SessionManager.removeForDevice = function(deviceUuid) {
+        delete sessionManagers[deviceUuid];
     };
 
     // Export the SbmdUtils object to globalThis

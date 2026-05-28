@@ -2090,6 +2090,8 @@ namespace
         EXPECT_EQ(outValue, "ep1");
     }
 
+#endif // BCORE_USE_MQUICKJS
+
     // =========================================================================
     // MapExecute output-only tests (no Matter interaction)
     // =========================================================================
@@ -2302,7 +2304,5 @@ namespace
         ASSERT_TRUE(script2->MapExecute(streamKey, "camera", "stream", sessionId, streamResult2));
         EXPECT_EQ(streamResult2.output.value(), "error:invalidSession");
     }
-
-#endif // BCORE_USE_MQUICKJS
 
 } // namespace

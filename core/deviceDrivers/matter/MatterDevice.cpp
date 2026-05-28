@@ -1249,6 +1249,12 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
             {
                 *response = strdup(result.output.value().c_str());
             }
+            else if (result.output.has_value())
+            {
+                icWarn("Output operation produced value \"%s\" but no response pointer available for URI: %s",
+                       result.output.value().c_str(),
+                       resource->uri);
+            }
 
             std::promise<bool> operationOK;
             operationOK.set_value(true);
