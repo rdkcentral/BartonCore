@@ -104,6 +104,16 @@ namespace barton
                 return ScriptResult::MakeError("'invoke' missing required 'commandId' field");
             }
 
+            if (!invokeObj[kKeyClusterId].isUInt())
+            {
+                return ScriptResult::MakeError("'invoke.clusterId' must be a non-negative integer");
+            }
+
+            if (!invokeObj[kKeyCommandId].isUInt())
+            {
+                return ScriptResult::MakeError("'invoke.commandId' must be a non-negative integer");
+            }
+
             ScriptWriteResult result;
             result.type = ScriptWriteResult::OperationType::Invoke;
             result.clusterId = static_cast<chip::ClusterId>(invokeObj[kKeyClusterId].asUInt());
@@ -111,11 +121,22 @@ namespace barton
 
             if (invokeObj.isMember(kKeyEndpointId))
             {
+                if (!invokeObj[kKeyEndpointId].isUInt() || invokeObj[kKeyEndpointId].asUInt() > UINT16_MAX)
+                {
+                    return ScriptResult::MakeError("'invoke.endpointId' must be an integer in [0, 65535]");
+                }
+
                 result.endpointId = static_cast<chip::EndpointId>(invokeObj[kKeyEndpointId].asUInt());
             }
 
             if (invokeObj.isMember(kKeyTimedInvokeTimeoutMs))
             {
+                if (!invokeObj[kKeyTimedInvokeTimeoutMs].isUInt() ||
+                    invokeObj[kKeyTimedInvokeTimeoutMs].asUInt() > UINT16_MAX)
+                {
+                    return ScriptResult::MakeError("'invoke.timedInvokeTimeoutMs' must be an integer in [0, 65535]");
+                }
+
                 result.timedInvokeTimeoutMs = static_cast<uint16_t>(invokeObj[kKeyTimedInvokeTimeoutMs].asUInt());
             }
 
@@ -159,6 +180,16 @@ namespace barton
                 return ScriptResult::MakeError("'write' missing required 'tlvBase64' field");
             }
 
+            if (!writeObj[kKeyClusterId].isUInt())
+            {
+                return ScriptResult::MakeError("'write.clusterId' must be a non-negative integer");
+            }
+
+            if (!writeObj[kKeyAttributeId].isUInt())
+            {
+                return ScriptResult::MakeError("'write.attributeId' must be a non-negative integer");
+            }
+
             ScriptWriteResult result;
             result.type = ScriptWriteResult::OperationType::Write;
             result.clusterId = static_cast<chip::ClusterId>(writeObj[kKeyClusterId].asUInt());
@@ -166,7 +197,17 @@ namespace barton
 
             if (writeObj.isMember(kKeyEndpointId))
             {
+                if (!writeObj[kKeyEndpointId].isUInt() || writeObj[kKeyEndpointId].asUInt() > UINT16_MAX)
+                {
+                    return ScriptResult::MakeError("'write.endpointId' must be an integer in [0, 65535]");
+                }
+
                 result.endpointId = static_cast<chip::EndpointId>(writeObj[kKeyEndpointId].asUInt());
+            }
+
+            if (!writeObj[kKeyTlvBase64].isString())
+            {
+                return ScriptResult::MakeError("'write.tlvBase64' must be a string");
             }
 
             std::string base64Str = writeObj[kKeyTlvBase64].asString();
@@ -207,6 +248,11 @@ namespace barton
 
         if (hasError)
         {
+            if (!jv[kKeyError].isString() || jv[kKeyError].asString().empty())
+            {
+                return MakeError("Script returned 'error' key with a non-string or empty value");
+            }
+
             std::string msg = jv[kKeyError].asString();
             icDebug("Script returned error: %s", msg.c_str());
             return MakeError(std::move(msg));
@@ -217,7 +263,14 @@ namespace barton
             const Json::Value &val = jv[kKeyValue];
             std::string strVal;
 
-            if (val.isString())
+            if (val.isNull())
+            {
+                // null is a valid way for a script to suppress the update
+                // (e.g. when a Matter attribute has no meaningful value yet)
+                icDebug("Script returned value: null — suppressing update");
+                return MakeSuppress();
+            }
+            else if (val.isString())
             {
                 strVal = val.asString();
             }
@@ -231,7 +284,7 @@ namespace barton
             }
             else
             {
-                return MakeError("'value' field must be a string, number, or boolean");
+                return MakeError("'value' field must be a string, number, boolean, or null");
             }
 
             icDebug("Script returned value: %s", strVal.c_str());

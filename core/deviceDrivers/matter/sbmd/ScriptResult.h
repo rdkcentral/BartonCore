@@ -119,7 +119,7 @@ namespace barton
         bool IsSuppressed() const { return !error.has_value() && !operation.has_value(); }
 
         /**
-         * Returns true if the operation field is set (and no error).
+         * Returns true if the operation field is set.
          */
         bool HasOperation() const { return operation.has_value(); }
 

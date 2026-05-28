@@ -9,9 +9,6 @@
 >   `identifySeconds` resource inline. This resource (and others common to all devices)
 >   will be refactored into common/base driver code in a future release.
 >
-> - **No formal "skip update" mechanism for scripts.** A script can suppress a
->   resource update by returning `{}` (empty object). Returning `{ error: "msg" }`
->   signals an error and fails the operation.
 > - **Verbose logging.** Logging output is very verbose at the moment, especially the
 >   frequent dumps of the entire device data cache JSON. This will be reduced.
 >
@@ -559,9 +556,10 @@ mapper:
 Event mappers receive `sbmdEventArgs` containing the base64-encoded TLV event data.
 The script decodes the data and returns a Barton resource value.
 
-> **Note:** If the event script returns an empty object `{}` or `{ value: null }`, the resource is not
-> updated. This allows the script to ignore non-state-change events (e.g. returning
-> `{}` for `LockOperationType` values that do not change lock state).
+> **Note:** Any mapper script can suppress a resource update by returning `{}` or `{ value: null }`.
+> The resource is not updated in either case. This is commonly used in event mappers to ignore
+> non-state-change events (e.g. returning `{}` for `LockOperationType` values that do not change
+> lock state), and in read mappers to skip updates when a Matter attribute holds a null value.
 
 ### 4.4 SeedFrom Mapper
 

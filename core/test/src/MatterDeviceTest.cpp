@@ -84,16 +84,20 @@ namespace
 
     /**
      * When MapEvent() returns a suppressed ScriptResult, OnEventData() must
-     * short-circuit at the IsSuppressed() check and must NOT proceed to
-     * updateResource().
+     * NOT call updateResource().
      *
-     * updateResource() is a free C function and cannot be directly intercepted
-     * by GMock. Correctness of the suppress path is verified structurally: the
-     * IsSuppressed() check in OnEventData() is the only code path between the
-     * MapEvent() return and the updateResource() call. The single EXPECT_CALL
-     * with Times(1) confirms the suppress branch was reached; no further mock
-     * method is expected after MapEvent() returns suppressed, confirming that
-     * OnEventData() did not fall through to the resource-update path.
+     * updateResource() is a free C function that cannot be intercepted by GMock,
+     * so correctness is verified structurally. OnEventData() has two independent
+     * guards that both prevent the updateResource() call-site from being reached
+     * when the result is suppressed:
+     *
+     *   1. IsSuppressed() check — returns immediately with a debug log.
+     *   2. holds_alternative<ResourceUpdate> check — a suppressed ScriptResult
+     *      carries no ResourceUpdate operation, so this guard would also fire
+     *      even if guard 1 were accidentally removed.
+     *
+     * Both guards are synchronous and unconditional; there is no code path
+     * between them and the updateResource() call-site.
      */
     TEST_F(MatterDeviceEventTest, SuppressedEventSkipsResourceUpdate)
     {

@@ -139,6 +139,12 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             continue;
         }
 
+        if (!std::holds_alternative<ScriptResult::ResourceUpdate>(readResult.Operation()))
+        {
+            icError("Read mapper returned unexpected operation type for URI: %s", uri.c_str());
+            continue;
+        }
+
         std::string outValue = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
 
         icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
@@ -233,6 +239,12 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
     if (eventResult.IsSuppressed())
     {
         icDebug("Event mapper suppressed update for URI: %s", uri.c_str());
+        return;
+    }
+
+    if (!std::holds_alternative<ScriptResult::ResourceUpdate>(eventResult.Operation()))
+    {
+        icError("Event mapper returned unexpected operation type for URI: %s", uri.c_str());
         return;
     }
 
@@ -809,6 +821,12 @@ std::optional<std::string> MatterDevice::ReadSeedValueFromAttribute(const char *
         return std::nullopt;
     }
 
+    if (!std::holds_alternative<ScriptResult::ResourceUpdate>(seedResult.Operation()))
+    {
+        icError("seedFrom mapper returned unexpected operation type for URI: %s", uri);
+        return std::nullopt;
+    }
+
     outValue = std::get<ScriptResult::ResourceUpdate>(seedResult.Operation()).value;
 
     return outValue;
@@ -1043,25 +1061,32 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
         }
 
         // Execute the script to map the TLV data to a string value using the stored mapper
-        auto readResult2 = script->MapAttributeRead(binding.attribute.value(), reader);
+        auto readResult = script->MapAttributeRead(binding.attribute.value(), reader);
 
-        if (readResult2.IsError())
+        if (readResult.IsError())
         {
             icError("Failed to execute read mapping script for URI: %s: %s",
                     resource->uri,
-                    readResult2.ErrorMessage().c_str());
+                    readResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
 
-        if (readResult2.IsSuppressed())
+        if (readResult.IsSuppressed())
         {
             icError("Read mapper unexpectedly suppressed value for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
 
-        outValue = std::get<ScriptResult::ResourceUpdate>(readResult2.Operation()).value;
+        if (!std::holds_alternative<ScriptResult::ResourceUpdate>(readResult.Operation()))
+        {
+            icError("Read mapper returned unexpected operation type for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        outValue = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
     }
     else
     {
@@ -1126,6 +1151,13 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
         if (!writeScriptResult.HasOperation())
         {
             icError("Write mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        if (!std::holds_alternative<ScriptWriteResult>(writeScriptResult.Operation()))
+        {
+            icError("Write mapper returned unexpected operation type for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
@@ -1293,6 +1325,13 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
         if (!executeScriptResult.HasOperation())
         {
             icError("Execute mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        if (!std::holds_alternative<ScriptWriteResult>(executeScriptResult.Operation()))
+        {
+            icError("Execute mapper returned unexpected operation type for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
@@ -1496,19 +1535,25 @@ void MatterDevice::OnResponse(chip::app::CommandSender *apCommandSender,
         responseReader.Init(*aResponseData.data);
 
         // Use the script to map the response TLV to a Barton string
-        auto cmdRespResult = script->MapCommandExecuteResponse(context.commandInfo, responseReader);
+        auto commandResponseResult = script->MapCommandExecuteResponse(context.commandInfo, responseReader);
 
-        if (!cmdRespResult.IsError() && cmdRespResult.HasOperation())
+        if (!commandResponseResult.IsError() && commandResponseResult.HasOperation())
         {
-            std::string responseValue = std::get<ScriptResult::ResourceUpdate>(cmdRespResult.Operation()).value;
+            if (!std::holds_alternative<ScriptResult::ResourceUpdate>(commandResponseResult.Operation()))
+            {
+                icError("Command response mapper returned unexpected operation type for device %s", deviceId.c_str());
+                return;
+            }
+
+            std::string responseValue = std::get<ScriptResult::ResourceUpdate>(commandResponseResult.Operation()).value;
             icDebug("Mapped command response to value: %s", responseValue.c_str());
             *context.response = strdup(responseValue.c_str());
         }
-        else if (cmdRespResult.IsError())
+        else if (commandResponseResult.IsError())
         {
             icWarn("Failed to map command response for device %s: %s",
                    deviceId.c_str(),
-                   cmdRespResult.ErrorMessage().c_str());
+                   commandResponseResult.ErrorMessage().c_str());
         }
     }
 }
