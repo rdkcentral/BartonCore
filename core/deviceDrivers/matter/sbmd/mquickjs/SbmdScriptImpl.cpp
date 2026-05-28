@@ -176,36 +176,46 @@ namespace barton
             {
                 JSValue iv = JS_GetPropertyStr(ctx, outJson, "invoke");
 
-                if (!JS_IsUndefined(iv) && !JS_IsNull(iv) && JS_IsPtr(iv) && !JS_IsString(ctx, iv))
+                if (!JS_IsUndefined(iv))
                 {
-                    Json::Value invokeJv(Json::objectValue);
-
-                    if (auto v = getPropertyUint(iv, "clusterId"))
+                    if (!JS_IsNull(iv) && JS_IsPtr(iv) && !JS_IsString(ctx, iv))
                     {
-                        invokeJv["clusterId"] = *v;
-                    }
+                        Json::Value invokeJv(Json::objectValue);
 
-                    if (auto v = getPropertyUint(iv, "commandId"))
+                        if (auto v = getPropertyUint(iv, "clusterId"))
+                        {
+                            invokeJv["clusterId"] = *v;
+                        }
+
+                        if (auto v = getPropertyUint(iv, "commandId"))
+                        {
+                            invokeJv["commandId"] = *v;
+                        }
+
+                        if (auto v = getPropertyUint(iv, "endpointId"))
+                        {
+                            invokeJv["endpointId"] = *v;
+                        }
+
+                        if (auto v = getPropertyUint(iv, "timedInvokeTimeoutMs"))
+                        {
+                            invokeJv["timedInvokeTimeoutMs"] = *v;
+                        }
+
+                        if (auto v = getPropertyStr(iv, "tlvBase64"))
+                        {
+                            invokeJv["tlvBase64"] = *v;
+                        }
+
+                        jv["invoke"] = invokeJv;
+                    }
+                    else
                     {
-                        invokeJv["commandId"] = *v;
+                        // Property present but not a valid object — preserve the key as
+                        // null so ParseInvoke() reports a type error and ambiguity
+                        // detection in FromJsonValue() fires correctly.
+                        jv["invoke"] = Json::Value();
                     }
-
-                    if (auto v = getPropertyUint(iv, "endpointId"))
-                    {
-                        invokeJv["endpointId"] = *v;
-                    }
-
-                    if (auto v = getPropertyUint(iv, "timedInvokeTimeoutMs"))
-                    {
-                        invokeJv["timedInvokeTimeoutMs"] = *v;
-                    }
-
-                    if (auto v = getPropertyStr(iv, "tlvBase64"))
-                    {
-                        invokeJv["tlvBase64"] = *v;
-                    }
-
-                    jv["invoke"] = invokeJv;
                 }
             }
 
@@ -213,31 +223,41 @@ namespace barton
             {
                 JSValue wv = JS_GetPropertyStr(ctx, outJson, "write");
 
-                if (!JS_IsUndefined(wv) && !JS_IsNull(wv) && JS_IsPtr(wv) && !JS_IsString(ctx, wv))
+                if (!JS_IsUndefined(wv))
                 {
-                    Json::Value writeJv(Json::objectValue);
-
-                    if (auto v = getPropertyUint(wv, "clusterId"))
+                    if (!JS_IsNull(wv) && JS_IsPtr(wv) && !JS_IsString(ctx, wv))
                     {
-                        writeJv["clusterId"] = *v;
-                    }
+                        Json::Value writeJv(Json::objectValue);
 
-                    if (auto v = getPropertyUint(wv, "attributeId"))
+                        if (auto v = getPropertyUint(wv, "clusterId"))
+                        {
+                            writeJv["clusterId"] = *v;
+                        }
+
+                        if (auto v = getPropertyUint(wv, "attributeId"))
+                        {
+                            writeJv["attributeId"] = *v;
+                        }
+
+                        if (auto v = getPropertyUint(wv, "endpointId"))
+                        {
+                            writeJv["endpointId"] = *v;
+                        }
+
+                        if (auto v = getPropertyStr(wv, "tlvBase64"))
+                        {
+                            writeJv["tlvBase64"] = *v;
+                        }
+
+                        jv["write"] = writeJv;
+                    }
+                    else
                     {
-                        writeJv["attributeId"] = *v;
+                        // Property present but not a valid object — preserve the key as
+                        // null so ParseWrite() reports a type error and ambiguity
+                        // detection in FromJsonValue() fires correctly.
+                        jv["write"] = Json::Value();
                     }
-
-                    if (auto v = getPropertyUint(wv, "endpointId"))
-                    {
-                        writeJv["endpointId"] = *v;
-                    }
-
-                    if (auto v = getPropertyStr(wv, "tlvBase64"))
-                    {
-                        writeJv["tlvBase64"] = *v;
-                    }
-
-                    jv["write"] = writeJv;
                 }
             }
 

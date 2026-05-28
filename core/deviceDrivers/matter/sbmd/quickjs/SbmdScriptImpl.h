@@ -154,12 +154,6 @@ namespace barton
         bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
 
         /**
-         * Extract the "output" field from a script result as a string.
-         * Frees the script result JSValue.
-         */
-        bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
-
-        /**
          * Set a JavaScript variable from a string value.
          */
         bool SetJsVariable(const std::string &name, const std::string &value);

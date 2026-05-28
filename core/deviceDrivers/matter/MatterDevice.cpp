@@ -1074,8 +1074,10 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
 
         if (readResult.IsSuppressed())
         {
-            icError("Read mapper unexpectedly suppressed value for URI: %s", resource->uri);
-            FailOperation(promises);
+            // Suppression is a valid v3.0 contract outcome (e.g. { value: null } when
+            // the attribute has no meaningful value). Treat it as a successful read
+            // that produces no value.
+            icDebug("Read mapper suppressed value for URI: %s", resource->uri);
             return;
         }
 

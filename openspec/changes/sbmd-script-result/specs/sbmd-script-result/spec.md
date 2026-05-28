@@ -95,6 +95,10 @@ All mapper methods on the `SbmdScript` abstract interface SHALL return `ScriptRe
 - **WHEN** `MapEvent()` is called and the script returns `{}`
 - **THEN** the returned `ScriptResult` SHALL have `isSuppressed()` true
 
+#### Scenario: Suppressed read mapper on explicit resource read
+- **WHEN** `MapAttributeRead()` is called (from an explicit `read_resource` request) and the script returns `{}` or `{ value: null }`
+- **THEN** the MatterDevice layer SHALL NOT fail the read operation; the caller SHALL receive a null value, consistent with how suppress is handled in subscription updates and seedFrom
+
 #### Scenario: Failed mapper
 - **WHEN** `MapWrite()` is called and the script throws an exception
 - **THEN** the returned `ScriptResult` SHALL have `isError()` true

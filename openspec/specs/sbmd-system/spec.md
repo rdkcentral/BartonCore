@@ -132,7 +132,7 @@ A resource's mapper MAY contain an `execute` section with a `script` and optiona
 - **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ output: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
 
 ### Requirement: Event mapper
-A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the event mapper SHALL fail. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
+A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return a JSON object. Valid return shapes are: `{ value: <string> }` to update the Barton resource, `{}` or `{ value: null }` to suppress the update (no error logged), and `{ error: <string> }` to signal a failure. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.
 
 #### Scenario: Event alias mapper resolves event metadata
 - **WHEN** an event mapper declares `alias: lockOperation` and `lockOperation` is an event alias with `clusterId: 0x0101`, `eventId: 0x0002`
@@ -142,8 +142,8 @@ A resource's mapper MAY contain an `event` section with an `alias` (a string nam
 - **WHEN** a Matter event fires for a cluster/event matching an event mapper
 - **THEN** the script SHALL be invoked with the event TLV, and the returned value SHALL update the Barton resource
 
-#### Scenario: Event script suppresses update by omitting output
-- **WHEN** an event script returns an object without an `output` key (e.g., `{}`)
+#### Scenario: Event script suppresses update
+- **WHEN** an event script returns `{}` or `{ value: null }` (e.g., for non-state-change event types)
 - **THEN** the resource SHALL NOT be updated and no error SHALL be logged — this is the standard mechanism for ignoring non-state-change events
 
 ### Requirement: seedFrom mapper type

@@ -557,9 +557,14 @@ Event mappers receive `sbmdEventArgs` containing the base64-encoded TLV event da
 The script decodes the data and returns a Barton resource value.
 
 > **Note:** Any mapper script can suppress a resource update by returning `{}` or `{ value: null }`.
-> The resource is not updated in either case. This is commonly used in event mappers to ignore
-> non-state-change events (e.g. returning `{}` for `LockOperationType` values that do not change
-> lock state), and in read mappers to skip updates when a Matter attribute holds a null value.
+> The effect depends on the call context:
+> - **Subscription / event updates:** the resource value is left unchanged; no `updateResource` call is made.
+> - **Explicit reads (`read_resource`):** no value is returned to the caller (the caller receives `null`).
+> - **seedFrom:** the initial seed is skipped; the resource has no value until the first event fires.
+>
+> Suppress is commonly used in event mappers to ignore non-state-change events (e.g. returning `{}`
+> for `LockOperationType` values that do not change lock state), and in read mappers to produce no
+> value when a Matter attribute holds a null or inapplicable value.
 
 ### 4.4 SeedFrom Mapper
 
