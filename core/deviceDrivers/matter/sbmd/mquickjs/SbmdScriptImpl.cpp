@@ -137,21 +137,7 @@ SbmdScriptImpl::~SbmdScriptImpl()
 
     if (ctx)
     {
-        // JSON-escape deviceId to prevent injection if it contains quotes/backslashes
-        std::string escaped;
-        escaped.reserve(deviceId.size());
-
-        for (char c : deviceId)
-        {
-            if (c == '"' || c == '\\')
-            {
-                escaped += '\\';
-            }
-
-            escaped += c;
-        }
-
-        std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + escaped + "\");";
+        std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + deviceId + "\");";
         JSValue result = JS_Eval(ctx, cleanupScript.c_str(), cleanupScript.length(), "<sbmd-cleanup>", JS_EVAL_REPL);
 
         if (JS_IsException(result))
