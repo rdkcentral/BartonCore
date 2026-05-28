@@ -241,9 +241,15 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
 
     if (doNotify == true)
     {
-        if (restoredCallback != NULL)
+        void (*restoredCb)(const char *) = NULL;
+
+        pthread_mutex_lock(&controlMutex);
+        restoredCb = restoredCallback;
+        pthread_mutex_unlock(&controlMutex);
+
+        if (restoredCb != NULL)
         {
-            restoredCallback(uuid);
+            restoredCb(uuid);
         }
     }
 }
@@ -298,9 +304,15 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
 
     if (doNotify == true)
     {
-        if (failedCallback != NULL)
+        void (*failedCb)(const char *) = NULL;
+
+        pthread_mutex_lock(&controlMutex);
+        failedCb = failedCallback;
+        pthread_mutex_unlock(&controlMutex);
+
+        if (failedCb != NULL)
         {
-            failedCallback(uuid);
+            failedCb(uuid);
         }
     }
 }
