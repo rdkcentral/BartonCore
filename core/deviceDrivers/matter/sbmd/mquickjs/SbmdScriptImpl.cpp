@@ -115,6 +115,12 @@ namespace barton
             auto getPropertyUint = [ctx](JSValue obj, const char *key) -> std::optional<uint32_t> {
                 JSValue fv = JS_GetPropertyStr(ctx, obj, key);
 
+                if (JS_IsException(fv))
+                {
+                    icWarn("JS exception getting field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
+
                 if (JS_IsUndefined(fv) || JS_IsNull(fv))
                 {
                     return std::nullopt;
@@ -124,6 +130,7 @@ namespace barton
 
                 if (JS_ToUint32(ctx, &v, fv) < 0)
                 {
+                    icWarn("JS exception converting field '%s' to uint32: %s", key, GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -133,6 +140,12 @@ namespace barton
             // Helper: extract a named string property from a JSValue object.
             auto getPropertyStr = [ctx](JSValue obj, const char *key) -> std::optional<std::string> {
                 JSValue fv = JS_GetPropertyStr(ctx, obj, key);
+
+                if (JS_IsException(fv))
+                {
+                    icWarn("JS exception getting field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
 
                 if (JS_IsUndefined(fv) || JS_IsNull(fv))
                 {
@@ -144,6 +157,7 @@ namespace barton
 
                 if (!s)
                 {
+                    icWarn("JS exception converting field '%s' to string: %s", key, GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -153,6 +167,11 @@ namespace barton
             // Extract "error" key
             {
                 JSValue ev = JS_GetPropertyStr(ctx, outJson, "error");
+
+                if (JS_IsException(ev))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
 
                 if (!JS_IsUndefined(ev))
                 {
@@ -184,6 +203,11 @@ namespace barton
             // Extract "value" key — preserve JS type (string/bool/number/null); reject objects/arrays
             {
                 JSValue vv = JS_GetPropertyStr(ctx, outJson, "value");
+
+                if (JS_IsException(vv))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
 
                 if (!JS_IsUndefined(vv))
                 {
@@ -231,6 +255,11 @@ namespace barton
             {
                 JSValue iv = JS_GetPropertyStr(ctx, outJson, "invoke");
 
+                if (JS_IsException(iv))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
+
                 if (!JS_IsUndefined(iv))
                 {
                     if (!JS_IsNull(iv) && JS_IsPtr(iv) && !JS_IsString(ctx, iv))
@@ -277,6 +306,11 @@ namespace barton
             // Extract "write" sub-object
             {
                 JSValue wv = JS_GetPropertyStr(ctx, outJson, "write");
+
+                if (JS_IsException(wv))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
 
                 if (!JS_IsUndefined(wv))
                 {

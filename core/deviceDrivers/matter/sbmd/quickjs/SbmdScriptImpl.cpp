@@ -191,6 +191,12 @@ namespace barton
             auto getUint = [ctx, invokeObj](const char *key) -> std::optional<uint32_t> {
                 JsValueGuard fg(ctx, JS_GetPropertyStr(ctx, invokeObj, key));
 
+                if (JS_IsException(fg.get()))
+                {
+                    icWarn("JS exception getting invoke field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
+
                 if (JS_IsUndefined(fg.get()) || JS_IsNull(fg.get()))
                 {
                     return std::nullopt;
@@ -200,6 +206,9 @@ namespace barton
 
                 if (JS_ToUint32(ctx, &v, fg.get()) < 0)
                 {
+                    icWarn("JS exception converting invoke field '%s' to uint32: %s",
+                           key,
+                           GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -208,6 +217,12 @@ namespace barton
 
             auto getStr = [ctx, invokeObj](const char *key) -> std::optional<std::string> {
                 JsValueGuard fg(ctx, JS_GetPropertyStr(ctx, invokeObj, key));
+
+                if (JS_IsException(fg.get()))
+                {
+                    icWarn("JS exception getting invoke field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
 
                 if (JS_IsUndefined(fg.get()) || JS_IsNull(fg.get()))
                 {
@@ -218,6 +233,9 @@ namespace barton
 
                 if (!sg)
                 {
+                    icWarn("JS exception converting invoke field '%s' to string: %s",
+                           key,
+                           GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -260,6 +278,12 @@ namespace barton
             auto getUint = [ctx, writeObj](const char *key) -> std::optional<uint32_t> {
                 JsValueGuard fg(ctx, JS_GetPropertyStr(ctx, writeObj, key));
 
+                if (JS_IsException(fg.get()))
+                {
+                    icWarn("JS exception getting write field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
+
                 if (JS_IsUndefined(fg.get()) || JS_IsNull(fg.get()))
                 {
                     return std::nullopt;
@@ -269,6 +293,8 @@ namespace barton
 
                 if (JS_ToUint32(ctx, &v, fg.get()) < 0)
                 {
+                    icWarn(
+                        "JS exception converting write field '%s' to uint32: %s", key, GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -277,6 +303,12 @@ namespace barton
 
             auto getStr = [ctx, writeObj](const char *key) -> std::optional<std::string> {
                 JsValueGuard fg(ctx, JS_GetPropertyStr(ctx, writeObj, key));
+
+                if (JS_IsException(fg.get()))
+                {
+                    icWarn("JS exception getting write field '%s': %s", key, GetExceptionString(ctx).c_str());
+                    return std::nullopt;
+                }
 
                 if (JS_IsUndefined(fg.get()) || JS_IsNull(fg.get()))
                 {
@@ -287,6 +319,8 @@ namespace barton
 
                 if (!sg)
                 {
+                    icWarn(
+                        "JS exception converting write field '%s' to string: %s", key, GetExceptionString(ctx).c_str());
                     return std::nullopt;
                 }
 
@@ -419,6 +453,11 @@ namespace barton
             {
                 JsValueGuard ig(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "invoke"));
 
+                if (JS_IsException(ig.get()))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
+
                 if (!JS_IsUndefined(ig.get()))
                 {
                     if (JS_IsObject(ig.get()) && !JS_IsNull(ig.get()))
@@ -435,6 +474,11 @@ namespace barton
             // Extract "write" sub-object
             {
                 JsValueGuard wg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "write"));
+
+                if (JS_IsException(wg.get()))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
 
                 if (!JS_IsUndefined(wg.get()))
                 {
