@@ -140,8 +140,13 @@ namespace barton
                 result.timedInvokeTimeoutMs = static_cast<uint16_t>(invokeObj[kKeyTimedInvokeTimeoutMs].asUInt());
             }
 
-            if (invokeObj.isMember(kKeyTlvBase64) && invokeObj[kKeyTlvBase64].isString())
+            if (invokeObj.isMember(kKeyTlvBase64))
             {
+                if (!invokeObj[kKeyTlvBase64].isString())
+                {
+                    return ScriptResult::MakeError("'invoke.tlvBase64' must be a string");
+                }
+
                 std::string base64Str = invokeObj[kKeyTlvBase64].asString();
 
                 if (!DecodeTlvBase64(base64Str, result.tlvBuffer, result.tlvLength))

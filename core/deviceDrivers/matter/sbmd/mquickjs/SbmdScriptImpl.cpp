@@ -62,10 +62,14 @@ namespace barton
          */
         std::string GetExceptionString(JSContext *ctx)
         {
-            // JS_GetException transfers ownership of the exception and clears it from
-            // the context. The exception is consumed in all code paths below — the context
-            // has no pending exception regardless of which return path is taken.
+            // JS_GetException clears the exception from the context's exception slot.
+            // Register it on the GC root stack so it stays alive across any internal
+            // allocations (e.g. property lookups) that could trigger a GC pass.
+            JSGCRef ex_ref;
             JSValue ex = JS_GetException(ctx);
+            JS_PUSH_VALUE(ctx, ex);
+
+            std::string result;
 
             // First try direct string conversion (works for string exceptions)
             {
@@ -73,26 +77,32 @@ namespace barton
                 const char *str = JS_ToCString(ctx, ex, &buf);
                 if (str)
                 {
-                    return std::string(str);
+                    result = str;
                 }
             }
 
             // If that fails, try to get the "message" property (for Error objects)
-            if (JS_IsPtr(ex))
+            if (result.empty() && JS_IsPtr(ex))
             {
+                JSGCRef msgVal_ref;
                 JSValue msgVal = JS_GetPropertyStr(ctx, ex, "message");
+                JS_PUSH_VALUE(ctx, msgVal);
+
                 if (!JS_IsUndefined(msgVal))
                 {
                     JSCStringBuf buf;
                     const char *msgStr = JS_ToCString(ctx, msgVal, &buf);
                     if (msgStr)
                     {
-                        return std::string(msgStr);
+                        result = msgStr;
                     }
                 }
+
+                JS_POP_VALUE(ctx, msgVal);
             }
 
-            return "unknown error";
+            JS_POP_VALUE(ctx, ex);
+            return result.empty() ? "unknown error" : result;
         }
 
         // Convert the script output JSValue to a ScriptResult.
