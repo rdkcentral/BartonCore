@@ -160,7 +160,7 @@ namespace barton
                     {
                         jv["error"] = Json::Value(); // null → type error in FromJsonValue
                     }
-                    else
+                    else if (JS_IsString(ctx, ev))
                     {
                         JSCStringBuf buf;
                         const char *s = JS_ToCString(ctx, ev, &buf);
@@ -169,11 +169,19 @@ namespace barton
                         {
                             jv["error"] = std::string(s);
                         }
+                        else
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+                    }
+                    else
+                    {
+                        jv["error"] = Json::Value(); // non-string → type error in FromJsonValue
                     }
                 }
             }
 
-            // Extract "value" key (JS_ToCString coerces booleans/numbers to strings)
+            // Extract "value" key — preserve JS type (string/bool/number/null); reject objects/arrays
             {
                 JSValue vv = JS_GetPropertyStr(ctx, outJson, "value");
 
@@ -183,7 +191,7 @@ namespace barton
                     {
                         jv["value"] = Json::Value(); // null → suppress signal
                     }
-                    else
+                    else if (JS_IsString(ctx, vv))
                     {
                         JSCStringBuf buf;
                         const char *s = JS_ToCString(ctx, vv, &buf);
@@ -192,6 +200,29 @@ namespace barton
                         {
                             jv["value"] = std::string(s);
                         }
+                        else
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+                    }
+                    else if (JS_IsBool(vv))
+                    {
+                        jv["value"] = static_cast<bool>(JS_VALUE_GET_SPECIAL_VALUE(vv));
+                    }
+                    else if (JS_IsNumber(ctx, vv))
+                    {
+                        double d = 0.0;
+
+                        if (JS_ToNumber(ctx, &d, vv) < 0)
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+
+                        jv["value"] = d;
+                    }
+                    else
+                    {
+                        return ScriptResult::MakeError("'value' field must be a string, number, boolean, or null");
                     }
                 }
             }

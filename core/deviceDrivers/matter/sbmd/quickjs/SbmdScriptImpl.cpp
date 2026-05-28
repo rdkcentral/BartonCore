@@ -327,13 +327,18 @@ namespace barton
             {
                 JsValueGuard eg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "error"));
 
+                if (JS_IsException(eg.get()))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
+
                 if (!JS_IsUndefined(eg.get()))
                 {
                     if (JS_IsNull(eg.get()))
                     {
                         jv["error"] = Json::Value(); // null → type error in FromJsonValue
                     }
-                    else
+                    else if (JS_IsString(eg.get()))
                     {
                         JsCStringGuard sg(ctx, JS_ToCString(ctx, eg.get()));
 
@@ -341,13 +346,26 @@ namespace barton
                         {
                             jv["error"] = std::string(sg.get());
                         }
+                        else
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+                    }
+                    else
+                    {
+                        jv["error"] = Json::Value(); // non-string → type error in FromJsonValue
                     }
                 }
             }
 
-            // Extract "value" key (JS_ToCString auto-coerces booleans and numbers to strings)
+            // Extract "value" key — preserve JS type (string/bool/number/null); reject objects/arrays
             {
                 JsValueGuard vg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "value"));
+
+                if (JS_IsException(vg.get()))
+                {
+                    return ScriptResult::MakeError(GetExceptionString(ctx));
+                }
 
                 if (!JS_IsUndefined(vg.get()))
                 {
@@ -355,7 +373,7 @@ namespace barton
                     {
                         jv["value"] = Json::Value(); // null → suppress signal
                     }
-                    else
+                    else if (JS_IsString(vg.get()))
                     {
                         JsCStringGuard sg(ctx, JS_ToCString(ctx, vg.get()));
 
@@ -363,6 +381,36 @@ namespace barton
                         {
                             jv["value"] = std::string(sg.get());
                         }
+                        else
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+                    }
+                    else if (JS_IsBool(vg.get()))
+                    {
+                        int bval = JS_ToBool(ctx, vg.get());
+
+                        if (bval < 0)
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+
+                        jv["value"] = static_cast<bool>(bval);
+                    }
+                    else if (JS_IsNumber(vg.get()))
+                    {
+                        double d = 0.0;
+
+                        if (JS_ToFloat64(ctx, &d, vg.get()) < 0)
+                        {
+                            return ScriptResult::MakeError(GetExceptionString(ctx));
+                        }
+
+                        jv["value"] = d;
+                    }
+                    else
+                    {
+                        return ScriptResult::MakeError("'value' field must be a string, number, boolean, or null");
                     }
                 }
             }

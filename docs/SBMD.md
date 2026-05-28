@@ -1339,7 +1339,9 @@ Scripts that fail will:
 
 Common error causes:
 - Syntax errors in JavaScript
-- Missing `value` field in return value (returned `{}` where a value was expected)
+- Non-object return value (script returned a string, number, or `undefined` instead of an object)
+- Malformed `invoke` or `write` object (missing required fields such as `clusterId`, `commandId`, or `tlvBase64`)
+- Returning `{}` or `{ value: null }` from a write or execute mapper (suppress is not meaningful there — an operation is required)
 - Type mismatches in TLV conversion
 - Undefined variables or properties
 - Invalid Base64 input passed to `SbmdUtils.Tlv.decode()` or `SbmdUtils.Base64.decode()`

@@ -1061,7 +1061,8 @@
 
         /**
          * Create an error response.
-         * The engine logs the message and skips the resource update.
+         * The engine treats this as a script failure; handling depends on the call context
+         * (e.g. aborts a write/execute, or logs and skips an update for attribute/event reads).
          * @param {string} msg - Human-readable error message
          * @returns {Object} Error response object: { error: string }
          */
