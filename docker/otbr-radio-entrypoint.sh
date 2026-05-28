@@ -27,19 +27,17 @@
 #   1. D-Bus system bus
 #   2. avahi-daemon  (mDNS/DNS-SD — required by otbr-agent built with OTBR_MDNS=avahi)
 #   3. cpcd  (CPC daemon — USB serial ↔ CPC socket)
-#      OR CPC socket proxy client (when CPC_REMOTE_HOST is set)
 #   4. otbr-agent  (Thread Border Router — CPC socket ↔ D-Bus API)
 #
 # Environment variables:
 #   RADIO_DEVICE              - host path of the USB serial device. The compose
 #                               overlay requires this to be set explicitly.
-#                               Not required when CPC_REMOTE_HOST is set.
-#   CPC_REMOTE_HOST           - when set, connect to a remote cpcd via the CPC
-#                               socket proxy instead of running cpcd locally.
-#                               The remote host must be running
-#                               cpc_remote_access.sh in server mode.
-#   CPC_REMOTE_PORT           - base port for the CPC socket proxy
-#                               (default: 15000)
+#                               Not required when RADIO_HOST/RADIO_PORT are set.
+#   RADIO_HOST                - when set (with RADIO_PORT), connect to a remote
+#                               serial tunnel instead of using a local device.
+#                               The workstation runs remote-serial.py to forward
+#                               its serial port via SSH.
+#   RADIO_PORT                - TCP port for the remote serial tunnel.
 #   CPC_INSTANCE              - CPC daemon instance name (default: cpcd_0)
 #   BACKBONE_IF               - network interface to use as the Thread backbone,
 #                               e.g. eth0
@@ -48,17 +46,17 @@
 #   DBUS_SOCKET_PATH          - socket path for the private system bus
 #   DBUS_SYSTEM_BUS_ADDRESS   - D-Bus address used by otbr-agent and clients
 #
-# See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for USB-IP setup and hardware info.
+# See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup and hardware info.
 #
 
 set -e
 
 # RADIO_DEVICE is intentionally not defaulted here.
 # If it is unset or empty the validation section below will exit with a
-# clear error message (unless CPC_REMOTE_HOST is set).
-RADIO_DEVICE="${RADIO_DEVICE}"
-CPC_REMOTE_HOST="${CPC_REMOTE_HOST:-}"
-CPC_REMOTE_PORT="${CPC_REMOTE_PORT:-15000}"
+# clear error message (unless RADIO_HOST/RADIO_PORT are set for remote serial).
+RADIO_DEVICE="${RADIO_DEVICE:-}"
+RADIO_HOST="${RADIO_HOST:-host.docker.internal}"
+RADIO_PORT="${RADIO_PORT:-}"
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
 CPCD_CONF="${CPCD_CONF:-/usr/local/etc/cpcd.conf}"
 DBUS_DIR="${DBUS_DIR:-/var/run/otbr-dbus}"
@@ -83,6 +81,13 @@ else
     fi
     echo "[otbr-radio] Auto-detected backbone interface: ${BACKBONE_IF}"
 fi
+
+# Accept Router Advertisements even with forwarding=1.
+# The kernel drops RAs when forwarding is enabled unless accept_ra=2.
+# This is an interface-specific sysctl that cannot be set via Docker Compose
+# sysctls (Docker requires the driver option syntax for those), so we set it
+# here since the container is privileged.
+sysctl -qw "net.ipv6.conf.${BACKBONE_IF}.accept_ra=2" 2>/dev/null || true
 
 ###############################################################################
 # 1. Start a private D-Bus system bus
@@ -110,98 +115,116 @@ echo "[otbr-radio] Private D-Bus started."
 # Two modes are supported:
 #   a) Local radio (default): RADIO_DEVICE must point to a USB serial device.
 #      cpcd is started locally to manage the CPC link.
-#   b) Remote CPC: CPC_REMOTE_HOST is set.  A CPC socket proxy client connects
-#      to a remote cpcd over TCP, creating local Unix sockets that libcpc
-#      applications (bt_host_cpc_hci_bridge, otbr-agent) use transparently.
+#   b) Remote serial tunnel: RADIO_HOST and RADIO_PORT are set.  A socat
+#      process bridges the remote TCP serial tunnel to a local PTY that cpcd
+#      opens as if it were a directly-attached USB serial device.
+#      The workstation runs scripts/remote-radio/remote-serial.py to forward
+#      its local serial port over an SSH tunnel to this container.
 ###############################################################################
-CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
 
-if [ -n "${CPC_REMOTE_HOST}" ]; then
+if [ -n "${RADIO_PORT}" ]; then
     #--------------------------------------------------------------------------
-    # Remote CPC mode — connect to cpcd running on a remote host via the
-    # CPC socket proxy.
+    # Remote serial tunnel mode — create a virtual serial device via socat
+    # that connects to the SSH-tunnelled serial port on the workstation.
+    # RADIO_HOST defaults to host.docker.internal (Docker's built-in DNS
+    # for the host machine).
     #--------------------------------------------------------------------------
-    echo "[otbr-radio] Remote CPC mode: connecting to cpcd on ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT}"
+    echo "[otbr-radio] Remote serial mode: connecting to ${RADIO_HOST}:${RADIO_PORT}"
 
-    CPC_PROXY_SCRIPT="/opt/cpc-proxy/cpc_socket_proxy.py"
-    CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
-    mkdir -p "${CPC_SOCKET_BASE}"
+    VIRTUAL_TTY="/dev/ttyRadio"
 
-    # Start proxy for the control socket.
-    echo "[otbr-radio] Starting CPC proxy: ctrl.cpcd.sock (port ${CPC_REMOTE_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/ctrl.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_REMOTE_PORT}" &
-
-    # Start proxy for the reset socket.
-    CPC_RESET_PORT=$((CPC_REMOTE_PORT + 1))
-    echo "[otbr-radio] Starting CPC proxy: reset.cpcd.sock (port ${CPC_RESET_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/reset.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_RESET_PORT}" &
-
-    # Start proxies for the Bluetooth RCP endpoint.
-    # bt_host_cpc_hci_bridge opens SL_CPC_ENDPOINT_BLUETOOTH_RCP which is 14
-    # in cpcd v4.4.6 (host library sl_cpc.h).
-    CPC_BT_EP=14
-    CPC_BT_DATA_PORT=$((CPC_REMOTE_PORT + 100 + CPC_BT_EP))
-    CPC_BT_EVENT_PORT=$((CPC_REMOTE_PORT + 400 + CPC_BT_EP))
-    echo "[otbr-radio] Starting CPC proxy: ep${CPC_BT_EP}.cpcd.sock (port ${CPC_BT_DATA_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/ep${CPC_BT_EP}.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_BT_DATA_PORT}" &
-    echo "[otbr-radio] Starting CPC proxy: ep${CPC_BT_EP}.event.cpcd.sock (port ${CPC_BT_EVENT_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/ep${CPC_BT_EP}.event.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_BT_EVENT_PORT}" &
-
-    # Start proxies for the OpenThread/Spinel endpoint.
-    # otbr-agent uses spinel+cpc://cpcd_0 which maps to
-    # SL_CPC_ENDPOINT_15_4 (12) in cpcd v4.4.6 for multi-PAN RCP firmware.
-    CPC_SPINEL_EP=12
-    CPC_SPINEL_DATA_PORT=$((CPC_REMOTE_PORT + 100 + CPC_SPINEL_EP))
-    CPC_SPINEL_EVENT_PORT=$((CPC_REMOTE_PORT + 400 + CPC_SPINEL_EP))
-    echo "[otbr-radio] Starting CPC proxy: ep${CPC_SPINEL_EP}.cpcd.sock (port ${CPC_SPINEL_DATA_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/ep${CPC_SPINEL_EP}.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_SPINEL_DATA_PORT}" &
-    echo "[otbr-radio] Starting CPC proxy: ep${CPC_SPINEL_EP}.event.cpcd.sock (port ${CPC_SPINEL_EVENT_PORT})"
-    python3 "${CPC_PROXY_SCRIPT}" client \
-        -s "${CPC_SOCKET_BASE}/ep${CPC_SPINEL_EP}.event.cpcd.sock" \
-        -H "${CPC_REMOTE_HOST}" -p "${CPC_SPINEL_EVENT_PORT}" &
-
-    # Give the proxies a moment to establish connections.
-    sleep 2
-
-    # Verify the control socket was created.
-    if [ ! -S "${CPC_SOCKET_BASE}/ctrl.cpcd.sock" ]; then
-        echo "[otbr-radio] ERROR: CPC proxy failed to create ctrl.cpcd.sock." >&2
-        echo "[otbr-radio]        Check that ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT} is reachable" >&2
-        echo "[otbr-radio]        and cpc_remote_access.sh server is running." >&2
-        exit 1
-    fi
-    echo "[otbr-radio] CPC proxy client connected to ${CPC_REMOTE_HOST}."
-
-else
-    #--------------------------------------------------------------------------
-    # Local radio mode — validate RADIO_DEVICE and start cpcd.
-    #--------------------------------------------------------------------------
-    if [ -z "${RADIO_DEVICE}" ]; then
-        echo "[otbr-radio] ERROR: Neither RADIO_DEVICE nor CPC_REMOTE_HOST is set." >&2
-        echo "[otbr-radio]        Set RADIO_DEVICE for a local radio:" >&2
-        echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
-        echo "[otbr-radio]        Or set CPC_REMOTE_HOST for a remote cpcd:" >&2
-        echo "[otbr-radio]            export CPC_REMOTE_HOST=10.0.0.1" >&2
-        exit 1
+    # Resolve RADIO_HOST to an IPv4 address.  The SSH reverse tunnel binds on
+    # 0.0.0.0 (IPv4 only), so we must connect via IPv4 even when the Docker
+    # host-gateway resolves to an IPv6 address.
+    RADIO_HOST_V4=$(getent ahostsv4 "${RADIO_HOST}" 2>/dev/null | awk '{print $1; exit}')
+    if [ -z "${RADIO_HOST_V4}" ]; then
+        echo "[otbr-radio] WARNING: Could not resolve ${RADIO_HOST} to IPv4; using as-is"
+        RADIO_HOST_V4="${RADIO_HOST}"
+    else
+        echo "[otbr-radio] Resolved ${RADIO_HOST} → ${RADIO_HOST_V4} (IPv4)"
     fi
 
+    # socat creates a PTY linked to the remote TCP stream.  Retry with
+    # backoff until the SSH tunnel is reachable.  The 'forever' and
+    # 'intervall' options make socat reconnect automatically if the TCP
+    # connection drops (self-healing).
+    SOCAT_WAIT_MAX=60
+    socatWaitCount=0
+    echo "[otbr-radio] Waiting for remote serial tunnel at ${RADIO_HOST_V4}:${RADIO_PORT}..."
+
+    while ! timeout 2 bash -c ": >/dev/tcp/${RADIO_HOST_V4}/${RADIO_PORT}" 2>/dev/null; do
+
+        if [ ${socatWaitCount} -ge ${SOCAT_WAIT_MAX} ]; then
+            echo "[otbr-radio] ERROR: Remote serial tunnel at ${RADIO_HOST_V4}:${RADIO_PORT} not reachable after ${SOCAT_WAIT_MAX}s." >&2
+            echo "[otbr-radio]        Ensure remote-serial.py is running on your workstation." >&2
+            echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
+            exit 1
+        fi
+
+        sleep 2
+        socatWaitCount=$((socatWaitCount + 2))
+    done
+
+    echo "[otbr-radio] Remote serial tunnel is reachable.  Starting socat bridge..."
+    rm -f "${VIRTUAL_TTY}"
+
+    # Start socat:  TCP connection → PTY device
+    #   - TCP4: force IPv4 (the SSH reverse tunnel binds on 0.0.0.0, not [::])
+    #   - b115200: match the radio baud rate
+    #   - raw,echo=0: pass bytes through unmodified
+    #   - link=: create a named symlink to the PTY
+    #   - forever,intervall=3: reconnect on TCP drops every 3s (self-healing)
+    #   NOTE: do NOT use wait-slave — it ties socat's TCP lifecycle to the
+    #   PTY slave state.  If cpcd briefly closes/reopens the device during
+    #   CPC init retries, wait-slave causes socat to disconnect TCP and
+    #   destroy the relay connection.
+    socat \
+        "TCP4:${RADIO_HOST_V4}:${RADIO_PORT},forever,intervall=3,keepalive,keepidle=10,keepintvl=5,keepcnt=3" \
+        "PTY,link=${VIRTUAL_TTY},raw,echo=0,b115200" &
+    SOCAT_PID=$!
+
+    # Wait for the PTY symlink to appear.
+    socatPtyWait=0
+
+    while [ ! -L "${VIRTUAL_TTY}" ]; do
+
+        if ! kill -0 ${SOCAT_PID} 2>/dev/null; then
+            echo "[otbr-radio] ERROR: socat exited before creating ${VIRTUAL_TTY}." >&2
+            exit 1
+        fi
+
+        if [ ${socatPtyWait} -ge 10 ]; then
+            echo "[otbr-radio] ERROR: socat did not create ${VIRTUAL_TTY} after 10s." >&2
+            exit 1
+        fi
+
+        sleep 1
+        socatPtyWait=$((socatPtyWait + 1))
+    done
+
+    RADIO_DEVICE="${VIRTUAL_TTY}"
+    echo "[otbr-radio] Virtual serial device ready: ${RADIO_DEVICE} (via ${RADIO_HOST_V4}:${RADIO_PORT})"
+
+elif [ -n "${RADIO_DEVICE}" ]; then
+    #--------------------------------------------------------------------------
+    # Local radio mode — validate RADIO_DEVICE directly.
+    #--------------------------------------------------------------------------
     if [ ! -e "${RADIO_DEVICE}" ]; then
         echo "[otbr-radio] ERROR: USB radio device '${RADIO_DEVICE}' not found." >&2
-        echo "[otbr-radio]        Check that the thread radio is connected and USB-IP is attached." >&2
+        echo "[otbr-radio]        Check that the radio is connected." >&2
         echo "[otbr-radio]        See docs/REMOTE_RADIO_FOR_DEVELOPMENT.md for setup instructions." >&2
         exit 1
     fi
+
     echo "[otbr-radio] Using USB radio device: ${RADIO_DEVICE}"
+
+else
+    echo "[otbr-radio] ERROR: No radio configured." >&2
+    echo "[otbr-radio]        Set RADIO_DEVICE for a locally attached radio:" >&2
+    echo "[otbr-radio]            export RADIO_DEVICE=/dev/ttyACM0" >&2
+    echo "[otbr-radio]        Or set RADIO_PORT for a remote serial tunnel:" >&2
+    echo "[otbr-radio]            export RADIO_PORT=21000" >&2
+    exit 1
 fi
 
 ###############################################################################
@@ -213,18 +236,27 @@ avahi-daemon --daemonize --no-chroot
 echo "[otbr-radio] avahi-daemon started."
 
 ###############################################################################
-# 4. Configure and start cpcd (local radio mode only)
+# 4. Configure and start cpcd
 #
 # Always write a fresh config so we fully control all keys.
 # The cpcd installed config uses 'uart_device_file' (not 'uart_device'), so
 # patching the existing file would silently fail leaving the wrong device path.
 #
-# Skipped when CPC_REMOTE_HOST is set — the CPC proxy handles connectivity.
+# In remote serial tunnel mode, RADIO_DEVICE has been set to the socat-created
+# PTY (/dev/ttyRadio) by step 2 above.  cpcd treats it identically to a
+# directly-attached USB serial device.
+#
+# Note: even for remote serial tunnels, uart_hardflow must be 'true' because
+# the radio's firmware has hardware flow control enabled.  cpcd checks the
+# radio's capability flags during init and exits with FATAL if there is a
+# mismatch.  On the PTY, CRTSCTS is accepted by the kernel but is a no-op
+# (no physical RTS/CTS lines).  Actual flow control happens on the physical
+# serial port at the workstation relay side.
 ###############################################################################
-if [ -z "${CPC_REMOTE_HOST}" ]; then
-    echo "[otbr-radio] Writing cpcd config to ${CPCD_CONF}..."
-    mkdir -p "$(dirname "${CPCD_CONF}")"
-    cat > "${CPCD_CONF}" <<EOF
+
+echo "[otbr-radio] Writing cpcd config to ${CPCD_CONF}..."
+mkdir -p "$(dirname "${CPCD_CONF}")"
+cat > "${CPCD_CONF}" <<EOF
 # cpcd configuration — written at container startup by otbr-radio-entrypoint.sh
 instance_name: ${CPC_INSTANCE}
 bus_type: UART
@@ -233,33 +265,39 @@ uart_device_baud: 115200
 uart_hardflow: true
 EOF
 
-    echo "[otbr-radio] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
-    CPCD_LOG="/tmp/cpcd.log"
-    : > "${CPCD_LOG}"
-    cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
-    CPCD_PID=$!
+echo "[otbr-radio] Starting cpcd (instance: ${CPC_INSTANCE}, device: ${RADIO_DEVICE})..."
+CPCD_LOG="/tmp/cpcd.log"
+: > "${CPCD_LOG}"
+# stdbuf -oL forces line-buffered stdout so 'grep' can detect the ready
+# message promptly even though cpcd's output is going through a pipe.
+stdbuf -oL cpcd --conf "${CPCD_CONF}" > >(tee "${CPCD_LOG}") 2>&1 &
+CPCD_PID=$!
 
-    # Wait until cpcd logs its ready message, meaning it has fully connected to the
-    # secondary and is accepting client connections.
-    CPCD_WAIT_MAX=30
-    cpcdWaitCount=0
-    echo "[otbr-radio] Waiting for cpcd to be ready..."
-    while ! grep -q "Daemon startup was successful" "${CPCD_LOG}" 2>/dev/null; do
-        if ! kill -0 ${CPCD_PID} 2>/dev/null; then
-            echo "[otbr-radio] ERROR: cpcd exited before becoming ready. Check device and firmware." >&2
-            cat "${CPCD_LOG}" >&2
-            exit 1
-        fi
-        if [ ${cpcdWaitCount} -ge ${CPCD_WAIT_MAX} ]; then
-            echo "[otbr-radio] ERROR: cpcd did not become ready after ${CPCD_WAIT_MAX}s." >&2
-            cat "${CPCD_LOG}" >&2
-            exit 1
-        fi
-        sleep 1
-        cpcdWaitCount=$((cpcdWaitCount + 1))
-    done
-    echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
-fi
+# Wait until cpcd logs its ready message, meaning it has fully connected to the
+# secondary and is accepting client connections.
+CPCD_WAIT_MAX=30
+cpcdWaitCount=0
+echo "[otbr-radio] Waiting for cpcd to be ready..."
+
+while ! grep -q "Daemon startup was successful" "${CPCD_LOG}" 2>/dev/null; do
+
+    if ! kill -0 ${CPCD_PID} 2>/dev/null; then
+        echo "[otbr-radio] ERROR: cpcd exited before becoming ready. Check device and firmware." >&2
+        cat "${CPCD_LOG}" >&2
+        exit 1
+    fi
+
+    if [ ${cpcdWaitCount} -ge ${CPCD_WAIT_MAX} ]; then
+        echo "[otbr-radio] ERROR: cpcd did not become ready after ${CPCD_WAIT_MAX}s." >&2
+        cat "${CPCD_LOG}" >&2
+        exit 1
+    fi
+
+    sleep 1
+    cpcdWaitCount=$((cpcdWaitCount + 1))
+done
+
+echo "[otbr-radio] cpcd ready (PID ${CPCD_PID}, waited ${cpcdWaitCount}s)."
 
 ###############################################################################
 # 5. Start bt_host_cpc_hci_bridge (CPC → virtual HCI serial device)

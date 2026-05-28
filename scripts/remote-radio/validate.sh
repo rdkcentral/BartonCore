@@ -1,16 +1,38 @@
 #!/bin/bash
 # ------------------------------ tabstop = 4 ----------------------------------
 #
-# CPC Remote Radio Validation Script
+# If not stated otherwise in this file or this component's LICENSE file the
+# following copyright and licenses apply:
 #
-# Performs a detailed check of all requirements for the CPC remote radio
-# chain to function correctly.  Run this inside the Barton or otbr-radio
+# Copyright 2026 Comcast Cable Communications Management, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ------------------------------ tabstop = 4 ----------------------------------
+
+#
+# Radio Validation Script
+#
+# Performs a detailed check of all requirements for the real-radio chain
+# to function correctly.  Run this inside the Barton or otbr-radio
 # container to diagnose connectivity, BLE chain, and runtime issues.
 #
 # Usage:
-#   ./cpc_validate.sh              # Run all checks
-#   ./cpc_validate.sh --fix        # Attempt to fix common issues
-#   ./cpc_validate.sh --json       # Output results as JSON (for automation)
+#   ./validate.sh              # Run all checks
+#   ./validate.sh --fix        # Attempt to fix common issues
+#   ./validate.sh --json       # Output results as JSON (for automation)
 #
 # Exit codes:
 #   0  All checks passed
@@ -38,14 +60,79 @@ if [ ! -f /entrypoint.sh ] || ! grep -q "otbr-radio" /entrypoint.sh 2>/dev/null;
     OTBR_CONTAINER=""
 
     # Determine docker command (with or without sudo).
+    # The barton devcontainer does not have the Docker CLI installed but does
+    # bind-mount the Docker socket.  Fall back to the curl+API approach when
+    # the docker command is unavailable.
     DOCKER_CMD=""
+    USE_CURL_API=false
     if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then
         DOCKER_CMD="docker"
-    elif command -v sudo >/dev/null 2>&1 && sudo docker ps >/dev/null 2>&1; then
+    elif command -v docker >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo docker ps >/dev/null 2>&1; then
         DOCKER_CMD="sudo docker"
+    elif [ -S /var/run/docker.sock ]; then
+        USE_CURL_API=true
     fi
 
-    if [ -n "$DOCKER_CMD" ]; then
+    if [ "$USE_CURL_API" = true ]; then
+        # Use the Docker Engine API via curl to find the otbr-radio container.
+        _DOCKER_API="http://localhost/v1.45"
+        _CURL="curl -s --unix-socket /var/run/docker.sock"
+        _SUDO=""
+        # Socket may require sudo for access.
+        if ! $_CURL "$_DOCKER_API/_ping" >/dev/null 2>&1; then
+            _CURL="sudo curl -s --unix-socket /var/run/docker.sock"
+        fi
+
+        # Get our own compose project from our hostname (container ID).
+        COMPOSE_PROJECT=$($_CURL "$_DOCKER_API/containers/$(hostname)/json" 2>/dev/null \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['Config']['Labels'].get('com.docker.compose.project',''))" 2>/dev/null) || true
+
+        if [ -n "$COMPOSE_PROJECT" ]; then
+            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22label%22%3A%5B%22com.docker.compose.project%3D${COMPOSE_PROJECT}%22%5D%2C%22name%22%3A%5B%22otbr-radio%22%5D%7D" 2>/dev/null \
+                | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
+        fi
+
+        if [ -z "$OTBR_CONTAINER" ]; then
+            OTBR_CONTAINER=$($_CURL "$_DOCKER_API/containers/json?filters=%7B%22name%22%3A%5B%22otbr-radio%22%5D%7D" 2>/dev/null \
+                | python3 -c "import json,sys; cs=json.load(sys.stdin); print(cs[0]['Names'][0].lstrip('/') if cs else '')" 2>/dev/null) || true
+        fi
+
+        if [ -n "$OTBR_CONTAINER" ]; then
+            echo "Not in otbr-radio container — re-executing inside ${OTBR_CONTAINER}..."
+            echo ""
+            # Use the Docker Engine API to exec into the container.
+            # Read the script content, base64-encode it, and pass as a
+            # command argument to avoid Docker exec stdin piping issues.
+            _ESCAPED_ARGS=""
+            for arg in "$@"; do
+                _ESCAPED_ARGS="${_ESCAPED_ARGS}, \"${arg}\""
+            done
+            _SCRIPT_B64=$(base64 -w0 "$0")
+            _EXEC_ID=$($_CURL -X POST "$_DOCKER_API/containers/${OTBR_CONTAINER}/exec" \
+                -H "Content-Type: application/json" \
+                -d "{\"Cmd\":[\"bash\", \"-c\", \"echo ${_SCRIPT_B64} | base64 -d | bash -s -- ${*}\"],\"AttachStdout\":true,\"AttachStderr\":true}" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin)['Id'])")
+            # Start the exec and demux the Docker multiplexed stream.
+            $_CURL -X POST "$_DOCKER_API/exec/${_EXEC_ID}/start" \
+                -H "Content-Type: application/json" \
+                -d '{"Detach":false}' \
+                | python3 -c "
+import sys
+buf = sys.stdin.buffer.read()
+i = 0
+while i + 8 <= len(buf):
+    size = int.from_bytes(buf[i+4:i+8], 'big')
+    if i + 8 + size <= len(buf):
+        sys.stdout.buffer.write(buf[i+8:i+8+size])
+    i += 8 + size
+sys.stdout.buffer.flush()
+"
+            # Get the exit code from the exec instance.
+            _EXIT=$($_CURL "$_DOCKER_API/exec/${_EXEC_ID}/json" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin).get('ExitCode',1))")
+            exit "${_EXIT}"
+        fi
+    elif [ -n "$DOCKER_CMD" ]; then
         # If we're inside a Compose-managed container, read the project label
         # from our own container to scope the search.
         COMPOSE_PROJECT=$($DOCKER_CMD inspect "$(hostname)" \
@@ -84,8 +171,9 @@ fi
 # Configuration
 ###############################################################################
 CPC_INSTANCE="${CPC_INSTANCE:-cpcd_0}"
-CPC_REMOTE_HOST="${CPC_REMOTE_HOST:-}"
-CPC_REMOTE_PORT="${CPC_REMOTE_PORT:-15000}"
+RADIO_PORT="${RADIO_PORT:-}"
+RADIO_HOST="${RADIO_HOST:-host.docker.internal}"
+RADIO_DEVICE="${RADIO_DEVICE:-}"
 CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm}"
 CPC_SOCKET_BASE="${CPC_SOCKET_DIR}/cpcd/${CPC_INSTANCE}"
 DBUS_DIR="${DBUS_DIR:-/var/run/otbr-dbus}"
@@ -93,7 +181,6 @@ DBUS_SOCKET_PATH="${DBUS_SOCKET_PATH:-${DBUS_DIR}/system_bus_socket}"
 HOST_NETNS="/run/host-netns"
 BT_BRIDGE_DIR="/var/run/bt-hci-bridge"
 HCI_PROXY_SCRIPT="/opt/cpc-proxy/hci_pty_proxy.py"
-CPC_PROXY_SCRIPT="/opt/cpc-proxy/cpc_socket_proxy.py"
 
 FIX_MODE=false
 JSON_MODE=false
@@ -188,13 +275,7 @@ check_container_env() {
         fail "Host netns mount" "${HOST_NETNS} not found — BLE will not work"
     fi
 
-    # Required bind-mounts
-    if [ -f "${CPC_PROXY_SCRIPT}" ]; then
-        pass "CPC proxy script" "${CPC_PROXY_SCRIPT} present"
-    else
-        fail "CPC proxy script" "${CPC_PROXY_SCRIPT} not found"
-    fi
-
+    # HCI PTY proxy script
     if [ -f "${HCI_PROXY_SCRIPT}" ]; then
         pass "HCI PTY proxy script" "${HCI_PROXY_SCRIPT} present"
     else
@@ -202,7 +283,7 @@ check_container_env() {
     fi
 
     # Required commands
-    for cmd in btattach bluetoothd hcitool hciconfig nsenter bt_host_cpc_hci_bridge python3; do
+    for cmd in btattach bluetoothd hcitool hciconfig nsenter bt_host_cpc_hci_bridge python3 socat cpcd; do
         if command -v "$cmd" >/dev/null 2>&1; then
             pass "Command: $cmd" "$(command -v "$cmd")"
         else
@@ -256,52 +337,90 @@ check_dbus() {
 }
 
 ###############################################################################
-# Section 3: CPC Connectivity
+# Section 3: Radio Connection
 ###############################################################################
-check_cpc() {
-    section "CPC Connectivity"
+check_radio() {
+    section "Radio Connection"
 
-    if [ -z "${CPC_REMOTE_HOST}" ]; then
-        skip "CPC remote mode" "CPC_REMOTE_HOST not set — local mode"
-        # Check for local cpcd
-        local cpcd_pid
-        cpcd_pid=$(pgrep -x cpcd 2>/dev/null | head -1) || true
-        if [ -n "$cpcd_pid" ]; then
-            pass "cpcd process" "PID $cpcd_pid"
+    if [ -n "${RADIO_PORT}" ]; then
+        #----------------------------------------------------------------------
+        # Remote serial tunnel mode
+        #----------------------------------------------------------------------
+        pass "Radio mode" "Remote serial tunnel (port ${RADIO_PORT})"
+
+        # Resolve to IPv4 (the SSH tunnel binds on 0.0.0.0)
+        local radio_host_v4
+        radio_host_v4=$(getent ahostsv4 "${RADIO_HOST}" 2>/dev/null | awk '{print $1; exit}') || true
+        if [ -z "${radio_host_v4}" ]; then
+            radio_host_v4="${RADIO_HOST}"
+        fi
+
+        # TCP connectivity to the tunnel endpoint
+        if timeout 3 bash -c "echo >/dev/tcp/${radio_host_v4}/${RADIO_PORT}" 2>/dev/null; then
+            pass "Tunnel TCP connectivity" "${radio_host_v4}:${RADIO_PORT} reachable"
         else
-            fail "cpcd process" "cpcd not running"
+            fail "Tunnel TCP connectivity" "Cannot connect to ${radio_host_v4}:${RADIO_PORT} — is remote-serial.py running on your workstation?"
+        fi
+
+        # socat process
+        local socat_pid
+        socat_pid=$(pgrep -x socat 2>/dev/null | head -1) || true
+        if [ -n "$socat_pid" ]; then
+            if is_process_alive "$socat_pid"; then
+                pass "socat bridge" "PID $socat_pid (alive)"
+            else
+                fail "socat bridge" "PID $socat_pid (ZOMBIE)"
+            fi
+        else
+            fail "socat bridge" "socat not running — virtual serial device will not exist"
+        fi
+
+        # Virtual PTY device
+        if [ -L "/dev/ttyRadio" ]; then
+            local pty_target
+            pty_target=$(readlink -f "/dev/ttyRadio" 2>/dev/null) || pty_target=""
+            if [ -c "$pty_target" ]; then
+                pass "Virtual serial device" "/dev/ttyRadio → ${pty_target}"
+            else
+                fail "Virtual serial device" "/dev/ttyRadio exists but target ${pty_target} is not a character device"
+            fi
+        else
+            fail "Virtual serial device" "/dev/ttyRadio not found — socat may not have started"
+        fi
+
+    elif [ -n "${RADIO_DEVICE}" ]; then
+        #----------------------------------------------------------------------
+        # Local USB radio mode
+        #----------------------------------------------------------------------
+        pass "Radio mode" "Local USB (${RADIO_DEVICE})"
+
+        if [ -e "${RADIO_DEVICE}" ]; then
+            pass "Radio device" "${RADIO_DEVICE} exists"
+            if [ -c "${RADIO_DEVICE}" ]; then
+                pass "Radio device type" "Character device"
+            else
+                warn "Radio device type" "Not a character device"
+            fi
+        else
+            fail "Radio device" "${RADIO_DEVICE} not found — is the radio connected?"
+        fi
+
+    else
+        fail "Radio mode" "Neither RADIO_PORT nor RADIO_DEVICE is set"
+        return
+    fi
+
+    # cpcd process (runs in both modes)
+    local cpcd_pid
+    cpcd_pid=$(pgrep -x cpcd 2>/dev/null | head -1) || true
+    if [ -n "$cpcd_pid" ]; then
+        if is_process_alive "$cpcd_pid"; then
+            pass "cpcd process" "PID $cpcd_pid (alive)"
+        else
+            fail "cpcd process" "PID $cpcd_pid (ZOMBIE)"
         fi
     else
-        pass "CPC remote mode" "Remote host: ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT}"
-
-        # TCP connectivity to remote host
-        if timeout 3 bash -c "echo >/dev/tcp/${CPC_REMOTE_HOST}/${CPC_REMOTE_PORT}" 2>/dev/null; then
-            pass "Remote ctrl port" "TCP ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT} reachable"
-        else
-            fail "Remote ctrl port" "Cannot connect to ${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT}"
-        fi
-
-        local reset_port=$((CPC_REMOTE_PORT + 1))
-        if timeout 3 bash -c "echo >/dev/tcp/${CPC_REMOTE_HOST}/${reset_port}" 2>/dev/null; then
-            pass "Remote reset port" "TCP ${CPC_REMOTE_HOST}:${reset_port} reachable"
-        else
-            fail "Remote reset port" "Cannot connect to ${CPC_REMOTE_HOST}:${reset_port}"
-        fi
-
-        # Check well-known endpoint ports
-        local ep14_port=$((CPC_REMOTE_PORT + 100 + 14))
-        if timeout 3 bash -c "echo >/dev/tcp/${CPC_REMOTE_HOST}/${ep14_port}" 2>/dev/null; then
-            pass "Remote ep14 port (BLE)" "TCP ${CPC_REMOTE_HOST}:${ep14_port} reachable"
-        else
-            fail "Remote ep14 port (BLE)" "Cannot connect to ${CPC_REMOTE_HOST}:${ep14_port} — BLE bridge will fail"
-        fi
-
-        local ep12_port=$((CPC_REMOTE_PORT + 100 + 12))
-        if timeout 3 bash -c "echo >/dev/tcp/${CPC_REMOTE_HOST}/${ep12_port}" 2>/dev/null; then
-            pass "Remote ep12 port (Thread)" "TCP ${CPC_REMOTE_HOST}:${ep12_port} reachable"
-        else
-            fail "Remote ep12 port (Thread)" "Cannot connect to ${CPC_REMOTE_HOST}:${ep12_port} — otbr-agent will fail"
-        fi
+        fail "cpcd process" "cpcd not running"
     fi
 
     # CPC socket directory
@@ -338,34 +457,6 @@ check_cpc() {
             warn "CPC socket: ep${ep} event" "Not found (events may not be available)"
         fi
     done
-
-    # CPC proxy processes (remote mode)
-    if [ -n "${CPC_REMOTE_HOST}" ]; then
-        local proxy_count
-        proxy_count=$(pgrep -cf "cpc_socket_proxy.py client" 2>/dev/null) || proxy_count=0
-        if [ "$proxy_count" -ge 6 ]; then
-            pass "CPC proxy processes" "${proxy_count} running (expected 6: ctrl, reset, ep12/ep14 data+event)"
-        elif [ "$proxy_count" -gt 0 ]; then
-            warn "CPC proxy processes" "Only ${proxy_count} running (expected 6)"
-        else
-            fail "CPC proxy processes" "No CPC proxy client processes running"
-        fi
-
-        # Check for zombie proxies
-        local zombie_count=0
-        for pid in $(pgrep -f "cpc_socket_proxy.py client" 2>/dev/null); do
-            local state
-            state=$(awk '/^State:/ {print $2}' /proc/"$pid"/status 2>/dev/null) || continue
-            if [[ "$state" == "Z" ]]; then
-                zombie_count=$((zombie_count + 1))
-            fi
-        done
-        if [ "$zombie_count" -gt 0 ]; then
-            fail "CPC proxy zombies" "${zombie_count} zombie proxy process(es)"
-        else
-            pass "CPC proxy zombies" "None"
-        fi
-    fi
 }
 
 ###############################################################################
@@ -375,8 +466,6 @@ check_ble_chain() {
     section "BLE Chain (bridge → pty_proxy → btattach → bluetoothd)"
 
     # bt_host_cpc_hci_bridge
-    # NOTE: pgrep -x can't match this — Linux /proc/PID/comm truncates to
-    # 15 chars ("bt_host_cpc_hci").  Use pgrep -f for the full command line.
     local bridge_pid
     bridge_pid=$(pgrep -f "bt_host_cpc_hci_bridge" 2>/dev/null | head -1) || true
     if [ -n "$bridge_pid" ]; then
@@ -445,10 +534,7 @@ check_ble_chain() {
         fail "bluetoothd" "Not running — BLE operations will fail"
     fi
 
-    # BLE monitor — runs as a backgrounded bash function inside the
-    # entrypoint script, so it appears as a child /bin/bash process of PID 1.
-    # We detect it by looking for child bash processes whose /proc/PID/cmdline
-    # contains "/entrypoint.sh" (i.e. subshells forked from the entrypoint).
+    # BLE monitor
     local monitor_found=false
     for child_pid in $(pgrep -P 1 2>/dev/null); do
         local child_cmd
@@ -499,9 +585,6 @@ check_hci() {
 
     for hci in $hci_list; do
         local idx="${hci#hci}"
-        local bus
-        bus=$(cat "/sys/class/bluetooth/${hci}/device/subsystem" 2>/dev/null | xargs basename 2>/dev/null) || bus="unknown"
-        # Try to get the vendor from hciconfig or sysfs
         local info=""
         local is_cpc=false
 
@@ -532,7 +615,6 @@ check_hci() {
             if $is_cpc; then
                 warn "HCI adapter: ${hci}" "${info} — state=${up_state} (CPC adapter not selected?)"
             else
-                # Non-CPC adapter that's not selected — just informational
                 if [ "$up_state" = "UP" ]; then
                     warn "HCI adapter: ${hci}" "${info} — state=${up_state} (host adapter — may confuse bluetoothd)"
                 else
@@ -546,8 +628,6 @@ check_hci() {
     # IMPORTANT: Do NOT use hciconfig name / Read Local Name (0x03|0x0014).
     # The Silicon Labs CPC BLE firmware does NOT support it and returns
     # "Unknown HCI Command", which hciconfig misreports as "I/O error".
-    # This was the root cause of false health-check failures that cascaded
-    # into bridge restarts and ep14 EAGAIN lockups.
     if [ -n "$expected_idx" ]; then
         local target_hci="hci${expected_idx}"
         if nsenter --net="${HOST_NETNS}" hciconfig "${target_hci}" 2>/dev/null | grep -q "UP RUNNING"; then
@@ -555,13 +635,10 @@ check_hci() {
                hcitool -i "${target_hci}" cmd 0x04 0x0009 >/dev/null 2>&1; then
                 pass "HCI transport (Read BD ADDR)" "Responsive on ${target_hci}"
 
-                # Extract the BD address from the response for display
                 local bd_addr
                 bd_addr=$(timeout 5 nsenter --net="${HOST_NETNS}" \
                     hcitool -i "${target_hci}" cmd 0x04 0x0009 2>/dev/null \
                     | grep "HCI Event" -A1 | tail -1 | awk '{
-                        # Response: status(1) + addr(6 bytes LE)
-                        # Skip first 4 bytes (evt fields), addr starts at byte 5
                         printf "%s:%s:%s:%s:%s:%s", $10, $9, $8, $7, $6, $5
                     }') || bd_addr=""
                 if [ -n "$bd_addr" ]; then
@@ -571,7 +648,6 @@ check_hci() {
                 fail "HCI transport (Read BD ADDR)" "No response from ${target_hci} within 5s — transport dead"
             fi
 
-            # Verify Read Local Version works (basic command, widely supported)
             if timeout 5 nsenter --net="${HOST_NETNS}" \
                hcitool -i "${target_hci}" cmd 0x04 0x0001 >/dev/null 2>&1; then
                 pass "HCI transport (Read Version)" "Responsive"
@@ -579,7 +655,6 @@ check_hci() {
                 warn "HCI transport (Read Version)" "No response (unusual)"
             fi
 
-            # Explicitly check Read Local Name is unsupported (known CPC firmware limitation)
             local name_result
             name_result=$(timeout 3 nsenter --net="${HOST_NETNS}" \
                 hciconfig "${target_hci}" name 2>&1) || true
@@ -616,16 +691,8 @@ check_ble_scan() {
     local target_hci="hci${idx}"
 
     # Use bluetoothctl for scanning (via D-Bus → bluetoothd).
-    #
-    # IMPORTANT: Do NOT use raw hcitool lescan here.  Raw HCI scanning
-    # bypasses bluetoothd and corrupts its internal state machine.  When the
-    # Matter SDK later tries to start BLE discovery via D-Bus, bluetoothd
-    # rejects it with "org.bluez.Error.InProgress" because it doesn't know
-    # the raw scan stopped.  This blocks commissioning entirely.
-    #
-    # bluetoothctl goes through D-Bus → bluetoothd, keeping state consistent.
-    # We must explicitly select the CPC adapter because bluetoothd may
-    # default to a host USB adapter (e.g. hci0).
+    # IMPORTANT: Do NOT use raw hcitool lescan — it bypasses bluetoothd
+    # and corrupts its internal state machine.
     local bd_addr
     bd_addr=$(nsenter --net="${HOST_NETNS}" hciconfig "${target_hci}" 2>/dev/null \
         | awk '/BD Address:/{print $3}') || bd_addr=""
@@ -635,16 +702,6 @@ check_ble_scan() {
         return
     fi
 
-    # Start scan, collect output for a few seconds, then stop cleanly.
-    #
-    # CRITICAL: Use a SINGLE bluetoothctl session for both scan on and
-    # scan off.  Using two separate instances creates a D-Bus session
-    # mismatch — the second instance's "scan off" is ignored because
-    # bluetoothd tracks discovery per-client and the second client never
-    # started one.  The first client's scan persists until bluetoothd's
-    # auto-cleanup fires (which may be delayed or incomplete), leaving
-    # the adapter in Discovering=yes and causing "InProgress" errors
-    # for the Matter SDK.
     local btctl_output
     btctl_output=$(
         {
@@ -686,7 +743,6 @@ check_otbr() {
         if is_process_alive "$otbr_pid"; then
             pass "otbr-agent process" "PID $otbr_pid (alive)"
 
-            # Check how long it's been running (stability indicator)
             local etime
             etime=$(ps -o etime= -p "$otbr_pid" 2>/dev/null | tr -d ' ') || etime=""
             if [ -n "$etime" ]; then
@@ -705,7 +761,6 @@ check_otbr() {
         wpan_state=$(ip -br link show wpan0 2>/dev/null | awk '{print $2}') || wpan_state="unknown"
         pass "wpan0 interface" "State: ${wpan_state}"
 
-        # Check for IPv6 addresses on wpan0 (Thread mesh connectivity)
         local v6_addrs
         v6_addrs=$(ip -6 addr show dev wpan0 scope global 2>/dev/null | grep -c "inet6") || v6_addrs=0
         if [ "$v6_addrs" -gt 0 ]; then
@@ -717,7 +772,7 @@ check_otbr() {
         fail "wpan0 interface" "Not found — otbr-agent may not be running or CPC link is down"
     fi
 
-    # Check avahi-daemon (required by otbr-agent with OTBR_MDNS=avahi)
+    # Check avahi-daemon
     local avahi_pid
     avahi_pid=$(pgrep -x avahi-daemon 2>/dev/null | head -1) || true
     if [ -n "$avahi_pid" ]; then
@@ -733,9 +788,8 @@ check_otbr() {
 check_known_pitfalls() {
     section "Known Pitfalls & Lessons Learned"
 
-    # Check for stale PID files or sockets from previous runs
+    # Check for stale CPC sockets
     if [ -S "${CPC_SOCKET_BASE}/ctrl.cpcd.sock" ]; then
-        # Verify the socket is actually connected (not stale)
         local ctrl_established
         ctrl_established=$(ss -x 2>/dev/null | grep -c "ctrl.cpcd.sock" 2>/dev/null) || ctrl_established=0
         if [ "$ctrl_established" -gt 0 ]; then
@@ -745,17 +799,16 @@ check_known_pitfalls() {
         fi
     fi
 
-    # Check for ep14 EAGAIN state: if the bridge is repeatedly failing to open
-    # the endpoint, cpcd needs to be restarted on the server side.
+    # ep14 EAGAIN state check
     local bridge_pid
     bridge_pid=$(pgrep -f "bt_host_cpc_hci_bridge" 2>/dev/null | head -1) || true
     if [ -z "$bridge_pid" ]; then
-        warn "ep14 EAGAIN check" "Bridge not running — if it keeps failing, restart cpcd on the server"
+        warn "ep14 EAGAIN check" "Bridge not running — if it keeps failing, restart cpcd"
     else
         pass "ep14 EAGAIN check" "Bridge alive (PID $bridge_pid)"
     fi
 
-    # Check for multiple HCI adapters (can confuse bluetoothd default adapter selection)
+    # Multiple HCI adapters
     local hci_count
     hci_count=$(ls /sys/class/bluetooth/ 2>/dev/null | wc -w) || hci_count=0
     if [ "$hci_count" -gt 1 ]; then
@@ -769,31 +822,28 @@ check_known_pitfalls() {
         pass "Single HCI adapter" "Only one adapter — no confusion risk"
     fi
 
-    # Check if there's a health check using the wrong HCI command
-    # (hciconfig name / Read Local Name is unsupported by CPC firmware)
+    # Dangerous health check command
     if grep -rq "hciconfig.*name" /entrypoint.sh 2>/dev/null; then
         fail "Health check command" "entrypoint.sh uses 'hciconfig name' — this ALWAYS fails on CPC firmware (use hcitool cmd 0x04 0x0009)"
     else
         pass "Health check command" "Not using unsupported 'hciconfig name'"
     fi
 
-    # Check if entrypoint has the dangerous HCI Reset sequence
+    # Dangerous HCI Reset
     if grep -q "hcitool.*cmd.*0x03.*0x0003" /entrypoint.sh 2>/dev/null; then
         warn "HCI Reset in entrypoint" "Found HCI Reset command — this can kill the CPC transport"
     else
         pass "No HCI Reset in entrypoint" "Dangerous reset sequence not present"
     fi
 
-    # Check for the kill-0 bug (BTATTACH_PID=0 initialization)
+    # kill-0 bug
     if grep -q 'BTATTACH_PID=0' /entrypoint.sh 2>/dev/null; then
         fail "BTATTACH_PID init" "Initialized to 0 — 'kill 0' will SIGTERM the entire process group!"
     else
         pass "BTATTACH_PID init" "Not initialized to 0 (safe)"
     fi
 
-    # Check for raw HCI scan commands (hcitool lescan) in scripts.
-    # These bypass bluetoothd and corrupt its state machine, causing
-    # "org.bluez.Error.InProgress" when the Matter SDK tries to scan.
+    # Raw HCI scan
     if grep -rq "hcitool.*lescan" /entrypoint.sh 2>/dev/null; then
         fail "Raw HCI scan in entrypoint" "hcitool lescan corrupts bluetoothd state — use bluetoothctl instead"
     else
@@ -855,23 +905,30 @@ print_summary() {
 ###############################################################################
 # Main
 ###############################################################################
+
+# Detect radio mode for header
+RADIO_MODE_DISPLAY="Unknown"
+if [ -n "${RADIO_PORT}" ]; then
+    RADIO_MODE_DISPLAY="Remote serial tunnel (${RADIO_HOST}:${RADIO_PORT})"
+elif [ -n "${RADIO_DEVICE}" ]; then
+    RADIO_MODE_DISPLAY="Local USB (${RADIO_DEVICE})"
+else
+    RADIO_MODE_DISPLAY="Not configured"
+fi
+
 if ! $JSON_MODE; then
     echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║         CPC Remote Radio Validation                        ║"
+    echo "║         Radio Stack Validation                             ║"
     echo "╠══════════════════════════════════════════════════════════════╣"
     printf "║  Instance: %-49s║\n" "${CPC_INSTANCE}"
-    if [ -n "${CPC_REMOTE_HOST}" ]; then
-        printf "║  Remote:   %-49s║\n" "${CPC_REMOTE_HOST}:${CPC_REMOTE_PORT}"
-    else
-        printf "║  Mode:     %-49s║\n" "Local radio"
-    fi
+    printf "║  Radio:    %-49s║\n" "${RADIO_MODE_DISPLAY}"
     printf "║  Date:     %-49s║\n" "$(date -Iseconds)"
     echo "╚══════════════════════════════════════════════════════════════╝"
 fi
 
 check_container_env
 check_dbus
-check_cpc
+check_radio
 check_ble_chain
 check_hci
 check_ble_scan

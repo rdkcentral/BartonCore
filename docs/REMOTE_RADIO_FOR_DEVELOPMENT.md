@@ -66,8 +66,8 @@ reads this file at startup to configure the Matter SDK's BLE adapter via
 The host machine may have its own built-in Bluetooth adapter (e.g. `hci0`).
 The radio's BLE adapter appears as a separate HCI device with a distinct index.
 A background monitor in the entrypoint watches `btattach` and automatically
-restarts it if the USB connection drops (e.g. USB-IP reconnect), updating the
-`ble_adapter_id` file accordingly.
+restarts it if the connection drops, updating the `ble_adapter_id` file
+accordingly.
 
 ---
 
@@ -100,126 +100,135 @@ Download the firmware image appropriate for the BRD2703 (EFR32MG24) in either
 
 ---
 
-## USB-IP: Forwarding the Radio to a Remote Dev Server
+## Radio Connection Methods
+
+Two methods are supported for connecting the radio to the otbr-radio container:
+
+| Method | When to use | Environment variable |
+|--------|-------------|---------------------|
+| **Local USB** | Radio is plugged directly into the Docker host | `RADIO_DEVICE=/dev/ttyACM0` |
+| **Remote serial tunnel** | Radio is on your laptop, Docker runs on a remote server | `RADIO_PORT=21000` |
+
+### Local USB Radio
+
+If the radio is plugged directly into the machine running Docker:
+
+```bash
+RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
+```
+
+### Remote Serial Tunnel
 
 If your devcontainer runs on a **remote server** (common with VS Code
-Remote-SSH) but the BRD2703 is plugged into your **local laptop**, use USB-IP
-to forward the USB device over the network.
+Remote-SSH) but the BRD2703 is plugged into your **local workstation**, use
+`remote-serial.py` to forward the serial port over an SSH tunnel.
 
-Automation scripts are provided in `scripts/remote-radio/`. They handle
-package installation, kernel module loading, device detection, per-user port
-isolation on shared servers, and cleanup.
+```
+  Workstation                          Dev Server (Docker host)
+  ┌──────────────────┐                ┌───────────────────────────────┐
+  │ BRD2703 radio    │                │  otbr-radio container         │
+  │ /dev/ttyACM0     │                │  ┌─────────────────────────┐  │
+  │       │          │                │  │ socat (TCP→PTY bridge)  │  │
+  │       ▼          │                │  │   /dev/ttyRadio         │  │
+  │ remote-serial.py │   SSH tunnel   │  │       │                 │  │
+  │ (serial→TCP      │───────────────▶│  │       ▼                 │  │
+  │  relay + SSH -R) │  port 21000    │  │     cpcd                │  │
+  │                  │                │  │   (same as local USB)   │  │
+  └──────────────────┘                │  └─────────────────────────┘  │
+                                      └───────────────────────────────┘
+```
 
-### Quick Start (Scripted)
+The tunnel is self-healing — if the SSH connection drops, `remote-serial.py`
+automatically reconnects. The socat bridge inside the container also reconnects
+automatically.
 
-**Step 1 — On your laptop** (where the radio is plugged in):
+#### Prerequisites
+
+1. **Python 3.7+** and **pyserial** on the workstation:
+
+   ```bash
+   pip install pyserial
+   ```
+
+2. **SSH key authentication** from your workstation to the dev server (no
+   password prompts).
+
+3. **`GatewayPorts clientspecified`** in the dev server's sshd config:
+
+   ```
+   # /etc/ssh/sshd_config on the dev server
+   GatewayPorts clientspecified
+   ```
+
+   Then restart sshd: `sudo systemctl restart sshd`
+
+#### Quick Start
+
+**Step 1 — On your workstation** (where the radio is plugged in):
 
 ```bash
-scripts/remote-radio/usbip-attach-local.sh user@devserver.example.com
+python3 scripts/remote-radio/remote-serial.py <user>@<devserver>
 ```
 
-This auto-detects the radio, binds it, starts the USB-IP daemon, and opens an
-SSH reverse tunnel. Leave the terminal open.
+The script auto-detects the radio, starts a TCP relay, and opens an SSH reverse
+tunnel. Leave this terminal open.
 
-**Step 2 — On the remote server** (where Docker runs):
+Example output:
+
+```
+[remote-serial] OK: Auto-detected radio: /dev/ttyACM0 (Silicon Labs CP210x)
+[remote-serial] OK: Remote UID: 1000
+[remote-serial] OK: Tunnel port: 21000
+[remote-serial] OK: TCP server listening on 127.0.0.1:21000
+
+=======================================
+ REMOTE SERIAL TUNNEL ACTIVE
+=======================================
+ Radio:       /dev/ttyACM0
+ Local TCP:   127.0.0.1:21000
+ Tunnel port: 21000 on remote (all interfaces)
+=======================================
+
+    RADIO_PORT=21000
+```
+
+**Step 2 — On the dev server** (or in your devcontainer):
 
 ```bash
-scripts/remote-radio/usbip-attach-remote.sh
+RADIO_PORT=21000 ./dockerw -T bash
 ```
 
-This auto-detects the radio from the remote USB listing, attaches it, waits
-for `/dev/ttyACM*` to appear, and prints the `RADIO_DEVICE` path to use.
+Or add `RADIO_PORT=21000` to `docker/.env`.
 
-**Step 3 — Validate** (inside the Barton container, after containers are up):
+**Step 3 — Validate** (inside the Barton or otbr-radio container):
 
 ```bash
-scripts/remote-radio/usbip-validate.sh
+scripts/remote-radio/validate.sh
 ```
 
-Checks the entire chain: D-Bus socket, container processes (cpcd, otbr-agent,
-bt_host_cpc_hci_bridge, btattach, bluetoothd), Thread network state, BLE HCI
-device, and `DBUS_SYSTEM_BUS_ADDRESS`.
+#### Port Isolation on Shared Servers
 
-**Teardown** — when done:
+The tunnel port is computed as `20000 + UID` on the remote server. Each
+developer on a shared server gets a unique port automatically:
 
-```bash
-# On the remote server:
-scripts/remote-radio/usbip-detach-remote.sh
+| UID | Port |
+|-----|------|
+| 1000 | 21000 |
+| 1001 | 21001 |
+| 1002 | 21002 |
 
-# On your laptop:
-scripts/remote-radio/usbip-detach-local.sh
-```
-
-### Port Isolation on Shared Servers
-
-The scripts use per-user loopback addresses to avoid conflicts when multiple
-developers share the same remote server. Each user's SSH tunnel binds to a
-unique address in the `127.0.0.0/8` range derived from their UID:
+#### Command-Line Options
 
 ```
-loopback_addr = 127.0.<UID_hi>.<UID_lo>
+usage: remote-serial.py [-h] [--port PORT] [--baud BAUD] ssh_target
+
+positional arguments:
+  ssh_target            SSH target (e.g. user@hostname)
+
+options:
+  --port PORT           Serial port path (auto-detected if omitted)
+  --baud BAUD           Baud rate (default: 115200)
 ```
-
-For example, UID 1000 → `127.0.3.232`. All tunnels use the standard USB-IP
-port 3240, so both `usbip list` and `usbip attach` work without any
-non-standard flags.
-
-> **Prerequisite**: The remote server's sshd must have `GatewayPorts clientspecified`
-> enabled so that SSH can bind the reverse tunnel to the per-user loopback address
-> instead of defaulting to `127.0.0.1`. Add this to `/etc/ssh/sshd_config` and
-> restart sshd:
-> ```
-> GatewayPorts clientspecified
-> ```
-
-Each user's attach and detach scripts only touch their own state files and
-vhci ports. There is no cross-user interference.
-
-### Manual USB-IP Setup
-
-If you prefer to run the commands manually:
-
-<details>
-<summary>Click to expand manual instructions</summary>
-
-#### On the laptop (USB-IP server)
-
-```bash
-sudo apt install linux-tools-generic linux-cloud-tools-generic
-sudo modprobe usbip_core usbip_host vhci_hcd
-
-# Find and bind the radio
-# Look for Silicon Labs CP210x (10c4:ea60) or SEGGER J-Link (1366:0105)
-usbip list -l
-sudo usbip bind -b <bus-id>
-
-# Start the daemon
-sudo usbipd -D
-
-# Compute your per-user loopback: 127.0.<UID/256>.<UID%256>
-# Example for remote UID 1000: 127.0.3.232
-ssh -R 127.0.3.232:3240:localhost:3240 <username>@<remote_ip>
-```
-
-#### On the remote server (USB-IP client)
-
-```bash
-sudo apt install linux-tools-generic hwdata
-sudo modprobe vhci_hcd
-
-# List and attach using your per-user loopback address
-usbip list -r 127.0.3.232
-sudo usbip attach -r 127.0.3.232 -b <bus-id>
-
-# Confirm
-ls -la /dev/ttyACM*
-```
-
-</details>
-
-> **Tip**: Always set `RADIO_DEVICE` explicitly, even if the device is at
-> `/dev/ttyACM0`. On shared servers, multiple radios may be attached at
-> different paths.
 
 ---
 
@@ -227,11 +236,14 @@ ls -la /dev/ttyACM*
 
 ### CLI (`dockerw`)
 
-Use the `-T` flag to add `docker/compose.otbr-radio.yaml` to the compose stack.
-Set `RADIO_DEVICE` explicitly:
+Use the `-T` flag to add `docker/compose.otbr-radio.yaml` to the compose stack:
 
 ```bash
+# Local USB radio:
 RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
+
+# Remote serial tunnel:
+RADIO_PORT=21000 ./dockerw -T bash
 ```
 
 To override the backbone interface:
@@ -250,7 +262,7 @@ docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml logs -f 
 
 Expected log progression:
 
-1. `Using USB radio device: /dev/ttyACM0`
+1. `Using USB radio device: /dev/ttyACM0` (or `Remote serial mode: connecting to ...`)
 2. `Connected to Secondary` / `Secondary CPC v4.4.6`
 3. `Daemon startup was successful`
 4. `bt_host_cpc_hci_bridge ready`
@@ -264,15 +276,20 @@ Expected log progression:
 manual edit to `.devcontainer/devcontainer.json` is required.
 
 The `otbr-radio` container starts automatically when the devcontainer launches.
-If `RADIO_DEVICE` is not set it exits with a clear error in its own logs, but
-**the `barton` devcontainer is unaffected and starts normally**.
+If neither `RADIO_DEVICE` nor `RADIO_PORT` is set, it exits with a clear error
+in its own logs, but **the `barton` devcontainer is unaffected and starts
+normally**.
 
-To enable real radio support, set `RADIO_DEVICE` in `docker/.env` after running
-`docker/setupDockerEnv.sh`, or export it in your host shell before opening
-VS Code:
+To enable real radio support, set the appropriate variable in `docker/.env`
+after running `docker/setupDockerEnv.sh`, or export it in your host shell
+before opening VS Code:
 
 ```bash
+# Local radio:
 export RADIO_DEVICE=/dev/ttyACM0
+
+# Remote tunnel:
+export RADIO_PORT=21000
 ```
 
 Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
@@ -281,21 +298,25 @@ Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
 
 ## Verifying the Full Stack
 
-The fastest way to verify everything is working is to run the validation script
-from inside the Barton container:
+Run the validation script from inside the Barton container:
 
 ```bash
-scripts/remote-radio/usbip-validate.sh
+scripts/remote-radio/validate.sh
 ```
 
 This checks:
 
-- D-Bus socket exists and is reachable
-- otbr-radio container processes (cpcd, otbr-agent, bt_host_cpc_hci_bridge,
-  btattach, bluetoothd)
-- Thread network state via D-Bus
-- BLE adapter ID file and HCI device presence
-- `DBUS_SYSTEM_BUS_ADDRESS` is set correctly
+- Container environment (privileged mode, required binaries)
+- D-Bus socket and daemon
+- Radio connection (local USB or remote serial tunnel)
+- CPC daemon and sockets
+- BLE chain (bridge → btattach → bluetoothd)
+- HCI adapter and transport health
+- BLE scanning capability
+- otbr-agent and Thread interface
+- Known pitfalls
+
+Options: `--json` for machine-readable output, `--fix` for auto-remediation.
 
 ### Manual D-Bus Verification
 
@@ -360,15 +381,9 @@ the index of the radio's adapter.
 docker compose -f docker/compose.yaml -f docker/compose.otbr-radio.yaml rm -sf otbr-radio
 ```
 
-### Detaching the USB-IP device
+### Stopping the remote serial tunnel
 
-```bash
-# On the remote server:
-scripts/remote-radio/usbip-detach-remote.sh
-
-# On your laptop (also close the SSH tunnel terminal):
-scripts/remote-radio/usbip-detach-local.sh
-```
+Press `Ctrl-C` in the terminal running `remote-serial.py` on your workstation.
 
 ---
 
@@ -377,7 +392,9 @@ scripts/remote-radio/usbip-detach-local.sh
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `InitCommissioner` fails with `CHIP_ERROR_INCORRECT_STATE` | Default `CertifierOperationalCredentialsIssuer` requires an auth token | Build with dev platform: `cmake -C config/cmake/platforms/dev/linux.cmake ..` to use `SelfSignedCertifierOperationalCredentialsIssuer` |
-| Only `hci0` visible, no `hci1` | `btattach` failed or USB-IP disconnected | Run `scripts/remote-radio/usbip-validate.sh` to diagnose; the entrypoint's BLE monitor should auto-restart `btattach` |
+| Only `hci0` visible, no `hci1` | `btattach` failed or radio disconnected | Run `scripts/remote-radio/validate.sh` to diagnose; the entrypoint's BLE monitor should auto-restart `btattach` |
 | `ble_adapter_id` contains `0` | Radio BLE bridge didn't create a new HCI device | Check otbr-radio logs for `bt_host_cpc_hci_bridge` errors |
 | OpenSSL link errors during build | Stale OpenSSL 1.1.1 in `/usr/local/openssl/` | Remove it: `sudo rm -rf /usr/local/openssl /usr/local/lib/libcurl*` and reconfigure |
 | `DBUS_SYSTEM_BUS_ADDRESS` not set | Barton connects to system D-Bus instead of otbr-radio's private bus | Export it or use `dockerw -T` which injects it automatically |
+| Remote tunnel not reachable | SSH tunnel not binding or IPv6/IPv4 mismatch | Check `remote-serial.py` output; ensure `GatewayPorts clientspecified` in sshd_config |
+| socat/ttyRadio not created | Remote serial tunnel not yet running | Start `remote-serial.py` on workstation before starting containers |
