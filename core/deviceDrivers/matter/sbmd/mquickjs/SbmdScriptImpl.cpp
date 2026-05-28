@@ -154,14 +154,21 @@ namespace barton
             {
                 JSValue ev = JS_GetPropertyStr(ctx, outJson, "error");
 
-                if (!JS_IsUndefined(ev) && !JS_IsNull(ev))
+                if (!JS_IsUndefined(ev))
                 {
-                    JSCStringBuf buf;
-                    const char *s = JS_ToCString(ctx, ev, &buf);
-
-                    if (s)
+                    if (JS_IsNull(ev))
                     {
-                        jv["error"] = std::string(s);
+                        jv["error"] = Json::Value(); // null → type error in FromJsonValue
+                    }
+                    else
+                    {
+                        JSCStringBuf buf;
+                        const char *s = JS_ToCString(ctx, ev, &buf);
+
+                        if (s)
+                        {
+                            jv["error"] = std::string(s);
+                        }
                     }
                 }
             }
@@ -170,14 +177,21 @@ namespace barton
             {
                 JSValue vv = JS_GetPropertyStr(ctx, outJson, "value");
 
-                if (!JS_IsUndefined(vv) && !JS_IsNull(vv))
+                if (!JS_IsUndefined(vv))
                 {
-                    JSCStringBuf buf;
-                    const char *s = JS_ToCString(ctx, vv, &buf);
-
-                    if (s)
+                    if (JS_IsNull(vv))
                     {
-                        jv["value"] = std::string(s);
+                        jv["value"] = Json::Value(); // null → suppress signal
+                    }
+                    else
+                    {
+                        JSCStringBuf buf;
+                        const char *s = JS_ToCString(ctx, vv, &buf);
+
+                        if (s)
+                        {
+                            jv["value"] = std::string(s);
+                        }
                     }
                 }
             }

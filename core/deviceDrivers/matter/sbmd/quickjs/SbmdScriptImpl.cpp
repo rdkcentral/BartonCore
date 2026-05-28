@@ -327,13 +327,20 @@ namespace barton
             {
                 JsValueGuard eg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "error"));
 
-                if (!JS_IsUndefined(eg.get()) && !JS_IsNull(eg.get()))
+                if (!JS_IsUndefined(eg.get()))
                 {
-                    JsCStringGuard sg(ctx, JS_ToCString(ctx, eg.get()));
-
-                    if (sg)
+                    if (JS_IsNull(eg.get()))
                     {
-                        jv["error"] = std::string(sg.get());
+                        jv["error"] = Json::Value(); // null → type error in FromJsonValue
+                    }
+                    else
+                    {
+                        JsCStringGuard sg(ctx, JS_ToCString(ctx, eg.get()));
+
+                        if (sg)
+                        {
+                            jv["error"] = std::string(sg.get());
+                        }
                     }
                 }
             }
@@ -342,13 +349,20 @@ namespace barton
             {
                 JsValueGuard vg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "value"));
 
-                if (!JS_IsUndefined(vg.get()) && !JS_IsNull(vg.get()))
+                if (!JS_IsUndefined(vg.get()))
                 {
-                    JsCStringGuard sg(ctx, JS_ToCString(ctx, vg.get()));
-
-                    if (sg)
+                    if (JS_IsNull(vg.get()))
                     {
-                        jv["value"] = std::string(sg.get());
+                        jv["value"] = Json::Value(); // null → suppress signal
+                    }
+                    else
+                    {
+                        JsCStringGuard sg(ctx, JS_ToCString(ctx, vg.get()));
+
+                        if (sg)
+                        {
+                            jv["value"] = std::string(sg.get());
+                        }
                     }
                 }
             }
@@ -357,9 +371,16 @@ namespace barton
             {
                 JsValueGuard ig(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "invoke"));
 
-                if (!JS_IsUndefined(ig.get()) && !JS_IsNull(ig.get()))
+                if (!JS_IsUndefined(ig.get()))
                 {
-                    jv["invoke"] = ExtractInvokeSubObject(ctx, ig.get());
+                    if (JS_IsObject(ig.get()) && !JS_IsNull(ig.get()))
+                    {
+                        jv["invoke"] = ExtractInvokeSubObject(ctx, ig.get());
+                    }
+                    else
+                    {
+                        jv["invoke"] = Json::Value(); // null/primitive → type error in ParseInvoke()
+                    }
                 }
             }
 
@@ -367,9 +388,16 @@ namespace barton
             {
                 JsValueGuard wg(ctx, JS_GetPropertyStr(ctx, outJsonGuard.get(), "write"));
 
-                if (!JS_IsUndefined(wg.get()) && !JS_IsNull(wg.get()))
+                if (!JS_IsUndefined(wg.get()))
                 {
-                    jv["write"] = ExtractWriteSubObject(ctx, wg.get());
+                    if (JS_IsObject(wg.get()) && !JS_IsNull(wg.get()))
+                    {
+                        jv["write"] = ExtractWriteSubObject(ctx, wg.get());
+                    }
+                    else
+                    {
+                        jv["write"] = Json::Value(); // null/primitive → type error in ParseWrite()
+                    }
                 }
             }
 

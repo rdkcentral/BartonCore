@@ -95,7 +95,7 @@ The `matterMeta` section MAY contain an `aliases` list. Aliases declare the Matt
 > provisional in the current CHIP SDK version and is not reliably present on real
 > devices. Event prerequisites SHOULD be upgraded to check the specific event ID once
 > `EventList` is stable and widely supported.
-A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object of the form `{ output: <string> }`. The `output` property is required — if missing, the read mapper SHALL fail. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
+A resource's mapper MAY contain a `read` section with an `alias` (a string naming an attribute alias defined in `matterMeta.aliases`) and a `script` (JavaScript string). The alias is resolved at parse time to `clusterId`, `attributeId`, `name`, and `type`. The script SHALL receive the attribute value as TLV base64 via `sbmdReadArgs.tlvBase64` along with additional context fields (`clusterId`, `attributeId`, `attributeName`, `attributeType`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object. Valid return shapes are: `{ value: <string> }` to update the Barton resource, `{}` or `{ value: null }` to suppress the update (no error logged), and `{ error: <string> }` to signal a failure. The `value` key is not required — an empty object is a valid suppress. Inline `attribute:` blocks are not permitted — all attribute metadata comes from an alias. A `command` field is defined in the schema for future use but is not yet supported; the driver will reject any read mapper that specifies `command` at configuration time.
 
 #### Scenario: Read alias mapper resolves attribute metadata
 - **WHEN** a read mapper declares `alias: stateValue` and `stateValue` is an attribute alias with `clusterId: 0x0045`, `attributeId: 0x0000`
@@ -103,11 +103,19 @@ A resource's mapper MAY contain a `read` section with an `alias` (a string namin
 
 #### Scenario: Read boolean attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: bool` and the Matter attribute value is `true`
-- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `{ output: "true" }`
+- **THEN** the script SHALL receive the TLV-encoded boolean as base64 and return `{ value: "true" }`
 
 #### Scenario: Read integer attribute
 - **WHEN** a read mapper's alias resolves to `attribute.type: uint8` and the Matter attribute value is `254`
-- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return `{ output: "254" }` (or any appropriate string representation)
+- **THEN** the script SHALL receive the TLV-encoded uint8 as base64 and return `{ value: "254" }` (or any appropriate string representation)
+
+#### Scenario: Read mapper suppresses update
+- **WHEN** a read mapper script returns `{}` or `{ value: null }` (e.g., the attribute has no meaningful value in the current state)
+- **THEN** the resource SHALL NOT be updated and no error SHALL be logged
+
+#### Scenario: Read mapper signals error
+- **WHEN** a read mapper script returns `{ error: "some message" }`
+- **THEN** the read operation SHALL fail and the error message SHALL be surfaced to the caller
 
 ### Requirement: Write mapper
 A resource's mapper MAY contain a `write` section with a `script` (JavaScript string). The script SHALL receive the Barton string value via `sbmdWriteArgs.input` (along with `resourceId`, `endpointId`, `deviceUuid`, `clusterFeatureMaps`) and return a JSON object describing the operation: `{write: {clusterId, attributeId, tlvBase64}}` for attribute writes, or `{invoke: {clusterId, commandId, tlvBase64}}` for command invocations. Optional `timedInvokeTimeoutMs` for timed commands.
@@ -125,11 +133,11 @@ A resource's mapper MAY contain a `write` section with a `script` (JavaScript st
 - **THEN** the driver SHALL send the command as a Matter timed invoke with the specified timeout
 
 ### Requirement: Execute mapper
-A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdCommandArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL receive the command response TLV via `sbmdCommandResponseArgs.tlvBase64` and SHALL return a JSON object of the form `{ output: <string> }`. If `scriptResponse` throws, returns an invalid value, or otherwise fails, the execute operation SHALL fail and the script error SHALL be surfaced to the caller.
+A resource's mapper MAY contain an `execute` section with a `script` and optional `scriptResponse`. The execute script SHALL receive arguments via `sbmdCommandArgs` and return an invoke operation JSON. If `scriptResponse` is defined, it SHALL receive the command response TLV via `sbmdCommandResponseArgs.tlvBase64` and SHALL return a JSON object of the form `{ value: <string> }`. If `scriptResponse` throws, returns an invalid value, or otherwise fails, the execute operation SHALL fail and the script error SHALL be surfaced to the caller.
 
 #### Scenario: Execute resource with response
 - **WHEN** an execute mapper with `scriptResponse` is invoked and the Matter command returns a response
-- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ output: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
+- **THEN** the response TLV SHALL be passed to `scriptResponse` as base64, and the script SHALL return `{ value: <string> }` as the execute response; if the script fails, that error SHALL be surfaced as an execute failure
 
 ### Requirement: Event mapper
 A resource's mapper MAY contain an `event` section with an `alias` (a string naming an event alias defined in `matterMeta.aliases`) and a `script`. The alias is resolved at parse time to `clusterId`, `eventId`, and `name`. When the event fires, the script SHALL receive the event TLV via `sbmdEventArgs.tlvBase64` and return a JSON object. Valid return shapes are: `{ value: <string> }` to update the Barton resource, `{}` or `{ value: null }` to suppress the update (no error logged), and `{ error: <string> }` to signal a failure. Inline `event:` blocks (with inline `clusterId`, `eventId`, `name`) are not permitted — all event metadata comes from an alias.

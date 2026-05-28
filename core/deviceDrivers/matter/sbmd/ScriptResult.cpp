@@ -60,13 +60,13 @@ namespace barton
                 return true;
             }
 
-            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
-
             if (base64Str.length() > UINT16_MAX)
             {
                 icError("base64 TLV string too large to decode (%zu bytes)", base64Str.length());
                 return false;
             }
+
+            size_t maxDecodedLen = BASE64_MAX_DECODED_LEN(base64Str.length());
 
             if (!outBuffer.Alloc(maxDecodedLen))
             {
@@ -216,6 +216,11 @@ namespace barton
             }
 
             std::string base64Str = writeObj[kKeyTlvBase64].asString();
+
+            if (base64Str.empty())
+            {
+                return ScriptResult::MakeError("'write.tlvBase64' must not be empty");
+            }
 
             if (!DecodeTlvBase64(base64Str, result.tlvBuffer, result.tlvLength))
             {
