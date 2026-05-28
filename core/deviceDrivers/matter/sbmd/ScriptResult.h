@@ -21,6 +21,10 @@
 //
 //------------------------------ tabstop = 4 ----------------------------------
 
+//
+// Created by Raiyan Chowdhury on 5/26/2026.
+//
+
 #pragma once
 
 #include <platform/CHIPDeviceLayer.h>
@@ -41,9 +45,6 @@ namespace barton
      * Result from a write/execute mapper script.
      * The script returns either an 'invoke' (command) or 'write' (attribute) operation
      * with all the details needed to perform the operation.
-     *
-     * Moved here from SbmdScript.h so that ScriptResult (which references ScriptWriteResult
-     * in its variant) can be defined in this single header without circular includes.
      */
     struct ScriptWriteResult
     {

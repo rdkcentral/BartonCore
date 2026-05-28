@@ -704,7 +704,7 @@ The script must return one of:
 | Return value | Meaning |
 |---|---|
 | `{ value: "..." }` | Update the Barton resource with the given string value |
-| `{}` (empty object) | Suppress — do not update the resource |
+| `{}` or `{ value: null }` | Suppress — do not update the resource |
 | `{ error: "msg" }` | Signal an error |
 
 `SbmdUtils.Response` helpers are available:
@@ -934,7 +934,7 @@ The script must return one of:
 | Return value | Meaning |
 |---|---|
 | `{ value: "..." }` | Return the response string to Barton |
-| `{}` (empty object) | Suppress — no response value |
+| `{}` or `{ value: null }` | Suppress — no response value |
 | `{ error: "msg" }` | Signal an error |
 
 ```javascript
@@ -969,7 +969,7 @@ The script must return one of:
 | Return value | Meaning |
 |---|---|
 | `{ value: "..." }` | Update the Barton resource with the given string value |
-| `{}` (empty object) | Suppress — do not update the resource |
+| `{}` or `{ value: null }` | Suppress — do not update the resource |
 | `{ error: "msg" }` | Signal an error |
 
 `SbmdUtils.Response.value(v)` and `SbmdUtils.Response.error(msg)` helpers are available.

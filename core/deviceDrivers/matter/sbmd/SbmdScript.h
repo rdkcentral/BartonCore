@@ -81,10 +81,10 @@ namespace barton
          *     "attributeType": <attribute type from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "value": <Barton string representation of the attribute value>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
+         * { }  or  { "value": null }            // suppress — no update, no error
+         * { "error": <string> }                 // signal a failure
          *
          * @param attributeInfo Information about the Matter attribute
          * @param reader TLV reader positioned at the attribute value
@@ -108,10 +108,10 @@ namespace barton
          *     "commandName": <command name from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "value": <Barton string representation of the command response>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // return response (non-string coerced to string)
+         * { }  or  { "value": null }            // suppress — no response value
+         * { "error": <string> }                 // signal a failure
          *
          * @param commandInfo Information about the Matter command
          * @param reader TLV reader positioned at the command response data
@@ -250,13 +250,14 @@ namespace barton
          *     "eventName": <event name from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "value": <Barton string representation of the event data>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
+         * { }  or  { "value": null }            // suppress — no update, no error
+         * { "error": <string> }                 // signal a failure
          *
          * If the script omits the "value" key but returns a plain object (e.g., returns {}),
-         * the event is intentionally suppressed: MapEvent returns a suppress ScriptResult.
+         * or returns { "value": null }, the event is intentionally suppressed: MapEvent returns
+         * a suppress ScriptResult.
          * The caller MUST check result.IsSuppressed() and skip updateResource in that case.
          * This is useful when an event type carries multiple operation sub-types, only some of
          * which represent a resource state change. For example, a LockOperation event may carry
