@@ -235,14 +235,19 @@ namespace barton
                     }
                     else if (JS_IsNumber(ctx, vv))
                     {
-                        double d = 0.0;
+                        // Use JS's own string conversion so that integral values
+                        // produce "42" rather than "42.0" (jsoncpp double formatting).
+                        JSCStringBuf buf;
+                        const char *s = JS_ToCString(ctx, vv, &buf);
 
-                        if (JS_ToNumber(ctx, &d, vv) < 0)
+                        if (s)
+                        {
+                            jv["value"] = std::string(s);
+                        }
+                        else
                         {
                             return ScriptResult::MakeError(GetExceptionString(ctx));
                         }
-
-                        jv["value"] = d;
                     }
                     else
                     {
