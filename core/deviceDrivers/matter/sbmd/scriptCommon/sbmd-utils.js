@@ -1105,8 +1105,8 @@
         return false;
     };
 
-    // Registry of per-device session managers
-    var sessionManagers = {};
+    // Registry of per-device session managers (null-prototype to avoid key collisions with Object.prototype)
+    var sessionManagers = Object.create(null);
 
     /**
      * Get or create a SessionManager for the given device UUID.

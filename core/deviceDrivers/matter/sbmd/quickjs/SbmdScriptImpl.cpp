@@ -223,7 +223,21 @@ SbmdScriptImpl::~SbmdScriptImpl()
 
     if (ctx)
     {
-        std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + deviceId + "\");";
+        // JSON-escape deviceId to prevent injection if it contains quotes/backslashes
+        std::string escaped;
+        escaped.reserve(deviceId.size());
+
+        for (char c : deviceId)
+        {
+            if (c == '"' || c == '\\')
+            {
+                escaped += '\\';
+            }
+
+            escaped += c;
+        }
+
+        std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + escaped + "\");";
         JsValueGuard resultGuard(ctx, JS_Eval(ctx, cleanupScript.c_str(), cleanupScript.length(),
                                               "<sbmd-cleanup>", JS_EVAL_TYPE_GLOBAL));
 
@@ -978,14 +992,13 @@ bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
         result.type = ScriptWriteResult::OperationType::Output;
 
         JsCStringGuard outputStrGuard(ctx, JS_ToCString(ctx, outputGuard.get()));
-        if (outputStrGuard)
+        if (!outputStrGuard)
         {
-            result.output = std::string(outputStrGuard.get());
+            icError("Failed to convert 'output' value to string: %s", GetExceptionString(ctx).c_str());
+            return false;
         }
-        else
-        {
-            result.output = "";
-        }
+
+        result.output = std::string(outputStrGuard.get());
 
         icDebug("execute mapped to output: \"%s\"", result.output.value().c_str());
         return true;
