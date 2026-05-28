@@ -216,6 +216,23 @@ SbmdScriptImpl::SbmdScriptImpl(const std::string &deviceId) :
 SbmdScriptImpl::~SbmdScriptImpl()
 {
     icDebug("SbmdScriptImpl destroyed for device %s", deviceId.c_str());
+
+    // Clean up any SessionManager state for this device in the shared JS context
+    std::lock_guard<std::mutex> lock(QuickJsRuntime::GetMutex());
+    JSContext *ctx = QuickJsRuntime::GetSharedContext();
+
+    if (ctx)
+    {
+        std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + deviceId + "\");";
+        JsValueGuard resultGuard(ctx, JS_Eval(ctx, cleanupScript.c_str(), cleanupScript.length(),
+                                              "<sbmd-cleanup>", JS_EVAL_TYPE_GLOBAL));
+
+        if (JS_IsException(resultGuard.get()))
+        {
+            icWarn("Failed to clean up SessionManager for device %s: %s",
+                   deviceId.c_str(), GetExceptionString(ctx).c_str());
+        }
+    }
 }
 
 void SbmdScriptImpl::SetClusterFeatureMaps(const std::map<uint32_t, uint32_t> &maps)
@@ -950,6 +967,12 @@ bool SbmdScriptImpl::MapExecute(const std::string &resourceKey,
 
     // Check for 'output' operation (local-only, no Matter interaction)
     JsValueGuard outputGuard(ctx, JS_GetPropertyStr(ctx, resultGuard.get(), "output"));
+    if (JS_IsException(outputGuard.get()))
+    {
+        icError("Exception getting 'output' property: %s", GetExceptionString(ctx).c_str());
+        return false;
+    }
+
     if (!JS_IsUndefined(outputGuard.get()) && !JS_IsNull(outputGuard.get()))
     {
         result.type = ScriptWriteResult::OperationType::Output;

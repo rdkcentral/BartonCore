@@ -232,16 +232,17 @@ interface SbmdCommandArgs {
  * @example
  * return { output: "session-id-1" };
  */
-interface SbmdCommandResult {
-    invoke?: {
-        clusterId: number;
-        commandId: number;
-        tlvBase64?: string;
-        endpointId?: string;
-        timedInvokeTimeoutMs?: number;
-    };
-    output?: string;
-}
+type SbmdCommandResult =
+    | {
+          invoke: {
+              clusterId: number;
+              commandId: number;
+              tlvBase64?: string;
+              endpointId?: string;
+              timedInvokeTimeoutMs?: number;
+          };
+      }
+    | { output: string };
 
 // =============================================================================
 // Execute Response Mapper Interface

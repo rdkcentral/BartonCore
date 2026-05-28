@@ -858,7 +858,7 @@ return {
 **Output (local-only, no Matter interaction):**
 ```javascript
 return {
-    output: <string>  // Value returned directly to the caller
+    output: "value"  // Value returned directly to the caller
 };
 ```
 
