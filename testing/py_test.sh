@@ -35,6 +35,7 @@
 # examples:
 # ./py_test.sh
 # ./py_test.sh -s --log-cli-level=DEBUG
+# ./py_test.sh --toolchain=gcc -s --log-cli-level=DEBUG
 
 
 # set -x
@@ -42,12 +43,57 @@ set -e
 
 function show_help {
     echo "This is a wrapper script around pytest to ensure the environment is setup correctly."
-    echo "Usage: $0 [pytest options]"
+    echo "Usage: $0 [-t=<clang|gcc>|--toolchain=<clang|gcc>] [pytest options]"
+    echo ""
+    echo "Options:"
+    echo "  -t=<clang|gcc>, --toolchain=<clang|gcc>"
+    echo "                           Specify the compiler toolchain used to build"
+    echo "                           libBartonCore.so. Determines which ASAN runtime"
+    echo "                           to preload. If not specified, auto-detects from"
+    echo "                           the system default 'cc'."
 }
 
-if [[ "$1" == "-h" ]]; then
-    show_help
-    exit 0
+TOOLCHAIN=""
+
+# Parse our options, pass the rest through to pytest
+PYTEST_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        -t=*|--toolchain=*)
+            TOOLCHAIN="${arg#*=}"
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            PYTEST_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+# Determine the correct ASAN runtime to preload based on the compiler that
+# built libBartonCore.so. Clang uses libclang_rt.asan; GCC uses libasan.so.
+if [[ -z "$TOOLCHAIN" ]]; then
+    # Auto-detect from the system default compiler
+    if cc --version 2>/dev/null | grep -qi clang; then
+        TOOLCHAIN="clang"
+    else
+        TOOLCHAIN="gcc"
+    fi
 fi
 
-LD_PRELOAD=$(gcc -print-file-name=libasan.so) pytest "$@"
+case "$TOOLCHAIN" in
+    clang)
+        ASAN_LIB=$(clang -print-file-name=libclang_rt.asan-x86_64.so)
+        ;;
+    gcc)
+        ASAN_LIB=$(gcc -print-file-name=libasan.so)
+        ;;
+    *)
+        echo "Error: unknown toolchain '$TOOLCHAIN'. Use 'clang' or 'gcc'." >&2
+        exit 1
+        ;;
+esac
+
+LD_PRELOAD="$ASAN_LIB" pytest "${PYTEST_ARGS[@]}"
