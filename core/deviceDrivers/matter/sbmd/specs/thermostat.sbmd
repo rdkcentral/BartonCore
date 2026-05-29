@@ -149,7 +149,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for OccupiedHeatingSetpoint');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -179,7 +179,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for OccupiedCoolingSetpoint');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -206,7 +206,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMinHeatSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -225,7 +225,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMaxHeatSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -244,7 +244,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMinCoolSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -263,7 +263,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMaxCoolSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
@@ -291,7 +291,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for ControlSequenceOfOperation');
               }
               var seqValues = [
                 'coolingOnly',
@@ -303,7 +303,7 @@ endpoints:
               ];
               var seq = seqValues[value];
               if (seq === undefined) {
-                seq = 'coolingOnly';
+                return SbmdUtils.Response.error('Unknown ControlSequenceOfOperation value: ' + value);
               }
               return {value: seq};
           write:
@@ -341,7 +341,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for SystemMode');
               }
               var modeMap = {
                 0: 'off',
@@ -395,7 +395,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for ThermostatRunningState');
               }
               if ((value & 0x0001) || (value & 0x0008)) {
                 return {value: 'heating'};
@@ -425,7 +425,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for FanMode');
               }
               var modeMap = {
                 0: 'off',
@@ -472,7 +472,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {value: null};
+                return SbmdUtils.Response.error('TLV decode failed for PercentCurrent');
               }
 
               return {value: String(value !== 0)};

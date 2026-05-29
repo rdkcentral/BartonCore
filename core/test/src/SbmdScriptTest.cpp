@@ -1887,7 +1887,7 @@ namespace
 
         // suppress: {} with no recognized keys → IsSuppressed()
         auto eventResult = script->MapEvent(event, reader);
-        EXPECT_TRUE(eventResult.IsSuppressed());
+        EXPECT_TRUE(eventResult.SkipsResourceUpdate());
     }
 
     // Test: MapEvent returns false when script returns a non-object (primitive string).
@@ -1949,7 +1949,7 @@ namespace
         WriteLockOperationTlv(buf, reader, 0);
 
         auto eventResult = script->MapEvent(event, reader);
-        EXPECT_TRUE(eventResult.IsSuppressed());
+        EXPECT_TRUE(eventResult.SkipsResourceUpdate());
     }
 
     // Test: MapEvent returns error when script returns undefined (missing return statement).

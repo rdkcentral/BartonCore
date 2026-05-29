@@ -107,7 +107,7 @@ namespace
     {
         EXPECT_CALL(*mockScriptPtr, MapEvent(::testing::_, ::testing::_))
             .Times(1)
-            .WillOnce(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeSuppress(); }));
+            .WillOnce(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeSkipResourceUpdate(); }));
 
         constexpr size_t kTlvBufferSize = 16;
         uint8_t tlvBuffer[kTlvBufferSize];

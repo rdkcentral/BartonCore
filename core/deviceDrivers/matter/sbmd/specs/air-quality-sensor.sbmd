@@ -99,8 +99,8 @@ endpoints:
             alias: "temperature"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              if (value === null) {
-                return {value: null};
+              if (value === null || value === -32768) {
+                return {value: ''};
               }
               // Matter temperature is in hundredths of degrees C (e.g. 23°C = 2300)
               return {value: value.toString()};
@@ -120,8 +120,8 @@ endpoints:
             alias: "humidity"
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              if (value === null) {
-                return {value: null};
+              if (value === null || value === 0xFFFF) {
+                return {value: ''};
               }
               // Matter humidity is in hundredths of percent, convert to whole percent
               var percent = Math.round(value / 100);

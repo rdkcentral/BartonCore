@@ -50,11 +50,12 @@ namespace barton
     {
         enum class OperationType
         {
-            Invoke, // Command invocation
-            Write   // Attribute write
+            Unknown, // Not set — indicates a bug if observed at runtime
+            Invoke,  // Command invocation
+            Write    // Attribute write
         };
 
-        OperationType type = OperationType::Invoke;
+        OperationType type = OperationType::Unknown;
 
         // Common fields
         std::optional<chip::EndpointId> endpointId; // Optional - uses default if not specified
@@ -78,10 +79,10 @@ namespace barton
      * A ScriptResult holds two optional fields — error and operation — whose
      * presence or absence determines the observable outcome:
      *
-     *   - isError()      — error field is set; the script failed
-     *   - hasOperation() — operation field is set; the script produced an action
-     *   - isSuppressed() — neither field is set; the script ran successfully
-     *                       but intentionally produced no action (derived state)
+     *   - IsError()              — error field is set; the script failed
+     *   - HasOperation()          — operation field is set; the script produced an action
+     *   - SkipsResourceUpdate()   — neither field is set; the script ran successfully
+     *                               but produced no action (derived state)
      *
      * ScriptResult is move-only because ScriptWriteResult contains a
      * chip::Platform::ScopedMemoryBuffer.
@@ -114,10 +115,10 @@ namespace barton
 
         /**
          * Returns true if neither error nor operation is set.
-         * This is a derived convenience: the script ran successfully but
-         * intentionally produced no action.
+         * The script ran successfully but produced no action — it did not
+         * return a new resource value, invoke a command, or write an attribute.
          */
-        bool IsSuppressed() const { return !error.has_value() && !operation.has_value(); }
+        bool SkipsResourceUpdate() const { return !error.has_value() && !operation.has_value(); }
 
         /**
          * Returns true if the operation field is set.
@@ -139,7 +140,7 @@ namespace barton
          * JSON schema v3.0.
          *
          * Valid top-level keys: "value", "invoke", "write", "error".
-         * An empty object {} produces a suppress result.
+         * An empty object {} produces a no-op result.
          * More than one key present simultaneously returns an error result.
          *
          * @param jv The JSON object returned by the script (must be an object type)
@@ -158,12 +159,10 @@ namespace barton
         }
 
         /**
-         * Construct a suppress ScriptResult (no error, no operation).
+         * Construct a ScriptResult that skips resource update (no error, no operation).
+         * The script ran successfully but produced no action.
          */
-        static ScriptResult MakeSuppress()
-        {
-            return ScriptResult {};
-        }
+        static ScriptResult MakeSkipResourceUpdate() { return ScriptResult {}; }
 
         /**
          * Construct a ResourceUpdate ScriptResult.

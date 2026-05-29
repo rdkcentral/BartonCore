@@ -43,16 +43,16 @@ namespace barton
 
     namespace
     {
-        constexpr const char *kKeyValue = "value";
-        constexpr const char *kKeyInvoke = "invoke";
-        constexpr const char *kKeyWrite = "write";
-        constexpr const char *kKeyError = "error";
-        constexpr const char *kKeyClusterId = "clusterId";
-        constexpr const char *kKeyCommandId = "commandId";
-        constexpr const char *kKeyAttributeId = "attributeId";
-        constexpr const char *kKeyEndpointId = "endpointId";
-        constexpr const char *kKeyTimedInvokeTimeoutMs = "timedInvokeTimeoutMs";
-        constexpr const char *kKeyTlvBase64 = "tlvBase64";
+        constexpr const char *keyValue = "value";
+        constexpr const char *keyInvoke = "invoke";
+        constexpr const char *keyWrite = "write";
+        constexpr const char *keyError = "error";
+        constexpr const char *keyClusterId = "clusterId";
+        constexpr const char *keyCommandId = "commandId";
+        constexpr const char *keyAttributeId = "attributeId";
+        constexpr const char *keyEndpointId = "endpointId";
+        constexpr const char *keyTimedInvokeTimeoutMs = "timedInvokeTimeoutMs";
+        constexpr const char *keyTlvBase64 = "tlvBase64";
 
         bool DecodeTlvBase64(const std::string &base64Str,
                              chip::Platform::ScopedMemoryBuffer<uint8_t> &outBuffer,
@@ -98,60 +98,60 @@ namespace barton
                 return ScriptResult::MakeError("'invoke' field must be an object");
             }
 
-            if (!invokeObj.isMember(kKeyClusterId))
+            if (!invokeObj.isMember(keyClusterId))
             {
                 return ScriptResult::MakeError("'invoke' missing required 'clusterId' field");
             }
 
-            if (!invokeObj.isMember(kKeyCommandId))
+            if (!invokeObj.isMember(keyCommandId))
             {
                 return ScriptResult::MakeError("'invoke' missing required 'commandId' field");
             }
 
-            if (!invokeObj[kKeyClusterId].isUInt())
+            if (!invokeObj[keyClusterId].isUInt())
             {
                 return ScriptResult::MakeError("'invoke.clusterId' must be a non-negative integer");
             }
 
-            if (!invokeObj[kKeyCommandId].isUInt())
+            if (!invokeObj[keyCommandId].isUInt())
             {
                 return ScriptResult::MakeError("'invoke.commandId' must be a non-negative integer");
             }
 
             ScriptWriteResult result;
             result.type = ScriptWriteResult::OperationType::Invoke;
-            result.clusterId = static_cast<chip::ClusterId>(invokeObj[kKeyClusterId].asUInt());
-            result.commandId = static_cast<chip::CommandId>(invokeObj[kKeyCommandId].asUInt());
+            result.clusterId = static_cast<chip::ClusterId>(invokeObj[keyClusterId].asUInt());
+            result.commandId = static_cast<chip::CommandId>(invokeObj[keyCommandId].asUInt());
 
-            if (invokeObj.isMember(kKeyEndpointId))
+            if (invokeObj.isMember(keyEndpointId))
             {
-                if (!invokeObj[kKeyEndpointId].isUInt() || invokeObj[kKeyEndpointId].asUInt() > UINT16_MAX)
+                if (!invokeObj[keyEndpointId].isUInt() || invokeObj[keyEndpointId].asUInt() > UINT16_MAX)
                 {
                     return ScriptResult::MakeError("'invoke.endpointId' must be an integer in [0, 65535]");
                 }
 
-                result.endpointId = static_cast<chip::EndpointId>(invokeObj[kKeyEndpointId].asUInt());
+                result.endpointId = static_cast<chip::EndpointId>(invokeObj[keyEndpointId].asUInt());
             }
 
-            if (invokeObj.isMember(kKeyTimedInvokeTimeoutMs))
+            if (invokeObj.isMember(keyTimedInvokeTimeoutMs))
             {
-                if (!invokeObj[kKeyTimedInvokeTimeoutMs].isUInt() ||
-                    invokeObj[kKeyTimedInvokeTimeoutMs].asUInt() > UINT16_MAX)
+                if (!invokeObj[keyTimedInvokeTimeoutMs].isUInt() ||
+                    invokeObj[keyTimedInvokeTimeoutMs].asUInt() > UINT16_MAX)
                 {
                     return ScriptResult::MakeError("'invoke.timedInvokeTimeoutMs' must be an integer in [0, 65535]");
                 }
 
-                result.timedInvokeTimeoutMs = static_cast<uint16_t>(invokeObj[kKeyTimedInvokeTimeoutMs].asUInt());
+                result.timedInvokeTimeoutMs = static_cast<uint16_t>(invokeObj[keyTimedInvokeTimeoutMs].asUInt());
             }
 
-            if (invokeObj.isMember(kKeyTlvBase64))
+            if (invokeObj.isMember(keyTlvBase64))
             {
-                if (!invokeObj[kKeyTlvBase64].isString())
+                if (!invokeObj[keyTlvBase64].isString())
                 {
                     return ScriptResult::MakeError("'invoke.tlvBase64' must be a string");
                 }
 
-                std::string base64Str = invokeObj[kKeyTlvBase64].asString();
+                std::string base64Str = invokeObj[keyTlvBase64].asString();
 
                 if (!DecodeTlvBase64(base64Str, result.tlvBuffer, result.tlvLength))
                 {
@@ -174,52 +174,52 @@ namespace barton
                 return ScriptResult::MakeError("'write' field must be an object");
             }
 
-            if (!writeObj.isMember(kKeyClusterId))
+            if (!writeObj.isMember(keyClusterId))
             {
                 return ScriptResult::MakeError("'write' missing required 'clusterId' field");
             }
 
-            if (!writeObj.isMember(kKeyAttributeId))
+            if (!writeObj.isMember(keyAttributeId))
             {
                 return ScriptResult::MakeError("'write' missing required 'attributeId' field");
             }
 
-            if (!writeObj.isMember(kKeyTlvBase64))
+            if (!writeObj.isMember(keyTlvBase64))
             {
                 return ScriptResult::MakeError("'write' missing required 'tlvBase64' field");
             }
 
-            if (!writeObj[kKeyClusterId].isUInt())
+            if (!writeObj[keyClusterId].isUInt())
             {
                 return ScriptResult::MakeError("'write.clusterId' must be a non-negative integer");
             }
 
-            if (!writeObj[kKeyAttributeId].isUInt())
+            if (!writeObj[keyAttributeId].isUInt())
             {
                 return ScriptResult::MakeError("'write.attributeId' must be a non-negative integer");
             }
 
             ScriptWriteResult result;
             result.type = ScriptWriteResult::OperationType::Write;
-            result.clusterId = static_cast<chip::ClusterId>(writeObj[kKeyClusterId].asUInt());
-            result.attributeId = static_cast<chip::AttributeId>(writeObj[kKeyAttributeId].asUInt());
+            result.clusterId = static_cast<chip::ClusterId>(writeObj[keyClusterId].asUInt());
+            result.attributeId = static_cast<chip::AttributeId>(writeObj[keyAttributeId].asUInt());
 
-            if (writeObj.isMember(kKeyEndpointId))
+            if (writeObj.isMember(keyEndpointId))
             {
-                if (!writeObj[kKeyEndpointId].isUInt() || writeObj[kKeyEndpointId].asUInt() > UINT16_MAX)
+                if (!writeObj[keyEndpointId].isUInt() || writeObj[keyEndpointId].asUInt() > UINT16_MAX)
                 {
                     return ScriptResult::MakeError("'write.endpointId' must be an integer in [0, 65535]");
                 }
 
-                result.endpointId = static_cast<chip::EndpointId>(writeObj[kKeyEndpointId].asUInt());
+                result.endpointId = static_cast<chip::EndpointId>(writeObj[keyEndpointId].asUInt());
             }
 
-            if (!writeObj[kKeyTlvBase64].isString())
+            if (!writeObj[keyTlvBase64].isString())
             {
                 return ScriptResult::MakeError("'write.tlvBase64' must be a string");
             }
 
-            std::string base64Str = writeObj[kKeyTlvBase64].asString();
+            std::string base64Str = writeObj[keyTlvBase64].asString();
 
             if (base64Str.empty())
             {
@@ -248,10 +248,10 @@ namespace barton
             return MakeError("Script result must be a JSON object");
         }
 
-        bool hasValue = jv.isMember(kKeyValue);
-        bool hasInvoke = jv.isMember(kKeyInvoke);
-        bool hasWrite = jv.isMember(kKeyWrite);
-        bool hasError = jv.isMember(kKeyError);
+        bool hasValue = jv.isMember(keyValue);
+        bool hasInvoke = jv.isMember(keyInvoke);
+        bool hasWrite = jv.isMember(keyWrite);
+        bool hasError = jv.isMember(keyError);
 
         int keyCount = (hasValue ? 1 : 0) + (hasInvoke ? 1 : 0) + (hasWrite ? 1 : 0) + (hasError ? 1 : 0);
 
@@ -262,27 +262,27 @@ namespace barton
 
         if (hasError)
         {
-            if (!jv[kKeyError].isString() || jv[kKeyError].asString().empty())
+            if (!jv[keyError].isString() || jv[keyError].asString().empty())
             {
                 return MakeError("Script returned 'error' key with a non-string or empty value");
             }
 
-            std::string msg = jv[kKeyError].asString();
+            std::string msg = jv[keyError].asString();
             icDebug("Script returned error: %s", msg.c_str());
             return MakeError(std::move(msg));
         }
 
         if (hasValue)
         {
-            const Json::Value &val = jv[kKeyValue];
+            const Json::Value &val = jv[keyValue];
             std::string strVal;
 
             if (val.isNull())
             {
-                // null is a valid way for a script to suppress the update
+                // null is a valid way for a script to produce no action
                 // (e.g. when a Matter attribute has no meaningful value yet)
-                icDebug("Script returned value: null — suppressing update");
-                return MakeSuppress();
+                icDebug("Script returned value: null — no resource update");
+                return MakeSkipResourceUpdate();
             }
             else if (val.isString())
             {
@@ -307,17 +307,17 @@ namespace barton
 
         if (hasInvoke)
         {
-            return ParseInvoke(jv[kKeyInvoke]);
+            return ParseInvoke(jv[keyInvoke]);
         }
 
         if (hasWrite)
         {
-            return ParseWrite(jv[kKeyWrite]);
+            return ParseWrite(jv[keyWrite]);
         }
 
-        // No recognized keys — suppress
-        icDebug("Script returned empty object — suppressing update");
-        return MakeSuppress();
+        // No recognized keys — skip resource update
+        icDebug("Script returned empty object — no resource update");
+        return MakeSkipResourceUpdate();
     }
 
 } // namespace barton

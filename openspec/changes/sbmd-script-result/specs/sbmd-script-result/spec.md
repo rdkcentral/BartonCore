@@ -1,44 +1,44 @@
 ## ADDED Requirements
 
 ### Requirement: ScriptResult represents the observable contract of a mapper script
-A `ScriptResult` holds two optional fields: `error` and `operation`. Their presence or absence determines the observable outcome. When `error` is set, the script failed. When `operation` is set and `error` is not, the script produced an action for the caller to take. When neither is set, the script ran successfully but produced no action — this is the suppress outcome. `isSuppressed()` is a derived convenience accessor, not an independent state field.
+A `ScriptResult` holds two optional fields: `error` and `operation`. Their presence or absence determines the observable outcome. When `error` is set, the script failed. When `operation` is set and `error` is not, the script produced an action for the caller to take. When neither is set, the script ran successfully but produced no action — this is the skip-resource-update outcome. `SkipsResourceUpdate()` is a derived convenience accessor, not an independent state field.
 
 #### Scenario: Error state when error field is present
 - **WHEN** `ScriptResult` has a non-empty `error` field
-- **THEN** `isError()` SHALL return `true` and the error message SHALL be accessible via `errorMessage()`
+- **THEN** `IsError()` SHALL return `true` and the error message SHALL be accessible via `ErrorMessage()`
 
-#### Scenario: Suppress derived when no fields are set
+#### Scenario: SkipsResourceUpdate derived when no fields are set
 - **WHEN** `ScriptResult` has neither an `error` field nor an `operation` field set
-- **THEN** `isSuppressed()` SHALL return `true`, `isError()` SHALL return `false`, and `hasOperation()` SHALL return `false`
+- **THEN** `SkipsResourceUpdate()` SHALL return `true`, `IsError()` SHALL return `false`, and `HasOperation()` SHALL return `false`
 
 #### Scenario: Operation state when operation is present
 - **WHEN** `ScriptResult` has an `operation` field set and no `error` field
-- **THEN** `hasOperation()` SHALL return `true`, `isError()` SHALL return `false`, and `isSuppressed()` SHALL return `false`
+- **THEN** `HasOperation()` SHALL return `true`, `IsError()` SHALL return `false`, and `SkipsResourceUpdate()` SHALL return `false`
 
 ---
 
 ### Requirement: ScriptResult parses all valid script JSON shapes
 `ScriptResult::FromJsonValue()` SHALL parse a `Json::Value` object into a `ScriptResult` according to the SBMD script JSON schema v3.0.
 
-#### Scenario: Empty object produces suppress
+#### Scenario: Empty object produces no-op
 - **WHEN** the JSON object has no recognized keys
-- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `isSuppressed()` is `true`
+- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `SkipsResourceUpdate()` is `true`
 
 #### Scenario: `value` key produces ResourceUpdate operation
 - **WHEN** the JSON object contains a `value` key with a string, number, or boolean
-- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `hasOperation()` is `true` and the operation is a `ResourceUpdate` containing the string representation of the value
+- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `HasOperation()` is `true` and the operation is a `ResourceUpdate` containing the string representation of the value
 
 #### Scenario: `invoke` key produces Invoke operation
 - **WHEN** the JSON object contains a valid `invoke` sub-object with `clusterId` and `commandId`
-- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `hasOperation()` is `true` and the operation is a `ScriptWriteResult` with `OperationType::Invoke`
+- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `HasOperation()` is `true` and the operation is a `ScriptWriteResult` with `OperationType::Invoke`
 
 #### Scenario: `write` key produces Write operation
 - **WHEN** the JSON object contains a valid `write` sub-object with `clusterId`, `attributeId`, and `tlvBase64`
-- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `hasOperation()` is `true` and the operation is a `ScriptWriteResult` with `OperationType::Write`
+- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `HasOperation()` is `true` and the operation is a `ScriptWriteResult` with `OperationType::Write`
 
 #### Scenario: `error` key produces error state
 - **WHEN** the JSON object contains an `error` key with a string value
-- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `isError()` is `true` and `errorMessage()` returns the error string
+- **THEN** `FromJsonValue()` SHALL return a `ScriptResult` where `IsError()` is `true` and `ErrorMessage()` returns the error string
 
 ---
 
@@ -80,7 +80,7 @@ When a mapper script throws an unhandled JavaScript exception, the engine implem
 
 #### Scenario: JS exception maps to error state
 - **WHEN** a script throws a JavaScript exception during execution
-- **THEN** the engine SHALL return a `ScriptResult` where `isError()` is `true` and `errorMessage()` contains the exception message
+- **THEN** the engine SHALL return a `ScriptResult` where `IsError()` is `true` and `ErrorMessage()` contains the exception message
 
 ---
 
@@ -89,19 +89,19 @@ All mapper methods on the `SbmdScript` abstract interface SHALL return `ScriptRe
 
 #### Scenario: Successful read mapper
 - **WHEN** `MapAttributeRead()` is called and the script returns `{ "value": "true" }`
-- **THEN** the returned `ScriptResult` SHALL have `hasOperation()` true with a `ResourceUpdate` containing `"true"`
+- **THEN** the returned `ScriptResult` SHALL have `HasOperation()` true with a `ResourceUpdate` containing `"true"`
 
-#### Scenario: Suppressed event mapper
+#### Scenario: No-op event mapper
 - **WHEN** `MapEvent()` is called and the script returns `{}`
-- **THEN** the returned `ScriptResult` SHALL have `isSuppressed()` true
+- **THEN** the returned `ScriptResult` SHALL have `SkipsResourceUpdate()` true
 
-#### Scenario: Suppressed read mapper on explicit resource read
+#### Scenario: No-op read mapper on explicit resource read
 - **WHEN** `MapAttributeRead()` is called (from an explicit `read_resource` request) and the script returns `{}` or `{ value: null }`
-- **THEN** the MatterDevice layer SHALL NOT fail the read operation; the caller SHALL receive a null value, consistent with how suppress is handled in subscription updates and seedFrom
+- **THEN** the MatterDevice layer SHALL NOT fail the read operation; the caller SHALL receive a null value, consistent with how no-op is handled in subscription updates and seedFrom
 
 #### Scenario: Failed mapper
 - **WHEN** `MapWrite()` is called and the script throws an exception
-- **THEN** the returned `ScriptResult` SHALL have `isError()` true
+- **THEN** the returned `ScriptResult` SHALL have `IsError()` true
 
 ---
 
@@ -114,7 +114,7 @@ The SBMD script JSON schema version 3.0 SHALL define the following valid top-lev
 
 #### Scenario: Script uses `error` for intentional error
 - **WHEN** a mapper script returns `{ error: "PIN required but not provided" }`
-- **THEN** `ScriptResult::isError()` SHALL return `true` and the error string SHALL appear in system logs
+- **THEN** `ScriptResult::IsError()` SHALL return `true` and the error string SHALL appear in system logs
 
 #### Scenario: Script uses `SbmdUtils.Response.value()` helper
 - **WHEN** a read mapper script calls `return SbmdUtils.Response.value("locked")`
@@ -122,7 +122,7 @@ The SBMD script JSON schema version 3.0 SHALL define the following valid top-lev
 
 #### Scenario: Script uses `SbmdUtils.Response.error()` helper
 - **WHEN** a mapper script calls `return SbmdUtils.Response.error("unexpected TLV format")`
-- **THEN** the returned JSON SHALL be `{ "error": "unexpected TLV format" }` and `ScriptResult::isError()` SHALL return `true`
+- **THEN** the returned JSON SHALL be `{ "error": "unexpected TLV format" }` and `ScriptResult::IsError()` SHALL return `true`
 
 ---
 

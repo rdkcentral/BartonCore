@@ -26,11 +26,11 @@ The `SbmdScript` virtual interface currently expresses results via `bool` return
 
 ### D1: ScriptResult models observable outcomes via two optional fields
 
-**Decision:** `ScriptResult` holds `optional<string> error` and `optional<variant<ResourceUpdate, ScriptWriteResult>> operation`. Suppress is not a named state; it is derived as `!error && !operation`.
+**Decision:** `ScriptResult` holds `optional<string> error` and `optional<variant<ResourceUpdate, ScriptWriteResult>> operation`. No-op is not a named state; it is derived as `!error && !operation`.
 
-**Rationale:** "Suppress" is not independently set — it follows from the absence of both error and operation. A dedicated `isSuppressed()` convenience method exposes this without adding a third field that could be independently set (creating an invalid state: error=set AND suppressed=true).
+**Rationale:** Skip-resource-update is not independently set — it follows from the absence of both error and operation. A dedicated `SkipsResourceUpdate()` convenience method exposes this without adding a third field that could be independently set (creating an invalid state: error=set AND no-op=true).
 
-**Alternative considered:** Three separate named states (Error, Suppress, Operation) as an enum. Rejected because it would require callers to handle a four-state combination matrix (the enum plus whether the operation payload is present).
+**Alternative considered:** Three separate named states (Error, NoOp, Operation) as an enum. Rejected because it would require callers to handle a four-state combination matrix (the enum plus whether the operation payload is present).
 
 ---
 
@@ -131,9 +131,9 @@ MapEvent(...)                 → ScriptResult
                   │                         │
             error (optional)          operation (optional)
             ─────────────────          ──────────────────
-            if set → isError()         if set → hasOperation()
+            if set → IsError()         if set → HasOperation()
                                        if absent (and !error)
-                                         → isSuppressed()
+                                         → SkipsResourceUpdate()
                                        ┌─────────────────┐
                                        │                 │
                                  ResourceUpdate    ScriptWriteResult

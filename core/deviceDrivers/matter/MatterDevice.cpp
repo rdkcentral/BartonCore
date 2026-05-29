@@ -133,9 +133,9 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             continue;
         }
 
-        if (readResult.IsSuppressed())
+        if (readResult.SkipsResourceUpdate())
         {
-            icDebug("Read mapper suppressed update for URI: %s", uri.c_str());
+            icDebug("Read mapper produced no update for URI: %s", uri.c_str());
             continue;
         }
 
@@ -235,10 +235,10 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
         return;
     }
 
-    // IsSuppressed means the script intentionally produced no value (e.g. {} return)
-    if (eventResult.IsSuppressed())
+    // IsNoOp means the script produced no value (e.g. {} return)
+    if (eventResult.SkipsResourceUpdate())
     {
-        icDebug("Event mapper suppressed update for URI: %s", uri.c_str());
+        icDebug("Event mapper produced no update for URI: %s", uri.c_str());
         return;
     }
 
@@ -815,9 +815,9 @@ std::optional<std::string> MatterDevice::ReadSeedValueFromAttribute(const char *
         return std::nullopt;
     }
 
-    if (seedResult.IsSuppressed())
+    if (seedResult.SkipsResourceUpdate())
     {
-        icDebug("seedFrom script suppressed value for URI: %s", uri);
+        icDebug("seedFrom script produced no value for URI: %s", uri);
         return std::nullopt;
     }
 
@@ -1072,12 +1072,12 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
             return;
         }
 
-        if (readResult.IsSuppressed())
+        if (readResult.SkipsResourceUpdate())
         {
-            // Suppression is a valid v3.0 contract outcome (e.g. { value: null } when
+            // No-op is a valid v3.0 contract outcome (e.g. { value: null } when
             // the attribute has no meaningful value). Return null to the caller to
             // signal no value.
-            icDebug("Read mapper suppressed value for URI: %s", resource->uri);
+            icDebug("Read mapper produced no value for URI: %s", resource->uri);
             *value = nullptr;
             return;
         }
@@ -1153,7 +1153,7 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
 
         if (!writeScriptResult.HasOperation())
         {
-            icError("Write mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            icError("Write mapper returned no-op (no operation) for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }
@@ -1327,7 +1327,7 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
 
         if (!executeScriptResult.HasOperation())
         {
-            icError("Execute mapper unexpectedly suppressed operation for URI: %s", resource->uri);
+            icError("Execute mapper returned no-op (no operation) for URI: %s", resource->uri);
             FailOperation(promises);
             return;
         }

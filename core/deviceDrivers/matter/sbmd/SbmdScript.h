@@ -83,12 +83,12 @@ namespace barton
          *
          * Script output JSON — one of:
          * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
-         * { }  or  { "value": null }            // suppress — no update, no error
+         * { }  or  { "value": null }            // no-op — no update, no error
          * { "error": <string> }                 // signal a failure
          *
          * @param attributeInfo Information about the Matter attribute
          * @param reader TLV reader positioned at the attribute value
-         * @return ScriptResult containing the mapped value, a suppress signal, or an error
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
         virtual ScriptResult MapAttributeRead(const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader) = 0;
 
@@ -110,12 +110,12 @@ namespace barton
          *
          * Script output JSON — one of:
          * { "value": <string|number|boolean> }  // return response (non-string coerced to string)
-         * { }  or  { "value": null }            // suppress — no response value
+         * { }  or  { "value": null }            // no-op — no response value
          * { "error": <string> }                 // signal a failure
          *
          * @param commandInfo Information about the Matter command
          * @param reader TLV reader positioned at the command response data
-         * @return ScriptResult containing the mapped value, a suppress signal, or an error
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
         virtual ScriptResult MapCommandExecuteResponse(const SbmdCommand &commandInfo,
                                                        chip::TLV::TLVReader &reader) = 0;
@@ -252,13 +252,13 @@ namespace barton
          *
          * Script output JSON — one of:
          * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
-         * { }  or  { "value": null }            // suppress — no update, no error
+         * { }  or  { "value": null }            // no-op — no update, no error
          * { "error": <string> }                 // signal a failure
          *
          * If the script omits the "value" key but returns a plain object (e.g., returns {}),
-         * or returns { "value": null }, the event is intentionally suppressed: MapEvent returns
-         * a suppress ScriptResult.
-         * The caller MUST check result.IsSuppressed() and skip updateResource in that case.
+         * or returns { "value": null }, the event produces no action: MapEvent returns
+         * a no-op ScriptResult.
+         * The caller MUST check result.IsNoOp() and skip updateResource in that case.
          * This is useful when an event type carries multiple operation sub-types, only some of
          * which represent a resource state change. For example, a LockOperation event may carry
          * a lock, unlock, or door-sense operation; a script can return {} for sub-types it does
@@ -269,7 +269,7 @@ namespace barton
          *
          * @param eventInfo Information about the Matter event
          * @param reader TLV reader positioned at the event data
-         * @return ScriptResult containing the mapped value, a suppress signal, or an error
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
         virtual ScriptResult MapEvent(const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader) = 0;
 

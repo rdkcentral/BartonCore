@@ -66,7 +66,7 @@ namespace
         auto result = ScriptResult::FromJsonValue(jv);
 
         EXPECT_FALSE(result.IsError());
-        EXPECT_TRUE(result.IsSuppressed());
+        EXPECT_TRUE(result.SkipsResourceUpdate());
         EXPECT_FALSE(result.HasOperation());
     }
 
@@ -142,7 +142,7 @@ namespace
         auto result = ScriptResult::FromJsonValue(jv);
 
         EXPECT_TRUE(result.IsError());
-        EXPECT_FALSE(result.IsSuppressed());
+        EXPECT_FALSE(result.SkipsResourceUpdate());
         EXPECT_FALSE(result.HasOperation());
         EXPECT_EQ(result.ErrorMessage(), "something went wrong");
     }
@@ -413,8 +413,8 @@ namespace
 
     TEST(ScriptResultHelpers, MakeSuppressIsSuppressed)
     {
-        auto r = ScriptResult::MakeSuppress();
-        EXPECT_TRUE(r.IsSuppressed());
+        auto r = ScriptResult::MakeSkipResourceUpdate();
+        EXPECT_TRUE(r.SkipsResourceUpdate());
         EXPECT_FALSE(r.IsError());
         EXPECT_FALSE(r.HasOperation());
     }
@@ -423,7 +423,7 @@ namespace
     {
         auto r = ScriptResult::MakeResourceUpdate("42");
         EXPECT_FALSE(r.IsError());
-        EXPECT_FALSE(r.IsSuppressed());
+        EXPECT_FALSE(r.SkipsResourceUpdate());
         ASSERT_TRUE(r.HasOperation());
         ASSERT_TRUE(std::holds_alternative<ScriptResult::ResourceUpdate>(r.Operation()));
         EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(r.Operation()).value, "42");
@@ -439,7 +439,7 @@ namespace
         auto r = ScriptResult::MakeWriteResult(std::move(wr));
 
         EXPECT_FALSE(r.IsError());
-        EXPECT_FALSE(r.IsSuppressed());
+        EXPECT_FALSE(r.SkipsResourceUpdate());
         ASSERT_TRUE(r.HasOperation());
         ASSERT_TRUE(std::holds_alternative<ScriptWriteResult>(r.Operation()));
 

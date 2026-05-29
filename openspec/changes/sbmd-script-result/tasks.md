@@ -6,7 +6,7 @@
 
 ## 2. ScriptResult class — header and implementation
 
-- [x] 2.1 Create `core/deviceDrivers/matter/sbmd/ScriptResult.h` — define `ScriptResult` class with `ResourceUpdate` nested struct, `optional<string> error`, `optional<variant<ResourceUpdate, ScriptWriteResult>> operation`, and accessor methods (`isError()`, `isSuppressed()`, `hasOperation()`, `errorMessage()`, `operation()`)
+- [x] 2.1 Create `core/deviceDrivers/matter/sbmd/ScriptResult.h` — define `ScriptResult` class with `ResourceUpdate` nested struct, `optional<string> error`, `optional<variant<ResourceUpdate, ScriptWriteResult>> operation`, and accessor methods (`IsError()`, `SkipsResourceUpdate()`, `HasOperation()`, `ErrorMessage()`, `Operation()`)
 - [x] 2.2 Create `core/deviceDrivers/matter/sbmd/ScriptResult.cpp` — implement `ScriptResult::FromJsonValue(const Json::Value&)` handling all five JSON shapes: empty object (suppress), `value` key (ResourceUpdate), `invoke` key (Invoke ScriptWriteResult), `write` key (Write ScriptWriteResult), `error` key (error)
 - [x] 2.3 Implement ambiguous-JSON detection in `FromJsonValue()` — return error ScriptResult when more than one of `value`/`invoke`/`write`/`error` is present
 - [x] 2.4 Implement base64 TLV decoding inside `FromJsonValue()` for `invoke.tlvBase64` and `write.tlvBase64` fields (move from engine impls)
@@ -44,8 +44,8 @@
 
 ## 7. Update MatterDevice.cpp call sites
 
-- [x] 7.1 Update all `MapAttributeRead` call sites in `MatterDevice.cpp` to use `ScriptResult` accessors (`hasOperation()`, `operation()`, `isError()`, `isSuppressed()`)
-- [x] 7.2 Update all `MapEvent` call sites in `MatterDevice.cpp` — replace empty-string suppress check with `isSuppressed()`
+- [x] 7.1 Update all `MapAttributeRead` call sites in `MatterDevice.cpp` to use `ScriptResult` accessors (`HasOperation()`, `Operation()`, `IsError()`, `SkipsResourceUpdate()`)
+- [x] 7.2 Update all `MapEvent` call sites in `MatterDevice.cpp` — replace empty-string suppress check with `SkipsResourceUpdate()`
 - [x] 7.3 Update all `MapWrite` and `MapExecute` call sites in `MatterDevice.cpp` — replace `ScriptWriteResult` out-param pattern with `ScriptResult` operation accessor
 - [x] 7.4 Update `MapCommandExecuteResponse` call sites in `MatterDevice.cpp`
 - [x] 7.5 Update any `SpecBasedMatterDeviceDriver.cpp` call sites if applicable
@@ -68,7 +68,7 @@
 
 - [x] 10.1 Update `SbmdScriptTest.cpp` test fixtures — replace all `{output: ...}` JSON strings with `{value: ...}`
 - [x] 10.2 Update `SbmdScriptTest.cpp` — replace `bool + outValue` result checks with `ScriptResult` accessor assertions
-- [x] 10.3 Add a behavior test verifying that when `MapEvent()` returns a suppressed `ScriptResult`, the `MatterDevice` layer does NOT call `updateResource` — add to `MatterDeviceTest.cpp` (create if it doesn't exist) since this tests `MatterDevice.cpp` behavior, not script parsing
+- [x] 10.3 Add a behavior test verifying that when `MapEvent()` returns a `ScriptResult` where `SkipsResourceUpdate()` is true, the `MatterDevice` layer does NOT call `updateResource` — add to `MatterDeviceTest.cpp` (create if it doesn't exist) since this tests `MatterDevice.cpp` behavior, not script parsing
 - [x] 10.4 Run full unit test suite and confirm all tests pass: `ctest --output-on-failure --test-dir build`; note whether any integration tests cover the door-lock suppress path and verify they still pass
 
 ## 11. Documentation update
