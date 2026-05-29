@@ -247,7 +247,7 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
         restoredCb = restoredCallback;
         pthread_mutex_unlock(&controlMutex);
 
-        if (restoredCb != NULL)
+        if (restoredCb)
         {
             restoredCb(uuid);
         }
@@ -310,7 +310,7 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
         failedCb = failedCallback;
         pthread_mutex_unlock(&controlMutex);
 
-        if (failedCb != NULL)
+        if (failedCb)
         {
             failedCb(uuid);
         }
@@ -474,9 +474,9 @@ static void *commFailWatchdogThreadProc(void *arg)
         // Re-check running after wakeup — if Term() signaled us, exit
         // immediately rather than iterating devices and calling into
         // potentially half-torn-down subsystems.
-        if (running == false)
+        if (!running)
         {
-            icLogInfo(LOG_TAG, "%s exiting after Term signal", __FUNCTION__);
+            icInfo("exiting after Term signal");
             pthread_mutex_unlock(&controlMutex);
             break;
         }
@@ -539,9 +539,9 @@ static void *commFailWatchdogThreadProc(void *arg)
             failedCb = failedCallback;
             pthread_mutex_unlock(&controlMutex);
 
-            if (failedCb != NULL)
+            if (failedCb)
             {
-                icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
+                icDebug("notifying callback of comm fail on %s", commFailUuid);
                 failedCb(commFailUuid);
             }
             iter++;
