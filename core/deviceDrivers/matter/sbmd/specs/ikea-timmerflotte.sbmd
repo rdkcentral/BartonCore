@@ -64,7 +64,7 @@ endpoints:
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // -32768 (0x8000): Matter null for int16 MeasuredValue
               if (value === null || value === -32768) {
-                return {value: ''};
+                return SbmdUtils.Response.error('TLV decode failed for MeasuredValue');
               }
               return {value: value.toString()};
 
@@ -83,7 +83,7 @@ endpoints:
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // 0xFFFF: Matter null for uint16 MeasuredValue
               if (value === null || value === 0xFFFF) {
-                return {value: ''};
+                return SbmdUtils.Response.error('TLV decode failed for MeasuredValue');
               }
               // Matter humidity is in hundredths of percent, convert to whole percent
               var percent = Math.round(value / 100);
