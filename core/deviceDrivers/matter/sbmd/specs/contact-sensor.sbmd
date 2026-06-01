@@ -2,7 +2,7 @@
 # Maps Matter contact sensor device types to Barton sensor device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -51,4 +51,4 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               // StateValue=true means contact is closed (not faulted); invert for Barton
-              return {output: (value === true) ? 'false' : 'true'};
+              return {value: (value === true) ? 'false' : 'true'};

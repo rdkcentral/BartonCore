@@ -737,9 +737,9 @@ endpoints: []
     auto spec = barton::SbmdParser::ParseString(yaml1);
     assert_null(spec.get());
 
-    // Wrong major version (3.x) — rejected regardless of minor
+    // Wrong major version (4.x) — rejected regardless of minor
     const char *yaml2 = R"(
-schemaVersion: "3.0"
+schemaVersion: "4.0"
 driverVersion: "1.0"
 name: "Test Device"
 bartonMeta:
@@ -757,7 +757,7 @@ endpoints: []
     assert_null(spec.get());
 
     // Correct major but spec minor is newer than the parser supports — rejected
-    // (a spec written for schema 2.2 cannot be loaded by a 2.1 parser)
+    // (a spec written for schema 2.2 cannot be loaded by a parser supporting up to 2.1)
     const char *yaml3 = R"(
 schemaVersion: "2.2"
 driverVersion: "1.0"

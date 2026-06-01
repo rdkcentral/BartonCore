@@ -2,7 +2,7 @@
 # Maps Matter Door Lock device type to Barton doorLock device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -69,9 +69,9 @@ endpoints:
               var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
               var opType = event[0];
               if (opType === 0) {
-                return { output: 'true' };
+                return { value: 'true' };
               } else if (opType === 1) {
-                return { output: 'false' };
+                return { value: 'false' };
               } else {
                 // Non-state-change event (2=NonAccessUserEvent, 3=ForcedUserEvent, 4=Unlatch)
                 // Do not update the resource
@@ -87,7 +87,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               var isLocked = value === 1;
-              return { output: isLocked ? 'true' : 'false' };
+              return { value: isLocked ? 'true' : 'false' };
 
       # Lock function resource - locks the door
       - id: "lock"
