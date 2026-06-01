@@ -436,7 +436,14 @@ class SerialRelay:
             try:
                 ser.write(data)
             except serial_mod.SerialException as e:
-                info(f"tcp→serial: serial write error: {e}")
+                warn(f"tcp→serial: serial write error: {e}")
+                # Close the port so _run's is_open check triggers a reopen.
+                # On Windows, PermissionError / "Access is denied" leaves the
+                # pyserial is_open flag True even though the handle is dead.
+                try:
+                    ser.close()
+                except Exception:
+                    pass
                 break
 
 

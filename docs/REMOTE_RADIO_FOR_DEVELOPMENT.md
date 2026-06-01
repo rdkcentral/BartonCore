@@ -107,7 +107,7 @@ Two methods are supported for connecting the radio to the otbr-radio container:
 | Method | When to use | Environment variable |
 |--------|-------------|---------------------|
 | **Local USB** | Radio is plugged directly into the Docker host | `RADIO_DEVICE=/dev/ttyACM0` |
-| **Remote serial tunnel** | Radio is on your laptop, Docker runs on a remote server | `RADIO_PORT=21000` |
+| **Remote serial tunnel** | Radio is on your laptop, Docker runs on a remote server | `RADIO_PORT=21234` |
 
 ### Local USB Radio
 
@@ -132,7 +132,7 @@ Remote-SSH) but the BRD2703 is plugged into your **local workstation**, use
   │       ▼          │                │  │   /dev/ttyRadio         │  │
   │ remote-serial.py │   SSH tunnel   │  │       │                 │  │
   │ (serial→TCP      │───────────────▶│  │       ▼                 │  │
-  │  relay + SSH -R) │  port 21000    │  │     cpcd                │  │
+  │  relay + SSH -R) │  port 21234    │  │     cpcd                │  │
   │                  │                │  │   (same as local USB)   │  │
   └──────────────────┘                │  └─────────────────────────┘  │
                                       └───────────────────────────────┘
@@ -177,28 +177,28 @@ Example output:
 
 ```
 [remote-serial] OK: Auto-detected radio: /dev/ttyACM0 (Silicon Labs CP210x)
-[remote-serial] OK: Remote UID: 1000
-[remote-serial] OK: Tunnel port: 21000
-[remote-serial] OK: TCP server listening on 127.0.0.1:21000
+[remote-serial] OK: Remote UID: 1234
+[remote-serial] OK: Tunnel port: 21234
+[remote-serial] OK: TCP server listening on 127.0.0.1:21234
 
 =======================================
  REMOTE SERIAL TUNNEL ACTIVE
 =======================================
  Radio:       /dev/ttyACM0
- Local TCP:   127.0.0.1:21000
- Tunnel port: 21000 on remote (all interfaces)
+ Local TCP:   127.0.0.1:21234
+ Tunnel port: 21234 on remote (all interfaces)
 =======================================
 
-    RADIO_PORT=21000
+    RADIO_PORT=21234
 ```
 
 **Step 2 — On the dev server** (or in your devcontainer):
 
 ```bash
-RADIO_PORT=21000 ./dockerw -T bash
+RADIO_PORT=21234 ./dockerw -T bash
 ```
 
-Or add `RADIO_PORT=21000` to `docker/.env`.
+Or add `RADIO_PORT=21234` to `docker/.env`.
 
 **Step 3 — Validate** (inside the Barton or otbr-radio container):
 
@@ -213,9 +213,9 @@ developer on a shared server gets a unique port automatically:
 
 | UID | Port |
 |-----|------|
-| 1000 | 21000 |
-| 1001 | 21001 |
-| 1002 | 21002 |
+| 1234 | 21234 |
+| 1235 | 21235 |
+| 1236 | 21236 |
 
 #### Command-Line Options
 
@@ -243,7 +243,7 @@ Use the `-T` flag to add `docker/compose.otbr-radio.yaml` to the compose stack:
 RADIO_DEVICE=/dev/ttyACM0 ./dockerw -T bash
 
 # Remote serial tunnel:
-RADIO_PORT=21000 ./dockerw -T bash
+RADIO_PORT=21234 ./dockerw -T bash
 ```
 
 To override the backbone interface:
@@ -289,7 +289,7 @@ before opening VS Code:
 export RADIO_DEVICE=/dev/ttyACM0
 
 # Remote tunnel:
-export RADIO_PORT=21000
+export RADIO_PORT=21234
 ```
 
 Then rebuild the devcontainer (**Dev Containers: Rebuild Container**).
