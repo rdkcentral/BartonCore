@@ -85,7 +85,16 @@ fi
 
 case "$TOOLCHAIN" in
     clang)
-        ASAN_LIB=$(clang -print-file-name=libclang_rt.asan-x86_64.so)
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+            x86_64) CLANG_ASAN_BASENAME="libclang_rt.asan-x86_64.so" ;;
+            aarch64|arm64) CLANG_ASAN_BASENAME="libclang_rt.asan-aarch64.so" ;;
+            *)
+                echo "Error: unsupported architecture '$ARCH' for clang ASAN runtime." >&2
+                exit 1
+                ;;
+        esac
+        ASAN_LIB=$(clang -print-file-name="$CLANG_ASAN_BASENAME")
         ;;
     gcc)
         ASAN_LIB=$(gcc -print-file-name=libasan.so)
