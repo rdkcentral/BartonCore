@@ -2,7 +2,7 @@
 # Maps Matter Thermostat device type to Barton thermostat device class
 
 # SBMD schema version 2.1
-schemaVersion: "2.1"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -126,12 +126,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return {value: null};
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
 
       # Heating setpoint (read/write)
       - id: "heatSetpoint"
@@ -149,12 +149,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for OccupiedHeatingSetpoint');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
           write:
             script: |
               var tlvBase64 = SbmdUtils.Tlv.encode(sbmdWriteArgs.input, 'int16');
@@ -179,12 +179,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for OccupiedCoolingSetpoint');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
           write:
             script: |
               var tlvBase64 = SbmdUtils.Tlv.encode(sbmdWriteArgs.input, 'int16');
@@ -206,12 +206,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMinHeatSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
 
       - id: "absoluteMaxHeatLimit"
         type: "com.icontrol.temperature"
@@ -225,12 +225,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMaxHeatSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
 
       - id: "absoluteMinCoolLimit"
         type: "com.icontrol.temperature"
@@ -244,12 +244,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMinCoolSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
 
       - id: "absoluteMaxCoolLimit"
         type: "com.icontrol.temperature"
@@ -263,12 +263,12 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for AbsMaxCoolSetpointLimit');
               }
               var neg = value < 0;
               var s = Math.abs(value).toString();
               while (s.length < (neg ? 3 : 4)) s = '0' + s;
-              return {output: (neg ? '-' : '') + s};
+              return {value: (neg ? '-' : '') + s};
 
       # Control sequence of operation
       - id: "controlSequenceOfOperation"
@@ -291,7 +291,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for ControlSequenceOfOperation');
               }
               var seqValues = [
                 'coolingOnly',
@@ -303,9 +303,9 @@ endpoints:
               ];
               var seq = seqValues[value];
               if (seq === undefined) {
-                seq = 'coolingOnly';
+                return SbmdUtils.Response.error('Unknown ControlSequenceOfOperation value: ' + value);
               }
-              return {output: seq};
+              return {value: seq};
           write:
             script: |
               var seqValues = [
@@ -341,7 +341,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for SystemMode');
               }
               var modeMap = {
                 0: 'off',
@@ -356,7 +356,7 @@ endpoints:
               if (mode === undefined) {
                 mode = 'unknown';
               }
-              return {output: mode};
+              return {value: mode};
           write:
             script: |
               var reverseModeMap = {
@@ -395,14 +395,14 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for ThermostatRunningState');
               }
               if ((value & 0x0001) || (value & 0x0008)) {
-                return {output: 'heating'};
+                return {value: 'heating'};
               } else if ((value & 0x0002) || (value & 0x0010)) {
-                return {output: 'cooling'};
+                return {value: 'cooling'};
               }
-              return {output: 'off'};
+              return {value: 'off'};
 
       # --- Optional Fan Control cluster resources ---
       # Present only when the device supports Fan Control cluster (0x0202).
@@ -425,7 +425,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for FanMode');
               }
               var modeMap = {
                 0: 'off',
@@ -440,7 +440,7 @@ endpoints:
               if (mode === undefined) {
                 mode = 'unknown';
               }
-              return {output: mode};
+              return {value: mode};
           write:
             script: |
               var reverseModeMap = {
@@ -472,7 +472,7 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               if (value === null) {
-                return {output: null};
+                return SbmdUtils.Response.error('TLV decode failed for PercentCurrent');
               }
 
-              return {output: String(value !== 0)};
+              return {value: String(value !== 0)};

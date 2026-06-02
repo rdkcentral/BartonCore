@@ -57,16 +57,20 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     unzip \
     wget \
     zip \
-    gcc-11 \
-    g++-11
+    clang-18 \
+    lld-18 \
+    llvm-18
 
-# Set the default gcc and g++ versions to 11 because our current checkout of matter can't handle 13
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 30 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 30 && \
-    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-11 30 && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 20 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20 && \
-    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-13 20
+# Set LLVM/Clang as the default compiler over GCC
+RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang-18 50 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-18 50 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30 && \
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 50 && \
+    update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 50 && \
+    update-alternatives --install /usr/bin/lld lld /usr/bin/lld-18 50 && \
+    update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-18 50 && \
+    update-alternatives --install /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-18 50
 
 ###############################################################################
 # expands the base stage to allow for building of packages with common tools

@@ -2,6 +2,26 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [4.3.0](https://github.com/rdkcentral/BartonCore/compare/125c52342bf5c12dfe19f1a6295eafa712a83137..4.3.0) - 2026-06-01
+#### Bug Fixes
+- race condition in deviceCommunicationWatchdog shutdown (#223) - ([66cc911](https://github.com/rdkcentral/BartonCore/commit/66cc9113a6ced37c7026ce38eca99d5b38aa8e48)) - Christian Leithner
+#### Build system
+- **(docker)** Use LLVM by default (#225) - ([4bbe256](https://github.com/rdkcentral/BartonCore/commit/4bbe256c7664619b0a17be5fce05c2cf1b1b4533)) - Christian Leithner
+- install cocogitto in container - ([125c523](https://github.com/rdkcentral/BartonCore/commit/125c52342bf5c12dfe19f1a6295eafa712a83137)) - Kevin Funderburg
+#### Documentation
+- **(docker)** clarify image editing workflow - ([4a4fff8](https://github.com/rdkcentral/BartonCore/commit/4a4fff87f791cad3728cb67a6a603c48759567d4)) - Kevin Funderburg
+- add release process documentation - ([8699335](https://github.com/rdkcentral/BartonCore/commit/86993356305f65a00dc6f32d8cf8b083895c2c19)) - Kevin Funderburg
+#### Features
+- **(sbmd)** replace bool+out-param mapper API with ScriptResult (#221) - ([df93d0a](https://github.com/rdkcentral/BartonCore/commit/df93d0a138ec848c6cd47ec23a6d6d8ed9625620)) - rchowdcmcsa
+- **(sbmd)** seed event-driven resource values from attributes (#211) - ([535b359](https://github.com/rdkcentral/BartonCore/commit/535b359c887a357a85eccc884eb58d310305b182)) - rchowdcmcsa
+#### Miscellaneous Chores
+- Add worktrees to gitignore (#224) - ([dc37e56](https://github.com/rdkcentral/BartonCore/commit/dc37e56334ba9a0577bdedd52bc0dfacbddee51e)) - Christian Leithner
+- add agent skills for common development workflows (#210) - ([8ee31c2](https://github.com/rdkcentral/BartonCore/commit/8ee31c2acf0f991eafc4d4eafc1f6ef86f6223c7)) - Christian Leithner
+#### Tests
+- suppress test output unless test fails (#206) - ([dfd083b](https://github.com/rdkcentral/BartonCore/commit/dfd083bf6e2e1bb6d2c1585ed5fe67763a860e28)) - Kevin Funderburg
+
+- - -
+
 ## [4.2.0](https://github.com/rdkcentral/BartonCore/compare/ddd7fdbe4470d410da0d3d4f438f62ac1b02a8cd..4.2.0) - 2026-05-08
 #### Bug Fixes
 - remove cpe.sslCert.validateFor* property lookups (#217) - ([757c910](https://github.com/rdkcentral/BartonCore/commit/757c910b704d9110268d4fd1ea66760115fbcb74)) - Christian Leithner

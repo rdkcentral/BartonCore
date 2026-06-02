@@ -86,37 +86,31 @@ namespace barton
          * QuickJS implementation passes input as global variable "sbmdReadArgs".
          * @see SbmdScript::MapAttributeRead for JSON format.
          */
-        bool MapAttributeRead(const SbmdAttribute &attributeInfo,
-                              chip::TLV::TLVReader &reader,
-                              std::string &outValue) override;
+        ScriptResult MapAttributeRead(const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader) override;
 
         /**
          * QuickJS implementation passes input as global variable "sbmdCommandResponseArgs".
          * @see SbmdScript::MapCommandExecuteResponse for JSON format.
          */
-        bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
-                                       chip::TLV::TLVReader &reader,
-                                       std::string &outValue) override;
+        ScriptResult MapCommandExecuteResponse(const SbmdCommand &commandInfo, chip::TLV::TLVReader &reader) override;
 
         /**
          * QuickJS implementation passes input as global variable "sbmdWriteArgs".
          * @see SbmdScript::MapWrite for JSON format.
          */
-        bool MapWrite(const std::string &resourceKey,
-                      const std::string &endpointId,
-                      const std::string &resourceId,
-                      const std::string &inValue,
-                      ScriptWriteResult &result) override;
+        ScriptResult MapWrite(const std::string &resourceKey,
+                              const std::string &endpointId,
+                              const std::string &resourceId,
+                              const std::string &inValue) override;
 
         /**
          * QuickJS implementation passes input as global variable "sbmdCommandArgs".
          * @see SbmdScript::MapExecute for JSON format.
          */
-        bool MapExecute(const std::string &resourceKey,
-                        const std::string &endpointId,
-                        const std::string &resourceId,
-                        const std::string &inValue,
-                        ScriptWriteResult &result) override;
+        ScriptResult MapExecute(const std::string &resourceKey,
+                                const std::string &endpointId,
+                                const std::string &resourceId,
+                                const std::string &inValue) override;
 
         /**
          * @see SbmdScript::AddEventMapper
@@ -127,9 +121,7 @@ namespace barton
          * QuickJS implementation passes input as global variable "sbmdEventArgs".
          * @see SbmdScript::MapEvent for JSON format.
          */
-        bool MapEvent(const SbmdEvent &eventInfo,
-                      chip::TLV::TLVReader &reader,
-                      std::string &outValue) override;
+        ScriptResult MapEvent(const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader) override;
 
     private:
         explicit SbmdScriptImpl(const std::string &deviceId);
@@ -160,12 +152,6 @@ namespace barton
          * Parse a JSON string into a QuickJS JSValue.
          */
         bool ParseJsonToJSValue(const std::string &jsonString, const std::string &sourceName, JSValue &outValue);
-
-        /**
-         * Extract the "output" field from a script result as a string.
-         * Frees the script result JSValue.
-         */
-        bool ExtractScriptOutputAsString(JSValue &scriptResult, std::string &outValue);
 
         /**
          * Set a JavaScript variable from a string value.

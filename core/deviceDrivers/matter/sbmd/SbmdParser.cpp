@@ -40,8 +40,11 @@ namespace barton
 
     namespace
     {
-        constexpr int kSupportedSchemaMajor = 2;
-        constexpr int kSupportedSchemaMinor = 1;
+        // Accepted schema versions: 2.0, 2.1 (legacy) and 3.0 (current)
+        constexpr int kLegacySchemaMajor = 2;
+        constexpr int kLegacySchemaMaxMinor = 1;
+        constexpr int kCurrentSchemaMajor = 3;
+        constexpr int kCurrentSchemaMaxMinor = 0;
 
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
@@ -206,13 +209,14 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
         int charsConsumed = 0;
         int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d%n", &specMajor, &specMinor, &charsConsumed);
 
-        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) ||
-            specMajor != kSupportedSchemaMajor || specMinor < 0 || specMinor > kSupportedSchemaMinor)
+        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) || specMinor < 0 ||
+            !((specMajor == kLegacySchemaMajor && specMinor <= kLegacySchemaMaxMinor) ||
+              (specMajor == kCurrentSchemaMajor && specMinor <= kCurrentSchemaMaxMinor)))
         {
-            icError("Unsupported SBMD schemaVersion '%s'; expected %d.x where x <= %d",
+            icError("Unsupported SBMD schemaVersion '%s'; supported versions: 2.0–2.%d, 3.0–3.%d",
                     spec->schemaVersion.c_str(),
-                    kSupportedSchemaMajor,
-                    kSupportedSchemaMinor);
+                    kLegacySchemaMaxMinor,
+                    kCurrentSchemaMaxMinor);
 
             return nullptr;
         }
