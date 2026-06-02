@@ -105,7 +105,7 @@ namespace
         attr.type = "bool";
 
         std::string mapperScript =
-            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: val ? 'true' : 'false'};";
+            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {value: val ? 'true' : 'false'};";
 
         EXPECT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
     }
@@ -130,8 +130,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     // Test: MapAttributeRead with simple boolean passthrough script
@@ -145,7 +145,7 @@ namespace
 
         // Script that converts Matter boolean to Barton string
         // sbmdReadArgs.tlvBase64 contains base64 encoded TLV
-        std::string mapperScript = "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: (val === "
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {value: (val === "
                                    "true) ? 'true' : 'false'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -161,9 +161,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "true");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "true");
     }
 
     // Test: MapAttributeRead with boolean false value
@@ -178,7 +178,7 @@ namespace
 
         // Script needs to properly handle false - compare against true explicitly
         // sbmdReadArgs.tlvBase64 contains base64 encoded TLV
-        std::string mapperScript = "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: (val === "
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {value: (val === "
                                    "true) ? 'true' : 'false'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -194,9 +194,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "false");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "false");
     }
 
     // Test: MapAttributeRead with integer value conversion
@@ -214,7 +214,7 @@ namespace
         std::string mapperScript = R"(
             var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
             var percent = Math.round(level / 254 * 100);
-            return {output: percent.toString()};
+            return {value: percent.toString()};
         )";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -230,9 +230,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "50"); // 127/254 * 100 = 50%
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "50"); // 127/254 * 100 = 50%
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains deviceUuid
@@ -245,7 +245,7 @@ namespace
         attr.type = "bool";
 
         // Script that returns the deviceUuid
-        std::string mapperScript = "return {output: sbmdReadArgs.deviceUuid};";
+        std::string mapperScript = "return {value: sbmdReadArgs.deviceUuid};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -259,9 +259,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, deviceId);
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, deviceId);
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains clusterId
@@ -274,7 +274,7 @@ namespace
         attr.type = "bool";
 
         // Script that returns the clusterId
-        std::string mapperScript = "return {output: sbmdReadArgs.clusterId.toString()};";
+        std::string mapperScript = "return {value: sbmdReadArgs.clusterId.toString()};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -288,9 +288,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "6"); // 0x0006 = 6
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "6"); // 0x0006 = 6
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeId
@@ -303,7 +303,7 @@ namespace
         attr.type = "bool";
 
         // Script that returns the attributeId
-        std::string mapperScript = "return {output: sbmdReadArgs.attributeId.toString()};";
+        std::string mapperScript = "return {value: sbmdReadArgs.attributeId.toString()};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -317,9 +317,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "5"); // 0x0005 = 5
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "5"); // 0x0005 = 5
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeName
@@ -332,7 +332,7 @@ namespace
         attr.type = "bool";
 
         // Script that returns the attributeName
-        std::string mapperScript = "return {output: sbmdReadArgs.attributeName};";
+        std::string mapperScript = "return {value: sbmdReadArgs.attributeName};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -346,9 +346,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "myTestAttribute");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "myTestAttribute");
     }
 
     // Test: MapAttributeRead verifies sbmdReadArgs contains attributeType
@@ -361,7 +361,7 @@ namespace
         attr.type = "boolean";
 
         // Script that returns the attributeType
-        std::string mapperScript = "return {output: sbmdReadArgs.attributeType};";
+        std::string mapperScript = "return {value: sbmdReadArgs.attributeType};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -375,13 +375,13 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "boolean");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "boolean");
     }
 
-    // Test: MapAttributeRead fails when script doesn't return output field
-    TEST_F(SbmdScriptTest, MapAttributeReadMissingOutputField)
+    // Test: MapAttributeRead succeeds when script returns value field (v3.0 format)
+    TEST_F(SbmdScriptTest, MapAttributeReadWithValueField)
     {
         SbmdAttribute attr;
         attr.clusterId = 0x0006;
@@ -389,7 +389,7 @@ namespace
         attr.name = "onOff";
         attr.type = "bool";
 
-        // Script that returns wrong format (missing output field)
+        // Script returns the v3.0 "value" field — the correct format
         std::string mapperScript = "return {value: 'true'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -404,8 +404,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "true");
     }
 
     // Test: MapAttributeRead fails with script syntax error
@@ -418,7 +419,7 @@ namespace
         attr.type = "bool";
 
         // Script with syntax error
-        std::string mapperScript = "return {output: invalid syntax here";
+        std::string mapperScript = "return {value: invalid syntax here";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -432,8 +433,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     // Test: MapAttributeRead with endpointId set
@@ -447,7 +448,7 @@ namespace
         attr.resourceEndpointId = "ep1";
 
         // Script that returns the endpointId
-        std::string mapperScript = "return {output: sbmdReadArgs.endpointId};";
+        std::string mapperScript = "return {value: sbmdReadArgs.endpointId};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -461,9 +462,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "ep1");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "ep1");
     }
 
     // Test: Multiple attribute mappers can coexist
@@ -481,8 +482,8 @@ namespace
         attr2.name = "currentLevel";
         attr2.type = "uint8";
 
-        std::string script1 = "return {output: 'attr1'};";
-        std::string script2 = "return {output: 'attr2'};";
+        std::string script1 = "return {value: 'attr1'};";
+        std::string script2 = "return {value: 'attr2'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr1, script1));
         ASSERT_TRUE(script->AddAttributeReadMapper(attr2, script2));
@@ -498,9 +499,9 @@ namespace
         reader1.Init(tlvBuffer1, writer1.GetLengthWritten());
         reader1.Next();
 
-        std::string outValue1;
-        ASSERT_TRUE(script->MapAttributeRead(attr1, reader1, outValue1));
-        EXPECT_EQ(outValue1, "attr1");
+        auto readResult1 = script->MapAttributeRead(attr1, reader1);
+        ASSERT_TRUE(readResult1.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult1.Operation()).value, "attr1");
 
         // Test attr2
         uint8_t tlvBuffer2[32];
@@ -513,9 +514,9 @@ namespace
         reader2.Init(tlvBuffer2, writer2.GetLengthWritten());
         reader2.Next();
 
-        std::string outValue2;
-        ASSERT_TRUE(script->MapAttributeRead(attr2, reader2, outValue2));
-        EXPECT_EQ(outValue2, "attr2");
+        auto readResult2 = script->MapAttributeRead(attr2, reader2);
+        ASSERT_TRUE(readResult2.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult2.Operation()).value, "attr2");
     }
 
     // Test: Script can access complex JSON structures
@@ -533,7 +534,7 @@ namespace
             var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
             var result = 'input:' + JSON.stringify(val) +
                          ',device:' + sbmdReadArgs.deviceUuid;
-            return {output: result};
+            return {value: result};
         )";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -549,12 +550,13 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        const auto &readVal = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
         // Verify it contains expected parts
         // Ensure the input value and device UUID appear in the output string
-        EXPECT_NE(outValue.find("input:true"), std::string::npos);
-        EXPECT_NE(outValue.find("device:test-device-uuid"), std::string::npos);
+        EXPECT_NE(readVal.find("input:true"), std::string::npos);
+        EXPECT_NE(readVal.find("device:test-device-uuid"), std::string::npos);
     }
 
     //==============================================================================
@@ -580,8 +582,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapCommandExecuteResponse(cmd, reader, outValue));
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        EXPECT_TRUE(cmdResult.IsError());
     }
 
     // Test: MapCommandExecuteResponse happy path with boolean response
@@ -595,7 +597,7 @@ namespace
         // Script that converts Matter boolean response to string
         std::string mapperScript = R"(
             var val = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
-            return {output: val ? 'success' : 'failure'};
+            return {value: val ? 'success' : 'failure'};
         )";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
@@ -611,9 +613,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "success");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "success");
     }
 
     // Test: MapCommandExecuteResponse happy path with integer response
@@ -628,7 +630,7 @@ namespace
         std::string mapperScript = R"(
             var states = ['not_fully_locked', 'locked', 'unlocked', 'unlatched'];
             var state = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
-            return {output: states[state] || 'unknown'};
+            return {value: states[state] || 'unknown'};
         )";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
@@ -644,9 +646,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "locked");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "locked");
     }
 
     // Test: MapCommandExecuteResponse with struct TLV response
@@ -661,7 +663,7 @@ namespace
         // TlvToJson uses context tag numbers as keys (e.g., "0", "1")
         std::string mapperScript = R"(
             var input = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
-            return {output: 'exists:' + input['0'] + ',index:' + input['1']};
+            return {value: 'exists:' + input['0'] + ',index:' + input['1']};
         )";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
@@ -682,9 +684,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "exists:true,index:42");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "exists:true,index:42");
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains deviceUuid
@@ -696,7 +698,7 @@ namespace
         cmd.name = "on";
 
         // Script that returns the deviceUuid
-        std::string mapperScript = "return {output: sbmdCommandResponseArgs.deviceUuid};";
+        std::string mapperScript = "return {value: sbmdCommandResponseArgs.deviceUuid};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -710,9 +712,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, deviceId);
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, deviceId);
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains clusterId
@@ -724,7 +726,7 @@ namespace
         cmd.name = "moveToLevel";
 
         // Script that returns the clusterId
-        std::string mapperScript = "return {output: sbmdCommandResponseArgs.clusterId.toString()};";
+        std::string mapperScript = "return {value: sbmdCommandResponseArgs.clusterId.toString()};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -738,9 +740,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "8"); // 0x0008 = 8
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "8"); // 0x0008 = 8
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains commandId
@@ -752,7 +754,7 @@ namespace
         cmd.name = "testCmd";
 
         // Script that returns the commandId
-        std::string mapperScript = "return {output: sbmdCommandResponseArgs.commandId.toString()};";
+        std::string mapperScript = "return {value: sbmdCommandResponseArgs.commandId.toString()};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -766,9 +768,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "5"); // 0x0005 = 5
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "5"); // 0x0005 = 5
     }
 
     // Test: MapCommandExecuteResponse verifies sbmdCommandResponseArgs contains commandName
@@ -780,7 +782,7 @@ namespace
         cmd.name = "myTestCommand";
 
         // Script that returns the commandName
-        std::string mapperScript = "return {output: sbmdCommandResponseArgs.commandName};";
+        std::string mapperScript = "return {value: sbmdCommandResponseArgs.commandName};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -794,9 +796,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "myTestCommand");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "myTestCommand");
     }
 
     // Test: MapCommandExecuteResponse with endpointId
@@ -809,7 +811,7 @@ namespace
         cmd.resourceEndpointId = "ep3";
 
         // Script that returns the endpointId
-        std::string mapperScript = "return {output: sbmdCommandResponseArgs.endpointId};";
+        std::string mapperScript = "return {value: sbmdCommandResponseArgs.endpointId};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -823,20 +825,20 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "ep3");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "ep3");
     }
 
-    // Test: MapCommandExecuteResponse fails when script doesn't return output field
-    TEST_F(SbmdScriptTest, MapCommandExecuteResponseMissingOutputField)
+    // Test: MapCommandExecuteResponse succeeds when script returns value field (v3.0 format)
+    TEST_F(SbmdScriptTest, MapCommandExecuteResponseWithValueField)
     {
         SbmdCommand cmd;
         cmd.clusterId = 0x0006;
         cmd.commandId = 0x0001;
         cmd.name = "on";
 
-        // Script that returns wrong format (missing output field)
+        // Script returns v3.0 "value" field — now the correct format
         std::string mapperScript = "return {value: 'result'};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
@@ -851,8 +853,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapCommandExecuteResponse(cmd, reader, outValue));
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "result");
     }
 
     // Test: MapCommandExecuteResponse fails with script syntax error
@@ -864,7 +867,7 @@ namespace
         cmd.name = "on";
 
         // Script with syntax error
-        std::string mapperScript = "return {output: this is bad syntax";
+        std::string mapperScript = "return {value: this is bad syntax";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
 
@@ -878,8 +881,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapCommandExecuteResponse(cmd, reader, outValue));
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        EXPECT_TRUE(cmdResult.IsError());
     }
 
     // Test: MapCommandExecuteResponse fails with runtime exception
@@ -907,8 +910,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapCommandExecuteResponse(cmd, reader, outValue));
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        EXPECT_TRUE(cmdResult.IsError());
     }
 
     // Test: MapCommandExecuteResponse with string TLV response
@@ -922,7 +925,7 @@ namespace
         // Script that processes a string response
         std::string mapperScript = R"(
             var val = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
-            return {output: 'Name: ' + val};
+            return {value: 'Name: ' + val};
         )";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));
@@ -938,9 +941,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd, reader, outValue));
-        EXPECT_EQ(outValue, "Name: TestDevice");
+        auto cmdResult = script->MapCommandExecuteResponse(cmd, reader);
+        ASSERT_TRUE(cmdResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "Name: TestDevice");
     }
 
     // Test: Multiple command response mappers can coexist
@@ -956,8 +959,8 @@ namespace
         cmd2.commandId = 0x0000;
         cmd2.name = "moveToLevel";
 
-        std::string script1 = "return {output: 'response1'};";
-        std::string script2 = "return {output: 'response2'};";
+        std::string script1 = "return {value: 'response1'};";
+        std::string script2 = "return {value: 'response2'};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd1, script1));
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd2, script2));
@@ -973,9 +976,9 @@ namespace
         reader1.Init(tlvBuffer1, writer1.GetLengthWritten());
         reader1.Next();
 
-        std::string outValue1;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd1, reader1, outValue1));
-        EXPECT_EQ(outValue1, "response1");
+        auto cmdResult1 = script->MapCommandExecuteResponse(cmd1, reader1);
+        ASSERT_TRUE(cmdResult1.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult1.Operation()).value, "response1");
 
         // Test cmd2
         uint8_t tlvBuffer2[32];
@@ -988,9 +991,9 @@ namespace
         reader2.Init(tlvBuffer2, writer2.GetLengthWritten());
         reader2.Next();
 
-        std::string outValue2;
-        ASSERT_TRUE(script->MapCommandExecuteResponse(cmd2, reader2, outValue2));
-        EXPECT_EQ(outValue2, "response2");
+        auto cmdResult2 = script->MapCommandExecuteResponse(cmd2, reader2);
+        ASSERT_TRUE(cmdResult2.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult2.Operation()).value, "response2");
     }
 
     //--------------------------------------------------------------------------
@@ -1007,7 +1010,7 @@ namespace
         attr.type = "bool";
 
         // 'CQ!!' is a valid-length (4-char) quartet with an invalid '!' at index 2 and 3.
-        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('CQ!!'); return {output: 'unreachable'};";
+        std::string mapperScript = "var val = SbmdUtils.Tlv.decode('CQ!!'); return {value: 'unreachable'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -1021,8 +1024,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     // Test: SbmdUtils.Base64.decode throws on invalid Base64 characters
@@ -1036,7 +1039,7 @@ namespace
 
         // 'AA!A' is a valid-length (4-char) quartet with an invalid '!' at index 2.
         std::string mapperScript =
-            "var bytes = SbmdUtils.Base64.decode('AA!A'); return {output: bytes.length.toString()};";
+            "var bytes = SbmdUtils.Base64.decode('AA!A'); return {value: bytes.length.toString()};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -1050,8 +1053,8 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapAttributeRead(attr, reader, outValue));
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     //--------------------------------------------------------------------------
@@ -1088,14 +1091,14 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
+        auto mapResult = script.MapAttributeRead(attr, reader);
 
-        if (!script.MapAttributeRead(attr, reader, outValue))
+        if (!mapResult.HasOperation())
         {
             return std::nullopt;
         }
 
-        return outValue;
+        return std::get<ScriptResult::ResourceUpdate>(mapResult.Operation()).value;
     }
 
     // Encode uint8 and round-trip via decode
@@ -1104,7 +1107,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(42, 'uint8');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "42");
@@ -1116,7 +1119,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(1000, 'uint16');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "1000");
@@ -1128,7 +1131,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(4294967295, 'uint32');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "4294967295");
@@ -1140,7 +1143,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(-100, 'int16');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "-100");
@@ -1154,7 +1157,7 @@ namespace
             var hi = SbmdUtils.Tlv.encode(127, 'int8');
             var dLo = SbmdUtils.Tlv.decode(lo);
             var dHi = SbmdUtils.Tlv.decode(hi);
-            return {output: dLo + ',' + dHi};
+            return {value: dLo + ',' + dHi};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "-128,127");
@@ -1166,7 +1169,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(3, 'enum8');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "3");
@@ -1178,7 +1181,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('hello', 'string');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded};
+            return {value: decoded};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "hello");
@@ -1190,7 +1193,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(99, 'string');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded};
+            return {value: decoded};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "99");
@@ -1202,7 +1205,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(true, 'bool');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded === true ? 'true' : 'false'};
+            return {value: decoded === true ? 'true' : 'false'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "true");
@@ -1214,7 +1217,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(false, 'bool');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded === false ? 'false' : 'true'};
+            return {value: decoded === false ? 'false' : 'true'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "false");
@@ -1226,7 +1229,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('200', 'uint8');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "200");
@@ -1238,7 +1241,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('FF', 'uint8', 16);
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "255");
@@ -1250,7 +1253,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('1010', 'uint8', 2);
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "10");
@@ -1261,7 +1264,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(256, 'uint8');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1272,7 +1275,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(-129, 'int8');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1283,7 +1286,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(-1, 'uint16');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1294,7 +1297,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(3.5, 'uint8');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1305,7 +1308,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(42);
-            return {output: 'unreachable'};
+            return {value: 'unreachable'};
         )");
         // Script should fail due to uncaught exception
         EXPECT_FALSE(result.has_value());
@@ -1316,7 +1319,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('hello', 'string', 16);
-            return {output: 'unreachable'};
+            return {value: 'unreachable'};
         )");
         // Script should fail due to uncaught exception
         EXPECT_FALSE(result.has_value());
@@ -1327,7 +1330,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('', 'uint8');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1338,7 +1341,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('abc', 'uint8');
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1349,7 +1352,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('GG', 'uint8', 16);
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1360,7 +1363,7 @@ namespace
     {
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode('42', 'uint8', 7);
-            return {output: encoded === null ? 'null' : 'not-null'};
+            return {value: encoded === null ? 'null' : 'not-null'};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "null");
@@ -1372,7 +1375,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(100, 'percent');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "100");
@@ -1384,7 +1387,7 @@ namespace
         auto result = RunEncodeScript(*script, R"(
             var encoded = SbmdUtils.Tlv.encode(0xAB, 'bitmap8');
             var decoded = SbmdUtils.Tlv.decode(encoded);
-            return {output: decoded.toString()};
+            return {value: decoded.toString()};
         )");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(*result, "171"); // 0xAB = 171
@@ -1476,7 +1479,7 @@ namespace
                 // Ignore out-of-memory or other allocation errors; we only care
                 // that the engine handled them without crashing the host.
             }
-            return { output: JSON.stringify({ value: bufs.length }) };
+            return { value: JSON.stringify({ value: bufs.length }) };
         )";
         script->AddAttributeReadMapper(attr, heavyScript);
 
@@ -1491,14 +1494,13 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
         // The script catches the OOM error internally via try/catch, so it
         // completes successfully.  The important thing is the engine does not
         // crash.  Zero buffers should have been allocated since each request
         // (256 KB) exceeds the remaining arena.
-        bool result = script->MapAttributeRead(attr, reader, outValue);
-        EXPECT_TRUE(result);
-        EXPECT_EQ(outValue, R"({"value":0})");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, R"({"value":0})");
     }
 
     // Test stack exhaustion via deeply recursive script
@@ -1524,7 +1526,7 @@ namespace
         // Script with infinite recursion to exhaust the stack
         std::string recursiveScript = R"(
             function recurse(n) { return recurse(n + 1); }
-            return { output: JSON.stringify({value: recurse(0)}) };
+            return { value: JSON.stringify({value: recurse(0)}) };
         )";
         script->AddAttributeReadMapper(attr, recursiveScript);
 
@@ -1539,10 +1541,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
         // Should fail gracefully with stack overflow, not crash
-        bool result = script->MapAttributeRead(attr, reader, outValue);
-        EXPECT_FALSE(result);
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     // After OOM during init, verify we can re-initialize with a larger size
@@ -1591,7 +1592,7 @@ namespace
         attr.name = "timeoutTest";
         attr.type = "bool";
 
-        std::string infiniteScript = "while(true) {} return {output: 'never'};";
+        std::string infiniteScript = "while(true) {} return {value: 'never'};";
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, infiniteScript));
 
         // Create a simple TLV boolean
@@ -1605,10 +1606,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        // Must return false (script interrupted), not hang forever
-        bool result = script->MapAttributeRead(attr, reader, outValue);
-        EXPECT_FALSE(result);
+        // Must return error (script interrupted), not hang forever
+        auto readResult = script->MapAttributeRead(attr, reader);
+        EXPECT_TRUE(readResult.IsError());
     }
 
     // A normal fast script completes successfully with timeout enabled
@@ -1630,7 +1630,7 @@ namespace
         attr.type = "bool";
 
         std::string normalScript =
-            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: val ? 'true' : 'false'};";
+            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {value: val ? 'true' : 'false'};";
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, normalScript));
 
         uint8_t tlvBuffer[32];
@@ -1643,9 +1643,9 @@ namespace
         reader.Init(tlvBuffer, writer.GetLengthWritten());
         reader.Next();
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-        EXPECT_EQ(outValue, "true");
+        auto readResult = script->MapAttributeRead(attr, reader);
+        ASSERT_TRUE(readResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "true");
     }
 
     // After a timeout, the context must remain usable for subsequent scripts
@@ -1672,9 +1672,9 @@ namespace
         goodAttr.name = "goodScript";
         goodAttr.type = "bool";
 
-        std::string infiniteScript = "while(true) {} return {output: 'never'};";
+        std::string infiniteScript = "while(true) {} return {value: 'never'};";
         std::string normalScript =
-            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {output: val ? 'true' : 'false'};";
+            "var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64); return {value: val ? 'true' : 'false'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(badAttr, infiniteScript));
         ASSERT_TRUE(script->AddAttributeReadMapper(goodAttr, normalScript));
@@ -1692,8 +1692,8 @@ namespace
             reader.Init(tlvBuffer, writer.GetLengthWritten());
             reader.Next();
 
-            std::string outValue;
-            EXPECT_FALSE(script->MapAttributeRead(badAttr, reader, outValue));
+            auto readResult = script->MapAttributeRead(badAttr, reader);
+            EXPECT_TRUE(readResult.IsError());
         }
 
         // Second: run a normal script — should succeed, proving context is OK
@@ -1702,9 +1702,9 @@ namespace
             reader.Init(tlvBuffer, writer.GetLengthWritten());
             reader.Next();
 
-            std::string outValue;
-            ASSERT_TRUE(script->MapAttributeRead(goodAttr, reader, outValue));
-            EXPECT_EQ(outValue, "false");
+            auto readResult = script->MapAttributeRead(goodAttr, reader);
+            ASSERT_TRUE(readResult.HasOperation());
+            EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "false");
         }
     }
 
@@ -1722,7 +1722,7 @@ namespace
 
         std::string mapperScript = "var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);"
                                    "var isLocked = value === 1;"
-                                   "return { output: isLocked ? 'true' : 'false' };";
+                                   "return { value: isLocked ? 'true' : 'false' };";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
 
@@ -1738,9 +1738,9 @@ namespace
             reader.Init(tlvBuffer, writer.GetLengthWritten());
             reader.Next();
 
-            std::string outValue;
-            ASSERT_TRUE(script->MapAttributeRead(attr, reader, outValue));
-            EXPECT_EQ(outValue, expectedOutput);
+            auto readResult = script->MapAttributeRead(attr, reader);
+            ASSERT_TRUE(readResult.HasOperation());
+            EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, expectedOutput);
         };
 
         runMapper(1, "true");  // DlLockState::Locked
@@ -1752,9 +1752,9 @@ namespace
     // MapEvent tests
     //
     // MapEvent has a tri-state contract (documented in SbmdScript.h):
-    //   false            = script error (exception, compile error, non-object return)
-    //   true + empty     = suppress (script returned {} without an "output" key)
-    //   true + non-empty = publish (script returned { output: "value" })
+    //   IsError()       = script error (exception, compile error, non-object return)
+    //   IsSuppressed()  = suppress (script returned {} with no recognized keys)
+    //   HasOperation()  = publish (script returned { value: "..." })
     //==============================================================================
 
     // Helper: encode a LockOperation TLV struct with a single uint8 at context tag 0.
@@ -1791,8 +1791,8 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.IsError());
     }
 
     // Test: AddEventMapper returns false for an empty script
@@ -1818,8 +1818,8 @@ namespace
         std::string mapperScript = R"(
             var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
             var opType = event[0];
-            if (opType === 0) { return { output: 'true' }; }
-            if (opType === 1) { return { output: 'false' }; }
+            if (opType === 0) { return { value: 'true' }; }
+            if (opType === 1) { return { value: 'false' }; }
             return {};
         )";
 
@@ -1829,9 +1829,9 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0 /* Lock */);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "true");
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "true");
     }
 
     // Test: MapEvent happy path — LockOperationType 1 (Unlock) → "false"
@@ -1845,8 +1845,8 @@ namespace
         std::string mapperScript = R"(
             var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
             var opType = event[0];
-            if (opType === 0) { return { output: 'true' }; }
-            if (opType === 1) { return { output: 'false' }; }
+            if (opType === 0) { return { value: 'true' }; }
+            if (opType === 1) { return { value: 'false' }; }
             return {};
         )";
 
@@ -1856,13 +1856,13 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 1 /* Unlock */);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "false");
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "false");
     }
 
-    // Test: MapEvent suppress path — LockOperationType 2 (NonAccessUserEvent) → true + empty outValue.
-    // The caller must check outValue.empty() and skip updateResource; this is the primary
+    // Test: MapEvent suppress path — LockOperationType 2 (NonAccessUserEvent) → IsSuppressed().
+    // The caller checks IsSuppressed() and skips updateResource; this is the primary
     // motivation for the tri-state contract.
     TEST_F(SbmdScriptTest, MapEventSuppressOnNoOutputKey)
     {
@@ -1874,8 +1874,8 @@ namespace
         std::string mapperScript = R"(
             var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
             var opType = event[0];
-            if (opType === 0) { return { output: 'true' }; }
-            if (opType === 1) { return { output: 'false' }; }
+            if (opType === 0) { return { value: 'true' }; }
+            if (opType === 1) { return { value: 'false' }; }
             return {};
         )";
 
@@ -1885,11 +1885,9 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 2 /* NonAccessUserEvent */);
 
-        std::string outValue = "sentinel"; // proves it was cleared, not merely never set
-        bool result = script->MapEvent(event, reader, outValue);
-
-        ASSERT_TRUE(result);           // not a script error
-        EXPECT_TRUE(outValue.empty()); // suppress: caller must not call updateResource
+        // suppress: {} with no recognized keys → IsSuppressed()
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.SkipsResourceUpdate());
     }
 
     // Test: MapEvent returns false when script returns a non-object (primitive string).
@@ -1909,11 +1907,11 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.IsError());
     }
 
-    // Test: MapEvent returns false when script returns null.
+    // Test: MapEvent returns error when script returns null.
     TEST_F(SbmdScriptTest, MapEventFailsOnNullReturn)
     {
         SbmdEvent event;
@@ -1929,20 +1927,20 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.IsError());
     }
 
-    // Test: MapEvent returns false when script returns {output: null}.
-    // null is not a valid suppress signal — use {} or omit 'output' instead.
-    TEST_F(SbmdScriptTest, MapEventFailsOnOutputNull)
+    // Test: MapEvent suppresses when script returns {value: null}.
+    // A null value is treated as absent — the engine ignores it, resulting in suppress.
+    TEST_F(SbmdScriptTest, MapEventSuppressOnValueNull)
     {
         SbmdEvent event;
         event.clusterId = 0x0101;
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        std::string mapperScript = "return { output: null };";
+        std::string mapperScript = "return { value: null };";
 
         ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
 
@@ -1950,11 +1948,11 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.SkipsResourceUpdate());
     }
 
-    // Test: MapEvent returns false when script returns undefined (missing return statement).
+    // Test: MapEvent returns error when script returns undefined (missing return statement).
     TEST_F(SbmdScriptTest, MapEventFailsOnUndefinedReturn)
     {
         SbmdEvent event;
@@ -1970,11 +1968,11 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.IsError());
     }
 
-    // Test: MapEvent returns false on script syntax error
+    // Test: MapEvent returns error on script syntax error
     TEST_F(SbmdScriptTest, MapEventFailsOnSyntaxError)
     {
         SbmdEvent event;
@@ -1982,7 +1980,7 @@ namespace
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        std::string mapperScript = "return {output: invalid syntax here";
+        std::string mapperScript = "return {value: invalid syntax here";
 
         ASSERT_TRUE(script->AddEventMapper(event, mapperScript));
 
@@ -1990,8 +1988,8 @@ namespace
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        EXPECT_FALSE(script->MapEvent(event, reader, outValue));
+        auto eventResult = script->MapEvent(event, reader);
+        EXPECT_TRUE(eventResult.IsError());
     }
 
     // Test: MapEvent exposes sbmdEventArgs.deviceUuid to the script
@@ -2002,15 +2000,15 @@ namespace
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.deviceUuid };"));
+        ASSERT_TRUE(script->AddEventMapper(event, "return { value: sbmdEventArgs.deviceUuid };"));
 
         uint8_t buf[64];
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, deviceId);
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, deviceId);
     }
 
     // Test: MapEvent exposes sbmdEventArgs.clusterId to the script
@@ -2021,15 +2019,15 @@ namespace
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.clusterId.toString() };"));
+        ASSERT_TRUE(script->AddEventMapper(event, "return { value: sbmdEventArgs.clusterId.toString() };"));
 
         uint8_t buf[64];
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "257"); // 0x0101 = 257
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "257"); // 0x0101 = 257
     }
 
     // Test: MapEvent exposes sbmdEventArgs.eventId to the script
@@ -2040,15 +2038,15 @@ namespace
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventId.toString() };"));
+        ASSERT_TRUE(script->AddEventMapper(event, "return { value: sbmdEventArgs.eventId.toString() };"));
 
         uint8_t buf[64];
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "2"); // 0x0002 = 2
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "2"); // 0x0002 = 2
     }
 
     // Test: MapEvent exposes sbmdEventArgs.eventName to the script
@@ -2059,15 +2057,15 @@ namespace
         event.eventId = 0x0002;
         event.name = "LockOperation";
 
-        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.eventName };"));
+        ASSERT_TRUE(script->AddEventMapper(event, "return { value: sbmdEventArgs.eventName };"));
 
         uint8_t buf[64];
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "LockOperation");
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "LockOperation");
     }
 
     // Test: MapEvent exposes sbmdEventArgs.endpointId to the script
@@ -2079,15 +2077,15 @@ namespace
         event.name = "LockOperation";
         event.resourceEndpointId = "ep1";
 
-        ASSERT_TRUE(script->AddEventMapper(event, "return { output: sbmdEventArgs.endpointId };"));
+        ASSERT_TRUE(script->AddEventMapper(event, "return { value: sbmdEventArgs.endpointId };"));
 
         uint8_t buf[64];
         chip::TLV::TLVReader reader;
         WriteLockOperationTlv(buf, reader, 0);
 
-        std::string outValue;
-        ASSERT_TRUE(script->MapEvent(event, reader, outValue));
-        EXPECT_EQ(outValue, "ep1");
+        auto eventResult = script->MapEvent(event, reader);
+        ASSERT_TRUE(eventResult.HasOperation());
+        EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value, "ep1");
     }
 
 #endif // BCORE_USE_MQUICKJS
