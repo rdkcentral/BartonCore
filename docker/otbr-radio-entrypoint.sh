@@ -765,6 +765,88 @@ hci_transport_healthy() {
     return 0
 }
 
+# hci_clear_stuck_discovery — detect and clear stuck BLE discovery mode.
+#
+# bluetoothd can get stuck in discovery if a client (e.g. the validate
+# script or a killed bluetoothctl session) started scanning but the
+# StopDiscovery D-Bus call never completed.  Once stuck, all subsequent
+# scan attempts return "InProgress" and no new device events are emitted.
+#
+# bluetoothctl "scan off" from a new session returns org.bluez.Error.Failed
+# because BlueZ only allows the D-Bus client that started discovery to
+# stop it.  Restarting bluetoothd clears all D-Bus client state without
+# disrupting the HCI transport (btattach, bridge, proxy stay alive).
+#
+
+# hci_discovery_is_active — returns 0 if BLE discovery is active on the
+# CPC adapter, 1 otherwise.
+hci_discovery_is_active() {
+    local adapterFile="${DBUS_DIR}/ble_adapter_id"
+    [ -f "$adapterFile" ] || return 1
+    local idx
+    idx=$(cat "$adapterFile" 2>/dev/null)
+    [ -n "$idx" ] || return 1
+    local target_hci="hci${idx}"
+
+    local bd_addr
+    bd_addr=$(nsenter --net="${HOST_NETNS}" hciconfig "${target_hci}" 2>/dev/null \
+        | awk '/BD Address:/{print $3}') || bd_addr=""
+    [ -n "$bd_addr" ] || return 1
+
+    # Query bluetoothctl "show" to check if discovery is active.
+    local show_output
+    show_output=$(
+        {
+            echo "select ${bd_addr}"
+            sleep 0.3
+            echo "show"
+            sleep 0.5
+        } | DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
+            timeout 5 nsenter --net="${HOST_NETNS}" \
+            bluetoothctl --agent=NoInputNoOutput 2>&1
+    ) || true
+
+    if echo "$show_output" | grep -qi "Discovering: yes"; then
+        return 0
+    fi
+
+    return 1
+}
+
+# hci_clear_stuck_discovery — kills and restarts bluetoothd to clear
+# orphaned discovery state.
+#
+# Returns 0 if discovery was cleared.  Returns 1 if bluetoothd did not
+# come back on D-Bus (caller should consider a BLE restart).
+hci_clear_stuck_discovery() {
+    echo "[monitor] BLE discovery stuck — restarting bluetoothd..." >&2
+    # SIGKILL — bluetoothd's clean shutdown sends HCI Reset which
+    # kills the CPC transport and takes down btattach + the adapter.
+    pkill -9 -x bluetoothd 2>/dev/null || true
+    sleep 1
+    nsenter --net="${HOST_NETNS}" bluetoothd 2>/dev/null &
+
+    # Wait for bluetoothd to register on D-Bus.
+    local waited=0
+
+    while [ ${waited} -lt 5 ]; do
+
+        if DBUS_SYSTEM_BUS_ADDRESS="unix:path=${DBUS_SOCKET_PATH}" \
+           dbus-send --system --dest=org.bluez --print-reply \
+           /org/bluez org.freedesktop.DBus.Introspectable.Introspect \
+           >/dev/null 2>&1; then
+            echo "[monitor] BLE discovery cleared (bluetoothd restarted)." >&2
+            return 0
+        fi
+
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    echo "[monitor] bluetoothd did not come back on D-Bus after restart." >&2
+    return 1
+}
+
 # service_monitor — unified background loop that watches the entire stack.
 #
 # Checks all layers bottom-to-top each iteration.  The lowest failed layer
@@ -781,6 +863,7 @@ service_monitor() {
     local backoff=5
     local healthCheckCounter=0
     local healthFailCount=0
+    local discoveryActiveCount=0
     # Grace period — skip health checks for 30s after startup or restart
     # to let the adapter stabilise.
     local graceUntil=$((SECONDS + 30))
@@ -846,6 +929,28 @@ service_monitor() {
                     fi
                 else
                     healthFailCount=0
+                fi
+            fi
+
+            # Stuck discovery check — if a bluetoothctl session left
+            # discovery running, clear it.  Only consider discovery
+            # "stuck" after it has been continuously active for several
+            # monitor iterations (≥60s) — normal Matter commissioning
+            # legitimately uses discovery and completes in <30s.
+            if [ -z "${restartFrom}" ]; then
+                if hci_discovery_is_active; then
+                    discoveryActiveCount=$((discoveryActiveCount + 1))
+                    # ~12 iterations × 5s backoff ≈ 60s of continuous discovery
+                    if [ ${discoveryActiveCount} -ge 12 ]; then
+                        echo "[monitor] BLE discovery stuck for ${discoveryActiveCount} checks — clearing..." >&2
+                        if ! hci_clear_stuck_discovery; then
+                            echo "[monitor] Stuck discovery could not be cleared — restarting BLE chain." >&2
+                            restartFrom="bridge"
+                        fi
+                        discoveryActiveCount=0
+                    fi
+                else
+                    discoveryActiveCount=0
                 fi
             fi
         fi

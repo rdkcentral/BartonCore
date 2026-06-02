@@ -68,8 +68,10 @@ using namespace otbr::DBus;
 namespace
 {
     // Note: I've seen approx 7 seconds on a standard Ubuntu desktop environment for a new network, about 18 seconds for
-    // creating and replacing an existing network. This should just "go away" if we implement a proper main loop.
-    constexpr int ATTACH_WAIT_SECONDS = 25;
+    // creating and replacing an existing network. CPC-based radio hardware (e.g., EFR32 via serial/SPI) can take 35+
+    // seconds due to shared radio scheduling and slower transport. This should just "go away" if we implement a proper
+    // main loop.
+    constexpr int ATTACH_WAIT_SECONDS = 60;
 } // namespace
 
 namespace barton
@@ -142,10 +144,35 @@ namespace barton
 
             if (threadApiAttachCallbackCalled && threadApiAttachError == ClientError::ERROR_NONE)
             {
-                threadApiCallError = threadApiBus->GetActiveDatasetTlvs(retVal);
-                if (threadApiCallError != ClientError::ERROR_NONE)
+                // The Attach callback may fire before OTBR has finished applying the new dataset.
+                // Retry GetActiveDatasetTlvs while time remains, processing D-Bus messages in between
+                // so we receive the "Active dataset tlvs changed" signal.
+                while (true)
                 {
-                    icError("Failed to get active dataset tlvs. Error = %d", (int) threadApiCallError);
+                    threadApiCallError = threadApiBus->GetActiveDatasetTlvs(retVal);
+
+                    if (threadApiCallError == ClientError::ERROR_NONE && !retVal.empty())
+                    {
+                        break;
+                    }
+
+                    auto next = steady_clock::now();
+                    timer = timer - duration_cast<milliseconds>(next - current);
+                    current = next;
+
+                    if (timer.count() <= 0)
+                    {
+                        icError("Timed out waiting for active dataset tlvs after successful attach.");
+                        break;
+                    }
+
+                    icDebug("Active dataset not yet available (error=%d), retrying...", (int) threadApiCallError);
+
+                    // Dispatch D-Bus messages for up to 1 second before retrying
+                    dbus_connection_read_write_dispatch(dbusConnection.get(), 1000);
+                    next = steady_clock::now();
+                    timer = timer - duration_cast<milliseconds>(next - current);
+                    current = next;
                 }
             }
             else if (timer.count() <= 0)

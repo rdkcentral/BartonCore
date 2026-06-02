@@ -672,6 +672,7 @@ check_hci() {
 ###############################################################################
 # Section 6: BLE Scanning Capability
 ###############################################################################
+
 check_ble_scan() {
     section "BLE Scanning"
 
@@ -932,6 +933,16 @@ check_radio
 check_ble_chain
 check_hci
 check_ble_scan
+
+# After BLE scanning, the HCI proxy forwards scan-disable to firmware.
+# Allow a few seconds for the firmware to process the stop so the radio
+# is available for Thread (802.15.4) operations.
+if ! $JSON_MODE; then
+    echo ""
+    echo "  ⏳ Waiting 3s for BLE scan cleanup (radio shared with Thread)..."
+fi
+sleep 3
+
 check_otbr
 check_known_pitfalls
 print_summary
