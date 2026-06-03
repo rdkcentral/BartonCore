@@ -40,8 +40,11 @@ namespace barton
 
     namespace
     {
-        constexpr int kSupportedSchemaMajor = 2;
-        constexpr int kSupportedSchemaMinor = 1;
+        // Accepted schema versions: 2.0, 2.1 (legacy) and 3.0 (current)
+        constexpr int kLegacySchemaMajor = 2;
+        constexpr int kLegacySchemaMaxMinor = 1;
+        constexpr int kCurrentSchemaMajor = 3;
+        constexpr int kCurrentSchemaMaxMinor = 0;
 
         const SbmdAlias *FindAlias(const std::vector<SbmdAlias> &aliases, const std::string &name)
         {
@@ -114,6 +117,24 @@ namespace barton
                 }
             }
 
+            // Validate seedFrom mapper cross-field constraints
+            if (mapper.seedFromAttribute.has_value())
+            {
+                if (!mapper.event.has_value())
+                {
+                    icError("Resource %s has seedFrom mapper but no event mapper — seedFrom requires event",
+                            resourceId.c_str());
+                    return false;
+                }
+
+                if (mapper.hasRead)
+                {
+                    icError("Resource %s has both read and seedFrom mappers — they are mutually exclusive",
+                            resourceId.c_str());
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -154,6 +175,11 @@ namespace barton
                 setCmdIds(resource.mapper.readCommand);
             }
 
+            if (resource.mapper.seedFromAttribute.has_value())
+            {
+                setAttrIds(resource.mapper.seedFromAttribute);
+            }
+
             if (resource.mapper.event.has_value())
             {
                 resource.mapper.event.value().resourceEndpointId = endpointId;
@@ -183,13 +209,14 @@ std::shared_ptr<SbmdSpec> SbmdParser::ParseYamlNode(const YAML::Node &root)
         int charsConsumed = 0;
         int parsed = sscanf(spec->schemaVersion.c_str(), "%d.%d%n", &specMajor, &specMinor, &charsConsumed);
 
-        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) ||
-            specMajor != kSupportedSchemaMajor || specMinor < 0 || specMinor > kSupportedSchemaMinor)
+        if (parsed != 2 || charsConsumed != static_cast<int>(spec->schemaVersion.size()) || specMinor < 0 ||
+            !((specMajor == kLegacySchemaMajor && specMinor <= kLegacySchemaMaxMinor) ||
+              (specMajor == kCurrentSchemaMajor && specMinor <= kCurrentSchemaMaxMinor)))
         {
-            icError("Unsupported SBMD schemaVersion '%s'; expected %d.x where x <= %d",
+            icError("Unsupported SBMD schemaVersion '%s'; supported versions: 2.0–2.%d, 3.0–3.%d",
                     spec->schemaVersion.c_str(),
-                    kSupportedSchemaMajor,
-                    kSupportedSchemaMinor);
+                    kLegacySchemaMaxMinor,
+                    kCurrentSchemaMaxMinor);
 
             return nullptr;
         }
@@ -717,6 +744,42 @@ bool SbmdParser::ParseMapper(const YAML::Node &node, SbmdMapper &mapper, const s
         {
             mapper.eventScript = eventNode["script"].as<std::string>();
         }
+    }
+
+    // Parse seedFrom mapping - one-shot attribute cache read for seeding event-driven resources
+    if (node["seedFrom"])
+    {
+        const YAML::Node &seedFromNode = node["seedFrom"];
+
+        if (!seedFromNode["alias"])
+        {
+            icError("seedFrom mapper must specify 'alias'");
+            return false;
+        }
+
+        std::string aliasName = seedFromNode["alias"].as<std::string>();
+        const SbmdAlias *alias = FindAlias(aliases, aliasName);
+
+        if (!alias)
+        {
+            icError("seedFrom mapper references unknown alias '%s'", aliasName.c_str());
+            return false;
+        }
+
+        if (!alias->attribute.has_value())
+        {
+            icError("seedFrom mapper alias '%s' must be an attribute alias (not event)", aliasName.c_str());
+            return false;
+        }
+
+        if (!seedFromNode["script"] || seedFromNode["script"].as<std::string>().empty())
+        {
+            icError("seedFrom mapper must have a non-empty 'script'");
+            return false;
+        }
+
+        mapper.seedFromAttribute = alias->attribute;
+        mapper.seedFromScript = seedFromNode["script"].as<std::string>();
     }
 
     return true;

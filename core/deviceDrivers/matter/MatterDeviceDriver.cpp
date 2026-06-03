@@ -66,6 +66,7 @@ extern "C" {
 #include "device/icDeviceResource.h"
 #include "device/icInitialResourceValues.h"
 #include "deviceDescriptor.h"
+#include "deviceDriverManager.h"
 #include "deviceService.h"
 #include "deviceService/resourceModes.h"
 #include "glib.h"
@@ -126,6 +127,47 @@ MatterDeviceDriver::MatterDeviceDriver(const char *driverName, const char *devic
 
     driver.commFailTimeoutSecsChanged = [](DeviceDriver *driver, const icDevice *device, uint32_t timeoutSecs) {
         static_cast<MatterDeviceDriver *>(driver->callbackContext)->commFailTimeoutSecs = timeoutSecs;
+    };
+
+    driver.metadataUpdated = [](DeviceDriver *driver, const icDevice *device, const char *key, const char *value) {
+        if (strcmp(key, MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS) != 0)
+        {
+            return;
+        }
+
+        uint64_t ms = 0;
+        g_autoptr(GError) parseError = NULL;
+        g_ascii_string_to_unsigned(value, 10, 0, UINT32_MAX, &ms, &parseError);
+
+        if (parseError != NULL)
+        {
+            icLogWarn(LOG_TAG,
+                      "%s: could not parse %s value '%s' for device %s: %s",
+                      __FUNCTION__,
+                      MATTER_DEVICE_METADATA_LIVENESS_TIMEOUT_OVERRIDE_MS,
+                      value,
+                      device->uuid,
+                      parseError->message);
+            return;
+        }
+
+        if (ms == 0)
+        {
+            return;
+        }
+
+        auto *self = static_cast<MatterDeviceDriver *>(driver->callbackContext);
+        auto cache = self->GetDeviceDataCache(std::string(device->uuid));
+
+        if (!cache)
+        {
+            icLogError(LOG_TAG, "%s: no DeviceDataCache for device %s", __FUNCTION__, device->uuid);
+            return;
+        }
+
+        auto overrideMs = static_cast<uint32_t>(ms);
+
+        self->RunOnMatterSync([cache, overrideMs]() { cache->OverrideLiveness(overrideMs); });
     };
 }
 

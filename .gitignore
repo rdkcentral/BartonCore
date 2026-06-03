@@ -14,6 +14,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Git worktrees
+.worktrees/
+
 # Node.js
 node_modules/
 package-lock.json

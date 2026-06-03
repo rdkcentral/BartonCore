@@ -366,6 +366,18 @@ struct DeviceDriver
      *       specializaiton is already stored in metadata.
      */
     void (*commFailTimeoutSecsChanged)(DeviceDriver *driver, const icDevice *device, uint32_t commFailTimeoutSecs);
+
+    /**
+     * @brief Notification that a metadata value has been set or changed on a device managed by this driver.
+     *        Drivers MAY set this to react immediately to metadata changes, e.g., to apply new
+     *        configuration to a live connection.
+     *
+     * @param driver  the driver being notified
+     * @param device  the device whose metadata changed (owned by caller; do not retain)
+     * @param key     the metadata key that changed
+     * @param value   the new metadata value (never NULL)
+     */
+    void (*metadataUpdated)(DeviceDriver *driver, const icDevice *device, const char *key, const char *value);
 };
 
 /*

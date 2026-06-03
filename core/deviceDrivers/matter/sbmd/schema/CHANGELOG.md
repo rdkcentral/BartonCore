@@ -1,5 +1,14 @@
 # SBMD Schema Changelog
 
+## v3.0
+
+- Mapper scripts must return `{ value: "..." }` instead of `{ output: "..." }`
+  for read/event/command-response results (breaking change from v2.x)
+- Scripts may return `{ error: "msg" }` to explicitly signal an error
+- Scripts may return `{}` (empty object) to suppress the resource update
+- `SbmdUtils.Response.value(v)` and `SbmdUtils.Response.error(msg)` helpers
+  added to `sbmd-utils.js` for constructing the new result objects
+
 ## v2.1
 
 - Add optional `vendorId` and `productId` fields to `matterMeta` for
