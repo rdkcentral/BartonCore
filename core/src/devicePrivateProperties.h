@@ -51,7 +51,7 @@
 #define TEST_FASTTIMERS_PROP                                  "cpe.tests.fastTimers"
 #define CPE_ZIGBEE_CHANNEL_CHANGE_ENABLED_KEY                 "cpe.zigbee.channelChange.enabled"
 #define CPE_ZIGBEE_CHANNEL_CHANGE_MAX_REJOIN_WAITTIME_MINUTES "cpe.zigbee.channelChange.maxWaitTimeMin"
-#define CPE_REGION_CODE_PROPERTY_NAME                         "country_code"
+#define CPE_ZIGBEE_REGION_CODE                                "cpe.zigbee.region_code"
 #define ZIGBEE_HEALTH_CHECK_INTERVAL_MILLIS                   "cpe.zigbee.healthCheck.intervalMillis"
 #define ZIGBEE_HEALTH_CHECK_CCA_THRESHOLD                     "cpe.zigbee.healthCheck.ccaThreshold"
 #define ZIGBEE_HEALTH_CHECK_CCA_FAILURE_THRESHOLD             "cpe.zigbee.healthCheck.ccaFailureThreshold"
