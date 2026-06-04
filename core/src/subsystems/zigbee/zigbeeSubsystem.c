@@ -792,8 +792,9 @@ static bool initializeNetwork(void)
     }
 
     uint64_t localEui64 = loadLocalEui64();
-    scoped_generic char *region = b_core_property_provider_get_property_as_string(
-        propertyProvider, CPE_REGION_CODE_PROPERTY_NAME, "US");
+
+    scoped_generic char *region =
+        b_core_property_provider_get_property_as_string(propertyProvider, CPE_ZIGBEE_REGION_CODE, NULL);
 
     for (int i = 0; i < MAX_NETWORK_INIT_RETRIES; ++i)
     {
