@@ -58,7 +58,7 @@ static void setAddress(uint64_t eui64, cJSON *request);
 
 int zhalNetworkInit(uint64_t eui64, const char *region, const char *networkConfigData, icStringHashMap *properties)
 {
-    icLogDebug(LOG_TAG, "zhalNetworkInit: eui64=%016" PRIx64 ", region = %s", eui64, region);
+    icLogDebug(LOG_TAG, "zhalNetworkInit: eui64=%016" PRIx64 ", region = %s", eui64, stringCoalesceAlt(region, NULL));
 
     cJSON *request = cJSON_CreateObject();
 

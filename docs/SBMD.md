@@ -111,7 +111,9 @@ binaries through firmware updates.
 
 1. **Startup**: `SbmdFactory` scans the specs directory and parses all `.sbmd` files
 2. **Registration**: Each parsed spec creates a `SpecBasedMatterDeviceDriver` instance
-3. **Device Addition**: When a Matter device is commissioned, it is matched to a driver by device type
+3. **Device Addition**: When a Matter device is commissioned, a two-pass claiming process selects
+   the driver: vendor-specific drivers (matched by `vendorId`/`productId`) are tried first,
+   then generic device-type drivers
 4. **Resource Binding**: The driver binds Barton resources to Matter attributes/commands via mappers
 5. **Runtime Operations**:
    - **Read**: Attribute data from cache/device → JavaScript script → Barton string
