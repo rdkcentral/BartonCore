@@ -98,6 +98,12 @@ RUN cd /tmp && \
     git clone --depth 1 --branch ${CPCD_GIT_TAG} \
         https://github.com/SiliconLabs/cpc-daemon.git && \
     cd cpc-daemon && \
+    # Increase CPC system command retry timeout from 100ms to 1000ms. \
+    # The default 100ms causes retransmissions over high-latency links \
+    # (e.g. TCP serial tunnel via SSH) before the radio can respond. \
+    # For the reboot command, duplicates cause an infinite reset loop. \
+    sed -i 's/100000\([, ]*\)\/\* 100ms between retries\*\//1000000\1\/\* 1s between retries *\//g' \
+        server_core/server_core.c && \
     mkdir build && cd build && \
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \

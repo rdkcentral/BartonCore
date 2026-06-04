@@ -356,6 +356,7 @@ class SerialRelay:
                 break
 
             info(f"TCP client connected from {addr}")
+            client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             client.settimeout(0.5)
             self._set_client(client)
 
