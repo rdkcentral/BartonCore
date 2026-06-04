@@ -178,10 +178,8 @@ if [ -n "${RADIO_PORT}" ]; then
     #   PTY slave state.  If cpcd briefly closes/reopens the device during
     #   CPC init retries, wait-slave causes socat to disconnect TCP and
     #   destroy the relay connection.
-    #   nodelay: disable Nagle's algorithm — critical for low-latency CPC
-    #   frame delivery over SSH tunnels.
     socat \
-        "TCP4:${RADIO_HOST_V4}:${RADIO_PORT},nodelay,forever,intervall=3,keepalive,keepidle=10,keepintvl=5,keepcnt=3" \
+        "TCP4:${RADIO_HOST_V4}:${RADIO_PORT},forever,intervall=3,keepalive,keepidle=10,keepintvl=5,keepcnt=3" \
         "PTY,link=${VIRTUAL_TTY},raw,echo=0,b115200" &
     SOCAT_PID=$!
 
@@ -336,7 +334,7 @@ restart_socat() {
     done
 
     socat \
-        "TCP4:${RADIO_HOST_V4}:${RADIO_PORT},nodelay,forever,intervall=3,keepalive,keepidle=10,keepintvl=5,keepcnt=3" \
+        "TCP4:${RADIO_HOST_V4}:${RADIO_PORT},forever,intervall=3,keepalive,keepidle=10,keepintvl=5,keepcnt=3" \
         "PTY,link=${VIRTUAL_TTY},raw,echo=0,b115200" &
     SOCAT_PID=$!
 
