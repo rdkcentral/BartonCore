@@ -18,6 +18,20 @@ SbmdDriver({
     DOOR_LOCK_CLUSTER: 0x0101,
     IDENTIFY_CLUSTER: 0x0003,
     GENERAL_DIAGNOSTICS_CLUSTER: 0x0033,
+    ATTR_LOCK_STATE: 0x0000,
+    ATTR_ACTUATOR_ENABLED: 0x0002,
+    ATTR_DOOR_STATE: 0x0003,
+    ATTR_IDENTIFY_TIME: 0x0000,
+    ATTR_CREDENTIAL_RULES_SUPPORT: 0x001b,
+    EVT_DOOR_LOCK_ALARM: 0x0000,
+    EVT_LOCK_OPERATION: 0x0002,
+    EVT_LOCK_USER_CHANGE: 0x0003,
+    CMD_LOCK_DOOR: 0x0000,
+    CMD_UNLOCK_DOOR: 0x0001,
+    CMD_GET_CREDENTIAL_STATUS_RESP: 0x0024,
+    CMD_GET_USER_RESP: 0x001a,
+    CMD_SET_CREDENTIAL_RESP: 0x001c,
+    CMD_REBOOT: 0x0000,
   },
 
   barton: {
@@ -67,7 +81,12 @@ SbmdDriver({
         locked: {
           type: "boolean",
           modes: ["read", "dynamic", "emitEvents"],
-          read: readLockedState,
+          read: {
+            supplements: {
+              attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: ATTR_LOCK_STATE }],
+            },
+            handler: readLockedState,
+          },
         },
         lock: {
           type: "function",
@@ -84,40 +103,28 @@ SbmdDriver({
   // =========================================================================
   // Matter device-side handlers — incoming data from the device
   //
-  // Each handler declares which cluster items it handles and the function
-  // to call.  Items can be specified three ways:
-  //   - Single:   { clusterId, attributeId }
-  //   - Multiple: { clusterId, attributeIds: [...] }
-  //   - Wildcard: { clusterId, attributeId: "*" }
-  //
-  // Handlers may declare optional "inputs" to request additional context.
-  // The runtime pre-fetches these and populates args before calling:
-  //
-  //   inputs.resources — Barton resource values, keyed by resource name.
-  //       Populated in args.resources as { resourceName: currentValue }.
-  //       Use endpoint-qualified names for endpoint resources (e.g. "1/locked").
-  //
-  //   inputs.attributes — Matter attribute values, each { clusterId, attributeId }.
-  //       Populated in args.attributes as [{ clusterId, attributeId, value }].
-  //
-  // If an input is unavailable (e.g. device offline), its value is null.
+  // Each handler declares:
+  //   - Trigger: what fires the handler (clusterId + attributeId/eventId/
+  //     commandId).  Supports single, multiple (array), or wildcard ("*").
+  //     The handler is called once per triggering change.
+  //   - Supplements (optional): supplementary data pre-fetched before the
+  //     handler runs.
   // =========================================================================
 
   attributeHandlers: {
     // Single attribute — one specific attribute, one handler
     lockState: {
       clusterId: DOOR_LOCK_CLUSTER,
-      attributeId: 0x0000,
+      attributeId: ATTR_LOCK_STATE,
       handler: handleLockStateAttribute,
     },
 
     // Multiple attributes — several attributes share one handler.
-    // Requests the current "locked" resource value so the handler can
-    // make decisions based on existing Barton state.
+    // Pre-fetches the current "locked" resource value as supplementary context.
     lockActuator: {
       clusterId: DOOR_LOCK_CLUSTER,
-      attributeIds: [0x0002, 0x0003],   // ActuatorEnabled, DoorState
-      inputs: {
+      attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE],
+      supplements: {
         resources: [LOCK_ENDPOINT + "/locked"],
       },
       handler: handleActuatorAttributes,
@@ -132,15 +139,13 @@ SbmdDriver({
   },
 
   eventHandlers: {
-    // Single event.
-    // Requests both a Barton resource value and a Matter attribute so
-    // the handler has full context when processing the event.
+    // Single event with supplementary pre-fetched data.
     lockOperation: {
       clusterId: DOOR_LOCK_CLUSTER,
-      eventId: 0x0002,
-      inputs: {
+      eventId: EVT_LOCK_OPERATION,
+      supplements: {
+        attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: ATTR_ACTUATOR_ENABLED }],
         resources:  [LOCK_ENDPOINT + "/locked"],
-        attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: 0x0002 }],  // ActuatorEnabled
       },
       handler: handleLockOperation,
     },
@@ -148,7 +153,7 @@ SbmdDriver({
     // Multiple events — several events share one handler
     lockAlarms: {
       clusterId: DOOR_LOCK_CLUSTER,
-      eventIds: [0x0000, 0x0003],       // DoorLockAlarm, LockUserChange
+      eventIds: [EVT_DOOR_LOCK_ALARM, EVT_LOCK_USER_CHANGE],
       handler: handleLockAlarms,
     },
 
@@ -161,14 +166,12 @@ SbmdDriver({
   },
 
   commandHandlers: {
-    // Single command response.
-    // Requests a Matter attribute (CredentialRulesSupport) to help
-    // interpret the response.
+    // Single command response with supplementary attribute context.
     getCredentialStatus: {
       clusterId: DOOR_LOCK_CLUSTER,
-      commandId: 0x0024,
-      inputs: {
-        attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: 0x001b }],  // CredentialRulesSupport
+      commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
+      supplements: {
+        attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: ATTR_CREDENTIAL_RULES_SUPPORT }],
       },
       handler: handleGetCredentialStatusResponse,
     },
@@ -176,7 +179,7 @@ SbmdDriver({
     // Multiple command responses
     userCommands: {
       clusterId: DOOR_LOCK_CLUSTER,
-      commandIds: [0x001a, 0x001c],     // GetUserResponse, SetCredentialResponse
+      commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
       handler: handleUserCommandResponses,
     },
 
@@ -191,6 +194,15 @@ SbmdDriver({
 
 // ===========================================================================
 // Resource handler implementations
+//
+// All handlers receive the same args shape:
+//   args.attribute  — { clusterId, attributeId, value }  (attribute handlers)
+//   args.event      — { clusterId, eventId, data }       (event handlers)
+//   args.command    — { clusterId, commandId, data }     (command handlers)
+//   args.resource   — { resourceId, input }              (resource handlers)
+//   args.supplements.attributes — { [clusterId]: { [attributeId]: value } }
+//   args.supplements.resources  — { "endpointId/resourceId": value }
+//   args.clusterFeatureMaps — always available
 // ===========================================================================
 
 /**
@@ -200,7 +212,7 @@ SbmdDriver({
  *   0 = NotFullyLocked, 1 = Locked, 2 = Unlocked, 3 = Unlatched
  */
 function readLockedState(args) {
-  var value = SbmdUtils.Tlv.decode(args.tlvBase64);
+  var value = args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_LOCK_STATE];
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
@@ -210,34 +222,34 @@ function readLockedState(args) {
 /** Read the current identify string. */
 function readIdentify(args) {
   return SbmdUtils.result()
-    .read(IDENTIFY_CLUSTER, 0x0000);
+    .read(IDENTIFY_CLUSTER, ATTR_IDENTIFY_TIME);
 }
 
 /** Write a new identify duration. */
 function writeIdentify(args) {
   var schema = { IdentifyTime: { tag: 0, type: "uint16" } };
-  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: parseInt(args.value) }, schema);
+  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: parseInt(args.resource.input) }, schema);
 
   return SbmdUtils.result()
-    .write(IDENTIFY_CLUSTER, 0x0000, tlvBase64);
+    .write(IDENTIFY_CLUSTER, ATTR_IDENTIFY_TIME, tlvBase64);
 }
 
 /** Reboot the device via a General Diagnostics cluster command. */
 function executeReboot(args) {
   return SbmdUtils.result()
-    .invoke(GENERAL_DIAGNOSTICS_CLUSTER, 0x0000, null, {});
+    .invoke(GENERAL_DIAGNOSTICS_CLUSTER, CMD_REBOOT, null, {});
 }
 
 /**
  * Execute LockDoor or UnlockDoor command based on which resource was invoked.
  *
- * args.resourceId is "lock" or "unlock", supplied by the runtime.
- * LockDoor = command 0x0000, UnlockDoor = command 0x0001.
+ * args.resource.resourceId is "lock" or "unlock", supplied by the runtime.
+ * LockDoor = CMD_LOCK_DOOR, UnlockDoor = CMD_UNLOCK_DOOR.
  */
 function executeLockAction(args) {
-  var commandId = (args.resourceId === "lock") ? 0x0000 : 0x0001;
+  var commandId = (args.resource.resourceId === "lock") ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
   var featureMap = args.clusterFeatureMaps[DOOR_LOCK_CLUSTER] || 0;
-  var tlvBase64 = buildPinPayload(featureMap, args.input);
+  var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
 
   return SbmdUtils.result()
     .invoke(DOOR_LOCK_CLUSTER, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
@@ -249,8 +261,7 @@ function executeLockAction(args) {
 
 /** Handle LockState attribute — same transform as the resource read. */
 function handleLockStateAttribute(args) {
-  var value = SbmdUtils.Tlv.decode(args.tlvBase64);
-  var isLocked = (value === 1);
+  var isLocked = (args.attribute.value === 1);
 
   return SbmdUtils.result()
     .updateEndpointResource(LOCK_ENDPOINT, "locked", isLocked ? "true" : "false");
@@ -259,19 +270,18 @@ function handleLockStateAttribute(args) {
 /**
  * Handle ActuatorEnabled + DoorState attributes together.
  *
- * args.resources["1/locked"] contains the current Barton "locked" value,
- * allowing the handler to skip redundant updates.
+ * args.supplements.resources["1/locked"] contains the current Barton
+ * "locked" value, allowing the handler to skip redundant updates.
  */
 function handleActuatorAttributes(args) {
-  var value = SbmdUtils.Tlv.decode(args.tlvBase64);
-  var currentLocked = args.resources[LOCK_ENDPOINT + "/locked"];
+  var currentLocked = args.supplements.resources[LOCK_ENDPOINT + "/locked"];
 
-  if (args.attributeId === 0x0002) {
+  if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .updateEndpointResource(LOCK_ENDPOINT, "actuatorEnabled", value ? "true" : "false");
-  } else if (args.attributeId === 0x0003) {
+      .updateEndpointResource(LOCK_ENDPOINT, "actuatorEnabled", args.attribute.value ? "true" : "false");
+  } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return SbmdUtils.result()
-      .updateEndpointResource(LOCK_ENDPOINT, "doorState", String(value))
+      .updateEndpointResource(LOCK_ENDPOINT, "doorState", String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked);
   }
 
@@ -281,7 +291,7 @@ function handleActuatorAttributes(args) {
 /** Wildcard handler — log any DoorLock attribute for diagnostics. */
 function handleLockDiagnostics(args) {
   return SbmdUtils.result()
-    .log("DoorLock attr 0x" + args.attributeId.toString(16) + " changed");
+    .log("DoorLock attr 0x" + args.attribute.attributeId.toString(16) + " changed");
 }
 
 // ===========================================================================
@@ -298,13 +308,12 @@ function handleLockDiagnostics(args) {
  * Only Lock (0) and Unlock (1) change the resource state.
  * Other operation types are acknowledged but produce no update.
  *
- * args.resources["1/locked"]  — current Barton locked state
- * args.attributes[0].value    — current ActuatorEnabled attribute value
+ * args.supplements.resources["1/locked"]                    — current Barton locked state
+ * args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_ACTUATOR_ENABLED]  — ActuatorEnabled
  */
 function handleLockOperation(args) {
-  var event = SbmdUtils.Tlv.decode(args.tlvBase64);
-  var opType = event[0];
-  var actuatorEnabled = args.attributes[0].value;
+  var opType = args.event.data[0];
+  var actuatorEnabled = args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_ACTUATOR_ENABLED];
 
   if (!actuatorEnabled) {
     return SbmdUtils.result()
@@ -336,20 +345,19 @@ function handleLockOperation(args) {
  * stores in memory with automatic cleanup after ttlSecs seconds.
  */
 function handleLockAlarms(args) {
-  var event = SbmdUtils.Tlv.decode(args.tlvBase64);
-  var alarmCode = event[0];
+  var alarmCode = args.event.data[0];
   var count = parseInt(SbmdUtils.getPersistentKey("alarmCount") || "0") + 1;
 
   return SbmdUtils.result()
     .setTransientKey("lastAlarmCode", String(alarmCode), 300)
     .setPersistentKey("alarmCount", String(count))
-    .log("DoorLock alarm event 0x" + args.eventId.toString(16) + " code=" + alarmCode + " total=" + count);
+    .log("DoorLock alarm event 0x" + args.event.eventId.toString(16) + " code=" + alarmCode + " total=" + count);
 }
 
 /** Wildcard event handler — catch-all for unhandled DoorLock events. */
 function handleLockEventCatchAll(args) {
   return SbmdUtils.result()
-    .log("DoorLock event 0x" + args.eventId.toString(16) + " received");
+    .log("DoorLock event 0x" + args.event.eventId.toString(16) + " received");
 }
 
 // ===========================================================================
@@ -359,12 +367,13 @@ function handleLockEventCatchAll(args) {
 /**
  * Handle GetCredentialStatusResponse.
  *
- * args.attributes[0].value — current CredentialRulesSupport, used to
- * determine which credential fields are meaningful in the response.
+ * args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_CREDENTIAL_RULES_SUPPORT] —
+ * CredentialRulesSupport, used to determine which credential
+ * fields are meaningful.
  */
 function handleGetCredentialStatusResponse(args) {
-  var response = SbmdUtils.Tlv.decode(args.tlvBase64);
-  var credRules = args.attributes[0].value;
+  var response = args.command.data;
+  var credRules = args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_CREDENTIAL_RULES_SUPPORT];
 
   return SbmdUtils.result()
     .updateEndpointResource(LOCK_ENDPOINT, "credentialStatus", JSON.stringify(response))
@@ -373,7 +382,7 @@ function handleGetCredentialStatusResponse(args) {
 
 /** Handle GetUserResponse + SetCredentialResponse — update resource. */
 function handleUserCommandResponses(args) {
-  var response = SbmdUtils.Tlv.decode(args.tlvBase64);
+  var response = args.command.data;
 
   return SbmdUtils.result()
     .updateEndpointResource(LOCK_ENDPOINT, "userCommandResult", JSON.stringify(response));
@@ -382,7 +391,7 @@ function handleUserCommandResponses(args) {
 /** Wildcard command handler — catch-all for unhandled command responses. */
 function handleLockCommandCatchAll(args) {
   return SbmdUtils.result()
-    .log("DoorLock command response 0x" + args.commandId.toString(16) + " received");
+    .log("DoorLock command response 0x" + args.command.commandId.toString(16) + " received");
 }
 
 // ---------------------------------------------------------------------------
