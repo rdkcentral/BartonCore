@@ -50,7 +50,7 @@ SbmdDriver({
       resources: {
         isOn: {
           type: "boolean",
-          modes: ["read", "write", "dynamic", "emitEvents"],
+          modes: ["read", "write"],
           read: {
             supplements: {
               attributes: [{ clusterId: ON_OFF_CLUSTER, attributeId: ATTR_ON_OFF }],
@@ -62,7 +62,7 @@ SbmdDriver({
         currentLevel: {
           type: "com.icontrol.lightLevel",
           optional: true,
-          modes: ["read", "write", "dynamic", "emitEvents"],
+          modes: ["read", "write"],
           read: {
             supplements: {
               attributes: [{ clusterId: LEVEL_CONTROL_CLUSTER, attributeId: ATTR_CURRENT_LEVEL }],

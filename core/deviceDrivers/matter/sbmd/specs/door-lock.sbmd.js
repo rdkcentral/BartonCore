@@ -62,7 +62,7 @@ SbmdDriver({
     },
     identify: {
       type: "string",
-      modes: ["read", "write"],
+      modes: ["read", "write", "static", "noEvents"],
       read: {
         supplements: {
           attributes: [{ clusterId: IDENTIFY_CLUSTER, attributeId: ATTR_IDENTIFY_TIME }],
@@ -83,14 +83,14 @@ SbmdDriver({
       profileVersion: 3,
 
       resources: {
-        locked: {
+        locked: { // reads return the cached resource value and don't require a handler
           type: "boolean",
-          modes: ["read", "dynamic", "emitEvents"],
-          read: {
+          modes: ["read"],
+          seed: {
             supplements: {
               attributes: [{ clusterId: DOOR_LOCK_CLUSTER, attributeId: ATTR_LOCK_STATE }],
             },
-            handler: readLockedState,
+            handler: seedLockedResource,
           },
         },
         lock: {
@@ -103,19 +103,19 @@ SbmdDriver({
         },
         actuatorEnabled: {
           type: "boolean",
-          modes: ["read", "dynamic", "emitEvents"],
+          modes: ["read"],
         },
         doorState: {
           type: "string",
-          modes: ["read", "dynamic", "emitEvents"],
+          modes: ["read"],
         },
         credentialStatus: {
           type: "string",
-          modes: ["read", "dynamic", "emitEvents"],
+          modes: ["read", "noEvents"],
         },
         userCommandResult: {
           type: "string",
-          modes: ["read", "dynamic", "emitEvents"],
+          modes: ["read"],
         },
       },
     },
@@ -133,7 +133,8 @@ SbmdDriver({
   // =========================================================================
 
   attributeHandlers: {
-    // Single attribute — one specific attribute, one handler
+    // Single attribute — one specific attribute, one handler.
+    // This is an example and would not be in the real driver since seeding and events are used instead
     lockState: {
       clusterId: DOOR_LOCK_CLUSTER,
       attributeId: ATTR_LOCK_STATE,
@@ -228,12 +229,12 @@ SbmdDriver({
 // ===========================================================================
 
 /**
- * Transform LockState attribute TLV into a Barton boolean.
+ * Seed the locked resource from the LockState attribute.
  *
  * LockState enum values:
  *   0 = NotFullyLocked, 1 = Locked, 2 = Unlocked, 3 = Unlatched
  */
-function readLockedState(args) {
+function seedLockedResource(args) {
   var value = args.supplements.attributes[args.constants.DOOR_LOCK_CLUSTER][args.constants.ATTR_LOCK_STATE];
   var isLocked = (value === 1);
 
@@ -283,14 +284,12 @@ function executeLockAction(args) {
 // Attribute handler implementations
 // ===========================================================================
 
-/** Handle LockState attribute — same transform as the resource read. */
+/** Handle LockState attribute — example only, no-op in this driver. */
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
-  // return an update to the "locked" resource, with example metadata
-  return SbmdUtils.result()
-    .updateEndpointResource(args.constants.LOCK_ENDPOINT, "locked", isLocked ? "true" : "false",
-      JSON.stringify({ source: "attribute", raw: args.attribute.value }));
+  // dont really do anything with this attribute report... example only.
+  return SbmdUtils.result();
 }
 
 /**
@@ -334,8 +333,8 @@ function handleLockDiagnostics(args) {
  * Only Lock (0) and Unlock (1) change the resource state.
  * Other operation types are acknowledged but produce no update.
  *
- * args.supplements.resources["1/locked"]                    — current Barton locked state
- * args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_ACTUATOR_ENABLED]  — ActuatorEnabled
+ * args.supplements.resources["1/locked"]  — current Barton locked state
+ * args.supplements.attributes[args.constants.DOOR_LOCK_CLUSTER][args.constants.ATTR_ACTUATOR_ENABLED]  — ActuatorEnabled
  */
 function handleLockOperation(args) {
   var opType = args.event.data[0];
@@ -393,7 +392,7 @@ function handleLockEventCatchAll(args) {
 /**
  * Handle GetCredentialStatusResponse.
  *
- * args.supplements.attributes[DOOR_LOCK_CLUSTER][ATTR_CREDENTIAL_RULES_SUPPORT] —
+ * args.supplements.attributes[args.constants.DOOR_LOCK_CLUSTER][args.constants.ATTR_CREDENTIAL_RULES_SUPPORT] —
  * CredentialRulesSupport, used to determine which credential
  * fields are meaningful.
  */
