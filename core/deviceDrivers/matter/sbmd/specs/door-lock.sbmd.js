@@ -1,6 +1,6 @@
 /**
  * Example Door Lock SBMD Driver for new SBMD specification exploration only.
- * This example has ficticious concepts whose purpose is to demonstrate the capabilities
+ * This example has fictitious concepts whose purpose is to demonstrate the capabilities
  * of the new SBMD spec. Impractical for real use.
  *
  * Maps Matter Door Lock device type (0x000a) to Barton doorLock device class
