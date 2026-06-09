@@ -69,9 +69,9 @@ namespace
 {
     // Note: I've seen approx 7 seconds on a standard Ubuntu desktop environment for a new network, about 18 seconds for
     // creating and replacing an existing network. CPC-based radio hardware (e.g., EFR32 via serial/SPI) can take 35+
-    // seconds due to shared radio scheduling and slower transport. This should just "go away" if we implement a proper
-    // main loop.
-    constexpr int ATTACH_WAIT_SECONDS = 60;
+    // seconds due to shared radio scheduling and slower transport. After the Attach callback fires, the OTBR may still
+    // need 30-40 seconds to form the network (detached → leader) before the dataset TLVs become available.
+    constexpr int ATTACH_WAIT_SECONDS = 120;
 } // namespace
 
 namespace barton
@@ -147,6 +147,8 @@ namespace barton
                 // The Attach callback may fire before OTBR has finished applying the new dataset.
                 // Retry GetActiveDatasetTlvs while time remains, processing D-Bus messages in between
                 // so we receive the "Active dataset tlvs changed" signal.
+                int datasetRetryCount = 0;
+
                 while (true)
                 {
                     threadApiCallError = threadApiBus->GetActiveDatasetTlvs(retVal);
@@ -166,10 +168,16 @@ namespace barton
                         break;
                     }
 
-                    icDebug("Active dataset not yet available (error=%d), retrying...", (int) threadApiCallError);
+                    if (datasetRetryCount == 0 || datasetRetryCount % 10 == 0)
+                    {
+                        icDebug("Active dataset not yet available (error=%d), retrying (%" PRId64 "ms remaining)...",
+                                (int) threadApiCallError, (int64_t) timer.count());
+                    }
 
-                    // Dispatch D-Bus messages for up to 1 second before retrying
-                    dbus_connection_read_write_dispatch(dbusConnection.get(), 1000);
+                    datasetRetryCount++;
+
+                    // Dispatch D-Bus messages for up to 2 seconds before retrying
+                    dbus_connection_read_write_dispatch(dbusConnection.get(), 2000);
                     next = steady_clock::now();
                     timer = timer - duration_cast<milliseconds>(next - current);
                     current = next;
