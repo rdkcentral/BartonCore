@@ -63,7 +63,12 @@ SbmdDriver({
     identify: {
       type: "string",
       modes: ["read", "write"],
-      read: readIdentify,
+      read: {
+        supplements: {
+          attributes: [{ clusterId: IDENTIFY_CLUSTER, attributeId: ATTR_IDENTIFY_TIME }],
+        },
+        handler: readIdentify,
+      },
       write: writeIdentify,
     },
   },
@@ -95,6 +100,22 @@ SbmdDriver({
         unlock: {
           type: "function",
           execute: executeLockAction,
+        },
+        actuatorEnabled: {
+          type: "boolean",
+          modes: ["read", "dynamic", "emitEvents"],
+        },
+        doorState: {
+          type: "string",
+          modes: ["read", "dynamic", "emitEvents"],
+        },
+        credentialStatus: {
+          type: "string",
+          modes: ["read", "dynamic", "emitEvents"],
+        },
+        userCommandResult: {
+          type: "string",
+          modes: ["read", "dynamic", "emitEvents"],
         },
       },
     },
@@ -219,10 +240,12 @@ function readLockedState(args) {
     .updateResource(isLocked ? "true" : "false");
 }
 
-/** Read the current identify string. */
+/** Read the current identify time. */
 function readIdentify(args) {
+  var value = args.supplements.attributes[IDENTIFY_CLUSTER][ATTR_IDENTIFY_TIME];
+
   return SbmdUtils.result()
-    .read(IDENTIFY_CLUSTER, ATTR_IDENTIFY_TIME);
+    .updateResource(String(value));
 }
 
 /** Write a new identify duration. */
@@ -263,8 +286,10 @@ function executeLockAction(args) {
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
+  // return an update to the "locked" resource, with example metadata
   return SbmdUtils.result()
-    .updateEndpointResource(LOCK_ENDPOINT, "locked", isLocked ? "true" : "false");
+    .updateEndpointResource(LOCK_ENDPOINT, "locked", isLocked ? "true" : "false",
+      JSON.stringify({ source: "attribute", raw: args.attribute.value }));
 }
 
 /**
@@ -323,11 +348,11 @@ function handleLockOperation(args) {
   if (opType === 0) {
     return SbmdUtils.result()
       .updateEndpointResource(LOCK_ENDPOINT, "locked", "true")
-      .setPersistentKey("lastLockOperation", "lock");
+      .setPersistentData("lastLockOperation", "lock");
   } else if (opType === 1) {
     return SbmdUtils.result()
       .updateEndpointResource(LOCK_ENDPOINT, "locked", "false")
-      .setPersistentKey("lastLockOperation", "unlock");
+      .setPersistentData("lastLockOperation", "unlock");
   }
 
   return SbmdUtils.result(); // no update
@@ -340,17 +365,17 @@ function handleLockOperation(args) {
  * short-lived diagnostics, and persists the total alarm count across
  * reboots.
  *
- * getPersistentKey(key) retrieves a value from non-volatile storage
- * (returns null if not set).  setTransientKey(key, value, ttlSecs)
+ * getPersistentData(name) retrieves a value from non-volatile storage
+ * (returns null if not set).  setTransientData(name, value, ttlSecs)
  * stores in memory with automatic cleanup after ttlSecs seconds.
  */
 function handleLockAlarms(args) {
   var alarmCode = args.event.data[0];
-  var count = parseInt(SbmdUtils.getPersistentKey("alarmCount") || "0") + 1;
+  var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0") + 1;
 
   return SbmdUtils.result()
-    .setTransientKey("lastAlarmCode", String(alarmCode), 300)
-    .setPersistentKey("alarmCount", String(count))
+    .setTransientData("lastAlarmCode", String(alarmCode), 300)
+    .setPersistentData("alarmCount", String(count))
     .log("DoorLock alarm event 0x" + args.event.eventId.toString(16) + " code=" + alarmCode + " total=" + count);
 }
 
