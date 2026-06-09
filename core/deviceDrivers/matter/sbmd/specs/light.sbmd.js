@@ -94,21 +94,21 @@ SbmdDriver({
 // ===========================================================================
 
 function readIsOn(args) {
-  var value = args.supplements.attributes[ON_OFF_CLUSTER][ATTR_ON_OFF];
+  var value = args.supplements.attributes[args.constants.ON_OFF_CLUSTER][args.constants.ATTR_ON_OFF];
 
   return SbmdUtils.result()
     .updateResource((value === true) ? "true" : "false");
 }
 
 function writeIsOn(args) {
-  var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
+  var commandId = (args.resource.input === "true") ? args.constants.CMD_ON : args.constants.CMD_OFF;
 
   return SbmdUtils.result()
-    .invoke(ON_OFF_CLUSTER, commandId, null, {});
+    .invoke(args.constants.ON_OFF_CLUSTER, commandId, null, {});
 }
 
 function readCurrentLevel(args) {
-  var level = args.supplements.attributes[LEVEL_CONTROL_CLUSTER][ATTR_CURRENT_LEVEL];
+  var level = args.supplements.attributes[args.constants.LEVEL_CONTROL_CLUSTER][args.constants.ATTR_CURRENT_LEVEL];
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
@@ -138,7 +138,7 @@ function writeCurrentLevel(args) {
   var tlvBase64 = SbmdUtils.Tlv.encodeStruct(payload, schema);
 
   return SbmdUtils.result()
-    .invoke(LEVEL_CONTROL_CLUSTER, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64, {});
+    .invoke(args.constants.LEVEL_CONTROL_CLUSTER, args.constants.CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64, {});
 }
 
 // ===========================================================================
@@ -147,12 +147,12 @@ function writeCurrentLevel(args) {
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .updateEndpointResource(LIGHT_ENDPOINT, "isOn", (args.attribute.value === true) ? "true" : "false");
+    .updateEndpointResource(args.constants.LIGHT_ENDPOINT, "isOn", (args.attribute.value === true) ? "true" : "false");
 }
 
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .updateEndpointResource(LIGHT_ENDPOINT, "currentLevel", percent.toString());
+    .updateEndpointResource(args.constants.LIGHT_ENDPOINT, "currentLevel", percent.toString());
 }
