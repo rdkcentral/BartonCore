@@ -619,7 +619,9 @@ supplements: {
 | `resources` | string[] | Barton resource values to fetch. Format: `"endpointId/resourceName"` for endpoint resources, or `"resourceName"` for device-level resources. |
 
 The fetched data is delivered to the handler in `args.supplements` (see
-[Section 5.1](#51-handler-arguments)).
+[Section 5.1](#51-handler-arguments)). All supplement values are **immutable
+copies** — modifying them has no effect on the underlying device cache or
+resource state.
 
 ---
 
