@@ -499,6 +499,16 @@ Both `seed` and `read` support the same object shape:
 }
 ```
 
+**No handler (event-driven resources)**
+
+A readable resource may omit both `seed` and `read`. In this case, the resource
+has no value until an attribute handler, event handler, or command handler updates
+it via `barton.updateResource()`. Reads return the last value set by a handler
+(or no value if none has fired yet). This pattern is common for resources whose
+values are populated entirely by device-initiated reports — for example,
+`actuatorEnabled` or `doorState` on a door lock, where an attribute handler
+pushes updates whenever the device reports a change.
+
 ### 4.9 Attribute Handlers
 
 Attribute handlers process incoming Matter attribute reports from the device.
@@ -1082,7 +1092,12 @@ When an incoming attribute/event/command matches multiple registered handlers:
 
 ## 10. Complete Examples
 
-### 10.1 Light Driver (Simple)
+### 10.1 Light Driver — Idiomatic
+
+Demonstrates the recommended driver structure: constants for all IDs, aliases for
+supplement references and handler dispatch, separate handler functions for each
+operation, and `optional: true` for the dimmable resource (not all lights support
+level control).
 
 ```js
 SbmdDriver({
@@ -1226,7 +1241,136 @@ function handleCurrentLevelAttribute(args) {
 }
 ```
 
-### 10.2 Door Lock Driver (Advanced)
+### 10.2 Light Driver — No Aliases, No Constants
+
+Demonstrates that aliases and constants are optional. All cluster IDs, attribute
+IDs, and resource names are inlined as literals. This style is harder to maintain
+but shows the minimum required structure.
+
+```js
+SbmdDriver({
+  schemaVersion: "4.0",
+  driverVersion: "1.0",
+  name: "Light (Inline)",
+
+  constants: {},
+
+  barton: { deviceClass: "light", deviceClassVersion: 0 },
+
+  matter: {
+    deviceTypes: [0x0100],
+    revision: 1,
+  },
+
+  reporting: { minSecs: 1, maxSecs: 3600 },
+
+  endpoints: {
+    "1": {
+      profile: "light",
+      profileVersion: 0,
+      resources: {
+        "isOn": {
+          type: "boolean",
+          modes: ["read", "write"],
+          read: {
+            supplements: { attributes: [] },
+            handler: function (args) {
+              return SbmdUtils.result();
+            },
+          },
+          write: function (args) {
+            var cmdId = (args.resource.input === "true") ? 0x0001 : 0x0000;
+
+            return SbmdUtils.result()
+              .device.invoke(0x0006, cmdId, null, {});
+          },
+        },
+      },
+    },
+  },
+
+  attributeHandlers: {
+    onOff: {
+      clusterId: 0x0006,
+      attributeId: 0x0000,
+      handler: function (args) {
+        return SbmdUtils.result()
+          .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false");
+      },
+    },
+  },
+});
+```
+
+### 10.3 Light Driver — Minimal Single-Handler
+
+Demonstrates the most compact driver possible. A single function handles all
+interactions by switching on the handler type (attribute report vs resource
+read/write). This trades readability for brevity and is not recommended for
+production drivers.
+
+```js
+SbmdDriver({
+  schemaVersion: "4.0",
+  driverVersion: "1.0",
+  name: "Light (Minimal)",
+
+  constants: {
+    CL_ON_OFF: 0x0006,
+    ATTR_ON_OFF: 0x0000,
+    CMD_ON: 0x0001,
+    CMD_OFF: 0x0000,
+  },
+
+  aliases: {
+    onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" },
+  },
+
+  barton: { deviceClass: "light", deviceClassVersion: 0 },
+  matter: { deviceTypes: [0x0100], revision: 1 },
+  reporting: { minSecs: 1, maxSecs: 3600 },
+
+  endpoints: {
+    "1": {
+      profile: "light",
+      profileVersion: 0,
+      resources: {
+        "isOn": {
+          type: "boolean",
+          modes: ["read", "write"],
+          read: { supplements: { attributes: ["onOff"] }, handler: lightHandler },
+          write: lightHandler,
+        },
+      },
+    },
+  },
+
+  attributeHandlers: {
+    onOff: { aliases: ["onOff"], handler: lightHandler },
+  },
+});
+
+function lightHandler(args) {
+  if (args.attribute) {
+    return SbmdUtils.result()
+      .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false");
+  }
+
+  if (args.resource.input !== null) {
+    var cmdId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
+
+    return SbmdUtils.result()
+      .device.invoke(CL_ON_OFF, cmdId, null, {});
+  }
+
+  var value = args.supplements.attributes.onOff;
+
+  return SbmdUtils.result()
+    .barton.updateResource("1", "isOn", value ? "true" : "false");
+}
+```
+
+### 10.4 Door Lock Driver — Advanced
 
 This example demonstrates the full breadth of SBMD v4.0 features. Some concepts
 are fictitious — their purpose is to illustrate capabilities, not to serve as a
@@ -1375,12 +1519,14 @@ SbmdDriver({
           prerequisites: ["actuatorEnabled"],
           optional: true,
           modes: ["read"],
+          // No seed or read handler — updated by handleActuatorAttributes
         },
         [RES_DOOR_STATE]: {
           type: "string",
           prerequisites: ["doorState"],
           optional: true,
           modes: ["read"],
+          // No seed or read handler — updated by handleActuatorAttributes
         },
         [RES_CREDENTIAL_STATUS]: {
           type: "string",
