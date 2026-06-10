@@ -548,7 +548,7 @@ Same dispatch rules and aliases/explicit mutual exclusivity as attribute handler
 ### 4.11 Command Handlers
 
 Command handlers process **unsolicited** commands received from the device — that
-is, commands that are not correlated to a pending `.invoke()` with a
+is, commands that are not correlated to a pending `.device.invoke()` with a
 `responseCommandId` (see [Section 6](#6-command-response-flows)).
 
 ```js
@@ -613,7 +613,7 @@ with `SbmdUtils.result()`.
 function myHandler(args) {
   // ... logic ...
   return SbmdUtils.result()
-    .updateResource(ENDPOINT, RESOURCE, value);
+    .barton.updateResource(ENDPOINT, RESOURCE, value);
 }
 ```
 
@@ -649,7 +649,7 @@ The `args` object varies by handler type. All fields are read-only.
 
 | Field | Type | Description |
 |---|---|---|
-| `args.invokeContext` | any | Arbitrary context passed via the `context` field on the originating `.invoke()` call. `null` if not set. |
+| `args.invokeContext` | any | Arbitrary context passed via the `context` field on the originating `.device.invoke()` call. `null` if not set. |
 
 ### 5.2 Handler Type Summary
 
@@ -677,14 +677,14 @@ The device returns a standard Matter status response (success or error code). No
 driver code is needed — the runtime automatically maps the status to the resource
 operation result (success/failure).
 
-This is the default behavior when `.invoke()` has no `responseCommandId`.
+This is the default behavior when `.device.invoke()` has no `responseCommandId`.
 
 ```js
 function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
   return SbmdUtils.result()
-    .invoke(CL_DOOR_LOCK, commandId, payload, { timedInvokeTimeoutMs: 10000 });
+    .device.invoke(CL_DOOR_LOCK, commandId, payload, { timedInvokeTimeoutMs: 10000 });
 }
 ```
 
@@ -696,14 +696,14 @@ resource operation with success or failure. The handler is not called again.
 Some commands expect a specific command to be sent back from the device. The
 resource operation cannot complete until that response arrives and is processed.
 
-Declare the expected response on the `.invoke()` options:
+Declare the expected response on the `.device.invoke()` options:
 
 ```js
 function executeGetCredentialStatus(args) {
   var payload = buildCredentialRequest(args.resource.input);
 
   return SbmdUtils.result()
-    .invoke(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
+    .device.invoke(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
       handler: processCredentialResponse,
       context: { requestedCredential: args.resource.input },
@@ -716,7 +716,7 @@ function processCredentialResponse(args) {
   var requested = args.invokeContext.requestedCredential;
 
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
+    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
 }
 ```
 
@@ -733,7 +733,7 @@ function processCredentialResponse(args) {
 **Runtime behavior**:
 
 1. Resource operation triggers the execute handler, which returns a result with
-   `.invoke(...)` containing `responseCommandId`.
+   `.device.invoke(...)` containing `responseCommandId`.
 2. Runtime sends the command and **parks** the resource operation, storing the
    `handler`, `context`, and timeout.
 3. When a command with matching `clusterId` + `responseCommandId` arrives:
@@ -764,7 +764,7 @@ commandHandlers: {
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
 }
 ```
 
@@ -779,14 +779,14 @@ handler returns.
 
 ```js
 return SbmdUtils.result()
-  .updateResource(EP_LOCK, RES_LOCKED, "true")
-  .setPersistentData("lastLockOperation", "lock")
+  .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
+  .storage.setPersistentData("lastLockOperation", "lock")
   .log("lock operation applied");
 ```
 
-### 7.1 Resource Updates
+### 7.1 Resource Updates — `barton`
 
-#### `updateResource(resource, value)`
+#### `barton.updateResource(resource, value)`
 
 Update a **device-level** resource (declared under top-level `resources`).
 
@@ -795,7 +795,7 @@ Update a **device-level** resource (declared under top-level `resources`).
 | `resource` | string | Resource name (use a `RES_*` constant). |
 | `value` | string | New resource value. |
 
-#### `updateResource(endpoint, resource, value [, metadata])`
+#### `barton.updateResource(endpoint, resource, value [, metadata])`
 
 Update an **endpoint-level** resource.
 
@@ -809,9 +809,9 @@ Update an **endpoint-level** resource.
 The runtime distinguishes the two-arg vs three-arg form by the first argument:
 endpoint IDs are numeric strings, resource names are not.
 
-### 7.2 Device Interaction
+### 7.2 Device Interaction — `device`
 
-#### `invoke(clusterId, commandId, payload, options)`
+#### `device.invoke(clusterId, commandId, payload, options)`
 
 Send a Matter command to the device.
 
@@ -833,7 +833,7 @@ Send a Matter command to the device.
 | `timeoutMs` | number | Response timeout in milliseconds. |
 | `passthrough` | boolean | Also fire `commandHandlers` for the response. Default `false`. |
 
-#### `read(clusterId, attributeId)`
+#### `device.read(clusterId, attributeId)`
 
 Read a Matter attribute from the device.
 
@@ -842,7 +842,7 @@ Read a Matter attribute from the device.
 | `clusterId` | number | Target cluster. |
 | `attributeId` | number | Attribute ID to read. |
 
-#### `write(clusterId, attributeId, payload)`
+#### `device.write(clusterId, attributeId, payload)`
 
 Write a Matter attribute on the device.
 
@@ -852,14 +852,14 @@ Write a Matter attribute on the device.
 | `attributeId` | number | Attribute ID to write. |
 | `payload` | string | Base64-encoded TLV value. |
 
-### 7.3 Persistent and Transient Storage
+### 7.3 Persistent and Transient Storage — `storage`
 
-#### `setPersistentData(name, value)`
+#### `storage.setPersistentData(name, value)`
 
 Store a key-value pair in non-volatile storage. Survives device and service
 reboots. Values are always strings.
 
-#### `setTransientData(name, value, ttlSecs)`
+#### `storage.setTransientData(name, value, ttlSecs)`
 
 Store a key-value pair in memory with automatic cleanup after `ttlSecs` seconds.
 Useful for short-lived diagnostic or debounce state.
@@ -894,7 +894,7 @@ function handleLockOperation(args) {
   }
 
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false");
+    .barton.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false");
 }
 ```
 
@@ -918,7 +918,7 @@ function writeIsOn(args) {
   var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .invoke(CL_ON_OFF, commandId, null, {});
+    .device.invoke(CL_ON_OFF, commandId, null, {});
 }
 ```
 
@@ -1153,14 +1153,14 @@ function readIsOn(args) {
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false");
+    .barton.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false");
 }
 
 function writeIsOn(args) {
   var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .invoke(CL_ON_OFF, commandId, null, {});
+    .device.invoke(CL_ON_OFF, commandId, null, {});
 }
 
 function readCurrentLevel(args) {
@@ -1168,7 +1168,7 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
+    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
 }
 
 function writeCurrentLevel(args) {
@@ -1188,20 +1188,20 @@ function writeCurrentLevel(args) {
   };
 
   return SbmdUtils.result()
-    .invoke(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
+    .device.invoke(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
             SbmdUtils.Tlv.encodeStruct(payload, schema), {});
 }
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
+    .barton.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
 }
 
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
+    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
 }
 ```
 
@@ -1459,14 +1459,14 @@ function seedLockedResource(args) {
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false");
+    .barton.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false");
 }
 
 function readIdentify(args) {
   var value = args.supplements.attributes.identifyTime;
 
   return SbmdUtils.result()
-    .updateResource(RES_IDENTIFY, String(value));
+    .barton.updateResource(RES_IDENTIFY, String(value));
 }
 
 function writeIdentify(args) {
@@ -1475,12 +1475,12 @@ function writeIdentify(args) {
     { IdentifyTime: parseInt(args.resource.input, 10) }, schema);
 
   return SbmdUtils.result()
-    .write(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
+    .device.write(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
 }
 
 function executeReboot(args) {
   return SbmdUtils.result()
-    .invoke(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
+    .device.invoke(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
 }
 
 function executeLockAction(args) {
@@ -1489,7 +1489,7 @@ function executeLockAction(args) {
   var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
 
   return SbmdUtils.result()
-    .invoke(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+    .device.invoke(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -1507,10 +1507,10 @@ function handleActuatorAttributes(args) {
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
+      .barton.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return SbmdUtils.result()
-      .updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
+      .barton.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked);
   }
 
@@ -1537,12 +1537,12 @@ function handleLockOperation(args) {
 
   if (opType === 0) {
     return SbmdUtils.result()
-      .updateResource(EP_LOCK, RES_LOCKED, "true")
-      .setPersistentData("lastLockOperation", "lock");
+      .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
+      .storage.setPersistentData("lastLockOperation", "lock");
   } else if (opType === 1) {
     return SbmdUtils.result()
-      .updateResource(EP_LOCK, RES_LOCKED, "false")
-      .setPersistentData("lastLockOperation", "unlock");
+      .barton.updateResource(EP_LOCK, RES_LOCKED, "false")
+      .storage.setPersistentData("lastLockOperation", "unlock");
   }
 
   return SbmdUtils.result();
@@ -1553,8 +1553,8 @@ function handleLockAlarms(args) {
   var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0", 10) + 1;
 
   return SbmdUtils.result()
-    .setTransientData("lastAlarmCode", String(alarmCode), 300)
-    .setPersistentData("alarmCount", String(count))
+    .storage.setTransientData("lastAlarmCode", String(alarmCode), 300)
+    .storage.setPersistentData("alarmCount", String(count))
     .log("DoorLock alarm 0x" + args.event.eventId.toString(16)
          + " code=" + alarmCode + " total=" + count);
 }
@@ -1573,13 +1573,13 @@ function handleGetCredentialStatusResponse(args) {
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .log("credential status updated (rules=" + credRules + ")");
 }
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
 }
 
 function handleLockCommandCatchAll(args) {
