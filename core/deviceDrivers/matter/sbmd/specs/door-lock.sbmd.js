@@ -224,8 +224,11 @@ SbmdDriver({
 //   args.resource   — { resourceId, input }              (resource handlers)
 //   args.supplements.attributes — { [clusterId]: { [attributeId]: value } }
 //   args.supplements.resources  — { "endpointId/resourceId": value }
-//   args.constants          — driver constants (from the constants block)
-//   args.clusterFeatureMaps — always available
+// Result builder methods:
+//   .updateResource(resource, value)                — update a device-level resource
+//   .updateResource(endpoint, resource, value, metadata?) — update an endpoint resource
+//   .invoke(), .read(), .write(), .log()
+//   .setPersistentData(), .setTransientData()
 // ===========================================================================
 
 /**
@@ -239,7 +242,7 @@ function seedLockedResource(args) {
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
-    .updateResource(isLocked ? "true" : "false");
+    .updateResource(args.constants.LOCK_ENDPOINT, "locked", isLocked ? "true" : "false");
 }
 
 /** Read the current identify time. */
@@ -247,13 +250,13 @@ function readIdentify(args) {
   var value = args.supplements.attributes[args.constants.IDENTIFY_CLUSTER][args.constants.ATTR_IDENTIFY_TIME];
 
   return SbmdUtils.result()
-    .updateResource(String(value));
+    .updateResource("identify", String(value));
 }
 
 /** Write a new identify duration. */
 function writeIdentify(args) {
   var schema = { IdentifyTime: { tag: 0, type: "uint16" } };
-  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: parseInt(args.resource.input) }, schema);
+  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: parseInt(args.resource.input, 10) }, schema);
 
   return SbmdUtils.result()
     .write(args.constants.IDENTIFY_CLUSTER, args.constants.ATTR_IDENTIFY_TIME, tlvBase64);
@@ -303,10 +306,10 @@ function handleActuatorAttributes(args) {
 
   if (args.attribute.attributeId === args.constants.ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .updateEndpointResource(args.constants.LOCK_ENDPOINT, "actuatorEnabled", args.attribute.value ? "true" : "false");
+      .updateResource(args.constants.LOCK_ENDPOINT, "actuatorEnabled", args.attribute.value ? "true" : "false");
   } else if (args.attribute.attributeId === args.constants.ATTR_DOOR_STATE) {
     return SbmdUtils.result()
-      .updateEndpointResource(args.constants.LOCK_ENDPOINT, "doorState", String(args.attribute.value))
+      .updateResource(args.constants.LOCK_ENDPOINT, "doorState", String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked);
   }
 
@@ -347,11 +350,11 @@ function handleLockOperation(args) {
 
   if (opType === 0) {
     return SbmdUtils.result()
-      .updateEndpointResource(args.constants.LOCK_ENDPOINT, "locked", "true")
+      .updateResource(args.constants.LOCK_ENDPOINT, "locked", "true")
       .setPersistentData("lastLockOperation", "lock");
   } else if (opType === 1) {
     return SbmdUtils.result()
-      .updateEndpointResource(args.constants.LOCK_ENDPOINT, "locked", "false")
+      .updateResource(args.constants.LOCK_ENDPOINT, "locked", "false")
       .setPersistentData("lastLockOperation", "unlock");
   }
 
@@ -371,7 +374,7 @@ function handleLockOperation(args) {
  */
 function handleLockAlarms(args) {
   var alarmCode = args.event.data[0];
-  var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0") + 1;
+  var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0", 10) + 1;
 
   return SbmdUtils.result()
     .setTransientData("lastAlarmCode", String(alarmCode), 300)
@@ -401,7 +404,7 @@ function handleGetCredentialStatusResponse(args) {
   var credRules = args.supplements.attributes[args.constants.DOOR_LOCK_CLUSTER][args.constants.ATTR_CREDENTIAL_RULES_SUPPORT];
 
   return SbmdUtils.result()
-    .updateEndpointResource(args.constants.LOCK_ENDPOINT, "credentialStatus", JSON.stringify(response))
+    .updateResource(args.constants.LOCK_ENDPOINT, "credentialStatus", JSON.stringify(response))
     .log("credential status updated (rules=" + credRules + ")");
 }
 
@@ -410,7 +413,7 @@ function handleUserCommandResponses(args) {
   var response = args.command.data;
 
   return SbmdUtils.result()
-    .updateEndpointResource(args.constants.LOCK_ENDPOINT, "userCommandResult", JSON.stringify(response));
+    .updateResource(args.constants.LOCK_ENDPOINT, "userCommandResult", JSON.stringify(response));
 }
 
 /** Wildcard command handler — catch-all for unhandled command responses. */

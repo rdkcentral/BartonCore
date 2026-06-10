@@ -97,7 +97,7 @@ function readIsOn(args) {
   var value = args.supplements.attributes[args.constants.ON_OFF_CLUSTER][args.constants.ATTR_ON_OFF];
 
   return SbmdUtils.result()
-    .updateResource((value === true) ? "true" : "false");
+    .updateResource(args.constants.LIGHT_ENDPOINT, "isOn", (value === true) ? "true" : "false");
 }
 
 function writeIsOn(args) {
@@ -112,7 +112,7 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(percent.toString());
+    .updateResource(args.constants.LIGHT_ENDPOINT, "currentLevel", percent.toString());
 }
 
 function writeCurrentLevel(args) {
@@ -147,7 +147,7 @@ function writeCurrentLevel(args) {
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .updateEndpointResource(args.constants.LIGHT_ENDPOINT, "isOn", (args.attribute.value === true) ? "true" : "false");
+    .updateResource(args.constants.LIGHT_ENDPOINT, "isOn", (args.attribute.value === true) ? "true" : "false");
 }
 
 function handleCurrentLevelAttribute(args) {
