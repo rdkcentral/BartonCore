@@ -20,7 +20,7 @@ or redeployment required.
   file-scoped vars. Constants are declared in a `constants` block and injected as
   read-only globals by the runtime. Local variables within handler functions may use
   `var` for short-lived temporaries confined to the handler invocation. This is to
-  prevent difficult-to-control dynamic memory usage which can cause resource exhaution.
+  prevent difficult-to-control dynamic memory usage which can cause resource exhaustion.
 - **Declarative resource model**: Resources declare their type, access modes, and
   optional seed/read/write/execute handlers. The runtime manages caching, event
   emission, and lifecycle.
