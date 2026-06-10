@@ -174,8 +174,8 @@ function myHandler(args) { ... }
 
 ```js
 constants: {
-  LIGHT_ENDPOINT: "1",
-  ON_OFF_CLUSTER: 0x0006,
+  EP_LIGHT: "1",
+  CL_ON_OFF: 0x0006,
   ATTR_ON_OFF: 0x0000,
   CMD_ON: 0x0001,
   CMD_OFF: 0x0000,
@@ -197,8 +197,8 @@ handler functions, and in helper functions.
 - `EVT_*` — Matter event IDs
 - `CMD_*` — Matter command IDs
 - `RES_*` — Barton resource names
-- `*_ENDPOINT` — Matter endpoint IDs (string)
-- `*_CLUSTER` — Matter cluster IDs
+- `EP_*` — Matter endpoint IDs (string)
+- `CL_*` — Matter cluster IDs
 
 ### 4.3 Aliases
 
@@ -209,20 +209,20 @@ referenced by name in prerequisites, supplements, and handler registrations.
 ```js
 aliases: {
   lockState: {
-    clusterId: DOOR_LOCK_CLUSTER,
+    clusterId: CL_DOOR_LOCK,
     attributeId: ATTR_LOCK_STATE,
     type: "DlLockState",
   },
   lockOperation: {
-    clusterId: DOOR_LOCK_CLUSTER,
+    clusterId: CL_DOOR_LOCK,
     eventId: EVT_LOCK_OPERATION,
   },
   getCredentialStatusResp: {
-    clusterId: DOOR_LOCK_CLUSTER,
+    clusterId: CL_DOOR_LOCK,
     commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
   },
   currentLevel: {
-    clusterId: LEVEL_CONTROL_CLUSTER,
+    clusterId: CL_LEVEL_CONTROL,
     attributeId: ATTR_CURRENT_LEVEL,
     type: "uint8",
   },
@@ -288,7 +288,7 @@ barton: {
 matter: {
   deviceTypes: [0x000a],
   revision: 1,
-  featureClusters: [DOOR_LOCK_CLUSTER],
+  featureClusters: [CL_DOOR_LOCK],
 }
 ```
 
@@ -368,7 +368,7 @@ Each endpoint carries a profile and its own set of resources.
 
 ```js
 endpoints: {
-  [LOCK_ENDPOINT]: {
+  [EP_LOCK]: {
     profile: "doorLock",
     profileVersion: 3,
     resources: {
@@ -588,7 +588,7 @@ entries.
 supplements: {
   attributes: ["lockState", "actuatorEnabled"],
   resources: [
-    LOCK_ENDPOINT + "/" + RES_LOCKED,
+    EP_LOCK + "/" + RES_LOCKED,
     RES_IDENTIFY,
   ],
 }
@@ -684,7 +684,7 @@ function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
   return SbmdUtils.result()
-    .invoke(DOOR_LOCK_CLUSTER, commandId, payload, { timedInvokeTimeoutMs: 10000 });
+    .invoke(CL_DOOR_LOCK, commandId, payload, { timedInvokeTimeoutMs: 10000 });
 }
 ```
 
@@ -703,7 +703,7 @@ function executeGetCredentialStatus(args) {
   var payload = buildCredentialRequest(args.resource.input);
 
   return SbmdUtils.result()
-    .invoke(DOOR_LOCK_CLUSTER, CMD_GET_CREDENTIAL_STATUS, payload, {
+    .invoke(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
       handler: processCredentialResponse,
       context: { requestedCredential: args.resource.input },
@@ -716,7 +716,7 @@ function processCredentialResponse(args) {
   var requested = args.invokeContext.requestedCredential;
 
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
+    .updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
 }
 ```
 
@@ -756,7 +756,7 @@ and react to.
 ```js
 commandHandlers: {
   userCommands: {
-    clusterId: DOOR_LOCK_CLUSTER,
+    clusterId: CL_DOOR_LOCK,
     commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
     handler: handleUserCommandResponses,
   },
@@ -764,7 +764,7 @@ commandHandlers: {
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
 }
 ```
 
@@ -779,7 +779,7 @@ handler returns.
 
 ```js
 return SbmdUtils.result()
-  .updateResource(LOCK_ENDPOINT, RES_LOCKED, "true")
+  .updateResource(EP_LOCK, RES_LOCKED, "true")
   .setPersistentData("lastLockOperation", "lock")
   .log("lock operation applied");
 ```
@@ -801,7 +801,7 @@ Update an **endpoint-level** resource.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `endpoint` | string | Endpoint ID (use an `*_ENDPOINT` constant). |
+| `endpoint` | string | Endpoint ID (use an `EP_*` constant). |
 | `resource` | string | Resource name (use a `RES_*` constant). |
 | `value` | string | New resource value. |
 | `metadata` | string | Optional. JSON string of metadata to attach to the update. |
@@ -894,7 +894,7 @@ function handleLockOperation(args) {
   }
 
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_LOCKED, (opType === 0) ? "true" : "false");
+    .updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false");
 }
 ```
 
@@ -918,7 +918,7 @@ function writeIsOn(args) {
   var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .invoke(ON_OFF_CLUSTER, commandId, null, {});
+    .invoke(CL_ON_OFF, commandId, null, {});
 }
 ```
 
@@ -1070,9 +1070,9 @@ SbmdDriver({
   name: "Light",
 
   constants: {
-    LIGHT_ENDPOINT: "1",
-    ON_OFF_CLUSTER: 0x0006,
-    LEVEL_CONTROL_CLUSTER: 0x0008,
+    EP_LIGHT: "1",
+    CL_ON_OFF: 0x0006,
+    CL_LEVEL_CONTROL: 0x0008,
     ATTR_ON_OFF: 0x0000,
     ATTR_CURRENT_LEVEL: 0x0000,
     CMD_ON: 0x0001,
@@ -1084,12 +1084,12 @@ SbmdDriver({
 
   aliases: {
     onOff: {
-      clusterId: ON_OFF_CLUSTER,
+      clusterId: CL_ON_OFF,
       attributeId: ATTR_ON_OFF,
       type: "bool",
     },
     currentLevel: {
-      clusterId: LEVEL_CONTROL_CLUSTER,
+      clusterId: CL_LEVEL_CONTROL,
       attributeId: ATTR_CURRENT_LEVEL,
       type: "uint8",
     },
@@ -1105,7 +1105,7 @@ SbmdDriver({
   reporting: { minSecs: 1, maxSecs: 3600 },
 
   endpoints: {
-    [LIGHT_ENDPOINT]: {
+    [EP_LIGHT]: {
       profile: "light",
       profileVersion: 0,
       resources: {
@@ -1153,14 +1153,14 @@ function readIsOn(args) {
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .updateResource(LIGHT_ENDPOINT, RES_IS_ON, (value === true) ? "true" : "false");
+    .updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false");
 }
 
 function writeIsOn(args) {
   var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .invoke(ON_OFF_CLUSTER, commandId, null, {});
+    .invoke(CL_ON_OFF, commandId, null, {});
 }
 
 function readCurrentLevel(args) {
@@ -1168,7 +1168,7 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(LIGHT_ENDPOINT, RES_CURRENT_LEVEL, percent.toString());
+    .updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
 }
 
 function writeCurrentLevel(args) {
@@ -1188,20 +1188,20 @@ function writeCurrentLevel(args) {
   };
 
   return SbmdUtils.result()
-    .invoke(LEVEL_CONTROL_CLUSTER, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
+    .invoke(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
             SbmdUtils.Tlv.encodeStruct(payload, schema), {});
 }
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .updateResource(LIGHT_ENDPOINT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
+    .updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
 }
 
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(LIGHT_ENDPOINT, RES_CURRENT_LEVEL, percent.toString());
+    .updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
 }
 ```
 
@@ -1224,10 +1224,10 @@ SbmdDriver({
   name: "Door Lock",
 
   constants: {
-    LOCK_ENDPOINT: "1",
-    DOOR_LOCK_CLUSTER: 0x0101,
-    IDENTIFY_CLUSTER: 0x0003,
-    GENERAL_DIAGNOSTICS_CLUSTER: 0x0033,
+    EP_LOCK: "1",
+    CL_DOOR_LOCK: 0x0101,
+    CL_IDENTIFY: 0x0003,
+    CL_GENERAL_DIAGNOSTICS: 0x0033,
     ATTR_LOCK_STATE: 0x0000,
     ATTR_ACTUATOR_ENABLED: 0x0002,
     ATTR_DOOR_STATE: 0x0003,
@@ -1255,36 +1255,36 @@ SbmdDriver({
 
   aliases: {
     lockState: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeId: ATTR_LOCK_STATE,
       type: "DlLockState",
     },
     actuatorEnabled: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeId: ATTR_ACTUATOR_ENABLED,
       type: "bool",
     },
     doorState: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeId: ATTR_DOOR_STATE,
       type: "DoorStateEnum",
     },
     identifyTime: {
-      clusterId: IDENTIFY_CLUSTER,
+      clusterId: CL_IDENTIFY,
       attributeId: ATTR_IDENTIFY_TIME,
       type: "uint16",
     },
     credentialRulesSupport: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeId: ATTR_CREDENTIAL_RULES_SUPPORT,
       type: "DlCredentialRuleMask",
     },
     lockOperation: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       eventId: EVT_LOCK_OPERATION,
     },
     getCredentialStatusResp: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
     },
   },
@@ -1297,7 +1297,7 @@ SbmdDriver({
   matter: {
     deviceTypes: [0x000a],
     revision: 1,
-    featureClusters: [DOOR_LOCK_CLUSTER],
+    featureClusters: [CL_DOOR_LOCK],
   },
 
   reporting: {
@@ -1326,7 +1326,7 @@ SbmdDriver({
 
   // Endpoints
   endpoints: {
-    [LOCK_ENDPOINT]: {
+    [EP_LOCK]: {
       profile: "doorLock",
       profileVersion: 3,
 
@@ -1382,17 +1382,17 @@ SbmdDriver({
 
     // Multiple attributes — explicit form, shared handler
     lockActuator: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE],
       supplements: {
-        resources: [LOCK_ENDPOINT + "/" + RES_LOCKED],
+        resources: [EP_LOCK + "/" + RES_LOCKED],
       },
       handler: handleActuatorAttributes,
     },
 
     // Wildcard — catch-all for any attribute on a cluster
     lockDiagnostics: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       attributeId: "*",
       handler: handleLockDiagnostics,
     },
@@ -1404,21 +1404,21 @@ SbmdDriver({
       aliases: ["lockOperation"],
       supplements: {
         attributes: ["actuatorEnabled"],
-        resources:  [LOCK_ENDPOINT + "/" + RES_LOCKED],
+        resources:  [EP_LOCK + "/" + RES_LOCKED],
       },
       handler: handleLockOperation,
     },
 
     // Multiple events — explicit form
     lockAlarms: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       eventIds: [EVT_DOOR_LOCK_ALARM, EVT_LOCK_USER_CHANGE],
       handler: handleLockAlarms,
     },
 
     // Wildcard
     lockEventCatchAll: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       eventId: "*",
       handler: handleLockEventCatchAll,
     },
@@ -1436,14 +1436,14 @@ SbmdDriver({
 
     // Multiple commands — explicit form
     userCommands: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
       handler: handleUserCommandResponses,
     },
 
     // Wildcard
     lockCommandCatchAll: {
-      clusterId: DOOR_LOCK_CLUSTER,
+      clusterId: CL_DOOR_LOCK,
       commandId: "*",
       handler: handleLockCommandCatchAll,
     },
@@ -1459,7 +1459,7 @@ function seedLockedResource(args) {
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_LOCKED, isLocked ? "true" : "false");
+    .updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false");
 }
 
 function readIdentify(args) {
@@ -1475,21 +1475,21 @@ function writeIdentify(args) {
     { IdentifyTime: parseInt(args.resource.input, 10) }, schema);
 
   return SbmdUtils.result()
-    .write(IDENTIFY_CLUSTER, ATTR_IDENTIFY_TIME, tlvBase64);
+    .write(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
 }
 
 function executeReboot(args) {
   return SbmdUtils.result()
-    .invoke(GENERAL_DIAGNOSTICS_CLUSTER, CMD_REBOOT, null, {});
+    .invoke(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
 }
 
 function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
-  var featureMap = args.clusterFeatureMaps[DOOR_LOCK_CLUSTER] || 0;
+  var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
   var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
 
   return SbmdUtils.result()
-    .invoke(DOOR_LOCK_CLUSTER, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+    .invoke(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -1503,14 +1503,14 @@ function handleLockStateAttribute(args) {
 }
 
 function handleActuatorAttributes(args) {
-  var currentLocked = args.supplements.resources[LOCK_ENDPOINT + "/" + RES_LOCKED];
+  var currentLocked = args.supplements.resources[EP_LOCK + "/" + RES_LOCKED];
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .updateResource(LOCK_ENDPOINT, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
+      .updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return SbmdUtils.result()
-      .updateResource(LOCK_ENDPOINT, RES_DOOR_STATE, String(args.attribute.value))
+      .updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked);
   }
 
@@ -1537,11 +1537,11 @@ function handleLockOperation(args) {
 
   if (opType === 0) {
     return SbmdUtils.result()
-      .updateResource(LOCK_ENDPOINT, RES_LOCKED, "true")
+      .updateResource(EP_LOCK, RES_LOCKED, "true")
       .setPersistentData("lastLockOperation", "lock");
   } else if (opType === 1) {
     return SbmdUtils.result()
-      .updateResource(LOCK_ENDPOINT, RES_LOCKED, "false")
+      .updateResource(EP_LOCK, RES_LOCKED, "false")
       .setPersistentData("lastLockOperation", "unlock");
   }
 
@@ -1573,13 +1573,13 @@ function handleGetCredentialStatusResponse(args) {
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .log("credential status updated (rules=" + credRules + ")");
 }
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .updateResource(LOCK_ENDPOINT, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
 }
 
 function handleLockCommandCatchAll(args) {
