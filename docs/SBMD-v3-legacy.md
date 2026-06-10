@@ -1,4 +1,4 @@
-# Specification-Based Matter Drivers (SBMD)
+# Specification-Based Matter Drivers (SBMD) — v3 (legacy YAML schema)
 
 > ## ⚠️ Known Issues and Limitations
 >
