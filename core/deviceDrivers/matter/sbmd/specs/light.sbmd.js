@@ -17,6 +17,8 @@ SbmdDriver({
     CMD_ON: 0x0001,
     CMD_OFF: 0x0000,
     CMD_MOVE_TO_LEVEL_WITH_ON_OFF: 0x0004,
+    RES_IS_ON: "isOn",
+    RES_CURRENT_LEVEL: "currentLevel",
   },
 
   barton: {
@@ -48,7 +50,7 @@ SbmdDriver({
       profileVersion: 0,
 
       resources: {
-        isOn: {
+        [RES_IS_ON]: {
           type: "boolean",
           modes: ["read", "write"],
           read: {
@@ -59,7 +61,7 @@ SbmdDriver({
           },
           write: writeIsOn,
         },
-        currentLevel: {
+        [RES_CURRENT_LEVEL]: {
           type: "com.icontrol.lightLevel",
           optional: true,
           modes: ["read", "write"],
@@ -97,7 +99,7 @@ function readIsOn(args) {
   var value = args.supplements.attributes[args.constants.ON_OFF_CLUSTER][args.constants.ATTR_ON_OFF];
 
   return SbmdUtils.result()
-    .updateResource(args.constants.LIGHT_ENDPOINT, "isOn", (value === true) ? "true" : "false");
+    .updateResource(args.constants.LIGHT_ENDPOINT, args.constants.RES_IS_ON, (value === true) ? "true" : "false");
 }
 
 function writeIsOn(args) {
@@ -112,7 +114,7 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .updateResource(args.constants.LIGHT_ENDPOINT, "currentLevel", percent.toString());
+    .updateResource(args.constants.LIGHT_ENDPOINT, args.constants.RES_CURRENT_LEVEL, percent.toString());
 }
 
 function writeCurrentLevel(args) {
@@ -147,12 +149,12 @@ function writeCurrentLevel(args) {
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .updateResource(args.constants.LIGHT_ENDPOINT, "isOn", (args.attribute.value === true) ? "true" : "false");
+    .updateResource(args.constants.LIGHT_ENDPOINT, args.constants.RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
 }
 
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .updateEndpointResource(args.constants.LIGHT_ENDPOINT, "currentLevel", percent.toString());
+    .updateResource(args.constants.LIGHT_ENDPOINT, args.constants.RES_CURRENT_LEVEL, percent.toString());
 }
