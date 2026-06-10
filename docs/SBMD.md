@@ -16,10 +16,11 @@ or redeployment required.
 - **Single-file drivers**: One `.sbmd.js` file fully defines a device driver —
   metadata, resource declarations, device-side handler registrations, and all
   handler implementations.
-- **No `var` in driver scope**: Driver authors never allocate memory directly.
-  Constants are declared in a `constants` block and injected as read-only globals
-  by the runtime. Local variables within handler functions use `var` only for
-  stack-scoped temporaries that the runtime can track.
+- **No `var` in driver scope**: Driver authors never allocate global mutable state or
+  file-scoped vars. Constants are declared in a `constants` block and injected as
+  read-only globals by the runtime. Local variables within handler functions may use
+  `var` for short-lived temporaries confined to the handler invocation. This is to
+  prevent difficult-to-control dynamic memory usage which can cause resource exhaution.
 - **Declarative resource model**: Resources declare their type, access modes, and
   optional seed/read/write/execute handlers. The runtime manages caching, event
   emission, and lifecycle.
@@ -30,7 +31,25 @@ or redeployment required.
   via `SbmdUtils.result()` that can atomically express multiple operations
   (resource updates, device invocations, logging, persistent storage).
 
-### 1.2 File Layout
+### 1.2 Historical Context
+
+Barton device drivers bridge Barton's resource-based device data model to
+device-specific interfaces like Matter and Zigbee. Historically, these drivers
+have been written in C/C++.
+
+The idea of specification-driven device drivers originated around 2015 for Zigbee
+driver authoring. Complexities with proprietary message timing shelved that effort,
+but the concept resurfaced with Matter, where writing custom native code for each
+supported device type adds too much friction to the goal of broad device support.
+
+SBMD addresses this by using textual specification files that map between Matter
+types and Barton resources, enabling new device type support without rebuilding or
+redeploying firmware. v1–v3 used declarative YAML specifications with embedded
+JavaScript mapper scripts. v4.0 consolidates everything into single `.sbmd.js`
+files where the full driver — metadata, resources, and handler logic — is expressed
+in JavaScript.
+
+### 1.3 File Layout
 
 ```
 core/deviceDrivers/matter/sbmd/specs/
@@ -111,7 +130,7 @@ flowchart TB
    and resource declarations, gated by alias prerequisites.
 5. **Runtime operations**:
    - **Attribute report** → attribute handler → result builder → resource update
-   - **Resource read** → read handler (with supplements) → result builder → value
+   - **Resource read** → read handler (with [supplements](#412-supplements)) → result builder → value
    - **Resource write** → write handler → result builder → Matter attribute write or command invoke
    - **Resource execute** → execute handler → result builder → Matter command invoke
    - **Event** → event handler → result builder → resource update
@@ -684,7 +703,7 @@ function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
   return SbmdUtils.result()
-    .device.invoke(CL_DOOR_LOCK, commandId, payload, { timedInvokeTimeoutMs: 10000 });
+    .device.invoke(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
 }
 ```
 
@@ -1499,7 +1518,7 @@ function executeLockAction(args) {
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
-  return SbmdUtils.result();
+  return SbmdUtils.result().ignore(); // This is just an example that used an alias.  Ignore...
 }
 
 function handleActuatorAttributes(args) {
