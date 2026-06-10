@@ -1,1349 +1,1608 @@
-# Specification-Based Matter Drivers (SBMD)
-
-> ## ⚠️ Known Issues and Limitations
->
-> This is the **first release** of SBMD support. It is considered **early access** and
-> will likely receive significant schema and interface changes in the next release.
->
-> - **Shared resources not yet factored out.** Some SBMD drivers define an
->   `identifySeconds` resource inline. This resource (and others common to all devices)
->   will be refactored into common/base driver code in a future release.
->
-> - **Verbose logging.** Logging output is very verbose at the moment, especially the
->   frequent dumps of the entire device data cache JSON. This will be reduced.
->
-> - **No multi-instance cluster support.** Devices that expose multiple instances of
->   the same cluster on different Matter endpoints (e.g., IKEA BILRESA) are not yet
->   supported. This will be addressed in the next release.
->
-> - **Event prerequisites are cluster-level only.** Resource prerequisites that
->   reference an event alias verify only that the cluster is present on the device —
->   they cannot confirm that the specific event ID is supported. The Matter `EventList`
->   attribute (0xFFFA), which would allow per-event-ID verification, is marked
->   provisional in the current CHIP SDK version and is not reliably available on real
->   devices. See [Section 3.7](#37-resources) for details.
+# Specification-Based Matter Drivers (SBMD) — v4.0
 
 ## 1. Introduction
 
-### 1.1 Purpose
-
 Specification-Based Matter Drivers (SBMD) is a device driver framework that enables
-Barton to support Matter devices through declarative YAML specification files rather
-than compiled C/C++ code. This approach facilitates:
+Barton to support Matter devices through JavaScript specification files rather than
+compiled C/C++ code. Each `.sbmd.js` file is a self-contained driver that declares
+metadata, resources, endpoints, and handler functions in a single registration call.
 
-- **Rapid device type support**: Add new Matter device types without code changes
-- **Dynamic extensibility**: Deploy new device support without firmware updates
-- **Simplified maintenance**: Declarative specifications are easier to review and maintain
-- **Reduced complexity**: Eliminate per-device-type native code compilation
+SBMD eliminates the need to write per-device-type native C/C++ drivers. New Matter
+device types can be supported by adding a specification file — no firmware rebuild
+or redeployment required.
 
-### 1.2 Historical Context
+### 1.1 Goals
 
-Barton device drivers are responsible for bridging Barton's resource-based device
-data model to device-specific interfaces like Matter, Zigbee, etc. Historically,
-these drivers have been written in C/C++.
+- **Single-file drivers**: One `.sbmd.js` file fully defines a device driver —
+  metadata, resource declarations, device-side handler registrations, and all
+  handler implementations.
+- **No `var` in driver scope**: Driver authors never allocate memory directly.
+  Constants are declared in a `constants` block and injected as read-only globals
+  by the runtime. Local variables within handler functions use `var` only for
+  stack-scoped temporaries that the runtime can track.
+- **Declarative resource model**: Resources declare their type, access modes, and
+  optional seed/read/write/execute handlers. The runtime manages caching, event
+  emission, and lifecycle.
+- **Bidirectional device interaction**: Cleanly separate Barton-initiated operations
+  (resource reads, writes, executes) from device-initiated data (attribute reports,
+  events, command responses).
+- **Composable results**: Handler functions return an immutable result object built
+  via `SbmdUtils.result()` that can atomically express multiple operations
+  (resource updates, device invocations, logging, persistent storage).
 
-The idea of device drivers as specifications started around 2015 related to Zigbee
-driver authoring. While complexities with proprietary message timing caused that
-effort to be shelved, the concept resurfaced with OCF device support and now Matter,
-where the need to add custom native code for each supported device type adds too
-much friction to the goal of virtually unlimited device support.
+### 1.2 File Layout
 
-SBMD addresses this by leveraging textual specification documents that provide the
-mapping between Matter types and Barton resources, enabling dynamically extending
-supported device types without requiring rebuilding and redeployment of the core
-binaries through firmware updates.
+```
+core/deviceDrivers/matter/sbmd/specs/
+  light.sbmd.js
+  door-lock.sbmd.js
+  thermostat.sbmd.js
+  contact-sensor.sbmd.js
+  ...
+```
 
-## 2. High-Level Architecture
+Each file is evaluated by the C runtime's embedded JavaScript engine (e.g., MQuickJS).
+The runtime provides `SbmdDriver()`, `SbmdUtils`, and injected constants as globals
+before evaluation.
+
+---
+
+## 2. Architecture
 
 ### 2.1 Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Barton Device Service                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐   │
-│  │  SBMD Spec File  │    │   SbmdParser     │    │   SbmdSpec       │   │
-│  │  (YAML .sbmd)    │───▶│                  │───▶│   (C++ structs)  │   │
-│  └──────────────────┘    └──────────────────┘    └────────┬─────────┘   │
-│                                                           │             │
-│                                                           ▼             │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                SpecBasedMatterDeviceDriver                       │   │
-│  │  ┌─────────────────┐    ┌─────────────────┐                      │   │
-│  │  │  MatterDevice   │    │   SbmdScript    │                      │   │
-│  │  │  (per device)   │◀──▶│  (JS runtime)   │                      │   │
-│  │  └────────┬────────┘    └────────┬────────┘                      │   │
-│  └───────────┼──────────────────────┼───────────────────────────────┘   │
-│              │                      │                                   │
-│              ▼                      ▼                                   │
-│  ┌──────────────────┐    ┌──────────────────────────────────────────┐   │
-│  │ DeviceDataCache  │    │  JavaScript Mapper Scripts               │   │
-│  │ (attribute cache)│    │  - Read: Matter TLV → Barton string      │   │
-│  └──────────────────┘    │  - Write: Barton string → Matter TLV     │   │
-│                          │  - Execute: Barton args → Command TLV    │   │
-│                          │  - Execute Response: Response TLV →      │   │
-│                          │                       Barton string      │   │
-│                          └──────────────────────────────────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-                          ┌──────────────────┐
-                          │   Matter Device  │
-                          │   (over fabric)  │
-                          └──────────────────┘
+SBMD sits between Barton's resource-based device model and the Matter protocol
+layer. Each `.sbmd.js` driver file is loaded at startup by the SBMD factory,
+evaluated in a sandboxed JavaScript engine, and registered as a device driver.
+When a Matter device is commissioned, a two-pass claiming process selects the
+best-matching driver. At runtime, the driver's handler functions translate
+between Barton resource operations and Matter attribute/command interactions.
+
+```mermaid
+flowchart TB
+    subgraph Barton["Barton Device Service"]
+        Factory["SbmdFactory<br/><i>scans specs/ at startup</i>"]
+        subgraph Driver["SpecBasedMatterDeviceDriver"]
+            Runtime["SBMD Runtime<br/><i>JS engine (MQuickJS)</i>"]
+            Cache["DeviceDataCache<br/><i>attribute subscription cache</i>"]
+        end
+    end
+
+    Files[".sbmd.js files<br/><i>specs/ directory</i>"] -->|parse & evaluate| Factory
+    Factory -->|register driver| Driver
+    Runtime <-->|read/update| Cache
+
+    subgraph Handlers["Handler Functions"]
+        Read["read handler<br/><i>cache → resource value</i>"]
+        Write["write handler<br/><i>resource value → attribute/command</i>"]
+        Seed["seed handler<br/><i>initial resource values</i>"]
+        AttrH["attribute handler<br/><i>report → resource update</i>"]
+        EventH["event handler<br/><i>event → resource update</i>"]
+    end
+
+    Runtime <--> Handlers
+
+    Device["Matter Device<br/><i>(over fabric)</i>"]
+    Cache <-->|Matter subscription| Device
+    Runtime <-->|invoke / write| Device
 ```
 
 ### 2.2 Key Components
 
 | Component | Description |
-|-----------|-------------|
-| **SbmdSpec** | C++ data structures representing a parsed SBMD specification |
-| **SbmdParser** | YAML parser that converts `.sbmd` files into `SbmdSpec` objects |
-| **SbmdFactory** | Auto-registers SBMD drivers from the specs directory at startup |
-| **SpecBasedMatterDeviceDriver** | Device driver implementation that uses SBMD specs |
-| **MatterDevice** | Per-device instance managing state, cache, and script execution |
-| **SbmdScript** | JavaScript runtime for executing mapper scripts (QuickJS or MQuickJS) |
-| **DeviceDataCache** | Cached attribute data kept up-to-date via Matter subscriptions |
+|---|---|
+| **SbmdFactory** | Scans the `specs/` directory at startup, evaluates each `.sbmd.js` file, and registers a driver instance per file. |
+| **SpecBasedMatterDeviceDriver** | The device driver implementation that uses a parsed SBMD registration to handle Barton resource operations and Matter device interactions. |
+| **SBMD Runtime** | Sandboxed JavaScript engine (MQuickJS) that evaluates driver files and dispatches handler calls. Provides `SbmdDriver()`, `SbmdUtils`, and injected constants as globals. |
+| **DeviceDataCache** | Per-device attribute cache kept current via Matter subscriptions. Handlers read from this cache for current device state. |
+| **Handler functions** | Plain JavaScript functions authored in the `.sbmd.js` file that translate between Barton and Matter representations. |
 
 ### 2.3 Data Flow
 
-1. **Startup**: `SbmdFactory` scans the specs directory and parses all `.sbmd` files
-2. **Registration**: Each parsed spec creates a `SpecBasedMatterDeviceDriver` instance
-3. **Device Addition**: When a Matter device is commissioned, a two-pass claiming process selects
-   the driver: vendor-specific drivers (matched by `vendorId`/`productId`) are tried first,
-   then generic device-type drivers
-4. **Resource Binding**: The driver binds Barton resources to Matter attributes/commands via mappers
-5. **Runtime Operations**:
-   - **Read**: Attribute data from cache/device → JavaScript script → Barton string
-   - **Write**: Barton string → JavaScript script → TLV → Matter attribute write
-   - **Execute**: Barton arguments → JavaScript script → TLV → Matter command
+1. **Startup**: `SbmdFactory` scans the specs directory and evaluates each `.sbmd.js`
+   file. The runtime performs a two-pass evaluation: first extracting constants,
+   then evaluating the full file with constants injected as read-only globals.
+2. **Registration**: Each `SbmdDriver()` call registers a driver with its metadata,
+   resource declarations, and handler functions.
+3. **Device claiming**: When a Matter device is commissioned, a two-pass process
+   selects the driver: vendor-specific drivers (matched by `vendorId`/`productId`)
+   are tried first, then generic device-type drivers.
+4. **Resource binding**: The driver creates Barton resources based on the endpoint
+   and resource declarations, gated by alias prerequisites.
+5. **Runtime operations**:
+   - **Attribute report** → attribute handler → result builder → resource update
+   - **Resource read** → read handler (with supplements) → result builder → value
+   - **Resource write** → write handler → result builder → Matter attribute write or command invoke
+   - **Resource execute** → execute handler → result builder → Matter command invoke
+   - **Event** → event handler → result builder → resource update
 
-## 3. SBMD File Schema
+---
 
-SBMD specifications are YAML files with the `.sbmd` extension. The current schema
-version is **3.0**, as specified in the `schemaVersion` field of each SBMD file.
+## 3. File Structure
 
-> **JSON Schema**: A formal JSON Schema for validating SBMD files is available in
-> [`core/deviceDrivers/matter/sbmd/schema/`](../core/deviceDrivers/matter/sbmd/schema/).
-> All `.sbmd` files in the `specs/` directory are automatically validated against
-> this schema during the build process.
+Every `.sbmd.js` file has two sections:
 
-**Schema version history:**
-- `2.0`: Initial release
-- `2.1`: Added `vendorId`/`productId` support
-- `3.0`: Script return contract changed — use `{ value: "..." }` instead of `{ output: "..." }` (see [Section 5](#5-javascript-script-interfaces))
+1. **Registration object** — a single `SbmdDriver({...})` call containing all
+   declarative metadata.
+2. **Handler functions** — plain JavaScript functions referenced by the
+   registration object.
 
-### 3.1 Top-Level Structure
+```js
+SbmdDriver({
+  schemaVersion: "4.0",
+  driverVersion: "1.0",
+  name: "...",
+  constants:         { ... },
+  aliases:           { ... },
+  barton:            { ... },
+  matter:            { ... },
+  reporting:         { ... },
+  resources:         { ... },       // device-level resources
+  endpoints:         { ... },       // endpoint-scoped resources
+  attributeHandlers: { ... },       // incoming attribute reports
+  eventHandlers:     { ... },       // incoming events
+  commandHandlers:   { ... },       // incoming (unsolicited) commands
+});
 
-```yaml
-schemaVersion: "3.0"          # SBMD schema version (required)
-driverVersion: "1.0"          # Driver version (required)
-name: "Driver Name"           # Human-readable name (required)
-scriptType: "JavaScript"      # Script type (see below)
-bartonMeta:                   # Barton-specific metadata (required)
-  deviceClass: "doorLock"     # Barton device class
-  deviceClassVersion: 3       # Device class version
-matterMeta:                   # Matter-specific metadata (required)
-  deviceTypes:                # List of supported Matter device type IDs
-    - 0x000a
-  revision: 1                 # Matter device type revision
-  featureClusters: []         # Cluster IDs for featureMap access (optional)
-  aliases: []                 # Named Matter element definitions (optional, see Section 3.4)
-reporting:                    # Subscription parameters (optional)
-  minSecs: 1                  # Minimum reporting interval
-  maxSecs: 3600               # Maximum reporting interval
-resources: []                 # Top-level (device) resources (optional)
-endpoints: []                 # Endpoint definitions (required)
+// Handler function implementations below
+function myHandler(args) { ... }
 ```
 
-### 3.2 Script Type
+---
 
-The `scriptType` field specifies the JavaScript runtime requirements for the driver:
+## 4. Registration Object Schema
 
-| Value | Description |
-|-------|-------------|
-| `JavaScript` | Scripts use `SbmdUtils` helpers for TLV encoding/decoding. |
+### 4.1 Top-Level Fields
 
-### 3.3 Barton Metadata
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `schemaVersion` | string | yes | Schema version. Currently `"4.0"`. |
+| `driverVersion` | string | yes | Driver-specific version string. |
+| `name` | string | yes | Human-readable driver name. |
+| `constants` | object | yes | Named constants (see [4.2](#42-constants)). |
+| `aliases` | object | no | Named references to Matter cluster attributes and events (see [4.3](#43-aliases)). |
+| `barton` | object | yes | Barton device class mapping (see [4.4](#44-barton)). |
+| `matter` | object | yes | Matter device type matching (see [4.5](#45-matter)). |
+| `reporting` | object | no | Attribute reporting interval (see [4.6](#46-reporting)). |
+| `resources` | object | no | Device-level resources (see [4.7](#47-resources)). |
+| `endpoints` | object | no | Endpoint definitions (see [4.8](#48-endpoints)). |
+| `attributeHandlers` | object | no | Attribute report handlers (see [4.9](#49-attribute-handlers)). |
+| `eventHandlers` | object | no | Event handlers (see [4.10](#410-event-handlers)). |
+| `commandHandlers` | object | no | Unsolicited command handlers (see [4.11](#411-command-handlers)). |
 
-```yaml
-bartonMeta:
-  deviceClass: "doorLock"     # Barton device class identifier
-  deviceClassVersion: 3       # Version of the device class schema
+### 4.2 Constants
+
+```js
+constants: {
+  LIGHT_ENDPOINT: "1",
+  ON_OFF_CLUSTER: 0x0006,
+  ATTR_ON_OFF: 0x0000,
+  CMD_ON: 0x0001,
+  CMD_OFF: 0x0000,
+  RES_IS_ON: "isOn",
+}
 ```
 
-### 3.4 Matter Metadata
+Constants must be **primitive literals** (numbers, strings, booleans). No
+expressions, function calls, or object references.
 
-The Matter metadata is used to determine which SBMD specification should be used
-for a particular device. When a Matter device is commissioned, its device type is
-matched against the `deviceTypes` list in each registered SBMD spec to find the
-appropriate driver.
+**Runtime behavior**: Before evaluating the file, the runtime extracts the
+`constants` block and injects each entry as a **read-only global variable** on
+the JavaScript execution context. This means bare constant names resolve
+everywhere in the file — inside the `SbmdDriver({...})` object literal, in
+handler functions, and in helper functions.
 
-```yaml
-matterMeta:
-  deviceTypes:                # Matter device type IDs (hex or decimal)
-    - 0x000a                  # Door Lock device type
-    - 0x000b                  # Alternative device type
-  revision: 1                 # Matter device type revision number from Matter Spec.
-  featureClusters:            # Optional: cluster IDs whose FeatureMap to read
-    - 0x0101                  # e.g., DoorLock cluster
+**Naming convention**: `UPPER_SNAKE_CASE`. Use prefixes to group by purpose:
+- `ATTR_*` — Matter attribute IDs
+- `EVT_*` — Matter event IDs
+- `CMD_*` — Matter command IDs
+- `RES_*` — Barton resource names
+- `*_ENDPOINT` — Matter endpoint IDs (string)
+- `*_CLUSTER` — Matter cluster IDs
+
+### 4.3 Aliases
+
+Aliases define **named references** to Matter cluster attributes, events, and
+commands. They provide a single place to declare cluster+ID pairs that can be
+referenced by name in prerequisites, supplements, and handler registrations.
+
+```js
+aliases: {
+  lockState: {
+    clusterId: DOOR_LOCK_CLUSTER,
+    attributeId: ATTR_LOCK_STATE,
+    type: "DlLockState",
+  },
+  lockOperation: {
+    clusterId: DOOR_LOCK_CLUSTER,
+    eventId: EVT_LOCK_OPERATION,
+  },
+  getCredentialStatusResp: {
+    clusterId: DOOR_LOCK_CLUSTER,
+    commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
+  },
+  currentLevel: {
+    clusterId: LEVEL_CONTROL_CLUSTER,
+    attributeId: ATTR_CURRENT_LEVEL,
+    type: "uint8",
+  },
+}
 ```
 
-The optional `featureClusters` list specifies which Matter cluster IDs the runtime
-should read `FeatureMap` attributes for. At device initialization, the runtime reads
-the FeatureMap attribute from each listed cluster and makes the values available to
-scripts via the `clusterFeatureMaps` object (keyed by decimal cluster ID string).
-If `featureClusters` is omitted, `clusterFeatureMaps` will be empty in all scripts.
+Each alias declares a `clusterId` and exactly one of `attributeId`, `eventId`,
+or `commandId`:
 
-#### Matter Element Aliases
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clusterId` | number | yes | Matter cluster ID. |
+| `attributeId` | number | conditional | Attribute ID. Mutually exclusive with `eventId` and `commandId`. |
+| `eventId` | number | conditional | Event ID. Mutually exclusive with `attributeId` and `commandId`. |
+| `commandId` | number | conditional | Command ID. Mutually exclusive with `attributeId` and `eventId`. |
+| `type` | string | no | Matter data type (documentation only, ignored by runtime). |
 
-The optional `aliases` list defines **named references** to Matter cluster attributes
-and events. All attribute and event metadata used by a driver — in resource mappers
-and in resource prerequisites — must be declared as an alias and referenced by name.
-Inline cluster/attribute/event IDs are not permitted directly in mappers.
+Aliases serve three purposes:
 
-Each alias has a unique `name` and declares either an `attribute` block or an `event`
-block (not both):
+1. **Prerequisite gates**: Resources list alias names in their `prerequisites`
+   array. Before registering the resource, the runtime checks that the
+   referenced Matter element is present on the device (see
+   [4.8.1 Resource Declaration](#481-resource-declaration)).
+2. **Supplement references**: Supplement `attributes` arrays reference aliases
+   by name. The runtime resolves each alias to its cluster+attribute pair,
+   fetches the value, and delivers it to the handler keyed by alias name
+   in `args.supplements.attributes` (see [4.12 Supplements](#412-supplements)).
+3. **Handler dispatch**: Attribute, event, and command handlers can specify
+   `aliases` (an array) instead of `clusterId` + ID fields. The runtime
+   resolves each alias to determine the trigger. A single handler can match
+   multiple aliases (see [4.9](#49-attribute-handlers),
+   [4.10](#410-event-handlers), [4.11](#411-command-handlers)).
 
-```yaml
-matterMeta:
-  aliases:
-    # Attribute alias — references a specific cluster attribute
-    - name: "lockState"
-      attribute:
-        clusterId: "0x0101"      # Door Lock cluster
-        attributeId: "0x0000"    # LockState attribute
-        name: "LockState"        # Attribute name (documentation)
-        type: "uint8"            # Matter data type (for TLV decoding context)
-
-    # Event alias — references a specific cluster event
-    - name: "lockOperation"
-      event:
-        clusterId: "0x0101"      # Door Lock cluster
-        eventId: "0x0002"        # LockOperation event
-        name: "LockOperation"    # Event name (documentation)
-```
-
-Aliases serve two purposes:
-
-1. **Mapper binding**: Read mappers and event mappers reference an alias by name via
-   `alias: <name>`. The alias is resolved at parse time to determine what cluster and
-   attribute/event to subscribe to, and the data is then passed to the mapper script.
-
-2. **Prerequisite gates**: Resources declare which aliases must be present in the
-   device's data cache before the resource is registered (see Section 3.7). For
-   attribute aliases, both the cluster and the attribute must be present. For event
-   aliases, only the cluster must be present.
-
-Using aliases eliminates duplication — a cluster/attribute pair is defined once and
-referenced by name wherever it is needed.
-
-### 3.5 Reporting Configuration
-
-A single wildcarded attribute reporting configuration is maintained on the device.
-These settings allow configuration on the min/max intervals.
-
-```yaml
-reporting:
-  minSecs: 1                  # Minimum subscription reporting interval (seconds)
-  maxSecs: 3600               # Maximum subscription reporting interval (seconds)
-```
-
-### 3.6 Endpoints
-
-Endpoints in this context are Barton device data model concepts and should not be
-confused with Matter endpoints. These represent logical groupings of resources
-within Barton's device representation and do not necessarily map directly to
-Matter endpoint IDs. The endpoint `id` is a Barton identifier, not a Matter
-endpoint number.
-
-```yaml
-endpoints:
-  - id: "1"                   # Barton endpoint identifier (string)
-    profile: "doorLock"       # Barton profile name
-    profileVersion: 3         # Profile version
-    resources: []             # Resources on this endpoint
-```
-
-### 3.7 Resources
-
-Resources define the Barton data model elements and their mapping to Matter:
-
-```yaml
-resources:
-  - id: "locked"              # Resource identifier
-    type: "boolean"           # Barton type (boolean, string, number, function, etc.)
-    optional: false           # If true, skip this resource when prerequisites fail (default: false)
-    modes:                    # Access modes
-      - "read"                # Resource is readable
-      - "dynamic"             # Value can change asynchronously
-      - "emitEvents"          # Changes generate events to subscribers
-    prerequisites:            # Presence gates checked before resource registration (required)
-      - alias: "lockState"    # References a matterMeta alias; cluster+attribute must be in cache
-    mapper:                   # Mapping configuration
-      read:
-        alias: "lockState"    # References a matterMeta alias (required for read mappers)
-        script: |             # JavaScript transformation script
-          ...
-      write:                  # Write mapper (optional)
-        script: |
-          ...
-      execute:                # Execute mapper (optional, for function types)
-        script: |
-          ...
-```
-
-#### Resource Modes
-
-| Mode | Description |
-|------|-------------|
-| `read` | Resource value can be read |
-| `write` | Resource value can be written |
-| `execute` | Resource can be executed (for function types). Automatically set when an execute mapper is present. |
-| `dynamic` | Value can change without direct write |
-| `emitEvents` | Changes generate events to subscribers |
-| `lazySaveNext` | Defer persistence to next save cycle |
-| `sensitive` | Value contains sensitive data |
-
-#### Optional Resources
-
-Setting `optional: true` on a resource changes how prerequisite failures and mapper
-bind failures are handled:
-
-| | Required resource (default) | Optional resource |
-|---|---|---|
-| Prerequisites not met | Commissioning fails | Resource is silently skipped |
-| Mapper bind failure | Commissioning fails | Resource is silently skipped |
-
-Use `optional: true` for resources that map to Matter attributes or clusters that
-may not be present on all devices that match the driver's `deviceTypes`.
-
-#### Resource Prerequisites
-
-The `prerequisites` field is **required on every resource**. It acts as a presence
-gate: before registering the resource, the driver checks that the specified Matter
-cluster and/or attribute exists in the device's data cache (populated during
-commissioning).
-
-```yaml
-# Always register this resource — no prerequisite check
-prerequisites: none           # preferred opt-out form
-# or equivalently:
-prerequisites: null
-
-# Require one or more aliases to be present
-prerequisites:
-  - alias: "lockState"        # Both cluster 0x0101 and attribute 0x0000 must be present
-  - alias: "lockOperation"    # Cluster 0x0101 must be present (event alias: cluster check only)
-```
-
-Each prerequisite entry references a `matterMeta` alias by name. The check performed
-depends on the alias type:
+The check performed depends on the alias type:
 
 | Alias type | Check performed |
-|------------|----------------|
-| `attribute` alias | Cluster **and** attribute must be present in the device's data cache |
-| `event` alias | Cluster must be present in the device's data cache |
-
-All listed prerequisites must be satisfied for the resource to be registered. If
-any prerequisite fails and the resource is required (no `optional: true`), the
-driver aborts commissioning. If the resource is optional, it is silently skipped.
-
-> ⚠️ **Known limitation — event prerequisites are cluster-level only.**
-> The Matter specification defines an `EventList` global attribute (0xFFFA) on every
-> cluster that would allow checking which specific event IDs a device supports before
-> any events have fired. However, `EventList` is marked **provisional** in the version
-> of the CHIP SDK used by Barton and is not reliably present on real devices. As a
-> result, event alias prerequisites can only confirm that the cluster exists on the
-> device — they cannot verify that the specific event ID is supported. A resource
-> gated on an event alias prerequisite will be registered if its cluster is present,
-> even if the device never generates that event. Once `EventList` support is
-> standardized and reliable, event prerequisites should be upgraded to check the
-> specific event ID.
-
-## 4. Mapper Configuration
-
-Mappers define the transformation between Barton resources and Matter attributes,
-commands, or events. Read and event mappers reference a named `matterMeta` alias
-to specify what to subscribe to. Write and execute mappers are script-only and
-return the full operation details from their script. All mapper types include a
-JavaScript `script` for the transformation.
-
-### 4.0 Conversion Overview
-
-Mappers bridge two different data representations:
-
-- **Barton side**: Resource values are represented as **strings**. All Barton resource
-  reads return strings, writes accept strings, and function arguments/responses are strings.
-
-- **Matter side**: Data is encoded as **TLV** (Tag-Length-Value) binary format for
-  over-the-air communication with devices.
-
-#### Read Operations
-
-For read operations, the SBMD runtime retrieves attribute data from the device and
-passes it to the script as base64-encoded TLV. The script decodes the TLV and
-transforms it to a Barton string:
-
-```
-Read Flow:
-  Matter Device → TLV → Base64 → Script (decode + transform) → Barton String
-```
-
-Scripts use `SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64)` to decode the TLV data
-into native JavaScript values.
-
-#### Write and Execute Operations
-
-For write and execute operations, scripts encode data as TLV and return it as
-base64. The script returns a structured JSON object with `tlvBase64` containing
-the encoded data:
-
-```
-Write/Execute Flow:
-  Barton Input → Script (transform + encode) → tlvBase64 → Matter Device
-
-Execute Response Flow:
-  Matter Device → TLV → Base64 → Script (decode + transform) → Barton String
-```
-
-Write and execute mapper scripts return one of:
-- `{write: {clusterId, attributeId, tlvBase64}}` - for attribute writes
-- `{invoke: {clusterId, commandId, tlvBase64, ...}}` - for command invocations
-
-Scripts use `SbmdUtils.Tlv.encode*()` helpers for TLV encoding.
-
-### 4.1 Attribute Mapping
-
-#### Read Mapper
-
-Maps a Matter attribute to a Barton resource value. The read mapper references a
-`matterMeta` attribute alias by name. The runtime resolves the alias to determine
-which cluster and attribute to subscribe to, then passes the TLV data to the script.
-
-```yaml
-# In matterMeta:
-matterMeta:
-  aliases:
-    - name: "lockState"
-      attribute:
-        clusterId: "0x0101"     # Door Lock cluster
-        attributeId: "0x0000"   # LockState attribute
-        name: "LockState"
-        type: "enum8"
-
-# In the resource mapper:
-mapper:
-  read:
-    alias: "lockState"          # Resolved to the alias defined in matterMeta
-    script: |
-      var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-      return {value: lockState === 1 ? 'true' : 'false'};
-```
-
-#### Write Mapper
-
-Maps a Barton resource write to a Matter operation. Write mappers are script-only and
-must return the full operation details. The script can return either a `write` operation
-(for attribute writes) or an `invoke` operation (for command-based writes):
-
-```yaml
-mapper:
-  write:
-    script: |
-      // Encode the value as TLV and return a write operation
-      const secs = parseInt(sbmdWriteArgs.input, 10);
-      const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-      return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
-```
-
-Or invoke a command:
-
-```yaml
-mapper:
-  write:
-    script: |
-      // Write to On/Off resource invokes On or Off command
-      const isOn = sbmdWriteArgs.input === 'true';
-      return SbmdUtils.Response.invoke(0x0006, isOn ? 0x0001 : 0x0000);
-```
-
-### 4.2 Command Mapping
-
-#### Execute Mapper
-
-Maps a Barton function execution to a Matter command. Execute mappers are script-only
-and must return an `invoke` operation with full command details:
-
-```yaml
-mapper:
-  execute:
-    script: |
-      // Build PINCode bytes if credential service is supported
-      var args = { PINCode: null };
-      const featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
-      if (((featureMap & 0x81) === 0x81) &&
-          sbmdCommandArgs.input.length > 0) {
-        var pinBytes = [];
-        for (let i = 0; i < sbmdCommandArgs.input.length; i++) {
-          pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
-        }
-        args.PINCode = pinBytes;
-      }
-      const tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-          args, {PINCode: {tag: 0, type: 'octstr'}});
-      return SbmdUtils.Response.invoke(0x0101, 0x0000, tlvBase64,
-          {timedInvokeTimeoutMs: 10000});
-```
-
-#### Execute Response Mapper (scriptResponse)
-
-Some Matter commands return response data. The optional `scriptResponse` field defines
-a script that converts the command response TLV (provided as JSON) back to a Barton
-string that can be returned to the caller:
-
-```yaml
-mapper:
-  execute:
-    script: |
-      // Encode user index as TLV and invoke GetUser
-      const userIndex = parseInt(sbmdCommandArgs.input, 10);
-      const tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-          {userIndex: userIndex}, {userIndex: {tag: 0, type: 'uint16'}});
-      return SbmdUtils.Response.invoke(0x0101, 0x0003, tlvBase64);
-    scriptResponse: |
-      // Decode GetUserResponse TLV and return userName
-      var user = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
-      if (user.userName) {
-        return {value: user.userName};
-      }
-      return {value: ""};
-```
-
-The `scriptResponse` receives the command response in `sbmdCommandResponseArgs.tlvBase64`
-which the script decodes using `SbmdUtils.Tlv.decode()` before returning a Barton string.
-
-### 4.3 Event Mapping
-
-#### Event Mapper
-
-Maps a Matter device event to a Barton resource value update. Event mappers reference
-a `matterMeta` event alias by name. The runtime subscribes to the specified event and
-invokes the script when the event fires.
-
-```yaml
-# In matterMeta:
-matterMeta:
-  aliases:
-    - name: "lockOperation"
-      event:
-        clusterId: "0x0101"      # Door Lock cluster
-        eventId: "0x0002"        # LockOperation event
-        name: "LockOperation"
-
-# In the resource mapper:
-mapper:
-  event:
-    alias: "lockOperation"       # Resolved to the alias defined in matterMeta
-    script: |
-      // Decode event TLV struct — lockOperationType is at tag 0
-      var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
-      // LockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, ...
-      var isLocked = (eventData.lockOperationType === 0);
-      return { value: isLocked ? 'true' : 'false' };
-```
-
-Event mappers receive `sbmdEventArgs` containing the base64-encoded TLV event data.
-The script decodes the data and returns a Barton resource value.
-
-> **Note:** Any mapper script can suppress a resource update by returning `{}` or `{ value: null }`.
-> The effect depends on the call context:
-> - **Subscription / event updates:** the resource value is left unchanged; no `updateResource` call is made.
-> - **Explicit reads (`read_resource`):** no value is returned to the caller (the caller receives `null`).
-> - **seedFrom:** the initial seed is skipped; the resource has no value until the first event fires.
->
-> Suppress is commonly used in event mappers to ignore non-state-change events (e.g. returning `{}`
-> for `LockOperationType` values that do not change lock state), and in read mappers to produce no
-> value when a Matter attribute holds a null or inapplicable value.
-
-### 4.4 SeedFrom Mapper
-
-Maps a Matter **attribute cache read** to provide the **initial value** of an
-event-driven resource at device configure and synchronize time. This enables
-resources that use events for live updates (via `mapper.event`) to still have
-their initial state populated from the device attribute cache when the device
-first connects.
-
-**Key constraints:**
-
-- `seedFrom` MUST be paired with an `event` mapper on the same resource.
-- `seedFrom` and `read` are **mutually exclusive** on the same mapper.
-- The `alias` field MUST reference an **attribute alias** (not an event alias).
-- The `script` field is required and must be non-empty.
-- The script uses the same `sbmdReadArgs` input interface as `read` mapper scripts.
-
-**When it is called:**
-
-- Once at device **commission** time, during resource registration — before the device is persisted and before `DEVICE_ADDED` is emitted, so `DEVICE_ADDED` carries the correct initial value.
-- Once at device **synchronize** time (reconnect), after the attribute cache is primed.
-- It is **not** called on live attribute subscription callbacks — the `event` mapper handles live updates.
-
-```yaml
-# In matterMeta:
-matterMeta:
-  aliases:
-    - name: "lockState"
-      attribute:
-        clusterId: "0x0101"
-        attributeId: "0x0000"
-        name: "LockState"
-        type: "uint8"
-    - name: "lockOperation"
-      event:
-        clusterId: "0x0101"
-        eventId: "0x0002"
-        name: "LockOperation"
-
-# In the resource:
-prerequisites:
-  - alias: "lockState"
-  - alias: "lockOperation"
-mapper:
-  # Live updates via LockOperation events
-  event:
-    alias: "lockOperation"
-    script: |
-      var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
-      // LockOperationType: 0=Lock, 1=Unlock, 2+=non-state-change
-      if (event[0] === 0) { return {value: 'true' }; }
-      if (event[0] === 1) { return {value: 'false' }; }
-      return {};  // Suppress — no update for non-state-change events
-
-  # Initial value from attribute cache at configure/synchronize time
-  seedFrom:
-    alias: "lockState"           # Must be an attribute alias
-    script: |
-      // Same script interface as read mapper (sbmdReadArgs.tlvBase64)
-      var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-      // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-      return { value: value === 1 ? 'true' : 'false' };
-```
-
-> **C++ field naming**: The YAML key is `seedFrom`. The internal C++ data model uses
-> `seedFromAttribute` (std::optional<SbmdAttribute>) and `seedFromScript` (std::string)
-> to represent the `seedFrom` configuration. Presence of `seedFrom` is indicated by
-> `seedFromAttribute.has_value()`, consistent with how `event` is represented.
-
-### 4.5 Combined Mappers
-
-A single resource can have multiple mappers for different operations:
-
-```yaml
-# In matterMeta:
-matterMeta:
-  aliases:
-    - name: "identifyTime"
-      attribute:
-        clusterId: "0x0003"
-        attributeId: "0x0000"
-        name: "IdentifyTime"
-        type: "uint16"
-
-# In the resource:
-prerequisites:
-  - alias: "identifyTime"
-mapper:
-  read:
-    alias: "identifyTime"
-    script: |
-      var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-      return {value: secs.toString()};
-  write:
-    script: |
-      const secs = parseInt(sbmdWriteArgs.input, 10);
-      const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-      return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
-```
-
-> **Note:** Read, event, and seedFrom mappers reference a `matterMeta` alias by name —
-> the alias tells the runtime what to subscribe to or read from the cache. Write and
-> execute mappers are script-only; the script returns the full operation details.
-
-## 5. JavaScript Script Interfaces
-
-Scripts are executed in an embedded JavaScript runtime. The engine is selected at build
-time via the `BCORE_MATTER_SBMD_JS_ENGINE` CMake option (`"quickjs"` or `"mquickjs"`,
-default: `"mquickjs"`). Each mapper type provides a specific input object and expects a
-specific output format.
-
-> **TypeScript Definitions**: A formal schema for all script interfaces is available in
-> [`core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts`](../core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts).
-> This file can be used for IDE autocompletion and type checking during script development.
-
-### 5.1 Read Mapper Script Interface
-
-#### Input Object: `sbmdReadArgs`
-
-```javascript
-sbmdReadArgs = {
-    tlvBase64: "...",          // Base64-encoded TLV data from Matter attribute
-    deviceUuid: "uuid-string", // Device UUID
-    clusterId: 0x0006,          // Cluster ID (number)
-    clusterFeatureMaps: {"6": 0}, // Feature maps keyed by cluster ID string (decimal)
-    endpointId: "1",           // Endpoint ID (string, may be empty for device resources)
-    attributeId: 0x0000,       // Attribute ID (number)
-    attributeName: "OnOff",    // Attribute name from spec
-    attributeType: "bool"      // Attribute type from spec
-}
-```
-
-#### Expected Output
-
-The script must return one of:
-
-| Return value | Meaning |
 |---|---|
-| `{ value: "..." }` | Update the Barton resource with the given string value |
-| `{}` or `{ value: null }` | Suppress — do not update the resource |
-| `{ error: "msg" }` | Signal an error |
+| Attribute alias (`attributeId`) | Cluster **and** attribute must be present in the device's data cache. |
+| Event alias (`eventId`) | Cluster must be present in the device's data cache. |
 
-`SbmdUtils.Response` helpers are available:
-- `SbmdUtils.Response.value(v)` — returns `{ value: String(v) }`
-- `SbmdUtils.Response.error(msg)` — returns `{ error: msg }`
+> **Note**: Event alias prerequisites can only confirm that the cluster exists —
+> they cannot verify that the specific event ID is supported, because the Matter
+> `EventList` global attribute is provisional and not reliably present on real
+> devices.
 
-```javascript
-return {
-    value: <barton_value>    // String value for the Barton resource
-};
-```
+### 4.4 Barton
 
-#### Examples
-
-**Boolean passthrough:**
-```javascript
-// Decode TLV boolean and return as string
-var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return SbmdUtils.Response.value(val);
-```
-
-**Enum to boolean conversion (Door Lock state):**
-```javascript
-// LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {value: lockState === 1 ? 'true' : 'false'};
-```
-
-**Percentage conversion (Level Control):**
-```javascript
-// Decode level (0-254) and convert to percentage string
-var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-var percent = Math.round(level / 254 * 100);
-return {value: percent.toString()};
-```
-
-### 5.2 Write Mapper Script Interface
-
-Write mappers are script-only—the script determines the complete Matter operation
-to perform and returns it as a structured JSON object.
-
-#### Input Object: `sbmdWriteArgs`
-
-```javascript
-sbmdWriteArgs = {
-    input: "value",            // Barton string value to write
-    deviceUuid: "uuid-string", // Device UUID
-    clusterFeatureMaps: {"6": 0}, // Feature maps keyed by cluster ID string (decimal)
-    endpointId: "1",           // Endpoint ID (string)
-    resourceId: "res-id"       // Barton resource ID
+```js
+barton: {
+  deviceClass: "doorLock",
+  deviceClassVersion: 3,
 }
 ```
 
-#### Expected Output
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deviceClass` | string | yes | Barton device class identifier. |
+| `deviceClassVersion` | number | yes | Version of the device class schema. |
 
-The script must return one of two operation types:
+### 4.5 Matter
 
-**For attribute writes:**
-```javascript
-return {
-    write: {
-        clusterId: <number>,    // Matter cluster ID
-        attributeId: <number>,  // Matter attribute ID
-        tlvBase64: <string>     // Base64-encoded TLV value
-    }
-};
-```
-
-**For command invocations:**
-```javascript
-return {
-    invoke: {
-        clusterId: <number>,           // Matter cluster ID
-        commandId: <number>,           // Matter command ID
-        tlvBase64: <string>,           // Base64-encoded TLV arguments (or "" for no args)
-        timedInvokeTimeoutMs?: <number> // Optional timed invoke timeout
-    }
-};
-```
-
-#### Examples
-
-**Attribute write - integer value:**
-```javascript
-// Input: sbmdWriteArgs.input = "30" (seconds)
-const secs = parseInt(sbmdWriteArgs.input, 10);
-const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-return {
-    write: {
-        clusterId: 0x0003,  // Identify cluster
-        attributeId: 0x0000, // IdentifyTime attribute
-        tlvBase64: tlvBase64
-    }
-};
-```
-
-**Command invocation - On/Off:**
-```javascript
-// Input: sbmdWriteArgs.input = "true" or "false"
-const isOn = sbmdWriteArgs.input === 'true';
-return {
-    invoke: {
-        clusterId: 0x0006,  // OnOff cluster
-        commandId: isOn ? 0x0001 : 0x0000,  // On=1, Off=0
-        tlvBase64: ""       // No arguments
-    }
-};
-```
-
-**Command invocation - Level Control:**
-```javascript
-// Input: sbmdWriteArgs.input = "50" (50%)
-var percent = parseInt(sbmdWriteArgs.input, 10);
-var level = Math.round(percent / 100 * 254);
-
-// Encode MoveToLevelWithOnOff command struct
-var tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-    { level: level, transitionTime: 0, optionsMask: 0, optionsOverride: 0 },
-    {
-        level: { tag: 0, type: 'uint8' },
-        transitionTime: { tag: 1, type: 'uint16' },
-        optionsMask: { tag: 2, type: 'bitmap8' },
-        optionsOverride: { tag: 3, type: 'bitmap8' }
-    }
-);
-return {
-    invoke: {
-        clusterId: 0x0008,  // LevelControl cluster
-        commandId: 0x0004,  // MoveToLevelWithOnOff
-        tlvBase64: tlvBase64
-    }
-};
-```
-
-### 5.3 Execute Mapper Script Interface
-
-Execute mappers are script-only—the script determines the complete Matter command
-to invoke and returns it as a structured JSON object.
-
-#### Input Object: `sbmdCommandArgs`
-
-```javascript
-sbmdCommandArgs = {
-    input: "value",            // Barton argument string
-    deviceUuid: "uuid-string", // Device UUID
-    clusterFeatureMaps: {"257": 129}, // Feature maps keyed by cluster ID string (decimal)
-    endpointId: "1",           // Endpoint ID (string)
-    resourceId: "res-id"       // Barton resource ID
+```js
+matter: {
+  deviceTypes: [0x000a],
+  revision: 1,
+  featureClusters: [DOOR_LOCK_CLUSTER],
 }
 ```
 
-#### Expected Output
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `deviceTypes` | number[] | yes | Matter device type IDs this driver handles. |
+| `revision` | number | no | Minimum Matter device type revision required. |
+| `vendorId` | number | no | Matter vendor ID for vendor-specific matching. |
+| `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. |
+| `featureClusters` | number[] | no | Cluster IDs whose feature maps should be cached and made available to handlers via `args.clusterFeatureMaps`. |
 
-```javascript
-return {
-    invoke: {
-        clusterId: <number>,           // Matter cluster ID
-        commandId: <number>,           // Matter command ID
-        tlvBase64: <string>,           // Base64-encoded TLV arguments (or "" for no args)
-        timedInvokeTimeoutMs?: <number> // Optional timed invoke timeout
-    }
-};
+**Driver claiming**: When a Matter device is commissioned, the runtime uses a
+two-pass claiming process to select the driver:
+
+1. **Vendor-specific pass**: Drivers that declare `vendorId` and `productId` are
+   tried first. A driver matches if the device's vendor ID, product ID, **and**
+   at least one `deviceTypes` entry all match.
+2. **Generic pass**: Drivers without `vendorId`/`productId` are tried next,
+   matched by `deviceTypes` alone.
+
+This allows a vendor-specific driver to override the generic behavior for a
+particular device while still sharing the same device type.
+
+```js
+// Vendor-specific driver example
+matter: {
+  vendorId: 0x117C,              // IKEA
+  productId: 0x8005,             // TIMMERFLOTTE
+  deviceTypes: [0x0302, 0x0307], // Temperature + Humidity Sensor
+}
 ```
 
-#### Examples
+### 4.6 Reporting
 
-**Simple command with no arguments:**
-```javascript
-// Toggle command
-return {
-    invoke: {
-        clusterId: 0x0006,  // OnOff cluster
-        commandId: 0x0002,  // Toggle
-        tlvBase64: ""       // No arguments
-    }
-};
+```js
+reporting: {
+  minSecs: 1,
+  maxSecs: 3600,
+}
 ```
 
-**Lock/Unlock with optional PIN and timed invoke:**
-```javascript
-var args = { PINCode: null };
-// Check if COTA (0x80) and PIN (0x01) features are both enabled
-const featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
-if (((featureMap & 0x81) === 0x81) &&
-    sbmdCommandArgs.input.length > 0) {
-  // Convert PIN string to byte array
-  var pinBytes = [];
-  for (let i = 0; i < sbmdCommandArgs.input.length; i++) {
-    pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `minSecs` | number | yes | Minimum attribute reporting interval in seconds. |
+| `maxSecs` | number | yes | Maximum attribute reporting interval in seconds. |
+
+### 4.7 Resources
+
+Device-level resources are declared at the top level under `resources`. These
+are available on the device itself, not tied to any specific endpoint.
+
+```js
+resources: {
+  [RES_IDENTIFY]: {
+    type: "string",
+    modes: ["read", "write", "static", "noEvents"],
+    read: {
+      supplements: {
+        attributes: ["identifyTime"],
+      },
+      handler: readIdentify,
+    },
+    write: writeIdentify,
+  },
+  [RES_REBOOT]: {
+    type: "function",
+    execute: executeReboot,
+  },
+}
+```
+
+See [4.8.1 Resource Declaration](#481-resource-declaration) for the full schema.
+
+### 4.8 Endpoints
+
+Each endpoint carries a profile and its own set of resources.
+
+```js
+endpoints: {
+  [LOCK_ENDPOINT]: {
+    profile: "doorLock",
+    profileVersion: 3,
+    resources: {
+      [RES_LOCKED]: { ... },
+      [RES_LOCK]:   { ... },
+    },
+  },
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | Barton resource profile name. |
+| `profileVersion` | number | yes | Profile version. |
+| `resources` | object | yes | Resource declarations (keyed by resource name). |
+
+#### 4.8.1 Resource Declaration
+
+```js
+[RES_LOCKED]: {
+  type: "boolean",
+  modes: ["read"],
+  seed: {
+    supplements: {
+      attributes: ["lockState"],
+    },
+    handler: seedLockedResource,
+  },
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | yes | Resource value type: `"boolean"`, `"string"`, `"function"`, or a custom type like `"com.icontrol.lightLevel"`. |
+| `modes` | string[] | no | Access modes. See below. |
+| `prerequisites` | string[] | no | Alias names that must be satisfied before the resource is created (see [4.3 Aliases](#43-aliases)). Default: none (always created). |
+| `optional` | boolean | no | Controls behavior when `prerequisites` are not met. If `false` (default), commissioning **fails**. If `true`, the resource is **silently skipped**. Has no effect without `prerequisites`. |
+| `seed` | object | no | Initialization handler, run on device discovery and each Barton startup. |
+| `read` | object | no | Read handler (for readable resources). |
+| `write` | function | no | Write handler function reference. |
+| `execute` | function | no | Execute handler function reference (for `type: "function"` resources). |
+
+**Prerequisites and Optional**
+
+The `prerequisites` array lists alias names (defined in the `aliases` section)
+that must be present on the device. The `optional` flag controls what happens
+when prerequisites are not met:
+
+| | `optional: false` (default) | `optional: true` |
+|---|---|---|
+| Prerequisites met | Resource is created | Resource is created |
+| Prerequisites not met | **Commissioning fails** | Resource is **silently skipped** |
+
+Use `optional: true` for resources that map to Matter attributes or clusters
+that may not be present on all devices matching the driver's `deviceTypes`.
+
+> **Note**: Prerequisites only need to list attributes or events that are
+> **optional** in the Matter specification for the targeted device type.
+> Attributes that are **required** by the specification (e.g., `LockState` on a
+> Door Lock) are guaranteed to be present on any certified device and may be
+> omitted from `prerequisites`.
+
+**Modes**
+
+Modes control resource behavior. Two modes are **on by default** and must be
+explicitly opted out of:
+
+| Mode | Default | Description |
+|---|---|---|
+| `"read"` | off | Resource is readable. |
+| `"write"` | off | Resource is writable. |
+| `"dynamic"` | **on** | Resource value can be updated by device-side handlers (attribute/event/command handlers). Opt out with `"static"`. |
+| `"emitEvents"` | **on** | Resource emits Barton events when its value changes. Opt out with `"noEvents"`. |
+| `"lazySaveNext"` | off | Defer persistence to the next save cycle instead of saving immediately on change. |
+| `"sensitive"` | off | Value contains sensitive data. The runtime may redact it from logs and diagnostics. |
+
+The opt-out modes `"static"` and `"noEvents"` are placed in the `modes` array
+to explicitly disable the corresponding default:
+
+```js
+// Dynamic + events (default): just declare access modes
+modes: ["read"]
+
+// Readable, writable, but not dynamic and no events:
+modes: ["read", "write", "static", "noEvents"]
+
+// Dynamic but no events:
+modes: ["read", "noEvents"]
+```
+
+Resources with `type: "function"` do not use `modes` — they are always
+execute-only.
+
+**Seed vs Read**
+
+- `seed` runs when the device is first discovered **and** each time Barton
+  starts up, to synchronize the resource value from device attributes (missed
+  events during downtime may have left the cached value stale). After seeding,
+  reads return the cached value and do not invoke a handler.
+- `read` runs on **every** read request. Use this for resources that must
+  always fetch a fresh value from the device.
+
+Both `seed` and `read` support the same object shape:
+
+```js
+{
+  supplements: { ... },   // optional pre-fetched data
+  handler: functionRef,   // handler function
+}
+```
+
+### 4.9 Attribute Handlers
+
+Attribute handlers process incoming Matter attribute reports from the device.
+
+```js
+attributeHandlers: {
+  // Alias form — resolved to cluster + attribute from the aliases section
+  handlerName: {
+    aliases:      string[],          // alias names (mutually exclusive with clusterId)
+    supplements:  { ... },           // optional: pre-fetched data
+    handler:      functionRef,       // required: handler function
+  },
+
+  // Explicit form — cluster + attribute ID(s) specified directly
+  handlerName: {
+    clusterId:    number,            // required: cluster to match
+    attributeId:  number | "*",      // single attribute or wildcard
+    attributeIds: number[],          // OR: multiple attributes (mutually exclusive with attributeId)
+    supplements:  { ... },           // optional: pre-fetched data
+    handler:      functionRef,       // required: handler function
+  },
+}
+```
+
+The `aliases` field and `clusterId` + `attributeId`/`attributeIds` fields are
+mutually exclusive. When `aliases` is used, the runtime resolves each entry to
+its corresponding cluster and attribute from the `aliases` section. The handler
+fires for any matching alias.
+
+**Trigger dispatch**:
+- **Single**: `attributeId: ATTR_LOCK_STATE` — fires for one specific attribute.
+- **Multiple**: `attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE]` — fires
+  for any of the listed attributes. The handler is called once per triggering
+  attribute change; `args.attribute` identifies which one fired.
+- **Wildcard**: `attributeId: "*"` — fires for any attribute on the cluster.
+
+When multiple handlers match the same attribute report, all matching handlers
+fire. More specific handlers (single/multi) fire before wildcard handlers.
+
+### 4.10 Event Handlers
+
+Event handlers process incoming Matter events from the device.
+
+```js
+eventHandlers: {
+  // Alias form
+  handlerName: {
+    aliases: string[],
+    supplements: { ... },
+    handler: functionRef,
+  },
+
+  // Explicit form
+  handlerName: {
+    clusterId: number,
+    eventId:   number | "*",
+    eventIds:  number[],
+    supplements: { ... },
+    handler:   functionRef,
+  },
+}
+```
+
+Same dispatch rules and aliases/explicit mutual exclusivity as attribute handlers.
+
+### 4.11 Command Handlers
+
+Command handlers process **unsolicited** commands received from the device — that
+is, commands that are not correlated to a pending `.invoke()` with a
+`responseCommandId` (see [Section 6](#6-command-response-flows)).
+
+```js
+commandHandlers: {
+  // Alias form
+  handlerName: {
+    aliases: string[],
+    supplements: { ... },
+    handler: functionRef,
+  },
+
+  // Explicit form
+  handlerName: {
+    clusterId: number,
+    commandId:   number | "*",
+    commandIds:  number[],
+    supplements: { ... },
+    handler:   functionRef,
+  },
+}
+```
+
+Same dispatch rules and aliases/explicit mutual exclusivity as attribute handlers.
+
+**Important**: When a command arrives that matches a pending invoke's
+`responseCommandId`, the invoke's response handler is called instead. Command
+handlers only fire for truly unsolicited commands or when `passthrough: true` is
+set on the invoke (see [Section 6.2](#62-flow-2-invoke-with-command-response)).
+
+### 4.12 Supplements
+
+Supplements declare data that should be pre-fetched by the runtime before a
+handler executes. They appear on `seed`, `read`, attribute/event/command handler
+entries.
+
+```js
+supplements: {
+  attributes: ["lockState", "actuatorEnabled"],
+  resources: [
+    LOCK_ENDPOINT + "/" + RES_LOCKED,
+    RES_IDENTIFY,
+  ],
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `attributes` | string[] | Alias names (defined in `aliases`) identifying Matter attributes to read from the device data cache. |
+| `resources` | string[] | Barton resource values to fetch. Format: `"endpointId/resourceName"` for endpoint resources, or `"resourceName"` for device-level resources. |
+
+The fetched data is delivered to the handler in `args.supplements` (see
+[Section 5.1](#51-handler-arguments)).
+
+---
+
+## 5. Handler Functions
+
+All handler functions receive a single `args` object and return a result built
+with `SbmdUtils.result()`.
+
+```js
+function myHandler(args) {
+  // ... logic ...
+  return SbmdUtils.result()
+    .updateResource(ENDPOINT, RESOURCE, value);
+}
+```
+
+### 5.1 Handler Arguments
+
+The `args` object varies by handler type. All fields are read-only.
+
+#### Common fields (always present)
+
+| Field | Type | Description |
+|---|---|---|
+| `args.deviceUuid` | `string` | The Barton device UUID. |
+| `args.endpointId` | `string \| null` | The Barton endpoint ID for the resource being operated on. `null` for device-level resources with no endpoint. |
+| `args.clusterFeatureMaps` | `{ [clusterId]: number }` | Feature maps for clusters declared in `matter.featureClusters`. |
+
+#### Trigger field (exactly one, depending on handler type)
+
+| Field | Type | Present on | Description |
+|---|---|---|---|
+| `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handlers | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
+| `args.event` | `{ clusterId, eventId, data, alias }` | event handlers | The event that triggered the handler. `data` is the decoded event payload (array of TLV field values). `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.command` | `{ clusterId, commandId, data, alias }` | command handlers, invoke response handlers | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.resource` | `{ resourceId, input }` | resource handlers (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
+
+#### Supplements (present when declared)
+
+| Field | Type | Description |
+|---|---|---|
+| `args.supplements.attributes` | `{ [aliasName]: value }` | Pre-fetched attribute values, keyed by alias name. |
+| `args.supplements.resources` | `{ [path]: value }` | Pre-fetched resource values. Keys are `"endpointId/resourceName"` or `"resourceName"`. |
+
+#### Invoke response context (present on invoke response handlers only)
+
+| Field | Type | Description |
+|---|---|---|
+| `args.invokeContext` | any | Arbitrary context passed via the `context` field on the originating `.invoke()` call. `null` if not set. |
+
+### 5.2 Handler Type Summary
+
+| Handler type | Trigger field | Typical use |
+|---|---|---|
+| `seed` handler | `args.resource` | Resource initialization from device attributes (runs on discovery and startup). |
+| `read` handler | `args.resource` | Fetch fresh value for a resource read. |
+| `write` handler | `args.resource` | Translate a Barton write into a Matter attribute write or command. |
+| `execute` handler | `args.resource` | Translate a Barton execute into a Matter command invoke. |
+| Attribute handler | `args.attribute` | React to an incoming attribute report from the device. |
+| Event handler | `args.event` | React to an incoming event from the device. |
+| Command handler | `args.command` | React to an unsolicited command from the device. |
+| Invoke response handler | `args.command` + `args.invokeContext` | Process a command response correlated to a pending invoke. |
+
+---
+
+## 6. Command Response Flows
+
+When a resource operation invokes a Matter command on the device, there are three
+possible response patterns. The runtime handles each differently.
+
+### 6.1 Flow 1: Simple Status Response
+
+The device returns a standard Matter status response (success or error code). No
+driver code is needed — the runtime automatically maps the status to the resource
+operation result (success/failure).
+
+This is the default behavior when `.invoke()` has no `responseCommandId`.
+
+```js
+function executeLockAction(args) {
+  var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
+
+  return SbmdUtils.result()
+    .invoke(DOOR_LOCK_CLUSTER, commandId, payload, { timedInvokeTimeoutMs: 10000 });
+}
+```
+
+The runtime sends the command, receives the status response, and completes the
+resource operation with success or failure. The handler is not called again.
+
+### 6.2 Flow 2: Invoke with Command Response
+
+Some commands expect a specific command to be sent back from the device. The
+resource operation cannot complete until that response arrives and is processed.
+
+Declare the expected response on the `.invoke()` options:
+
+```js
+function executeGetCredentialStatus(args) {
+  var payload = buildCredentialRequest(args.resource.input);
+
+  return SbmdUtils.result()
+    .invoke(DOOR_LOCK_CLUSTER, CMD_GET_CREDENTIAL_STATUS, payload, {
+      responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
+      handler: processCredentialResponse,
+      context: { requestedCredential: args.resource.input },
+      timeoutMs: 5000,
+      passthrough: false,
+    });
+}
+
+function processCredentialResponse(args) {
+  var requested = args.invokeContext.requestedCredential;
+
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
+}
+```
+
+**Invoke response options**:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `responseCommandId` | number | yes | The command ID expected as a response. |
+| `handler` | function | yes | Handler function to process the response. Receives `args.command` and `args.invokeContext`. Its result completes the original resource operation. |
+| `context` | any | no | Arbitrary data to pass to the response handler via `args.invokeContext`. Must be a JSON-serializable value. |
+| `timeoutMs` | number | no | Maximum time to wait for the response in milliseconds. If the response does not arrive within this time, the resource operation fails with a timeout error. Default is runtime-defined. |
+| `passthrough` | boolean | no | If `true`, the response command also fires any matching `commandHandlers` entry after the invoke response handler runs. Default `false`. |
+
+**Runtime behavior**:
+
+1. Resource operation triggers the execute handler, which returns a result with
+   `.invoke(...)` containing `responseCommandId`.
+2. Runtime sends the command and **parks** the resource operation, storing the
+   `handler`, `context`, and timeout.
+3. When a command with matching `clusterId` + `responseCommandId` arrives:
+   - Runtime checks for a pending invoke first.
+   - **Match found**: routes to the invoke's `handler`. The handler's result
+     completes the parked resource operation.
+   - If `passthrough: true`, the matching `commandHandlers` entry also fires
+     afterward.
+4. **No match** (no pending invoke): falls through to `commandHandlers` for
+   unsolicited processing.
+5. **Timeout**: if `timeoutMs` elapses before the response arrives, the parked
+   resource operation fails with a timeout error.
+
+### 6.3 Flow 3: Unsolicited Commands
+
+Commands that arrive with no pending invoke are routed to `commandHandlers`.
+These represent device-initiated communication that the driver wants to observe
+and react to.
+
+```js
+commandHandlers: {
+  userCommands: {
+    clusterId: DOOR_LOCK_CLUSTER,
+    commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
+    handler: handleUserCommandResponses,
+  },
+}
+
+function handleUserCommandResponses(args) {
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+}
+```
+
+---
+
+## 7. Result Builder — `SbmdUtils.result()`
+
+All handler functions return a result object built with the `SbmdUtils.result()`
+builder. The builder is immutable — each method returns a new builder instance,
+allowing chaining. The runtime processes all operations atomically after the
+handler returns.
+
+```js
+return SbmdUtils.result()
+  .updateResource(LOCK_ENDPOINT, RES_LOCKED, "true")
+  .setPersistentData("lastLockOperation", "lock")
+  .log("lock operation applied");
+```
+
+### 7.1 Resource Updates
+
+#### `updateResource(resource, value)`
+
+Update a **device-level** resource (declared under top-level `resources`).
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resource` | string | Resource name (use a `RES_*` constant). |
+| `value` | string | New resource value. |
+
+#### `updateResource(endpoint, resource, value [, metadata])`
+
+Update an **endpoint-level** resource.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `endpoint` | string | Endpoint ID (use an `*_ENDPOINT` constant). |
+| `resource` | string | Resource name (use a `RES_*` constant). |
+| `value` | string | New resource value. |
+| `metadata` | string | Optional. JSON string of metadata to attach to the update. |
+
+The runtime distinguishes the two-arg vs three-arg form by the first argument:
+endpoint IDs are numeric strings, resource names are not.
+
+### 7.2 Device Interaction
+
+#### `invoke(clusterId, commandId, payload, options)`
+
+Send a Matter command to the device.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clusterId` | number | Target cluster. |
+| `commandId` | number | Command ID. |
+| `payload` | string\|null | Base64-encoded TLV payload, or `null`. |
+| `options` | object | Invoke options. |
+
+**Options object**:
+
+| Field | Type | Description |
+|---|---|---|
+| `timedInvokeTimeoutMs` | number | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
+| `responseCommandId` | number | Expected response command ID (see [Section 6.2](#62-flow-2-invoke-with-command-response)). |
+| `handler` | function | Response handler (required when `responseCommandId` is set). |
+| `context` | any | Arbitrary context forwarded to the response handler. |
+| `timeoutMs` | number | Response timeout in milliseconds. |
+| `passthrough` | boolean | Also fire `commandHandlers` for the response. Default `false`. |
+
+#### `read(clusterId, attributeId)`
+
+Read a Matter attribute from the device.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clusterId` | number | Target cluster. |
+| `attributeId` | number | Attribute ID to read. |
+
+#### `write(clusterId, attributeId, payload)`
+
+Write a Matter attribute on the device.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clusterId` | number | Target cluster. |
+| `attributeId` | number | Attribute ID to write. |
+| `payload` | string | Base64-encoded TLV value. |
+
+### 7.3 Persistent and Transient Storage
+
+#### `setPersistentData(name, value)`
+
+Store a key-value pair in non-volatile storage. Survives device and service
+reboots. Values are always strings.
+
+#### `setTransientData(name, value, ttlSecs)`
+
+Store a key-value pair in memory with automatic cleanup after `ttlSecs` seconds.
+Useful for short-lived diagnostic or debounce state.
+
+These are also available as standalone read accessors:
+
+- `SbmdUtils.getPersistentData(name)` — returns `string | null`
+- `SbmdUtils.getTransientData(name)` — returns `string | null`
+
+### 7.4 Logging
+
+#### `log(message)`
+
+Emit a diagnostic log message associated with this handler invocation.
+
+### 7.5 Ignore
+
+#### `ignore()`
+
+Complete the operation successfully without updating any resource. This is
+useful in event and attribute handlers to silently discard non-actionable
+reports, and in read/seed handlers to skip the update — in which case the
+runtime returns the previously cached value (if any) to the caller.
+
+```js
+function handleLockOperation(args) {
+  var opType = args.event.data[0];
+
+  if (opType !== 0 && opType !== 1) {
+    // Non-state-change event — ignore
+    return SbmdUtils.result().ignore();
   }
-  args.PINCode = pinBytes;
-}
-// Encode struct with PINCode field at tag 0
-const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
-return {
-    invoke: {
-        clusterId: 0x0101,  // DoorLock cluster
-        commandId: 0x0000,  // LockDoor
-        timedInvokeTimeoutMs: 10000,
-        tlvBase64: tlvBase64
-    }
-};
-```
 
-### 5.4 Execute Response Mapper Script Interface
-
-For commands that return data, an optional `scriptResponse` can process the response:
-
-#### Input Object: `sbmdCommandResponseArgs`
-
-```javascript
-sbmdCommandResponseArgs = {
-    tlvBase64: "...",          // Base64-encoded TLV response data
-    deviceUuid: "uuid-string", // Device UUID
-    clusterId: 0x0101,         // Cluster ID (number)
-    clusterFeatureMaps: {"257": 129}, // Feature maps keyed by cluster ID string (decimal)
-    endpointId: "1",           // Endpoint ID (string)
-    commandId: 0x0000,         // Command ID (number)
-    commandName: "LockDoor"    // Command name from spec
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_LOCKED, (opType === 0) ? "true" : "false");
 }
 ```
 
-#### Expected Output
+### 7.6 Error
 
-The script must return one of:
+#### `error(message)`
 
-| Return value | Meaning |
-|---|---|
-| `{ value: "..." }` | Return the response string to Barton |
-| `{}` or `{ value: null }` | Suppress — no response value |
-| `{ error: "msg" }` | Signal an error |
+Signal that the operation failed. The runtime marks the resource operation as
+failed and logs the message. For resource reads, the caller receives an error.
+For writes and executes, the operation is reported as failed. For attribute,
+event, and command handlers, the error is logged and no resource updates occur.
 
-```javascript
-return {
-    value: <barton_response> // String response for Barton
-};
-```
+```js
+function writeIsOn(args) {
+  var value = args.resource.input;
 
-### 5.5 Event Mapper Script Interface
+  if (value !== "true" && value !== "false") {
+    return SbmdUtils.result().error("invalid value: " + value);
+  }
 
-Event mappers process Matter device events (e.g., DoorLock LockOperation) and produce
-a Barton resource value.
+  var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
-#### Input Object: `sbmdEventArgs`
-
-```javascript
-sbmdEventArgs = {
-    tlvBase64: "...",          // Base64-encoded TLV data from Matter event
-    deviceUuid: "uuid-string", // Device UUID
-    clusterId: 0x0101,         // Cluster ID (number)
-    clusterFeatureMaps: {"257": 129}, // Feature maps keyed by cluster ID string (decimal)
-    endpointId: "1",           // Endpoint ID (string)
-    eventId: 0x0002,           // Event ID (number)
-    eventName: "LockOperation" // Event name from spec
+  return SbmdUtils.result()
+    .invoke(ON_OFF_CLUSTER, commandId, null, {});
 }
 ```
 
-#### Expected Output
+### 7.7 Empty Result
 
-The script must return one of:
+Returning `SbmdUtils.result()` with no chained operations is valid. It signals
+that the handler processed the input but produced no side effects.
 
-| Return value | Meaning |
-|---|---|
-| `{ value: "..." }` | Update the Barton resource with the given string value |
-| `{}` or `{ value: null }` | Suppress — do not update the resource |
-| `{ error: "msg" }` | Signal an error |
+```js
+function handleLockDiagnostics(args) {
+  return SbmdUtils.result(); // acknowledged, no action
+}
+```
 
-`SbmdUtils.Response.value(v)` and `SbmdUtils.Response.error(msg)` helpers are available.
+---
 
-```javascript
-return {
-    value: <barton_value>    // String value for the Barton resource
+## 8. TLV Utilities
+
+The runtime provides TLV encoding/decoding helpers for constructing command
+payloads and interpreting attribute/event data.
+
+### 8.1 `SbmdUtils.Tlv.encodeStruct(fields, schema)`
+
+Encode a JavaScript object into a base64-encoded Matter TLV struct.
+
+```js
+var schema = {
+  IdentifyTime: { tag: 0, type: "uint16" },
 };
+var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
 ```
 
-#### Example
+**Schema entry fields**:
 
-**DoorLock LockOperation event:**
-```javascript
-// Decode LockOperation event TLV struct to determine lock state
-var eventData = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
-// LockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, ...
-var isLocked = (eventData.lockOperationType === 0);
-return { value: isLocked ? 'true' : 'false' };
+| Field | Type | Description |
+|---|---|---|
+| `tag` | number | TLV context tag. |
+| `type` | string | TLV type: `"uint8"`, `"uint16"`, `"uint32"`, `"int8"`, `"int16"`, `"int32"`, `"bool"`, `"octstr"`, `"utf8"`. |
+
+### 8.2 `SbmdUtils.Tlv.encode(value, type)`
+
+Encode a single primitive value into a base64-encoded Matter TLV element.
+
+```js
+var tlvBase64 = SbmdUtils.Tlv.encode(42, "uint16");
+var tlvBool = SbmdUtils.Tlv.encode(true, "bool");
 ```
 
-## 6. Matter Data Types
+| Parameter | Type | Description |
+|---|---|---|
+| `value` | any | The value to encode. |
+| `type` | string | TLV type (same types as `encodeStruct` schema entries). |
 
-### 6.1 Supported SBMD Types
+### 8.3 `SbmdUtils.Tlv.decode(tlvBase64)`
 
-The following Matter data types are supported in read mapper attribute definitions:
+Decode a base64-encoded TLV value into a JavaScript value.
+
+### 8.4 `SbmdUtils.Base64.encode(bytes)` / `SbmdUtils.Base64.decode(base64)`
+
+Encode a byte array to a base64 string, or decode a base64 string to a byte array.
+
+```js
+var encoded = SbmdUtils.Base64.encode([0x01, 0x02, 0x03]);
+var bytes = SbmdUtils.Base64.decode("AQID");
+```
+
+### 8.5 Supported Data Types
+
+The following Matter data types are recognized by the TLV encoding/decoding
+helpers and may be used in `encodeStruct` schema entries, `encode` type
+arguments, and alias `type` documentation fields.
 
 | Category | Types |
-|----------|-------|
-| **Boolean** | `bool`, `boolean` |
+|---|---|
+| **Boolean** | `bool` |
 | **Unsigned Integer** | `uint8`, `uint16`, `uint32`, `uint64` |
-| **Signed Integer** | `int8`, `int16`, `int24`, `int32`, `int40`, `int48`, `int56`, `int64` |
-| **Enum/Bitmap** | `enum8`, `enum16`, `bitmap8`, `bitmap16`, `bitmap32`, `bitmap64` |
-| **Floating Point** | `single`, `float`, `double` |
-| **String** | `string`, `char_string`, `long_char_string` |
-| **Byte String** | `octstr`, `octet_string`, `long_octet_string` |
-| **Derived Types** | `percent`, `percent100ths`, `epoch-s`, `epoch-us`, `posix-ms`, `elapsed-s`, `utc`, `systime-ms`, `systime-us`, `temperature`, `amperage-ma`, `voltage-mv`, `power-mw`, `energy-mwh` |
-| **Network Types** | `ipadr`, `ipv4adr`, `ipv6adr`, `ipv6pre`, `hwadr`, `semtag` |
-| **Matter Identifiers** | `fabric-idx`, `fabric-id`, `node-id`, `vendor-id`, `devtype-id`, `group-id`, `endpoint-no`, `cluster-id`, `attrib-id`, `event-id`, `command-id`, `action-id`, `trans-id`, `data-ver`, `entry-idx` |
-| **Complex** | `struct`, `list`, `array`, `null` |
+| **Signed Integer** | `int8`, `int16`, `int32`, `int64` |
+| **Floating Point** | `float`, `double` |
+| **String** | `utf8` |
+| **Byte String** | `octstr` |
+| **Complex** | `struct`, `list`, `array` |
 
-### 6.2 TLV Decoding for Read Operations
+The decoder (`SbmdUtils.Tlv.decode`) handles all TLV types automatically and
+returns native JavaScript values:
+- Booleans → `true`/`false`
+- Numbers → JavaScript numbers
+- Strings → JavaScript strings
+- Byte arrays → arrays of integers (0–255)
+- Structs → JavaScript objects
+- Arrays/Lists → JavaScript arrays
 
-For read operations, the C++ runtime passes attribute data (or command responses) as
-base64-encoded TLV. Scripts use `SbmdUtils.Tlv.decode()` to convert TLV to JavaScript:
+---
 
-```javascript
-var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-```
+## 9. Runtime Guarantees
 
-The decoder automatically handles all TLV types and returns native JavaScript values:
-- Booleans: `true`/`false`
-- Numbers: JavaScript numbers (automatic integer/float handling)
-- Strings: JavaScript strings
-- Byte arrays: JavaScript arrays of integers (0-255)
-- Structs: JavaScript objects
-- Arrays/Lists: JavaScript arrays
+### 9.1 Constants Injection
 
-The `type` field in the mapper's `attribute:` section is for documentation purposes.
+The runtime performs a two-pass evaluation of each `.sbmd.js` file:
 
-### 6.3 TLV Encoding for Write and Execute Operations
+1. **Extract**: Parse the `constants: { ... }` block from the source text.
+   Only primitive literal values are permitted (numbers, strings, booleans).
+2. **Inject**: Register each constant as a **read-only global** on the JavaScript
+   execution context.
+3. **Evaluate**: Execute the full file. All bare constant references resolve
+   against the injected globals.
 
-For write and execute operations, scripts encode values as TLV and return base64-encoded
-data. Two encoding approaches are available:
+Attempting to reassign a constant results in a runtime error.
 
-#### SbmdUtils.Tlv Encoding
+### 9.2 Handler Isolation
 
-The built-in `SbmdUtils.Tlv` helpers provide simple encoding for primitive and struct types:
+- Each handler invocation receives a fresh `args` object. Handlers cannot modify
+  shared state except through `SbmdUtils.result()` operations.
+- Handler functions must be **synchronous** and **deterministic**. They must not
+  use timers, promises, or any asynchronous APIs.
+- The result builder is the **only** way to produce side effects. Direct mutation
+  of device state, resources, or storage outside the result is not possible.
 
-```javascript
-// Encode primitive values
-var tlv = SbmdUtils.Tlv.encode(42, 'uint16');
-var tlv = SbmdUtils.Tlv.encode(true, 'bool');
+### 9.3 Memory Safety
 
-// Encode structs with field schema
-var args = { PINCode: [0x31, 0x32, 0x33, 0x34] };
-var tlv = SbmdUtils.Tlv.encodeStruct(args, {
-    PINCode: {tag: 0, type: 'octstr'}
+- `var` declarations inside handler functions are permitted for stack-scoped
+  temporaries. The runtime tracks and reclaims these allocations after the
+  handler returns.
+- No global `var` declarations are permitted at file scope. The runtime may
+  reject files that declare `var` outside of function bodies.
+- `SbmdUtils` and `SbmdDriver` are the only runtime-provided globals (aside
+  from injected constants and standard JavaScript built-ins).
+
+### 9.4 Handler Dispatch Order
+
+When an incoming attribute/event/command matches multiple registered handlers:
+
+1. **Specific handlers** (single `attributeId`/`eventId`/`commandId`) fire first.
+2. **Multi handlers** (arrays like `attributeIds`) fire next.
+3. **Wildcard handlers** (`"*"`) fire last.
+4. For invoke response commands: the invoke response handler fires first. If
+   `passthrough: true`, matching `commandHandlers` fire afterward in the order
+   above.
+
+---
+
+## 10. Complete Examples
+
+### 10.1 Light Driver (Simple)
+
+```js
+SbmdDriver({
+  schemaVersion: "4.0",
+  driverVersion: "1.0",
+  name: "Light",
+
+  constants: {
+    LIGHT_ENDPOINT: "1",
+    ON_OFF_CLUSTER: 0x0006,
+    LEVEL_CONTROL_CLUSTER: 0x0008,
+    ATTR_ON_OFF: 0x0000,
+    ATTR_CURRENT_LEVEL: 0x0000,
+    CMD_ON: 0x0001,
+    CMD_OFF: 0x0000,
+    CMD_MOVE_TO_LEVEL_WITH_ON_OFF: 0x0004,
+    RES_IS_ON: "isOn",
+    RES_CURRENT_LEVEL: "currentLevel",
+  },
+
+  aliases: {
+    onOff: {
+      clusterId: ON_OFF_CLUSTER,
+      attributeId: ATTR_ON_OFF,
+      type: "bool",
+    },
+    currentLevel: {
+      clusterId: LEVEL_CONTROL_CLUSTER,
+      attributeId: ATTR_CURRENT_LEVEL,
+      type: "uint8",
+    },
+  },
+
+  barton: { deviceClass: "light", deviceClassVersion: 0 },
+
+  matter: {
+    deviceTypes: [0x0100, 0x010a, 0x0101, 0x010b, 0x0102, 0x010d, 0x010c],
+    revision: 1,
+  },
+
+  reporting: { minSecs: 1, maxSecs: 3600 },
+
+  endpoints: {
+    [LIGHT_ENDPOINT]: {
+      profile: "light",
+      profileVersion: 0,
+      resources: {
+        [RES_IS_ON]: {
+          type: "boolean",
+          modes: ["read", "write"],
+          read: {
+            supplements: {
+              attributes: ["onOff"],
+            },
+            handler: readIsOn,
+          },
+          write: writeIsOn,
+        },
+        [RES_CURRENT_LEVEL]: {
+          type: "com.icontrol.lightLevel",
+          prerequisites: ["currentLevel"],
+          optional: true,
+          modes: ["read", "write"],
+          read: {
+            supplements: {
+              attributes: ["currentLevel"],
+            },
+            handler: readCurrentLevel,
+          },
+          write: writeCurrentLevel,
+        },
+      },
+    },
+  },
+
+  attributeHandlers: {
+    onOff: {
+      aliases: ["onOff"],
+      handler: handleOnOffAttribute,
+    },
+    currentLevel: {
+      aliases: ["currentLevel"],
+      handler: handleCurrentLevelAttribute,
+    },
+  },
 });
-```
 
-## 7. Complete Examples
+function readIsOn(args) {
+  var value = args.supplements.attributes.onOff;
 
-### 7.1 Door Lock Driver
+  return SbmdUtils.result()
+    .updateResource(LIGHT_ENDPOINT, RES_IS_ON, (value === true) ? "true" : "false");
+}
 
-```yaml
-schemaVersion: "3.0"
-driverVersion: "1.0"
-name: "Door Lock"
-scriptType: "JavaScript"
-bartonMeta:
-  deviceClass: "doorLock"
-  deviceClassVersion: 3
-matterMeta:
-  deviceTypes:
-    - 0x000a
-  revision: 1
-  featureClusters:
-    - 0x0101  # DoorLock cluster — for featureMap access in scripts
-  aliases:
-    - name: "lockState"
-      attribute:
-        clusterId: "0x0101"    # Door Lock cluster
-        attributeId: "0x0000"  # LockState attribute
-        name: "LockState"
-        type: "uint8"
-    - name: "identifyTime"
-      attribute:
-        clusterId: "0x0003"    # Identify cluster
-        attributeId: "0x0000"  # IdentifyTime attribute
-        name: "IdentifyTime"
-        type: "uint16"
-reporting:
-  minSecs: 1
-  maxSecs: 3600
-resources:
-  - id: "identifySeconds"
-    type: "com.icontrol.seconds"
-    modes:
-      - "read"
-      - "write"
-    prerequisites:
-      - alias: "identifyTime"
-    mapper:
-      read:
-        alias: "identifyTime"
-        script: |
-          var secs = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-          return {value: secs.toString()};
-      write:
-        script: |
-          var secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          var tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
-endpoints:
-  - id: "1"
-    profile: "doorLock"
-    profileVersion: 3
-    resources:
-      - id: "locked"
-        type: "boolean"
-        modes:
-          - "read"
-          - "dynamic"
-          - "emitEvents"
-        prerequisites:
-          - alias: "lockState"
-        mapper:
-          read:
-            alias: "lockState"
-            script: |
-              // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return { value: value === 1 ? 'true' : 'false' };
-      - id: "lock"
-        type: "function"
-        prerequisites: none
-        mapper:
-          execute:
-            script: |
-              // Check if COTA (0x80) and PIN (0x01) features are both enabled
-              var args = { PINCode: null };
-              var featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
-              if (((featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                var pinBytes = [];
-                for (var i = 0; i < sbmdCommandArgs.input.length; i++) {
-                  pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
-                }
-                args.PINCode = pinBytes;
-              }
-              var tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-                  args, {PINCode: {tag: 0, type: 'octstr'}});
-              return SbmdUtils.Response.invoke(0x0101, 0x0000, tlvBase64,
-                  {timedInvokeTimeoutMs: 10000});
-      - id: "unlock"
-        type: "function"
-        prerequisites: none
-        mapper:
-          execute:
-            script: |
-              var args = { PINCode: null };
-              var featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
-              if (((featureMap & 0x81) === 0x81) &&
-                  sbmdCommandArgs.input.length > 0) {
-                var pinBytes = [];
-                for (var i = 0; i < sbmdCommandArgs.input.length; i++) {
-                  pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
-                }
-                args.PINCode = pinBytes;
-              }
-              var tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-                  args, {PINCode: {tag: 0, type: 'octstr'}});
-              return SbmdUtils.Response.invoke(0x0101, 0x0001, tlvBase64,
-                  {timedInvokeTimeoutMs: 10000});
-```
+function writeIsOn(args) {
+  var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
-### 7.2 Water Leak Detector
+  return SbmdUtils.result()
+    .invoke(ON_OFF_CLUSTER, commandId, null, {});
+}
 
-```yaml
-schemaVersion: "3.0"
-driverVersion: "1.0"
-name: "Water Leak Detector"
-scriptType: "JavaScript"
-bartonMeta:
-  deviceClass: "sensor"
-  deviceClassVersion: 1
-matterMeta:
-  deviceTypes:
-    - 0x0043
-  revision: 1
-  aliases:
-    - name: "stateValue"
-      attribute:
-        clusterId: "0x0045"    # Boolean State cluster
-        attributeId: "0x0000"  # StateValue attribute
-        name: "StateValue"
-        type: "bool"
-reporting:
-  minSecs: 1
-  maxSecs: 3600
-endpoints:
-  - id: "1"
-    profile: "sensor"
-    profileVersion: 2
-    resources:
-      - id: "faulted"
-        type: "com.icontrol.boolean"
-        modes:
-          - "read"
-          - "dynamic"
-          - "emitEvents"
-        prerequisites:
-          - alias: "stateValue"
-        mapper:
-          read:
-            alias: "stateValue"
-            script: |
-              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return {value: (value === true) ? 'true' : 'false'};
-```
+function readCurrentLevel(args) {
+  var level = args.supplements.attributes.currentLevel;
+  var percent = Math.round(level / 254 * 100);
 
-## 8. Authoring Guidelines
+  return SbmdUtils.result()
+    .updateResource(LIGHT_ENDPOINT, RES_CURRENT_LEVEL, percent.toString());
+}
 
-### 8.1 Creating a New SBMD File
+function writeCurrentLevel(args) {
+  var percent = parseInt(args.resource.input, 10);
 
-1. **Identify the Matter device type** - Find the device type ID from the Matter specification
-2. **Map to Barton device class** - Determine which Barton device class best fits
-3. **Define endpoints and resources** - The endpoints and resources defined in the SBMD file
-   **must conform to the data model defined by the Barton device class**. The device class
-   specifies required endpoints, profiles, and resources that devices of that class must
-   provide. Refer to the Barton device class documentation for the expected structure.
-4. **Declare `matterMeta` aliases** - For each Matter attribute or event the driver uses,
-   add a named alias to `matterMeta.aliases`. All mapper and prerequisite references
-   must use alias names — inline cluster/attribute/event IDs in mappers are not permitted.
-5. **Map resources** - For each Barton resource, write the mapper using `alias: <name>` for
-   read and event mappers. Write and execute mappers are script-only.
-6. **Declare `prerequisites`** - Every resource must include a `prerequisites` field. Use
-   an alias list for conditional registration, or `prerequisites: none` to always register.
-   Mark resources as `optional: true` if they should be silently skipped when prerequisites
-   are not met, rather than aborting commissioning.
-7. **Write scripts** - Create transformation scripts for non-trivial mappings
-8. **Test** - Validate with actual devices
+  if (isNaN(percent)) percent = 0;
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
 
-### 8.2 Best Practices
+  var level = Math.round(percent / 100 * 254);
+  var payload = { Level: level, TransitionTime: 0, OptionsMask: 0, OptionsOverride: 0 };
+  var schema = {
+    Level:           { tag: 0, type: "uint8" },
+    TransitionTime:  { tag: 1, type: "uint16" },
+    OptionsMask:     { tag: 2, type: "uint8" },
+    OptionsOverride: { tag: 3, type: "uint8" },
+  };
 
-1. **Use hex notation** for cluster/attribute/command IDs for consistency with Matter spec
-2. **Name aliases descriptively and uniquely** — each alias name must be unique within
-   the spec and clearly convey what it represents
-3. **Always declare `prerequisites`** — every resource requires the field. For resources with
-   a read or event mapper, use the same alias as the mapper references. For execute-only
-   resources (functions), use `prerequisites: none` unless a specific cluster presence
-   check is needed
-4. **Mark truly optional resources** with `optional: true` — resources that depend on
-   clusters or attributes that may not be present on every device of the target type
-5. **Document transformations** in comments within scripts
-6. **Check feature maps** before using optional features
-7. **Handle null/undefined** values gracefully in scripts
-8. **Set appropriate reporting intervals** based on device type (e.g., sensors may need faster reporting)
+  return SbmdUtils.result()
+    .invoke(LEVEL_CONTROL_CLUSTER, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
+            SbmdUtils.Tlv.encodeStruct(payload, schema), {});
+}
 
-### 8.3 Common Patterns
+function handleOnOffAttribute(args) {
+  return SbmdUtils.result()
+    .updateResource(LIGHT_ENDPOINT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
+}
 
-**Identity passthrough (no transformation):**
-```javascript
-var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {value: val.toString()};
-```
+function handleCurrentLevelAttribute(args) {
+  var percent = Math.round(args.attribute.value / 254 * 100);
 
-**Boolean enum conversion:**
-```javascript
-var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-return {value: val === <expected_value> ? 'true' : 'false'};
-```
-
-**Numeric scaling:**
-```javascript
-var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-var scaled = Math.round(val * <scale_factor>);
-return {value: scaled.toString()};
-```
-
-**Feature-conditional logic:**
-```javascript
-// Requires the cluster to be listed in matterMeta.featureClusters
-const featureMap = sbmdCommandArgs.clusterFeatureMaps['<clusterId>'] || 0;
-if ((featureMap & <feature_bit>) !== 0) {
-  // Feature is enabled
+  return SbmdUtils.result()
+    .updateResource(LIGHT_ENDPOINT, RES_CURRENT_LEVEL, percent.toString());
 }
 ```
 
-### 8.4 Debugging Tips
+### 10.2 Door Lock Driver (Advanced)
 
-1. Script errors are logged via `icLog` - check logs for the "SbmdScriptImpl" tag
-2. JSON input/output is logged at debug level
-3. Use `console.log()` in scripts for additional debugging (outputs to log)
-4. Validate YAML syntax before deployment
-5. Test scripts with unit tests before integration
+This example demonstrates the full breadth of SBMD v4.0 features. Some concepts
+are fictitious — their purpose is to illustrate capabilities, not to serve as a
+production driver.
 
-## 9. File Deployment
+Demonstrates: device-level resources, endpoint-scoped resources, aliases and
+prerequisites with `optional: true`, resource seeding, modes (`static`,
+`noEvents`), single/multi/wildcard attribute/event/command handlers (alias and
+explicit forms), supplements, persistent and transient data storage, invoke with
+`responseCommandId`, TLV encoding, and feature map inspection.
 
-### 9.1 Specs Directory
+```js
+SbmdDriver({
+  schemaVersion: "4.0",
+  driverVersion: "1.0",
+  name: "Door Lock",
 
-SBMD specification files should be placed in:
+  constants: {
+    LOCK_ENDPOINT: "1",
+    DOOR_LOCK_CLUSTER: 0x0101,
+    IDENTIFY_CLUSTER: 0x0003,
+    GENERAL_DIAGNOSTICS_CLUSTER: 0x0033,
+    ATTR_LOCK_STATE: 0x0000,
+    ATTR_ACTUATOR_ENABLED: 0x0002,
+    ATTR_DOOR_STATE: 0x0003,
+    ATTR_IDENTIFY_TIME: 0x0000,
+    ATTR_CREDENTIAL_RULES_SUPPORT: 0x001b,
+    EVT_DOOR_LOCK_ALARM: 0x0000,
+    EVT_LOCK_OPERATION: 0x0002,
+    EVT_LOCK_USER_CHANGE: 0x0003,
+    CMD_LOCK_DOOR: 0x0000,
+    CMD_UNLOCK_DOOR: 0x0001,
+    CMD_GET_CREDENTIAL_STATUS_RESP: 0x0024,
+    CMD_GET_USER_RESP: 0x001a,
+    CMD_SET_CREDENTIAL_RESP: 0x001c,
+    CMD_REBOOT: 0x0000,
+    RES_REBOOT: "reboot",
+    RES_IDENTIFY: "identify",
+    RES_LOCKED: "locked",
+    RES_LOCK: "lock",
+    RES_UNLOCK: "unlock",
+    RES_ACTUATOR_ENABLED: "actuatorEnabled",
+    RES_DOOR_STATE: "doorState",
+    RES_CREDENTIAL_STATUS: "credentialStatus",
+    RES_USER_COMMAND_RESULT: "userCommandResult",
+  },
+
+  aliases: {
+    lockState: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeId: ATTR_LOCK_STATE,
+      type: "DlLockState",
+    },
+    actuatorEnabled: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeId: ATTR_ACTUATOR_ENABLED,
+      type: "bool",
+    },
+    doorState: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeId: ATTR_DOOR_STATE,
+      type: "DoorStateEnum",
+    },
+    identifyTime: {
+      clusterId: IDENTIFY_CLUSTER,
+      attributeId: ATTR_IDENTIFY_TIME,
+      type: "uint16",
+    },
+    credentialRulesSupport: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeId: ATTR_CREDENTIAL_RULES_SUPPORT,
+      type: "DlCredentialRuleMask",
+    },
+    lockOperation: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      eventId: EVT_LOCK_OPERATION,
+    },
+    getCredentialStatusResp: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      commandId: CMD_GET_CREDENTIAL_STATUS_RESP,
+    },
+  },
+
+  barton: {
+    deviceClass: "doorLock",
+    deviceClassVersion: 3,
+  },
+
+  matter: {
+    deviceTypes: [0x000a],
+    revision: 1,
+    featureClusters: [DOOR_LOCK_CLUSTER],
+  },
+
+  reporting: {
+    minSecs: 1,
+    maxSecs: 3600,
+  },
+
+  // Device-level resources
+  resources: {
+    [RES_REBOOT]: {
+      type: "function",
+      execute: executeReboot,
+    },
+    [RES_IDENTIFY]: {
+      type: "string",
+      modes: ["read", "write", "static", "noEvents"],
+      read: {
+        supplements: {
+          attributes: ["identifyTime"],
+        },
+        handler: readIdentify,
+      },
+      write: writeIdentify,
+    },
+  },
+
+  // Endpoints
+  endpoints: {
+    [LOCK_ENDPOINT]: {
+      profile: "doorLock",
+      profileVersion: 3,
+
+      resources: {
+        [RES_LOCKED]: {
+          type: "boolean",
+          modes: ["read"],
+          seed: {
+            supplements: {
+              attributes: ["lockState"],
+            },
+            handler: seedLockedResource,
+          },
+        },
+        [RES_LOCK]: {
+          type: "function",
+          execute: executeLockAction,
+        },
+        [RES_UNLOCK]: {
+          type: "function",
+          execute: executeLockAction,
+        },
+        [RES_ACTUATOR_ENABLED]: {
+          type: "boolean",
+          prerequisites: ["actuatorEnabled"],
+          optional: true,
+          modes: ["read"],
+        },
+        [RES_DOOR_STATE]: {
+          type: "string",
+          prerequisites: ["doorState"],
+          optional: true,
+          modes: ["read"],
+        },
+        [RES_CREDENTIAL_STATUS]: {
+          type: "string",
+          modes: ["read", "noEvents"],
+        },
+        [RES_USER_COMMAND_RESULT]: {
+          type: "string",
+          modes: ["read"],
+        },
+      },
+    },
+  },
+
+  attributeHandlers: {
+    // Single attribute via alias
+    lockState: {
+      aliases: ["lockState"],
+      handler: handleLockStateAttribute,
+    },
+
+    // Multiple attributes — explicit form, shared handler
+    lockActuator: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeIds: [ATTR_ACTUATOR_ENABLED, ATTR_DOOR_STATE],
+      supplements: {
+        resources: [LOCK_ENDPOINT + "/" + RES_LOCKED],
+      },
+      handler: handleActuatorAttributes,
+    },
+
+    // Wildcard — catch-all for any attribute on a cluster
+    lockDiagnostics: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      attributeId: "*",
+      handler: handleLockDiagnostics,
+    },
+  },
+
+  eventHandlers: {
+    // Single event via alias, with supplements
+    lockOperation: {
+      aliases: ["lockOperation"],
+      supplements: {
+        attributes: ["actuatorEnabled"],
+        resources:  [LOCK_ENDPOINT + "/" + RES_LOCKED],
+      },
+      handler: handleLockOperation,
+    },
+
+    // Multiple events — explicit form
+    lockAlarms: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      eventIds: [EVT_DOOR_LOCK_ALARM, EVT_LOCK_USER_CHANGE],
+      handler: handleLockAlarms,
+    },
+
+    // Wildcard
+    lockEventCatchAll: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      eventId: "*",
+      handler: handleLockEventCatchAll,
+    },
+  },
+
+  commandHandlers: {
+    // Single command via alias, with supplements
+    getCredentialStatus: {
+      aliases: ["getCredentialStatusResp"],
+      supplements: {
+        attributes: ["credentialRulesSupport"],
+      },
+      handler: handleGetCredentialStatusResponse,
+    },
+
+    // Multiple commands — explicit form
+    userCommands: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      commandIds: [CMD_GET_USER_RESP, CMD_SET_CREDENTIAL_RESP],
+      handler: handleUserCommandResponses,
+    },
+
+    // Wildcard
+    lockCommandCatchAll: {
+      clusterId: DOOR_LOCK_CLUSTER,
+      commandId: "*",
+      handler: handleLockCommandCatchAll,
+    },
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Resource handlers
+// ---------------------------------------------------------------------------
+
+function seedLockedResource(args) {
+  var value = args.supplements.attributes.lockState;
+  var isLocked = (value === 1);
+
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_LOCKED, isLocked ? "true" : "false");
+}
+
+function readIdentify(args) {
+  var value = args.supplements.attributes.identifyTime;
+
+  return SbmdUtils.result()
+    .updateResource(RES_IDENTIFY, String(value));
+}
+
+function writeIdentify(args) {
+  var schema = { IdentifyTime: { tag: 0, type: "uint16" } };
+  var tlvBase64 = SbmdUtils.Tlv.encodeStruct(
+    { IdentifyTime: parseInt(args.resource.input, 10) }, schema);
+
+  return SbmdUtils.result()
+    .write(IDENTIFY_CLUSTER, ATTR_IDENTIFY_TIME, tlvBase64);
+}
+
+function executeReboot(args) {
+  return SbmdUtils.result()
+    .invoke(GENERAL_DIAGNOSTICS_CLUSTER, CMD_REBOOT, null, {});
+}
+
+function executeLockAction(args) {
+  var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
+  var featureMap = args.clusterFeatureMaps[DOOR_LOCK_CLUSTER] || 0;
+  var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
+
+  return SbmdUtils.result()
+    .invoke(DOOR_LOCK_CLUSTER, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+}
+
+// ---------------------------------------------------------------------------
+// Attribute handlers
+// ---------------------------------------------------------------------------
+
+function handleLockStateAttribute(args) {
+  var isLocked = (args.attribute.value === 1);
+
+  return SbmdUtils.result();
+}
+
+function handleActuatorAttributes(args) {
+  var currentLocked = args.supplements.resources[LOCK_ENDPOINT + "/" + RES_LOCKED];
+
+  if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
+    return SbmdUtils.result()
+      .updateResource(LOCK_ENDPOINT, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
+  } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
+    return SbmdUtils.result()
+      .updateResource(LOCK_ENDPOINT, RES_DOOR_STATE, String(args.attribute.value))
+      .log("doorState changed while locked=" + currentLocked);
+  }
+
+  return SbmdUtils.result();
+}
+
+function handleLockDiagnostics(args) {
+  return SbmdUtils.result()
+    .log("DoorLock attr 0x" + args.attribute.attributeId.toString(16) + " changed");
+}
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
+
+function handleLockOperation(args) {
+  var opType = args.event.data[0];
+  var actuatorEnabled = args.supplements.attributes.actuatorEnabled;
+
+  if (!actuatorEnabled) {
+    return SbmdUtils.result()
+      .log("lock operation ignored — actuator disabled");
+  }
+
+  if (opType === 0) {
+    return SbmdUtils.result()
+      .updateResource(LOCK_ENDPOINT, RES_LOCKED, "true")
+      .setPersistentData("lastLockOperation", "lock");
+  } else if (opType === 1) {
+    return SbmdUtils.result()
+      .updateResource(LOCK_ENDPOINT, RES_LOCKED, "false")
+      .setPersistentData("lastLockOperation", "unlock");
+  }
+
+  return SbmdUtils.result();
+}
+
+function handleLockAlarms(args) {
+  var alarmCode = args.event.data[0];
+  var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0", 10) + 1;
+
+  return SbmdUtils.result()
+    .setTransientData("lastAlarmCode", String(alarmCode), 300)
+    .setPersistentData("alarmCount", String(count))
+    .log("DoorLock alarm 0x" + args.event.eventId.toString(16)
+         + " code=" + alarmCode + " total=" + count);
+}
+
+function handleLockEventCatchAll(args) {
+  return SbmdUtils.result()
+    .log("DoorLock event 0x" + args.event.eventId.toString(16) + " received");
+}
+
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
+
+function handleGetCredentialStatusResponse(args) {
+  var response = args.command.data;
+  var credRules = args.supplements.attributes.credentialRulesSupport;
+
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .log("credential status updated (rules=" + credRules + ")");
+}
+
+function handleUserCommandResponses(args) {
+  return SbmdUtils.result()
+    .updateResource(LOCK_ENDPOINT, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+}
+
+function handleLockCommandCatchAll(args) {
+  return SbmdUtils.result()
+    .log("DoorLock command 0x" + args.command.commandId.toString(16) + " received");
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function buildPinPayload(featureMap, pinString) {
+  if (((featureMap & 0x81) !== 0x81) || !pinString || pinString.length === 0) {
+    return null;
+  }
+
+  var schema = { PINCode: { tag: 0, type: "octstr" } };
+  var pinBytes = new Uint8Array(pinString.length);
+
+  for (var i = 0; i < pinString.length; i++) {
+    pinBytes[i] = pinString.charCodeAt(i);
+  }
+
+  return SbmdUtils.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+}
 ```
-core/deviceDrivers/matter/sbmd/specs/
-```
-
-Files must have the `.sbmd` extension.
-
-### 9.2 Automatic Registration
-
-At startup, `SbmdFactory` automatically:
-1. Scans the specs directory
-2. Parses each `.sbmd` file
-3. Creates `SpecBasedMatterDeviceDriver` instances
-4. Registers drivers with `MatterDriverFactory`
-
-### 9.3 Runtime Loading
-
-Future versions may support:
-- Dynamic loading of new specs without restart
-- Remote spec distribution
-- Spec versioning and updates
-
-## 10. Appendix
-
-### 10.1 Matter Cluster Reference
-
-Common clusters used in SBMD specs:
-
-| Cluster | ID | Description |
-|---------|------|-------------|
-| Identify | 0x0003 | Device identification |
-| On/Off | 0x0006 | Binary switch control |
-| Level Control | 0x0008 | Dimmable control |
-| Door Lock | 0x0101 | Lock control |
-| Window Covering | 0x0102 | Shades/blinds control |
-| Boolean State | 0x0045 | Binary sensor state |
-| Occupancy Sensing | 0x0406 | Motion detection |
-
-### 10.2 Error Handling
-
-Scripts that fail will:
-1. Log an error with details
-2. Return failure to the calling operation
-3. Not affect other operations or devices
-
-Common error causes:
-- Syntax errors in JavaScript
-- Non-object return value (script returned a string, number, or `undefined` instead of an object)
-- Malformed `invoke` or `write` object (missing required fields such as `clusterId`, `commandId`, or `tlvBase64`)
-- Returning `{}` or `{ value: null }` from a write or execute mapper (suppress is not meaningful there — an operation is required)
-- Type mismatches in TLV conversion
-- Undefined variables or properties
-- Invalid Base64 input passed to `SbmdUtils.Tlv.decode()` or `SbmdUtils.Base64.decode()`
