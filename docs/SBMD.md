@@ -751,8 +751,7 @@ function executeGetCredentialStatus(args) {
     .device.requestCommand(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
       handler: function(args) {
-        var requested = args.handlerContext.requestedCredential;
-        var response = SbmdUtils.Tlv.decode(args.command.data);
+        var response = args.command.data;
 
         return SbmdUtils.result()
           .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
