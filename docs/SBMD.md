@@ -1186,9 +1186,8 @@ Attempting to reassign a constant results in a runtime error.
 
 ### 9.3 Memory Safety
 
-- `var` declarations inside handler functions are permitted for stack-scoped
-  temporaries. The runtime tracks and reclaims these allocations after the
-  handler returns.
+- `var` declarations inside handler functions are permitted for function-scoped
+  temporaries. The runtime reclaims these allocations when the handler returns.
 - No global `var` declarations are permitted at file scope. The runtime may
   reject files that declare `var` outside of function bodies.
 - `SbmdUtils` and `SbmdDriver` are the only runtime-provided globals (aside
