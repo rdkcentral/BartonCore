@@ -28,8 +28,8 @@ or redeployment required.
   (resource reads, writes, executes) from device-initiated data (attribute reports,
   events, command responses).
 - **Composable results**: Handler functions return an immutable result object built
-  via `SbmdUtils.result()` that can atomically express multiple operations
-  (resource updates, device invocations, logging, persistent storage).
+  via `SbmdUtils.result()` that can express multiple operations
+  (resource updates, device interactions, logging, persistent storage).
 
 ### 1.2 Historical Context
 
@@ -827,8 +827,8 @@ function handleUserCommandResponses(args) {
 
 All handler functions return a result object built with the `SbmdUtils.result()`
 builder. The builder is immutable — each method returns a new builder instance,
-allowing chaining. The runtime processes all operations atomically after the
-handler returns.
+allowing chaining. When a handler returns, the runtime executes all operations
+in the chain **in order**.
 
 ```js
 return SbmdUtils.result()
@@ -974,11 +974,11 @@ Emit a diagnostic log message associated with this handler invocation.
 
 #### `success()`
 
-Explicitly mark the operation as completed successfully. All side effects
-(resource updates, invokes, storage, logs) earlier in the chain are executed
-regardless. For resource reads, the resource value comes from any preceding
-`barton.updateResource()` call; if none was made, the runtime returns the
-previously cached value.
+Explicitly mark the operation as completed successfully. All operations
+(resource updates, device interactions, storage writes, logs) earlier in the
+chain are executed in order regardless. For resource reads, the resource value
+comes from any preceding `barton.updateResource()` call; if none was made, the
+runtime returns the previously cached value.
 
 ```js
 function handleLockOperation(args) {
@@ -1003,7 +1003,7 @@ is a **runtime error**.
 #### `error(message)`
 
 Mark the operation as failed. The runtime logs the message and reports the
-resource operation as failed to the caller. **All other side effects in the
+resource operation as failed to the caller. **All other operations in the
 chain still execute** — resource updates, storage writes, and log messages
 earlier in the chain are applied even when the operation is marked as an error.
 This allows handlers to record diagnostic state before failing.
@@ -1032,21 +1032,27 @@ ultimately resolve to success or failure. The rules are:
 
 | Chain contains | Outcome |
 |---|---|
-| `.success()` | Success. All side effects execute. |
-| `.error(message)` | Failure. All side effects still execute, but the operation is reported as failed. |
-| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. Side effects execute immediately. |
-| `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. Side effects execute immediately. |
-| `.device.requestCommand()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). Side effects from the initial chain execute immediately. |
-| `.device.readAttribute()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). Side effects from the initial chain execute immediately. |
+| `.success()` | Success. All preceding operations in the chain execute. |
+| `.error(message)` | Failure. All preceding operations still execute, but the operation is reported as failed. |
+| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
+| `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
+| `.device.requestCommand()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
+| `.device.readAttribute()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
 | No terminal | **Runtime error.** Every chain must end with an explicit terminal. |
+
+**Single path to terminal**: A result chain must contain exactly **one** path to
+a terminal. A chain must not include multiple deferred operations
+(`requestCommand`, `readAttribute`) because each defers to its own handler,
+creating ambiguous completion. The runtime rejects chains with more than one
+deferred operation.
 
 **Timeout resolution**: Per-operation `timeoutMs` > `matter.defaultTimeoutMs` > system default.
 
 For **device-initiated handlers** (attribute, event, command), there is no
 caller waiting for a result, but all handlers must still end with an explicit
-terminal. `.success()` and `.error()` affect logging and diagnostics; side
-effects always execute. For command handlers, `.error()` can trigger a failure
-status response back to the device.
+terminal. `.success()` and `.error()` affect logging and diagnostics; all
+operations in the chain execute regardless. For command handlers, `.error()`
+can trigger a failure status response back to the device.
 
 ```js
 // Chaining: update resource, send command, mark success
