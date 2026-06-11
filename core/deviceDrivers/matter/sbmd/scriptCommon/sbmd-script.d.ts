@@ -223,8 +223,8 @@ interface SbmdCommandArgs {
  * Output object for command execute mapper scripts.
  *
  * Must return either an `invoke` operation with pre-encoded TLV,
- * or an `output` operation for local-only results (no Matter interaction).
- * Use `SbmdUtils.Response.invoke()` or `SbmdUtils.Response.output()` helpers.
+ * or a `value` result for local-only results (no Matter interaction).
+ * Use `SbmdUtils.Response.invoke()` or `SbmdUtils.Response.value()` helpers.
  *
  * @example
  * return { invoke: { clusterId: 6, commandId: 2 } };
@@ -233,7 +233,7 @@ interface SbmdCommandArgs {
  * return { invoke: { clusterId: 257, commandId: 0, tlvBase64: "...", timedInvokeTimeoutMs: 10000 } };
  *
  * @example
- * return { output: "session-id-1" };
+ * return { value: "session-id-1" };
  */
 type SbmdCommandResult =
     | {
@@ -245,7 +245,7 @@ type SbmdCommandResult =
               timedInvokeTimeoutMs?: number;
           };
       }
-    | { output: string };
+    | { value: string };
 
 // =============================================================================
 // Execute Response Mapper Interface
@@ -404,7 +404,8 @@ declare var SbmdUtils: {
     Response: {
         invoke(clusterId: number, commandId: number, tlvBase64?: string, options?: { endpointId?: number; timedInvokeTimeoutMs?: number }): SbmdCommandResult;
         write(clusterId: number, attributeId: number, tlvBase64?: string, options?: { endpointId?: number }): SbmdWriteResult;
-        output(value: string): SbmdCommandResult;
+        value(value: string): SbmdCommandResult;
+        error(message: string): SbmdErrorResult;
     };
     SessionManager: SessionManagerStatic;
 };

@@ -3,8 +3,8 @@
 # Provides abstract camera session lifecycle endpoint per the
 # camera-architecture-redesign spec (D1).
 
-# SBMD schema version 2.1
-schemaVersion: "2.1"
+# SBMD schema version 3.0
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
