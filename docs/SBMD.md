@@ -693,7 +693,7 @@ A handler can inspect which trigger field is present to determine the context.
 | Field | Type | Description |
 |---|---|---|
 | `args.handlerContext` | any | Arbitrary context passed via the `context` field on the originating `.device.requestCommand()` or `.device.readAttribute()` call. `null` if not set. |
-| `args.error` | `{ message, type }` | Error details, present only on `onError` handlers. `type` is `"timeout"`, `"transport"`, or `"internal"`. |
+| `args.error` | `{ message, type, matterCode }` | Error details, present only on `onError` handlers. `type` is `"timeout"`, `"transport"`, or `"internal"`. `matterCode` (number or `null`) is the Matter SDK error code when available. |
 
 ### 5.2 Handler Type Summary
 
@@ -776,7 +776,7 @@ function executeGetCredentialStatus(args) {
 |---|---|---|---|
 | `responseCommandId` | number | yes | The command ID expected as a response. |
 | `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with a terminal (`.success()` or `.error()`). Its result completes the original resource operation. |
-| `onError` | function | yes | Error handler for infrastructure failures (timeout, transport, internal). Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with a terminal. |
+| `onError` | function | yes | Error handler for infrastructure failures (timeout, transport, internal). Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with a terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. Must be a JSON-serializable value. |
 | `timeoutMs` | number | no | Maximum time to wait for the response in milliseconds. Timeout routes to `onError` with `type: "timeout"`. Default: `matter.defaultTimeoutMs` or system default. |
 | `passthrough` | boolean | no | If `true`, the response command also fires any matching `commandHandlers` entry after the response handler runs. Default `false`. |
@@ -901,7 +901,7 @@ Completion is deferred to the `handler` or `onError` callback.
 |---|---|---|---|
 | `responseCommandId` | number | yes | The command ID expected as a response. |
 | `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with an explicit terminal. |
-| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
 | `timeoutMs` | number | no | Response timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 | `passthrough` | boolean | no | Also fire `commandHandlers` for the response. Default `false`. |
@@ -943,7 +943,7 @@ or `onError` callback.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `handler` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`) and `args.handlerContext`. Must end with an explicit terminal. |
-| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
 | `timeoutMs` | number | no | Read timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 
