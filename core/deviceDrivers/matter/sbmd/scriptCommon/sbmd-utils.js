@@ -1049,11 +1049,21 @@
         },
 
         /**
-         * Create a local-only output response (no Matter interaction)
-         * @param {string} value - The output string to return to the caller
-         * @returns {Object} Output response object
+         * Create a resource-value response (v3.0 format).
+         * Use in read, event, and command-response mappers to return a Barton resource value.
+         * @param {string|number|boolean} v - Resource value (coerced to string)
+         * @returns {Object} Value response object: { value: string }
          */
-        output: function(value) { return {output: value}; }
+        value: function(v) { return { value: String(v) }; },
+
+        /**
+         * Create an error response.
+         * The engine treats this as a script failure; handling depends on the call context
+         * (e.g. aborts a write/execute, or logs and skips an update for attribute/event reads).
+         * @param {string} msg - Human-readable error message
+         * @returns {Object} Error response object: { error: string }
+         */
+        error: function(msg) { return { error: msg }; }
     };
 
     /**

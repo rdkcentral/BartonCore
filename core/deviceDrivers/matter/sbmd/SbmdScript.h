@@ -28,6 +28,7 @@
 #pragma once
 
 #include "SbmdSpec.h"
+#include "ScriptResult.h"
 #include "lib/core/TLVReader.h"
 #include <platform/CHIPDeviceLayer.h>
 
@@ -37,42 +38,6 @@
 
 namespace barton
 {
-    /**
-     * Result from a write/execute mapper script.
-     * The script returns either an 'invoke' (command) or 'write' (attribute) operation
-     * with all the details needed to perform the operation.
-     */
-    struct ScriptWriteResult
-    {
-        enum class OperationType
-        {
-            None,
-            Invoke, // Command invocation
-            Write,  // Attribute write
-            Output  // Local-only: return output string without a Matter operation
-        };
-
-        OperationType type = OperationType::None;
-
-        // Common fields
-        std::optional<chip::EndpointId> endpointId; // Optional - uses default if not specified
-        chip::ClusterId clusterId = 0;
-
-        // For Invoke operations
-        chip::CommandId commandId = 0;
-        std::optional<uint16_t> timedInvokeTimeoutMs; // For timed commands
-
-        // For Write operations
-        chip::AttributeId attributeId = 0;
-
-        // TLV encoded payload (decoded from base64)
-        chip::Platform::ScopedMemoryBuffer<uint8_t> tlvBuffer;
-        size_t tlvLength = 0;
-
-        // For Output operations (local-only execute, no Matter interaction)
-        std::optional<std::string> output;
-    };
-
     /**
      * This is the base class for SBMD scripts. Implementations can use whatever scripting
      * language or engine they wish, as long as they implement this interface.
@@ -116,19 +81,16 @@ namespace barton
          *     "attributeType": <attribute type from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "output": <Barton string representation of the attribute value>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
+         * { }  or  { "value": null }            // no-op — no update, no error
+         * { "error": <string> }                 // signal a failure
          *
          * @param attributeInfo Information about the Matter attribute
          * @param reader TLV reader positioned at the attribute value
-         * @param outValue Will contain the Barton string representation
-         * @return true if mapping was successful, false otherwise
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
-        virtual bool MapAttributeRead(const SbmdAttribute &attributeInfo,
-                                      chip::TLV::TLVReader &reader,
-                                      std::string &outValue) = 0;
+        virtual ScriptResult MapAttributeRead(const SbmdAttribute &attributeInfo, chip::TLV::TLVReader &reader) = 0;
 
         /**
          * Convert a Matter command response TLV to a Barton resource string value.
@@ -146,19 +108,17 @@ namespace barton
          *     "commandName": <command name from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "output": <Barton string representation of the command response>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // return response (non-string coerced to string)
+         * { }  or  { "value": null }            // no-op — no response value
+         * { "error": <string> }                 // signal a failure
          *
          * @param commandInfo Information about the Matter command
          * @param reader TLV reader positioned at the command response data
-         * @param outValue Will contain the Barton string representation
-         * @return true if mapping was successful, false otherwise
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
-        virtual bool MapCommandExecuteResponse(const SbmdCommand &commandInfo,
-                                               chip::TLV::TLVReader &reader,
-                                               std::string &outValue) = 0;
+        virtual ScriptResult MapCommandExecuteResponse(const SbmdCommand &commandInfo,
+                                                       chip::TLV::TLVReader &reader) = 0;
 
         /**
          * Add a write mapper script for the specified resource.
@@ -224,14 +184,12 @@ namespace barton
          * @param endpointId The endpoint ID from the resource (may be empty for device-level)
          * @param resourceId The resource identifier
          * @param inValue Barton string representation of the value to write
-         * @param[out] result The parsed operation details
-         * @return true if mapping was successful, false otherwise
+         * @return ScriptResult containing the invoke/write operation, or an error
          */
-        virtual bool MapWrite(const std::string &resourceKey,
-                              const std::string &endpointId,
-                              const std::string &resourceId,
-                              const std::string &inValue,
-                              ScriptWriteResult &result) = 0;
+        virtual ScriptResult MapWrite(const std::string &resourceKey,
+                                      const std::string &endpointId,
+                                      const std::string &resourceId,
+                                      const std::string &inValue) = 0;
 
         /**
          * Execute an execute mapper script and get the operation to perform.
@@ -261,14 +219,12 @@ namespace barton
          * @param endpointId The endpoint ID from the resource (may be empty for device-level)
          * @param resourceId The resource identifier
          * @param inValue Barton string argument(s) for the execute
-         * @param[out] result The parsed operation details
-         * @return true if mapping was successful, false otherwise
+         * @return ScriptResult containing the invoke operation, or an error
          */
-        virtual bool MapExecute(const std::string &resourceKey,
-                                const std::string &endpointId,
-                                const std::string &resourceId,
-                                const std::string &inValue,
-                                ScriptWriteResult &result) = 0;
+        virtual ScriptResult MapExecute(const std::string &resourceKey,
+                                        const std::string &endpointId,
+                                        const std::string &resourceId,
+                                        const std::string &inValue) = 0;
 
         /**
          * Add an event mapper script for the specified event.
@@ -294,32 +250,28 @@ namespace barton
          *     "eventName": <event name from spec>
          * }
          *
-         * Script output JSON:
-         * {
-         *     "output": <Barton string representation of the event data>
-         * }
+         * Script output JSON — one of:
+         * { "value": <string|number|boolean> }  // update resource (non-string coerced to string)
+         * { }  or  { "value": null }            // no-op — no update, no error
+         * { "error": <string> }                 // signal a failure
          *
-         * If the script omits the "output" key but returns a plain object (e.g., returns {}),
-         * the event is intentionally suppressed: MapEvent returns true with outValue left empty.
-         * The caller MUST check outValue.empty() and skip updateResource in that case.
+         * If the script omits the "value" key but returns a plain object (e.g., returns {}),
+         * or returns { "value": null }, the event produces no action: MapEvent returns
+         * a no-op ScriptResult.
+         * The caller MUST check result.IsNoOp() and skip updateResource in that case.
          * This is useful when an event type carries multiple operation sub-types, only some of
          * which represent a resource state change. For example, a LockOperation event may carry
          * a lock, unlock, or door-sense operation; a script can return {} for sub-types it does
          * not need to propagate, avoiding spurious resource updates.
          *
          * If the script returns a non-object (undefined, null, a primitive), that is always
-         * treated as a script error regardless of any missing "output" key — MapEvent returns false.
+         * treated as a script error — MapEvent returns an error ScriptResult.
          *
          * @param eventInfo Information about the Matter event
          * @param reader TLV reader positioned at the event data
-         * @param outValue Will contain the Barton string representation on success.
-         *                 Empty when the script intentionally suppressed the update.
-         * @return true if mapping ran successfully (including intentional suppression),
-         *         false if the script itself failed (exception, compile error, etc.)
+         * @return ScriptResult containing the mapped value, a no-op, or an error
          */
-        virtual bool MapEvent(const SbmdEvent &eventInfo,
-                              chip::TLV::TLVReader &reader,
-                              std::string &outValue) = 0;
+        virtual ScriptResult MapEvent(const SbmdEvent &eventInfo, chip::TLV::TLVReader &reader) = 0;
 
     protected:
         std::string deviceId;

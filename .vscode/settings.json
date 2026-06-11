@@ -17,7 +17,8 @@
     "files.insertFinalNewline": true,
     "files.trimTrailingWhitespace": true,
     "files.associations": {
-        "*.sbmd": "yaml"
+        "*.sbmd": "yaml",
+        "**/docker/version": "plaintext"
     },
 
     "prettier.tabWidth": 4,

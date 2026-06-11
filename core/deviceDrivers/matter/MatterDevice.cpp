@@ -123,12 +123,29 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
         }
 
         // Execute the script to map the TLV data to a string value
-        std::string outValue;
-        if (!device->script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        auto readResult = device->script->MapAttributeRead(binding.attribute.value(), reader);
+
+        if (readResult.IsError())
         {
-            icError("Failed to execute read mapping script for URI: %s", uri.c_str());
+            icError("Failed to execute read mapping script for URI: %s: %s",
+                    uri.c_str(),
+                    readResult.ErrorMessage().c_str());
             continue;
         }
+
+        if (readResult.SkipsResourceUpdate())
+        {
+            icDebug("Read mapper produced no update for URI: %s", uri.c_str());
+            continue;
+        }
+
+        if (!std::holds_alternative<ScriptResult::ResourceUpdate>(readResult.Operation()))
+        {
+            icError("Read mapper returned unexpected operation type for URI: %s", uri.c_str());
+            continue;
+        }
+
+        std::string outValue = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
 
         icDebug("Updating resource %s to value: %s", uri.c_str(), outValue.c_str());
 
@@ -209,20 +226,29 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
     readerCopy.Init(*apData);
 
     // Execute the script to map the event TLV data to a string value
-    std::string outValue;
+    auto eventResult = device->script->MapEvent(event, readerCopy);
 
-    if (!device->script->MapEvent(event, readerCopy, outValue))
+    if (eventResult.IsError())
     {
-        icError("Failed to execute event mapping script for URI: %s", uri.c_str());
+        icError(
+            "Failed to execute event mapping script for URI: %s: %s", uri.c_str(), eventResult.ErrorMessage().c_str());
         return;
     }
 
-    // Empty outValue means the script intentionally suppressed the update (no 'output' key returned)
-    if (outValue.empty())
+    // IsNoOp means the script produced no value (e.g. {} return)
+    if (eventResult.SkipsResourceUpdate())
     {
-        icDebug("Event mapper suppressed update for URI: %s", uri.c_str());
+        icDebug("Event mapper produced no update for URI: %s", uri.c_str());
         return;
     }
+
+    if (!std::holds_alternative<ScriptResult::ResourceUpdate>(eventResult.Operation()))
+    {
+        icError("Event mapper returned unexpected operation type for URI: %s", uri.c_str());
+        return;
+    }
+
+    std::string outValue = std::get<ScriptResult::ResourceUpdate>(eventResult.Operation()).value;
 
     icDebug("Updating resource %s from event to value: %s", uri.c_str(), outValue.c_str());
 
@@ -781,11 +807,27 @@ std::optional<std::string> MatterDevice::ReadSeedValueFromAttribute(const char *
 
     std::string outValue;
 
-    if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+    auto seedResult = script->MapAttributeRead(binding.attribute.value(), reader);
+
+    if (seedResult.IsError())
     {
-        icError("seedFrom script failed for URI: %s", uri);
+        icError("seedFrom script failed for URI: %s: %s", uri, seedResult.ErrorMessage().c_str());
         return std::nullopt;
     }
+
+    if (seedResult.SkipsResourceUpdate())
+    {
+        icDebug("seedFrom script produced no value for URI: %s", uri);
+        return std::nullopt;
+    }
+
+    if (!std::holds_alternative<ScriptResult::ResourceUpdate>(seedResult.Operation()))
+    {
+        icError("seedFrom mapper returned unexpected operation type for URI: %s", uri);
+        return std::nullopt;
+    }
+
+    outValue = std::get<ScriptResult::ResourceUpdate>(seedResult.Operation()).value;
 
     return outValue;
 }
@@ -1019,12 +1061,35 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
         }
 
         // Execute the script to map the TLV data to a string value using the stored mapper
-        if (!script->MapAttributeRead(binding.attribute.value(), reader, outValue))
+        auto readResult = script->MapAttributeRead(binding.attribute.value(), reader);
+
+        if (readResult.IsError())
         {
-            icError("Failed to execute read mapping script for URI: %s", resource->uri);
+            icError("Failed to execute read mapping script for URI: %s: %s",
+                    resource->uri,
+                    readResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
+
+        if (readResult.SkipsResourceUpdate())
+        {
+            // No-op is a valid v3.0 contract outcome (e.g. { value: null } when
+            // the attribute has no meaningful value). Return null to the caller to
+            // signal no value.
+            icDebug("Read mapper produced no value for URI: %s", resource->uri);
+            *value = nullptr;
+            return;
+        }
+
+        if (!std::holds_alternative<ScriptResult::ResourceUpdate>(readResult.Operation()))
+        {
+            icError("Read mapper returned unexpected operation type for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        outValue = std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value;
     }
     else
     {
@@ -1074,17 +1139,33 @@ void MatterDevice::HandleResourceWrite(std::forward_list<std::promise<bool>> &pr
     if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
         // Execute the script to get the full operation details
-        ScriptWriteResult result;
-        if (!script->MapWrite(binding.resourceKey,
-                              binding.endpointId,
-                              binding.resourceId,
-                              newValue != nullptr ? newValue : "",
-                              result))
+        auto writeScriptResult = script->MapWrite(
+            binding.resourceKey, binding.endpointId, binding.resourceId, newValue != nullptr ? newValue : "");
+
+        if (writeScriptResult.IsError())
         {
-            icError("Failed to execute write mapping script for URI: %s", resource->uri);
+            icError("Failed to execute write mapping script for URI: %s: %s",
+                    resource->uri,
+                    writeScriptResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
+
+        if (!writeScriptResult.HasOperation())
+        {
+            icError("Write mapper returned no-op (no operation) for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        if (!std::holds_alternative<ScriptWriteResult>(writeScriptResult.Operation()))
+        {
+            icError("Write mapper returned unexpected operation type for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        const ScriptWriteResult &result = std::get<ScriptWriteResult>(writeScriptResult.Operation());
 
         // Determine the endpoint to use
         chip::EndpointId endpointId;
@@ -1230,29 +1311,40 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
     if (binding.type == ResourceBinding::Type::ScriptOnly)
     {
         // Execute using script that returns full operation details
-        ScriptWriteResult result;
-
-        // Parse the input argument(s)
         std::string inputValue = (arg != nullptr) ? arg : "";
 
-        if (!script->MapExecute(binding.resourceKey, binding.endpointId, binding.resourceId, inputValue, result))
+        auto executeScriptResult =
+            script->MapExecute(binding.resourceKey, binding.endpointId, binding.resourceId, inputValue);
+
+        if (executeScriptResult.IsError())
         {
-            icError("Failed to execute mapping script for URI: %s", resource->uri);
+            icError("Failed to execute mapping script for URI: %s: %s",
+                    resource->uri,
+                    executeScriptResult.ErrorMessage().c_str());
             FailOperation(promises);
             return;
         }
 
-        if (result.type == ScriptWriteResult::OperationType::Output)
+        if (!executeScriptResult.HasOperation())
         {
-            // Local-only execute: return output string without a Matter interaction
-            if (response != nullptr && result.output.has_value())
+            icError("Execute mapper returned no-op (no operation) for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        // Handle ResourceUpdate (local-only execute: return value without a Matter interaction)
+        if (std::holds_alternative<ScriptResult::ResourceUpdate>(executeScriptResult.Operation()))
+        {
+            const auto &update = std::get<ScriptResult::ResourceUpdate>(executeScriptResult.Operation());
+
+            if (response != nullptr)
             {
-                *response = strdup(result.output.value().c_str());
+                *response = strdup(update.value.c_str());
             }
-            else if (result.output.has_value())
+            else
             {
-                icWarn("Output operation produced value \"%s\" but no response pointer available for URI: %s",
-                       result.output.value().c_str(),
+                icWarn("Execute mapper produced value \"%s\" but no response pointer available for URI: %s",
+                       update.value.c_str(),
                        resource->uri);
             }
 
@@ -1262,6 +1354,14 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
             return;
         }
 
+        if (!std::holds_alternative<ScriptWriteResult>(executeScriptResult.Operation()))
+        {
+            icError("Execute mapper returned unexpected operation type for URI: %s", resource->uri);
+            FailOperation(promises);
+            return;
+        }
+
+        const ScriptWriteResult &result = std::get<ScriptWriteResult>(executeScriptResult.Operation());
         // Determine the endpoint to use
         chip::EndpointId endpointId;
         if (result.endpointId.has_value())
@@ -1459,15 +1559,25 @@ void MatterDevice::OnResponse(chip::app::CommandSender *apCommandSender,
         responseReader.Init(*aResponseData.data);
 
         // Use the script to map the response TLV to a Barton string
-        std::string responseValue;
-        if (script->MapCommandExecuteResponse(context.commandInfo, responseReader, responseValue))
+        auto commandResponseResult = script->MapCommandExecuteResponse(context.commandInfo, responseReader);
+
+        if (!commandResponseResult.IsError() && commandResponseResult.HasOperation())
         {
+            if (!std::holds_alternative<ScriptResult::ResourceUpdate>(commandResponseResult.Operation()))
+            {
+                icError("Command response mapper returned unexpected operation type for device %s", deviceId.c_str());
+                return;
+            }
+
+            std::string responseValue = std::get<ScriptResult::ResourceUpdate>(commandResponseResult.Operation()).value;
             icDebug("Mapped command response to value: %s", responseValue.c_str());
             *context.response = strdup(responseValue.c_str());
         }
-        else
+        else if (commandResponseResult.IsError())
         {
-            icWarn("Failed to map command response for device %s", deviceId.c_str());
+            icWarn("Failed to map command response for device %s: %s",
+                   deviceId.c_str(),
+                   commandResponseResult.ErrorMessage().c_str());
         }
     }
 }

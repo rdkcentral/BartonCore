@@ -46,19 +46,19 @@ interface SbmdBaseContext {
  * @example
  * // Boolean passthrough
  * var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
- * return { output: val ? 'true' : 'false' };
+ * return SbmdUtils.Response.value(val ? 'true' : 'false');
  *
  * @example
  * // Enum to boolean conversion (Door Lock state)
  * // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
  * var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
- * return { output: lockState === 1 ? 'true' : 'false' };
+ * return SbmdUtils.Response.value(lockState === 1 ? 'true' : 'false');
  *
  * @example
  * // Percentage conversion (Level Control 0-254 to 0-100)
  * var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
  * var percent = Math.round(level / 254 * 100);
- * return { output: percent.toString() };
+ * return SbmdUtils.Response.value(percent.toString());
  */
 interface SbmdReadArgs extends SbmdBaseContext {
     /** Base64-encoded TLV data from Matter attribute */
@@ -78,18 +78,21 @@ interface SbmdReadArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for read mapper scripts.
+ * Output object for read mapper scripts (v3.0 format).
+ *
+ * Return one of: SbmdReadResult, SbmdErrorResult, or {} (suppress).
  *
  * @example
- * return { output: "true" };
- * return { output: 50 };  // Numbers are converted to strings
+ * return SbmdUtils.Response.value('true');
+ * return SbmdUtils.Response.value(50);  // Numbers are converted to strings
+ * return {};  // suppress — skip the resource update
  */
 interface SbmdReadResult {
     /**
      * Value for the Barton resource.
      * Will be converted to a string for the resource value.
      */
-    output: string | number | boolean;
+    value: string | number | boolean;
 }
 
 // =============================================================================
@@ -258,12 +261,12 @@ type SbmdCommandResult =
  * @example
  * // Decode TLV response and return a field
  * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
- * return { output: resp.userName || "" };
+ * return SbmdUtils.Response.value(resp.userName || "");
  *
  * @example
  * // Return decoded response as JSON string
  * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
- * return { output: JSON.stringify(resp) };
+ * return SbmdUtils.Response.value(JSON.stringify(resp));
  */
 interface SbmdCommandResponseArgs extends SbmdBaseContext {
     /** Base64-encoded TLV response data */
@@ -280,18 +283,20 @@ interface SbmdCommandResponseArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for command response mapper scripts.
+ * Output object for command response mapper scripts (v3.0 format).
+ *
+ * Return one of: SbmdCommandResponseResult, SbmdErrorResult, or {} (suppress).
  *
  * @example
- * return { output: "success" };
- * return { output: JSON.stringify(result) };
+ * return SbmdUtils.Response.value("success");
+ * return SbmdUtils.Response.value(JSON.stringify(result));
  */
 interface SbmdCommandResponseResult {
     /**
      * Response value for Barton.
      * Will be converted to a string.
      */
-    output: string | number | boolean;
+    value: string | number | boolean;
 }
 
 // =============================================================================
@@ -308,10 +313,11 @@ interface SbmdCommandResponseResult {
  *
  * @example
  * // DoorLock LockOperation event
- * const { TlvField, TlvUInt8 } = MatterClusters;
- * const tlvBytes = SbmdUtils.Base64.decode(sbmdEventArgs.tlvBase64);
- * // Extract lockOperationType field to determine lock state
- * return { output: lockOperationType === 1 ? 'true' : 'false' };
+ * var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
+ * var opType = event[0]; // LockOperationType at context tag 0
+ * if (opType === 0) return SbmdUtils.Response.value('true');  // Lock
+ * if (opType === 1) return SbmdUtils.Response.value('false'); // Unlock
+ * return {};  // suppress other operation types
  */
 interface SbmdEventArgs extends SbmdBaseContext {
     /** Base64-encoded TLV data from Matter event */
@@ -328,17 +334,33 @@ interface SbmdEventArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for event mapper scripts.
+ * Output object for event mapper scripts (v3.0 format).
+ *
+ * Return one of: SbmdEventResult, SbmdErrorResult, or {} (suppress).
  *
  * @example
- * return { output: "true" };
+ * return SbmdUtils.Response.value("true");
+ * return {};  // suppress — skip the resource update
  */
 interface SbmdEventResult {
     /**
      * Value for the Barton resource.
      * Will be converted to a string for the resource value.
      */
-    output: string | number | boolean;
+    value: string | number | boolean;
+}
+
+/**
+ * Error result returned by any SBMD mapper script.
+ *
+ * The engine logs the error message and skips the resource update.
+ * Use SbmdUtils.Response.error() to construct.
+ *
+ * @example
+ * return SbmdUtils.Response.error('Unexpected lock state: ' + state);
+ */
+interface SbmdErrorResult {
+    error: string;
 }
 
 // =============================================================================

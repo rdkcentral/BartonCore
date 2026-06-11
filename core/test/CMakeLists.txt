@@ -179,6 +179,16 @@ if (BCORE_MATTER)
     )
 
     bcore_add_cpp_test(
+        NAME testMatterDevice
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/MatterDeviceTest.cpp
+        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/api/c/public
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    bcore_add_cpp_test(
         NAME testSbmdPrerequisites
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdPrerequisitesTest.cpp
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
@@ -209,6 +219,7 @@ if (BCORE_MATTER)
     bcore_add_cpp_test(
         NAME testSbmdScript
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdScriptTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
                 ${SBMD_SCRIPT_TEST_ENGINE_SOURCES}
         LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock ${SBMD_SCRIPT_TEST_ENGINE_LIBS} jsoncpp BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -225,6 +236,16 @@ if (BCORE_MATTER)
             -UBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
             -DBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS=100)
     endif()
+
+    bcore_add_cpp_test(
+        NAME testScriptResult
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptResultTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
+        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock jsoncpp BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
+                 ${PROJECT_SOURCE_DIR}/core
+    )
 
     if (BUILD_TESTING)
         bcore_configure_glib()
