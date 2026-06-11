@@ -698,6 +698,11 @@ A handler can inspect which trigger field is present to determine the context.
 
 #### Deferred handler context (present on response/error handlers)
 
+A **deferred handler** is a `handler` or `onError` callback provided on a
+`.device.requestCommand()` or `.device.readAttribute()` call. These handlers
+run later — when the device responds or a timeout occurs — rather than inline
+with the originating handler. They receive the following additional fields:
+
 | Field | Type | Description |
 |---|---|---|
 | `args.resource` | `{ resourceId, input }` | The resource operation being serviced. Same shape as the resource trigger on the originating handler. Always present when the deferred operation was initiated from a resource handler. |
@@ -1849,7 +1854,12 @@ function executeLockAction(args) {
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
-  return SbmdUtils.result().success(); // This is just an example that used an alias.  Ignore...
+  //this handler is here for example of a handler with a single alias.
+  //this overall lock example should not really do this since the state
+  //of the locked resource is managed by seed initially, then by events.
+  return SbmdUtils.result()
+    .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
+    .success();
 }
 
 function handleActuatorAttributes(args) {
