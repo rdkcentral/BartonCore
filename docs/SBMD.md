@@ -1363,7 +1363,7 @@ function handleCurrentLevelAttribute(args) {
 
 ### 10.2 Light Driver — No Aliases, No Constants
 
-Demonstrates that aliases and constants are optional. All cluster IDs, attribute
+Demonstrates that aliases are optional and that the `constants` block can be empty. All cluster IDs, attribute
 IDs, and resource names are inlined as literals. This style is harder to maintain
 but shows the minimum required structure.
 
