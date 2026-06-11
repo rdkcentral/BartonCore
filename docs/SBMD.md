@@ -909,7 +909,7 @@ Completion is deferred to the `handler` or `onError` callback.
 
 See [Section 6.2](#62-flow-2-command-with-response) for the full runtime flow.
 
-#### `device.writeAttribute(clusterId, attributeId, payload)` — **terminal**
+#### `device.writeAttribute(clusterId, attributeId, payload, options)` — **terminal**
 
 Write a Matter attribute on the device. The operation completes based on the
 device's Matter status response.
@@ -919,6 +919,13 @@ device's Matter status response.
 | `clusterId` | number | Target cluster. |
 | `attributeId` | number | Attribute ID to write. |
 | `payload` | string | Base64-encoded TLV value. |
+| `options` | object | Write options (optional). |
+
+**Options**:
+
+| Field | Type | Description |
+|---|---|---|
+| `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 
 #### `device.readAttribute(clusterId, attributeId, options)` — **not a terminal**
 
