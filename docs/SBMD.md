@@ -1104,27 +1104,40 @@ var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
 | Field | Type | Description |
 |---|---|---|
 | `tag` | number | TLV context tag. |
-| `type` | string | TLV type (see [8.5 Supported Data Types](#85-supported-data-types)). |
+| `type` | string | TLV type (see [8.6 Supported Data Types](#86-supported-data-types)). |
 
-### 8.2 `SbmdUtils.Tlv.encode(value, type)`
+### 8.2 `SbmdUtils.Tlv.encode(value, type, base)`
 
 Encode a single primitive value into a base64-encoded Matter TLV element.
+Returns `null` if the value cannot be parsed or is out of range for the
+specified type.
 
 ```js
 var tlvBase64 = SbmdUtils.Tlv.encode(42, "uint16");
 var tlvBool = SbmdUtils.Tlv.encode(true, "bool");
+var tlvFromHex = SbmdUtils.Tlv.encode("FF", "uint8", 16);
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
-| `value` | any | The value to encode. |
-| `type` | string | TLV type (same types as `encodeStruct` schema entries). |
+| `value` | any | The value to encode. For integer types, strings are parsed using `parseInt` with the given `base`. |
+| `type` | string | TLV type (see [8.6 Supported Data Types](#86-supported-data-types)). For type `"string"`, the value is coerced via `String()` and encoded as a TLV UTF-8 string. |
+| `base` | number | Optional. Radix for string-to-integer parsing (2, 8, 10, 16). Default `10`. Invalid with type `"string"`. |
 
 ### 8.3 `SbmdUtils.Tlv.decode(tlvBase64)`
 
 Decode a base64-encoded TLV value into a JavaScript value.
 
-### 8.4 `SbmdUtils.Base64.encode(bytes)` / `SbmdUtils.Base64.decode(base64)`
+### 8.4 `SbmdUtils.Tlv.emptyStruct()`
+
+Create a base64-encoded empty TLV struct (STRUCT + END_CONTAINER). Useful for
+commands that take no arguments but require a struct payload.
+
+```js
+var payload = SbmdUtils.Tlv.emptyStruct();
+```
+
+### 8.5 `SbmdUtils.Base64.encode(bytes)` / `SbmdUtils.Base64.decode(base64)`
 
 Encode a byte array to a base64 string, or decode a base64 string to a byte array.
 
@@ -1133,7 +1146,7 @@ var encoded = SbmdUtils.Base64.encode([0x01, 0x02, 0x03]);
 var bytes = SbmdUtils.Base64.decode("AQID");
 ```
 
-### 8.5 Supported Data Types
+### 8.6 Supported Data Types
 
 The following Matter data types are recognized by the TLV encoding/decoding
 helpers and may be used in `encodeStruct` schema entries, `encode` type
@@ -1145,9 +1158,13 @@ arguments, and alias `type` documentation fields.
 | **Unsigned Integer** | `uint8`, `uint16`, `uint32`, `uint64` |
 | **Signed Integer** | `int8`, `int16`, `int32`, `int64` |
 | **Floating Point** | `float`, `double` |
-| **String** | `utf8` |
+| **String** | `utf8`, `string` |
 | **Byte String** | `octstr` |
-| **Complex** | `struct`, `list`, `array` |
+| **Enum** | `enum8`, `enum16` |
+| **Bitmap** | `bitmap8`, `bitmap16`, `bitmap32` |
+| **Percent** | `percent`, `percent100ths` |
+| **Complex** | `struct`, `array` |
+| **Null** | `null` |
 
 The decoder (`SbmdUtils.Tlv.decode`) handles all TLV types automatically and
 returns native JavaScript values:
