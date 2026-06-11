@@ -860,8 +860,7 @@ Update an **endpoint-level** resource.
 | `value` | string | New resource value. |
 | `metadata` | string | Optional. JSON string of metadata to attach to the update. |
 
-The runtime distinguishes the two-arg vs three-arg form by the first argument:
-endpoint IDs are numeric strings, resource names are not.
+The runtime distinguishes the two forms by argument count: use the 2-arg form for device-level resources, and the 3-arg (or 4-arg with `metadata`) form for endpoint-level resources.
 
 ### 7.2 Device Interaction — `device`
 
