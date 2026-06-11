@@ -2,7 +2,7 @@
 # Maps Matter Occupancy Sensor device type to Barton sensor device class
 
 # SBMD schema version 2.0
-schemaVersion: "2.0"
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -52,4 +52,4 @@ endpoints:
             script: |
               var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
               var occupied = (value & 0x01) !== 0;
-              return {output: occupied ? 'true' : 'false'};
+              return {value: occupied ? 'true' : 'false'};

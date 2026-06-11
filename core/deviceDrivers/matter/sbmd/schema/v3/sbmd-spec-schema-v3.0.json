@@ -1,15 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema-v2.1.json",
+  "$id": "https://github.com/rdkcentral/BartonCore/sbmd-spec-schema-v3.0.json",
   "title": "SBMD Specification Schema",
   "description": "JSON Schema for validating Specification-Based Matter Driver (SBMD) YAML files",
   "type": "object",
-  "required": ["schemaVersion", "driverVersion", "name", "bartonMeta", "matterMeta"],
+  "required": [
+    "schemaVersion",
+    "driverVersion",
+    "name",
+    "bartonMeta",
+    "matterMeta"
+  ],
   "properties": {
     "schemaVersion": {
       "type": "string",
       "description": "SBMD schema version",
-      "const": "2.1"
+      "const": "3.0"
     },
     "driverVersion": {
       "type": "string",
@@ -24,7 +30,9 @@
     "scriptType": {
       "type": "string",
       "description": "Script type: 'JavaScript' for base64 TLV passed to/from scripts via SbmdUtils",
-      "enum": ["JavaScript"]
+      "enum": [
+        "JavaScript"
+      ]
     },
     "bartonMeta": {
       "$ref": "#/$defs/bartonMeta"
@@ -55,7 +63,10 @@
     "bartonMeta": {
       "type": "object",
       "description": "Barton device class mapping",
-      "required": ["deviceClass", "deviceClassVersion"],
+      "required": [
+        "deviceClass",
+        "deviceClassVersion"
+      ],
       "properties": {
         "deviceClass": {
           "type": "string",
@@ -73,13 +84,18 @@
     "matterMeta": {
       "type": "object",
       "description": "Matter device type support",
-      "required": ["deviceTypes"],
+      "required": [
+        "deviceTypes"
+      ],
       "properties": {
         "deviceTypes": {
           "type": "array",
           "description": "Matter device type IDs (hex or decimal)",
           "items": {
-            "type": ["integer", "string"],
+            "type": [
+              "integer",
+              "string"
+            ],
             "description": "Device type ID (e.g., 0x0100 or 256)"
           },
           "minItems": 1
@@ -93,7 +109,10 @@
           "type": "array",
           "description": "Cluster IDs to get feature maps from for script access",
           "items": {
-            "type": ["integer", "string"],
+            "type": [
+              "integer",
+              "string"
+            ],
             "description": "Cluster ID (hex or decimal)"
           }
         },
@@ -105,17 +124,27 @@
           }
         },
         "vendorId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter vendor ID for vendor-specific claiming (hex or decimal)"
         },
         "productId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter product ID for vendor-specific claiming (hex or decimal)"
         }
       },
       "dependentRequired": {
-        "vendorId": ["productId"],
-        "productId": ["vendorId"]
+        "vendorId": [
+          "productId"
+        ],
+        "productId": [
+          "vendorId"
+        ]
       },
       "additionalProperties": false
     },
@@ -139,7 +168,12 @@
     "endpoint": {
       "type": "object",
       "description": "Barton endpoint definition",
-      "required": ["id", "profile", "profileVersion", "resources"],
+      "required": [
+        "id",
+        "profile",
+        "profileVersion",
+        "resources"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -169,7 +203,12 @@
     "resource": {
       "type": "object",
       "description": "Device resource definition",
-      "required": ["id", "type", "mapper", "prerequisites"],
+      "required": [
+        "id",
+        "type",
+        "mapper",
+        "prerequisites"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -186,7 +225,15 @@
           "description": "Resource modes",
           "items": {
             "type": "string",
-            "enum": ["read", "write", "execute", "dynamic", "emitEvents", "lazySaveNext", "sensitive"]
+            "enum": [
+              "read",
+              "write",
+              "execute",
+              "dynamic",
+              "emitEvents",
+              "lazySaveNext",
+              "sensitive"
+            ]
           }
         },
         "optional": {
@@ -203,7 +250,9 @@
             },
             {
               "type": "string",
-              "enum": ["none"],
+              "enum": [
+                "none"
+              ],
               "description": "Explicit opt-out using keyword: always register this resource"
             },
             {
@@ -247,7 +296,9 @@
     "readMapper": {
       "type": "object",
       "description": "Read mapper configuration",
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "properties": {
         "alias": {
           "type": "string",
@@ -264,15 +315,25 @@
         }
       },
       "oneOf": [
-        {"required": ["alias"]},
-        {"required": ["command"]}
+        {
+          "required": [
+            "alias"
+          ]
+        },
+        {
+          "required": [
+            "command"
+          ]
+        }
       ],
       "additionalProperties": false
     },
     "writeMapper": {
       "type": "object",
       "description": "Write mapper configuration (script-only). The script returns the full operation as {write: {clusterId, attributeId, tlvBase64}} or {invoke: {clusterId, commandId, tlvBase64, ...}}.",
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "properties": {
         "script": {
           "type": "string",
@@ -285,7 +346,9 @@
     "executeMapper": {
       "type": "object",
       "description": "Execute mapper configuration",
-      "required": ["script"],
+      "required": [
+        "script"
+      ],
       "properties": {
         "command": {
           "$ref": "#/$defs/command"
@@ -303,28 +366,13 @@
       },
       "additionalProperties": false
     },
-    "eventMapper": {
-      "type": "object",
-      "description": "Event mapper configuration for handling Matter events that update the resource",
-      "required": ["alias", "script"],
-      "properties": {
-        "alias": {
-          "type": "string",
-          "description": "Name of the matterMeta alias (must be an event alias) to subscribe to",
-          "minLength": 1
-        },
-        "script": {
-          "type": "string",
-          "description": "JavaScript mapper script for processing event TLV data",
-          "minLength": 1
-        }
-      },
-      "additionalProperties": false
-    },
     "seedFromMapper": {
       "type": "object",
       "description": "SeedFrom mapper configuration: reads an attribute from the device data cache once at configure and synchronize time to seed the initial value of an event-driven resource. Must be used alongside an event mapper; mutually exclusive with read mapper.",
-      "required": ["alias", "script"],
+      "required": [
+        "alias",
+        "script"
+      ],
       "properties": {
         "alias": {
           "type": "string",
@@ -339,17 +387,48 @@
       },
       "additionalProperties": false
     },
+    "eventMapper": {
+      "type": "object",
+      "description": "Event mapper configuration for handling Matter events that update the resource",
+      "required": [
+        "alias",
+        "script"
+      ],
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Name of the matterMeta alias (must be an event alias) to subscribe to",
+          "minLength": 1
+        },
+        "script": {
+          "type": "string",
+          "description": "JavaScript mapper script for processing event TLV data",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "event": {
       "type": "object",
       "description": "Matter cluster event definition",
-      "required": ["clusterId", "eventId", "name"],
+      "required": [
+        "clusterId",
+        "eventId",
+        "name"
+      ],
       "properties": {
         "clusterId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter cluster ID (hex or decimal)"
         },
         "eventId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter event ID (hex or decimal)"
         },
         "name": {
@@ -363,14 +442,25 @@
     "attribute": {
       "type": "object",
       "description": "Matter cluster attribute definition",
-      "required": ["clusterId", "attributeId", "name", "type"],
+      "required": [
+        "clusterId",
+        "attributeId",
+        "name",
+        "type"
+      ],
       "properties": {
         "clusterId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter cluster ID (hex or decimal)"
         },
         "attributeId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter attribute ID (hex or decimal)"
         },
         "name": {
@@ -379,7 +469,6 @@
           "minLength": 1
         },
         "type": {
-
           "description": "Matter data type",
           "$ref": "#/$defs/matterType"
         }
@@ -389,14 +478,24 @@
     "command": {
       "type": "object",
       "description": "Matter cluster command definition",
-      "required": ["clusterId", "commandId", "name"],
+      "required": [
+        "clusterId",
+        "commandId",
+        "name"
+      ],
       "properties": {
         "clusterId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter cluster ID (hex or decimal)"
         },
         "commandId": {
-          "type": ["integer", "string"],
+          "type": [
+            "integer",
+            "string"
+          ],
           "description": "Matter command ID (hex or decimal)"
         },
         "name": {
@@ -423,7 +522,10 @@
     "argument": {
       "type": "object",
       "description": "Command argument definition",
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -431,7 +533,6 @@
           "minLength": 1
         },
         "type": {
-
           "description": "Matter data type",
           "$ref": "#/$defs/matterType"
         }
@@ -441,7 +542,9 @@
     "prerequisite": {
       "type": "object",
       "description": "A single prerequisite gate for resource registration; references a matterMeta alias by name",
-      "required": ["alias"],
+      "required": [
+        "alias"
+      ],
       "properties": {
         "alias": {
           "type": "string",
@@ -454,7 +557,9 @@
     "alias": {
       "type": "object",
       "description": "Named Matter element (attribute or event) in matterMeta.aliases; referenced by resources",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -469,8 +574,16 @@
         }
       },
       "oneOf": [
-        {"required": ["attribute"]},
-        {"required": ["event"]}
+        {
+          "required": [
+            "attribute"
+          ]
+        },
+        {
+          "required": [
+            "event"
+          ]
+        }
       ],
       "additionalProperties": false
     },
@@ -478,23 +591,74 @@
       "type": "string",
       "description": "Matter data type",
       "enum": [
-        "bool", "boolean",
-        "uint8", "uint16", "uint32", "uint64",
-        "int8", "int16", "int24", "int32", "int40", "int48", "int56", "int64",
-        "enum8", "enum16",
-        "bitmap8", "bitmap16", "bitmap32", "bitmap64",
-        "single", "float", "double",
-        "string", "char_string", "long_char_string",
-        "octstr", "octet_string", "long_octet_string",
-        "percent", "percent100ths",
-        "epoch-s", "epoch-us", "posix-ms", "elapsed-s", "utc",
-        "systime-ms", "systime-us",
-        "temperature", "amperage-ma", "voltage-mv", "power-mw", "energy-mwh",
-        "ipadr", "ipv4adr", "ipv6adr", "ipv6pre", "hwadr", "semtag",
-        "fabric-idx", "fabric-id", "node-id", "vendor-id", "devtype-id",
-        "group-id", "endpoint-no", "cluster-id", "attrib-id", "event-id",
-        "command-id", "action-id", "trans-id", "data-ver", "entry-idx",
-        "struct", "list", "array", "null"
+        "bool",
+        "boolean",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "int8",
+        "int16",
+        "int24",
+        "int32",
+        "int40",
+        "int48",
+        "int56",
+        "int64",
+        "enum8",
+        "enum16",
+        "bitmap8",
+        "bitmap16",
+        "bitmap32",
+        "bitmap64",
+        "single",
+        "float",
+        "double",
+        "string",
+        "char_string",
+        "long_char_string",
+        "octstr",
+        "octet_string",
+        "long_octet_string",
+        "percent",
+        "percent100ths",
+        "epoch-s",
+        "epoch-us",
+        "posix-ms",
+        "elapsed-s",
+        "utc",
+        "systime-ms",
+        "systime-us",
+        "temperature",
+        "amperage-ma",
+        "voltage-mv",
+        "power-mw",
+        "energy-mwh",
+        "ipadr",
+        "ipv4adr",
+        "ipv6adr",
+        "ipv6pre",
+        "hwadr",
+        "semtag",
+        "fabric-idx",
+        "fabric-id",
+        "node-id",
+        "vendor-id",
+        "devtype-id",
+        "group-id",
+        "endpoint-no",
+        "cluster-id",
+        "attrib-id",
+        "event-id",
+        "command-id",
+        "action-id",
+        "trans-id",
+        "data-ver",
+        "entry-idx",
+        "struct",
+        "list",
+        "array",
+        "null"
       ]
     }
   }
