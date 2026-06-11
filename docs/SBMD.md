@@ -1015,8 +1015,7 @@ function writeIsOn(args) {
   var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .device.sendCommand(CL_ON_OFF, commandId, null, {})
-    .success();
+    .device.sendCommand(CL_ON_OFF, commandId, null, {});
 }
 ```
 
