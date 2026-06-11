@@ -1391,8 +1391,8 @@ function writeCurrentLevel(args) {
   var schema = {
     Level:           { tag: 0, type: "uint8" },
     TransitionTime:  { tag: 1, type: "uint16" },
-    OptionsMask:     { tag: 2, type: "uint8" },
-    OptionsOverride: { tag: 3, type: "uint8" },
+    OptionsMask:     { tag: 2, type: "bitmap8" },
+    OptionsOverride: { tag: 3, type: "bitmap8" }
   };
 
   return SbmdUtils.result()
