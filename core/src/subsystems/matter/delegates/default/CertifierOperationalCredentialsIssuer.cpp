@@ -255,7 +255,7 @@ CHIP_ERROR CertifierOperationalCredentialsIssuer::FetchNOC(const ByteSpan & csr,
             url.str().c_str(), &httpCode, request.c_str(), headers.get(), nullptr, nullptr, 0, SSL_VERIFY_BOTH, true),
         free);
 
-    if (httpCode == 0)
+    if (httpCode == 0 && responseBody == nullptr)
     {
         ChipLogError(Controller, "Failed to request operational certificate. No HTTP response received.");
 

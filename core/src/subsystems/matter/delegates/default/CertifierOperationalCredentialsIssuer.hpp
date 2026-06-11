@@ -29,6 +29,7 @@
 #include <crypto/CHIPCryptoPAL.h>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <lib/core/PeerId.h>
 #include <lib/support/DLLUtil.h>
 #include <string>
