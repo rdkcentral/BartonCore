@@ -1088,7 +1088,9 @@ a terminal. A chain must not include multiple deferred operations
 creating ambiguous completion. The runtime rejects chains with more than one
 deferred operation.
 
-**Timeout resolution**: Per-operation `timeoutMs` > `matter.defaultTimeoutMs` > system default.
+**Timeout resolution**: The runtime resolves timeouts in precedence order:
+per-operation `timeoutMs` overrides `matter.defaultTimeoutMs`, which overrides
+the system default.
 
 For **device-initiated handlers** (attribute, event, command), there is no
 caller waiting for a result, but all handlers must still end with an explicit
