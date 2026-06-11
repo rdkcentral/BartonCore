@@ -991,7 +991,7 @@ Emit a diagnostic log message associated with this handler invocation.
 
 ### 7.5 Success
 
-#### `success(value?)`
+#### `success(value?, metadata?)`
 
 Explicitly mark the operation as completed successfully. All operations
 (resource updates, device interactions, storage writes, logs) earlier in the
@@ -1007,6 +1007,11 @@ resource handlers (read, write, execute, seed) and deferred response handlers
 (`requestCommand` handler, `readAttribute` handler). Using `success(value)` on
 a device-initiated handler (attribute, event, command) is a **runtime error**
 because there is no resource operation to complete.
+
+The optional `metadata` parameter (string) is a JSON string of metadata to
+attach to the resource update. Only valid when `value` is also provided and the
+handler updates a resource (read/seed/write handlers). Ignored for execute
+handlers.
 
 When `value` is omitted, the resource value comes from any preceding
 `dataModel.updateResource()` call; if none was made, the runtime returns the
@@ -1065,7 +1070,7 @@ ultimately resolve to success or failure. The rules are:
 | Chain contains | Outcome |
 |---|---|
 | `.success()` | Success. All preceding operations in the chain execute. |
-| `.success(value)` | Success. Sets the result value for the resource operation (updates the resource for read/seed/write; returns to caller for execute). Only valid on resource handlers and deferred response handlers. |
+| `.success(value)` | Success. Sets the result value for the resource operation (updates the resource for read/seed/write; returns to caller for execute). Accepts optional second `metadata` argument (JSON string) for resource updates. Only valid on resource handlers and deferred response handlers. |
 | `.error(message)` | Failure. All preceding operations still execute, but the operation is reported as failed. |
 | `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. If `successValue` is set and the command succeeds, sets the result value for the resource operation. All preceding operations execute. |
 | `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
