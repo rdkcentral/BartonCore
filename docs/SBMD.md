@@ -700,6 +700,7 @@ A handler can inspect which trigger field is present to determine the context.
 
 | Field | Type | Description |
 |---|---|---|
+| `args.resource` | `{ resourceId, input }` | The resource operation being serviced. Same shape as the resource trigger on the originating handler. Always present when the deferred operation was initiated from a resource handler. |
 | `args.handlerContext` | any | Arbitrary context passed via the `context` field on the originating `.device.requestCommand()` or `.device.readAttribute()` call. `null` if not set. |
 | `args.error` | `{ message, type, matterCode }` | Error details, present only on `onError` handlers. `type` is `"timeout"`, `"transport"`, or `"internal"`. `matterCode` (number or `null`) is the Matter SDK error code when available. |
 
@@ -714,8 +715,8 @@ A handler can inspect which trigger field is present to determine the context.
 | Attribute handler | `args.attribute` | React to an incoming attribute report from the device. |
 | Event handler | `args.event` | React to an incoming event from the device. |
 | Command handler | `args.command` | React to an unsolicited command from the device. |
-| Invoke response handler | `args.command` + `args.handlerContext` | Process a command response correlated to a pending `requestCommand`. |
-| Read response handler | `args.attribute` + `args.handlerContext` | Process an attribute value from a pending `readAttribute`. |
+| Invoke response handler | `args.command` + `args.resource` + `args.handlerContext` | Process a command response correlated to a pending `requestCommand`. |
+| Read response handler | `args.attribute` + `args.resource` + `args.handlerContext` | Process an attribute value from a pending `readAttribute`. |
 
 ---
 
@@ -762,8 +763,7 @@ function executeGetCredentialStatus(args) {
         var response = args.command.data;
 
         return SbmdUtils.result()
-          .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
-          .success();
+          .success(JSON.stringify(response));
       },
       onError: function(args) {
         return SbmdUtils.result()
@@ -900,6 +900,7 @@ device's Matter status response (success or failure).
 |---|---|---|
 | `timedInvokeTimeoutMs` | number | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
 | `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
+| `successValue` | string | Optional. If the command succeeds, set the result value for the resource operation. For read/seed/write handlers, updates the resource. For execute handlers, returns the value to the caller. Same semantics as `success(value)`. Only valid on resource handlers. |
 
 #### `device.requestCommand(clusterId, commandId, payload, options)` — **not a terminal**
 
@@ -990,13 +991,26 @@ Emit a diagnostic log message associated with this handler invocation.
 
 ### 7.5 Success
 
-#### `success()`
+#### `success(value?)`
 
 Explicitly mark the operation as completed successfully. All operations
 (resource updates, device interactions, storage writes, logs) earlier in the
-chain are executed in order regardless. For resource reads, the resource value
-comes from any preceding `dataModel.updateResource()` call; if none was made, the
-runtime returns the previously cached value.
+chain are executed in order regardless.
+
+The optional `value` parameter (string) sets the result of the resource
+operation. For read/seed/write handlers, this updates the resource value
+(shorthand for `dataModel.updateResource(<current resource>, value).success()`).
+For execute handlers and their deferred response handlers, this returns the
+value to the caller that invoked the execute — it does not store a value in the
+resource. This is valid only when the handler is servicing a resource operation:
+resource handlers (read, write, execute, seed) and deferred response handlers
+(`requestCommand` handler, `readAttribute` handler). Using `success(value)` on
+a device-initiated handler (attribute, event, command) is a **runtime error**
+because there is no resource operation to complete.
+
+When `value` is omitted, the resource value comes from any preceding
+`dataModel.updateResource()` call; if none was made, the runtime returns the
+previously cached value.
 
 ```js
 function handleLockOperation(args) {
@@ -1051,8 +1065,9 @@ ultimately resolve to success or failure. The rules are:
 | Chain contains | Outcome |
 |---|---|
 | `.success()` | Success. All preceding operations in the chain execute. |
+| `.success(value)` | Success. Sets the result value for the resource operation (updates the resource for read/seed/write; returns to caller for execute). Only valid on resource handlers and deferred response handlers. |
 | `.error(message)` | Failure. All preceding operations still execute, but the operation is reported as failed. |
-| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
+| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. If `successValue` is set and the command succeeds, sets the result value for the resource operation. All preceding operations execute. |
 | `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
 | `.device.requestCommand()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
 | `.device.readAttribute()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
