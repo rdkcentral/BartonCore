@@ -1138,7 +1138,7 @@ var tlvFromHex = SbmdUtils.Tlv.encode("FF", "uint8", 16);
 
 | Parameter | Type | Description |
 |---|---|---|
-| `value` | any | The value to encode. For integer types, strings are parsed using `parseInt` with the given `base`. |
+| `value` | any | The value to encode. For integer types up to 32-bit (and enum/bitmap/percent), strings are parsed using `parseInt` with the given `base`; for 64-bit types, pass a number (limited to JS safe integer range). |
 | `type` | string | TLV type (see [8.6 Supported Data Types](#86-supported-data-types)). For type `"string"`, the value is coerced via `String()` and encoded as a TLV UTF-8 string. |
 | `base` | number | Optional. Radix for string-to-integer parsing (2, 8, 10, 16). Default `10`. Invalid with type `"string"`. |
 
