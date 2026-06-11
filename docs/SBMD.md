@@ -1078,7 +1078,7 @@ function writeLockState(args) {
 
 // Response handler: decode, decide, complete
 function handleCredentialResponse(args) {
-  var response = SbmdUtils.Tlv.decode(args.command.data);
+  var response = args.command.data;
 
   if (!response.credentialExists) {
     return SbmdUtils.result()
