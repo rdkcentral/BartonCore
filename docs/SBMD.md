@@ -1856,9 +1856,9 @@ function executeLockAction(args) {
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
-  //this handler is here for example of a handler with a single alias.
-  //this overall lock example should not really do this since the state
-  //of the locked resource is managed by seed initially, then by events.
+  // This handler is included as an example of a handler with a single alias.
+  // This overall lock example should not really do this since the state
+  // of the locked resource is managed by seed initially, then by events.
   return SbmdUtils.result()
     .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
     .success();
