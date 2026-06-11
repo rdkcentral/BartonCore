@@ -1067,16 +1067,15 @@ function writeIsOn(args) {
 Every result chain for a **resource handler** (read, write, execute, seed) must
 ultimately resolve to success or failure. The rules are:
 
-| Chain contains | Outcome |
-|---|---|
-| `.success()` | Success. All preceding operations in the chain execute. |
-| `.success(value)` | Success. Sets the result value for the resource operation (updates the resource for read/seed/write; returns to caller for execute). Accepts optional second `metadata` argument (JSON string) for resource updates. Only valid on resource handlers and deferred response handlers. |
-| `.error(message)` | Failure. All preceding operations still execute, but the operation is reported as failed. |
-| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. If `successValue` is set and the command succeeds, sets the result value for the resource operation. All preceding operations execute. |
-| `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. All preceding operations execute. |
-| `.device.requestCommand()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
-| `.device.readAttribute()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). All preceding operations execute when the handler returns. |
-| No terminal | **Runtime error.** Every chain must end with an explicit terminal. |
+| Chain ends with | Terminal? | Outcome |
+|---|---|---|
+| `.success()` | yes | Success. See [7.5](#75-success). |
+| `.error()` | yes | Failure. See [7.6](#76-error). |
+| `.device.sendCommand()` | yes | Delegates to Matter status response. See [7.2](#72-device-interaction--device). |
+| `.device.writeAttribute()` | yes | Delegates to Matter status response. See [7.2](#72-device-interaction--device). |
+| `.device.requestCommand()` | no | Defers to response `handler` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
+| `.device.readAttribute()` | no | Defers to response `handler` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
+| *(none)* | — | **Runtime error.** Every chain must end with an explicit terminal. |
 
 **Single path to terminal**: A result chain must contain exactly **one** path to
 a terminal. A chain must not include multiple deferred operations
