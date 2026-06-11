@@ -103,7 +103,7 @@ flowchart TB
 
     Device["Matter Device<br/><i>(over fabric)</i>"]
     Cache <-->|Matter subscription| Device
-    Runtime <-->|invoke / write| Device
+    Runtime <-->|command / read / write| Device
 ```
 
 ### 2.2 Key Components
@@ -308,6 +308,7 @@ matter: {
   deviceTypes: [0x000a],
   revision: 1,
   featureClusters: [CL_DOOR_LOCK],
+  defaultTimeoutMs: 10000,
 }
 ```
 
@@ -318,6 +319,7 @@ matter: {
 | `vendorId` | number | no | Matter vendor ID for vendor-specific matching. |
 | `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. |
 | `featureClusters` | number[] | no | Cluster IDs whose feature maps should be cached and made available to handlers via `args.clusterFeatureMaps`. |
+| `defaultTimeoutMs` | number | no | Default timeout in milliseconds for all device interactions (`sendCommand`, `requestCommand`, `writeAttribute`, `readAttribute`). Overrides the system default. Can be overridden per-operation via `timeoutMs`. |
 
 **Driver claiming**: When a Matter device is commissioned, the runtime uses a
 two-pass claiming process to select the driver:
@@ -577,8 +579,8 @@ Same dispatch rules and aliases/explicit mutual exclusivity as attribute handler
 ### 4.11 Command Handlers
 
 Command handlers process **unsolicited** commands received from the device — that
-is, commands that are not correlated to a pending `.device.invoke()` with a
-`responseCommandId` (see [Section 6](#6-command-response-flows)).
+is, commands that are not correlated to a pending `.device.requestCommand()`
+(see [Section 6](#6-command-response-flows)).
 
 ```js
 commandHandlers: {
@@ -602,10 +604,10 @@ commandHandlers: {
 
 Same dispatch rules and aliases/explicit mutual exclusivity as attribute handlers.
 
-**Important**: When a command arrives that matches a pending invoke's
-`responseCommandId`, the invoke's response handler is called instead. Command
+**Important**: When a command arrives that matches a pending `requestCommand`'s
+`responseCommandId`, the request's response handler is called instead. Command
 handlers only fire for truly unsolicited commands or when `passthrough: true` is
-set on the invoke (see [Section 6.2](#62-flow-2-invoke-with-command-response)).
+set on the `requestCommand` (see [Section 6.2](#62-flow-2-command-with-response)).
 
 ### 4.12 Supplements
 
@@ -640,11 +642,16 @@ resource state.
 All handler functions receive a single `args` object and return a result built
 with `SbmdUtils.result()`.
 
+Handler functions can be declared as named functions or inline (anonymous)
+functions. Named functions are recommended for readability and reuse. Inline
+functions are acceptable for short, single-use handlers.
+
 ```js
 function myHandler(args) {
   // ... logic ...
   return SbmdUtils.result()
-    .barton.updateResource(ENDPOINT, RESOURCE, value);
+    .barton.updateResource(ENDPOINT, RESOURCE, value)
+    .success();
 }
 ```
 
@@ -660,14 +667,19 @@ The `args` object varies by handler type. All fields are read-only.
 | `args.endpointId` | `string \| null` | The Barton endpoint ID for the resource being operated on. `null` for device-level resources with no endpoint. |
 | `args.clusterFeatureMaps` | `{ [clusterId]: number }` | Feature maps for clusters declared in `matter.featureClusters`. |
 
-#### Trigger field (exactly one, depending on handler type)
+#### Trigger field (exactly one, depending on invocation context)
 
-| Field | Type | Present on | Description |
+The same function can be registered for multiple purposes (e.g., as both an
+attribute handler and a resource read handler). The trigger field present in
+`args` depends on how the handler was invoked, not on the function itself.
+A handler can inspect which trigger field is present to determine the context.
+
+| Field | Type | Present when invoked as | Description |
 |---|---|---|---|
-| `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handlers | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
-| `args.event` | `{ clusterId, eventId, data, alias }` | event handlers | The event that triggered the handler. `data` is the decoded event payload (array of TLV field values). `alias` is the alias name if registered via `aliases`, otherwise `null`. |
-| `args.command` | `{ clusterId, commandId, data, alias }` | command handlers, invoke response handlers | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
-| `args.resource` | `{ resourceId, input }` | resource handlers (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
+| `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handler | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
+| `args.event` | `{ clusterId, eventId, data, alias }` | event handler | The event that triggered the handler. `data` is the decoded event payload (array of TLV field values). `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.command` | `{ clusterId, commandId, data, alias }` | command handler, command response handler | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.resource` | `{ resourceId, input }` | resource handler (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
 
 #### Supplements (present when declared)
 
@@ -676,11 +688,12 @@ The `args` object varies by handler type. All fields are read-only.
 | `args.supplements.attributes` | `{ [aliasName]: value }` | Pre-fetched attribute values, keyed by alias name. |
 | `args.supplements.resources` | `{ [path]: value }` | Pre-fetched resource values. Keys are `"endpointId/resourceName"` or `"resourceName"`. |
 
-#### Invoke response context (present on invoke response handlers only)
+#### Deferred handler context (present on response/error handlers)
 
 | Field | Type | Description |
 |---|---|---|
-| `args.invokeContext` | any | Arbitrary context passed via the `context` field on the originating `.device.invoke()` call. `null` if not set. |
+| `args.handlerContext` | any | Arbitrary context passed via the `context` field on the originating `.device.requestCommand()` or `.device.readAttribute()` call. `null` if not set. |
+| `args.error` | `{ message, type }` | Error details, present only on `onError` handlers. `type` is `"timeout"`, `"transport"`, or `"internal"`. |
 
 ### 5.2 Handler Type Summary
 
@@ -693,13 +706,14 @@ The `args` object varies by handler type. All fields are read-only.
 | Attribute handler | `args.attribute` | React to an incoming attribute report from the device. |
 | Event handler | `args.event` | React to an incoming event from the device. |
 | Command handler | `args.command` | React to an unsolicited command from the device. |
-| Invoke response handler | `args.command` + `args.invokeContext` | Process a command response correlated to a pending invoke. |
+| Invoke response handler | `args.command` + `args.handlerContext` | Process a command response correlated to a pending `requestCommand`. |
+| Read response handler | `args.attribute` + `args.handlerContext` | Process an attribute value from a pending `readAttribute`. |
 
 ---
 
 ## 6. Command Response Flows
 
-When a resource operation invokes a Matter command on the device, there are three
+When a resource operation sends a Matter command to the device, there are three
 possible response patterns. The runtime handles each differently.
 
 ### 6.1 Flow 1: Simple Status Response
@@ -708,79 +722,86 @@ The device returns a standard Matter status response (success or error code). No
 driver code is needed — the runtime automatically maps the status to the resource
 operation result (success/failure).
 
-This is the default behavior when `.device.invoke()` has no `responseCommandId`.
+This is the behavior when using `.device.sendCommand()`.
 
 ```js
 function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
   return SbmdUtils.result()
-    .device.invoke(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
+    .device.sendCommand(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
 }
 ```
 
 The runtime sends the command, receives the status response, and completes the
 resource operation with success or failure. The handler is not called again.
 
-### 6.2 Flow 2: Invoke with Command Response
+### 6.2 Flow 2: Command with Response
 
 Some commands expect a specific command to be sent back from the device. The
 resource operation cannot complete until that response arrives and is processed.
 
-Declare the expected response on the `.device.invoke()` options:
+Use `.device.requestCommand()` to declare the expected response:
 
 ```js
 function executeGetCredentialStatus(args) {
   var payload = buildCredentialRequest(args.resource.input);
 
   return SbmdUtils.result()
-    .device.invoke(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
+    .device.requestCommand(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
-      handler: processCredentialResponse,
+      handler: function(args) {
+        var requested = args.handlerContext.requestedCredential;
+        var response = SbmdUtils.Tlv.decode(args.command.data);
+
+        return SbmdUtils.result()
+          .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+          .success();
+      },
+      onError: function(args) {
+        return SbmdUtils.result()
+          .log("credential request failed: " + args.error.message)
+          .error(args.error.message);
+      },
       context: { requestedCredential: args.resource.input },
       timeoutMs: 5000,
       passthrough: false,
     });
 }
-
-function processCredentialResponse(args) {
-  var requested = args.invokeContext.requestedCredential;
-
-  return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(args.command.data));
-}
 ```
 
-**Invoke response options**:
+**`requestCommand` options**:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `responseCommandId` | number | yes | The command ID expected as a response. |
-| `handler` | function | yes | Handler function to process the response. Receives `args.command` and `args.invokeContext`. Its result completes the original resource operation. |
-| `context` | any | no | Arbitrary data to pass to the response handler via `args.invokeContext`. Must be a JSON-serializable value. |
-| `timeoutMs` | number | no | Maximum time to wait for the response in milliseconds. If the response does not arrive within this time, the resource operation fails with a timeout error. Default is runtime-defined. |
-| `passthrough` | boolean | no | If `true`, the response command also fires any matching `commandHandlers` entry after the invoke response handler runs. Default `false`. |
+| `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with a terminal (`.success()` or `.error()`). Its result completes the original resource operation. |
+| `onError` | function | yes | Error handler for infrastructure failures (timeout, transport, internal). Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with a terminal. |
+| `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. Must be a JSON-serializable value. |
+| `timeoutMs` | number | no | Maximum time to wait for the response in milliseconds. Timeout routes to `onError` with `type: "timeout"`. Default: `matter.defaultTimeoutMs` or system default. |
+| `passthrough` | boolean | no | If `true`, the response command also fires any matching `commandHandlers` entry after the response handler runs. Default `false`. |
+| `timedInvokeTimeoutMs` | number | no | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
 
 **Runtime behavior**:
 
 1. Resource operation triggers the execute handler, which returns a result with
-   `.device.invoke(...)` containing `responseCommandId`.
+   `.device.requestCommand(...)`.
 2. Runtime sends the command and **parks** the resource operation, storing the
-   `handler`, `context`, and timeout.
+   `handler`, `onError`, `context`, and timeout.
 3. When a command with matching `clusterId` + `responseCommandId` arrives:
-   - Runtime checks for a pending invoke first.
-   - **Match found**: routes to the invoke's `handler`. The handler's result
+   - Runtime checks for a pending request first.
+   - **Match found**: routes to the request's `handler`. The handler's terminal
      completes the parked resource operation.
    - If `passthrough: true`, the matching `commandHandlers` entry also fires
      afterward.
-4. **No match** (no pending invoke): falls through to `commandHandlers` for
+4. **No match** (no pending request): falls through to `commandHandlers` for
    unsolicited processing.
-5. **Timeout**: if `timeoutMs` elapses before the response arrives, the parked
-   resource operation fails with a timeout error.
+5. **Timeout or failure**: routes to `onError`. The `onError` handler's terminal
+   completes the parked resource operation.
 
 ### 6.3 Flow 3: Unsolicited Commands
 
-Commands that arrive with no pending invoke are routed to `commandHandlers`.
+Commands that arrive with no pending request are routed to `commandHandlers`.
 These represent device-initiated communication that the driver wants to observe
 and react to.
 
@@ -795,7 +816,8 @@ commandHandlers: {
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .success();
 }
 ```
 
@@ -812,7 +834,8 @@ handler returns.
 return SbmdUtils.result()
   .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
   .storage.setPersistentData("lastLockOperation", "lock")
-  .log("lock operation applied");
+  .log("lock operation applied")
+  .success();
 ```
 
 ### 7.1 Resource Updates — `barton`
@@ -842,46 +865,81 @@ endpoint IDs are numeric strings, resource names are not.
 
 ### 7.2 Device Interaction — `device`
 
-#### `device.invoke(clusterId, commandId, payload, options)`
+#### `device.sendCommand(clusterId, commandId, payload, options)` — **terminal**
 
-Send a Matter command to the device.
+Send a Matter command to the device. The operation completes based on the
+device's Matter status response (success or failure).
 
 | Parameter | Type | Description |
 |---|---|---|
 | `clusterId` | number | Target cluster. |
 | `commandId` | number | Command ID. |
 | `payload` | string\|null | Base64-encoded TLV payload, or `null`. |
-| `options` | object | Invoke options. |
+| `options` | object | Command options (optional). |
 
-**Options object**:
+**Options**:
 
 | Field | Type | Description |
 |---|---|---|
 | `timedInvokeTimeoutMs` | number | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
-| `responseCommandId` | number | Expected response command ID (see [Section 6.2](#62-flow-2-invoke-with-command-response)). |
-| `handler` | function | Response handler (required when `responseCommandId` is set). |
-| `context` | any | Arbitrary context forwarded to the response handler. |
-| `timeoutMs` | number | Response timeout in milliseconds. |
-| `passthrough` | boolean | Also fire `commandHandlers` for the response. Default `false`. |
+| `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 
-#### `device.read(clusterId, attributeId)`
+#### `device.requestCommand(clusterId, commandId, payload, options)` — **not a terminal**
 
-Read a Matter attribute from the device.
+Send a Matter command and wait for a specific command response from the device.
+Completion is deferred to the `handler` or `onError` callback.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `clusterId` | number | Target cluster. |
-| `attributeId` | number | Attribute ID to read. |
+| `commandId` | number | Command ID. |
+| `payload` | string\|null | Base64-encoded TLV payload, or `null`. |
+| `options` | object | Request options (required). |
 
-#### `device.write(clusterId, attributeId, payload)`
+**Options**:
 
-Write a Matter attribute on the device.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `responseCommandId` | number | yes | The command ID expected as a response. |
+| `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with an explicit terminal. |
+| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
+| `timeoutMs` | number | no | Response timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
+| `passthrough` | boolean | no | Also fire `commandHandlers` for the response. Default `false`. |
+| `timedInvokeTimeoutMs` | number | no | Timed invoke timeout (for commands that require it). |
+
+See [Section 6.2](#62-flow-2-command-with-response) for the full runtime flow.
+
+#### `device.writeAttribute(clusterId, attributeId, payload)` — **terminal**
+
+Write a Matter attribute on the device. The operation completes based on the
+device's Matter status response.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `clusterId` | number | Target cluster. |
 | `attributeId` | number | Attribute ID to write. |
 | `payload` | string | Base64-encoded TLV value. |
+
+#### `device.readAttribute(clusterId, attributeId, options)` — **not a terminal**
+
+Read a Matter attribute from the device. Completion is deferred to the `handler`
+or `onError` callback.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clusterId` | number | Target cluster. |
+| `attributeId` | number | Attribute ID to read. |
+| `options` | object | Read options (required). |
+
+**Options**:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `handler` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
+| `timeoutMs` | number | no | Read timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 
 ### 7.3 Persistent and Transient Storage — `storage`
 
@@ -906,61 +964,109 @@ These are also available as standalone read accessors:
 
 Emit a diagnostic log message associated with this handler invocation.
 
-### 7.5 Ignore
+### 7.5 Success
 
-#### `ignore()`
+#### `success()`
 
-Complete the operation successfully without updating any resource. This is
-useful in event and attribute handlers to silently discard non-actionable
-reports, and in read/seed handlers to skip the update — in which case the
-runtime returns the previously cached value (if any) to the caller.
+Explicitly mark the operation as completed successfully. All side effects
+(resource updates, invokes, storage, logs) earlier in the chain are executed
+regardless. For resource reads, the resource value comes from any preceding
+`barton.updateResource()` call; if none was made, the runtime returns the
+previously cached value.
 
 ```js
 function handleLockOperation(args) {
   var opType = args.event.data[0];
 
   if (opType !== 0 && opType !== 1) {
-    // Non-state-change event — ignore
-    return SbmdUtils.result().ignore();
+    // Non-state-change event — nothing to do
+    return SbmdUtils.result().success();
   }
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false");
+    .barton.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false")
+    .success();
 }
 ```
+
+Every result chain must end with an explicit terminal. A chain with no terminal
+is a **runtime error**.
 
 ### 7.6 Error
 
 #### `error(message)`
 
-Signal that the operation failed. The runtime marks the resource operation as
-failed and logs the message. For resource reads, the caller receives an error.
-For writes and executes, the operation is reported as failed. For attribute,
-event, and command handlers, the error is logged and no resource updates occur.
+Mark the operation as failed. The runtime logs the message and reports the
+resource operation as failed to the caller. **All other side effects in the
+chain still execute** — resource updates, storage writes, and log messages
+earlier in the chain are applied even when the operation is marked as an error.
+This allows handlers to record diagnostic state before failing.
 
 ```js
 function writeIsOn(args) {
   var value = args.resource.input;
 
   if (value !== "true" && value !== "false") {
-    return SbmdUtils.result().error("invalid value: " + value);
+    return SbmdUtils.result()
+      .log("rejected invalid write: " + value)
+      .error("invalid value: " + value);
   }
 
   var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .device.invoke(CL_ON_OFF, commandId, null, {});
+    .device.sendCommand(CL_ON_OFF, commandId, null, {})
+    .success();
 }
 ```
 
-### 7.7 Empty Result
+### 7.7 Operation Completion
 
-Returning `SbmdUtils.result()` with no chained operations is valid. It signals
-that the handler processed the input but produced no side effects.
+Every result chain for a **resource handler** (read, write, execute, seed) must
+ultimately resolve to success or failure. The rules are:
+
+| Chain contains | Outcome |
+|---|---|
+| `.success()` | Success. All side effects execute. |
+| `.error(message)` | Failure. All side effects still execute, but the operation is reported as failed. |
+| `.device.sendCommand()` | Terminal — success/failure is determined by the Matter status response. Side effects execute immediately. |
+| `.device.writeAttribute()` | Terminal — success/failure is determined by the Matter status response. Side effects execute immediately. |
+| `.device.requestCommand()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). Side effects from the initial chain execute immediately. |
+| `.device.readAttribute()` | Not a terminal — the response `handler` or `onError` callback must provide the terminal (`.success()` or `.error()`). Side effects from the initial chain execute immediately. |
+| No terminal | **Runtime error.** Every chain must end with an explicit terminal. |
+
+**Timeout resolution**: Per-operation `timeoutMs` > `matter.defaultTimeoutMs` > system default.
+
+For **device-initiated handlers** (attribute, event, command), there is no
+caller waiting for a result, but all handlers must still end with an explicit
+terminal. `.success()` and `.error()` affect logging and diagnostics; side
+effects always execute. For command handlers, `.error()` can trigger a failure
+status response back to the device.
 
 ```js
-function handleLockDiagnostics(args) {
-  return SbmdUtils.result(); // acknowledged, no action
+// Chaining: update resource, send command, mark success
+function writeLockState(args) {
+  var commandId = (args.resource.input === "true") ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
+
+  return SbmdUtils.result()
+    .storage.setPersistentData("lastWriteAttempt", args.resource.input)
+    .device.sendCommand(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
+    // No .success() needed — sendCommand is a terminal that defers to Matter status
+}
+
+// Response handler: decode, decide, complete
+function handleCredentialResponse(args) {
+  var response = SbmdUtils.Tlv.decode(args.command.data);
+
+  if (!response.credentialExists) {
+    return SbmdUtils.result()
+      .log("credential not found")
+      .error("credential not found");
+  }
+
+  return SbmdUtils.result()
+    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .success();
 }
 ```
 
@@ -1084,7 +1190,7 @@ When an incoming attribute/event/command matches multiple registered handlers:
 1. **Specific handlers** (single `attributeId`/`eventId`/`commandId`) fire first.
 2. **Multi handlers** (arrays like `attributeIds`) fire next.
 3. **Wildcard handlers** (`"*"`) fire last.
-4. For invoke response commands: the invoke response handler fires first. If
+4. For command response requests: the response handler fires first. If
    `passthrough: true`, matching `commandHandlers` fire afterward in the order
    above.
 
@@ -1189,14 +1295,15 @@ function readIsOn(args) {
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false");
+    .barton.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false")
+    .success();
 }
 
 function writeIsOn(args) {
   var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
   return SbmdUtils.result()
-    .device.invoke(CL_ON_OFF, commandId, null, {});
+    .device.sendCommand(CL_ON_OFF, commandId, null, {});
 }
 
 function readCurrentLevel(args) {
@@ -1204,7 +1311,8 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
+    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
+    .success();
 }
 
 function writeCurrentLevel(args) {
@@ -1224,20 +1332,22 @@ function writeCurrentLevel(args) {
   };
 
   return SbmdUtils.result()
-    .device.invoke(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
+    .device.sendCommand(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
             SbmdUtils.Tlv.encodeStruct(payload, schema), {});
 }
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false");
+    .barton.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false")
+    .success();
 }
 
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString());
+    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
+    .success();
 }
 ```
 
@@ -1275,14 +1385,14 @@ SbmdDriver({
           read: {
             supplements: { attributes: [] },
             handler: function (args) {
-              return SbmdUtils.result();
+              return SbmdUtils.result().success();
             },
           },
           write: function (args) {
             var cmdId = (args.resource.input === "true") ? 0x0001 : 0x0000;
 
             return SbmdUtils.result()
-              .device.invoke(0x0006, cmdId, null, {});
+              .device.sendCommand(0x0006, cmdId, null, {});
           },
         },
       },
@@ -1295,7 +1405,8 @@ SbmdDriver({
       attributeId: 0x0000,
       handler: function (args) {
         return SbmdUtils.result()
-          .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false");
+          .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+          .success();
       },
     },
   },
@@ -1353,20 +1464,22 @@ SbmdDriver({
 function lightHandler(args) {
   if (args.attribute) {
     return SbmdUtils.result()
-      .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false");
+      .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+      .success();
   }
 
   if (args.resource.input !== null) {
     var cmdId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
     return SbmdUtils.result()
-      .device.invoke(CL_ON_OFF, cmdId, null, {});
+      .device.sendCommand(CL_ON_OFF, cmdId, null, {});
   }
 
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .barton.updateResource("1", "isOn", value ? "true" : "false");
+    .barton.updateResource("1", "isOn", value ? "true" : "false")
+    .success();
 }
 ```
 
@@ -1626,14 +1739,16 @@ function seedLockedResource(args) {
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false");
+    .barton.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
+    .success();
 }
 
 function readIdentify(args) {
   var value = args.supplements.attributes.identifyTime;
 
   return SbmdUtils.result()
-    .barton.updateResource(RES_IDENTIFY, String(value));
+    .barton.updateResource(RES_IDENTIFY, String(value))
+    .success();
 }
 
 function writeIdentify(args) {
@@ -1642,12 +1757,12 @@ function writeIdentify(args) {
     { IdentifyTime: parseInt(args.resource.input, 10) }, schema);
 
   return SbmdUtils.result()
-    .device.write(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
+    .device.writeAttribute(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
 }
 
 function executeReboot(args) {
   return SbmdUtils.result()
-    .device.invoke(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
+    .device.sendCommand(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
 }
 
 function executeLockAction(args) {
@@ -1656,7 +1771,7 @@ function executeLockAction(args) {
   var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
 
   return SbmdUtils.result()
-    .device.invoke(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+    .device.sendCommand(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -1666,7 +1781,7 @@ function executeLockAction(args) {
 function handleLockStateAttribute(args) {
   var isLocked = (args.attribute.value === 1);
 
-  return SbmdUtils.result().ignore(); // This is just an example that used an alias.  Ignore...
+  return SbmdUtils.result().success(); // This is just an example that used an alias.  Ignore...
 }
 
 function handleActuatorAttributes(args) {
@@ -1674,19 +1789,22 @@ function handleActuatorAttributes(args) {
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .barton.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false");
+      .barton.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false")
+      .success();
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return SbmdUtils.result()
       .barton.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
-      .log("doorState changed while locked=" + currentLocked);
+      .log("doorState changed while locked=" + currentLocked)
+      .success();
   }
 
-  return SbmdUtils.result();
+  return SbmdUtils.result().success();
 }
 
 function handleLockDiagnostics(args) {
   return SbmdUtils.result()
-    .log("DoorLock attr 0x" + args.attribute.attributeId.toString(16) + " changed");
+    .log("DoorLock attr 0x" + args.attribute.attributeId.toString(16) + " changed")
+    .success();
 }
 
 // ---------------------------------------------------------------------------
@@ -1699,20 +1817,23 @@ function handleLockOperation(args) {
 
   if (!actuatorEnabled) {
     return SbmdUtils.result()
-      .log("lock operation ignored — actuator disabled");
+      .log("lock operation ignored — actuator disabled")
+      .success();
   }
 
   if (opType === 0) {
     return SbmdUtils.result()
       .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
-      .storage.setPersistentData("lastLockOperation", "lock");
+      .storage.setPersistentData("lastLockOperation", "lock")
+      .success();
   } else if (opType === 1) {
     return SbmdUtils.result()
       .barton.updateResource(EP_LOCK, RES_LOCKED, "false")
-      .storage.setPersistentData("lastLockOperation", "unlock");
+      .storage.setPersistentData("lastLockOperation", "unlock")
+      .success();
   }
 
-  return SbmdUtils.result();
+  return SbmdUtils.result().success();
 }
 
 function handleLockAlarms(args) {
@@ -1723,12 +1844,14 @@ function handleLockAlarms(args) {
     .storage.setTransientData("lastAlarmCode", String(alarmCode), 300)
     .storage.setPersistentData("alarmCount", String(count))
     .log("DoorLock alarm 0x" + args.event.eventId.toString(16)
-         + " code=" + alarmCode + " total=" + count);
+         + " code=" + alarmCode + " total=" + count)
+    .success();
 }
 
 function handleLockEventCatchAll(args) {
   return SbmdUtils.result()
-    .log("DoorLock event 0x" + args.event.eventId.toString(16) + " received");
+    .log("DoorLock event 0x" + args.event.eventId.toString(16) + " received")
+    .success();
 }
 
 // ---------------------------------------------------------------------------
@@ -1741,17 +1864,20 @@ function handleGetCredentialStatusResponse(args) {
 
   return SbmdUtils.result()
     .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
-    .log("credential status updated (rules=" + credRules + ")");
+    .log("credential status updated (rules=" + credRules + ")")
+    .success();
 }
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data));
+    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .success();
 }
 
 function handleLockCommandCatchAll(args) {
   return SbmdUtils.result()
-    .log("DoorLock command 0x" + args.command.commandId.toString(16) + " received");
+    .log("DoorLock command 0x" + args.command.commandId.toString(16) + " received")
+    .success();
 }
 
 // ---------------------------------------------------------------------------
