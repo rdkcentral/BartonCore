@@ -1791,11 +1791,15 @@ function readIdentify(args) {
 
 function writeIdentify(args) {
   var schema = { IdentifyTime: { tag: 0, type: "uint16" } };
-  var tlvBase64 = SbmdUtils.Tlv.encodeStruct(
-    { IdentifyTime: parseInt(args.resource.input, 10) }, schema);
+  var secs = parseInt(args.resource.input, 10);
+
+  if (isNaN(secs) || secs < 0) secs = 0;
+  if (secs > 0xFFFF) secs = 0xFFFF;
+
+  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: secs }, schema);
 
   return SbmdUtils.result()
-    .device.writeAttribute(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64);
+    .device.writeAttribute(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64, {});
 }
 
 function executeReboot(args) {
