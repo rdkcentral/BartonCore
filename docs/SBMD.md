@@ -387,6 +387,14 @@ See [4.8.1 Resource Declaration](#481-resource-declaration) for the full schema.
 
 Each endpoint carries a profile and its own set of resources.
 
+> **Important**: Endpoints in the SBMD registration are **Barton data model
+> endpoints**, not Matter endpoints. A Barton endpoint groups related resources
+> under a named profile and is keyed by a string identifier (typically an
+> `EP_*` constant whose value is a Matter endpoint ID). The runtime uses this
+> key to correlate Barton endpoints with Matter endpoints, but the two concepts
+> are distinct — a Barton endpoint defines a resource profile, while a Matter
+> endpoint defines clusters and device types.
+
 ```js
 endpoints: {
   [EP_LOCK]: {
