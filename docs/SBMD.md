@@ -505,7 +505,7 @@ Both `seed` and `read` support the same object shape:
 
 A readable resource may omit both `seed` and `read`. In this case, the resource
 has no value until an attribute handler, event handler, or command handler updates
-it via `barton.updateResource()`. Reads return the last value set by a handler
+it via `dataModel.updateResource()`. Reads return the last value set by a handler
 (or no value if none has fired yet). This pattern is common for resources whose
 values are populated entirely by device-initiated reports — for example,
 `actuatorEnabled` or `doorState` on a door lock, where an attribute handler
@@ -650,7 +650,7 @@ functions are acceptable for short, single-use handlers.
 function myHandler(args) {
   // ... logic ...
   return SbmdUtils.result()
-    .barton.updateResource(ENDPOINT, RESOURCE, value)
+    .dataModel.updateResource(ENDPOINT, RESOURCE, value)
     .success();
 }
 ```
@@ -755,7 +755,7 @@ function executeGetCredentialStatus(args) {
         var response = SbmdUtils.Tlv.decode(args.command.data);
 
         return SbmdUtils.result()
-          .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+          .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
           .success();
       },
       onError: function(args) {
@@ -816,7 +816,7 @@ commandHandlers: {
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
     .success();
 }
 ```
@@ -832,15 +832,15 @@ in the chain **in order**.
 
 ```js
 return SbmdUtils.result()
-  .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
+  .dataModel.updateResource(EP_LOCK, RES_LOCKED, "true")
   .storage.setPersistentData("lastLockOperation", "lock")
   .log("lock operation applied")
   .success();
 ```
 
-### 7.1 Resource Updates — `barton`
+### 7.1 Barton Device Data Model — `dataModel`
 
-#### `barton.updateResource(resource, value)`
+#### `dataModel.updateResource(resource, value)`
 
 Update a **device-level** resource (declared under top-level `resources`).
 
@@ -849,7 +849,7 @@ Update a **device-level** resource (declared under top-level `resources`).
 | `resource` | string | Resource name (use a `RES_*` constant). |
 | `value` | string | New resource value. |
 
-#### `barton.updateResource(endpoint, resource, value [, metadata])`
+#### `dataModel.updateResource(endpoint, resource, value [, metadata])`
 
 Update an **endpoint-level** resource.
 
@@ -860,7 +860,18 @@ Update an **endpoint-level** resource.
 | `value` | string | New resource value. |
 | `metadata` | string | Optional. JSON string of metadata to attach to the update. |
 
-The runtime distinguishes the two forms by argument count: use the 2-arg form for device-level resources, and the 3-arg (or 4-arg with `metadata`) form for endpoint-level resources.
+The runtime distinguishes the two forms by argument count: use the 2-arg form
+for device-level resources, and the 3-arg (or 4-arg with `metadata`) form for
+endpoint-level resources.
+
+#### `dataModel.setMetadata(name, value)`
+
+Set arbitrary name/value metadata on the device.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | string | Metadata key. |
+| `value` | string | Metadata value. |
 
 ### 7.2 Device Interaction — `device`
 
@@ -977,7 +988,7 @@ Emit a diagnostic log message associated with this handler invocation.
 Explicitly mark the operation as completed successfully. All operations
 (resource updates, device interactions, storage writes, logs) earlier in the
 chain are executed in order regardless. For resource reads, the resource value
-comes from any preceding `barton.updateResource()` call; if none was made, the
+comes from any preceding `dataModel.updateResource()` call; if none was made, the
 runtime returns the previously cached value.
 
 ```js
@@ -990,7 +1001,7 @@ function handleLockOperation(args) {
   }
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false")
+    .dataModel.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false")
     .success();
 }
 ```
@@ -1076,7 +1087,7 @@ function handleCredentialResponse(args) {
   }
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .success();
 }
 ```
@@ -1322,7 +1333,7 @@ function readIsOn(args) {
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false")
+    .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false")
     .success();
 }
 
@@ -1338,7 +1349,7 @@ function readCurrentLevel(args) {
   var percent = Math.round(level / 254 * 100);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
+    .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
     .success();
 }
 
@@ -1365,7 +1376,7 @@ function writeCurrentLevel(args) {
 
 function handleOnOffAttribute(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false")
+    .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false")
     .success();
 }
 
@@ -1373,7 +1384,7 @@ function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
+    .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
     .success();
 }
 ```
@@ -1432,7 +1443,7 @@ SbmdDriver({
       attributeId: 0x0000,
       handler: function (args) {
         return SbmdUtils.result()
-          .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+          .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
           .success();
       },
     },
@@ -1491,7 +1502,7 @@ SbmdDriver({
 function lightHandler(args) {
   if (args.attribute) {
     return SbmdUtils.result()
-      .barton.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
+      .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
       .success();
   }
 
@@ -1505,7 +1516,7 @@ function lightHandler(args) {
   var value = args.supplements.attributes.onOff;
 
   return SbmdUtils.result()
-    .barton.updateResource("1", "isOn", value ? "true" : "false")
+    .dataModel.updateResource("1", "isOn", value ? "true" : "false")
     .success();
 }
 ```
@@ -1766,7 +1777,7 @@ function seedLockedResource(args) {
   var isLocked = (value === 1);
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
+    .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
     .success();
 }
 
@@ -1774,7 +1785,7 @@ function readIdentify(args) {
   var value = args.supplements.attributes.identifyTime;
 
   return SbmdUtils.result()
-    .barton.updateResource(RES_IDENTIFY, String(value))
+    .dataModel.updateResource(RES_IDENTIFY, String(value))
     .success();
 }
 
@@ -1816,11 +1827,11 @@ function handleActuatorAttributes(args) {
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
     return SbmdUtils.result()
-      .barton.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false")
+      .dataModel.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false")
       .success();
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
     return SbmdUtils.result()
-      .barton.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
+      .dataModel.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked)
       .success();
   }
@@ -1850,12 +1861,12 @@ function handleLockOperation(args) {
 
   if (opType === 0) {
     return SbmdUtils.result()
-      .barton.updateResource(EP_LOCK, RES_LOCKED, "true")
+      .dataModel.updateResource(EP_LOCK, RES_LOCKED, "true")
       .storage.setPersistentData("lastLockOperation", "lock")
       .success();
   } else if (opType === 1) {
     return SbmdUtils.result()
-      .barton.updateResource(EP_LOCK, RES_LOCKED, "false")
+      .dataModel.updateResource(EP_LOCK, RES_LOCKED, "false")
       .storage.setPersistentData("lastLockOperation", "unlock")
       .success();
   }
@@ -1890,14 +1901,14 @@ function handleGetCredentialStatusResponse(args) {
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
+    .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .log("credential status updated (rules=" + credRules + ")")
     .success();
 }
 
 function handleUserCommandResponses(args) {
   return SbmdUtils.result()
-    .barton.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
+    .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
     .success();
 }
 
