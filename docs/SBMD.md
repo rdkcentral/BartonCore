@@ -1104,7 +1104,7 @@ var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
 | Field | Type | Description |
 |---|---|---|
 | `tag` | number | TLV context tag. |
-| `type` | string | TLV type: `"uint8"`, `"uint16"`, `"uint32"`, `"int8"`, `"int16"`, `"int32"`, `"bool"`, `"octstr"`, `"utf8"`. |
+| `type` | string | TLV type (see [8.5 Supported Data Types](#85-supported-data-types)). |
 
 ### 8.2 `SbmdUtils.Tlv.encode(value, type)`
 
