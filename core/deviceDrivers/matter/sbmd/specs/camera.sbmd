@@ -37,7 +37,7 @@ endpoints:
             script: |
               var sessions = SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid);
               var sessionId = sessions.create({});
-              return SbmdUtils.Response.output(sessionId.toString());
+              return SbmdUtils.Response.value(sessionId.toString());
 
       # Start streaming for an existing session
       - id: "stream"
@@ -53,7 +53,7 @@ endpoints:
                 return SbmdUtils.Response.error('invalidSession');
               }
 
-              return SbmdUtils.Response.output('ok');
+              return SbmdUtils.Response.value('ok');
 
       # Take a snapshot for an existing session
       - id: "takePicture"
@@ -69,7 +69,7 @@ endpoints:
                 return SbmdUtils.Response.error('invalidSession');
               }
 
-              return SbmdUtils.Response.output('ok');
+              return SbmdUtils.Response.value('ok');
 
       # Destroy an existing session and release resources
       - id: "destroySession"
@@ -83,7 +83,7 @@ endpoints:
               if (!sessions.destroy(sessionId)) {
                 return SbmdUtils.Response.error('invalidSession');
               }
-              return SbmdUtils.Response.output('ok');
+              return SbmdUtils.Response.value('ok');
 
       # Session status event resource - traffic controller
       # Emits events with metadata: {sessionId, protocol, nextAction}
