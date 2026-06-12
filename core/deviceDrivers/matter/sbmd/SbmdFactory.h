@@ -56,11 +56,6 @@ namespace barton
         ~SbmdFactory() = default;
 
         /**
-         * Load and register v3 SBMD drivers (.sbmd) from a single directory.
-         */
-        static void RegisterV3DriversFromDirectory(const std::string &dirPath, bool &allRegistered);
-
-        /**
          * Load and register v4 SBMD drivers (.sbmd.js) from a single directory.
          * V4 drivers are activated immediately and stored in v4Drivers for lifetime management.
          */

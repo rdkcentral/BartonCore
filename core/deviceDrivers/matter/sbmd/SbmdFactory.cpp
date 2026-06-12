@@ -28,7 +28,6 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdFactory.h"
-#include "SbmdParser.h"
 #include "SpecBasedMatterDeviceDriver.h"
 #include "../MatterDriverFactory.h"
 
@@ -83,105 +82,30 @@ bool SbmdFactory::RegisterDrivers()
             continue;
         }
 
-        RegisterV3DriversFromDirectory(dirPath, allRegistered);
         RegisterV4DriversFromDirectory(dirPath, allRegistered);
     }
 
     return allRegistered;
 }
 
-void SbmdFactory::RegisterV3DriversFromDirectory(const std::string &dirPath, bool &allRegistered)
+void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, bool &allRegistered)
 {
     std::error_code ec;
+
     bool exists = std::filesystem::exists(dirPath, ec);
+
     if (ec)
     {
         icError("Failed to check if SBMD directory exists %s: %s", dirPath.c_str(), ec.message().c_str());
         allRegistered = false;
         return;
     }
+
     if (!exists)
     {
         icWarn("SBMD specs directory does not exist: %s", dirPath.c_str());
         allRegistered = false;
         return;
-    }
-
-    bool isDir = std::filesystem::is_directory(dirPath, ec);
-    if (ec)
-    {
-        icError("Failed to check if SBMD path is a directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        allRegistered = false;
-        return;
-    }
-    if (!isDir)
-    {
-        icWarn("SBMD specs path is not a directory: %s", dirPath.c_str());
-        allRegistered = false;
-        return;
-    }
-
-    std::filesystem::directory_iterator dirIterator(dirPath, ec);
-    if (ec)
-    {
-        icError("Failed to open SBMD directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        allRegistered = false;
-        return;
-    }
-
-    try
-    {
-        for (const auto& entry : dirIterator)
-        {
-            if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
-            {
-                try
-                {
-                    icDebug("Loading SBMD spec: %s", entry.path().c_str());
-
-                    auto spec = SbmdParser::ParseFile(entry.path().string());
-                    if (!spec)
-                    {
-                        icError("Failed to parse SBMD spec: %s", entry.path().c_str());
-                        allRegistered = false;
-                        continue;
-                    }
-
-                    auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(spec);
-
-                    if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
-                    {
-                        icError("FATAL: Failed to register SBMD driver from: %s. "
-                                "This is a fatal error. Matter subsystem will not be ready.",
-                                entry.path().c_str());
-                        allRegistered = false;
-                        continue;
-                    }
-
-                    icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
-                }
-                catch (const std::exception& e)
-                {
-                    icError("Exception loading SBMD spec %s: %s", entry.path().c_str(), e.what());
-                    allRegistered = false;
-                }
-            }
-        }
-    }
-    catch (const std::filesystem::filesystem_error& e)
-    {
-        icError("Filesystem error during SBMD directory iteration: %s", e.what());
-        allRegistered = false;
-    }
-}
-
-void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, bool &allRegistered)
-{
-    std::error_code ec;
-
-    if (!std::filesystem::exists(dirPath, ec) || ec)
-    {
-        return; // V3 method already logged this
     }
 
     if (!std::filesystem::is_directory(dirPath, ec) || ec)

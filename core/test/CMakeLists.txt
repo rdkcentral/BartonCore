@@ -157,16 +157,6 @@ if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
 
-    bcore_add_cmocka_test(
-        NAME sbmdParserTest
-        INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/..
-        TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdParserTest.cpp
-        LINK_LIBRARIES BartonCoreStatic yaml-cpp
-    )
-
-    if (TARGET sbmdParserTest)
-        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/v3-pending/")
-    endif()
 
     bcore_add_cpp_test(
         NAME testMatterDeviceEndpointMap

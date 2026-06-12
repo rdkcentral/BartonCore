@@ -979,97 +979,6 @@
     };
 
     /**
-     * Response helpers for SBMD scripts
-     */
-    var Response =
-    {
-        /**
-         * Create an invoke (command) response
-         * @param {number} clusterId - Matter cluster ID
-         * @param {number} commandId - Matter command ID
-         * @param {string} [tlvBase64] - Optional base64 TLV payload for command arguments.
-         *   Omit for no-argument commands (e.g. On, Off, Toggle).
-         * @param {Object} [options] - Optional settings: endpointId, timedInvokeTimeoutMs
-         * @returns {Object} Invoke response object
-         */
-        invoke: function(clusterId, commandId, tlvBase64, options)
-        {
-            var result =
-            {
-                invoke:
-                {
-                    clusterId: clusterId,
-                    commandId: commandId
-                }
-            };
-
-            if (tlvBase64)
-            {
-                result.invoke.tlvBase64 = tlvBase64;
-            }
-
-            if (options)
-            {
-                if (options.endpointId !== undefined)
-                {
-                    result.invoke.endpointId = options.endpointId;
-                }
-                if (options.timedInvokeTimeoutMs !== undefined)
-                {
-                    result.invoke.timedInvokeTimeoutMs = options.timedInvokeTimeoutMs;
-                }
-            }
-
-            return result;
-        },
-
-        /**
-         * Create a write (attribute) response
-         * @param {number} clusterId - Matter cluster ID
-         * @param {number} attributeId - Matter attribute ID
-         * @param {string} tlvBase64 - Base64 TLV payload
-         * @param {Object} [options] - Optional settings: endpointId
-         * @returns {Object} Write response object
-         */
-        write: function(clusterId, attributeId, tlvBase64, options)
-        {
-            var result =
-            {
-                write:
-                {
-                    clusterId: clusterId,
-                    attributeId: attributeId,
-                    tlvBase64: tlvBase64
-                }
-            };
-
-            if (options && options.endpointId !== undefined)
-            {
-                result.write.endpointId = options.endpointId;
-            }
-
-            return result;
-        },
-
-        /**
-         * Create a resource-value response (v3.0 format).
-         * Use in read, event, and command-response mappers to return a Barton resource value.
-         * @param {string|number|boolean} v - Resource value (coerced to string)
-         * @returns {Object} Value response object: { value: string }
-         */
-        value: function(v) { return { value: String(v) }; },
-
-        /**
-         * Create an error response.
-         * The engine treats this as a script failure; handling depends on the call context
-         * (e.g. aborts a write/execute, or logs and skips an update for attribute/event reads).
-         * @param {string} msg - Human-readable error message
-         * @returns {Object} Error response object: { error: string }
-         */
-        error: function(msg) { return { error: msg }; }
-    };
-
-    /**
      * Result builder for v4 handlers.
      *
      * Usage:
@@ -1351,7 +1260,6 @@
     {
         Base64: Base64,
         Tlv: Tlv,
-        Response: Response,
         TLV_TYPE: TLV_TYPE,
         result: createResultBuilder
     };
