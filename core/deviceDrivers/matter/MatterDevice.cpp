@@ -1332,6 +1332,28 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
             return;
         }
 
+        // Handle ResourceUpdate (local-only execute: return value without a Matter interaction)
+        if (std::holds_alternative<ScriptResult::ResourceUpdate>(executeScriptResult.Operation()))
+        {
+            const auto &update = std::get<ScriptResult::ResourceUpdate>(executeScriptResult.Operation());
+
+            if (response != nullptr)
+            {
+                *response = strdup(update.value.c_str());
+            }
+            else
+            {
+                icWarn("Execute mapper produced value \"%s\" but no response pointer available for URI: %s",
+                       update.value.c_str(),
+                       resource->uri);
+            }
+
+            std::promise<bool> operationOK;
+            operationOK.set_value(true);
+            promises.push_front(std::move(operationOK));
+            return;
+        }
+
         if (!std::holds_alternative<ScriptWriteResult>(executeScriptResult.Operation()))
         {
             icError("Execute mapper returned unexpected operation type for URI: %s", resource->uri);
@@ -1340,7 +1362,6 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
         }
 
         const ScriptWriteResult &result = std::get<ScriptWriteResult>(executeScriptResult.Operation());
-
         // Determine the endpoint to use
         chip::EndpointId endpointId;
         if (result.endpointId.has_value())

@@ -860,6 +860,11 @@ sbmdCommandArgs = {
 
 #### Expected Output
 
+Execute mappers must return either an `invoke` object (to send a Matter command),
+a `value` object (for local-only operations that return a value without
+any Matter interaction), or an `error` object to signal failure.
+
+**Invoke (sends a Matter command):**
 ```javascript
 return {
     invoke: {
@@ -870,6 +875,25 @@ return {
     }
 };
 ```
+
+**Value (local-only, no Matter interaction):**
+```javascript
+return {
+    value: "value"  // Value returned directly to the caller
+};
+```
+
+**Error (signals failure to the caller):**
+```javascript
+return {
+    error: "description of what went wrong"
+};
+```
+
+Use `SbmdUtils.Response.invoke()`, `SbmdUtils.Response.value()`, or
+`SbmdUtils.Response.error()` helpers.
+The `SessionManager` utility (`SbmdUtils.SessionManager.getForDevice(sbmdCommandArgs.deviceUuid)`)
+provides per-device session lifecycle management for value-based execute mappers.
 
 #### Examples
 
