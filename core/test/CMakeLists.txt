@@ -165,7 +165,7 @@ if (BCORE_MATTER)
     )
 
     if (TARGET sbmdParserTest)
-        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
+        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/v3-pending/")
     endif()
 
     bcore_add_cpp_test(
@@ -235,6 +235,21 @@ if (BCORE_MATTER)
         target_compile_options(testSbmdScript PRIVATE
             -UBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
             -DBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS=100)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testResultBuilder
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ResultBuilderTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testResultBuilder)
+        target_link_libraries(testResultBuilder bCoreConfig)
     endif()
 
     bcore_add_cpp_test(

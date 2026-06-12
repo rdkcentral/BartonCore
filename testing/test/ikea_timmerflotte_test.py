@@ -45,7 +45,10 @@ from testing.mocks.devices.matter.matter_ikea_timmerflotte import (
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.requires_matterjs
+pytestmark = [
+    pytest.mark.requires_matterjs,
+    pytest.mark.skip(reason="pending SBMD v4 conversion"),
+]
 
 
 # ================================================================

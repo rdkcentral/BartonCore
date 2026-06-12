@@ -9,15 +9,15 @@
 
 ## 2. Staging — Move v3 Drivers Aside
 
-- [ ] 2.1 Move all `.sbmd` files from `core/deviceDrivers/matter/sbmd/specs/` to `core/deviceDrivers/matter/sbmd/specs/v3-pending/`.
-- [ ] 2.2 Disable non-light integration tests by adding a `@pytest.mark.skip(reason="pending v4 conversion")` or equivalent exclusion for thermostat, door-lock, contact-sensor, temperature-sensor, humidity-sensor, occupancy-sensor, air-quality-sensor, water-leak-detector, and IKEA Timmerflotte test files.
-- [ ] 2.3 Verify the build succeeds with no `.sbmd` files in the active specs directory and only light tests enabled.
+- [x] 2.1 Move all `.sbmd` files from `core/deviceDrivers/matter/sbmd/specs/` to `core/deviceDrivers/matter/sbmd/specs/v3-pending/`.
+- [x] 2.2 Disable non-light integration tests by adding a `@pytest.mark.skip(reason="pending v4 conversion")` or equivalent exclusion for thermostat, door-lock, contact-sensor, temperature-sensor, humidity-sensor, occupancy-sensor, air-quality-sensor, water-leak-detector, and IKEA Timmerflotte test files.
+- [x] 2.3 Verify the build succeeds with no `.sbmd` files in the active specs directory and only light tests enabled.
 
 ## 3. Result Builder — `SbmdUtils.result()`
 
-- [ ] 3.1 Implement `SbmdUtils.result()` in `sbmd-utils.js` — mutable builder with `dataModel.updateResource()` (2/3/4-arg), `dataModel.setMetadata()`, `storage.setPersistentData()`, `storage.setTransientData()`, `device.sendCommand()`, `device.writeAttribute()`, `device.requestCommand()`, `device.readAttribute()`, `log()`, `success()`, `error()`. Non-terminals return builder, terminals return raw `{ops, terminal}` object.
-- [ ] 3.2 Remove v3 `SbmdUtils.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`.
-- [ ] 3.3 Write JS-level unit tests for the result builder — verify chain structure, terminal enforcement, operation ordering, all operation types. (Can be run via mquickjs in a C++ test harness.)
+- [x] 3.1 Implement `SbmdUtils.result()` in `sbmd-utils.js` — mutable builder with `dataModel.updateResource()` (2/3/4-arg), `dataModel.setMetadata()`, `storage.setPersistentData()`, `storage.setTransientData()`, `device.sendCommand()`, `device.writeAttribute()`, `device.requestCommand()`, `device.readAttribute()`, `log()`, `success()`, `error()`. Non-terminals return builder, terminals return raw `{ops, terminal}` object.
+- [ ] 3.2 Remove v3 `SbmdUtils.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`. (deferred to task group 13 — v3 tests still reference these)
+- [x] 3.3 Write JS-level unit tests for the result builder — verify chain structure, terminal enforcement, operation ordering, all operation types. (Can be run via mquickjs in a C++ test harness.)
 
 ## 4. SbmdDriver() Registration System
 

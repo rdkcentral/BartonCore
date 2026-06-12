@@ -35,7 +35,10 @@ from testing.utils.barton_utils import (
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.requires_matterjs
+pytestmark = [
+    pytest.mark.requires_matterjs,
+    pytest.mark.skip(reason="pending SBMD v4 conversion"),
+]
 
 
 def _commission_door_lock(default_environment, matter_door_lock):
