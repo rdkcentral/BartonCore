@@ -27,7 +27,11 @@
 
 #pragma once
 
+#include "SbmdV4Driver.h"
+
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace barton
 {
@@ -43,6 +47,7 @@ namespace barton
         /**
          * Register SBMD drivers from all configured directories.
          * Directories are specified as a semicolon-delimited list.
+         * Loads both v3 (.sbmd) and v4 (.sbmd.js) drivers.
          */
         bool RegisterDrivers();
 
@@ -51,8 +56,20 @@ namespace barton
         ~SbmdFactory() = default;
 
         /**
-         * Load and register SBMD drivers from a single directory.
+         * Load and register v3 SBMD drivers (.sbmd) from a single directory.
          */
-        static void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+        static void RegisterV3DriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+
+        /**
+         * Load and register v4 SBMD drivers (.sbmd.js) from a single directory.
+         * V4 drivers are activated immediately and stored in v4Drivers for lifetime management.
+         */
+        void RegisterV4DriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+
+        /**
+         * Owned v4 driver instances. These must outlive the SpecBasedMatterDeviceDriver
+         * instances that reference them (those are owned by the C device manager).
+         */
+        std::vector<std::unique_ptr<SbmdV4Driver>> v4Drivers;
     };
 } //namespace barton
