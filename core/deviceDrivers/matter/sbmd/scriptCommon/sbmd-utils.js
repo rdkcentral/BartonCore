@@ -1073,7 +1073,7 @@
     function SessionManager()
     {
         this.nextId = 1;
-        this.sessions = {};
+        this.sessions = Object.create(null);
     }
 
     /**
@@ -1105,7 +1105,7 @@
     SessionManager.prototype.destroy = function(id) {
         var key = String(id);
 
-        if (this.sessions.hasOwnProperty(key))
+        if (key in this.sessions)
         {
             delete this.sessions[key];
 
