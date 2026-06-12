@@ -693,18 +693,9 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
             tlvLength = decoded;
         }
 
-        // Build SbmdCommand and send
-        SbmdCommand sbmdCmd;
-        sbmdCmd.clusterId = cmd.clusterId;
-        sbmdCmd.commandId = cmd.commandId;
-        sbmdCmd.name = "sbmd-command";
-
-        if (cmd.timedInvokeTimeoutMs.has_value())
-        {
-            sbmdCmd.timedInvokeTimeoutMs = cmd.timedInvokeTimeoutMs.value();
-        }
-
-        if (!device.SendCommandFromTlv(promises, sbmdCmd, endpointId, tlvBuffer, tlvLength,
+        if (!device.SendCommandFromTlv(promises, cmd.clusterId, cmd.commandId,
+                                       cmd.timedInvokeTimeoutMs, endpointId,
+                                       tlvBuffer, tlvLength,
                                        exchangeMgr, sessionHandle, uri, executeResponse))
         {
             FailOperation(promises);

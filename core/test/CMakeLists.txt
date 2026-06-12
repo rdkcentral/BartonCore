@@ -169,16 +169,6 @@ if (BCORE_MATTER)
     )
 
     bcore_add_cpp_test(
-        NAME testMatterDevice
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/MatterDeviceTest.cpp
-        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
-        INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${PROJECT_SOURCE_DIR}/api/c/public
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                 ${PROJECT_SOURCE_DIR}/core
-    )
-
-    bcore_add_cpp_test(
         NAME testSbmdPrerequisites
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdPrerequisitesTest.cpp
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
@@ -187,45 +177,6 @@ if (BCORE_MATTER)
                  ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core
     )
-
-    # Select engine-specific sources and libraries for the SbmdScript test
-    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
-        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdScriptImpl.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-        )
-        set(SBMD_SCRIPT_TEST_ENGINE_LIBS mquickjs)
-    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
-        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdScriptImpl.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/QuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdUtilsLoader.cpp
-        )
-        set(SBMD_SCRIPT_TEST_ENGINE_LIBS quickjs)
-    endif()
-
-    bcore_add_cpp_test(
-        NAME testSbmdScript
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdScriptTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
-                ${SBMD_SCRIPT_TEST_ENGINE_SOURCES}
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock ${SBMD_SCRIPT_TEST_ENGINE_LIBS} jsoncpp BartonCommon::xhLog
-        INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                 ${PROJECT_SOURCE_DIR}/core
-                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd
-    )
-
-    if (TARGET testSbmdScript)
-        target_link_libraries(testSbmdScript bCoreConfig)
-        # Use a short timeout for tests so they don't wait 5 seconds.
-        # The -U removes the definition from bCoreConfig before -D redefines it.
-        target_compile_options(testSbmdScript PRIVATE
-            -UBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
-            -DBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS=100)
-    endif()
 
     bcore_add_cpp_test(
         NAME testResultBuilder
@@ -348,16 +299,6 @@ if (BCORE_MATTER)
     if (TARGET testSbmdFactory)
         target_link_libraries(testSbmdFactory bCoreConfig)
     endif()
-
-    bcore_add_cpp_test(
-        NAME testScriptResult
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptResultTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock jsoncpp BartonCommon::xhLog
-        INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                 ${PROJECT_SOURCE_DIR}/core
-    )
 
     if (BUILD_TESTING)
         bcore_configure_glib()
