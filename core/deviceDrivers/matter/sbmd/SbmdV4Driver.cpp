@@ -1,0 +1,229 @@
+//------------------------------ tabstop = 4 ----------------------------------
+//
+// If not stated otherwise in this file or this component's LICENSE file the
+// following copyright and licenses apply:
+//
+// Copyright 2026 Comcast Cable Communications Management, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//------------------------------ tabstop = 4 ----------------------------------
+
+/*
+ * Created by tlea on 6/12/2026
+ */
+
+#define LOG_TAG "SbmdV4Driver"
+#define logFmt(fmt) "(%s): " fmt, __func__
+
+#include "SbmdV4Driver.h"
+#include "mquickjs/SbmdV4Loader.h"
+
+extern "C" {
+#include <icLog/logging.h>
+}
+
+namespace barton
+{
+    SbmdV4Driver::SbmdV4Driver(std::unique_ptr<SbmdV4Registration> registration, std::string source)
+        : registration(std::move(registration)), source(std::move(source))
+    {
+    }
+
+    SbmdV4Driver::~SbmdV4Driver()
+    {
+        // If still activated at destruction, the GC refs are leaked.
+        // This shouldn't happen in normal operation.
+        if (registration && registration->activated)
+        {
+            icWarn("driver '%s' destroyed while still activated", registration->name.c_str());
+        }
+    }
+
+    bool SbmdV4Driver::Activate(JSContext *ctx)
+    {
+        if (registration->activated)
+        {
+            icWarn("driver '%s' already activated", registration->name.c_str());
+            return true;
+        }
+
+        icDebug("activating driver '%s'", registration->name.c_str());
+
+        // Re-evaluate the source to get fresh handler JSValues
+        auto freshReg = SbmdV4Loader::LoadDriver(ctx, registration->filePath, source.c_str(), source.size());
+
+        if (!freshReg)
+        {
+            icError("failed to re-evaluate driver '%s' during activation", registration->name.c_str());
+            return false;
+        }
+
+        // Replace registration with the fresh one (preserves metadata, gets new handler JSValues)
+        registration = std::move(freshReg);
+
+        // GC-root all handler JSValues
+        RootHandlers(ctx);
+
+        registration->activated = true;
+        icDebug("driver '%s' activated with %zu GC roots", registration->name.c_str(), gcRefs.size());
+
+        return true;
+    }
+
+    void SbmdV4Driver::Deactivate(JSContext *ctx)
+    {
+        if (!registration->activated)
+        {
+            icWarn("driver '%s' already deactivated", registration->name.c_str());
+            return;
+        }
+
+        icDebug("deactivating driver '%s'", registration->name.c_str());
+
+        UnrootHandlers(ctx);
+
+        registration->activated = false;
+    }
+
+    bool SbmdV4Driver::IsActivated() const
+    {
+        return registration && registration->activated;
+    }
+
+    const SbmdV4Registration &SbmdV4Driver::GetRegistration() const
+    {
+        return *registration;
+    }
+
+    const std::string &SbmdV4Driver::GetName() const
+    {
+        return registration->name;
+    }
+
+    void SbmdV4Driver::RootIfValid(JSContext *ctx, JSValue &handler)
+    {
+        if (JS_IsUndefined(handler))
+        {
+            return;
+        }
+
+        auto &ref = gcRefs.emplace_back();
+        ref.val = handler;
+        JS_AddGCRef(ctx, &ref);
+    }
+
+    void SbmdV4Driver::RootHandlers(JSContext *ctx)
+    {
+        gcRefs.clear();
+
+        // Root resource handlers across all endpoints
+        for (auto &endpoint : registration->endpoints)
+        {
+            for (auto &resource : endpoint.resources)
+            {
+                if (resource.seed.has_value())
+                {
+                    RootIfValid(ctx, resource.seed->handler);
+                }
+
+                if (resource.read.has_value())
+                {
+                    RootIfValid(ctx, resource.read->handler);
+                }
+
+                if (resource.write.has_value())
+                {
+                    RootIfValid(ctx, resource.write->handler);
+                }
+
+                if (resource.execute.has_value())
+                {
+                    RootIfValid(ctx, resource.execute->handler);
+                }
+            }
+        }
+
+        // Root device handlers (attribute, event, command)
+        for (auto &handler : registration->attributeHandlers)
+        {
+            RootIfValid(ctx, handler.handler);
+        }
+
+        for (auto &handler : registration->eventHandlers)
+        {
+            RootIfValid(ctx, handler.handler);
+        }
+
+        for (auto &handler : registration->commandHandlers)
+        {
+            RootIfValid(ctx, handler.handler);
+        }
+    }
+
+    void SbmdV4Driver::UnrootHandlers(JSContext *ctx)
+    {
+        // Remove all GC roots
+        for (auto &ref : gcRefs)
+        {
+            JS_DeleteGCRef(ctx, &ref);
+        }
+
+        gcRefs.clear();
+
+        // Reset handler JSValues to undefined
+        for (auto &endpoint : registration->endpoints)
+        {
+            for (auto &resource : endpoint.resources)
+            {
+                if (resource.seed.has_value())
+                {
+                    resource.seed->handler = JS_UNDEFINED;
+                }
+
+                if (resource.read.has_value())
+                {
+                    resource.read->handler = JS_UNDEFINED;
+                }
+
+                if (resource.write.has_value())
+                {
+                    resource.write->handler = JS_UNDEFINED;
+                }
+
+                if (resource.execute.has_value())
+                {
+                    resource.execute->handler = JS_UNDEFINED;
+                }
+            }
+        }
+
+        for (auto &handler : registration->attributeHandlers)
+        {
+            handler.handler = JS_UNDEFINED;
+        }
+
+        for (auto &handler : registration->eventHandlers)
+        {
+            handler.handler = JS_UNDEFINED;
+        }
+
+        for (auto &handler : registration->commandHandlers)
+        {
+            handler.handler = JS_UNDEFINED;
+        }
+    }
+
+} // namespace barton

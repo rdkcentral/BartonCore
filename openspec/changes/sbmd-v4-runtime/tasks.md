@@ -31,12 +31,12 @@
 
 ## 5. Driver Lifecycle — Activate / Deactivate
 
-- [ ] 5.1 Create driver state model — metadata-only (inactive) vs handlers-rooted (active). Store file path or source text for re-evaluation on activation.
-- [ ] 5.2 Implement `Activate()` — re-evaluate `.sbmd.js` file, GC-root handler JSValues via `JS_AddGCRef`. Build dispatch tables (attribute, event, command lookups).
-- [ ] 5.3 Implement `Deactivate()` — release GC roots via `JS_DeleteGCRef`, clear dispatch tables.
+- [x] 5.1 Create driver state model — metadata-only (inactive) vs handlers-rooted (active). Store file path or source text for re-evaluation on activation.
+- [x] 5.2 Implement `Activate()` — re-evaluate `.sbmd.js` file, GC-root handler JSValues via `JS_AddGCRef`. Build dispatch tables (attribute, event, command lookups).
+- [x] 5.3 Implement `Deactivate()` — release GC roots via `JS_DeleteGCRef`, clear dispatch tables.
 - [ ] 5.4 Integrate with `SbmdFactory::RegisterDrivers()` — at startup, load all drivers as metadata-only. Then activate drivers that have paired devices in the database.
 - [ ] 5.5 Integrate with commissioning flow — activate candidate drivers before claiming, deactivate losers that end up with no devices.
-- [ ] 5.6 Write unit tests for activate/deactivate lifecycle — verify handlers are callable after activation, verify GC roots released after deactivation.
+- [x] 5.6 Write unit tests for activate/deactivate lifecycle — verify handlers are callable after activation, verify GC roots released after deactivation.
 
 ## 6. Handler Dispatch and Supplements
 
