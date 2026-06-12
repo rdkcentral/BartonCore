@@ -66,6 +66,20 @@ namespace
         EXPECT_EQ(cache->GetLastReportCompletedTimestamp(), 0);
     }
 
+    // Test: GetVendorId returns error when cache is not initialized
+    TEST_F(DeviceDataCacheTest, GetVendorIdWhenNotInitialized)
+    {
+        uint16_t value;
+        EXPECT_NE(cache->GetVendorId(value), CHIP_NO_ERROR);
+    }
+
+    // Test: GetProductId returns error when cache is not initialized
+    TEST_F(DeviceDataCacheTest, GetProductIdWhenNotInitialized)
+    {
+        uint16_t value;
+        EXPECT_NE(cache->GetProductId(value), CHIP_NO_ERROR);
+    }
+
     // Test: GetVendorName returns error when cache is not initialized
     TEST_F(DeviceDataCacheTest, GetVendorNameWhenNotInitialized)
     {

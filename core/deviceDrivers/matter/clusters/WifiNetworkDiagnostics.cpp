@@ -55,10 +55,10 @@ bool WifiNetworkDiagnostics::GetRssi(void *context,
     using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
     using TypeInfo = Attributes::Rssi::TypeInfo;
 
-    // Per Matter 1.4 11.15.6, the RSSI attribute is not reportable, so its value is not populated in the cache via
-    // subscription reports. Therefore, we must read it on-demand.
-    // This context pointer is passed to the read attribute callback, which will be responsible for deleting it. However,
-    // if the ReadAttribute request fails to be sent, then we must delete it here.
+    // Per Matter 1.4 11.15.6, changes to the RSSI attribute are not reportable, so its value is not populated in the
+    // cache via subscription reports. Therefore, we must read it on-demand. This context pointer is passed to the read
+    // attribute callback, which will be responsible for deleting it. However, if the ReadAttribute request fails to be
+    // sent, then we must delete it here.
     auto rssiReadContext = new OnDemandReadContext(context, eventHandler, deviceId);
 
     chip::Controller::ClusterBase cluster(exchangeMgr, sessionHandle, endpointId);
@@ -98,4 +98,42 @@ bool WifiNetworkDiagnostics::GetRssi(void *context,
     }
 
     return true;
-};
+}
+
+void WifiNetworkDiagnostics::OnAttributeChanged(chip::app::ClusterStateCache *cache,
+                                                const chip::app::ConcreteAttributePath &path)
+{
+    using namespace chip::app;
+    using namespace chip::app::Clusters::WiFiNetworkDiagnostics;
+
+    if (path.mEndpointId != endpointId || path.mClusterId != Clusters::WiFiNetworkDiagnostics::Id)
+    {
+        return;
+    }
+
+    switch (path.mAttributeId)
+    {
+        // While changes to the RSSI value are not reportable, its value is still reported in the initial priming
+        // report when the subscription is established, so that must be handled here to populate the resource at startup.
+        case Attributes::Rssi::Id:
+        {
+            using TypeInfo = Attributes::Rssi::TypeInfo;
+
+            TypeInfo::DecodableType value;
+            CHIP_ERROR error = cache->Get<TypeInfo>(path, value);
+            if (error == CHIP_NO_ERROR)
+            {
+                static_cast<WifiNetworkDiagnostics::EventHandler *>(eventHandler)
+                    ->RssiReported(deviceId, value.IsNull() ? nullptr : &value.Value());
+            }
+            else
+            {
+                icError("Failed to read Rssi attribute for device %s: %s", deviceId.c_str(), error.AsString());
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+}

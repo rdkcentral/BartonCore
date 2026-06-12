@@ -30,6 +30,7 @@
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
 #include "SbmdSpec.h"
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -43,12 +44,21 @@ namespace barton
         SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
+        uint16_t GetSupportedVendorId() const override;
+        uint16_t GetSupportedProductId() const override;
+        bool IsVendorSpecificDriver() const override;
+
         bool AddDevice(std::unique_ptr<MatterDevice> device) override;
 
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
         bool DoRegisterResources(icDevice *device) override;
+
+        void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                 const std::string &deviceId,
+                                 chip::Messaging::ExchangeManager &exchangeMgr,
+                                 const chip::SessionHandle &sessionHandle) override;
 
         void DoReadResource(std::forward_list<std::promise<bool>> &promises,
                             const std::string &deviceId,
@@ -57,13 +67,13 @@ namespace barton
                             chip::Messaging::ExchangeManager &exchangeMgr,
                             const chip::SessionHandle &sessionHandle) override;
 
-        bool WriteResource(std::forward_list<std::promise<bool>> &promises,
-                           const std::string &deviceId,
-                           icDeviceResource *resource,
-                           const char *previousValue,
-                           const char *newValue,
-                           chip::Messaging::ExchangeManager &exchangeMgr,
-                           const chip::SessionHandle &sessionHandle) override;
+        bool DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                             const std::string &deviceId,
+                             icDeviceResource *resource,
+                             const char *previousValue,
+                             const char *newValue,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle) override;
 
         void ExecuteResource(std::forward_list<std::promise<bool>> &promises,
                              const std::string &deviceId,
@@ -91,6 +101,14 @@ namespace barton
          */
         void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
 
+        /**
+         * Seed the initial values of all seedFrom resources for a device from the attribute cache.
+         * Called at configure and synchronize time, after bindings are established and the cache is primed.
+         * Skips resources that were marked as optional and not registered.
+         * @param deviceId The device ID
+         */
+        void SeedInitialResourceValues(const std::string &deviceId);
+
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
 
         /**
@@ -99,8 +117,33 @@ namespace barton
          */
         static std::string MakeResourceKey(const SbmdResource &resource);
 
+        /**
+         * Iterate all spec resources, skipping those marked optional and missing for deviceId.
+         * Calls callback for each non-skipped resource. For device-level resources, the
+         * SbmdEndpoint pointer is nullptr. For endpoint-level resources, it points to the
+         * containing endpoint.
+         *
+         * @param deviceId The device ID used to look up the skipped-resource set
+         * @param callback Called for each non-skipped resource
+         */
+        void ForEachNonSkippedResource(
+            const std::string &deviceId,
+            const std::function<void(const SbmdResource &, const SbmdEndpoint *)> &callback) const;
+
+        /**
+         * Check whether all prerequisites declared by a resource are satisfied by the device's data cache.
+         * Resources with an empty prerequisites vector (prerequisites: none) always satisfy the check.
+         *
+         * @param resource The resource whose prerequisites to evaluate
+         * @param device   The commissioned device whose data cache is queried
+         * @return true if all prerequisites are met, false if any prerequisite is unmet
+         */
+        static bool CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device);
+
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
          * configuration */
         std::map<std::string, std::set<std::string>> skippedOptionalResources;
+
+        friend class TestableSpecBasedMatterDeviceDriver;
     };
 } // namespace barton

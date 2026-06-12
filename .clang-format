@@ -109,6 +109,7 @@ SpacesInConditionalStatement: false
 SpacesInContainerLiterals: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
+SeparateDefinitionBlocks: Always
 TabWidth: 4
 UseCRLF: false
 UseTab: Never

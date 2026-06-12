@@ -225,7 +225,7 @@ gchar *deviceServiceConfigurationGetMatterAttestationTrustStoreDir(void)
     return retVal;
 }
 
-gchar *deviceServiceConfigurationGetSbmdDir(void)
+gchar *deviceServiceConfigurationGetSbmdDirs(void)
 {
     LOCK_SCOPE(deviceServiceConfigurationMutex);
 
@@ -237,7 +237,7 @@ gchar *deviceServiceConfigurationGetSbmdDir(void)
 
     gchar *retVal = NULL;
     g_object_get(initializeParams,
-                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIR],
+                 B_CORE_INITIALIZE_PARAMS_CONTAINER_PROPERTY_NAMES[B_CORE_INITIALIZE_PARAMS_CONTAINER_PROP_SBMD_DIRS],
                  &retVal,
                  NULL);
 

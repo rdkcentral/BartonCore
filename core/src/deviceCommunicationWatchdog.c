@@ -129,7 +129,10 @@ void deviceCommunicationWatchdogInit(deviceCommunicationWatchdogCommFailedCallba
 
 void deviceCommunicationWatchdogSetMonitorInterval(uint32_t seconds)
 {
+    pthread_mutex_lock(&controlMutex);
     monitorThreadSleepSeconds = seconds;
+    pthread_cond_broadcast(&controlCond);
+    pthread_mutex_unlock(&controlMutex);
 }
 
 void deviceCommunicationWatchdogTerm()
@@ -145,6 +148,12 @@ void deviceCommunicationWatchdogTerm()
 
     running = false;
 
+    // NULL out callbacks while still holding controlMutex — prevents other
+    // threads (PetDevice, ForceDeviceInCommFail) from invoking callbacks
+    // into half-torn-down subsystems during shutdown.
+    failedCallback = NULL;
+    restoredCallback = NULL;
+
     pthread_cond_broadcast(&controlCond);
 
     pthread_mutex_unlock(&controlMutex);
@@ -158,9 +167,6 @@ void deviceCommunicationWatchdogTerm()
     g_hash_table_destroy(monitoredDevices);
     monitoredDevices = NULL;
     pthread_mutex_unlock(&monitoredDevicesMutex);
-
-    failedCallback = NULL;
-    restoredCallback = NULL;
 
     observabilityCounterRelease(commFailCounter);
     commFailCounter = NULL;
@@ -261,7 +267,16 @@ void deviceCommunicationWatchdogPetDevice(const char *uuid)
 
     if (doNotify == true)
     {
-        restoredCallback(uuid);
+        void (*restoredCb)(const char *) = NULL;
+
+        pthread_mutex_lock(&controlMutex);
+        restoredCb = restoredCallback;
+        pthread_mutex_unlock(&controlMutex);
+
+        if (restoredCb)
+        {
+            restoredCb(uuid);
+        }
     }
 }
 
@@ -315,7 +330,16 @@ void deviceCommunicationWatchdogForceDeviceInCommFail(const char *uuid)
 
     if (doNotify == true)
     {
-        failedCallback(uuid);
+        void (*failedCb)(const char *) = NULL;
+
+        pthread_mutex_lock(&controlMutex);
+        failedCb = failedCallback;
+        pthread_mutex_unlock(&controlMutex);
+
+        if (failedCb)
+        {
+            failedCb(uuid);
+        }
     }
 }
 
@@ -473,6 +497,16 @@ static void *commFailWatchdogThreadProc(void *arg)
             incrementalCondTimedWaitMillis(&controlCond, &controlMutex, monitorThreadSleepSeconds);
         }
 
+        // Re-check running after wakeup — if Term() signaled us, exit
+        // immediately rather than iterating devices and calling into
+        // potentially half-torn-down subsystems.
+        if (!running)
+        {
+            icInfo("exiting after Term signal");
+            pthread_mutex_unlock(&controlMutex);
+            break;
+        }
+
         bool isCommfailFast = fastCommFailTimer;
 
         pthread_mutex_unlock(&controlMutex);
@@ -536,8 +570,17 @@ static void *commFailWatchdogThreadProc(void *arg)
         while (iter < uuidsInCommFail->len)
         {
             gchar *commFailUuid = g_ptr_array_index(uuidsInCommFail, iter);
-            icLogDebug(LOG_TAG, "%s: notifying callback of comm fail on %s", __FUNCTION__, commFailUuid);
-            failedCallback(commFailUuid);
+            void (*failedCb)(const char *) = NULL;
+
+            pthread_mutex_lock(&controlMutex);
+            failedCb = failedCallback;
+            pthread_mutex_unlock(&controlMutex);
+
+            if (failedCb)
+            {
+                icDebug("notifying callback of comm fail on %s", commFailUuid);
+                failedCb(commFailUuid);
+            }
             iter++;
         }
 

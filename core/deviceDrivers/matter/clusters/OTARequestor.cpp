@@ -184,7 +184,7 @@ namespace barton
         icDebug();
 
         // FIXME: exchangeMgr const_cast goes away with Matter 1.1+
-        auto writeClient = new chip::app::WriteClient(
+        auto writeClient = std::make_unique<chip::app::WriteClient>(
             const_cast<chip::Messaging::ExchangeManager *>(&exchangeMgr), this, chip::Optional<uint16_t>::Missing());
 
         chip::app::AttributePathParams attributePathParams;
@@ -200,11 +200,9 @@ namespace barton
         if (err != CHIP_NO_ERROR)
         {
             icError("Failed to encode attribute");
-
-            delete writeClient;
             return false;
         }
 
-        return SendWriteRequest(writeClient, sessionHandle, context);
+        return SendWriteRequest(std::move(writeClient), sessionHandle, context);
     }
 } // namespace barton

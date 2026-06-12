@@ -96,7 +96,7 @@ namespace barton
         gint64 commissionStartTime = g_get_monotonic_time();
         observabilityCounterAdd(commissioningAttemptCounter, 1);
 
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
         Reset();
         setupPayload = setupPayloadStr;
         SetCommissioningStatus(Pending);
@@ -113,7 +113,7 @@ namespace barton
             std::chrono::system_clock::now() + std::chrono::duration_cast<std::chrono::seconds>(duration);
 
         // wait until timeout or until commissioningStatus reaches one of our two exit values
-        if (!cond.wait_until(lock_guard, waitingUntil, [this]() {
+        if (!cond.wait_until(lockGuard, waitingUntil, [this]() {
                 return (this->commissioningStatus == CommissionedSuccessfully ||
                         this->commissioningStatus == CommissioningFailed);
             }))
@@ -133,7 +133,7 @@ namespace barton
 
         auto endStatus = this->commissioningStatus;
 
-        lock_guard.unlock();
+        lockGuard.unlock();
 
         double durationSecs = (double) (g_get_monotonic_time() - commissionStartTime) / G_USEC_PER_SEC;
         observabilityHistogramRecord(commissioningDurationHistogram, durationSecs);
@@ -170,7 +170,7 @@ namespace barton
             return false;
         }
 
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
 
         this->finalNodeId = nodeId;
         std::chrono::duration<uint16_t> duration(timeoutSeconds);
@@ -215,8 +215,7 @@ namespace barton
                 deviceDataCache->GetHardwareVersionString(hardwareVersion);
                 deviceDataCache->GetSoftwareVersionString(firmwareVersion);
 
-                std::unique_ptr<MatterDevice> device =
-                    std::make_unique<MatterDevice>(uuid, deviceDataCache);
+                std::unique_ptr<MatterDevice> device = std::make_unique<MatterDevice>(uuid, deviceDataCache);
 
                 // Transfer ownership to driver
                 if (!driver->AddDevice(std::move(device)))
@@ -228,18 +227,16 @@ namespace barton
                 }
 
                 // these are device service details (technology neutral)
-                DeviceFoundDetails details {
-                    .deviceDriver = driver->GetDriver(),
-                    .subsystem = MATTER_SUBSYSTEM_NAME,
-                    .deviceClass = driver->GetDeviceClass(),
-                    .deviceClassVersion = driver->GetDeviceClassVersion(),
-                    .deviceUuid = uuid.c_str(),
-                    .manufacturer = manufacturer.c_str(),
-                    .model = model.c_str(),
-                    .hardwareVersion = hardwareVersion.c_str(),
-                    .firmwareVersion = firmwareVersion.c_str(),
-                    .endpointProfileMap = nullptr
-                };
+                DeviceFoundDetails details {.deviceDriver = driver->GetDriver(),
+                                            .subsystem = MATTER_SUBSYSTEM_NAME,
+                                            .deviceClass = driver->GetDeviceClass(),
+                                            .deviceClassVersion = driver->GetDeviceClassVersion(),
+                                            .deviceUuid = uuid.c_str(),
+                                            .manufacturer = manufacturer.c_str(),
+                                            .model = model.c_str(),
+                                            .hardwareVersion = hardwareVersion.c_str(),
+                                            .firmwareVersion = firmwareVersion.c_str(),
+                                            .endpointProfileMap = nullptr};
 
                 if (deviceServiceDeviceFound(&details, true))
                 {
@@ -329,7 +326,7 @@ namespace barton
         Matter &matter = Matter::GetInstance(); // for readability
         chip::NodeId randomId = Matter::GetRandomOperationalNodeId();
 
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
 
         SetupPayload parsedPayload;
         if ((err = Matter::ParseSetupPayload(setupPayload, parsedPayload)) != CHIP_NO_ERROR)
@@ -369,8 +366,8 @@ namespace barton
         else
         {
             icDebug("Calling PairDevice()");
-            err =
-                matter.GetCommissioner()->PairDevice(randomId, setupPayload.c_str(), commissioningParams, discoveryType);
+            err = matter.GetCommissioner()->PairDevice(
+                randomId, setupPayload.c_str(), commissioningParams, discoveryType);
             if (err != CHIP_NO_ERROR)
             {
                 icError("PairDevice failed with error: %s", err.AsString());
@@ -395,7 +392,7 @@ namespace barton
     {
         icDebug("Node %016" PRIx64 " commissioned successfully", peerId.GetNodeId());
 
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
         finalNodeId = peerId.GetNodeId();
         SetCommissioningStatus(CommissionedSuccessfully);
     }
@@ -408,7 +405,7 @@ namespace barton
     {
         icDebug("Node %016" PRIx64 " commissioning failure", peerId.GetNodeId());
 
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
         finalNodeId = peerId.GetNodeId();
         SetCommissioningStatus(CommissioningFailed);
     }
@@ -430,7 +427,7 @@ namespace barton
 
     void CommissioningOrchestrator::OnDiscoveredDevice(const chip::Dnssd::CommissionNodeData &nodeData)
     {
-        std::unique_lock<std::mutex> lock_guard(mtx);
+        std::unique_lock<std::mutex> lockGuard(mtx);
 
         // only process the first response
         if (discoveredNodeData == nullptr)

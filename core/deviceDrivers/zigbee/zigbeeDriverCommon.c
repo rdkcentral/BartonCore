@@ -29,6 +29,7 @@
 #include "devicePrivateProperties.h"
 #include "deviceServiceCommFail.h"
 #include "deviceServiceConfiguration.h"
+#include "deviceServiceHash.h"
 #include "icTypes/icLinkedList.h"
 #include "provider/barton-core-property-provider.h"
 #include "zigbeeClusters/alarmsCluster.h"
@@ -50,7 +51,6 @@
 #include <icConcurrent/threadPool.h>
 #include <icConcurrent/threadUtils.h>
 #include <icConcurrent/timedWait.h>
-#include <icCrypto/digest.h>
 #include <icLog/telemetryMarkers.h>
 #include <icUtil/fileUtils.h>
 #include <icUtil/stringUtils.h>
@@ -332,9 +332,6 @@ static void updateJsonMetadata(const char *deviceUuid,
                                const char *key,
                                const char *value);
 
-// FIXME: Copy Paste Tech Debt (duplicated in deviceDescriptorHandler)
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal);
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat);
 
 typedef struct
 {
@@ -3562,7 +3559,6 @@ static void handlePollControlCheckin(uint64_t eui64,
     }
 }
 
-
 void zigbeeDriverCommonComcastBatterySavingUpdateResources(uint64_t eui64,
                                                            const ComcastBatterySavingData *data,
                                                            const void *ctx)
@@ -4039,8 +4035,9 @@ static bool validateMD5Checksum(const char *originalMD5Checksum, const char *fil
 {
     bool retVal = false;
 
-    scoped_generic char *fileMd5Checksum = digestFileHex(filePath, CRYPTO_DIGEST_MD5);
-    if (stringCompare(originalMD5Checksum, fileMd5Checksum, true) == 0)
+    g_autofree char *fileMd5Checksum = deviceServiceHashComputeFileMd5HexString(filePath);
+
+    if (fileMd5Checksum != NULL && stringCompare(originalMD5Checksum, fileMd5Checksum, true) == 0)
     {
         retVal = true;
     }
@@ -4083,13 +4080,7 @@ downloadFirmwareFile(const char *firmwareBaseUrl, const char *firmwareDirectory,
         if (fp != NULL)
         {
             // set standard curl options
-            const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-            g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-            g_autofree char *propValue =
-                b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
-
-            sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
-            applyStandardCurlOptions(curl, url, 60, NULL, verifyFlag, false);
+            applyStandardCurlOptions(curl, url, 60, NULL, SSL_VERIFY_BOTH, false);
             if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK)
             {
                 icLogError(LOG_TAG, "curl_easy_setopt(curl, CURLOPT_URL, url) failed at %s(%d)", __FILE__, __LINE__);
@@ -4661,64 +4652,6 @@ static void diagnosticsCollectionTaskFunc(void *arg)
         }
     }
     linkedListDestroy(deviceDrivers, standardDoNotFreeFunc);
-}
-
-// FIXME: Copy Paste Tech Debt (duplicated in deviceDescriptorHandler)
-
-#define DEFAULT_SSL_VERIFY_MODE               SSL_VERIFY_BOTH
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER "cpe.sslCert.validateForHttpsToServer"
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE "cpe.sslCert.validateForHttpsToDevice"
-#define SSL_VERIFICATION_TYPE_NONE            "none"
-#define SSL_VERIFICATION_TYPE_HOST            "host"
-#define SSL_VERIFICATION_TYPE_PEER            "peer"
-#define SSL_VERIFICATION_TYPE_BOTH            "both"
-
-static const char *sslVerifyCategoryToProp[] = {
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER,
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE,
-};
-
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal)
-{
-    sslVerify retVal = DEFAULT_SSL_VERIFY_MODE;
-    if (strVal == NULL || strlen(strVal) == 0 || strcasecmp(strVal, SSL_VERIFICATION_TYPE_NONE) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_NONE option");
-        retVal = SSL_VERIFY_NONE;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_HOST) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_HOST option");
-        retVal = SSL_VERIFY_HOST;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_PEER) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_PEER option");
-        retVal = SSL_VERIFY_PEER;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_BOTH) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_BOTH option");
-        retVal = SSL_VERIFY_BOTH;
-    }
-    else
-    {
-        icLogDebug(LOG_TAG, "using default option [%d]", retVal);
-    }
-
-    return retVal;
-}
-
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat)
-{
-    const char *propKey = NULL;
-
-    if (cat >= SSL_VERIFY_CATEGORY_FIRST && cat <= SSL_VERIFY_CATEGORY_LAST)
-    {
-        propKey = sslVerifyCategoryToProp[cat];
-    }
-
-    return propKey;
 }
 
 #endif // BARTON_CONFIG_ZIGBEE

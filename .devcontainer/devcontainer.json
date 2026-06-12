@@ -49,7 +49,13 @@
 
         // OpenTelemetry: collector endpoint is provided by compose.observability.yaml
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4318",
-        "OTEL_SERVICE_NAME": "barton-core"
+        "OTEL_SERVICE_NAME": "barton-core",
+
+        // ASAN-instrumented libBartonCore.so requires the link order check to be disabled
+        // when loaded via GObject introspection in Python. Without this, VS Code's pytest
+        // discovery crashes because ASAN kills the process. This is harmless for non-ASAN
+        // processes — they simply ignore the option.
+        "ASAN_OPTIONS": "verify_asan_link_order=0"
     },
 
     // specify the non-root user to use in the container
@@ -71,8 +77,10 @@
         "ghcr.io/devcontainers/features/node:1": {}
     },
 
-    "customizations": {
-        "vscode": {
+    "customizations":
+    {
+        "vscode":
+        {
             "extensions": [
                 // Docker and Container Management
                 "ms-azuretools.vscode-docker", // Docker support for managing containers

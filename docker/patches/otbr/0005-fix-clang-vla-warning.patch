@@ -1,0 +1,17 @@
+Source: Comcast
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1234567..abcdefg 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -34,6 +34,10 @@ project(openthread-br VERSION 0.3.0)
+ 
+ add_compile_options(-Wall -Wextra -Werror -Wfatal-errors -Wuninitialized -Wno-missing-braces)
+ 
++if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
++    add_compile_options(-Wno-vla-cxx-extension)
++endif()
++
+ add_library(otbr-config INTERFACE)
+ 
+ set(OTBR_INFRA_IF_NAME "wlan0" CACHE STRING "The infrastructure interface name")

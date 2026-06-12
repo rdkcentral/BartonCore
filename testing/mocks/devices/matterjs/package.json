@@ -1,0 +1,11 @@
+{
+    "name": "bartoncore-matterjs-virtual-devices",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "matter.js virtual devices for BartonCore integration testing",
+    "dependencies": {
+        "@matter/main": "0.16.10",
+        "@matter/nodejs": "0.16.10"
+    }
+}

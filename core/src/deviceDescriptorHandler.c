@@ -28,7 +28,9 @@
  * success.  The interval between each download attempt will increase until we reach our maximum interval.
  */
 
+#include <inttypes.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
@@ -37,6 +39,7 @@
 
 #include "deviceDescriptorHandler.h"
 #include "deviceServiceConfiguration.h"
+#include "deviceServiceHash.h"
 #include "deviceServicePrivate.h"
 #include "glib.h"
 #include "provider/barton-core-property-provider.h"
@@ -44,7 +47,6 @@
 #include <devicePrivateProperties.h>
 #include <deviceService.h>
 #include <icConcurrent/repeatingTask.h>
-#include <icCrypto/digest.h>
 #include <icLog/logging.h>
 #include <icLog/telemetryMarkers.h>
 #include <icUtil/fileUtils.h>
@@ -65,6 +67,10 @@
 
 #define BASE_DD_EXPONENTIAL_DELAY_SECONDS 2
 #define MAX_DD_EXPONENTIAL_DELAY_SECONDS  (60 * 60 * 24)
+
+// Property names to override retry delays for testing
+#define CPE_DD_EXPONENTIAL_DELAY_SECS     "cpe.dd.exponentialDelaySecs"
+#define CPE_DD_INCREMENTAL_DELAY_SECS     "cpe.dd.incrementalDelaySecs"
 
 static pthread_mutex_t deviceDescriptorMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -91,9 +97,7 @@ static bool localAllowlistIsValid(void);
 static bool localDenylistIsValid(void);
 static bool checkAndSetReadyForPairing(void);
 
-// FIXME: Copy Paste Tech Debt (duplicated in zigbeeDriverCommon)
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal);
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat);
+
 
 static deviceDescriptorsReadyForPairingFunc readyForPairingCB;
 static deviceDescriptorsUpdatedFunc descriptorsUpdatedCB;
@@ -117,17 +121,15 @@ void deviceServiceDeviceDescriptorsInit(deviceDescriptorsReadyForPairingFunc rea
 
     if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE))
     {
-        allowlistUrl = b_core_property_provider_get_property_as_string(
-            propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE, NULL);
+        allowlistUrl =
+            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_ALLOWLIST_URL_OVERRIDE, NULL);
     }
     else if (b_core_property_provider_has_property(propertyProvider, DEVICE_DESCRIPTOR_LIST))
     {
-        allowlistUrl =
-            b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
+        allowlistUrl = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESCRIPTOR_LIST, NULL);
     }
 
-    char *denylistUrl =
-        b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
+    char *denylistUrl = b_core_property_provider_get_property_as_string(propertyProvider, DEVICE_DESC_DENYLIST, NULL);
 
     // device service can be informed for pairing is possible or not based on
     // valid local allowlist & denyList. If url is valid, url will be used to check
@@ -267,15 +269,34 @@ void deviceDescriptorsUpdateAllowlist(const char *url)
 
         if (useAggressivePolicy == true)
         {
-            policy = createIncrementalRepeatingTaskPolicy(INIT_DD_TASK_WAIT_TIME_SECONDS,
-                                                          MAX_DD_TASK_WAIT_TIME_SECONDS,
-                                                          INTERVAL_DD_TASK_TIME_SECONDS,
-                                                          DELAY_SECS);
+            uint64_t incrementalDelay = b_core_property_provider_get_property_as_uint64(
+                propertyProvider, CPE_DD_INCREMENTAL_DELAY_SECS, INIT_DD_TASK_WAIT_TIME_SECONDS);
+
+            policy = createIncrementalRepeatingTaskPolicy(
+                incrementalDelay, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
         }
         else
         {
+            uint32_t exponentialDelay = b_core_property_provider_get_property_as_uint32(
+                propertyProvider, CPE_DD_EXPONENTIAL_DELAY_SECS, BASE_DD_EXPONENTIAL_DELAY_SECONDS);
+
+            if (exponentialDelay == 0)
+            {
+                icLogWarn(LOG_TAG, "%s: clamping exponential delay from 0 to 1", __FUNCTION__);
+                exponentialDelay = 1;
+            }
+            else if (exponentialDelay > UINT8_MAX)
+            {
+                icLogWarn(LOG_TAG,
+                          "%s: clamping exponential delay %" PRIu32 " to %d",
+                          __FUNCTION__,
+                          exponentialDelay,
+                          UINT8_MAX);
+                exponentialDelay = UINT8_MAX;
+            }
+
             policy = createExponentialRepeatingTaskPolicy(
-                BASE_DD_EXPONENTIAL_DELAY_SECONDS, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
+                (uint8_t) exponentialDelay, MAX_DD_EXPONENTIAL_DELAY_SECONDS, DELAY_SECS);
         }
 
         // Kick it off in the background, with increasing backoff until it eventually completes
@@ -357,7 +378,8 @@ static bool updateAllowlistTaskFunc(void *taskArg)
 
             // update our system properties
             deviceServiceSetSystemProperty(CURRENT_DEVICE_DESCRIPTOR_URL, url);
-            scoped_generic char *md5 = digestFileHex(allowlistPath, CRYPTO_DIGEST_MD5);
+
+            g_autofree char *md5 = deviceServiceHashComputeFileMd5HexString(allowlistPath);
             deviceServiceSetSystemProperty(CURRENT_DEVICE_DESCRIPTOR_MD5, md5);
         }
     }
@@ -429,9 +451,13 @@ void deviceDescriptorsUpdateDenylist(const char *url)
         scoped_generic char *pendingDenylistDownloadUrl = strdup(url);
 
         // Kick it off in the background, with increasing backoff until it eventually completes
-        // Kick it off in the background, with increasing backoff until it eventually completes
+        g_autoptr(BCorePropertyProvider) denylistPropertyProvider = deviceServiceConfigurationGetPropertyProvider();
+
+        uint64_t incrementalDelay = b_core_property_provider_get_property_as_uint64(
+            denylistPropertyProvider, CPE_DD_INCREMENTAL_DELAY_SECS, INIT_DD_TASK_WAIT_TIME_SECONDS);
+
         RepeatingTaskPolicy *policy = createIncrementalRepeatingTaskPolicy(
-            INIT_DD_TASK_WAIT_TIME_SECONDS, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
+            incrementalDelay, MAX_DD_TASK_WAIT_TIME_SECONDS, INTERVAL_DD_TASK_TIME_SECONDS, DELAY_SECS);
         denylistTaskId = createPolicyRepeatingTask(updateDenylistTaskFunc,
                                                    destroyDenylistTaskObjectsFunc,
                                                    policy,
@@ -519,7 +545,8 @@ static bool updateDenylistTaskFunc(void *taskArg)
 
             // update our system properties
             deviceServiceSetSystemProperty(CURRENT_DENYLIST_URL, url);
-            scoped_generic char *md5 = digestFileHex(denylistPath, CRYPTO_DIGEST_MD5);
+
+            g_autofree char *md5 = deviceServiceHashComputeFileMd5HexString(denylistPath);
             deviceServiceSetSystemProperty(CURRENT_DENYLIST_MD5, md5);
         }
     }
@@ -566,7 +593,6 @@ static void destroyDenylistTaskObjectsFunc(uint32_t taskHandle, void *userArg, R
     free(userArg);
 }
 
-
 static bool downloadFile(const char *url, const char *destFile, deviceDescriptorFileValidator fileValidator)
 {
     icLogDebug(LOG_TAG, "%s: url=%s, destFile=%s", __FUNCTION__, url, destFile);
@@ -578,14 +604,7 @@ static bool downloadFile(const char *url, const char *destFile, deviceDescriptor
     // Write to a temp file so we don't end up with a bogus allowlist in case of any failure
     AUTO_CLEAN(free_generic__auto) char *tmpfilename = stringBuilder("%s.tmp", destFile);
 
-    const char *propKey = sslVerifyPropKeyForCategoryBarton(SSL_VERIFY_HTTP_FOR_SERVER);
-    g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
-    g_autofree char *propValue =
-        b_core_property_provider_get_property_as_string(propertyProvider, propKey, NULL);
-
-    sslVerify verifyFlag = convertVerifyPropValToModeBarton(propValue);
-
-    fileSize = urlHelperDownloadFile(url, &httpCode, NULL, NULL, DOWNLOAD_TIMEOUT_SECS, verifyFlag, true, tmpfilename);
+    fileSize = urlHelperDownloadFile(url, &httpCode, NULL, NULL, DOWNLOAD_TIMEOUT_SECS, SSL_VERIFY_BOTH, true, tmpfilename);
 
     if (fileSize > 0 && (httpCode == 200 || httpCode == 0))
     {
@@ -672,7 +691,7 @@ static bool fileNeedsUpdating(const char *currentUrlSystemKey,
         if (strcmp(currentUrl, newUrl) == 0)
         {
             // URL is the same, so compare the MD5
-            scoped_generic char *localMd5 = digestFileHex(currentFilePath, CRYPTO_DIGEST_MD5);
+            g_autofree char *localMd5 = deviceServiceHashComputeFileMd5HexString(currentFilePath);
 
             // compare to what we have in our database (to see if the local file was altered, replaced, etc)
             if (stringCompare(currentMd5, localMd5, true) != 0)
@@ -708,60 +727,4 @@ static bool fileNeedsUpdating(const char *currentUrlSystemKey,
     return result;
 }
 
-// FIXME: Copy Paste Tech Debt (duplicated in zigbeeDriverCommon)
 
-#define DEFAULT_SSL_VERIFY_MODE               SSL_VERIFY_BOTH
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER "cpe.sslCert.validateForHttpsToServer"
-#define SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE "cpe.sslCert.validateForHttpsToDevice"
-#define SSL_VERIFICATION_TYPE_NONE            "none"
-#define SSL_VERIFICATION_TYPE_HOST            "host"
-#define SSL_VERIFICATION_TYPE_PEER            "peer"
-#define SSL_VERIFICATION_TYPE_BOTH            "both"
-
-static const char *sslVerifyCategoryToProp[] = {
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_SERVER,
-    SSL_CERT_VALIDATE_FOR_HTTPS_TO_DEVICE,
-};
-
-static sslVerify convertVerifyPropValToModeBarton(const char *strVal)
-{
-    sslVerify retVal = DEFAULT_SSL_VERIFY_MODE;
-    if (strVal == NULL || strlen(strVal) == 0 || strcasecmp(strVal, SSL_VERIFICATION_TYPE_NONE) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_NONE option");
-        retVal = SSL_VERIFY_NONE;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_HOST) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_HOST option");
-        retVal = SSL_VERIFY_HOST;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_PEER) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_PEER option");
-        retVal = SSL_VERIFY_PEER;
-    }
-    else if (strcasecmp(strVal, SSL_VERIFICATION_TYPE_BOTH) == 0)
-    {
-        icLogDebug(LOG_TAG, "using VERIFY_BOTH option");
-        retVal = SSL_VERIFY_BOTH;
-    }
-    else
-    {
-        icLogDebug(LOG_TAG, "using default option [%d]", retVal);
-    }
-
-    return retVal;
-}
-
-static const char *sslVerifyPropKeyForCategoryBarton(sslVerifyCategory cat)
-{
-    const char *propKey = NULL;
-
-    if (cat >= SSL_VERIFY_CATEGORY_FIRST && cat <= SSL_VERIFY_CATEGORY_LAST)
-    {
-        propKey = sslVerifyCategoryToProp[cat];
-    }
-
-    return propKey;
-}

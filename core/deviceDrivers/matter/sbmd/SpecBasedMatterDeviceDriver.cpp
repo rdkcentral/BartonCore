@@ -29,7 +29,16 @@
 
 #include "SpecBasedMatterDeviceDriver.h"
 #include "matter/sbmd/SbmdSpec.h"
-#include "matter/sbmd/script/QuickJsScript.h"
+
+#if defined(BCORE_USE_MQUICKJS)
+#include "matter/sbmd/mquickjs/SbmdScriptImpl.h"
+#elif defined(BCORE_USE_QUICKJS)
+#include "matter/sbmd/quickjs/SbmdScriptImpl.h"
+#endif
+
+#include <app/ConcreteAttributePath.h>
+#include <cinttypes>
+#include <lib/core/TLVReader.h>
 #include <memory>
 
 extern "C" {
@@ -58,6 +67,22 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpe
 {
     icDebug("Created SBMD driver for: %s", this->spec->name.c_str());
 }
+
+uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const
+{
+    return spec->matterMeta.vendorId.value_or(0);
+}
+
+uint16_t SpecBasedMatterDeviceDriver::GetSupportedProductId() const
+{
+    return spec->matterMeta.productId.value_or(0);
+}
+
+bool SpecBasedMatterDeviceDriver::IsVendorSpecificDriver() const
+{
+    return spec->matterMeta.vendorId.has_value() && spec->matterMeta.productId.has_value();
+}
+
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
     return spec->matterMeta.deviceTypes;
@@ -76,12 +101,21 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     // Set feature clusters from the spec for featureMap lookup
     device->SetFeatureClusters(spec->matterMeta.featureClusters);
 
+    // Resolve the endpoint map before resource binding
+    if (!device->ResolveEndpointMap(spec->matterMeta.deviceTypes))
+    {
+        icError("Failed to resolve endpoint map for device %s, no matching device types found",
+                device->GetDeviceId().c_str());
+        return false;
+    }
+
     // for each resource in the spec, configure mapper bindings.
     // Note: resource modes ("read", "dynamic", "emitEvents") describe client-facing capabilities
     // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
     // is populated: read mappers query the device, event mappers update the value from events.
     // A resource can be readable without a read mapper if its value is populated by events.
-    auto configureResource = [&device](const SbmdResource &sbmdResource) -> bool {
+    auto configureResource = [&device](const SbmdResource &sbmdResource,
+                                       std::optional<uint32_t> sbmdEndpointIndex) -> bool {
         icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
 
         g_autofree char *uri = nullptr;
@@ -99,7 +133,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         // a resource can have different mappers for read, write, and execute
         if (sbmdResource.mapper.hasRead)
         {
-            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper))
+            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
             {
                 icError("  Failed to bind read script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -109,7 +143,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         {
             // Write mappers are script-only - script returns full operation details
             std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
-            if (!device->BindWriteInfo(uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
+            if (!device->BindWriteInfo(
+                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
             {
                 icError("  Failed to bind write script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -120,7 +155,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             // Execute mappers are script-only - script returns full operation details
             std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
             if (!device->BindExecuteInfo(
-                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id))
+                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
             {
                 icError("  Failed to bind execute script for resource %s", sbmdResource.id.c_str());
                 return false;
@@ -129,19 +164,45 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         if (sbmdResource.mapper.event.has_value())
         {
             // Event mappers - bind event to resource for automatic updates
-            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value()))
+            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value(), sbmdEndpointIndex))
             {
                 icError("  Failed to bind event for resource %s", sbmdResource.id.c_str());
                 return false;
             }
         }
+
+        if (sbmdResource.mapper.seedFromAttribute.has_value())
+        {
+            if (!device->BindResourceSeedFromInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
+            {
+                icError("  Failed to bind seedFrom for resource %s", sbmdResource.id.c_str());
+                return false;
+            }
+        }
+
         return true;
     };
 
-    // Configure device-level resources
-    for (const auto &resource : spec->resources)
-    {
-        if (!configureResource(resource))
+    // Helper lambda that evaluates prerequisites and, if satisfied, attempts to configure the resource.
+    // Handles optional/required branching and skip bookkeeping so that the two loops below stay symmetric.
+    // Returns false if commissioning must be aborted (required resource failed), true otherwise.
+    auto processResource = [&](const SbmdResource &resource, std::optional<uint32_t> endpointIndex) -> bool {
+        if (!CheckPrerequisites(resource, *device))
+        {
+            if (resource.optional)
+            {
+                icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
+                skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
+
+                return true;
+            }
+
+            icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
+
+            return false;
+        }
+
+        if (!configureResource(resource, endpointIndex))
         {
             if (resource.optional)
             {
@@ -149,32 +210,37 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                        resource.id.c_str(),
                        device->GetDeviceId().c_str());
                 skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
+
+                return true;
             }
-            else
-            {
-                return false;
-            }
+
+            icError("Required resource '%s' failed to configure, aborting commissioning", resource.id.c_str());
+
+            return false;
+        }
+
+        return true;
+    };
+
+    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
+    for (const auto &resource : spec->resources)
+    {
+        if (!processResource(resource, std::nullopt))
+        {
+            return false;
         }
     }
 
     // Configure endpoint-level resources
-    for (const auto &endpoint : spec->endpoints)
+    for (uint32_t epIdx = 0; epIdx < static_cast<uint32_t>(spec->endpoints.size()); ++epIdx)
     {
+        const auto &endpoint = spec->endpoints[epIdx];
+
         for (const auto &resource : endpoint.resources)
         {
-            if (!configureResource(resource))
+            if (!processResource(resource, epIdx))
             {
-                if (resource.optional)
-                {
-                    icWarn("Optional resource %s failed to configure for device %s, skipping",
-                           resource.id.c_str(),
-                           device->GetDeviceId().c_str());
-                    skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-                }
-                else
-                {
-                    return false;
-                }
+                return false;
             }
         }
     }
@@ -184,8 +250,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
 
 std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(const std::string &deviceId)
 {
-    // For now, only QuickJS is supported
-    auto script = QuickJsScript::Create(deviceId);
+    auto script = SbmdScriptImpl::Create(deviceId);
     if (!script)
     {
         icLogError(LOG_TAG, "Failed to create script for device %s", deviceId.c_str());
@@ -240,6 +305,12 @@ void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const S
         // Event mappers convert event TLV to resource values
         script.AddEventMapper(resource.mapper.event.value(), resource.mapper.eventScript);
     }
+
+    if (resource.mapper.seedFromAttribute.has_value() && !resource.mapper.seedFromScript.empty())
+    {
+        // SeedFrom mappers reuse the attribute read mapper interface — same script shape as read mappers
+        script.AddAttributeReadMapper(resource.mapper.seedFromAttribute.value(), resource.mapper.seedFromScript);
+    }
 }
 
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()
@@ -249,22 +320,47 @@ SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionInte
     return {spec->reporting.minSecs, spec->reporting.maxSecs};
 }
 
+void SpecBasedMatterDeviceDriver::ForEachNonSkippedResource(
+    const std::string &deviceId,
+    const std::function<void(const SbmdResource &, const SbmdEndpoint *)> &callback) const
+{
+    auto skipIt = skippedOptionalResources.find(deviceId);
+    const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
+
+    for (const auto &resource : spec->resources)
+    {
+        if (skipped && skipped->count(MakeResourceKey(resource)))
+        {
+            continue;
+        }
+
+        callback(resource, nullptr);
+    }
+
+    for (const auto &endpoint : spec->endpoints)
+    {
+        for (const auto &resource : endpoint.resources)
+        {
+            if (skipped && skipped->count(MakeResourceKey(resource)))
+            {
+                continue;
+            }
+
+            callback(resource, &endpoint);
+        }
+    }
+}
+
 bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
 {
     bool result = true;
 
     icDebug();
 
-    auto skipIt = skippedOptionalResources.find(device->uuid);
-    const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
+    auto matterDevice = GetDevice(device->uuid);
+    std::map<const SbmdEndpoint *, icDeviceEndpoint *> icEndpoints;
 
-    // register device resources
-    for (auto &sbmdResource : spec->resources)
-    {
-        if (skipped && skipped->count(MakeResourceKey(sbmdResource)))
-        {
-            continue;
-        }
+    ForEachNonSkippedResource(device->uuid, [&](const SbmdResource &sbmdResource, const SbmdEndpoint *sbmdEndpoint) {
         uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
 
         // if an executable mapper was provided, we need to make sure the resource is executable
@@ -281,67 +377,93 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
         // while mappers describe how the value is populated (attribute read, event, etc.).
         ResourceCachingPolicy cachingPolicy =
             (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ||
-            sbmdResource.mapper.event.has_value()
+                    sbmdResource.mapper.event.has_value()
                 ? CACHING_POLICY_ALWAYS
                 : CACHING_POLICY_NEVER;
 
+        // Seed resource with value from attribute cache if specified
+        const char *initialValue = nullptr;
+        std::string seedValue;
+
+        if (sbmdEndpoint == nullptr)
+        {
+            if (sbmdResource.mapper.seedFromAttribute.has_value() && matterDevice != nullptr)
+            {
+                g_autofree char *uri = createDeviceResourceUri(device->uuid, sbmdResource.id.c_str());
+                auto maybeSeedValue = matterDevice->ReadSeedValueFromAttribute(uri);
+
+                if (maybeSeedValue.has_value())
+                {
+                    seedValue = std::move(*maybeSeedValue);
+                    initialValue = seedValue.c_str();
+                }
+            }
+
+            result &= createDeviceResource(device,
+                                           sbmdResource.id.c_str(),
+                                           initialValue,
+                                           sbmdResource.type.c_str(),
+                                           resourceMode,
+                                           cachingPolicy) != nullptr;
+
+            return;
+        }
+
+        auto [epIt, inserted] = icEndpoints.emplace(sbmdEndpoint, nullptr);
+
+        if (inserted)
+        {
+            auto *ep = createEndpoint(device, sbmdEndpoint->id.c_str(), sbmdEndpoint->profile.c_str(), true);
+
+            if (ep == nullptr)
+            {
+                icError("Failed to create endpoint '%s' with profile '%s'",
+                        sbmdEndpoint->id.c_str(),
+                        sbmdEndpoint->profile.c_str());
+                result = false;
+
+                return;
+            }
+
+            ep->profileVersion = sbmdEndpoint->profileVersion;
+            epIt->second = ep;
+        }
+
+        auto *ep = epIt->second;
+
+        if (ep == nullptr)
+        {
+            return;
+        }
+
+        if (sbmdResource.mapper.seedFromAttribute.has_value() && matterDevice != nullptr)
+        {
+            g_autofree char *uri = createEndpointResourceUri(
+                device->uuid, sbmdResource.resourceEndpointId.value_or("").c_str(), sbmdResource.id.c_str());
+            auto maybeSeedValue = matterDevice->ReadSeedValueFromAttribute(uri);
+
+            if (maybeSeedValue.has_value())
+            {
+                seedValue = std::move(*maybeSeedValue);
+                initialValue = seedValue.c_str();
+            }
+        }
+
         result &=
-            createDeviceResource(
-                device, sbmdResource.id.c_str(), nullptr, sbmdResource.type.c_str(), resourceMode, cachingPolicy) !=
+            createEndpointResource(
+                ep, sbmdResource.id.c_str(), initialValue, sbmdResource.type.c_str(), resourceMode, cachingPolicy) !=
             nullptr;
-    }
-
-    // register endpoint resources
-    for (auto &sbmdEndpoint : spec->endpoints)
-    {
-        icDeviceEndpoint *endpoint =
-            createEndpoint(device, sbmdEndpoint.id.c_str(), sbmdEndpoint.profile.c_str(), true);
-
-        if (endpoint == nullptr)
-        {
-            icError("Failed to create endpoint '%s' with profile '%s'",
-                    sbmdEndpoint.id.c_str(),
-                    sbmdEndpoint.profile.c_str());
-            result = false;
-            continue;
-        }
-
-        endpoint->profileVersion = sbmdEndpoint.profileVersion;
-        for (auto &sbmdResource : sbmdEndpoint.resources)
-        {
-            if (skipped && skipped->count(MakeResourceKey(sbmdResource)))
-            {
-                continue;
-            }
-
-            uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
-
-            // if an executable mapper was provided, we need to make sure the resource is executable
-            if (sbmdResource.mapper.hasExecute)
-            {
-                resourceMode |= RESOURCE_MODE_EXECUTABLE;
-            }
-
-            // Use CACHING_POLICY_ALWAYS when the resource value is kept up to date
-            // automatically — either via attribute subscription or event mapper updates.
-            // With CACHING_POLICY_ALWAYS, the device service returns the stored value on read
-            // without calling the driver's readResource callback.
-            ResourceCachingPolicy cachingPolicy =
-                (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ||
-                sbmdResource.mapper.event.has_value()
-                    ? CACHING_POLICY_ALWAYS
-                    : CACHING_POLICY_NEVER;
-
-            result &= createEndpointResource(endpoint,
-                                             sbmdResource.id.c_str(),
-                                             nullptr,
-                                             sbmdResource.type.c_str(),
-                                             resourceMode,
-                                             cachingPolicy) != nullptr;
-        }
-    }
+    });
 
     return result;
+}
+
+void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
+                                                      const std::string &deviceId,
+                                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                                      const chip::SessionHandle &sessionHandle)
+{
+    SeedInitialResourceValues(deviceId);
 }
 
 void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<bool>> &promises,
@@ -364,13 +486,13 @@ void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<
     device->HandleResourceRead(promises, resource, value, exchangeMgr, sessionHandle);
 }
 
-bool SpecBasedMatterDeviceDriver::WriteResource(std::forward_list<std::promise<bool>> &promises,
-                                                const std::string &deviceId,
-                                                icDeviceResource *resource,
-                                                const char *previousValue,
-                                                const char *newValue,
-                                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                                const chip::SessionHandle &sessionHandle)
+bool SpecBasedMatterDeviceDriver::DoWriteResource(std::forward_list<std::promise<bool>> &promises,
+                                                  const std::string &deviceId,
+                                                  icDeviceResource *resource,
+                                                  const char *previousValue,
+                                                  const char *newValue,
+                                                  chip::Messaging::ExchangeManager &exchangeMgr,
+                                                  const chip::SessionHandle &sessionHandle)
 {
     icDebug("%s = %s", resource->id, newValue);
 
@@ -454,4 +576,119 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
 std::string SpecBasedMatterDeviceDriver::MakeResourceKey(const SbmdResource &resource)
 {
     return resource.resourceEndpointId.value_or("") + ":" + resource.id;
+}
+
+void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &deviceId)
+{
+    icDebug("Seeding initial resource values for device %s", deviceId.c_str());
+
+    auto device = GetDevice(deviceId);
+
+    if (device == nullptr)
+    {
+        icError("Device %s not found for seedFrom seeding", deviceId.c_str());
+        return;
+    }
+
+    ForEachNonSkippedResource(deviceId, [&](const SbmdResource &resource, const SbmdEndpoint *sbmdEndpoint) {
+        if (!resource.mapper.seedFromAttribute.has_value())
+        {
+            return;
+        }
+
+        g_autofree char *uri = (sbmdEndpoint == nullptr)
+                                   ? createDeviceResourceUri(deviceId.c_str(), resource.id.c_str())
+                                   : createEndpointResourceUri(deviceId.c_str(),
+                                                               resource.resourceEndpointId.value_or("").c_str(),
+                                                               resource.id.c_str());
+
+        device->SeedResourceFromAttribute(uri);
+    });
+}
+
+bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device)
+{
+    // Empty prerequisites vector means always attempt to register (declared as "none" in the spec)
+    if (resource.prerequisites.empty())
+    {
+        return true;
+    }
+
+    auto cache = device.GetDeviceDataCache();
+
+    if (!cache)
+    {
+        icWarn("No device data cache for device %s; prerequisites cannot be evaluated and will be treated as unmet",
+               device.GetDeviceId().c_str());
+
+        return false;
+    }
+
+    const auto endpointIds = cache->GetEndpointIds();
+
+    for (const auto &prereq : resource.prerequisites)
+    {
+        uint32_t clusterId = prereq.clusterId;
+        const std::vector<uint32_t> &attributeIds = prereq.attributeIds;
+
+        // Check cluster presence on any endpoint
+        bool clusterFound = false;
+
+        for (auto endpointId : endpointIds)
+        {
+            if (cache->EndpointHasServerCluster(endpointId, clusterId))
+            {
+                clusterFound = true;
+                break;
+            }
+        }
+
+        if (!clusterFound)
+        {
+            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s; prerequisite not met",
+                    resource.id.c_str(),
+                    clusterId,
+                    device.GetDeviceId().c_str());
+
+            return false;
+        }
+
+        // Check attribute presence for each required attribute ID
+        for (uint32_t attributeId : attributeIds)
+        {
+            bool attributeFound = false;
+
+            for (auto endpointId : endpointIds)
+            {
+                // find the endpoint with the cluster and then check for the attribute
+                if (!cache->EndpointHasServerCluster(endpointId, clusterId))
+                {
+                    continue;
+                }
+
+                chip::app::ConcreteDataAttributePath path(endpointId, clusterId, attributeId);
+                chip::TLV::TLVReader reader;
+
+                if (cache->GetAttributeData(path, reader) == CHIP_NO_ERROR)
+                {
+                    attributeFound = true;
+                    break;
+                }
+            }
+
+            if (!attributeFound)
+            {
+                icDebug("Resource '%s': prerequisite attribute 0x%08" PRIx32 " on cluster 0x%08" PRIx32
+                        " not found on device %s; prerequisite not met",
+                        resource.id.c_str(),
+                        attributeId,
+                        clusterId,
+                        device.GetDeviceId().c_str());
+
+                return false;
+            }
+        }
+    }
+
+    return true;
 }

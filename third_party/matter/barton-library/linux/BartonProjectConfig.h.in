@@ -53,6 +53,8 @@
 #define LOCALSTATEDIR        CHIP_BARTON_CONF_DIR // CHIP Counters Config
 #define CHIP_CONFIG_KVS_PATH CHIP_BARTON_CONF_DIR "/matterkv"
 
+#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING $(BARTON_CORE_VERSION)
+
 // ------------------------------------
 
 #endif /* CHIPPROJECTCONFIG_H */

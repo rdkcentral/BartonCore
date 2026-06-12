@@ -21,5 +21,4 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-add_subdirectory(crypto/c)
 add_subdirectory(device)

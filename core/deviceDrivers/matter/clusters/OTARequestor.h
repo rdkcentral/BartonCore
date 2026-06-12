@@ -44,12 +44,6 @@ namespace barton
     class OTARequestor : public MatterCluster
     {
     public:
-        OTARequestor(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
-                     std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::OtaSoftwareUpdateRequestor::Id, deviceDataCache)
-        {
-        }
-
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
@@ -109,5 +103,16 @@ namespace barton
             std::vector<OtaSoftwareUpdateRequestor::Structs::ProviderLocation::Type> &otaProviderList,
             const chip::Messaging::ExchangeManager &exchangeMgr,
             const chip::SessionHandle &sessionHandle);
+
+    protected:
+        OTARequestor(EventHandler *handler, std::string deviceId, chip::EndpointId endpointId,
+                     std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::OtaSoftwareUpdateRequestor::Id, deviceDataCache)
+        {
+        }
+
+    private:
+        template <typename T, typename... Args>
+        friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton

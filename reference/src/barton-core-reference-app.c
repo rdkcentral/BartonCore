@@ -58,9 +58,7 @@ static gboolean NO_MATTER = FALSE;
 static gchar *wifi_ssid = NULL;
 static gchar *wifi_password = NULL;
 static gchar *storage_dir = NULL;
-static gchar *sbmd_dir = NULL;
-
-static bool showAdvanced = false;
+static gchar *sbmd_dirs = NULL;
 
 static GList *categories = NULL;
 
@@ -72,7 +70,7 @@ static GOptionEntry entries[] = {
     {    "wifi-ssid", 's', 0, G_OPTION_ARG_STRING,     &wifi_ssid,                  "Wi-Fi SSID for commissioning",     "SSID"},
     {"wifi-password", 'p', 0, G_OPTION_ARG_STRING, &wifi_password,              "Wi-Fi Password for commissioning", "PASSWORD"},
     {  "storage-dir", 'd', 0, G_OPTION_ARG_STRING,   &storage_dir, "Persisted storage directory for configuration",      "DIR"},
-    {     "sbmd-dir", 'b', 0, G_OPTION_ARG_STRING,      &sbmd_dir, "Directory containing SBMD specification files",      "DIR"},
+    {    "sbmd-dirs", 'b', 0, G_OPTION_ARG_STRING,     &sbmd_dirs, "Semicolon-delimited list of directories containing SBMD specification files", "DIRS"},
     G_OPTION_ENTRY_NULL
 };
 
@@ -93,7 +91,7 @@ static void showInteractiveHelp(bool isInteractive)
     for (GList *it = categories; it != NULL; it = it->next)
     {
         Category *category = (Category *) it->data;
-        categoryPrint(category, isInteractive, showAdvanced);
+        categoryPrint(category, isInteractive);
     }
 }
 
@@ -130,7 +128,7 @@ static bool handleInteractiveCommand(BCoreClient *client, char **args, int numAr
                 Command *command = findCommand(args[1]);
                 if (command != NULL)
                 {
-                    commandPrintUsage(command, true, showAdvanced);
+                    commandPrintUsage(command, true);
                 }
                 else
                 {
@@ -302,9 +300,9 @@ static BCoreClient *initializeClient(gchar *confDir)
     g_autoptr(BCoreInitializeParamsContainer) params = b_core_initialize_params_container_new();
     b_core_initialize_params_container_set_storage_dir(params, confDir);
 
-    if (sbmd_dir != NULL)
+    if (sbmd_dirs != NULL)
     {
-        b_core_initialize_params_container_set_sbmd_dir(params, sbmd_dir);
+        b_core_initialize_params_container_set_sbmd_dirs(params, sbmd_dirs);
     }
 
     g_autofree gchar *matterConfDir = stringBuilder("%s/matter", confDir);

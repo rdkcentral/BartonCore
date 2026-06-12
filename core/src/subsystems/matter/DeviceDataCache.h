@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "Matter.h"
 #include "MatterCommon.h"
 #include "app/ClusterStateCache.h"
 #include "controller/CHIPDeviceController.h"
@@ -35,7 +36,9 @@
 #include <chrono>
 #include <future>
 #include <json/json.h>
+#include <map>
 #include <string>
+#include <tuple>
 
 extern "C" {
 #include <observability/observabilityTracing.h>
@@ -48,6 +51,10 @@ namespace barton
 
     class DeviceDataCache : public chip::app::ClusterStateCache::Callback
     {
+        // Allow test subclass to access private members for cache population in tests
+        friend class TestableMatterDevice;
+        friend class SbmdPrerequisitesTestHelper;
+
     public:
         DeviceDataCache(const std::string &deviceUuid, std::shared_ptr<chip::Controller::DeviceController> controller) :
             deviceUuid(deviceUuid), mOnDeviceConnectedCallback(OnDeviceConnectedCallback, this),
@@ -89,7 +96,23 @@ namespace barton
                                       chip::AttributeId attributeId,
                                       std::string &outValue) const;
 
+        /**
+         * Get a uint16 attribute value from the cache.
+         *
+         * @param endpointId The endpoint ID.
+         * @param clusterId The cluster ID.
+         * @param attributeId The attribute ID.
+         * @param[out] outValue The value if found.
+         * @return CHIP_NO_ERROR on success, error code otherwise.
+         */
+        CHIP_ERROR GetUint16Attribute(chip::EndpointId endpointId,
+                                      chip::ClusterId clusterId,
+                                      chip::AttributeId attributeId,
+                                      uint16_t &outValue) const;
+
         // Some simple accessors for common Basic Information Cluster attributes
+        CHIP_ERROR GetVendorId(uint16_t &outValue) const;
+        CHIP_ERROR GetProductId(uint16_t &outValue) const;
         CHIP_ERROR GetVendorName(std::string &outValue) const;
         CHIP_ERROR GetProductName(std::string &outValue) const;
         CHIP_ERROR GetHardwareVersionString(std::string &outValue) const;
@@ -131,6 +154,30 @@ namespace barton
         void SetCallback(std::unique_ptr<chip::app::ClusterStateCache::Callback> cb) { callback = std::move(cb); }
 
         /**
+         * Set the callback handler for common cluster events and attribute changes.
+         *
+         * @param key A tuple containing the endpoint ID and cluster ID.
+         * @param clusterCallback Weak pointer to the callback for a particular device+endpoint+cluster.
+         *                        The cache does not take ownership; expired weak pointers are erased on dispatch.
+         */
+        void SetClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key,
+                                std::weak_ptr<chip::app::ClusterStateCache::Callback> clusterCallback)
+        {
+            // clusterCallbacks is read from Matter-thread callbacks, so it must be mutated on the Matter thread
+            // as well to avoid race conditions
+            Matter::RunOnMatterStack([this, key, clusterCallback] {
+                clusterCallbacks[key] = clusterCallback;
+            });
+        }
+
+        void RemoveClusterCallback(std::tuple<chip::EndpointId, chip::ClusterId> key)
+        {
+            Matter::RunOnMatterStack([this, key] {
+                clusterCallbacks.erase(key);
+            });
+        }
+
+        /**
          * Get attribute data stored in the cache as a TLVReader.
          */
         CHIP_ERROR GetAttributeData(const chip::app::ConcreteDataAttributePath &aPath,
@@ -157,6 +204,23 @@ namespace barton
          * @return CHIP_NO_ERROR on success
          */
         CHIP_ERROR RegenerateAttributeReport();
+
+        /**
+         * Overrides the ReadClient liveness timeout to the given number of milliseconds.
+         *
+         * When ms > 0, the liveness timer fires after exactly ms milliseconds
+         * instead of using the negotiated maxInterval + roundTripTimeout formula.
+         * Setting ms=1 causes CHIP_ERROR_TIMEOUT on the next Matter event-loop
+         * tick, which triggers DefaultResubscribePolicy to schedule a new CASE
+         * session (ForceCASE=true) — driving the communicationRestored →
+         * synchronizeDevice path without waiting for the full negotiated window.
+         *
+         * OnSubscriptionEstablished resets the override to Clock::kZero so
+         * subsequent subscriptions use the naturally negotiated liveness window.
+         *
+         * Must be called on the Matter event-loop thread.
+         */
+        void OverrideLiveness(uint32_t ms);
 
     private:
         static void OnDeviceConnectedCallback(void *context,
@@ -214,7 +278,26 @@ namespace barton
                          chip::TLV::TLVReader *apData,
                          const chip::app::StatusIB *apStatus) override
         {
-            if (callback != nullptr)
+
+            auto key = std::make_tuple(aEventHeader.mPath.mEndpointId, aEventHeader.mPath.mClusterId);
+            auto it = clusterCallbacks.find(key);
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
+
+            if (clusterCallback != nullptr)
+            {
+                clusterCallback->OnEventData(aEventHeader, apData, apStatus);
+            }
+
+            else if (callback != nullptr)
             {
                 callback->OnEventData(aEventHeader, apData, apStatus);
             }
@@ -239,7 +322,25 @@ namespace barton
                              chip::TLV::TLVReader *apData,
                              const chip::app::StatusIB &aStatus) override
         {
-            if (callback != nullptr && aStatus.IsSuccess())
+            auto key = std::make_tuple(aPath.mEndpointId, aPath.mClusterId);
+            auto it = clusterCallbacks.find(key);
+            std::shared_ptr<chip::app::ClusterStateCache::Callback> clusterCallback;
+
+            if (it != clusterCallbacks.end())
+            {
+                clusterCallback = it->second.lock();
+                if (!clusterCallback)
+                {
+                    clusterCallbacks.erase(it);
+                }
+            }
+
+            if (clusterCallback != nullptr && aStatus.IsSuccess())
+            {
+                clusterCallback->OnAttributeChanged(clusterStateCache.get(), aPath);
+            }
+
+            else if (callback != nullptr && aStatus.IsSuccess())
             {
                 callback->OnAttributeChanged(clusterStateCache.get(), aPath);
             }
@@ -314,7 +415,15 @@ namespace barton
         std::chrono::steady_clock::time_point connectionStartTime;
         std::shared_ptr<chip::Controller::DeviceController> controller = nullptr;
 
+        // This is the overall callback handler for device cluster events and attribute changes.
         std::unique_ptr<chip::app::ClusterStateCache::Callback> callback;
+
+        // These callback handlers are for events and attributes on specific clusters that are
+        // not encompassed in the overall callback handler above.
+        // endpoint id + cluster id to ClusterStateCache Callback.
+        std::map<std::tuple<chip::EndpointId, chip::ClusterId>, std::weak_ptr<chip::app::ClusterStateCache::Callback>>
+            clusterCallbacks;
+
         chip::Callback::Callback<chip::OnDeviceConnected> mOnDeviceConnectedCallback;
         chip::Callback::Callback<chip::OnDeviceConnectionFailure> mOnDeviceConnectionFailureCallback;
 

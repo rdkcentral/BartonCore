@@ -17,7 +17,8 @@
     "files.insertFinalNewline": true,
     "files.trimTrailingWhitespace": true,
     "files.associations": {
-        "*.sbmd": "yaml"
+        "*.sbmd": "yaml",
+        "**/docker/version": "plaintext"
     },
 
     "prettier.tabWidth": 4,
@@ -154,10 +155,13 @@
     },
 
     "python.envFile": "${workspaceFolder}/.devcontainer/vsc-python.env",
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    "python-envs.defaultInterpreterPath": "/usr/bin/python3",
+    "python-envs.workspaceSearchPaths": [],
 
     // pytest configuration
+    "python.testing.cwd": "${workspaceFolder}",
     "python.testing.pytestArgs": ["testing"],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "/usr/local/bin/pytest"
+    "python.testing.pytestEnabled": true
 }

@@ -180,6 +180,8 @@ static void pendingReconfigurationFreeFunc(void *key, void *value);
 
 static void reconfigureDeviceTask(void *arg);
 
+static void waitForOrCancelPendingReconfiguration(const char *uuid);
+
 /* Private data */
 
 /**
@@ -1122,6 +1124,10 @@ bool deviceServiceRemoveDevice(const char *uuid)
 
     if (device != NULL)
     {
+        // Any device (especially sleepy devices) may still have a pending reconfiguration operation
+        // that needs to be waited on or canceled before we can safely remove it.
+        waitForOrCancelPendingReconfiguration(uuid);
+
         if (jsonDatabaseRemoveDeviceById(uuid) == false)
         {
             icLogError(LOG_TAG, "Failed to remove device %s", uuid);
@@ -2017,6 +2023,34 @@ bool deviceServiceInitialize(BCoreClient *service)
     return true;
 }
 
+static void OnCommFailMonitorIntervalPropertyChanged(BCorePropertyProvider *provider,
+                                                      const gchar *propertyName,
+                                                      const gchar *oldValue,
+                                                      const gchar *newValue,
+                                                      gpointer userData)
+{
+    (void) provider;
+    (void) oldValue;
+    (void) userData;
+
+    if (g_strcmp0(propertyName, COMM_FAIL_MONITOR_INTERVAL_SECS_PROP) != 0)
+    {
+        return;
+    }
+
+    if (newValue == NULL)
+    {
+        return;
+    }
+
+    guint64 secs = g_ascii_strtoull(newValue, NULL, 10);
+
+    if (secs > 0)
+    {
+        deviceCommunicationWatchdogSetMonitorInterval((uint32_t) secs);
+    }
+}
+
 // TODO: Document subsys and driver lifecycles, what type of operations are allowed prior to "all drivers starte"
 // TODO: Possibly factor out DeviceDriver initialize() functions in favor of self-registration and DeviceDriver
 //       callbacks, so DeviceDriver::startup() and DeviceDriver::shutdown() have clearer purpose/consistency.
@@ -2048,6 +2082,26 @@ bool deviceServiceStart(void)
     startMainLoop();
 
     deviceServiceCommFailInit();
+
+    // Allow the watchdog check interval to be modified via property for environments where e.g. devices need
+    // a short commFailOverrideSeconds.
+    // If this property is not set, then the default 60s interval is unchanged.
+    // The signal handler also applies the property when it is written after startup.
+    {
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        guint32 monitorIntervalSecs =
+            b_core_property_provider_get_property_as_uint32(propertyProvider, COMM_FAIL_MONITOR_INTERVAL_SECS_PROP, 0);
+
+        if (monitorIntervalSecs > 0)
+        {
+            deviceCommunicationWatchdogSetMonitorInterval(monitorIntervalSecs);
+        }
+
+        g_signal_connect(propertyProvider,
+                         B_CORE_PROPERTY_PROVIDER_SIGNAL_PROPERTY_CHANGED,
+                         G_CALLBACK(OnCommFailMonitorIntervalPropertyChanged),
+                         NULL);
+    }
 
     deviceStorageMonitorStart();
 
@@ -3193,6 +3247,30 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
     {
         jsonDatabaseSaveMetadata(metadata);
         sendMetadataUpdatedEvent(metadata);
+
+        scoped_icDevice *device = jsonDatabaseGetDeviceById(metadata->deviceUuid);
+
+        if (device != NULL)
+        {
+            DeviceDriver *driver = deviceDriverManagerGetDeviceDriver(device->managingDeviceDriver);
+
+            if (driver != NULL && driver->metadataUpdated != NULL)
+            {
+                driver->metadataUpdated(driver, device, metadata->id, metadata->value);
+            }
+
+            // When commFailOverrideSeconds is written, the running per-device watchdog
+            // timer must be reprogrammed immediately — persisting the value alone is not
+            // enough. We do this directly here rather than via the metadata-updated GObject
+            // signal because subscribing to that signal would require threading BCoreClient
+            // through to commFail init and an extra device lookup in the handler, for no
+            // behavioral gain: g_signal_emit is synchronous and icDevice* is already in
+            // hand here.
+            if (strcmp(metadata->id, COMMON_DEVICE_METADATA_COMMFAIL_OVERRIDE_SECS) == 0)
+            {
+                deviceServiceCommFailSetDeviceTimeoutSecs(device, deviceServiceCommFailGetTimeoutSecs());
+            }
+        }
     }
 
     metadataDestroy(metadata);
@@ -4927,6 +5005,56 @@ static void destroyReconfigureDeviceContext(ReconfigureDeviceContext *ctx)
     if (ctx != NULL)
     {
         free(ctx->deviceUuid);
+    }
+}
+
+static void waitForOrCancelPendingReconfiguration(const char *uuid)
+{
+    g_autoptr(ReconfigureDeviceContext) ctx = deviceServiceGetReconfigureDeviceContext(uuid);
+
+    if (ctx == NULL)
+    {
+        return;
+    }
+
+    mutexLock(&ctx->mtx);
+    uint32_t taskHandle = ctx->taskHandle;
+    mutexUnlock(&ctx->mtx);
+
+    if (isDelayTaskWaiting(taskHandle) == true)
+    {
+        cancelDelayTask(taskHandle);
+        deviceServiceRemoveReconfigureDeviceContext(ctx);
+        return;
+    }
+
+    if (sendReconfigurationSignal(ctx, true) == true)
+    {
+        bool done = false;
+        struct timespec start, now;
+
+        getCurrentTime(&start, supportMonotonic());
+
+        while (done == false)
+        {
+            getCurrentTime(&now, supportMonotonic());
+
+            long elapsed_sec = now.tv_sec - start.tv_sec;
+            if (elapsed_sec >= PENDING_RECONFIGURATION_TIMEOUT_SEC)
+            {
+                done = true;
+                icError("Device pending reconfiguration is taking too long to cancel");
+                continue;
+            }
+
+            mutexLock(&reconfigurationControlMutex);
+            incrementalCondTimedWait(&reconfigurationControlCond,
+                                     &reconfigurationControlMutex,
+                                     (PENDING_RECONFIGURATION_TIMEOUT_SEC - elapsed_sec));
+            mutexUnlock(&reconfigurationControlMutex);
+
+            done = deviceServiceIsReconfigurationPending(uuid) == false;
+        }
     }
 }
 

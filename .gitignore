@@ -13,3 +13,11 @@ _codeql_detected_source_root
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Git worktrees
+.worktrees/
+
+# Node.js
+node_modules/
+package-lock.json
+!testing/mocks/devices/matterjs/package-lock.json

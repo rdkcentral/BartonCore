@@ -35,12 +35,14 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <tuple>
 
 namespace barton
 {
     class MatterCluster : public chip::app::CommandSender::Callback,
                           public chip::app::WriteClient::Callback,
-                          public chip::app::ClusterStateCache::Callback
+                          public chip::app::ClusterStateCache::Callback,
+                          public std::enable_shared_from_this<MatterCluster>
     {
     public:
         class EventHandler
@@ -50,16 +52,22 @@ namespace barton
             virtual void WriteRequestCompleted(void *context, bool success) {};
         };
 
-        MatterCluster(EventHandler *handler,
-                      std::string deviceId,
-                      chip::EndpointId endpointId,
-                      chip::ClusterId clusterId,
-                      std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            eventHandler(handler), deviceId(std::move(deviceId)), endpointId(endpointId),
-            clusterId(clusterId), deviceDataCache(std::move(deviceDataCache))
+        /**
+         * @brief Factory method to safely construct any MatterCluster subclass.
+         *        Guarantees that Init() is called only after the object is fully
+         *        constructed, including any subclass constructors.
+         *
+         * @tparam T    A MatterCluster subclass
+         * @tparam Args Constructor argument types
+         * @return std::shared_ptr<T>
+         */
+        template<typename T, typename... Args>
+        static std::shared_ptr<T> Create(Args &&...args)
         {
-            nodeId = Subsystem::Matter::UuidToNodeId(this->deviceId.c_str());
-        };
+            std::shared_ptr<T> instance(new T(std::forward<Args>(args)...));
+            instance->Init();
+            return instance;
+        }
 
         virtual ~MatterCluster() = default;
 
@@ -105,6 +113,31 @@ namespace barton
         inline std::string GetDeviceId() { return deviceId; }
 
     protected:
+        /**
+         * @brief Registers the cluster callback with the DeviceDataCache.
+         *        Called automatically by Create() after full construction.
+         */
+        virtual void Init()
+        {
+            if (deviceDataCache != nullptr)
+            {
+                auto key = std::make_tuple(endpointId, clusterId);
+                deviceDataCache->SetClusterCallback(
+                    key, std::weak_ptr<chip::app::ClusterStateCache::Callback>(shared_from_this()));
+            }
+        }
+
+        MatterCluster(EventHandler *handler,
+                      std::string deviceId,
+                      chip::EndpointId endpointId,
+                      chip::ClusterId clusterId,
+                      std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            eventHandler(handler), deviceId(std::move(deviceId)), endpointId(endpointId), clusterId(clusterId),
+            deviceDataCache(std::move(deviceDataCache))
+        {
+            nodeId = Subsystem::Matter::UuidToNodeId(this->deviceId.c_str());
+        };
+
         std::mutex mtx;
         EventHandler *eventHandler;
         std::string deviceId;
@@ -142,8 +175,9 @@ namespace barton
         bool
         SendCommand(chip::app::CommandSender *commandSender, const chip::SessionHandle &sessionHandle, void *context);
 
-        bool
-        SendWriteRequest(chip::app::WriteClient *writeClient, const chip::SessionHandle &sessionHandle, void *context);
+        bool SendWriteRequest(std::unique_ptr<chip::app::WriteClient> writeClient,
+                              const chip::SessionHandle &sessionHandle,
+                              void *context);
 
     private:
     };

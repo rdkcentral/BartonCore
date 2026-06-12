@@ -27,6 +27,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace barton
 {
     class SbmdFactory
@@ -38,10 +40,19 @@ namespace barton
             return instance;
         }
 
+        /**
+         * Register SBMD drivers from all configured directories.
+         * Directories are specified as a semicolon-delimited list.
+         */
         bool RegisterDrivers();
 
     private:
         SbmdFactory() = default;
         ~SbmdFactory() = default;
+
+        /**
+         * Load and register SBMD drivers from a single directory.
+         */
+        static void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
     };
 } //namespace barton

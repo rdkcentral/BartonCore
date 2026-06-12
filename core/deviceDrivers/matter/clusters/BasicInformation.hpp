@@ -38,12 +38,6 @@ namespace barton
     class BasicInformation : public MatterCluster
     {
     public:
-        BasicInformation(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
-                         std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, Id, deviceDataCache)
-        {
-        }
-
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
@@ -57,5 +51,16 @@ namespace barton
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
+
+    protected:
+        BasicInformation(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                         std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, Id, deviceDataCache)
+        {
+        }
+
+    private:
+        template <typename T, typename... Args>
+        friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton

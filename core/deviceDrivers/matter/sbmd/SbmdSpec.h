@@ -164,6 +164,37 @@ namespace barton
         // Event mapping - for handling Matter events that update the resource
         std::optional<SbmdEvent> event;
         std::string eventScript;
+
+        // SeedFrom mapping - for seeding initial resource value from the attribute cache
+        // at configure and synchronize time. Only valid alongside an event mapper.
+        // YAML key: seedFrom.
+        std::optional<SbmdAttribute> seedFromAttribute;
+        std::string seedFromScript;
+    };
+
+    /**
+     * A single prerequisite for a resource: the device must have this cluster present, and optionally
+     * one or more specific attributes within that cluster, in order for the resource to be registered.
+     *
+     * Cluster and attribute IDs are resolved from an alias at parse time (see SbmdAlias and
+     * SbmdMatterMeta.aliases).
+     */
+    struct SbmdPrerequisite
+    {
+        uint32_t clusterId = 0;
+        std::vector<uint32_t>
+            attributeIds; // empty = cluster presence sufficient; populated = each attribute must be present
+    };
+
+    /**
+     * A named reference to a Matter cluster attribute or event, defined in matterMeta.aliases.
+     * Each alias binds a spec-author-chosen name to the IDs and type of a single Matter element.
+     */
+    struct SbmdAlias
+    {
+        std::string name;                       // spec-author-chosen identifier, unique within the driver spec
+        std::optional<SbmdAttribute> attribute; // set for attribute aliases
+        std::optional<SbmdEvent> event;         // set for event aliases
     };
 
     /**
@@ -177,6 +208,9 @@ namespace barton
         bool optional = false;               // If true, failure to configure this resource does not block commissioning
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
         SbmdMapper mapper;
+        // Empty means always register (declared as "none"). Non-empty means all entries
+        // must be satisfied before the resource is registered.
+        std::vector<SbmdPrerequisite> prerequisites;
     };
 
     /**
@@ -205,8 +239,11 @@ namespace barton
     struct SbmdMatterMeta
     {
         std::vector<uint16_t> deviceTypes;
-        uint32_t revision;
+        std::optional<uint32_t> revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
+        std::vector<SbmdAlias> aliases;        // Named Matter element definitions referenced by resources
+        std::optional<uint16_t> vendorId;
+        std::optional<uint16_t> productId;
     };
 
     /**
@@ -232,13 +269,6 @@ namespace barton
         SbmdReporting reporting;
         std::vector<SbmdResource> resources;  // Top-level resources
         std::vector<SbmdEndpoint> endpoints;
-
-        /**
-         * Check if this spec uses matter.js for script execution.
-         * When true, write mappers return fully-specified operations (invoke/write)
-         * and the command/commands/attribute metadata in the SBMD file is ignored.
-         */
-        bool UsesMatterJs() const { return scriptType == "JavaScript+matterjs"; }
     };
 
 } // namespace barton

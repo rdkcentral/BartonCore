@@ -1,8 +1,8 @@
 # Light SBMD Specification
 # Maps Matter light device types to Barton light device class
 
-# SBMD schema version 1.0
-schemaVersion: "1.0"
+# SBMD schema version 2.0
+schemaVersion: "3.0"
 # Driver version for this specification
 driverVersion: "1.0"
 # Human-readable driver name
@@ -32,34 +32,24 @@ matterMeta:
     - 0x0104  # Dimmable Light Switch
     - 0x0105  # Color Dimmable Light Switch
   revision: 1
+  aliases:
+    - name: "onOff"
+      attribute:
+        clusterId: "0x0006"      # On/Off cluster
+        attributeId: "0x0000"    # OnOff attribute
+        name: "OnOff"
+        type: "bool"
+    - name: "currentLevel"
+      attribute:
+        clusterId: "0x0008"      # Level Control cluster
+        attributeId: "0x0000"    # CurrentLevel attribute
+        name: "CurrentLevel"
+        type: "uint8"
 
 # Subscription reporting configuration
 reporting:
   minSecs: 1
   maxSecs: 3600
-
-# Device-level resources (not associated with a specific endpoint)
-resources:
-  - id: "identifySeconds"
-    type: "com.icontrol.seconds"
-    modes:
-      - "read"
-      - "write"
-    mapper:
-      read:
-        attribute:
-          clusterId: "0x0003"      # Identify cluster
-          attributeId: "0x0000"    # IdentifyTime attribute
-          name: "IdentifyTime"
-          type: "uint16"
-        script: |
-          const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-          return {output: value.toString()};
-      write:
-        script: |
-          const secs = parseInt(sbmdWriteArgs.input, 10) || 0;
-          const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
-          return SbmdUtils.Response.write(0x0003, 0x0000, tlvBase64);
 
 endpoints:
   - id: "1"
@@ -73,20 +63,18 @@ endpoints:
           - "write"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "onOff"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0006"      # On/Off cluster
-              attributeId: "0x0000"    # OnOff attribute
-              name: "OnOff"
-              type: "bool"
+            alias: "onOff"
             script: |
-              const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              return {output: (value === true) ? 'true' : 'false'};
+              var value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              return {value: (value === true) ? 'true' : 'false'};
           write:
             script: |
               // On/Off commands have no arguments
-              const commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
+              var commandId = (sbmdWriteArgs.input === 'true') ? 0x0001 : 0x0000;  // On=1, Off=0
               return SbmdUtils.Response.invoke(0x0006, commandId);
 
       - id: "currentLevel"
@@ -97,39 +85,37 @@ endpoints:
           - "write"
           - "dynamic"
           - "emitEvents"
+        prerequisites:
+          - alias: "currentLevel"
         mapper:
           read:
-            attribute:
-              clusterId: "0x0008"      # Level Control cluster
-              attributeId: "0x0000"    # CurrentLevel attribute
-              name: "CurrentLevel"
-              type: "uint8"
+            alias: "currentLevel"
             script: |
-              const level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-              const percent = Math.round(level / 254 * 100);
-              return {output: percent.toString()};
+              var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
+              var percent = Math.round(level / 254 * 100);
+              return {value: percent.toString()};
           write:
             script: |
-              let percent = parseInt(sbmdWriteArgs.input, 10);
+              var percent = parseInt(sbmdWriteArgs.input, 10);
               if (isNaN(percent)) percent = 0;
               if (percent < 0) percent = 0;
               if (percent > 100) percent = 100;
 
               // Convert percentage (0-100) to Matter level (0-254)
-              const level = Math.round(percent / 100 * 254);
+              var level = Math.round(percent / 100 * 254);
 
               // Encode MoveToLevelWithOnOff command args as TLV struct
-              const args = {
+              var args = {
                 Level: level,
                 TransitionTime: 0,
                 OptionsMask: 0,
                 OptionsOverride: 0
               };
-              const schema = {
+              var schema = {
                 Level: {tag: 0, type: 'uint8'},
                 TransitionTime: {tag: 1, type: 'uint16'},
                 OptionsMask: {tag: 2, type: 'uint8'},
                 OptionsOverride: {tag: 3, type: 'uint8'}
               };
-              const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
+              var tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, schema);
               return SbmdUtils.Response.invoke(0x0008, 0x0004, tlvBase64);

@@ -57,16 +57,20 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
     unzip \
     wget \
     zip \
-    gcc-11 \
-    g++-11
+    clang-18 \
+    lld-18 \
+    llvm-18
 
-# Set the default gcc and g++ versions to 11 because our current checkout of matter can't handle 13
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 30 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 30 && \
-    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-11 30 && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 20 && \
-    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 20 && \
-    update-alternatives --install /usr/bin/gcov gcov /usr/bin/gcov-13 20
+# Set LLVM/Clang as the default compiler over GCC
+RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang-18 50 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-18 50 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30 && \
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 50 && \
+    update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 50 && \
+    update-alternatives --install /usr/bin/lld lld /usr/bin/lld-18 50 && \
+    update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-18 50 && \
+    update-alternatives --install /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-18 50
 
 ###############################################################################
 # expands the base stage to allow for building of packages with common tools
@@ -107,8 +111,7 @@ RUN pip3 install --upgrade --break-system-packages \
     pygobject-stubs==2.14.0 \
     setuptools==73.0.0 \
     python_stdnum \
-    pytest \
-    pytest-forked
+    pytest
 
 # pygobject-stubs distributed the stub (pyi) files for standard distribution girs, but we also want its tools so we can make
 # out own stubs. Those don't come with the pip package.
@@ -141,6 +144,7 @@ FROM base_builder AS third_party_builder
 ARG LINENOISE_GIT_TAG="d895173d679be70bcd8b23041fff3e458e1a3506"
 ARG OTBR_GIT_TAG="e851c2a80fb036e6987bedac399184a729f638d4"
 ARG FFF_GIT_TAG="5111c61e1ef7848e3afd3550044a8cf4405f4199"
+ARG MQUICKJS_GIT_TAG="ee50431eac9b14b99f722b537ec4cac0c8dd75ab"
 
 # Copy over the third party patches
 ADD patches /tmp/patches
@@ -266,29 +270,6 @@ RUN cd /tmp && \
     make install && \
     rm -rf /tmp/linenoise
 
-# Download, install, and clean up OpenSSL 1.1.1v, specifically for use in our project
-RUN cd /tmp && \
-    wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1v/openssl-1.1.1v.tar.gz && \
-    tar -xzvf openssl-1.1.1v.tar.gz && \
-    cd openssl-1.1.1v && \
-    ./config --prefix=/usr/local/openssl --openssldir=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/openssl-1.1.1v.tar.gz /tmp/openssl-1.1.1v
-COPY openssl.conf /etc/ld.so.conf.d/
-RUN ldconfig
-
-# Download, build, and install libcurl, but link against OpenSSL 1.1.1v specifically
-RUN cd /tmp && \
-    wget https://curl.se/download/curl-7.82.0.tar.gz && \
-    tar -xzvf curl-7.82.0.tar.gz && \
-    cd curl-7.82.0 && \
-    ./configure --with-ssl=/usr/local/openssl && \
-    make && \
-    make install && \
-    rm -rf /tmp/curl-7.82.0.tar.gz /tmp/curl-7.82.0
-
-
 # Matter sample apps for use as test targets
 # MATTER_REF is passed as a build arg, sourced from matter-version file
 ARG MATTER_REF
@@ -298,6 +279,7 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     git clone --branch ${MATTER_REF} --depth 1 https://github.com/project-chip/connectedhomeip.git matter && \
     cd matter && \
     ./scripts/checkout_submodules.py --shallow --platform linux && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/matter . && \
     export PKG_CONFIG_PATH=/usr/local/openssl/lib/pkgconfig:$PKG_CONFIG_PATH && \
     . ./scripts/activate.sh && \
     ./scripts/build/build_examples.py \
@@ -318,24 +300,36 @@ RUN test -n "${MATTER_REF}" || (echo "Error: MATTER_REF build arg is required" >
     rm -rf /root/.cipd-cache-dir
 SHELL ["/bin/sh", "-c"]
 
-# Download, build, and install quickjs, which needs our custom CMakeLists.txt
+# Download, build, and install mquickjs, which needs our custom CMakeLists.txt
 RUN cd /tmp && \
-    wget https://bellard.org/quickjs/quickjs-2025-09-13-2.tar.xz && \
-    tar -xvf quickjs-2025-09-13-2.tar.xz && \
-    cd quickjs-2025-09-13 && \
-    cp /tmp/patches/quickjs/CMakeLists.txt . && \
+    git clone --depth 1 https://github.com/bellard/mquickjs.git && \
+    cd mquickjs && \
+    git fetch --depth 1 origin ${MQUICKJS_GIT_TAG} && \
+    git checkout ${MQUICKJS_GIT_TAG} && \
+    cp /tmp/patches/mquickjs/CMakeLists.txt . && \
+    ${APPLY_PATCHES_PATH} /tmp/patches/mquickjs . && \
     mkdir build && \
     cd build && \
     cmake .. && \
     make && \
     make install && \
-    rm -rf /tmp/quickjs-2025-09-13-2.tar.xz /tmp/quickjs-2025-09-13
+    rm -rf /tmp/mquickjs
 
 # Clean up our patches
 RUN rm -rf /tmp/patches
 
-# Ensure the system uses OpenSSL 3 by default
-ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/openssl/lib:$LD_LIBRARY_PATH
+###############################################################################
+# Node.js for virtual test devices (matter.js deps installed at runtime)
+###############################################################################
+RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs
 
 ###############################################################################
 # Development build stage
@@ -365,6 +359,20 @@ RUN apt-get update && apt-get -y upgrade && DEBIAN_FRONTEND='noninteractive' apt
 
 RUN pip3 install --upgrade --break-system-packages \
     stack-pr
+
+# Cocogitto (conventional commit tooling)
+# NOTE: This version must match the cocogitto-action version used in
+# .github/workflows/release.yaml and .github/workflows/check-pr-title.yaml.
+# If you upgrade here, upgrade the action version there too (and vice versa).
+ARG COCOGITTO_VERSION="6.3.0"
+# Cocogitto does not publish checksums; this was computed from the release artifact.
+# Update when changing COCOGITTO_VERSION.
+ARG COCOGITTO_SHA256="046dbc0ea190528f5a028a64ed761d605f4be85de3a6e469174139331eb058bb"
+RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    -o /tmp/cocogitto.tar.gz && \
+    echo "${COCOGITTO_SHA256}  /tmp/cocogitto.tar.gz" | sha256sum --check && \
+    tar xzf /tmp/cocogitto.tar.gz -C /usr/local/bin --strip-components=1 --wildcards '*/cog' && \
+    rm /tmp/cocogitto.tar.gz
 
 # Make some /usr/ stuff open permissions. These are individual containers,
 # so this will let people install barton outputs.

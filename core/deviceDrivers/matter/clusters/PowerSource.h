@@ -39,12 +39,6 @@ namespace barton
     class PowerSource : public MatterCluster
     {
     public:
-        PowerSource(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
-                    std::shared_ptr<DeviceDataCache> deviceDataCache) :
-            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::PowerSource::Id, deviceDataCache)
-        {
-        }
-
         class EventHandler : public MatterCluster::EventHandler
         {
         public:
@@ -54,5 +48,16 @@ namespace barton
 
         void OnAttributeChanged(chip::app::ClusterStateCache *cache,
                                 const chip::app::ConcreteAttributePath &path) override;
+
+    protected:
+        PowerSource(EventHandler *handler, const std::string deviceId, chip::EndpointId endpointId,
+                    std::shared_ptr<DeviceDataCache> deviceDataCache) :
+            MatterCluster(handler, deviceId, endpointId, chip::app::Clusters::PowerSource::Id, deviceDataCache)
+        {
+        }
+
+    private:
+        template <typename T, typename... Args>
+        friend std::shared_ptr<T> MatterCluster::Create(Args&&... args);
     };
 } // namespace barton

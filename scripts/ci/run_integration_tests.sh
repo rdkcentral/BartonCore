@@ -31,6 +31,9 @@ set -e
 sudo service dbus start
 cmake --build $BARTON_TOP/build --target install
 
+# Install matter.js virtual device dependencies
+npm --prefix $BARTON_TOP/testing/mocks/devices/matterjs ci
+
 echo ""
 echo "***********************************"
 echo "End of installation, starting tests"

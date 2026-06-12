@@ -29,12 +29,12 @@
 #   docker compose -f compose.yaml -f compose.devcontainer.yaml ...
 #
 # It overrides the barton service's image/build so that the user is baked into
-# the image at build time (devcontainers require this — the entrypoint.sh
+# the image at build time (devcontainers require this -- the entrypoint.sh
 # approach used by dockerw does not work for VS Code remote containers).
 
-# Setting the name element helps distinguish devcontainer instances from dockerw
-# instances on shared machines. Example: $USER-barton-devcontainer-barton-1
-name: $BUILDER_USER-barton-devcontainer
+# Setting the name element to the user helps keep the container name easy to identify
+# by namespacing it with the user's name and workspace. Example: $BUILDER_USER-barton-$BARTON_WORKSPACE_ID-devcontainer
+name: $BUILDER_USER-barton-$BARTON_WORKSPACE_ID-devcontainer
 
 services:
     barton:

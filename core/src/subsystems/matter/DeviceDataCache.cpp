@@ -215,6 +215,44 @@ CHIP_ERROR DeviceDataCache::GetStringAttribute(chip::EndpointId endpointId,
     return CHIP_NO_ERROR;
 }
 
+CHIP_ERROR DeviceDataCache::GetUint16Attribute(chip::EndpointId endpointId,
+                                               chip::ClusterId clusterId,
+                                               chip::AttributeId attributeId,
+                                               uint16_t &outValue) const
+{
+    if (!clusterStateCache)
+    {
+        return CHIP_ERROR_INCORRECT_STATE;
+    }
+
+    chip::app::ConcreteAttributePath attributePath(endpointId, clusterId, attributeId);
+
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR err = clusterStateCache->Get(attributePath, reader);
+    if (err != CHIP_NO_ERROR)
+    {
+        return err;
+    }
+
+    return reader.Get(outValue);
+}
+
+CHIP_ERROR DeviceDataCache::GetVendorId(uint16_t &outValue) const
+{
+    return GetUint16Attribute(0,
+                              chip::app::Clusters::BasicInformation::Id,
+                              chip::app::Clusters::BasicInformation::Attributes::VendorID::Id,
+                              outValue);
+}
+
+CHIP_ERROR DeviceDataCache::GetProductId(uint16_t &outValue) const
+{
+    return GetUint16Attribute(0,
+                              chip::app::Clusters::BasicInformation::Id,
+                              chip::app::Clusters::BasicInformation::Attributes::ProductID::Id,
+                              outValue);
+}
+
 CHIP_ERROR DeviceDataCache::GetVendorName(std::string &outValue) const
 {
     return GetStringAttribute(0,
@@ -647,6 +685,29 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
             // Get all endpoint IDs
             std::vector<chip::EndpointId> endpointIds = self->GetEndpointIds();
 
+            // Collect valid (non-expired) cluster callbacks, opportunistically erasing expired ones.
+            // This snapshot ensures the same set of callbacks receives both OnReportBegin and OnReportEnd.
+            std::vector<std::shared_ptr<chip::app::ClusterStateCache::Callback>> validClusterCallbacks;
+            for (auto it = self->clusterCallbacks.begin(); it != self->clusterCallbacks.end();)
+            {
+                auto cb = it->second.lock();
+                if (cb)
+                {
+                    validClusterCallbacks.push_back(std::move(cb));
+                    ++it;
+                }
+                else
+                {
+                    it = self->clusterCallbacks.erase(it);
+                }
+            }
+
+            // Trigger OnReportBegin on all registered callbacks for common clusters first,
+            // then for all other device-specific clusters.
+            for (const auto &clusterCallback : validClusterCallbacks)
+            {
+                clusterCallback->OnReportBegin();
+            }
             self->callback->OnReportBegin();
 
             // Iterate through all endpoints, clusters, and attributes
@@ -684,6 +745,12 @@ CHIP_ERROR DeviceDataCache::RegenerateAttributeReport()
                 });
             }
 
+            // Trigger OnReportEnd on all registered callbacks for common clusters first,
+            // then for all other device-specific clusters.
+            for (const auto &clusterCallback : validClusterCallbacks)
+            {
+                clusterCallback->OnReportEnd();
+            }
             self->callback->OnReportEnd();
 
             icDebug("Done regenerating attribute report");
@@ -726,6 +793,9 @@ void DeviceDataCache::OnSubscriptionEstablished(chip::SubscriptionId aSubscripti
 
     ensureMatterMetersCreated();
     observabilityCounterAddWithAttrs(subscriptionEstablishedCounter, 1, "device.id", deviceUuid.c_str(), NULL);
+
+    // Ensure that, once a subscription is established, the naturally negotiated liveness timeout is used
+    readClient->OverrideLivenessTimeout(chip::System::Clock::kZero);
 }
 
 void DeviceDataCache::OnError(CHIP_ERROR aError)
@@ -875,9 +945,20 @@ void DeviceDataCache::OnDeviceConnectionFailure(const chip::ScopedNodeId &peerId
     observabilityCounterAddWithAttrs(
         caseSessionErrorCounter, 1, "device.id", deviceUuid.c_str(), "error", error.AsString(), NULL);
     std::lock_guard<std::mutex> lock(startupPromiseMutex);
+
     if (startupPromise)
     {
         startupPromise->set_value(false);
         startupPromise.reset();
     }
+}
+
+void DeviceDataCache::OverrideLiveness(uint32_t ms)
+{
+    if (!readClient)
+    {
+        return;
+    }
+
+    readClient->OverrideLivenessTimeout(chip::System::Clock::Milliseconds32(ms));
 }

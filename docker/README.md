@@ -74,6 +74,15 @@ Say you were making some image related changes, this would be the process:
 At this point, the image is available locally with the designated tag, and all operations that rely on
 this image with this specific tag will succeed.
 
+Once you've verified your changes work, finalize by bumping the official image version so CI and
+other developers pick up the new image:
+
+1. Increment the version in `docker/version` (e.g., `2.6` → `2.7`)
+2. Update `IMAGE_TAG` in `docker/.env` to match the new version (or just delete `docker/.env`
+   to use the default from `docker/version`)
+3. Rebuild with `docker/build.sh` and push the new image
+4. The temporary testing tag (e.g., `joetest1`) can be deleted — it served its purpose
+
 ### Note on Rebuilding the Devcontainer
 
 Due to the layout of Barton's docker and devcontainer environment, running the devcontainer commands

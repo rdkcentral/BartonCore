@@ -62,7 +62,7 @@ The build system SHALL support the following ON/OFF flags with specified default
 | `BCORE_MATTER_SKIP_SDK` | OFF | `BARTON_CONFIG_MATTER_SKIP_SDK` |
 | `BCORE_MATTER_USE_DEFAULT_COMMISSIONABLE_DATA` | OFF | `BARTON_CONFIG_USE_DEFAULT_COMMISSIONABLE_DATA` |
 | `BCORE_MATTER_ENABLE_OTA_PROVIDER` | OFF | `BARTON_CONFIG_MATTER_ENABLE_OTA_PROVIDER` |
-| `BCORE_MATTER_USE_MATTERJS` | ON | `BARTON_CONFIG_MATTER_USE_MATTERJS` |
+| `BCORE_MATTER_VALIDATE_SCHEMAS` | ON | `BARTON_CONFIG_MATTER_VALIDATE_SCHEMAS` |
 | `BCORE_BUILD_THIRD_PARTY_BARTON_COMMON` | ON | `BARTON_CONFIG_BUILD_THIRD_PARTY_BARTON_COMMON` |
 | `BCORE_OBSERVABILITY` | OFF | `BARTON_CONFIG_OBSERVABILITY` |
 
@@ -86,8 +86,12 @@ The build system SHALL support the following ON/OFF flags with specified default
 - **WHEN** `BCORE_OBSERVABILITY=ON`
 - **THEN** `BARTON_CONFIG_OBSERVABILITY=1` SHALL be defined, `core/src/observability/*.cpp` SHALL be compiled, and opentelemetry-cpp SHALL be fetched and linked
 
+#### Scenario: Removed matterjs flag rejected
+- **WHEN** `BCORE_MATTER_USE_MATTERJS` is set in the CMake cache
+- **THEN** configuration SHALL fail with a `FATAL_ERROR` indicating the option has been removed
+
 ### Requirement: String configuration options
-The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_LINK_LIBRARIES`.
+The build system SHALL support string configuration via `bcore_string_option()` for: `BCORE_MATTER_LIB` (default: `"BartonMatter"`), `BCORE_MATTER_PROVIDER_IMPLEMENTATIONS`, `BCORE_MATTER_DELEGATE_IMPLEMENTATIONS`, `BCORE_MATTER_BLE_CONTROLLER_DEVICE_NAME` (default: `"Matter-Controller"`), `BCORE_MATTER_SBMD_JS_ENGINE` (default: `"mquickjs"`, valid values: `"quickjs"` or `"mquickjs"`), `BCORE_MATTER_SBMD_SPECS_DIR` (semicolon-delimited list of directories), `BCORE_LINK_LIBRARIES`.
 
 #### Scenario: Custom Matter library name
 - **WHEN** `BCORE_MATTER_LIB=CustomMatter` is set
@@ -98,22 +102,26 @@ The build system SHALL support string configuration via `bcore_string_option()` 
 - **THEN** those sources SHALL be compiled and linked instead of the default providers
 
 ### Requirement: Integer configuration options
-The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120).
+The build system SHALL support integer configuration via `bcore_int_option()` for: `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS` (default: 120), `BCORE_MQUICKJS_MEMSIZE_BYTES` (default: 1048576, size of the pre-allocated memory buffer for the mquickjs JavaScript engine).
 
 #### Scenario: Custom Zigbee timeout
 - **WHEN** `BCORE_ZIGBEE_STARTUP_TIMEOUT_SECONDS=60` is set
 - **THEN** `BARTON_CONFIG_ZIGBEE_STARTUP_TIMEOUT_SECONDS=60` SHALL be defined
 
 ### Requirement: Dependency version constraints
-The build system SHALL enforce minimum versions for required dependencies: GLib/GIO (2.62.4), CMocka (1.1.5, test only), GoogleTest (1.14.0, test only), libcurl (7.82.0), OpenSSL (1.1.1l–1.1.1v), libuuid (1.0.3), libxml2 (2.9.8), mbedcrypto (2.28.4), jsoncpp (1.9.5, when BCORE_MATTER=ON).
+The build system SHALL enforce minimum versions for required dependencies: GLib/GIO (2.62.4), CMocka (1.1.5, test only), GoogleTest (1.14.0, test only), libcurl (7.82.0), OpenSSL (3.0.5+), libuuid (1.0.3), libxml2 (2.9.8), mbedcrypto (2.28.4), jsoncpp (1.9.5, when BCORE_MATTER=ON).
 
 #### Scenario: GLib version check
 - **WHEN** CMake configures with GLib 2.60.0
 - **THEN** configuration SHALL fail because the minimum required version is 2.62.4
 
-#### Scenario: OpenSSL version range
-- **WHEN** OpenSSL 3.0.0 is detected
-- **THEN** configuration SHALL fail because it exceeds the maximum version 1.1.1v
+#### Scenario: OpenSSL minimum version
+- **WHEN** OpenSSL 3.0.4 is detected
+- **THEN** configuration SHALL fail because it is below the required version 3.0.5
+
+#### Scenario: Newer OpenSSL 3.x version
+- **WHEN** OpenSSL 3.1.0 is detected
+- **THEN** configuration SHALL pass OpenSSL version checking
 
 ### Requirement: Stack protection and sanitizer support
 The build system SHALL support optional stack smash protection (`BCORE_BUILD_WITH_SSP`) adding `-fstack-protector-strong`, and AddressSanitizer (`BCORE_BUILD_WITH_ASAN`) adding `-fsanitize=address` to both compiler and linker flags.

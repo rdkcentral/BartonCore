@@ -114,13 +114,13 @@ gchar *deviceServiceConfigurationGetMatterStorageDir(void);
 gchar *deviceServiceConfigurationGetMatterAttestationTrustStoreDir(void);
 
 /**
- * deviceServiceConfigurationGetSbmdDir
+ * deviceServiceConfigurationGetSbmdDirs
  *
- * @brief This retrieves the SBMD spec directory.
+ * @brief This retrieves the semicolon-delimited list of SBMD spec directories.
  *
- * @return the SBMD spec directory
+ * @return the semicolon-delimited list of SBMD spec directories
  */
-gchar *deviceServiceConfigurationGetSbmdDir(void);
+gchar *deviceServiceConfigurationGetSbmdDirs(void);
 
 /**
  * deviceServiceConfigurationGetAccountId
