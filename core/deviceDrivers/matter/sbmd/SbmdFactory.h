@@ -71,5 +71,11 @@ namespace barton
          * instances that reference them (those are owned by the C device manager).
          */
         std::vector<std::unique_ptr<SbmdV4Driver>> v4Drivers;
+
+        /**
+         * Whether the mquickjs runtime, utilities bundle, and capture function
+         * have been initialized for v4 driver loading.
+         */
+        bool v4RuntimeReady = false;
     };
 } //namespace barton

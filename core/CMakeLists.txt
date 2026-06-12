@@ -162,7 +162,7 @@ if (BCORE_MATTER)
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
-        
+
         # Validates all .sbmd files against the versioned JSON schemas during build.
         # SBMD_SCHEMA_DIR points to the top-level schema directory; the validator
         # recursively searches subdirectories (e.g. v2/, v3/) for a schema file
@@ -330,6 +330,12 @@ if (BCORE_MATTER)
 
     if (ALL_SBMD_FILES)
         install(FILES ${ALL_SBMD_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    endif()
+
+    file(GLOB ALL_SBMD_V4_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
+
+    if (ALL_SBMD_V4_FILES)
+        install(FILES ${ALL_SBMD_V4_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
     endif()
 endif()
 

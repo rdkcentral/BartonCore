@@ -42,6 +42,7 @@
 #include <app/ConcreteAttributePath.h>
 #include <cinttypes>
 #include <lib/core/TLVReader.h>
+#include <lib/core/TLVWriter.h>
 #include <memory>
 
 extern "C" {
@@ -1017,16 +1018,16 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisitesV4(const SbmdV4Resource &res
 
         // Try parsing as a numeric cluster ID first
         uint32_t clusterId = 0;
+        char *endPtr = nullptr;
+        unsigned long parsed = strtoul(prereqAlias.c_str(), &endPtr, 0);
 
-        try
-        {
-            clusterId = std::stoul(prereqAlias);
-        }
-        catch (...)
+        if (endPtr == prereqAlias.c_str() || *endPtr != '\0')
         {
             icDebug("V4: Prerequisite '%s' is not a numeric cluster ID, skipping", prereqAlias.c_str());
             continue;
         }
+
+        clusterId = static_cast<uint32_t>(parsed);
 
         bool clusterFound = false;
 
@@ -1329,26 +1330,32 @@ void SpecBasedMatterDeviceDriver::HandleV4AttributeReport(const std::string &dev
         return;
     }
 
-    // Encode TLV as base64 for passing to JS handlers
-    // Read the TLV data into a buffer first
-    const uint8_t *tlvStart = reader.GetReadPoint();
+    // Encode TLV element as base64 for passing to JS handlers.
+    // The reader from ClusterStateCache::Get() is positioned at the attribute value
+    // element but GetRemainingLength() may be 0 for in-memory cache data.
+    // Use TLVWriter::CopyElement to extract the element into a scratch buffer.
+    uint8_t tlvBuf[256]; // Attributes rarely exceed this; grow if needed
+    chip::TLV::TLVWriter writer;
+    writer.Init(tlvBuf, sizeof(tlvBuf));
 
-    // We need the raw TLV bytes. The reader is positioned at the element.
-    // Get the total length including tag and value.
-    // Use a simpler approach: copy the remaining buffer from the reader
-    size_t remaining = reader.GetRemainingLength();
+    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    {
+        icWarn("V4: Failed to copy TLV element for cluster 0x%x attribute 0x%x", clusterId, attributeId);
+        return;
+    }
 
-    if (remaining == 0)
+    uint32_t tlvLen = writer.GetLengthWritten();
+
+    if (tlvLen == 0)
     {
         icDebug("V4: Empty TLV data for attribute 0x%x", attributeId);
         return;
     }
 
     // Base64 encode the TLV data
-    // The reader's read point is at the current element
-    size_t maxBase64Len = BASE64_ENCODED_LEN(remaining) + 1;
+    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
     std::string tlvBase64(maxBase64Len, '\0');
-    uint16_t encoded = chip::Base64Encode(tlvStart, static_cast<uint16_t>(remaining),
+    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen),
                                           tlvBase64.data());
     tlvBase64.resize(encoded);
 

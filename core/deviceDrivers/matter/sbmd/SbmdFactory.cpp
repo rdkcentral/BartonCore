@@ -33,6 +33,7 @@
 #include "../MatterDriverFactory.h"
 
 #include "mquickjs/MQuickJsRuntime.h"
+#include "mquickjs/SbmdUtilsLoader.h"
 #include "mquickjs/SbmdV4Loader.h"
 
 #include <filesystem>
@@ -193,6 +194,47 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
     if (ec)
     {
         return;
+    }
+
+    // Ensure the shared JS runtime is initialized before loading any v4 drivers.
+    // SbmdScriptImpl::Create lazily initializes for v3 scripts, but v4 drivers
+    // need it at factory registration time.
+    // Note: do NOT hold the JS mutex across these calls — LoadBundle and
+    // InjectCaptureFunction may acquire it internally.
+    if (!v4RuntimeReady)
+    {
+        if (!MQuickJsRuntime::IsInitialized())
+        {
+            if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
+            {
+                icError("Failed to initialize mquickjs runtime for v4 drivers");
+                allRegistered = false;
+                return;
+            }
+        }
+
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (!SbmdUtilsLoader::LoadBundle(ctx))
+        {
+            icError("Failed to load SBMD utilities bundle for v4 drivers");
+            allRegistered = false;
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+            if (!SbmdV4Loader::InjectCaptureFunction(ctx))
+            {
+                icError("Failed to inject SbmdDriver capture function");
+                allRegistered = false;
+                return;
+            }
+        }
+
+        v4RuntimeReady = true;
+        icInfo("mquickjs runtime initialized for v4 SBMD drivers");
     }
 
     try

@@ -34,8 +34,8 @@
 - [x] 5.1 Create driver state model — metadata-only (inactive) vs handlers-rooted (active). Store file path or source text for re-evaluation on activation.
 - [x] 5.2 Implement `Activate()` — re-evaluate `.sbmd.js` file, GC-root handler JSValues via `JS_AddGCRef`. Build dispatch tables (attribute, event, command lookups).
 - [x] 5.3 Implement `Deactivate()` — release GC roots via `JS_DeleteGCRef`, clear dispatch tables.
-- [ ] 5.4 Integrate with `SbmdFactory::RegisterDrivers()` — at startup, load all drivers as metadata-only. Then activate drivers that have paired devices in the database.
-- [ ] 5.5 Integrate with commissioning flow — activate candidate drivers before claiming, deactivate losers that end up with no devices.
+- [x] 5.4 Integrate with `SbmdFactory::RegisterDrivers()` — at startup, load all drivers as metadata-only. Then activate drivers that have paired devices in the database.
+- [x] 5.5 Integrate with commissioning flow — activate candidate drivers before claiming, deactivate losers that end up with no devices.
 - [x] 5.6 Write unit tests for activate/deactivate lifecycle — verify handlers are callable after activation, verify GC roots released after deactivation.
 
 ## 6. Handler Dispatch and Supplements
@@ -66,33 +66,33 @@
 
 ## 9. Update SpecBasedMatterDeviceDriver
 
-- [ ] 9.1 Rework `DoRegisterResources` — iterate v4 resource declarations, check prerequisites (same logic, different data source), register Barton resources with modes.
-- [ ] 9.2 Rework `DoReadResource` — look up read/seed handler, resolve supplements, invoke handler, execute result chain, return value.
-- [ ] 9.3 Rework `DoWriteResource` — look up write handler, invoke, execute result chain (sendCommand/writeAttribute terminal).
-- [ ] 9.4 Rework `ExecuteResource` — look up execute handler, invoke, execute result chain (may be deferred).
-- [ ] 9.5 Rework `DoSynchronizeDevice` — call seed handlers for all seeded resources.
-- [ ] 9.6 Wire attribute/event/command report callbacks to dispatch system (task group 6).
-- [ ] 9.7 Integrate driver lifecycle (activate/deactivate) into the driver's `AddDevice`/remove-device flow.
+- [x] 9.1 Rework `DoRegisterResources` — iterate v4 resource declarations, check prerequisites (same logic, different data source), register Barton resources with modes.
+- [x] 9.2 Rework `DoReadResource` — look up read/seed handler, resolve supplements, invoke handler, execute result chain, return value.
+- [x] 9.3 Rework `DoWriteResource` — look up write handler, invoke, execute result chain (sendCommand/writeAttribute terminal).
+- [x] 9.4 Rework `ExecuteResource` — look up execute handler, invoke, execute result chain (may be deferred).
+- [x] 9.5 Rework `DoSynchronizeDevice` — call seed handlers for all seeded resources.
+- [x] 9.6 Wire attribute/event/command report callbacks to dispatch system (task group 6).
+- [x] 9.7 Integrate driver lifecycle (activate/deactivate) into the driver's `AddDevice`/remove-device flow.
 
 ## 10. Update SbmdFactory
 
-- [ ] 10.1 Change `RegisterDriversFromDirectory` to scan for `.sbmd.js` files instead of `.sbmd` files.
-- [ ] 10.2 Replace `SbmdParser::ParseFile` with v4 evaluation flow (constants extraction → IIFE eval → registration extraction).
-- [ ] 10.3 Integrate with startup activation — after loading all drivers, query device database for paired devices, activate drivers that have devices.
-- [ ] 10.4 Write unit test for factory loading `.sbmd.js` files.
+- [x] 10.1 Change `RegisterDriversFromDirectory` to scan for `.sbmd.js` files instead of `.sbmd` files.
+- [x] 10.2 Replace `SbmdParser::ParseFile` with v4 evaluation flow (constants extraction → IIFE eval → registration extraction).
+- [x] 10.3 Integrate with startup activation — after loading all drivers, query device database for paired devices, activate drivers that have devices.
+- [x] 10.4 Write unit test for factory loading `.sbmd.js` files.
 
 ## 11. Update Build System
 
-- [ ] 11.1 Update `core/CMakeLists.txt` — remove `SbmdParser.cpp` from source list, remove yaml-cpp dependency from SBMD build (check if used elsewhere first). Add any new source files.
-- [ ] 11.2 Replace SBMD schema validation in the build with `.sbmd.js` syntax validation (ensure files parse without errors).
-- [ ] 11.3 Regenerate `SbmdUtilsEmbedded.h` from the updated `sbmd-utils.js` (the `embed-js-as-header.py` script).
-- [ ] 11.4 Verify full build succeeds with the new source files and removed v3 files.
+- [x] 11.1 Update `core/CMakeLists.txt` — remove `SbmdParser.cpp` from source list, remove yaml-cpp dependency from SBMD build (check if used elsewhere first). Add any new source files.
+- [x] 11.2 Replace SBMD schema validation in the build with `.sbmd.js` syntax validation (ensure files parse without errors).
+- [x] 11.3 Regenerate `SbmdUtilsEmbedded.h` from the updated `sbmd-utils.js` (the `embed-js-as-header.py` script).
+- [x] 11.4 Verify full build succeeds with the new source files and removed v3 files.
 
 ## 12. Light Driver Conversion
 
-- [ ] 12.1 Write `light.sbmd.js` — constants (EP, CL, ATTR, CMD, RES), aliases (onOff, currentLevel), barton/matter metadata, endpoints with resources (isOn with seed+write, currentLevel optional with seed+write), attributeHandlers for onOff and currentLevel. Match v3 behavior exactly.
-- [ ] 12.2 Place `light.sbmd.js` in `core/deviceDrivers/matter/sbmd/specs/`.
-- [ ] 12.3 Run light integration tests (`testing/test/light_test.py`) — all must pass.
+- [x] 12.1 Write `light.sbmd.js` — constants (EP, CL, ATTR, CMD, RES), aliases (onOff, currentLevel), barton/matter metadata, endpoints with resources (isOn with seed+write, currentLevel optional with seed+write), attributeHandlers for onOff and currentLevel. Match v3 behavior exactly.
+- [x] 12.2 Place `light.sbmd.js` in `core/deviceDrivers/matter/sbmd/specs/`.
+- [x] 12.3 Run light integration tests (`testing/test/light_test.py`) — all must pass.
 - [ ] 12.4 Profile JS heap usage with the v4 light driver loaded — compare against v3 baseline using `MQuickJsRuntime::LogMemoryUsage` and observability metrics.
 
 ## 13. Remove v3 Infrastructure
