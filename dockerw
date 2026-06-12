@@ -38,8 +38,9 @@ COMPOSE_INTERACTIVE_FLAGS=""
 EXTRA_ENV="-e SSH_AUTH_SOCK"
 DEV_VOL=""
 HOST_NETWORK=""
+DEBUGINFOD_CACHE_VOL=""
 
-while getopts ":ne:dH" opt; do
+while getopts ":ne:dHD" opt; do
     case ${opt} in
     n) # process option n
         COMPOSE_INTERACTIVE_FLAGS="--no-TTY"
@@ -53,6 +54,16 @@ while getopts ":ne:dH" opt; do
     H) # use host networking (useful for Matter device access)
         HOST_NETWORK="--network host"
         ;;
+    D) # mount host debuginfod cache into container
+        _cache="${DEBUGINFOD_CACHE_PATH:-$HOME/.cache/debuginfod_client}"
+        if [ -d "$_cache" ]; then
+            DEBUGINFOD_CACHE_VOL="-v $_cache:$_cache:cached"
+            EXTRA_ENV="${EXTRA_ENV} -e DEBUGINFOD_CACHE_PATH=$_cache"
+        else
+            echo "WARNING: debuginfod cache directory '$_cache' does not exist, skipping mount." >&2
+        fi
+        unset _cache
+        ;;
     esac
 done
 shift "$(($OPTIND - 1))"
@@ -64,7 +75,7 @@ $DIR/docker/setupDockerEnv.sh
 
 COMPOSE_FILE="${DIR}/docker/compose.yaml"
 
-EXTRA_VOLUMES="${DEV_VOL}"
+EXTRA_VOLUMES="${DEV_VOL} ${DEBUGINFOD_CACHE_VOL}"
 
 VOLUMES_ARGS="-v $HOME:$HOME
              $EXTRA_VOLUMES"
