@@ -288,6 +288,7 @@ if (BCORE_MATTER)
         NAME testSbmdV4Driver
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4DriverTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Driver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Dispatch.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
@@ -300,6 +301,25 @@ if (BCORE_MATTER)
 
     if (TARGET testSbmdV4Driver)
         target_link_libraries(testSbmdV4Driver bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdV4Dispatch
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4DispatchTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Dispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Driver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdV4Dispatch)
+        target_link_libraries(testSbmdV4Dispatch bCoreConfig)
     endif()
 
     bcore_add_cpp_test(

@@ -75,13 +75,12 @@ namespace
                     },
                 },
             },
-            attributeHandlers: [
-                {
-                    name: "onOffHandler",
+            attributeHandlers: {
+                onOffHandler: {
                     aliases: ["onOff"],
                     handler: handleOnOff,
                 },
-            ],
+            },
         });
 
         function readIsOn(args) {

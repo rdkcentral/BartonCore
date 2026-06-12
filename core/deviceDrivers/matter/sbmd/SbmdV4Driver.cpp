@@ -77,8 +77,18 @@ namespace barton
         // GC-root all handler JSValues
         RootHandlers(ctx);
 
+        // Build dispatch tables from aliases and handlers
+        attributeDispatch.Build(registration->aliases, registration->attributeHandlers);
+        eventDispatch.Build(registration->aliases, registration->eventHandlers);
+        commandDispatch.Build(registration->aliases, registration->commandHandlers);
+
         registration->activated = true;
-        icDebug("driver '%s' activated with %zu GC roots", registration->name.c_str(), gcRefs.size());
+        icDebug("driver '%s' activated with %zu GC roots, dispatch: %zu attr, %zu event, %zu cmd entries",
+                registration->name.c_str(),
+                gcRefs.size(),
+                attributeDispatch.GetSpecificEntryCount() + attributeDispatch.GetWildcardEntryCount(),
+                eventDispatch.GetSpecificEntryCount() + eventDispatch.GetWildcardEntryCount(),
+                commandDispatch.GetSpecificEntryCount() + commandDispatch.GetWildcardEntryCount());
 
         return true;
     }
@@ -94,6 +104,10 @@ namespace barton
         icDebug("deactivating driver '%s'", registration->name.c_str());
 
         UnrootHandlers(ctx);
+
+        attributeDispatch.Clear();
+        eventDispatch.Clear();
+        commandDispatch.Clear();
 
         registration->activated = false;
     }
@@ -111,6 +125,21 @@ namespace barton
     const std::string &SbmdV4Driver::GetName() const
     {
         return registration->name;
+    }
+
+    const SbmdV4DispatchTable &SbmdV4Driver::GetAttributeDispatch() const
+    {
+        return attributeDispatch;
+    }
+
+    const SbmdV4DispatchTable &SbmdV4Driver::GetEventDispatch() const
+    {
+        return eventDispatch;
+    }
+
+    const SbmdV4DispatchTable &SbmdV4Driver::GetCommandDispatch() const
+    {
+        return commandDispatch;
     }
 
     void SbmdV4Driver::RootIfValid(JSContext *ctx, JSValue &handler)

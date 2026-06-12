@@ -38,6 +38,7 @@
 
 #pragma once
 
+#include "SbmdV4Dispatch.h"
 #include "SbmdV4Registration.h"
 
 #include <list>
@@ -110,6 +111,21 @@ namespace barton
          */
         const std::string &GetName() const;
 
+        /**
+         * Get the attribute dispatch table (only valid when activated).
+         */
+        const SbmdV4DispatchTable &GetAttributeDispatch() const;
+
+        /**
+         * Get the event dispatch table (only valid when activated).
+         */
+        const SbmdV4DispatchTable &GetEventDispatch() const;
+
+        /**
+         * Get the command dispatch table (only valid when activated).
+         */
+        const SbmdV4DispatchTable &GetCommandDispatch() const;
+
     private:
         /**
          * Walk the registration and GC-root all handler JSValues.
@@ -131,6 +147,11 @@ namespace barton
 
         // GC roots — stable addresses via std::list (vector would invalidate on realloc)
         std::list<JSGCRef> gcRefs;
+
+        // Dispatch tables — built at activation, cleared at deactivation
+        SbmdV4DispatchTable attributeDispatch;
+        SbmdV4DispatchTable eventDispatch;
+        SbmdV4DispatchTable commandDispatch;
     };
 
 } // namespace barton
