@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Temperature Sensor SBMD v4 Driver
+// Temperature Sensor SBMD Driver
 //
 // Maps Matter Temperature Sensor device type to Barton environmentalSensor.
 // MeasuredValue is in hundredths of degrees Celsius.

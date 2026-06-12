@@ -44,7 +44,7 @@ namespace barton
         std::string name;
         std::string type;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
-        std::string resourceId;                        // Resource ID from the owning SbmdResource
+        std::string resourceId;                        // Resource ID from the owning SbmdSpecResource
 
         // Equality operator for map key usage
         bool operator==(const SbmdAttribute &other) const
@@ -86,7 +86,7 @@ namespace barton
         std::optional<uint16_t> timedInvokeTimeoutMs; // If set, command requires timed invoke with this timeout
         std::vector<SbmdArgument> args;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
-        std::string resourceId;                        // Resource ID from the owning SbmdResource
+        std::string resourceId;                        // Resource ID from the owning SbmdSpecResource
 
         // Equality operator for map key usage
         bool operator==(const SbmdCommand &other) const
@@ -117,7 +117,7 @@ namespace barton
         uint32_t eventId;
         std::string name;
         std::optional<std::string> resourceEndpointId; // Endpoint ID if parsed from an endpoint resource
-        std::string resourceId;                        // Resource ID from the owning SbmdResource
+        std::string resourceId;                        // Resource ID from the owning SbmdSpecResource
 
         // Equality operator for map key usage
         bool operator==(const SbmdEvent &other) const
@@ -176,8 +176,8 @@ namespace barton
      * A single prerequisite for a resource: the device must have this cluster present, and optionally
      * one or more specific attributes within that cluster, in order for the resource to be registered.
      *
-     * Cluster and attribute IDs are resolved from an alias at parse time (see SbmdAlias and
-     * SbmdMatterMeta.aliases).
+     * Cluster and attribute IDs are resolved from an alias at parse time (see SbmdSpecAlias and
+     * SbmdSpecMatterMeta.aliases).
      */
     struct SbmdPrerequisite
     {
@@ -190,7 +190,7 @@ namespace barton
      * A named reference to a Matter cluster attribute or event, defined in matterMeta.aliases.
      * Each alias binds a spec-author-chosen name to the IDs and type of a single Matter element.
      */
-    struct SbmdAlias
+    struct SbmdSpecAlias
     {
         std::string name;                       // spec-author-chosen identifier, unique within the driver spec
         std::optional<SbmdAttribute> attribute; // set for attribute aliases
@@ -200,7 +200,7 @@ namespace barton
     /**
      * Represents a device resource (property or function)
      */
-    struct SbmdResource
+    struct SbmdSpecResource
     {
         std::string id;
         std::string type;                    // "boolean", "string", "number", "function", etc.
@@ -216,18 +216,18 @@ namespace barton
     /**
      * Represents a device endpoint with its profile and resources
      */
-    struct SbmdEndpoint
+    struct SbmdSpecEndpoint
     {
         std::string id;
         std::string profile;
         uint32_t profileVersion;
-        std::vector<SbmdResource> resources;
+        std::vector<SbmdSpecResource> resources;
     };
 
     /**
      * Barton-specific metadata
      */
-    struct SbmdBartonMeta
+    struct SbmdSpecBartonMeta
     {
         std::string deviceClass;
         uint32_t deviceClassVersion;
@@ -236,12 +236,12 @@ namespace barton
     /**
      * Matter-specific metadata
      */
-    struct SbmdMatterMeta
+    struct SbmdSpecMatterMeta
     {
         std::vector<uint16_t> deviceTypes;
         std::optional<uint32_t> revision;
         std::vector<uint32_t> featureClusters; // Optional: cluster IDs to get feature maps from
-        std::vector<SbmdAlias> aliases;        // Named Matter element definitions referenced by resources
+        std::vector<SbmdSpecAlias> aliases;        // Named Matter element definitions referenced by resources
         std::optional<uint16_t> vendorId;
         std::optional<uint16_t> productId;
     };
@@ -249,7 +249,7 @@ namespace barton
     /**
      * Reporting configuration for attribute subscriptions
      */
-    struct SbmdReporting
+    struct SbmdSpecReporting
     {
         uint16_t minSecs = 0; // Minimum reporting interval in seconds
         uint16_t maxSecs = 0; // Maximum reporting interval in seconds
@@ -264,11 +264,11 @@ namespace barton
         std::string driverVersion;
         std::string name;
         std::string scriptType;
-        SbmdBartonMeta bartonMeta;
-        SbmdMatterMeta matterMeta;
-        SbmdReporting reporting;
-        std::vector<SbmdResource> resources;  // Top-level resources
-        std::vector<SbmdEndpoint> endpoints;
+        SbmdSpecBartonMeta bartonMeta;
+        SbmdSpecMatterMeta matterMeta;
+        SbmdSpecReporting reporting;
+        std::vector<SbmdSpecResource> resources;  // Top-level resources
+        std::vector<SbmdSpecEndpoint> endpoints;
     };
 
 } // namespace barton

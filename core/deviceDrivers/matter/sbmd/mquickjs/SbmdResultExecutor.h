@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * Walks and executes a v4 handler result chain ({ops, terminal}).
+ * Walks and executes a handler result chain ({ops, terminal}).
  *
  * The result chain is a JSValue with:
  *   - ops: array of non-terminal operation objects
@@ -164,10 +164,10 @@ namespace barton
     };
 
     /**
-     * Walks a v4 handler result JSValue and extracts it into ParsedResult.
+     * Walks a handler result JSValue and extracts it into ParsedResult.
      * Must be called while holding MQuickJsRuntime::GetMutex().
      */
-    class SbmdV4ResultExecutor
+    class SbmdResultExecutor
     {
     public:
         /**

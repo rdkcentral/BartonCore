@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * Dispatch table construction and handler lookup for v4 SBMD drivers.
+ * Dispatch table construction and handler lookup for SBMD drivers.
  *
  * Maps incoming Matter attribute/event/command reports to the right handler
  * functions based on alias resolution and priority ordering.
@@ -40,7 +40,7 @@
 
 #pragma once
 
-#include "SbmdV4Registration.h"
+#include "SbmdRegistration.h"
 
 #include <cstdint>
 #include <map>
@@ -69,7 +69,7 @@ namespace barton
      */
     struct DispatchEntry
     {
-        const SbmdV4DeviceHandler *handler; // Non-owning pointer into the registration
+        const SbmdDeviceHandler *handler; // Non-owning pointer into the registration
         HandlerPriority priority;
     };
 
@@ -103,19 +103,19 @@ namespace barton
      * list of handler entries. Also maintains a wildcard table keyed by
      * clusterId only.
      */
-    class SbmdV4DispatchTable
+    class SbmdDispatchTable
     {
     public:
         /**
          * Build a dispatch table from the registration's aliases and a handler vector.
          *
-         * @param aliases The registration's alias map (name → SbmdV4Alias)
+         * @param aliases The registration's alias map (name → SbmdAlias)
          * @param handlers The device handler vector (attributeHandlers, eventHandlers, or commandHandlers)
          * @param aliasElementGetter Function to extract the relevant element ID from an alias
          *        (e.g. attributeId for attribute dispatch, eventId for event dispatch)
          */
-        void Build(const std::unordered_map<std::string, SbmdV4Alias> &aliases,
-                   const std::vector<SbmdV4DeviceHandler> &handlers);
+        void Build(const std::unordered_map<std::string, SbmdAlias> &aliases,
+                   const std::vector<SbmdDeviceHandler> &handlers);
 
         /**
          * Look up all matching handlers for a given (clusterId, elementId),

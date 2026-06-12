@@ -86,8 +86,8 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             aPath.mClusterId,
             aPath.mAttributeId);
 
-    // V4 path: delegate to the driver's dispatch handler
-    if (device->v4AttributeCallback)
+    // delegate to the driver's dispatch handler
+    if (device->attributeCallback)
     {
         if (cache == nullptr)
         {
@@ -99,17 +99,17 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
 
         if (cache->Get(aPath, reader) != CHIP_NO_ERROR)
         {
-            icError("Failed to get attribute data from cache for v4 dispatch, device %s",
+            icError("Failed to get attribute data from cache for dispatch, device %s",
                     device->deviceId.c_str());
             return;
         }
 
-        device->v4AttributeCallback(device->deviceId, aPath.mEndpointId, aPath.mClusterId, aPath.mAttributeId, reader);
+        device->attributeCallback(device->deviceId, aPath.mEndpointId, aPath.mClusterId, aPath.mAttributeId, reader);
 
         return;
     }
 
-    // V3 path: use script-based attribute read mappers
+    // Legacy path: use script-based attribute read mappers
     // Fast O(1) lookup for readable attributes (may have multiple bindings per path)
     auto range = device->readableAttributeLookup.equal_range(aPath);
     if (range.first == range.second)
@@ -1098,7 +1098,7 @@ void MatterDevice::HandleResourceRead(std::forward_list<std::promise<bool>> &pro
 
         if (readResult.SkipsResourceUpdate())
         {
-            // No-op is a valid v3.0 contract outcome (e.g. { value: null } when
+            // No-op is a valid contract outcome (e.g. { value: null } when
             // the attribute has no meaningful value). Return null to the caller to
             // signal no value.
             icDebug("Read mapper produced no value for URI: %s", resource->uri);

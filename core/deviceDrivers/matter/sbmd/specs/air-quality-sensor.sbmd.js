@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Air Quality Sensor SBMD v4 Driver
+// Air Quality Sensor SBMD Driver
 //
 // Maps Matter Air Quality Sensor device type to Barton airQualitySensor.
 // Supports air quality level, temperature, humidity, CO2, and PM2.5.

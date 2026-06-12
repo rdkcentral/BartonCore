@@ -33,7 +33,7 @@
 
 #include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdUtilsLoader.h"
-#include "mquickjs/SbmdV4Loader.h"
+#include "mquickjs/SbmdLoader.h"
 
 #include <filesystem>
 #include <fstream>
@@ -82,13 +82,13 @@ bool SbmdFactory::RegisterDrivers()
             continue;
         }
 
-        RegisterV4DriversFromDirectory(dirPath, allRegistered);
+        RegisterDriversFromDirectory(dirPath, allRegistered);
     }
 
     return allRegistered;
 }
 
-void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, bool &allRegistered)
+void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
 {
     std::error_code ec;
 
@@ -120,18 +120,18 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
         return;
     }
 
-    // Ensure the shared JS runtime is initialized before loading any v4 drivers.
-    // SbmdScriptImpl::Create lazily initializes for v3 scripts, but v4 drivers
+    // Ensure the shared JS runtime is initialized before loading any drivers.
+    // SbmdScriptImpl::Create lazily initializes, but drivers
     // need it at factory registration time.
     // Note: do NOT hold the JS mutex across these calls — LoadBundle and
     // InjectCaptureFunction may acquire it internally.
-    if (!v4RuntimeReady)
+    if (!runtimeReady)
     {
         if (!MQuickJsRuntime::IsInitialized())
         {
             if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
             {
-                icError("Failed to initialize mquickjs runtime for v4 drivers");
+                icError("Failed to initialize mquickjs runtime for drivers");
                 allRegistered = false;
                 return;
             }
@@ -141,7 +141,7 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
 
         if (!SbmdUtilsLoader::LoadBundle(ctx))
         {
-            icError("Failed to load SBMD utilities bundle for v4 drivers");
+            icError("Failed to load SBMD utilities bundle for drivers");
             allRegistered = false;
             return;
         }
@@ -149,7 +149,7 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-            if (!SbmdV4Loader::InjectCaptureFunction(ctx))
+            if (!SbmdLoader::InjectCaptureFunction(ctx))
             {
                 icError("Failed to inject SbmdDriver capture function");
                 allRegistered = false;
@@ -157,8 +157,8 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
             }
         }
 
-        v4RuntimeReady = true;
-        icInfo("mquickjs runtime initialized for v4 SBMD drivers");
+        runtimeReady = true;
+        icInfo("mquickjs runtime initialized for SBMD drivers");
     }
 
     try
@@ -180,14 +180,14 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
 
             try
             {
-                icDebug("Loading v4 SBMD driver: %s", entry.path().c_str());
+                icDebug("Loading SBMD driver: %s", entry.path().c_str());
 
                 // Read file contents
                 std::ifstream file(entry.path(), std::ios::binary | std::ios::ate);
 
                 if (!file.is_open())
                 {
-                    icError("Failed to open v4 SBMD driver: %s", entry.path().c_str());
+                    icError("Failed to open SBMD driver: %s", entry.path().c_str());
                     allRegistered = false;
                     continue;
                 }
@@ -199,68 +199,68 @@ void SbmdFactory::RegisterV4DriversFromDirectory(const std::string &dirPath, boo
 
                 if (!file)
                 {
-                    icError("Failed to read v4 SBMD driver: %s", entry.path().c_str());
+                    icError("Failed to read SBMD driver: %s", entry.path().c_str());
                     allRegistered = false;
                     continue;
                 }
 
                 // Load the driver registration under the JS mutex
-                std::unique_ptr<SbmdV4Registration> registration;
+                std::unique_ptr<SbmdRegistration> registration;
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
                     registration =
-                        SbmdV4Loader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
+                        SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
                 }
 
                 if (!registration)
                 {
-                    icError("Failed to load v4 SBMD driver: %s", entry.path().c_str());
+                    icError("Failed to load SBMD driver: %s", entry.path().c_str());
                     allRegistered = false;
                     continue;
                 }
 
-                // Create the v4 driver and activate it
-                auto v4 = std::make_unique<SbmdV4Driver>(std::move(registration), std::move(source));
+                // Create the driver and activate it
+                auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
 
                 {
                     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-                    if (!v4->Activate(ctx))
+                    if (!sbmdDriver->Activate(ctx))
                     {
-                        icError("Failed to activate v4 SBMD driver: %s", entry.path().c_str());
+                        icError("Failed to activate SBMD driver: %s", entry.path().c_str());
                         allRegistered = false;
                         continue;
                     }
                 }
 
                 // Create the SpecBasedMatterDeviceDriver wrapper
-                auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(v4.get());
+                auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
 
                 if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
                 {
-                    icError("FATAL: Failed to register v4 SBMD driver from: %s", entry.path().c_str());
+                    icError("FATAL: Failed to register SBMD driver from: %s", entry.path().c_str());
                     allRegistered = false;
                     continue;
                 }
 
-                // Store the v4 driver for lifetime management
-                v4Drivers.push_back(std::move(v4));
+                // Store the driver for lifetime management
+                drivers.push_back(std::move(sbmdDriver));
 
-                icInfo("Successfully registered v4 SBMD driver: %s", entry.path().filename().c_str());
+                icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }
             catch (const std::exception &e)
             {
-                icError("Exception loading v4 SBMD driver %s: %s", entry.path().c_str(), e.what());
+                icError("Exception loading SBMD driver %s: %s", entry.path().c_str(), e.what());
                 allRegistered = false;
             }
         }
     }
     catch (const std::filesystem::filesystem_error &e)
     {
-        icError("Filesystem error during v4 SBMD directory iteration: %s", e.what());
+        icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
     }
 }

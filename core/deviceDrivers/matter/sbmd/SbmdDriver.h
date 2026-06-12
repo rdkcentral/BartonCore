@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * A v4 SBMD driver instance with activate/deactivate lifecycle.
+ * A SBMD driver instance with activate/deactivate lifecycle.
  *
  * Lifecycle:
  *   1. Load: Parse .sbmd.js file, extract metadata. Handlers are NOT rooted.
@@ -38,8 +38,8 @@
 
 #pragma once
 
-#include "SbmdV4Dispatch.h"
-#include "SbmdV4Registration.h"
+#include "SbmdDispatch.h"
+#include "SbmdRegistration.h"
 
 #include <list>
 #include <memory>
@@ -51,28 +51,28 @@ extern "C" {
 
 namespace barton
 {
-    class SbmdV4Driver
+    class SbmdDriver
     {
     public:
         /**
          * Create a driver from a loaded registration and its source text.
          *
-         * The registration should come from SbmdV4Loader::LoadDriver(). Its handler
+         * The registration should come from SbmdLoader::LoadDriver(). Its handler
          * JSValues are present but NOT GC-rooted — they are only valid until the next
          * GC cycle. Call Activate() to root them.
          *
          * @param registration The extracted registration (takes ownership)
          * @param source The .sbmd.js file contents (retained for re-activation)
          */
-        SbmdV4Driver(std::unique_ptr<SbmdV4Registration> registration, std::string source);
+        SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source);
 
-        ~SbmdV4Driver();
+        ~SbmdDriver();
 
         // Non-copyable, movable
-        SbmdV4Driver(const SbmdV4Driver &) = delete;
-        SbmdV4Driver &operator=(const SbmdV4Driver &) = delete;
-        SbmdV4Driver(SbmdV4Driver &&) = default;
-        SbmdV4Driver &operator=(SbmdV4Driver &&) = default;
+        SbmdDriver(const SbmdDriver &) = delete;
+        SbmdDriver &operator=(const SbmdDriver &) = delete;
+        SbmdDriver(SbmdDriver &&) = default;
+        SbmdDriver &operator=(SbmdDriver &&) = default;
 
         /**
          * Activate the driver — re-evaluate the .sbmd.js file and GC-root all handler JSValues.
@@ -104,7 +104,7 @@ namespace barton
          * Get the driver registration (always available, even when deactivated).
          * Handler JSValues are only valid when activated.
          */
-        const SbmdV4Registration &GetRegistration() const;
+        const SbmdRegistration &GetRegistration() const;
 
         /**
          * Get the driver name (convenience — same as registration.name).
@@ -114,17 +114,17 @@ namespace barton
         /**
          * Get the attribute dispatch table (only valid when activated).
          */
-        const SbmdV4DispatchTable &GetAttributeDispatch() const;
+        const SbmdDispatchTable &GetAttributeDispatch() const;
 
         /**
          * Get the event dispatch table (only valid when activated).
          */
-        const SbmdV4DispatchTable &GetEventDispatch() const;
+        const SbmdDispatchTable &GetEventDispatch() const;
 
         /**
          * Get the command dispatch table (only valid when activated).
          */
-        const SbmdV4DispatchTable &GetCommandDispatch() const;
+        const SbmdDispatchTable &GetCommandDispatch() const;
 
     private:
         /**
@@ -142,16 +142,16 @@ namespace barton
          */
         void RootIfValid(JSContext *ctx, JSValue &handler);
 
-        std::unique_ptr<SbmdV4Registration> registration;
+        std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation
 
         // GC roots — stable addresses via std::list (vector would invalidate on realloc)
         std::list<JSGCRef> gcRefs;
 
         // Dispatch tables — built at activation, cleared at deactivation
-        SbmdV4DispatchTable attributeDispatch;
-        SbmdV4DispatchTable eventDispatch;
-        SbmdV4DispatchTable commandDispatch;
+        SbmdDispatchTable attributeDispatch;
+        SbmdDispatchTable eventDispatch;
+        SbmdDispatchTable commandDispatch;
     };
 
 } // namespace barton

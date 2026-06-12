@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "SbmdV4Driver.h"
+#include "SbmdDriver.h"
 
 #include <memory>
 #include <string>
@@ -47,7 +47,7 @@ namespace barton
         /**
          * Register SBMD drivers from all configured directories.
          * Directories are specified as a semicolon-delimited list.
-         * Loads both v3 (.sbmd) and v4 (.sbmd.js) drivers.
+         * Loads SBMD drivers (.sbmd.js) from configured directories.
          */
         bool RegisterDrivers();
 
@@ -56,21 +56,21 @@ namespace barton
         ~SbmdFactory() = default;
 
         /**
-         * Load and register v4 SBMD drivers (.sbmd.js) from a single directory.
-         * V4 drivers are activated immediately and stored in v4Drivers for lifetime management.
+         * Load and register SBMD drivers (.sbmd.js) from a single directory.
+         * Drivers are activated immediately and stored in drivers for lifetime management.
          */
-        void RegisterV4DriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+        void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
 
         /**
-         * Owned v4 driver instances. These must outlive the SpecBasedMatterDeviceDriver
+         * Owned driver instances. These must outlive the SpecBasedMatterDeviceDriver
          * instances that reference them (those are owned by the C device manager).
          */
-        std::vector<std::unique_ptr<SbmdV4Driver>> v4Drivers;
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
 
         /**
          * Whether the mquickjs runtime, utilities bundle, and capture function
-         * have been initialized for v4 driver loading.
+         * have been initialized for driver loading.
          */
-        bool v4RuntimeReady = false;
+        bool runtimeReady = false;
     };
 } //namespace barton

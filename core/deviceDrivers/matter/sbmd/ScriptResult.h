@@ -137,7 +137,7 @@ namespace barton
 
         /**
          * Parse a Json::Value object into a ScriptResult according to SBMD script
-         * JSON schema v3.0.
+         * JSON response schema.
          *
          * Valid top-level keys: "value", "invoke", "write", "error".
          * An empty object {} produces a no-op result.

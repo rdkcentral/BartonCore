@@ -22,6 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "MatterDeviceTestHelpers.h"
+#include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.h"
 #include <app/data-model/Decode.h>
 
@@ -577,19 +578,24 @@ namespace
             PopulateCacheWithVendorProduct();
         }
 
-        void TearDown() override { cache.reset(); }
-
-        std::shared_ptr<SbmdSpec>
-        MakeVendorSpec(uint16_t vendorId, uint16_t productId, std::vector<uint16_t> deviceTypes = {})
+        void TearDown() override
         {
-            auto spec = std::make_shared<SbmdSpec>();
-            spec->name = "vendor-test";
-            spec->bartonMeta.deviceClass = "testClass";
-            spec->bartonMeta.deviceClassVersion = 1;
-            spec->matterMeta.deviceTypes = std::move(deviceTypes);
-            spec->matterMeta.vendorId = vendorId;
-            spec->matterMeta.productId = productId;
-            return spec;
+            drivers.clear();
+            cache.reset();
+        }
+
+        SbmdDriver *MakeVendorDriver(uint16_t vendorId, uint16_t productId, std::vector<uint16_t> deviceTypes = {})
+        {
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "vendor-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = 1;
+            reg->matter.deviceTypes = std::move(deviceTypes);
+            reg->matter.vendorId = vendorId;
+            reg->matter.productId = productId;
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
+
+            return drivers.back().get();
         }
 
         void PopulateCacheWithVendorProduct()
@@ -604,39 +610,44 @@ namespace
         }
 
         std::shared_ptr<DeviceDataCache> cache;
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
     };
 
     TEST_F(VendorProductClaimTest, VendorProductMatch)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(kTestVendorId, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(kTestVendorId, kTestProductId,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongProductIdFails)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(kTestVendorId, 0x9999, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(kTestVendorId, 0x9999,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongVendorIdFails)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(0x0001, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(0x0001, kTestProductId,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, NoVendorSetFallsThroughToDeviceTypeMatching)
     {
         // Driver without vendorId/productId uses device-type matching
-        auto spec = std::make_shared<SbmdSpec>();
-        spec->name = "generic-test";
-        spec->bartonMeta.deviceClass = "testClass";
-        spec->bartonMeta.deviceClassVersion = 1;
-        spec->matterMeta.deviceTypes = {kTemperatureSensorDeviceType};
+        auto reg = std::make_unique<SbmdRegistration>();
+        reg->name = "generic-test";
+        reg->barton.deviceClass = "testClass";
+        reg->barton.deviceClassVersion = 1;
+        reg->matter.deviceTypes = {kTemperatureSensorDeviceType};
+        drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
 
-        SpecBasedMatterDeviceDriver driver(spec);
+        SpecBasedMatterDeviceDriver driver(drivers.back().get());
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
     }
 

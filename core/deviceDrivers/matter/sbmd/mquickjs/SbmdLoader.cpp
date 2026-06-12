@@ -25,10 +25,10 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdV4Loader"
+#define LOG_TAG "SbmdLoader"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "SbmdV4Loader.h"
+#include "SbmdLoader.h"
 #include "MQuickJsRuntime.h"
 
 #include <algorithm>
@@ -394,7 +394,7 @@ namespace barton
 
     } // anonymous namespace
 
-    bool SbmdV4Loader::InjectCaptureFunction(JSContext *ctx)
+    bool SbmdLoader::InjectCaptureFunction(JSContext *ctx)
     {
         if (!ctx)
         {
@@ -431,7 +431,7 @@ namespace barton
         return true;
     }
 
-    std::vector<std::pair<std::string, std::string>> SbmdV4Loader::ExtractConstants(JSContext *ctx,
+    std::vector<std::pair<std::string, std::string>> SbmdLoader::ExtractConstants(JSContext *ctx,
                                                                                      const char *source,
                                                                                      size_t sourceLen)
     {
@@ -594,7 +594,7 @@ namespace barton
         return constants;
     }
 
-    std::string SbmdV4Loader::GenerateConstantsPreamble(
+    std::string SbmdLoader::GenerateConstantsPreamble(
         const std::vector<std::pair<std::string, std::string>> &constants)
     {
         std::string preamble;
@@ -607,12 +607,12 @@ namespace barton
         return preamble;
     }
 
-    int SbmdV4Loader::CountPreambleLines(const std::string &preamble)
+    int SbmdLoader::CountPreambleLines(const std::string &preamble)
     {
         return static_cast<int>(std::count(preamble.begin(), preamble.end(), '\n'));
     }
 
-    std::unique_ptr<SbmdV4Registration> SbmdV4Loader::LoadDriver(JSContext *ctx,
+    std::unique_ptr<SbmdRegistration> SbmdLoader::LoadDriver(JSContext *ctx,
                                                                    const std::string &filePath,
                                                                    const char *source,
                                                                    size_t sourceLen)
@@ -623,7 +623,7 @@ namespace barton
             return nullptr;
         }
 
-        icDebug("Loading v4 driver from %s (%zu bytes)", filePath.c_str(), sourceLen);
+        icDebug("Loading driver from %s (%zu bytes)", filePath.c_str(), sourceLen);
 
         // Pass 1: Extract constants
         auto constants = ExtractConstants(ctx, source, sourceLen);
@@ -668,7 +668,7 @@ namespace barton
             return nullptr;
         }
 
-        icInfo("Loaded v4 driver '%s' from %s (schema %s, driver %s)",
+        icInfo("Loaded driver '%s' from %s (schema %s, driver %s)",
                reg->name.c_str(),
                filePath.c_str(),
                reg->schemaVersion.c_str(),
@@ -677,7 +677,7 @@ namespace barton
         return reg;
     }
 
-    std::unique_ptr<SbmdV4Registration> SbmdV4Loader::ExtractRegistration(JSContext *ctx,
+    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx,
                                                                            const std::string &filePath)
     {
         JSValue global = JS_GetGlobalObject(ctx);
@@ -689,7 +689,7 @@ namespace barton
             return nullptr;
         }
 
-        auto reg = std::make_unique<SbmdV4Registration>();
+        auto reg = std::make_unique<SbmdRegistration>();
         reg->filePath = filePath;
 
         if (!ExtractMetadata(ctx, regVal, *reg))
@@ -771,7 +771,7 @@ namespace barton
         return reg;
     }
 
-    bool SbmdV4Loader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdV4Registration &out)
+    bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
     {
         out.schemaVersion = GetStringProp(ctx, reg, "schemaVersion");
         out.driverVersion = GetStringProp(ctx, reg, "driverVersion");
@@ -835,7 +835,7 @@ namespace barton
         return true;
     }
 
-    bool SbmdV4Loader::ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdV4Registration &out)
+    bool SbmdLoader::ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdRegistration &out)
     {
         auto keys = GetObjectKeys(ctx, aliasesObj);
 
@@ -848,7 +848,7 @@ namespace barton
                 continue;
             }
 
-            SbmdV4Alias alias;
+            SbmdAlias alias;
             alias.name = name;
             alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId");
             alias.attributeId = GetOptUint32Prop(ctx, aliasVal, "attributeId");
@@ -862,7 +862,7 @@ namespace barton
         return true;
     }
 
-    bool SbmdV4Loader::ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdV4Registration &out)
+    bool SbmdLoader::ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out)
     {
         auto endpointIds = GetObjectKeys(ctx, endpointsObj);
 
@@ -875,7 +875,7 @@ namespace barton
                 continue;
             }
 
-            SbmdV4Endpoint endpoint;
+            SbmdEndpoint endpoint;
             endpoint.id = epId;
             endpoint.profile = GetStringProp(ctx, epVal, "profile");
             endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion");
@@ -896,7 +896,7 @@ namespace barton
                         continue;
                     }
 
-                    SbmdV4Resource resource;
+                    SbmdResource resource;
                     resource.id = resId;
                     resource.type = GetStringProp(ctx, resVal, "type");
 
@@ -965,9 +965,9 @@ namespace barton
         return true;
     }
 
-    std::optional<SbmdV4ResourceHandler> SbmdV4Loader::ExtractResourceHandler(JSContext *ctx, JSValue val)
+    std::optional<SbmdResourceHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
     {
-        SbmdV4ResourceHandler handler;
+        SbmdResourceHandler handler;
 
         if (JS_IsFunction(ctx, val))
         {
@@ -997,9 +997,9 @@ namespace barton
         return handler;
     }
 
-    bool SbmdV4Loader::ExtractDeviceHandlers(JSContext *ctx,
+    bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx,
                                               JSValue handlersObj,
-                                              std::vector<SbmdV4DeviceHandler> &out)
+                                              std::vector<SbmdDeviceHandler> &out)
     {
         auto handlerNames = GetObjectKeys(ctx, handlersObj);
 
@@ -1012,7 +1012,7 @@ namespace barton
                 continue;
             }
 
-            SbmdV4DeviceHandler dh;
+            SbmdDeviceHandler dh;
             dh.name = name;
 
             // Handler function
@@ -1048,9 +1048,9 @@ namespace barton
         return true;
     }
 
-    SbmdV4Supplements SbmdV4Loader::ExtractSupplements(JSContext *ctx, JSValue supplementsObj)
+    SbmdSupplements SbmdLoader::ExtractSupplements(JSContext *ctx, JSValue supplementsObj)
     {
-        SbmdV4Supplements supplements;
+        SbmdSupplements supplements;
 
         JSValue attrsVal = JS_GetPropertyStr(ctx, supplementsObj, "attributes");
 

@@ -243,9 +243,9 @@ if (BCORE_MATTER)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4Loader
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4LoaderTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
+        NAME testSbmdLoader
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdLoaderTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -254,14 +254,14 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4Loader)
-        target_link_libraries(testSbmdV4Loader bCoreConfig)
+    if (TARGET testSbmdLoader)
+        target_link_libraries(testSbmdLoader bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4ResultExecutor
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4ResultExecutorTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+        NAME testSbmdResultExecutor
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdResultExecutorTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -270,17 +270,17 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4ResultExecutor)
-        target_link_libraries(testSbmdV4ResultExecutor bCoreConfig)
+    if (TARGET testSbmdResultExecutor)
+        target_link_libraries(testSbmdResultExecutor bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4Driver
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4DriverTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Driver.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Dispatch.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+        NAME testSbmdDriver
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -289,17 +289,17 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4Driver)
-        target_link_libraries(testSbmdV4Driver bCoreConfig)
+    if (TARGET testSbmdDriver)
+        target_link_libraries(testSbmdDriver bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4Dispatch
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4DispatchTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Dispatch.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Driver.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+        NAME testSbmdDispatch
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDispatchTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -308,16 +308,16 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4Dispatch)
-        target_link_libraries(testSbmdV4Dispatch bCoreConfig)
+    if (TARGET testSbmdDispatch)
+        target_link_libraries(testSbmdDispatch bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4HandlerInvoker
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4HandlerInvokerTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4HandlerInvoker.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
+        NAME testSbmdHandlerInvoker
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdHandlerInvokerTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -326,17 +326,17 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4HandlerInvoker)
-        target_link_libraries(testSbmdV4HandlerInvoker bCoreConfig)
+    if (TARGET testSbmdHandlerInvoker)
+        target_link_libraries(testSbmdHandlerInvoker bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdV4Factory
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4FactoryTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Driver.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdV4Dispatch.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+        NAME testSbmdFactory
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdFactoryTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
@@ -345,8 +345,8 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    if (TARGET testSbmdV4Factory)
-        target_link_libraries(testSbmdV4Factory bCoreConfig)
+    if (TARGET testSbmdFactory)
+        target_link_libraries(testSbmdFactory bCoreConfig)
     endif()
 
     bcore_add_cpp_test(

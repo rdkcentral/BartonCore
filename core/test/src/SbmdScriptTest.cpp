@@ -380,7 +380,7 @@ namespace
         EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(readResult.Operation()).value, "boolean");
     }
 
-    // Test: MapAttributeRead succeeds when script returns value field (v3.0 format)
+    // Test: MapAttributeRead succeeds when script returns value field (legacy format)
     TEST_F(SbmdScriptTest, MapAttributeReadWithValueField)
     {
         SbmdAttribute attr;
@@ -389,7 +389,7 @@ namespace
         attr.name = "onOff";
         attr.type = "bool";
 
-        // Script returns the v3.0 "value" field — the correct format
+        // Script returns the "value" field — the correct format
         std::string mapperScript = "return {value: 'true'};";
 
         ASSERT_TRUE(script->AddAttributeReadMapper(attr, mapperScript));
@@ -830,7 +830,7 @@ namespace
         EXPECT_EQ(std::get<ScriptResult::ResourceUpdate>(cmdResult.Operation()).value, "ep3");
     }
 
-    // Test: MapCommandExecuteResponse succeeds when script returns value field (v3.0 format)
+    // Test: MapCommandExecuteResponse succeeds when script returns value field (legacy format)
     TEST_F(SbmdScriptTest, MapCommandExecuteResponseWithValueField)
     {
         SbmdCommand cmd;
@@ -838,7 +838,7 @@ namespace
         cmd.commandId = 0x0001;
         cmd.name = "on";
 
-        // Script returns v3.0 "value" field — now the correct format
+        // Script returns "value" field — now the correct format
         std::string mapperScript = "return {value: 'result'};";
 
         ASSERT_TRUE(script->AddCommandExecuteResponseMapper(cmd, mapperScript));

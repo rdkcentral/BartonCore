@@ -22,17 +22,17 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for v4 SBMD factory loading pipeline.
+ * Unit tests for SBMD factory loading pipeline.
  *
- * Tests the v4 loading path: .sbmd.js discovery → SbmdV4Loader → SbmdV4Driver → activation.
+ * Tests the loading path: .sbmd.js discovery → SbmdLoader → SbmdDriver → activation.
  * Uses a temp directory with test .sbmd.js files to verify end-to-end loading without
  * the full deviceDriverManager/MatterDriverFactory infrastructure.
  */
 
-#include "deviceDrivers/matter/sbmd/SbmdV4Driver.h"
+#include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <chrono>
 #include <filesystem>
@@ -44,7 +44,7 @@ using namespace barton;
 
 namespace
 {
-    // Minimal v4 driver source for testing
+    // Minimal driver source for testing
     constexpr const char *kMinimalDriver = R"(
 SbmdDriver({
     schemaVersion: '4.0',
@@ -100,7 +100,7 @@ SbmdDriver({
 });
 )";
 
-    class SbmdV4FactoryTest : public ::testing::Test
+    class SbmdFactoryTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -109,7 +109,7 @@ SbmdDriver({
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdV4Loader::InjectCaptureFunction(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         static void TearDownTestSuite()
@@ -141,7 +141,7 @@ SbmdDriver({
         std::filesystem::path tempDir;
     };
 
-    TEST_F(SbmdV4FactoryTest, LoadDriverFromFile)
+    TEST_F(SbmdFactoryTest, LoadDriverFromFile)
     {
         WriteFile("test-light.sbmd.js", kMinimalDriver);
 
@@ -156,12 +156,12 @@ SbmdDriver({
         file.read(source.data(), fileSize);
         ASSERT_TRUE(file.good());
 
-        // Load via SbmdV4Loader
-        std::unique_ptr<SbmdV4Registration> reg;
+        // Load via SbmdLoader
+        std::unique_ptr<SbmdRegistration> reg;
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
-            reg = SbmdV4Loader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
+            reg = SbmdLoader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
         }
 
         ASSERT_NE(reg, nullptr);
@@ -176,7 +176,7 @@ SbmdDriver({
         EXPECT_TRUE(reg->endpoints[0].resources[0].write.has_value());
     }
 
-    TEST_F(SbmdV4FactoryTest, CreateAndActivateDriver)
+    TEST_F(SbmdFactoryTest, CreateAndActivateDriver)
     {
         WriteFile("test-light.sbmd.js", kMinimalDriver);
 
@@ -189,15 +189,15 @@ SbmdDriver({
         std::string source(static_cast<size_t>(fileSize), '\0');
         file.read(source.data(), fileSize);
 
-        std::unique_ptr<SbmdV4Registration> reg;
+        std::unique_ptr<SbmdRegistration> reg;
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
-            reg = SbmdV4Loader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
+            reg = SbmdLoader::LoadDriver(ctx, filePath.string(), source.c_str(), source.size());
         }
         ASSERT_NE(reg, nullptr);
 
-        auto driver = std::make_unique<SbmdV4Driver>(std::move(reg), std::string(source));
+        auto driver = std::make_unique<SbmdDriver>(std::move(reg), std::string(source));
         EXPECT_FALSE(driver->IsActivated());
 
         {
@@ -221,7 +221,7 @@ SbmdDriver({
         EXPECT_FALSE(driver->IsActivated());
     }
 
-    TEST_F(SbmdV4FactoryTest, FileDiscoveryPattern)
+    TEST_F(SbmdFactoryTest, FileDiscoveryPattern)
     {
         // Write files with various extensions
         WriteFile("light.sbmd.js", kMinimalDriver);
@@ -252,7 +252,7 @@ SbmdDriver({
         EXPECT_EQ(sbmdJsCount, 1); // Only light.sbmd.js
     }
 
-    TEST_F(SbmdV4FactoryTest, NonExistentDirectoryDoesNotCrash)
+    TEST_F(SbmdFactoryTest, NonExistentDirectoryDoesNotCrash)
     {
         // Verify iterating a nonexistent dir doesn't crash
         auto badPath = tempDir / "nonexistent";

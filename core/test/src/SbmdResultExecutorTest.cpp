@@ -22,13 +22,13 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for SbmdV4ResultExecutor::Parse — walks handler result JSValues
+ * Unit tests for SbmdResultExecutor::Parse — walks handler result JSValues
  * and extracts typed ParsedResult structures.
  */
 
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -41,7 +41,7 @@ using namespace barton;
 
 namespace
 {
-    class SbmdV4ResultExecutorTest : public ::testing::Test
+    class SbmdResultExecutorTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -85,7 +85,7 @@ namespace
                 return std::nullopt;
             }
 
-            return SbmdV4ResultExecutor::Parse(ctx, result);
+            return SbmdResultExecutor::Parse(ctx, result);
         }
     };
 
@@ -93,7 +93,7 @@ namespace
     // Basic parse: success terminal with empty ops
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSuccessTerminal)
+    TEST_F(SbmdResultExecutorTest, ParseSuccessTerminal)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().success()");
         ASSERT_TRUE(parsed.has_value());
@@ -101,7 +101,7 @@ namespace
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(parsed->terminal.data));
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseErrorTerminal)
+    TEST_F(SbmdResultExecutorTest, ParseErrorTerminal)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().error('something broke')");
         ASSERT_TRUE(parsed.has_value());
@@ -114,7 +114,7 @@ namespace
     // Non-terminal ops
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseLogOp)
+    TEST_F(SbmdResultExecutorTest, ParseLogOp)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().log('hello world').success()");
         ASSERT_TRUE(parsed.has_value());
@@ -123,7 +123,7 @@ namespace
         EXPECT_EQ(std::get<ResultOp::Log>(parsed->ops[0].data).message, "hello world");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseUpdateResource2Arg)
+    TEST_F(SbmdResultExecutorTest, ParseUpdateResource2Arg)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().dataModel.updateResource('isOn', 'true').success()");
         ASSERT_TRUE(parsed.has_value());
@@ -136,7 +136,7 @@ namespace
         EXPECT_EQ(ur.value, "true");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseUpdateResource3Arg)
+    TEST_F(SbmdResultExecutorTest, ParseUpdateResource3Arg)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().dataModel.updateResource('1', 'isOn', 'true').success()");
         ASSERT_TRUE(parsed.has_value());
@@ -150,7 +150,7 @@ namespace
         EXPECT_EQ(ur.value, "true");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSetMetadata)
+    TEST_F(SbmdResultExecutorTest, ParseSetMetadata)
     {
         auto parsed =
             EvalAndParse("SbmdUtils.result().dataModel.setMetadata('1', 'dimLevel', 'unit', 'percent').success()");
@@ -165,7 +165,7 @@ namespace
         EXPECT_EQ(sm.value, "percent");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSetPersistentData)
+    TEST_F(SbmdResultExecutorTest, ParseSetPersistentData)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().storage.setPersistentData('lastState', 'on').success()");
         ASSERT_TRUE(parsed.has_value());
@@ -177,7 +177,7 @@ namespace
         EXPECT_EQ(sp.value, "on");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSetTransientData)
+    TEST_F(SbmdResultExecutorTest, ParseSetTransientData)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().storage.setTransientData('debounce', '1').success()");
         ASSERT_TRUE(parsed.has_value());
@@ -193,7 +193,7 @@ namespace
     // Multiple ops before terminal
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseMultipleOps)
+    TEST_F(SbmdResultExecutorTest, ParseMultipleOps)
     {
         auto parsed = EvalAndParse("SbmdUtils.result()"
                                    ".log('updating')"
@@ -212,7 +212,7 @@ namespace
     // Device terminal: sendCommand
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSendCommandMinimal)
+    TEST_F(SbmdResultExecutorTest, ParseSendCommandMinimal)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().device.sendCommand(6, 1)");
         ASSERT_TRUE(parsed.has_value());
@@ -226,7 +226,7 @@ namespace
         EXPECT_FALSE(cmd.timedInvokeTimeoutMs.has_value());
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSendCommandWithPayload)
+    TEST_F(SbmdResultExecutorTest, ParseSendCommandWithPayload)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().device.sendCommand(257, 0, 'AB==')");
         ASSERT_TRUE(parsed.has_value());
@@ -238,7 +238,7 @@ namespace
         EXPECT_EQ(cmd.tlvBase64, "AB==");
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseSendCommandWithOptions)
+    TEST_F(SbmdResultExecutorTest, ParseSendCommandWithOptions)
     {
         auto parsed = EvalAndParse(
             "SbmdUtils.result().device.sendCommand(257, 0, 'AB==', {timedInvokeTimeoutMs: 10000, endpointId: 5})");
@@ -259,7 +259,7 @@ namespace
     // Device terminal: writeAttribute
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseWriteAttribute)
+    TEST_F(SbmdResultExecutorTest, ParseWriteAttribute)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().device.writeAttribute(3, 0, 'AQID')");
         ASSERT_TRUE(parsed.has_value());
@@ -272,7 +272,7 @@ namespace
         EXPECT_FALSE(wa.endpointId.has_value());
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseWriteAttributeWithOptions)
+    TEST_F(SbmdResultExecutorTest, ParseWriteAttributeWithOptions)
     {
         auto parsed = EvalAndParse("SbmdUtils.result().device.writeAttribute(3, 0, 'AQID', {endpointId: 2})");
         ASSERT_TRUE(parsed.has_value());
@@ -290,7 +290,7 @@ namespace
     // Device terminal: requestCommand (deferred)
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseRequestCommand)
+    TEST_F(SbmdResultExecutorTest, ParseRequestCommand)
     {
         // Use IIFE to allow var declarations
         auto parsed = EvalAndParse(
@@ -323,7 +323,7 @@ namespace
     // Device terminal: readAttribute (deferred)
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseReadAttribute)
+    TEST_F(SbmdResultExecutorTest, ParseReadAttribute)
     {
         auto parsed = EvalAndParse(
             "(function() {"
@@ -351,7 +351,7 @@ namespace
     // Ops before device terminal
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseOpsBeforeDeviceTerminal)
+    TEST_F(SbmdResultExecutorTest, ParseOpsBeforeDeviceTerminal)
     {
         auto parsed = EvalAndParse("SbmdUtils.result()"
                                    ".log('sending lock command')"
@@ -368,25 +368,25 @@ namespace
     // Edge cases
     // ========================================================================
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseNullResultReturnsNullopt)
+    TEST_F(SbmdResultExecutorTest, ParseNullResultReturnsNullopt)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        auto parsed = SbmdV4ResultExecutor::Parse(ctx, JS_NULL);
+        auto parsed = SbmdResultExecutor::Parse(ctx, JS_NULL);
         EXPECT_FALSE(parsed.has_value());
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseUndefinedResultReturnsNullopt)
+    TEST_F(SbmdResultExecutorTest, ParseUndefinedResultReturnsNullopt)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        auto parsed = SbmdV4ResultExecutor::Parse(ctx, JS_UNDEFINED);
+        auto parsed = SbmdResultExecutor::Parse(ctx, JS_UNDEFINED);
         EXPECT_FALSE(parsed.has_value());
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseMissingTerminalReturnsNullopt)
+    TEST_F(SbmdResultExecutorTest, ParseMissingTerminalReturnsNullopt)
     {
         // Construct a raw object with ops but no terminal
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -395,11 +395,11 @@ namespace
         JSValue result = JS_Eval(ctx, "({ops: []})", 11, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(result));
 
-        auto parsed = SbmdV4ResultExecutor::Parse(ctx, result);
+        auto parsed = SbmdResultExecutor::Parse(ctx, result);
         EXPECT_FALSE(parsed.has_value());
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseUnknownOpTypeSkipped)
+    TEST_F(SbmdResultExecutorTest, ParseUnknownOpTypeSkipped)
     {
         // Build a raw result with an unknown op type followed by a known one
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -413,14 +413,14 @@ namespace
         JSValue result = JS_Eval(ctx, code, strlen(code), "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(result));
 
-        auto parsed = SbmdV4ResultExecutor::Parse(ctx, result);
+        auto parsed = SbmdResultExecutor::Parse(ctx, result);
         ASSERT_TRUE(parsed.has_value());
         // Unknown op should be skipped, only the log op remains
         ASSERT_EQ(parsed->ops.size(), 1u);
         EXPECT_TRUE(std::holds_alternative<ResultOp::Log>(parsed->ops[0].data));
     }
 
-    TEST_F(SbmdV4ResultExecutorTest, ParseUnknownTerminalReturnsNullopt)
+    TEST_F(SbmdResultExecutorTest, ParseUnknownTerminalReturnsNullopt)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -430,7 +430,7 @@ namespace
         JSValue result = JS_Eval(ctx, code, strlen(code), "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(result));
 
-        auto parsed = SbmdV4ResultExecutor::Parse(ctx, result);
+        auto parsed = SbmdResultExecutor::Parse(ctx, result);
         EXPECT_FALSE(parsed.has_value());
     }
 

@@ -25,10 +25,10 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdV4ResultExecutor"
+#define LOG_TAG "SbmdResultExecutor"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "SbmdV4ResultExecutor.h"
+#include "SbmdResultExecutor.h"
 
 #include <string>
 
@@ -121,7 +121,7 @@ namespace barton
         }
     } // namespace
 
-    std::optional<ParsedResult> SbmdV4ResultExecutor::Parse(JSContext *ctx, JSValue resultVal)
+    std::optional<ParsedResult> SbmdResultExecutor::Parse(JSContext *ctx, JSValue resultVal)
     {
         if (JS_IsUndefined(resultVal) || JS_IsNull(resultVal))
         {
@@ -180,7 +180,7 @@ namespace barton
         return result;
     }
 
-    std::optional<ResultOp> SbmdV4ResultExecutor::ParseOp(JSContext *ctx, JSValue opVal)
+    std::optional<ResultOp> SbmdResultExecutor::ParseOp(JSContext *ctx, JSValue opVal)
     {
         std::string opType = GetStringProp(ctx, opVal, "op");
 
@@ -242,7 +242,7 @@ namespace barton
         }
     }
 
-    std::optional<ResultTerminal> SbmdV4ResultExecutor::ParseTerminal(JSContext *ctx, JSValue termVal)
+    std::optional<ResultTerminal> SbmdResultExecutor::ParseTerminal(JSContext *ctx, JSValue termVal)
     {
         std::string opType = GetStringProp(ctx, termVal, "op");
 

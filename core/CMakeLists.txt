@@ -274,10 +274,10 @@ install(TARGETS BartonCore DESTINATION lib)
 
 # Install SBMD driver specification files.
 if (BCORE_MATTER)
-    file(GLOB ALL_SBMD_V4_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
+    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
 
-    if (ALL_SBMD_V4_FILES)
-        install(FILES ${ALL_SBMD_V4_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
+    if (ALL_SBMD_FILES)
+        install(FILES ${ALL_SBMD_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
     endif()
 endif()
 

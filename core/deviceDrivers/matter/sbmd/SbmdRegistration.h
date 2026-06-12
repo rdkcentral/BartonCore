@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * C++ data structures extracted from a v4 SbmdDriver({...}) registration object.
+ * C++ data structures extracted from a SbmdDriver({...}) registration object.
  * These hold the metadata and handler references for a single .sbmd.js driver.
  */
 
@@ -46,7 +46,7 @@ namespace barton
      * A resolved alias — a named reference to a Matter cluster element.
      * Exactly one of attributeId, eventId, or commandId is set.
      */
-    struct SbmdV4Alias
+    struct SbmdAlias
     {
         std::string name;
         uint32_t clusterId = 0;
@@ -59,7 +59,7 @@ namespace barton
     /**
      * Supplement declarations for a handler — what data to pre-fetch before calling it.
      */
-    struct SbmdV4Supplements
+    struct SbmdSupplements
     {
         std::vector<std::string> attributes; // Alias names to resolve and fetch from device data cache
         std::vector<std::string> resources;  // Resource paths ("endpointId/resourceId") to fetch
@@ -70,16 +70,16 @@ namespace barton
      * For simple declarations (just a function), only handler is set.
      * For object declarations, supplements and handler are both set.
      */
-    struct SbmdV4ResourceHandler
+    struct SbmdResourceHandler
     {
         JSValue handler = JS_UNDEFINED; // GC-rooted function reference
-        SbmdV4Supplements supplements;
+        SbmdSupplements supplements;
     };
 
     /**
-     * A v4 resource declaration within an endpoint.
+     * A resource declaration within an endpoint.
      */
-    struct SbmdV4Resource
+    struct SbmdResource
     {
         std::string id;
         std::string type;
@@ -87,38 +87,38 @@ namespace barton
         bool optional = false;
         std::vector<std::string> prerequisites; // Alias names for prerequisite checks
 
-        std::optional<SbmdV4ResourceHandler> seed;
-        std::optional<SbmdV4ResourceHandler> read;
-        std::optional<SbmdV4ResourceHandler> write;
-        std::optional<SbmdV4ResourceHandler> execute;
+        std::optional<SbmdResourceHandler> seed;
+        std::optional<SbmdResourceHandler> read;
+        std::optional<SbmdResourceHandler> write;
+        std::optional<SbmdResourceHandler> execute;
     };
 
     /**
-     * A v4 endpoint declaration containing resources.
+     * A endpoint declaration containing resources.
      */
-    struct SbmdV4Endpoint
+    struct SbmdEndpoint
     {
         std::string id;
         std::string profile;
         uint32_t profileVersion = 0;
-        std::vector<SbmdV4Resource> resources;
+        std::vector<SbmdResource> resources;
     };
 
     /**
      * An attribute/event/command handler registration.
      */
-    struct SbmdV4DeviceHandler
+    struct SbmdDeviceHandler
     {
         std::string name;                    // Handler registration name
         std::vector<std::string> aliases;    // Alias names this handler matches
         JSValue handler = JS_UNDEFINED;      // GC-rooted function reference
-        SbmdV4Supplements supplements;
+        SbmdSupplements supplements;
     };
 
     /**
      * Barton device class metadata.
      */
-    struct SbmdV4BartonMeta
+    struct SbmdBartonMeta
     {
         std::string deviceClass;
         uint32_t deviceClassVersion = 0;
@@ -127,7 +127,7 @@ namespace barton
     /**
      * Matter device type matching metadata.
      */
-    struct SbmdV4MatterMeta
+    struct SbmdMatterMeta
     {
         std::vector<uint16_t> deviceTypes;
         std::optional<uint32_t> revision;
@@ -140,18 +140,18 @@ namespace barton
     /**
      * Reporting configuration for attribute subscriptions.
      */
-    struct SbmdV4Reporting
+    struct SbmdReporting
     {
         uint16_t minSecs = 0;
         uint16_t maxSecs = 0;
     };
 
     /**
-     * Complete v4 registration extracted from a SbmdDriver({...}) call.
+     * Complete registration extracted from a SbmdDriver({...}) call.
      * Metadata fields are always populated. Handler JSValues are only valid
      * when the driver is activated (GC-rooted).
      */
-    struct SbmdV4Registration
+    struct SbmdRegistration
     {
         // Metadata — always available
         std::string schemaVersion;
@@ -159,20 +159,20 @@ namespace barton
         std::string name;
         std::string filePath; // Source file path for diagnostics
 
-        SbmdV4BartonMeta barton;
-        SbmdV4MatterMeta matter;
-        SbmdV4Reporting reporting;
+        SbmdBartonMeta barton;
+        SbmdMatterMeta matter;
+        SbmdReporting reporting;
 
         // Aliases — keyed by name
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
 
         // Endpoints with resources
-        std::vector<SbmdV4Endpoint> endpoints;
+        std::vector<SbmdEndpoint> endpoints;
 
         // Device-initiated message handlers
-        std::vector<SbmdV4DeviceHandler> attributeHandlers;
-        std::vector<SbmdV4DeviceHandler> eventHandlers;
-        std::vector<SbmdV4DeviceHandler> commandHandlers;
+        std::vector<SbmdDeviceHandler> attributeHandlers;
+        std::vector<SbmdDeviceHandler> eventHandlers;
+        std::vector<SbmdDeviceHandler> commandHandlers;
 
         // Whether handler JSValues are currently GC-rooted (driver is activated)
         bool activated = false;

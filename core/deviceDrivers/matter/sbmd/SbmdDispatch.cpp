@@ -25,10 +25,10 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdV4Dispatch"
+#define LOG_TAG "SbmdDispatch"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "SbmdV4Dispatch.h"
+#include "SbmdDispatch.h"
 
 #include <algorithm>
 
@@ -38,8 +38,8 @@ extern "C" {
 
 namespace barton
 {
-    void SbmdV4DispatchTable::Build(const std::unordered_map<std::string, SbmdV4Alias> &aliases,
-                                   const std::vector<SbmdV4DeviceHandler> &handlers)
+    void SbmdDispatchTable::Build(const std::unordered_map<std::string, SbmdAlias> &aliases,
+                                   const std::vector<SbmdDeviceHandler> &handlers)
     {
         Clear();
 
@@ -66,7 +66,7 @@ namespace barton
                     continue;
                 }
 
-                const SbmdV4Alias &alias = aliasIt->second;
+                const SbmdAlias &alias = aliasIt->second;
 
                 // Determine the element ID from the alias — use whichever is set
                 std::optional<uint32_t> elementId;
@@ -113,7 +113,7 @@ namespace barton
         }
     }
 
-    std::vector<const DispatchEntry *> SbmdV4DispatchTable::Lookup(uint32_t clusterId, uint32_t elementId) const
+    std::vector<const DispatchEntry *> SbmdDispatchTable::Lookup(uint32_t clusterId, uint32_t elementId) const
     {
         std::vector<const DispatchEntry *> result;
 
@@ -142,13 +142,13 @@ namespace barton
         return result;
     }
 
-    void SbmdV4DispatchTable::Clear()
+    void SbmdDispatchTable::Clear()
     {
         specificTable.clear();
         wildcardTable.clear();
     }
 
-    size_t SbmdV4DispatchTable::GetSpecificEntryCount() const
+    size_t SbmdDispatchTable::GetSpecificEntryCount() const
     {
         size_t count = 0;
 
@@ -160,7 +160,7 @@ namespace barton
         return count;
     }
 
-    size_t SbmdV4DispatchTable::GetWildcardEntryCount() const
+    size_t SbmdDispatchTable::GetWildcardEntryCount() const
     {
         size_t count = 0;
 

@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Humidity Sensor SBMD v4 Driver
+// Humidity Sensor SBMD Driver
 //
 // Maps Matter Humidity Sensor device type to Barton environmentalSensor.
 // MeasuredValue is in hundredths of percent RH; converted to whole percent.

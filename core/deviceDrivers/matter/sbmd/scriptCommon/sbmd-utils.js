@@ -979,7 +979,7 @@
     };
 
     /**
-     * Result builder for v4 handlers.
+     * Result builder for SBMD handlers.
      *
      * Usage:
      *   SbmdUtils.result()

@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Thermostat SBMD v4 Driver
+// Thermostat SBMD Driver
 //
 // Maps Matter Thermostat device type to Barton thermostat device class.
 // Supports thermostat cluster mandatory attributes, system mode, setpoints,

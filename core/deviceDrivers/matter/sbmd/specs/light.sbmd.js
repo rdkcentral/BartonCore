@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Light SBMD v4 Driver
+// Light SBMD Driver
 //
 // Maps Matter light device types to Barton light device class.
 // Supports On/Off Light, Dimmable Light, Color Temperature Light,

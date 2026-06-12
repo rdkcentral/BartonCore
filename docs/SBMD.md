@@ -1,4 +1,4 @@
-# Specification-Based Matter Drivers (SBMD) — v4.0
+# Specification-Based Matter Drivers (SBMD)
 
 ## 1. Introduction
 
@@ -44,10 +44,10 @@ supported device type adds too much friction to the goal of broad device support
 
 SBMD addresses this by using textual specification files that map between Matter
 types and Barton resources, enabling new device type support without rebuilding or
-redeploying firmware. v1–v3 used declarative YAML specifications with embedded
-JavaScript mapper scripts. v4.0 consolidates everything into single `.sbmd.js`
-files where the full driver — metadata, resources, and handler logic — is expressed
-in JavaScript.
+redeploying firmware. Earlier versions used declarative YAML specifications with
+embedded JavaScript mapper scripts. The current format (schema version 4)
+consolidates everything into single `.sbmd.js` files where the full driver —
+metadata, resources, and handler logic — is expressed in JavaScript.
 
 ### 1.3 File Layout
 
@@ -1557,7 +1557,7 @@ function lightHandler(args) {
 
 ### 10.4 Door Lock Driver — Advanced
 
-This example demonstrates the full breadth of SBMD v4.0 features. Some concepts
+This example demonstrates the full breadth of SBMD features. Some concepts
 are fictitious — their purpose is to illustrate capabilities, not to serve as a
 production driver.
 

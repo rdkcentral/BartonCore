@@ -25,12 +25,12 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdV4HandlerInvoker"
+#define LOG_TAG "SbmdHandlerInvoker"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "SbmdV4HandlerInvoker.h"
+#include "SbmdHandlerInvoker.h"
 #include "MQuickJsRuntime.h"
-#include "SbmdV4ResultExecutor.h"
+#include "SbmdResultExecutor.h"
 
 #include <string>
 #include <variant>
@@ -57,7 +57,7 @@ extern void setMetadata(const char *deviceUuid,
 
 namespace barton
 {
-    JSValue SbmdV4HandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
+    JSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
     {
         JSValue args = JS_NewObject(ctx);
 
@@ -77,7 +77,7 @@ namespace barton
         return args;
     }
 
-    JSValue SbmdV4HandlerInvoker::BuildAttributeArgs(JSContext *ctx,
+    JSValue SbmdHandlerInvoker::BuildAttributeArgs(JSContext *ctx,
                                                      const HandlerContext &hctx,
                                                      uint32_t clusterId,
                                                      uint32_t attributeId,
@@ -100,7 +100,7 @@ namespace barton
         return args;
     }
 
-    JSValue SbmdV4HandlerInvoker::BuildResourceArgs(JSContext *ctx,
+    JSValue SbmdHandlerInvoker::BuildResourceArgs(JSContext *ctx,
                                                     const HandlerContext &hctx,
                                                     const std::string &resourceId,
                                                     const std::optional<std::string> &input)
@@ -125,7 +125,7 @@ namespace barton
         return args;
     }
 
-    std::optional<ParsedResult> SbmdV4HandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, JSValue args)
+    std::optional<ParsedResult> SbmdHandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, JSValue args)
     {
         if (JS_IsUndefined(handler))
         {
@@ -159,10 +159,10 @@ namespace barton
             return std::nullopt;
         }
 
-        return SbmdV4ResultExecutor::Parse(ctx, result);
+        return SbmdResultExecutor::Parse(ctx, result);
     }
 
-    void SbmdV4HandlerInvoker::ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops)
+    void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops)
     {
         for (const auto &op : ops)
         {

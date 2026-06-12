@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * Handler invocation for v4 SBMD drivers.
+ * Handler invocation for SBMD drivers.
  *
  * Builds the JS `args` object, calls a handler function, parses the result
  * chain, and executes non-terminal ops. Terminal execution is left to the
@@ -35,8 +35,8 @@
 
 #pragma once
 
-#include "../SbmdV4Registration.h"
-#include "SbmdV4ResultExecutor.h"
+#include "../SbmdRegistration.h"
+#include "SbmdResultExecutor.h"
 
 #include <map>
 #include <optional>
@@ -61,14 +61,14 @@ namespace barton
     };
 
     /**
-     * Invokes v4 handler functions and parses their results.
+     * Invokes handler functions and parses their results.
      *
      * Usage:
      *   1. Build trigger-specific args via BuildAttributeArgs / BuildResourceArgs / etc.
      *   2. Call InvokeHandler with the handler JSValue and args
      *   3. Process the returned ParsedResult (execute ops, handle terminal)
      */
-    class SbmdV4HandlerInvoker
+    class SbmdHandlerInvoker
     {
     public:
         /**

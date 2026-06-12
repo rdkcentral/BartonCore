@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Door Lock SBMD v4 Driver
+// Door Lock SBMD Driver
 //
 // Maps Matter Door Lock device type to Barton doorLock device class.
 // Uses LockState attribute for real-time lock state updates.

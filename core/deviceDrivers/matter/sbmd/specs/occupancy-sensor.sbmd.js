@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Occupancy Sensor SBMD v4 Driver
+// Occupancy Sensor SBMD Driver
 //
 // Maps Matter Occupancy Sensor device type to Barton sensor device class.
 // Occupancy bitmap: bit 0 = occupied.

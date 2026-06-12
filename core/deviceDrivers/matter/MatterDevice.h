@@ -73,23 +73,23 @@ namespace barton
         const std::string &GetDeviceId() const { return deviceId; }
 
         /**
-         * Callback type for v4 attribute change handling.
+         * Callback type for attribute change handling.
          * Receives the endpoint, cluster, and attribute IDs along with a TLV reader positioned
          * at the attribute value. Called from CacheCallback::OnAttributeChanged when set.
          */
-        using V4AttributeCallback = std::function<void(const std::string &deviceId,
+        using AttributeCallback = std::function<void(const std::string &deviceId,
                                                        chip::EndpointId endpointId,
                                                        chip::ClusterId clusterId,
                                                        chip::AttributeId attributeId,
                                                        chip::TLV::TLVReader &reader)>;
 
         /**
-         * Set a v4 attribute callback. When set, CacheCallback::OnAttributeChanged will
+         * Set a attribute callback. When set, CacheCallback::OnAttributeChanged will
          * call this instead of using the script mapper.
          */
-        void SetV4AttributeCallback(V4AttributeCallback callback)
+        void SetAttributeCallback(AttributeCallback callback)
         {
-            v4AttributeCallback = std::move(callback);
+            attributeCallback = std::move(callback);
         }
 
         void SetScript(std::unique_ptr<SbmdScript> newScript)
@@ -610,7 +610,7 @@ namespace barton
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
-        V4AttributeCallback v4AttributeCallback; // Set by v4 drivers; bypasses script-based attribute handling
+        AttributeCallback attributeCallback; // Set by drivers; bypasses script-based attribute handling
         std::unique_ptr<CacheCallback> cacheCallback;
         std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
         std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId

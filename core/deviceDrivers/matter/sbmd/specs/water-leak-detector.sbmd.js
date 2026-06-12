@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Water Leak Detector SBMD v4 Driver
+// Water Leak Detector SBMD Driver
 //
 // Maps Matter Water Leak Detector device type to Barton sensor device class.
 // StateValue=true means water detected (faulted=true).

@@ -22,13 +22,13 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for SbmdV4Loader — constants extraction, file evaluation,
+ * Unit tests for SbmdLoader — constants extraction, file evaluation,
  * and registration extraction.
  */
 
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -41,7 +41,7 @@ using namespace barton;
 
 namespace
 {
-    class SbmdV4LoaderTest : public ::testing::Test
+    class SbmdLoaderTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -50,7 +50,7 @@ namespace
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdV4Loader::InjectCaptureFunction(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         static void TearDownTestSuite()
@@ -66,13 +66,13 @@ namespace
         std::vector<std::pair<std::string, std::string>> ExtractConstants(const char *source)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            return SbmdV4Loader::ExtractConstants(Ctx(), source, strlen(source));
+            return SbmdLoader::ExtractConstants(Ctx(), source, strlen(source));
         }
 
-        std::unique_ptr<SbmdV4Registration> LoadDriver(const std::string &source)
+        std::unique_ptr<SbmdRegistration> LoadDriver(const std::string &source)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            return SbmdV4Loader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
+            return SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
         }
     };
 
@@ -80,7 +80,7 @@ namespace
     // Constants extraction tests
     // ========================================================================
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsBasic)
+    TEST_F(SbmdLoaderTest, ExtractConstantsBasic)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({
@@ -101,7 +101,7 @@ namespace
         EXPECT_EQ(constants[2].second, "0");
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsHexNumbers)
+    TEST_F(SbmdLoaderTest, ExtractConstantsHexNumbers)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({
@@ -122,7 +122,7 @@ namespace
         EXPECT_EQ(constants[2].second, "255");
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsBooleans)
+    TEST_F(SbmdLoaderTest, ExtractConstantsBooleans)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({ constants: { A: true, B: false } });
@@ -135,7 +135,7 @@ namespace
         EXPECT_EQ(constants[1].second, "false");
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsStringsWithEscapes)
+    TEST_F(SbmdLoaderTest, ExtractConstantsStringsWithEscapes)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({ constants: { A: "hello \"world\"", B: "back\\slash" } });
@@ -148,7 +148,7 @@ namespace
         EXPECT_EQ(constants[1].second, R"("back\\slash")");
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsEmptyBlock)
+    TEST_F(SbmdLoaderTest, ExtractConstantsEmptyBlock)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({ constants: {} });
@@ -157,7 +157,7 @@ namespace
         EXPECT_TRUE(constants.empty());
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsNoConstantsBlock)
+    TEST_F(SbmdLoaderTest, ExtractConstantsNoConstantsBlock)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({ name: "test" });
@@ -166,7 +166,7 @@ namespace
         EXPECT_TRUE(constants.empty());
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsRejectsNonPrimitive)
+    TEST_F(SbmdLoaderTest, ExtractConstantsRejectsNonPrimitive)
     {
         auto constants = ExtractConstants(R"(
             SbmdDriver({ constants: { A: 1, B: [1, 2] } });
@@ -176,7 +176,7 @@ namespace
         EXPECT_TRUE(constants.empty());
     }
 
-    TEST_F(SbmdV4LoaderTest, ExtractConstantsWithNestedBraces)
+    TEST_F(SbmdLoaderTest, ExtractConstantsWithNestedBraces)
     {
         // Ensure we find the right closing brace
         auto constants = ExtractConstants(R"(
@@ -193,29 +193,29 @@ namespace
         EXPECT_EQ(constants[0].second, "1");
     }
 
-    TEST_F(SbmdV4LoaderTest, GenerateConstantsPreamble)
+    TEST_F(SbmdLoaderTest, GenerateConstantsPreamble)
     {
         std::vector<std::pair<std::string, std::string>> constants = {
             {"EP_LIGHT", "\"1\""},
             {"CL_ON_OFF", "6"},
         };
 
-        auto preamble = SbmdV4Loader::GenerateConstantsPreamble(constants);
+        auto preamble = SbmdLoader::GenerateConstantsPreamble(constants);
         EXPECT_EQ(preamble, "var EP_LIGHT = \"1\";\nvar CL_ON_OFF = 6;\n");
     }
 
-    TEST_F(SbmdV4LoaderTest, CountPreambleLines)
+    TEST_F(SbmdLoaderTest, CountPreambleLines)
     {
-        EXPECT_EQ(SbmdV4Loader::CountPreambleLines("var A = 1;\nvar B = 2;\n"), 2);
-        EXPECT_EQ(SbmdV4Loader::CountPreambleLines(""), 0);
-        EXPECT_EQ(SbmdV4Loader::CountPreambleLines("var A = 1;\n"), 1);
+        EXPECT_EQ(SbmdLoader::CountPreambleLines("var A = 1;\nvar B = 2;\n"), 2);
+        EXPECT_EQ(SbmdLoader::CountPreambleLines(""), 0);
+        EXPECT_EQ(SbmdLoader::CountPreambleLines("var A = 1;\n"), 1);
     }
 
     // ========================================================================
     // Full driver loading and registration extraction tests
     // ========================================================================
 
-    TEST_F(SbmdV4LoaderTest, LoadMinimalDriver)
+    TEST_F(SbmdLoaderTest, LoadMinimalDriver)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -238,7 +238,7 @@ namespace
         EXPECT_EQ(reg->matter.deviceTypes[0], 0x0100);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithConstants)
+    TEST_F(SbmdLoaderTest, LoadDriverWithConstants)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -267,7 +267,7 @@ namespace
         EXPECT_EQ(reg->endpoints[0].id, "1"); // EP_LIGHT resolved to "1"
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithAliases)
+    TEST_F(SbmdLoaderTest, LoadDriverWithAliases)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -302,7 +302,7 @@ namespace
         EXPECT_EQ(it2->second.eventId.value(), 2u);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithResourceHandlers)
+    TEST_F(SbmdLoaderTest, LoadDriverWithResourceHandlers)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -369,7 +369,7 @@ namespace
         EXPECT_TRUE(res.write->supplements.attributes.empty());
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithAttributeHandlers)
+    TEST_F(SbmdLoaderTest, LoadDriverWithAttributeHandlers)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -405,7 +405,7 @@ namespace
         EXPECT_FALSE(JS_IsUndefined(reg->attributeHandlers[0].handler));
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithReporting)
+    TEST_F(SbmdLoaderTest, LoadDriverWithReporting)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -426,7 +426,7 @@ namespace
         EXPECT_EQ(reg->matter.revision.value(), 2u);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithPrerequisites)
+    TEST_F(SbmdLoaderTest, LoadDriverWithPrerequisites)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -471,7 +471,7 @@ namespace
         EXPECT_EQ(res.prerequisites[0], "currentLevel");
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverWithMatterOptions)
+    TEST_F(SbmdLoaderTest, LoadDriverWithMatterOptions)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -508,7 +508,7 @@ namespace
         EXPECT_EQ(reg->matter.defaultTimeoutMs.value(), 10000u);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverMissingNameFails)
+    TEST_F(SbmdLoaderTest, LoadDriverMissingNameFails)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -523,7 +523,7 @@ namespace
         EXPECT_EQ(reg, nullptr);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverDoubleSbmdDriverCallFails)
+    TEST_F(SbmdLoaderTest, LoadDriverDoubleSbmdDriverCallFails)
     {
         auto reg = LoadDriver(R"(
             SbmdDriver({
@@ -547,7 +547,7 @@ namespace
         EXPECT_EQ(reg, nullptr);
     }
 
-    TEST_F(SbmdV4LoaderTest, LoadDriverNoSbmdDriverCallFails)
+    TEST_F(SbmdLoaderTest, LoadDriverNoSbmdDriverCallFails)
     {
         auto reg = LoadDriver(R"(
             // Just some random code
@@ -557,7 +557,7 @@ namespace
         EXPECT_EQ(reg, nullptr);
     }
 
-    TEST_F(SbmdV4LoaderTest, ConstantsAvailableInHandlers)
+    TEST_F(SbmdLoaderTest, ConstantsAvailableInHandlers)
     {
         // Verify that constants injected as var declarations are accessible
         // inside handler functions via the IIFE scope
@@ -601,7 +601,7 @@ namespace
         ASSERT_TRUE(reg->endpoints[0].resources[0].write.has_value());
     }
 
-    TEST_F(SbmdV4LoaderTest, CrossDriverIsolation)
+    TEST_F(SbmdLoaderTest, CrossDriverIsolation)
     {
         // Load two drivers with same function names — IIFE wrapping should prevent collision
         auto reg1 = LoadDriver(R"(

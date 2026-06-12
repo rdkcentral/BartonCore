@@ -22,14 +22,14 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for SbmdV4Driver activate/deactivate lifecycle.
+ * Unit tests for SbmdDriver activate/deactivate lifecycle.
  */
 
-#include "deviceDrivers/matter/sbmd/SbmdV4Driver.h"
+#include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -99,7 +99,7 @@ namespace
         }
     )";
 
-    class SbmdV4DriverTest : public ::testing::Test
+    class SbmdDriverTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -108,7 +108,7 @@ namespace
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdV4Loader::InjectCaptureFunction(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         static void TearDownTestSuite()
@@ -124,17 +124,17 @@ namespace
         /**
          * Create a driver from the test source. Loads it initially to get metadata.
          */
-        std::unique_ptr<SbmdV4Driver> CreateDriver(const std::string &source = kDriverSource)
+        std::unique_ptr<SbmdDriver> CreateDriver(const std::string &source = kDriverSource)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto reg = SbmdV4Loader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
+            auto reg = SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
 
             if (!reg)
             {
                 return nullptr;
             }
 
-            return std::make_unique<SbmdV4Driver>(std::move(reg), source);
+            return std::make_unique<SbmdDriver>(std::move(reg), source);
         }
 
         /**
@@ -171,7 +171,7 @@ namespace
                 return std::nullopt;
             }
 
-            return SbmdV4ResultExecutor::Parse(ctx, result);
+            return SbmdResultExecutor::Parse(ctx, result);
         }
     };
 
@@ -179,14 +179,14 @@ namespace
     // Initial state (metadata-only)
     // ========================================================================
 
-    TEST_F(SbmdV4DriverTest, InitiallyNotActivated)
+    TEST_F(SbmdDriverTest, InitiallyNotActivated)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
         EXPECT_FALSE(driver->IsActivated());
     }
 
-    TEST_F(SbmdV4DriverTest, MetadataAvailableBeforeActivation)
+    TEST_F(SbmdDriverTest, MetadataAvailableBeforeActivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -203,7 +203,7 @@ namespace
     // Activation
     // ========================================================================
 
-    TEST_F(SbmdV4DriverTest, ActivateSetsActivatedFlag)
+    TEST_F(SbmdDriverTest, ActivateSetsActivatedFlag)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -222,7 +222,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdV4DriverTest, MetadataPreservedAfterActivation)
+    TEST_F(SbmdDriverTest, MetadataPreservedAfterActivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -245,7 +245,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdV4DriverTest, HandlersCallableAfterActivation)
+    TEST_F(SbmdDriverTest, HandlersCallableAfterActivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -278,7 +278,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdV4DriverTest, AttributeHandlerCallableAfterActivation)
+    TEST_F(SbmdDriverTest, AttributeHandlerCallableAfterActivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -309,7 +309,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdV4DriverTest, DoubleActivateSucceeds)
+    TEST_F(SbmdDriverTest, DoubleActivateSucceeds)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -333,7 +333,7 @@ namespace
     // Deactivation
     // ========================================================================
 
-    TEST_F(SbmdV4DriverTest, DeactivateClearsActivatedFlag)
+    TEST_F(SbmdDriverTest, DeactivateClearsActivatedFlag)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -347,7 +347,7 @@ namespace
         EXPECT_FALSE(driver->IsActivated());
     }
 
-    TEST_F(SbmdV4DriverTest, HandlersUndefinedAfterDeactivation)
+    TEST_F(SbmdDriverTest, HandlersUndefinedAfterDeactivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -371,7 +371,7 @@ namespace
         EXPECT_TRUE(JS_IsUndefined(reg.attributeHandlers[0].handler));
     }
 
-    TEST_F(SbmdV4DriverTest, MetadataPreservedAfterDeactivation)
+    TEST_F(SbmdDriverTest, MetadataPreservedAfterDeactivation)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -387,7 +387,7 @@ namespace
         EXPECT_EQ(reg.barton.deviceClass, "light");
     }
 
-    TEST_F(SbmdV4DriverTest, DoubleDeactivateIsSafe)
+    TEST_F(SbmdDriverTest, DoubleDeactivateIsSafe)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -406,7 +406,7 @@ namespace
     // Re-activation
     // ========================================================================
 
-    TEST_F(SbmdV4DriverTest, ReactivateAfterDeactivate)
+    TEST_F(SbmdDriverTest, ReactivateAfterDeactivate)
     {
         auto driver = CreateDriver();
         ASSERT_NE(driver, nullptr);
@@ -442,7 +442,7 @@ namespace
     // Edge cases
     // ========================================================================
 
-    TEST_F(SbmdV4DriverTest, DriverWithNoHandlers)
+    TEST_F(SbmdDriverTest, DriverWithNoHandlers)
     {
         const char *minimalSource = R"(
             SbmdDriver({

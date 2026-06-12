@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// Contact Sensor SBMD v4 Driver
+// Contact Sensor SBMD Driver
 //
 // Maps Matter Contact Sensor device type to Barton sensor device class.
 // BooleanState cluster: StateValue=true means closed (not faulted).

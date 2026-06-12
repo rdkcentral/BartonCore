@@ -22,14 +22,14 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for SbmdV4HandlerInvoker — args building, handler invocation,
+ * Unit tests for SbmdHandlerInvoker — args building, handler invocation,
  * result parsing, and non-terminal op execution.
  */
 
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4HandlerInvoker.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -89,7 +89,7 @@ void setMetadata(const char *deviceUuid, const char *endpointId, const char *nam
 
 namespace
 {
-    class SbmdV4HandlerInvokerTest : public ::testing::Test
+    class SbmdHandlerInvokerTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -98,7 +98,7 @@ namespace
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdV4Loader::InjectCaptureFunction(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         static void TearDownTestSuite()
@@ -177,12 +177,12 @@ namespace
     // BuildAttributeArgs
     // ========================================================================
 
-    TEST_F(SbmdV4HandlerInvokerTest, BuildAttributeArgsBasicFields)
+    TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsBasicFields)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
+        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
         ASSERT_FALSE(JS_IsException(args));
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -196,12 +196,12 @@ namespace
         EXPECT_EQ(GetStringProp(attr, "tlvBase64"), "AB==");
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, BuildAttributeArgsFeatureMaps)
+    TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsFeatureMaps)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
+        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
 
         JSValue fm = JS_GetPropertyStr(Ctx(), args, "clusterFeatureMaps");
         ASSERT_FALSE(JS_IsUndefined(fm));
@@ -209,12 +209,12 @@ namespace
         EXPECT_EQ(GetUint32Prop(fm, "8"), 0x03u);
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, BuildAttributeArgsEmptyTlv)
+    TEST_F(SbmdHandlerInvokerTest, BuildAttributeArgsEmptyTlv)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
+        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
 
         JSValue attr = JS_GetPropertyStr(Ctx(), args, "attribute");
         JSValue tlv = JS_GetPropertyStr(Ctx(), attr, "tlvBase64");
@@ -225,12 +225,12 @@ namespace
     // BuildResourceArgs
     // ========================================================================
 
-    TEST_F(SbmdV4HandlerInvokerTest, BuildResourceArgsRead)
+    TEST_F(SbmdHandlerInvokerTest, BuildResourceArgsRead)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         ASSERT_FALSE(JS_IsException(args));
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -244,12 +244,12 @@ namespace
         EXPECT_TRUE(JS_IsNull(input));
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, BuildResourceArgsWrite)
+    TEST_F(SbmdHandlerInvokerTest, BuildResourceArgsWrite)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "dimLevel", std::string("75"));
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "dimLevel", std::string("75"));
         ASSERT_FALSE(JS_IsException(args));
 
         JSValue resource = JS_GetPropertyStr(Ctx(), args, "resource");
@@ -261,7 +261,7 @@ namespace
     // InvokeHandler
     // ========================================================================
 
-    TEST_F(SbmdV4HandlerInvokerTest, InvokeSimpleSuccessHandler)
+    TEST_F(SbmdHandlerInvokerTest, InvokeSimpleSuccessHandler)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
@@ -269,15 +269,15 @@ namespace
         JSValue handler = EvalFunc("(function(args) { return SbmdUtils.result().success(); })");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
         EXPECT_TRUE(result->ops.empty());
         EXPECT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, InvokeHandlerWithOps)
+    TEST_F(SbmdHandlerInvokerTest, InvokeHandlerWithOps)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
@@ -290,8 +290,8 @@ namespace
             "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
         ASSERT_EQ(result->ops.size(), 1u);
@@ -303,7 +303,7 @@ namespace
         EXPECT_EQ(ur.value, "true");
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, InvokeHandlerWithSendCommand)
+    TEST_F(SbmdHandlerInvokerTest, InvokeHandlerWithSendCommand)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
@@ -315,8 +315,8 @@ namespace
             "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::string("true"));
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::string("true"));
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
@@ -326,7 +326,7 @@ namespace
         EXPECT_EQ(cmd.commandId, 1u);
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, InvokeThrowingHandlerReturnsNullopt)
+    TEST_F(SbmdHandlerInvokerTest, InvokeThrowingHandlerReturnsNullopt)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
@@ -334,19 +334,19 @@ namespace
         JSValue handler = EvalFunc("(function(args) { throw new Error('boom'); })");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         EXPECT_FALSE(result.has_value());
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, InvokeUndefinedHandlerReturnsNullopt)
+    TEST_F(SbmdHandlerInvokerTest, InvokeUndefinedHandlerReturnsNullopt)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdV4HandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), JS_UNDEFINED, args);
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), JS_UNDEFINED, args);
 
         EXPECT_FALSE(result.has_value());
     }
@@ -355,7 +355,7 @@ namespace
     // ExecuteOps
     // ========================================================================
 
-    TEST_F(SbmdV4HandlerInvokerTest, ExecuteOpsUpdateResource)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResource)
     {
         auto hctx = MakeContext();
 
@@ -366,7 +366,7 @@ namespace
         ur.value = "true";
         ops.push_back(ResultOp{ur});
 
-        SbmdV4HandlerInvoker::ExecuteOps(hctx, ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
         EXPECT_EQ(g_updateResourceCalls[0].deviceUuid, "test-device-uuid");
@@ -375,7 +375,7 @@ namespace
         EXPECT_EQ(g_updateResourceCalls[0].value, "true");
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, ExecuteOpsUpdateResourceUsesDefaultEndpoint)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceUsesDefaultEndpoint)
     {
         auto hctx = MakeContext();
 
@@ -386,13 +386,13 @@ namespace
         ur.value = "false";
         ops.push_back(ResultOp{ur});
 
-        SbmdV4HandlerInvoker::ExecuteOps(hctx, ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
         EXPECT_EQ(g_updateResourceCalls[0].endpointId, "1"); // default from context
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, ExecuteOpsSetMetadata)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsSetMetadata)
     {
         auto hctx = MakeContext();
 
@@ -404,7 +404,7 @@ namespace
         sm.value = "percent";
         ops.push_back(ResultOp{sm});
 
-        SbmdV4HandlerInvoker::ExecuteOps(hctx, ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         ASSERT_EQ(g_setMetadataCalls.size(), 1u);
         EXPECT_EQ(g_setMetadataCalls[0].deviceUuid, "test-device-uuid");
@@ -413,7 +413,7 @@ namespace
         EXPECT_EQ(g_setMetadataCalls[0].value, "percent");
     }
 
-    TEST_F(SbmdV4HandlerInvokerTest, ExecuteOpsMultiple)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsMultiple)
     {
         auto hctx = MakeContext();
 
@@ -436,7 +436,7 @@ namespace
         sm.value = "device";
         ops.push_back(ResultOp{sm});
 
-        SbmdV4HandlerInvoker::ExecuteOps(hctx, ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         // Log doesn't produce external calls, but the other two should
         EXPECT_EQ(g_updateResourceCalls.size(), 1u);
@@ -447,7 +447,7 @@ namespace
     // End-to-end: invoke → parse → execute ops
     // ========================================================================
 
-    TEST_F(SbmdV4HandlerInvokerTest, EndToEndInvokeAndExecuteOps)
+    TEST_F(SbmdHandlerInvokerTest, EndToEndInvokeAndExecuteOps)
     {
         auto hctx = MakeContext();
 
@@ -462,12 +462,12 @@ namespace
             "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdV4HandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
-        auto result = SbmdV4HandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
 
         // Execute ops outside the mutex (in real code) but fine in test
-        SbmdV4HandlerInvoker::ExecuteOps(hctx, result->ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
         EXPECT_EQ(g_updateResourceCalls[0].endpointId, "1");

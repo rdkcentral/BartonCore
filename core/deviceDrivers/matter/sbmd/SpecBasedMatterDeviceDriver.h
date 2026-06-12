@@ -29,9 +29,8 @@
 
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
-#include "SbmdSpec.h"
-#include "SbmdV4Driver.h"
-#include "mquickjs/SbmdV4ResultExecutor.h"
+#include "SbmdDriver.h"
+#include "mquickjs/SbmdResultExecutor.h"
 #include <functional>
 #include <map>
 #include <memory>
@@ -43,10 +42,7 @@ namespace barton
     class SpecBasedMatterDeviceDriver : public MatterDeviceDriver
     {
     public:
-        SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
-        SpecBasedMatterDeviceDriver(SbmdV4Driver *v4Driver);
-
-        bool IsV4() const { return v4Driver != nullptr; }
+        SpecBasedMatterDeviceDriver(SbmdDriver *driver);
 
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
@@ -91,36 +87,34 @@ namespace barton
 
     private:
 
-        std::shared_ptr<SbmdSpec> spec;
+        SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
-        SbmdV4Driver *v4Driver = nullptr; // Non-owning. Owned by SbmdFactory.
-
-        // V4-specific internal methods
-        bool DoRegisterResourcesV4(icDevice *device);
-        void SeedInitialResourceValuesV4(const std::string &deviceId);
+        // Driver-based internal methods
+        bool DoRegisterDriverResources(icDevice *device);
+        void SeedInitialResourceValues(const std::string &deviceId);
 
         /**
-         * V4 prerequisite check — evaluates prerequisites from v4 registration data
+         * Prerequisite check — evaluates prerequisites from registration data
          * against the device's data cache.
          */
-        static bool CheckPrerequisitesV4(const SbmdV4Resource &resource, const MatterDevice &device);
+        static bool CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device);
 
         /**
-         * Invoke a v4 seed handler for a resource. Returns the seed value or empty string.
+         * Invoke a seed handler for a resource. Returns the seed value or empty string.
          */
-        std::string InvokeV4SeedHandler(const std::string &deviceId,
+        std::string InvokeSeedHandler(const std::string &deviceId,
                                         const std::string &endpointId,
-                                        const SbmdV4Resource &resource);
+                                        const SbmdResource &resource);
 
         /**
-         * Find a v4 resource by endpoint ID and resource ID.
+         * Find a resource by endpoint ID and resource ID.
          */
-        const SbmdV4Resource *FindV4Resource(const char *endpointId, const char *resourceId) const;
+        const SbmdResource *FindDriverResource(const char *endpointId, const char *resourceId) const;
 
         /**
-         * Handle a read/write/execute resource operation through the v4 handler system.
+         * Handle a read/write/execute resource operation through the handler system.
          */
-        void HandleV4ResourceOp(std::forward_list<std::promise<bool>> &promises,
+        void HandleResourceOp(std::forward_list<std::promise<bool>> &promises,
                                 MatterDevice &device,
                                 icDeviceResource *resource,
                                 const char *input,
@@ -131,9 +125,9 @@ namespace barton
                                 const char *opType);
 
         /**
-         * Execute a v4 result chain terminal — success, error, sendCommand, or writeAttribute.
+         * Execute a result chain terminal — success, error, sendCommand, or writeAttribute.
          */
-        void ExecuteV4Terminal(std::forward_list<std::promise<bool>> &promises,
+        void ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
                               MatterDevice &device,
                               const ResultTerminal &terminal,
                               const char *uri,
@@ -143,67 +137,16 @@ namespace barton
                               const chip::SessionHandle &sessionHandle);
 
         /**
-         * Handle a v4 attribute report via the dispatch tables.
-         * Called from MatterDevice::CacheCallback via the V4AttributeCallback.
+         * Handle a attribute report via the dispatch tables.
+         * Called from MatterDevice::CacheCallback via the AttributeCallback.
          */
-        void HandleV4AttributeReport(const std::string &deviceId,
+        void HandleAttributeReport(const std::string &deviceId,
                                      chip::EndpointId endpointId,
                                      chip::ClusterId clusterId,
                                      chip::AttributeId attributeId,
                                      chip::TLV::TLVReader &reader);
 
-        /**
-         * Create and configure a script engine with all mappers from the spec
-         * @param deviceId The device ID for the script instance
-         * @return A configured SbmdScript instance
-         */
-        std::unique_ptr<SbmdScript> CreateConfiguredScript(const std::string &deviceId);
-
-        /**
-         * Add mappers from a resource to the script engine
-         * @param script The script engine to configure
-         * @param resource The resource containing mapper configurations
-         */
-        void AddResourceMappers(SbmdScript &script, const SbmdResource &resource);
-
-        /**
-         * Seed the initial values of all seedFrom resources for a device from the attribute cache.
-         * Called at configure and synchronize time, after bindings are established and the cache is primed.
-         * Skips resources that were marked as optional and not registered.
-         * @param deviceId The device ID
-         */
-        void SeedInitialResourceValues(const std::string &deviceId);
-
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
-
-        /**
-         * Build a key for identifying a resource, combining endpoint ID and resource ID.
-         * For device-level resources, the endpoint ID portion is empty.
-         */
-        static std::string MakeResourceKey(const SbmdResource &resource);
-
-        /**
-         * Iterate all spec resources, skipping those marked optional and missing for deviceId.
-         * Calls callback for each non-skipped resource. For device-level resources, the
-         * SbmdEndpoint pointer is nullptr. For endpoint-level resources, it points to the
-         * containing endpoint.
-         *
-         * @param deviceId The device ID used to look up the skipped-resource set
-         * @param callback Called for each non-skipped resource
-         */
-        void ForEachNonSkippedResource(
-            const std::string &deviceId,
-            const std::function<void(const SbmdResource &, const SbmdEndpoint *)> &callback) const;
-
-        /**
-         * Check whether all prerequisites declared by a resource are satisfied by the device's data cache.
-         * Resources with an empty prerequisites vector (prerequisites: none) always satisfy the check.
-         *
-         * @param resource The resource whose prerequisites to evaluate
-         * @param device   The commissioned device whose data cache is queried
-         * @return true if all prerequisites are met, false if any prerequisite is unmet
-         */
-        static bool CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device);
 
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
          * configuration */

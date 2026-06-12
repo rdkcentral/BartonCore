@@ -24,7 +24,7 @@
 /*
  * Created by tlea on 6/12/2026
  *
- * Loader for v4 SBMD driver files (.sbmd.js).
+ * Loader for SBMD driver files (.sbmd.js).
  *
  * Handles the two-pass evaluation process:
  *   Pass 1: Extract constants block, evaluate as object literal, produce var declarations.
@@ -35,7 +35,7 @@
 
 #pragma once
 
-#include "../SbmdV4Registration.h"
+#include "../SbmdRegistration.h"
 
 #include <memory>
 #include <optional>
@@ -49,7 +49,7 @@ extern "C" {
 
 namespace barton
 {
-    class SbmdV4Loader
+    class SbmdLoader
     {
     public:
         /**
@@ -79,7 +79,7 @@ namespace barton
          * @param sourceLen Length of the file contents
          * @return The extracted registration, or nullptr on failure
          */
-        static std::unique_ptr<SbmdV4Registration> LoadDriver(JSContext *ctx,
+        static std::unique_ptr<SbmdRegistration> LoadDriver(JSContext *ctx,
                                                                const std::string &filePath,
                                                                const char *source,
                                                                size_t sourceLen);
@@ -117,41 +117,41 @@ namespace barton
         /**
          * Extract the registration object from the JS context after evaluation.
          * Reads __sbmd_registration, resets it to null, and walks the JSValue
-         * to populate a SbmdV4Registration struct.
+         * to populate a SbmdRegistration struct.
          */
-        static std::unique_ptr<SbmdV4Registration> ExtractRegistration(JSContext *ctx, const std::string &filePath);
+        static std::unique_ptr<SbmdRegistration> ExtractRegistration(JSContext *ctx, const std::string &filePath);
 
         /**
          * Walk a JSValue registration object and populate metadata fields.
          */
-        static bool ExtractMetadata(JSContext *ctx, JSValue reg, SbmdV4Registration &out);
+        static bool ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out);
 
         /**
          * Walk the aliases object and populate the aliases map.
          */
-        static bool ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdV4Registration &out);
+        static bool ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdRegistration &out);
 
         /**
          * Walk the endpoints object and populate endpoint/resource structures.
          */
-        static bool ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdV4Registration &out);
+        static bool ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out);
 
         /**
          * Walk a resource handler declaration (simple function or {supplements, handler} object).
          */
-        static std::optional<SbmdV4ResourceHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
+        static std::optional<SbmdResourceHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
 
         /**
          * Walk a device handler array (attributeHandlers, eventHandlers, commandHandlers).
          */
         static bool ExtractDeviceHandlers(JSContext *ctx,
                                           JSValue handlersObj,
-                                          std::vector<SbmdV4DeviceHandler> &out);
+                                          std::vector<SbmdDeviceHandler> &out);
 
         /**
          * Walk a supplements declaration object.
          */
-        static SbmdV4Supplements ExtractSupplements(JSContext *ctx, JSValue supplementsObj);
+        static SbmdSupplements ExtractSupplements(JSContext *ctx, JSValue supplementsObj);
     };
 
 } // namespace barton

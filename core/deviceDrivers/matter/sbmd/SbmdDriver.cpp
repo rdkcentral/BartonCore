@@ -25,11 +25,11 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdV4Driver"
+#define LOG_TAG "SbmdDriver"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
-#include "SbmdV4Driver.h"
-#include "mquickjs/SbmdV4Loader.h"
+#include "SbmdDriver.h"
+#include "mquickjs/SbmdLoader.h"
 
 extern "C" {
 #include <icLog/logging.h>
@@ -37,12 +37,12 @@ extern "C" {
 
 namespace barton
 {
-    SbmdV4Driver::SbmdV4Driver(std::unique_ptr<SbmdV4Registration> registration, std::string source)
+    SbmdDriver::SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source)
         : registration(std::move(registration)), source(std::move(source))
     {
     }
 
-    SbmdV4Driver::~SbmdV4Driver()
+    SbmdDriver::~SbmdDriver()
     {
         // If still activated at destruction, the GC refs are leaked.
         // This shouldn't happen in normal operation.
@@ -52,7 +52,7 @@ namespace barton
         }
     }
 
-    bool SbmdV4Driver::Activate(JSContext *ctx)
+    bool SbmdDriver::Activate(JSContext *ctx)
     {
         if (registration->activated)
         {
@@ -63,7 +63,7 @@ namespace barton
         icDebug("activating driver '%s'", registration->name.c_str());
 
         // Re-evaluate the source to get fresh handler JSValues
-        auto freshReg = SbmdV4Loader::LoadDriver(ctx, registration->filePath, source.c_str(), source.size());
+        auto freshReg = SbmdLoader::LoadDriver(ctx, registration->filePath, source.c_str(), source.size());
 
         if (!freshReg)
         {
@@ -93,7 +93,7 @@ namespace barton
         return true;
     }
 
-    void SbmdV4Driver::Deactivate(JSContext *ctx)
+    void SbmdDriver::Deactivate(JSContext *ctx)
     {
         if (!registration->activated)
         {
@@ -112,37 +112,37 @@ namespace barton
         registration->activated = false;
     }
 
-    bool SbmdV4Driver::IsActivated() const
+    bool SbmdDriver::IsActivated() const
     {
         return registration && registration->activated;
     }
 
-    const SbmdV4Registration &SbmdV4Driver::GetRegistration() const
+    const SbmdRegistration &SbmdDriver::GetRegistration() const
     {
         return *registration;
     }
 
-    const std::string &SbmdV4Driver::GetName() const
+    const std::string &SbmdDriver::GetName() const
     {
         return registration->name;
     }
 
-    const SbmdV4DispatchTable &SbmdV4Driver::GetAttributeDispatch() const
+    const SbmdDispatchTable &SbmdDriver::GetAttributeDispatch() const
     {
         return attributeDispatch;
     }
 
-    const SbmdV4DispatchTable &SbmdV4Driver::GetEventDispatch() const
+    const SbmdDispatchTable &SbmdDriver::GetEventDispatch() const
     {
         return eventDispatch;
     }
 
-    const SbmdV4DispatchTable &SbmdV4Driver::GetCommandDispatch() const
+    const SbmdDispatchTable &SbmdDriver::GetCommandDispatch() const
     {
         return commandDispatch;
     }
 
-    void SbmdV4Driver::RootIfValid(JSContext *ctx, JSValue &handler)
+    void SbmdDriver::RootIfValid(JSContext *ctx, JSValue &handler)
     {
         if (JS_IsUndefined(handler))
         {
@@ -154,7 +154,7 @@ namespace barton
         JS_AddGCRef(ctx, &ref);
     }
 
-    void SbmdV4Driver::RootHandlers(JSContext *ctx)
+    void SbmdDriver::RootHandlers(JSContext *ctx)
     {
         gcRefs.clear();
 
@@ -202,7 +202,7 @@ namespace barton
         }
     }
 
-    void SbmdV4Driver::UnrootHandlers(JSContext *ctx)
+    void SbmdDriver::UnrootHandlers(JSContext *ctx)
     {
         // Remove all GC roots
         for (auto &ref : gcRefs)

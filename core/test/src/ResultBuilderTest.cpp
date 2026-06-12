@@ -22,7 +22,7 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for the SbmdUtils.result() builder (v4 result chain).
+ * Unit tests for the SbmdUtils.result() builder (result chain).
  *
  * These tests initialize the mquickjs runtime, load sbmd-utils.js,
  * then evaluate JS expressions to verify the builder API produces

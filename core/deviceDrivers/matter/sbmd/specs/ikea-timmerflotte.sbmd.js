@@ -22,7 +22,7 @@
 // ------------------------------ tabstop = 4 ----------------------------------
 
 //
-// IKEA TIMMERFLOTTE SBMD v4 Driver
+// IKEA TIMMERFLOTTE SBMD Driver
 //
 // Vendor-specific driver for the IKEA TIMMERFLOTTE temperature and humidity
 // sensor (VID 0x117C / PID 0x8005), claimed by vendor/product ID match.

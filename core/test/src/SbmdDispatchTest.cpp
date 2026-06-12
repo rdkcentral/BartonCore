@@ -22,19 +22,19 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Unit tests for SbmdV4DispatchTable — dispatch table construction, lookup,
+ * Unit tests for SbmdDispatchTable — dispatch table construction, lookup,
  * and priority ordering.
  *
- * Also tests integration with SbmdV4Driver — dispatch tables built during
+ * Also tests integration with SbmdDriver — dispatch tables built during
  * activation and cleared during deactivation.
  */
 
-#include "deviceDrivers/matter/sbmd/SbmdV4Dispatch.h"
-#include "deviceDrivers/matter/sbmd/SbmdV4Driver.h"
+#include "deviceDrivers/matter/sbmd/SbmdDispatch.h"
+#include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -51,13 +51,13 @@ namespace
     // Pure dispatch table tests (no JS engine needed)
     // ========================================================================
 
-    class SbmdV4DispatchTableTest : public ::testing::Test
+    class SbmdDispatchTableTest : public ::testing::Test
     {
     protected:
         // Helper to create a simple alias
-        static SbmdV4Alias MakeAttrAlias(const std::string &name, uint32_t clusterId, uint32_t attrId)
+        static SbmdAlias MakeAttrAlias(const std::string &name, uint32_t clusterId, uint32_t attrId)
         {
-            SbmdV4Alias alias;
+            SbmdAlias alias;
             alias.name = name;
             alias.clusterId = clusterId;
             alias.attributeId = attrId;
@@ -65,9 +65,9 @@ namespace
             return alias;
         }
 
-        static SbmdV4Alias MakeEventAlias(const std::string &name, uint32_t clusterId, uint32_t eventId)
+        static SbmdAlias MakeEventAlias(const std::string &name, uint32_t clusterId, uint32_t eventId)
         {
-            SbmdV4Alias alias;
+            SbmdAlias alias;
             alias.name = name;
             alias.clusterId = clusterId;
             alias.eventId = eventId;
@@ -75,9 +75,9 @@ namespace
             return alias;
         }
 
-        static SbmdV4Alias MakeCmdAlias(const std::string &name, uint32_t clusterId, uint32_t cmdId)
+        static SbmdAlias MakeCmdAlias(const std::string &name, uint32_t clusterId, uint32_t cmdId)
         {
-            SbmdV4Alias alias;
+            SbmdAlias alias;
             alias.name = name;
             alias.clusterId = clusterId;
             alias.commandId = cmdId;
@@ -86,9 +86,9 @@ namespace
         }
 
         // Helper to create a wildcard alias (no element ID set)
-        static SbmdV4Alias MakeWildcardAlias(const std::string &name, uint32_t clusterId)
+        static SbmdAlias MakeWildcardAlias(const std::string &name, uint32_t clusterId)
         {
-            SbmdV4Alias alias;
+            SbmdAlias alias;
             alias.name = name;
             alias.clusterId = clusterId;
 
@@ -96,9 +96,9 @@ namespace
         }
 
         // Helper to create a handler with given aliases
-        static SbmdV4DeviceHandler MakeHandler(const std::string &name, const std::vector<std::string> &aliases)
+        static SbmdDeviceHandler MakeHandler(const std::string &name, const std::vector<std::string> &aliases)
         {
-            SbmdV4DeviceHandler handler;
+            SbmdDeviceHandler handler;
             handler.name = name;
             handler.aliases = aliases;
             handler.handler = JS_UNDEFINED; // Not needed for table tests
@@ -107,22 +107,22 @@ namespace
         }
     };
 
-    TEST_F(SbmdV4DispatchTableTest, EmptyTableLookupReturnsEmpty)
+    TEST_F(SbmdDispatchTableTest, EmptyTableLookupReturnsEmpty)
     {
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         auto results = table.Lookup(0x0006, 0x0000);
         EXPECT_TRUE(results.empty());
     }
 
-    TEST_F(SbmdV4DispatchTableTest, SingleSpecificHandler)
+    TEST_F(SbmdDispatchTableTest, SingleSpecificHandler)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("onOffHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
@@ -131,15 +131,15 @@ namespace
         EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, NoMatchReturnsEmpty)
+    TEST_F(SbmdDispatchTableTest, NoMatchReturnsEmpty)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("onOffHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         // Different cluster
@@ -148,16 +148,16 @@ namespace
         EXPECT_TRUE(table.Lookup(0x0006, 0x0001).empty());
     }
 
-    TEST_F(SbmdV4DispatchTableTest, MultiAliasHandlerMatchesAll)
+    TEST_F(SbmdDispatchTableTest, MultiAliasHandlerMatchesAll)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
         aliases["currentLevel"] = MakeAttrAlias("currentLevel", 0x0008, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("lightState", {"onOff", "currentLevel"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         // Should match both
@@ -172,15 +172,15 @@ namespace
         EXPECT_EQ(r2[0]->priority, HandlerPriority::Multi);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, WildcardHandlerMatchesAnyElementInCluster)
+    TEST_F(SbmdDispatchTableTest, WildcardHandlerMatchesAnyElementInCluster)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["anyOnOff"] = MakeWildcardAlias("anyOnOff", 0x0006);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         // Matches any attribute in cluster 0x0006
@@ -199,19 +199,19 @@ namespace
         EXPECT_TRUE(table.Lookup(0x0008, 0x0000).empty());
     }
 
-    TEST_F(SbmdV4DispatchTableTest, PriorityOrderSpecificBeforeMulti)
+    TEST_F(SbmdDispatchTableTest, PriorityOrderSpecificBeforeMulti)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
         aliases["currentLevel"] = MakeAttrAlias("currentLevel", 0x0008, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         // Multi handler registered first
         handlers.push_back(MakeHandler("multiHandler", {"onOff", "currentLevel"}));
         // Specific handler registered second
         handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
@@ -223,19 +223,19 @@ namespace
         EXPECT_EQ(results[1]->priority, HandlerPriority::Multi);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, PriorityOrderSpecificBeforeWildcard)
+    TEST_F(SbmdDispatchTableTest, PriorityOrderSpecificBeforeWildcard)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
         aliases["anyOnOff"] = MakeWildcardAlias("anyOnOff", 0x0006);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         // Wildcard first
         handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
         // Specific second
         handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
@@ -247,19 +247,19 @@ namespace
         EXPECT_EQ(results[1]->priority, HandlerPriority::Wildcard);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, AllThreePriorities)
+    TEST_F(SbmdDispatchTableTest, AllThreePriorities)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
         aliases["currentLevel"] = MakeAttrAlias("currentLevel", 0x0008, 0x0000);
         aliases["anyOnOff"] = MakeWildcardAlias("anyOnOff", 0x0006);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
         handlers.push_back(MakeHandler("multiHandler", {"onOff", "currentLevel"}));
         handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
@@ -272,30 +272,30 @@ namespace
         EXPECT_EQ(results[2]->priority, HandlerPriority::Wildcard);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, UnknownAliasSkipped)
+    TEST_F(SbmdDispatchTableTest, UnknownAliasSkipped)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         // "onOff" alias is NOT defined
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("brokenHandler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         EXPECT_EQ(table.GetSpecificEntryCount(), 0u);
         EXPECT_EQ(table.GetWildcardEntryCount(), 0u);
     }
 
-    TEST_F(SbmdV4DispatchTableTest, EventDispatch)
+    TEST_F(SbmdDispatchTableTest, EventDispatch)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["lockOp"] = MakeEventAlias("lockOp", 0x0101, 2);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("lockOpHandler", {"lockOp"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0101, 2);
@@ -303,15 +303,15 @@ namespace
         EXPECT_EQ(results[0]->handler->name, "lockOpHandler");
     }
 
-    TEST_F(SbmdV4DispatchTableTest, CommandDispatch)
+    TEST_F(SbmdDispatchTableTest, CommandDispatch)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["lockDoor"] = MakeCmdAlias("lockDoor", 0x0101, 0);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("lockCmdHandler", {"lockDoor"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0101, 0);
@@ -319,15 +319,15 @@ namespace
         EXPECT_EQ(results[0]->handler->name, "lockCmdHandler");
     }
 
-    TEST_F(SbmdV4DispatchTableTest, ClearRemovesAllEntries)
+    TEST_F(SbmdDispatchTableTest, ClearRemovesAllEntries)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("handler", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
         EXPECT_EQ(table.GetSpecificEntryCount(), 1u);
 
@@ -336,16 +336,16 @@ namespace
         EXPECT_TRUE(table.Lookup(0x0006, 0x0000).empty());
     }
 
-    TEST_F(SbmdV4DispatchTableTest, MultipleHandlersSameKey)
+    TEST_F(SbmdDispatchTableTest, MultipleHandlersSameKey)
     {
-        std::unordered_map<std::string, SbmdV4Alias> aliases;
+        std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
 
-        std::vector<SbmdV4DeviceHandler> handlers;
+        std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("handler1", {"onOff"}));
         handlers.push_back(MakeHandler("handler2", {"onOff"}));
 
-        SbmdV4DispatchTable table;
+        SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
@@ -356,10 +356,10 @@ namespace
     }
 
     // ========================================================================
-    // Integration with SbmdV4Driver (requires JS engine)
+    // Integration with SbmdDriver (requires JS engine)
     // ========================================================================
 
-    class SbmdV4DispatchDriverTest : public ::testing::Test
+    class SbmdDispatchDriverTest : public ::testing::Test
     {
     protected:
         static void SetUpTestSuite()
@@ -368,7 +368,7 @@ namespace
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
             ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
-            ASSERT_TRUE(SbmdV4Loader::InjectCaptureFunction(ctx));
+            ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
         static void TearDownTestSuite()
@@ -381,17 +381,17 @@ namespace
             return MQuickJsRuntime::GetSharedContext();
         }
 
-        std::unique_ptr<SbmdV4Driver> CreateDriver(const std::string &source)
+        std::unique_ptr<SbmdDriver> CreateDriver(const std::string &source)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto reg = SbmdV4Loader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
+            auto reg = SbmdLoader::LoadDriver(Ctx(), "<test>", source.c_str(), source.size());
 
             if (!reg)
             {
                 return nullptr;
             }
 
-            return std::make_unique<SbmdV4Driver>(std::move(reg), source);
+            return std::make_unique<SbmdDriver>(std::move(reg), source);
         }
 
         std::optional<ParsedResult> CallHandler(JSValue handler)
@@ -423,11 +423,11 @@ namespace
                 return std::nullopt;
             }
 
-            return SbmdV4ResultExecutor::Parse(ctx, result);
+            return SbmdResultExecutor::Parse(ctx, result);
         }
     };
 
-    TEST_F(SbmdV4DispatchDriverTest, DispatchTablesBuiltOnActivation)
+    TEST_F(SbmdDispatchDriverTest, DispatchTablesBuiltOnActivation)
     {
         auto driver = CreateDriver(R"(
             SbmdDriver({
@@ -484,7 +484,7 @@ namespace
         }
     }
 
-    TEST_F(SbmdV4DispatchDriverTest, DispatchTablesClearedOnDeactivation)
+    TEST_F(SbmdDispatchDriverTest, DispatchTablesClearedOnDeactivation)
     {
         auto driver = CreateDriver(R"(
             SbmdDriver({
@@ -521,7 +521,7 @@ namespace
         EXPECT_TRUE(driver->GetAttributeDispatch().Lookup(0x0006, 0x0000).empty());
     }
 
-    TEST_F(SbmdV4DispatchDriverTest, DispatchToHandlerAndInvoke)
+    TEST_F(SbmdDispatchDriverTest, DispatchToHandlerAndInvoke)
     {
         auto driver = CreateDriver(R"(
             SbmdDriver({
