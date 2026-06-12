@@ -30,6 +30,8 @@
 #include "../MatterDevice.h"
 #include "../MatterDeviceDriver.h"
 #include "SbmdSpec.h"
+#include "SbmdV4Driver.h"
+#include "mquickjs/SbmdV4ResultExecutor.h"
 #include <functional>
 #include <map>
 #include <memory>
@@ -42,6 +44,10 @@ namespace barton
     {
     public:
         SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec);
+        SpecBasedMatterDeviceDriver(SbmdV4Driver *v4Driver);
+
+        bool IsV4() const { return v4Driver != nullptr; }
+
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
         uint16_t GetSupportedVendorId() const override;
@@ -86,6 +92,65 @@ namespace barton
     private:
 
         std::shared_ptr<SbmdSpec> spec;
+
+        SbmdV4Driver *v4Driver = nullptr; // Non-owning. Owned by SbmdFactory.
+
+        // V4-specific internal methods
+        bool DoRegisterResourcesV4(icDevice *device);
+        void SeedInitialResourceValuesV4(const std::string &deviceId);
+
+        /**
+         * V4 prerequisite check — evaluates prerequisites from v4 registration data
+         * against the device's data cache.
+         */
+        static bool CheckPrerequisitesV4(const SbmdV4Resource &resource, const MatterDevice &device);
+
+        /**
+         * Invoke a v4 seed handler for a resource. Returns the seed value or empty string.
+         */
+        std::string InvokeV4SeedHandler(const std::string &deviceId,
+                                        const std::string &endpointId,
+                                        const SbmdV4Resource &resource);
+
+        /**
+         * Find a v4 resource by endpoint ID and resource ID.
+         */
+        const SbmdV4Resource *FindV4Resource(const char *endpointId, const char *resourceId) const;
+
+        /**
+         * Handle a read/write/execute resource operation through the v4 handler system.
+         */
+        void HandleV4ResourceOp(std::forward_list<std::promise<bool>> &promises,
+                                MatterDevice &device,
+                                icDeviceResource *resource,
+                                const char *input,
+                                char **readValue,
+                                char **executeResponse,
+                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                const chip::SessionHandle &sessionHandle,
+                                const char *opType);
+
+        /**
+         * Execute a v4 result chain terminal — success, error, sendCommand, or writeAttribute.
+         */
+        void ExecuteV4Terminal(std::forward_list<std::promise<bool>> &promises,
+                              MatterDevice &device,
+                              const ResultTerminal &terminal,
+                              const char *uri,
+                              char **readValue,
+                              char **executeResponse,
+                              chip::Messaging::ExchangeManager &exchangeMgr,
+                              const chip::SessionHandle &sessionHandle);
+
+        /**
+         * Handle a v4 attribute report via the dispatch tables.
+         * Called from MatterDevice::CacheCallback via the V4AttributeCallback.
+         */
+        void HandleV4AttributeReport(const std::string &deviceId,
+                                     chip::EndpointId endpointId,
+                                     chip::ClusterId clusterId,
+                                     chip::AttributeId attributeId,
+                                     chip::TLV::TLVReader &reader);
 
         /**
          * Create and configure a script engine with all mappers from the spec

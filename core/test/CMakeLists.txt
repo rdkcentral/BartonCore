@@ -323,6 +323,24 @@ if (BCORE_MATTER)
     endif()
 
     bcore_add_cpp_test(
+        NAME testSbmdV4HandlerInvoker
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4HandlerInvokerTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4HandlerInvoker.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4Loader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdV4HandlerInvoker)
+        target_link_libraries(testSbmdV4HandlerInvoker bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
         NAME testScriptResult
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptResultTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp

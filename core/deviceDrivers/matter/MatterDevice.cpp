@@ -86,6 +86,30 @@ void MatterDevice::CacheCallback::OnAttributeChanged(chip::app::ClusterStateCach
             aPath.mClusterId,
             aPath.mAttributeId);
 
+    // V4 path: delegate to the driver's dispatch handler
+    if (device->v4AttributeCallback)
+    {
+        if (cache == nullptr)
+        {
+            icError("Null cache pointer for device %s", device->deviceId.c_str());
+            return;
+        }
+
+        chip::TLV::TLVReader reader;
+
+        if (cache->Get(aPath, reader) != CHIP_NO_ERROR)
+        {
+            icError("Failed to get attribute data from cache for v4 dispatch, device %s",
+                    device->deviceId.c_str());
+            return;
+        }
+
+        device->v4AttributeCallback(device->deviceId, aPath.mEndpointId, aPath.mClusterId, aPath.mAttributeId, reader);
+
+        return;
+    }
+
+    // V3 path: use script-based attribute read mappers
     // Fast O(1) lookup for readable attributes (may have multiple bindings per path)
     auto range = device->readableAttributeLookup.equal_range(aPath);
     if (range.first == range.second)
@@ -1397,6 +1421,74 @@ void MatterDevice::HandleResourceExecute(std::forward_list<std::promise<bool>> &
         FailOperation(promises);
         return;
     }
+}
+
+bool MatterDevice::WriteAttributeFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                         chip::EndpointId endpointId,
+                                         chip::ClusterId clusterId,
+                                         chip::AttributeId attributeId,
+                                         const uint8_t *tlvBuffer,
+                                         size_t encodedLength,
+                                         chip::Messaging::ExchangeManager &exchangeMgr,
+                                         const chip::SessionHandle &sessionHandle,
+                                         const char *uri)
+{
+    if (tlvBuffer == nullptr || encodedLength == 0)
+    {
+        icError("Empty TLV buffer for attribute write at URI: %s", uri);
+        return false;
+    }
+
+    chip::TLV::TLVReader reader;
+    reader.Init(tlvBuffer, encodedLength);
+
+    if (reader.Next() != CHIP_NO_ERROR)
+    {
+        icError("Empty or invalid TLV from write for URI: %s", uri);
+        return false;
+    }
+
+    chip::app::ConcreteAttributePath attrPath(endpointId, clusterId, attributeId);
+
+    auto writeClient =
+        std::make_unique<chip::app::WriteClient>(const_cast<chip::Messaging::ExchangeManager *>(&exchangeMgr),
+                                                 this,
+                                                 chip::Optional<uint16_t>::Missing());
+
+    if (!writeClient)
+    {
+        icError("Failed to create WriteClient for URI: %s", uri);
+        return false;
+    }
+
+    CHIP_ERROR err = writeClient->PutPreencodedAttribute(attrPath, reader);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to encode preencoded attribute for URI: %s, error: %s", uri, err.AsString());
+        return false;
+    }
+
+    promises.emplace_front();
+    auto &writePromise = promises.front();
+
+    err = writeClient->SendWriteRequest(sessionHandle);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to send write request for URI: %s, error: %s", uri, err.AsString());
+        writePromise.set_value(false);
+        return false;
+    }
+
+    icDebug("Successfully initiated attribute write for resource %s", uri);
+
+    WriteContext context;
+    context.writePromise = &writePromise;
+    context.writeClient = std::move(writeClient);
+    activeWriteContexts[context.writeClient.get()] = std::move(context);
+
+    return true;
 }
 
 void MatterDevice::CacheCallback::OnSubscriptionEstablished(chip::SubscriptionId aSubscriptionId)

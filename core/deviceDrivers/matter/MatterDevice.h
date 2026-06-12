@@ -72,6 +72,26 @@ namespace barton
 
         const std::string &GetDeviceId() const { return deviceId; }
 
+        /**
+         * Callback type for v4 attribute change handling.
+         * Receives the endpoint, cluster, and attribute IDs along with a TLV reader positioned
+         * at the attribute value. Called from CacheCallback::OnAttributeChanged when set.
+         */
+        using V4AttributeCallback = std::function<void(const std::string &deviceId,
+                                                       chip::EndpointId endpointId,
+                                                       chip::ClusterId clusterId,
+                                                       chip::AttributeId attributeId,
+                                                       chip::TLV::TLVReader &reader)>;
+
+        /**
+         * Set a v4 attribute callback. When set, CacheCallback::OnAttributeChanged will
+         * call this instead of using the script mapper.
+         */
+        void SetV4AttributeCallback(V4AttributeCallback callback)
+        {
+            v4AttributeCallback = std::move(callback);
+        }
+
         void SetScript(std::unique_ptr<SbmdScript> newScript)
         {
             script = std::move(newScript);
@@ -338,6 +358,33 @@ namespace barton
     private:
         // Allow test subclass to access private members for testing
         friend class TestableMatterDevice;
+        friend class SpecBasedMatterDeviceDriver;
+
+        /**
+         * Send a command to the device using pre-encoded TLV data.
+         */
+        bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                const SbmdCommand &command,
+                                chip::EndpointId endpointId,
+                                const uint8_t *tlvBuffer,
+                                size_t encodedLength,
+                                chip::Messaging::ExchangeManager &exchangeMgr,
+                                const chip::SessionHandle &sessionHandle,
+                                const char *uri,
+                                char **response);
+
+        /**
+         * Write an attribute to the device using pre-encoded TLV data.
+         */
+        bool WriteAttributeFromTlv(std::forward_list<std::promise<bool>> &promises,
+                                   chip::EndpointId endpointId,
+                                   chip::ClusterId clusterId,
+                                   chip::AttributeId attributeId,
+                                   const uint8_t *tlvBuffer,
+                                   size_t encodedLength,
+                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                   const chip::SessionHandle &sessionHandle,
+                                   const char *uri);
 
         /**
          * Synchronously get attribute data from the cache as a TLVReader.
@@ -560,34 +607,10 @@ namespace barton
             SbmdEvent event;
         };
 
-        /**
-         * Send a command to the device using pre-encoded TLV data.
-         * Common helper used by both write-command and execute-command paths.
-         *
-         * @param promises Forward list of promises to fulfill on completion
-         * @param command The command definition with cluster info and optional timed invoke timeout
-         * @param endpointId The endpoint to send the command to
-         * @param tlvBuffer Buffer containing the TLV-encoded command arguments
-         * @param encodedLength Length of the encoded TLV data
-         * @param exchangeMgr The exchange manager for Matter communication
-         * @param sessionHandle The session handle for the device
-         * @param uri The resource URI (for logging)
-         * @param response Optional pointer to store command response (nullptr for write operations)
-         * @return True if command was successfully initiated, false otherwise
-         */
-        bool SendCommandFromTlv(std::forward_list<std::promise<bool>> &promises,
-                                const SbmdCommand &command,
-                                chip::EndpointId endpointId,
-                                const uint8_t *tlvBuffer,
-                                size_t encodedLength,
-                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                const chip::SessionHandle &sessionHandle,
-                                const char *uri,
-                                char **response);
-
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         std::unique_ptr<SbmdScript> script; //add this in a SbmdDevice subclass or move all drivers completely to SBMD
+        V4AttributeCallback v4AttributeCallback; // Set by v4 drivers; bypasses script-based attribute handling
         std::unique_ptr<CacheCallback> cacheCallback;
         std::vector<uint32_t> featureClusters; // Cluster IDs to get feature maps from (from SBMD spec)
         std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index → resolved Matter EndpointId
