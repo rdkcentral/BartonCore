@@ -406,7 +406,9 @@ SbmdScriptImpl::~SbmdScriptImpl()
     if (ctx)
     {
         std::string cleanupScript = "SbmdUtils.SessionManager.removeForDevice(\"" + deviceId + "\");";
+        JSGCRef result_ref;
         JSValue result = JS_Eval(ctx, cleanupScript.c_str(), cleanupScript.length(), "<sbmd-cleanup>", JS_EVAL_REPL);
+        JS_PUSH_VALUE(ctx, result);
 
         if (JS_IsException(result))
         {
