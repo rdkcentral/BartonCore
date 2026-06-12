@@ -269,6 +269,22 @@ if (BCORE_MATTER)
     endif()
 
     bcore_add_cpp_test(
+        NAME testSbmdV4ResultExecutor
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdV4ResultExecutorTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdV4ResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdV4ResultExecutor)
+        target_link_libraries(testSbmdV4ResultExecutor bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
         NAME testScriptResult
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptResultTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp

@@ -50,10 +50,10 @@
 
 ## 7. Result Chain Execution
 
-- [ ] 7.1 Implement result JSValue walker — extract `ops` array and `terminal` object from the handler's return value. Walk each op's properties via `JS_GetPropertyStr`.
-- [ ] 7.2 Implement non-terminal operation executors — `updateResource` (call Barton resource update API), `setMetadata`, `setPersistentData`, `setTransientData`, `log` (route to icLog). Skip unknown ops with warning.
-- [ ] 7.3 Implement terminal executors — `success` (complete resource operation with value), `error` (complete with failure), `sendCommand` (invoke Matter command, use status as completion), `writeAttribute` (write Matter attribute, use status as completion).
-- [ ] 7.4 Write unit tests for result execution — verify operations execute in order, terminals complete correctly, unknown ops are skipped.
+- [x] 7.1 Implement result JSValue walker — extract `ops` array and `terminal` object from the handler's return value. Walk each op's properties via `JS_GetPropertyStr`.
+- [x] 7.2 Implement non-terminal operation executors — `updateResource` (call Barton resource update API), `setMetadata`, `setPersistentData`, `setTransientData`, `log` (route to icLog). Skip unknown ops with warning.
+- [x] 7.3 Implement terminal executors — `success` (complete resource operation with value), `error` (complete with failure), `sendCommand` (invoke Matter command, use status as completion), `writeAttribute` (write Matter attribute, use status as completion).
+- [x] 7.4 Write unit tests for result execution — verify operations execute in order, terminals complete correctly, unknown ops are skipped.
 
 ## 8. Deferred Operations
 
