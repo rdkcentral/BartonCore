@@ -63,7 +63,8 @@ def _get_cmake_cache_path() -> str:
 
 
 def _is_otel_enabled() -> bool:
-    """Check if BCORE_OBSERVABILITY is enabled in CMakeCache.txt."""
+    """Check if BCORE_OBSERVABILITY_BACKEND is set to 'otel' in CMakeCache.txt."""
+
     cache_path = _get_cmake_cache_path()
     if not os.path.exists(cache_path):
         logger.warning(
@@ -74,11 +75,15 @@ def _is_otel_enabled() -> bool:
     try:
         with open(cache_path, "r") as f:
             for line in f:
-                match = re.match(r"^BCORE_OBSERVABILITY:BOOL=(.+)$", line.strip())
+                match = re.match(
+                    r"^BCORE_OBSERVABILITY_BACKEND:STRING=(.+)$", line.strip()
+                )
                 if match:
-                    value = match.group(1).upper()
-                    enabled = value in ("ON", "TRUE", "1", "YES")
-                    logger.debug(f"BCORE_OBSERVABILITY={value} (enabled={enabled})")
+                    value = match.group(1).strip()
+                    enabled = value == "otel"
+                    logger.debug(
+                        f"BCORE_OBSERVABILITY_BACKEND={value} (enabled={enabled})"
+                    )
                     return enabled
     except Exception as e:
         logger.warning(f"Error reading CMakeCache.txt: {e}, assuming otel is disabled")
@@ -101,7 +106,7 @@ def is_otel_enabled() -> bool:
 # Skip marker for tests that require OpenTelemetry
 requires_otel = pytest.mark.skipif(
     not is_otel_enabled(),
-    reason="Test requires OpenTelemetry (BCORE_OBSERVABILITY=ON)",
+    reason="Test requires OpenTelemetry (BCORE_OBSERVABILITY_BACKEND=otel)",
 )
 
 # The following list of plugins are automatically loaded by pytest when running tests.

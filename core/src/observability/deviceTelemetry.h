@@ -30,11 +30,9 @@
 extern "C" {
 #endif
 
-#ifdef BARTON_CONFIG_OBSERVABILITY
-
 /**
  * Record device telemetry for a resource update.
- * Inspects resource type and emits appropriate OTel metrics:
+ * Inspects resource type and emits appropriate metrics:
  *   - device.resource.value gauge for numeric types (integer, percentage)
  *   - device.resource.state_change counter for boolean types
  *   - device.resource.update counter for all value changes
@@ -64,30 +62,6 @@ void deviceTelemetryRecordResourceUpdate(const char *deviceUuid,
  * @param deviceUuid  Device UUID to evict from cache (NULL evicts all)
  */
 void deviceTelemetryInvalidateCache(const char *deviceUuid);
-
-#else /* !BARTON_CONFIG_OBSERVABILITY */
-
-static inline void deviceTelemetryRecordResourceUpdate(const char *deviceUuid,
-                                                       const char *endpointId,
-                                                       const char *resourceId,
-                                                       const char *resourceType,
-                                                       const char *newValue,
-                                                       bool didChange)
-{
-    (void) deviceUuid;
-    (void) endpointId;
-    (void) resourceId;
-    (void) resourceType;
-    (void) newValue;
-    (void) didChange;
-}
-
-static inline void deviceTelemetryInvalidateCache(const char *deviceUuid)
-{
-    (void) deviceUuid;
-}
-
-#endif /* BARTON_CONFIG_OBSERVABILITY */
 
 #ifdef __cplusplus
 }

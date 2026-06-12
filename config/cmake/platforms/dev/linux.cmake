@@ -30,7 +30,7 @@ set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type")
 set(BCORE_BUILD_WITH_SSP ON CACHE BOOL "Build with SSP")
 set(BCORE_BUILD_WITH_ASAN ON CACHE BOOL "Build with ASAN")
 
-set(BCORE_OBSERVABILITY ON CACHE BOOL "Enable observability")
+set(BCORE_OBSERVABILITY_BACKEND "none" CACHE STRING "Observability backend")
 
 set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to Matter installation")
 

@@ -22,14 +22,9 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 /*
- * Test that all observability headers compile and all API calls
- * are safe no-ops when BARTON_CONFIG_OBSERVABILITY is not defined.
+ * Test that all observability API calls are safe no-ops when linked
+ * against the noop backend.
  */
-
-/* Ensure the flag is NOT defined for this test */
-#ifdef BARTON_CONFIG_OBSERVABILITY
-#undef BARTON_CONFIG_OBSERVABILITY
-#endif
 
 #include <setjmp.h>
 #include <stdarg.h>

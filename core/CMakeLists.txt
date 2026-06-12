@@ -162,7 +162,7 @@ if (BCORE_MATTER)
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
-        
+
         # Validates all .sbmd files against the versioned JSON schemas during build.
         # SBMD_SCHEMA_DIR points to the top-level schema directory; the validator
         # recursively searches subdirectories (e.g. v2/, v3/) for a schema file
@@ -255,12 +255,12 @@ if (BCORE_THREAD)
         ${DBUS_LIBRARIES})
 endif()
 
-# OpenTelemetry observability (if option set)
-if (BCORE_OBSERVABILITY)
+# Observability backend selection
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "otel")
     include(BCoreOpenTelemetry)
 
-    file(GLOB otelSrc "src/observability/*.cpp")
-    file(GLOB otelSrcC "src/observability/*.c")
+    file(GLOB otelSrc "src/observability/otel/*.cpp")
+    file(GLOB otelSrcC "src/observability/otel/*.c")
     list(APPEND SOURCES ${otelSrc} ${otelSrcC})
 
     list(APPEND XTRA_LIBS
@@ -274,6 +274,9 @@ if (BCORE_OBSERVABILITY)
         opentelemetry_resources
         opentelemetry_common
         opentelemetry_http_client_curl)
+else()
+    file(GLOB noopSrc "src/observability/noop/*.c")
+    list(APPEND SOURCES ${noopSrc})
 endif()
 
 list(APPEND SOURCES
@@ -338,9 +341,9 @@ target_include_directories(BartonCore PRIVATE
                             ${BARTON_PUBLIC_INCLUDES}
                             )
 
-# When OpenTelemetry is enabled, wrap icLogMsg so the OTel log bridge
+# When the OTel backend is active, wrap icLogMsg so the log bridge
 # intercepts all logging without modifying BartonCommon.
-if (BCORE_OBSERVABILITY)
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "otel")
     target_link_options(BartonCoreStatic PRIVATE "-Wl,--wrap=icLogMsg")
     target_link_options(BartonCore PRIVATE "-Wl,--wrap=icLogMsg")
 endif()

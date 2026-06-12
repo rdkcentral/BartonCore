@@ -28,14 +28,9 @@
 extern "C" {
 #endif
 
-#ifdef BARTON_CONFIG_OBSERVABILITY
-
 /**
- * Initialize all OpenTelemetry providers (tracer, meter, logger).
- * Reads configuration from standard OTel environment variables:
- *   - OTEL_EXPORTER_OTLP_ENDPOINT (default: http://localhost:4318)
- *   - OTEL_SERVICE_NAME (default: barton-core)
- *   - OTEL_RESOURCE_ATTRIBUTES
+ * Initialize the observability subsystem (tracer, meter, logger).
+ * Behavior depends on the compiled backend (otel, in-memory, or noop).
  *
  * @return 0 on success, non-zero on failure
  */
@@ -46,19 +41,6 @@ int observabilityInit(void);
  * Safe to call even if init was not called or failed.
  */
 void observabilityShutdown(void);
-
-#else /* !BARTON_CONFIG_OBSERVABILITY */
-
-static inline int observabilityInit(void)
-{
-    return 0;
-}
-static inline void observabilityShutdown(void)
-{
-    (void) 0;
-}
-
-#endif /* BARTON_CONFIG_OBSERVABILITY */
 
 #ifdef __cplusplus
 }

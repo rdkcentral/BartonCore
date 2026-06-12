@@ -38,6 +38,16 @@ list(APPEND TEST_SRC ${PROJECT_SOURCE_DIR}/core/src/subsystems/matter/ReadPrepar
                      ${PROJECT_SOURCE_DIR}/api/c/src/provider/barton-core-default-property-provider.c
                      ${PROJECT_SOURCE_DIR}/core/src/deviceServiceConfiguration.c)
 
+# DeviceDataCache.cpp uses the observability API; pull in the active backend sources.
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "otel")
+    file(GLOB _otel_obs_src ${PROJECT_SOURCE_DIR}/core/src/observability/otel/*.cpp
+                            ${PROJECT_SOURCE_DIR}/core/src/observability/otel/*.c)
+    list(APPEND TEST_SRC ${_otel_obs_src})
+else()
+    file(GLOB _noop_obs_src ${PROJECT_SOURCE_DIR}/core/src/observability/noop/*.c)
+    list(APPEND TEST_SRC ${_noop_obs_src})
+endif()
+
 pkg_check_modules(OPENSSL REQUIRED openssl)
 
 # This executable should contain a collection of mini integration (mostly unit)

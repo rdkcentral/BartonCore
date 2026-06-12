@@ -38,8 +38,6 @@ typedef struct ObservabilitySpan ObservabilitySpan;
 /** Opaque span context handle for propagation */
 typedef struct ObservabilitySpanContext ObservabilitySpanContext;
 
-#ifdef BARTON_CONFIG_OBSERVABILITY
-
 /**
  * Start a new root span with the given name.
  * @param name  Span name (e.g., "device.discovery")
@@ -56,7 +54,7 @@ ObservabilitySpan *observabilitySpanStart(const char *name);
 ObservabilitySpan *observabilitySpanStartWithParent(const char *name, const ObservabilitySpanContext *parent);
 
 /**
- * Start a new root span with an OTel span link to an existing context.
+ * Start a new root span with a span link to an existing context.
  * The returned span is NOT a child of @p linked; it starts its own trace but carries a link reference.
  * @param name    Span name
  * @param linked  Span context to link (NULL creates a plain root span with no link)
@@ -123,72 +121,6 @@ void observabilitySpanContextSetCurrent(ObservabilitySpanContext *ctx);
  * @return Current context, or NULL if none is set.
  */
 ObservabilitySpanContext *observabilitySpanContextGetCurrent(void);
-
-#else /* !BARTON_CONFIG_OBSERVABILITY */
-
-static inline ObservabilitySpan *observabilitySpanStart(const char *name)
-{
-    (void) name;
-    return (ObservabilitySpan *) 0;
-}
-static inline ObservabilitySpan *observabilitySpanStartWithParent(const char *name,
-                                                                  const ObservabilitySpanContext *parent)
-{
-    (void) name;
-    (void) parent;
-    return (ObservabilitySpan *) 0;
-}
-static inline ObservabilitySpan *observabilitySpanStartWithLink(const char *name,
-                                                                const ObservabilitySpanContext *linked)
-{
-    (void) name;
-    (void) linked;
-    return (ObservabilitySpan *) 0;
-}
-static inline void observabilitySpanRelease(ObservabilitySpan *span)
-{
-    (void) span;
-}
-static inline void observabilitySpanSetAttribute(ObservabilitySpan *span, const char *key, const char *value)
-{
-    (void) span;
-    (void) key;
-    (void) value;
-}
-static inline void observabilitySpanSetAttributeInt(ObservabilitySpan *span, const char *key, int64_t value)
-{
-    (void) span;
-    (void) key;
-    (void) value;
-}
-static inline void observabilitySpanSetError(ObservabilitySpan *span, const char *message)
-{
-    (void) span;
-    (void) message;
-}
-static inline ObservabilitySpanContext *observabilitySpanGetContext(ObservabilitySpan *span)
-{
-    (void) span;
-    return (ObservabilitySpanContext *) 0;
-}
-static inline void observabilitySpanContextRef(ObservabilitySpanContext *ctx)
-{
-    (void) ctx;
-}
-static inline void observabilitySpanContextRelease(ObservabilitySpanContext *ctx)
-{
-    (void) ctx;
-}
-static inline void observabilitySpanContextSetCurrent(ObservabilitySpanContext *ctx)
-{
-    (void) ctx;
-}
-static inline ObservabilitySpanContext *observabilitySpanContextGetCurrent(void)
-{
-    return (ObservabilitySpanContext *) 0;
-}
-
-#endif /* BARTON_CONFIG_OBSERVABILITY */
 
 #ifdef __cplusplus
 }

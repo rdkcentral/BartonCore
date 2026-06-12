@@ -143,8 +143,8 @@ bcore_add_cmocka_test(
     LINK_LIBRARIES BartonCoreStatic
 )
 
-# Observability no-op test: verifies headers compile and all calls are safe
-# no-ops when BARTON_CONFIG_OBSERVABILITY is not defined.
+# Observability no-op test: verifies all API calls are safe no-ops when linked
+# against the noop backend.
 bcore_add_cmocka_test(
     NAME testObservabilityNoop
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityNoopTest.c
@@ -152,7 +152,7 @@ bcore_add_cmocka_test(
     INCLUDES ${BARTON_PRIVATE_INCLUDES}
 )
 
-if (BCORE_OBSERVABILITY)
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "otel")
     include(BCoreAddCppTest)
 
     bcore_add_cpp_test(

@@ -28,22 +28,20 @@
 extern "C" {
 #endif
 
-#ifdef BARTON_CONFIG_OBSERVABILITY
-
 /**
- * Initialize the OTel log bridge. Call after observabilityInit().
- * Registers a hook so that icLog messages are also emitted as OTel log records.
+ * Initialize the log bridge. Call after observabilityInit().
+ * Registers a hook so that icLog messages are also emitted as observability log records.
  *
  * @return 0 on success, non-zero on failure
  */
 int observabilityLogBridgeInit(void);
 
 /**
- * Emit a log record through the OpenTelemetry Logs SDK.
+ * Emit a log record through the observability log backend.
  * Typically called from the icLog hook, not directly.
  *
  * @param category  Log category / scope name (e.g., "deviceService")
- * @param priority  icLog priority (maps to OTel severity)
+ * @param priority  icLog priority (maps to severity)
  * @param file      Source file name
  * @param func      Function name
  * @param line      Source line number
@@ -57,36 +55,9 @@ void observabilityLogBridgeEmit(const char *category,
                         const char *message);
 
 /**
- * Shut down the OTel log bridge and deregister the icLog hook.
+ * Shut down the log bridge and deregister the icLog hook.
  */
 void observabilityLogBridgeShutdown(void);
-
-#else /* !BARTON_CONFIG_OBSERVABILITY */
-
-static inline int observabilityLogBridgeInit(void)
-{
-    return 0;
-}
-static inline void observabilityLogBridgeEmit(const char *category,
-                                      int priority,
-                                      const char *file,
-                                      const char *func,
-                                      int line,
-                                      const char *message)
-{
-    (void) category;
-    (void) priority;
-    (void) file;
-    (void) func;
-    (void) line;
-    (void) message;
-}
-static inline void observabilityLogBridgeShutdown(void)
-{
-    (void) 0;
-}
-
-#endif /* BARTON_CONFIG_OBSERVABILITY */
 
 #ifdef __cplusplus
 }

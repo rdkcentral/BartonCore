@@ -41,8 +41,6 @@ typedef struct ObservabilityGauge ObservabilityGauge;
 /** Opaque histogram handle */
 typedef struct ObservabilityHistogram ObservabilityHistogram;
 
-#ifdef BARTON_CONFIG_OBSERVABILITY
-
 /**
  * Create a named counter instrument.
  * @param name         Metric name (e.g., "device.commfail.count")
@@ -135,75 +133,6 @@ void observabilityGaugeRelease(ObservabilityGauge *gauge);
  * @param histogram  Histogram to release (NULL is safe no-op)
  */
 void observabilityHistogramRelease(ObservabilityHistogram *histogram);
-
-#else /* !BARTON_CONFIG_OBSERVABILITY */
-
-static inline ObservabilityCounter *observabilityCounterCreate(const char *name, const char *description, const char *unit)
-{
-    (void) name;
-    (void) description;
-    (void) unit;
-    return (ObservabilityCounter *) 0;
-}
-static inline void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t value)
-{
-    (void) counter;
-    (void) value;
-}
-static inline void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t value, ...)
-{
-    (void) counter;
-    (void) value;
-}
-static inline ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *description, const char *unit)
-{
-    (void) name;
-    (void) description;
-    (void) unit;
-    return (ObservabilityGauge *) 0;
-}
-static inline void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t value)
-{
-    (void) gauge;
-    (void) value;
-}
-static inline void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...)
-{
-    (void) gauge;
-    (void) value;
-}
-static inline ObservabilityHistogram *
-observabilityHistogramCreate(const char *name, const char *description, const char *unit)
-{
-    (void) name;
-    (void) description;
-    (void) unit;
-    return (ObservabilityHistogram *) 0;
-}
-static inline void observabilityHistogramRecord(ObservabilityHistogram *histogram, double value)
-{
-    (void) histogram;
-    (void) value;
-}
-static inline void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...)
-{
-    (void) histogram;
-    (void) value;
-}
-static inline void observabilityCounterRelease(ObservabilityCounter *counter)
-{
-    (void) counter;
-}
-static inline void observabilityGaugeRelease(ObservabilityGauge *gauge)
-{
-    (void) gauge;
-}
-static inline void observabilityHistogramRelease(ObservabilityHistogram *histogram)
-{
-    (void) histogram;
-}
-
-#endif /* BARTON_CONFIG_OBSERVABILITY */
 
 #ifdef __cplusplus
 }

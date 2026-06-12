@@ -7,8 +7,7 @@
     "initializeCommand": "docker/setupDockerEnv.sh",
     "dockerComposeFile": [
         "../docker/compose.yaml",
-        "../docker/compose.devcontainer.yaml",
-        "../docker/compose.observability.yaml"
+        "../docker/compose.devcontainer.yaml"
     ],
     "service": "barton",
 
@@ -47,10 +46,6 @@
         "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
         "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}",
 
-        // OpenTelemetry: collector endpoint is provided by compose.observability.yaml
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4318",
-        "OTEL_SERVICE_NAME": "barton-core",
-
         // ASAN-instrumented libBartonCore.so requires the link order check to be disabled
         // when loaded via GObject introspection in Python. Without this, VS Code's pytest
         // discovery crashes because ASAN kills the process. This is harmless for non-ASAN
@@ -60,22 +55,6 @@
 
     // specify the non-root user to use in the container
     "remoteUser": "${localEnv:USER}",
-
-    // Jaeger and Prometheus run in separate compose services. socat proxies
-    // them into this container so VS Code can forward the ports to the local browser.
-    "forwardPorts": [16686, 9090],
-    "portsAttributes": {
-        "16686": { "label": "Jaeger UI", "onAutoForward": "silent" },
-        "9090": { "label": "Prometheus UI", "onAutoForward": "silent" }
-    },
-    "postStartCommand": {
-        "jaeger-proxy": "until curl -sf http://jaeger:16686/ >/dev/null 2>&1; do sleep 1; done && socat TCP-LISTEN:16686,fork,reuseaddr TCP:jaeger:16686",
-        "prometheus-proxy": "until curl -sf http://prometheus:9090/ >/dev/null 2>&1; do sleep 1; done && socat TCP-LISTEN:9090,fork,reuseaddr TCP:prometheus:9090"
-    },
-
-    "features": {
-        "ghcr.io/devcontainers/features/node:1": {}
-    },
 
     "customizations":
     {

@@ -145,9 +145,8 @@ bcore_option(NAME BCORE_GENERATE_DEFAULT_LABELS
 bcore_option(NAME BCORE_MATTER_USE_RANDOM_PORT
            DEFINITION BARTON_CONFIG_MATTER_USE_RANDOM_PORT
            DESCRIPTION "Use a random oerational communication port for Matter. If not set, 5540 will be used.")
-bcore_option(NAME BCORE_OBSERVABILITY
-           DEFINITION BARTON_CONFIG_OBSERVABILITY
-           DESCRIPTION "Enable OpenTelemetry observability (tracing, metrics, log bridge)")
+set(BCORE_OBSERVABILITY_BACKEND "none" CACHE STRING "Observability backend (none, otel)")
+set_property(CACHE BCORE_OBSERVABILITY_BACKEND PROPERTY STRINGS none otel)
 bcore_option(NAME BCORE_BUILD_REFERENCE
            DEFINITION BARTON_CONFIG_BUILD_REFERENCE
            DESCRIPTION "Build the reference application"
