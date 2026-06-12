@@ -21,13 +21,13 @@
 
 ## 4. SbmdDriver() Registration System
 
-- [ ] 4.1 Inject `SbmdDriver` capture function and `__sbmd_registration` global into the mquickjs context at initialization time (evaluate once via `JS_EVAL_REPL`).
-- [ ] 4.2 Implement constants extraction — text-scan for `constants:` block, brace-match, evaluate as `({...})` object literal, walk properties to get name→value pairs, generate `var` declaration preamble string.
-- [ ] 4.3 Implement file evaluation — prepend constants preamble, wrap in IIFE, evaluate with `JS_EVAL_REPL`. Read `__sbmd_registration`, reset to null.
-- [ ] 4.4 Implement registration extraction — walk the registration JSValue to extract metadata (schemaVersion, driverVersion, name, barton, matter, reporting) into C++ structs. Extract aliases, resources, endpoints declarations.
-- [ ] 4.5 Implement handler extraction — extract handler function JSValues from resource seed/read/write/execute declarations and from attributeHandlers/eventHandlers/commandHandlers entries. Extract supplement declarations.
-- [ ] 4.6 Write unit tests for constants extraction (valid blocks, edge cases: hex numbers, strings, booleans, trailing commas, empty block).
-- [ ] 4.7 Write unit tests for full file evaluation and registration extraction — load a minimal `.sbmd.js` test fixture, verify all metadata fields extracted correctly.
+- [x] 4.1 Inject `SbmdDriver` capture function and `__sbmd_registration` global into the mquickjs context at initialization time (evaluate once via `JS_EVAL_REPL`).
+- [x] 4.2 Implement constants extraction — text-scan for `constants:` block, brace-match, evaluate as `({...})` object literal, walk properties to get name→value pairs, generate `var` declaration preamble string.
+- [x] 4.3 Implement file evaluation — prepend constants preamble, wrap in IIFE, evaluate with `JS_EVAL_REPL`. Read `__sbmd_registration`, reset to null.
+- [x] 4.4 Implement registration extraction — walk the registration JSValue to extract metadata (schemaVersion, driverVersion, name, barton, matter, reporting) into C++ structs. Extract aliases, resources, endpoints declarations.
+- [x] 4.5 Implement handler extraction — extract handler function JSValues from resource seed/read/write/execute declarations and from attributeHandlers/eventHandlers/commandHandlers entries. Extract supplement declarations.
+- [x] 4.6 Write unit tests for constants extraction (valid blocks, edge cases: hex numbers, strings, booleans, trailing commas, empty block).
+- [x] 4.7 Write unit tests for full file evaluation and registration extraction — load a minimal `.sbmd.js` test fixture, verify all metadata fields extracted correctly.
 
 ## 5. Driver Lifecycle — Activate / Deactivate
 
