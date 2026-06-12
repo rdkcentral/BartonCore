@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 pytestmark = [
     pytest.mark.requires_matterjs,
-    pytest.mark.skip(reason="pending SBMD v4 conversion"),
 ]
 
 

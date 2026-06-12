@@ -882,10 +882,11 @@ bool SpecBasedMatterDeviceDriver::DoRegisterResourcesV4(icDevice *device)
                 resourceMode |= RESOURCE_MODE_EXECUTABLE;
             }
 
-            // V4 resources with read handlers use CACHING_POLICY_ALWAYS because
-            // the attribute dispatch handles live updates
+            // V4 resources without explicit read handlers are updated via attribute subscriptions,
+            // so use CACHING_POLICY_ALWAYS to return the DB-cached value on read.
+            // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
             ResourceCachingPolicy cachingPolicy =
-                resource.read.has_value() ? CACHING_POLICY_ALWAYS : CACHING_POLICY_NEVER;
+                resource.read.has_value() ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
 
             // Seed initial value if there's a seed handler
             const char *initialValue = nullptr;
@@ -1126,6 +1127,24 @@ void SpecBasedMatterDeviceDriver::HandleV4ResourceOp(std::forward_list<std::prom
 
     if (handler == nullptr)
     {
+        if (strcmp(opType, "read") == 0)
+        {
+            // No explicit read handler — resource value is populated by attribute subscription.
+            // With CACHING_POLICY_ALWAYS this path shouldn't normally be reached,
+            // but return success with the cached value as a safety net.
+            icDebug("V4: No read handler for resource %s, returning cached value", resourceId);
+
+            if (readValue != nullptr && resource->value != nullptr)
+            {
+                *readValue = strdup(resource->value);
+            }
+
+            std::promise<bool> ok;
+            ok.set_value(true);
+            promises.push_front(std::move(ok));
+            return;
+        }
+
         icError("V4: No %s handler for resource %s", opType, resourceId);
         FailOperation(promises);
         return;

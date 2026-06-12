@@ -47,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 pytestmark = [
     pytest.mark.requires_matterjs,
-    pytest.mark.skip(reason="pending SBMD v4 conversion"),
 ]
 
 
@@ -60,12 +59,17 @@ def test_commission_timmerflotte(
     default_environment, matter_ikea_timmerflotte
 ):
     """Commission an IKEA TIMMERFLOTTE sensor and verify both resources."""
+    client = default_environment.get_client()
+
+    # Register listeners before commissioning to catch initial subscription values
+    temp_queue = resource_update_listener(client, "temperature")
+    hum_queue = resource_update_listener(client, "humidity")
+
     device = commission_device(
         default_environment,
         matter_ikea_timmerflotte,
         "environmentalSensor",
     )
-    client = default_environment.get_client()
 
     assert_device_has_common_resources(
         client,
@@ -79,9 +83,6 @@ def test_commission_timmerflotte(
     )
 
     # Virtual device defaults: temperature = 2550 (25.50°C), humidity = 5000 (50.00%)
-    temp_queue = resource_update_listener(client, "temperature")
-    hum_queue = resource_update_listener(client, "humidity")
-
     wait_for_resource_value(temp_queue, "2550")
     wait_for_resource_value(hum_queue, "50")
 
