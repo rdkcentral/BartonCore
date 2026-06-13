@@ -435,6 +435,119 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     return true;
 }
 
+bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
+                                            chip::CommandId commandId,
+                                            std::optional<uint16_t> timedInvokeTimeoutMs,
+                                            chip::EndpointId endpointId,
+                                            const uint8_t *tlvBuffer,
+                                            size_t encodedLength,
+                                            chip::Messaging::ExchangeManager &exchangeMgr,
+                                            const chip::SessionHandle &sessionHandle,
+                                            std::function<void(const chip::app::ConcreteCommandPath &,
+                                                               chip::TLV::TLVReader *)> onResponse,
+                                            std::function<void(CHIP_ERROR)> onError)
+{
+    // Empty TLV structure for commands with no arguments
+    static const uint8_t emptyTlvStruct[] = {0x15, 0x18};
+    static const size_t emptyTlvStructLen = sizeof(emptyTlvStruct);
+
+    if (tlvBuffer == nullptr || encodedLength == 0)
+    {
+        tlvBuffer = emptyTlvStruct;
+        encodedLength = emptyTlvStructLen;
+    }
+
+    chip::TLV::TLVReader reader;
+    reader.Init(tlvBuffer, encodedLength);
+
+    if (reader.Next() != CHIP_NO_ERROR || reader.GetType() != chip::TLV::kTLVType_Structure)
+    {
+        icError("Invalid TLV structure for deferred command cluster 0x%x cmd 0x%x", clusterId, commandId);
+        return false;
+    }
+
+    bool isTimedRequest = timedInvokeTimeoutMs.has_value();
+    auto commandSender = std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest);
+
+    if (!commandSender)
+    {
+        return false;
+    }
+
+    chip::app::CommandSender::PrepareCommandParameters prepareParams;
+    prepareParams.SetStartDataStruct(true);
+
+    chip::app::CommandPathParams commandPath(endpointId, 0, clusterId, commandId,
+                                             chip::app::CommandPathFlags::kEndpointIdValid);
+
+    CHIP_ERROR err = commandSender->PrepareCommand(commandPath, prepareParams);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to prepare deferred command: %s", err.AsString());
+        return false;
+    }
+
+    chip::TLV::TLVWriter *writer = commandSender->GetCommandDataIBTLVWriter();
+
+    if (writer == nullptr)
+    {
+        return false;
+    }
+
+    chip::TLV::TLVType containerType;
+    err = reader.EnterContainer(containerType);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        return false;
+    }
+
+    while ((err = reader.Next()) == CHIP_NO_ERROR)
+    {
+        err = writer->CopyElement(reader);
+
+        if (err != CHIP_NO_ERROR)
+        {
+            return false;
+        }
+    }
+
+    if (err != CHIP_END_OF_TLV)
+    {
+        return false;
+    }
+
+    chip::app::CommandSender::FinishCommandParameters finishParams(
+        isTimedRequest ? chip::MakeOptional(timedInvokeTimeoutMs.value()) : chip::NullOptional);
+    finishParams.SetEndDataStruct(true);
+    err = commandSender->FinishCommand(finishParams);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        return false;
+    }
+
+    err = commandSender->SendCommandRequest(sessionHandle);
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icError("Failed to send deferred command request: %s", err.AsString());
+        return false;
+    }
+
+    icDebug("Successfully initiated deferred command cluster 0x%x cmd 0x%x", clusterId, commandId);
+
+    CommandContext context;
+    context.commandSender = std::move(commandSender);
+    context.deferredOnResponse = std::move(onResponse);
+    context.deferredOnError = std::move(onError);
+    auto *commandSenderPtr = context.commandSender.get();
+    activeCommandContexts[commandSenderPtr] = std::move(context);
+
+    return true;
+}
+
 bool MatterDevice::WriteAttributeFromTlv(std::forward_list<std::promise<bool>> &promises,
                                          chip::EndpointId endpointId,
                                          chip::ClusterId clusterId,
@@ -617,6 +730,22 @@ void MatterDevice::OnResponse(chip::app::CommandSender *apCommandSender,
 
     CommandContext &context = it->second;
 
+    if (context.IsDeferred())
+    {
+        // Deferred mode: route to callbacks
+        if (aResponseData.statusIB.IsSuccess())
+        {
+            context.deferredOnResponse(aResponseData.path, aResponseData.data);
+        }
+        else
+        {
+            context.deferredOnError(CHIP_ERROR_IM_STATUS_CODE_RECEIVED);
+        }
+
+        return;
+    }
+
+    // Normal mode
     if (!aResponseData.statusIB.IsSuccess())
     {
         icError("Command failed with status 0x%x for device %s",
@@ -644,9 +773,16 @@ void MatterDevice::OnError(const chip::app::CommandSender *apCommandSender,
     icError("OnError for command from device %s: error=%s", deviceId.c_str(), aErrorData.error.AsString());
 
     auto it = activeCommandContexts.find(const_cast<chip::app::CommandSender *>(apCommandSender));
+
     if (it != activeCommandContexts.end())
     {
-        // Signal failure
+        if (it->second.IsDeferred())
+        {
+            it->second.deferredOnError(aErrorData.error);
+            return;
+        }
+
+        // Normal mode: signal failure
         try
         {
             it->second.commandPromise->set_value(false);
@@ -663,9 +799,17 @@ void MatterDevice::OnDone(chip::app::CommandSender *apCommandSender)
     icDebug("OnDone for command from device %s", deviceId.c_str());
 
     auto it = activeCommandContexts.find(apCommandSender);
+
     if (it != activeCommandContexts.end())
     {
-        // If we haven't already signaled the promise (via OnError), signal success now
+        if (it->second.IsDeferred())
+        {
+            // Deferred mode: callbacks already handled everything, just clean up
+            activeCommandContexts.erase(it);
+            return;
+        }
+
+        // Normal mode: if we haven't already signaled the promise (via OnError), signal success now
         try
         {
             it->second.commandPromise->set_value(true);

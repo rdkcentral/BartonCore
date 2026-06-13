@@ -624,13 +624,14 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
 
     // Handle the terminal
-    ExecuteTerminal(promises, device, result->terminal, resource->uri, readValue, executeResponse,
+    ExecuteTerminal(promises, device, result->terminal, hctx, resource->uri, readValue, executeResponse,
                      exchangeMgr, sessionHandle);
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
                                                     MatterDevice &device,
                                                     const ResultTerminal &terminal,
+                                                    const HandlerContext &hctx,
                                                     const char *uri,
                                                     char **readValue,
                                                     char **executeResponse,
@@ -753,20 +754,773 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
 
     if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
     {
-        icWarn("requestCommand terminal not yet implemented (deferred operations)");
-        FailOperation(promises);
+        const auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
+        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse,
+                              exchangeMgr, sessionHandle);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
-        icWarn("readAttribute terminal not yet implemented (deferred operations)");
-        FailOperation(promises);
+        const auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse,
+                             exchangeMgr, sessionHandle);
         return;
     }
 
     icError("Unknown terminal type");
     FailOperation(promises);
+}
+
+// ================================================================
+// Deferred operations — requestCommand and readAttribute terminals
+// ================================================================
+
+void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::promise<bool>> &promises,
+                                                        MatterDevice &device,
+                                                        const ResultTerminal::RequestCommand &cmd,
+                                                        const HandlerContext &hctx,
+                                                        char **readValue,
+                                                        char **executeResponse,
+                                                        chip::Messaging::ExchangeManager &exchangeMgr,
+                                                        const chip::SessionHandle &sessionHandle)
+{
+    // Resolve endpoint
+    chip::EndpointId endpointId = 0;
+
+    if (cmd.endpointId.has_value())
+    {
+        endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+    }
+    else if (!device.GetEndpointForCluster(cmd.clusterId, endpointId))
+    {
+        icError("Failed to find endpoint for cluster 0x%x (requestCommand)", cmd.clusterId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Decode base64 TLV
+    const uint8_t *tlvBuffer = nullptr;
+    size_t tlvLength = 0;
+    std::unique_ptr<uint8_t[]> decodedTlv;
+
+    if (!cmd.tlvBase64.empty())
+    {
+        size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+        decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+        uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
+                                              static_cast<uint16_t>(cmd.tlvBase64.size()),
+                                              decodedTlv.get());
+
+        if (decoded == UINT16_MAX)
+        {
+            icError("Failed to base64 decode TLV for requestCommand");
+            FailOperation(promises);
+            return;
+        }
+
+        tlvBuffer = decodedTlv.get();
+        tlvLength = decoded;
+    }
+
+    // Create parking promise
+    promises.emplace_front();
+    auto &parkingPromise = promises.front();
+
+    // Register pending operation
+    uint64_t pendingId = nextPendingId++;
+    PendingOperation pending;
+    pending.id = pendingId;
+    pending.parkingPromise = &parkingPromise;
+    pending.clusterId = cmd.clusterId;
+    pending.responseCommandId = cmd.responseCommandId;
+    pending.handlerContext = hctx;
+    pending.device = &device;
+    pending.exchangeMgr = &exchangeMgr;
+    pending.sessionHandle = &sessionHandle;
+    pending.readValue = readValue;
+    pending.executeResponse = executeResponse;
+
+    // Set overall deadline from driver's defaultTimeoutMs or fallback
+    uint32_t overallMs = PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS;
+
+    if (driver && driver->GetRegistration().matter.defaultTimeoutMs.has_value())
+    {
+        overallMs = driver->GetRegistration().matter.defaultTimeoutMs.value();
+    }
+
+    pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
+    pending.deferralDepth = 0;
+
+    // GC-root the deferred handlers so they survive until we need them
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (!JS_IsUndefined(cmd.onResponse))
+        {
+            pending.onResponseRef.val = cmd.onResponse;
+            JS_AddGCRef(ctx, &pending.onResponseRef);
+            pending.onResponseRooted = true;
+        }
+
+        if (!JS_IsUndefined(cmd.onError))
+        {
+            pending.onErrorRef.val = cmd.onError;
+            JS_AddGCRef(ctx, &pending.onErrorRef);
+            pending.onErrorRooted = true;
+        }
+    }
+
+    pendingOperations.emplace(pendingId, std::move(pending));
+
+    // Send the command with deferred callbacks
+    bool sent = device.SendCommandWithCallbacks(
+        cmd.clusterId, cmd.commandId, cmd.timedInvokeTimeoutMs,
+        endpointId, tlvBuffer, tlvLength, exchangeMgr, sessionHandle,
+        [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
+            HandleDeferredCommandResponse(pendingId, path, data);
+        },
+        [this, pendingId](CHIP_ERROR error) {
+            HandleDeferredCommandError(pendingId, error);
+        });
+
+    if (!sent)
+    {
+        icError("Failed to send deferred command");
+        CompletePendingOperation(pendingId, false);
+    }
+}
+
+void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::promise<bool>> &promises,
+                                                       MatterDevice &device,
+                                                       const ResultTerminal::ReadAttribute &ra,
+                                                       const HandlerContext &hctx,
+                                                       char **readValue,
+                                                       char **executeResponse,
+                                                       chip::Messaging::ExchangeManager &exchangeMgr,
+                                                       const chip::SessionHandle &sessionHandle)
+{
+    // Resolve endpoint
+    chip::EndpointId endpointId = 0;
+
+    if (ra.endpointId.has_value())
+    {
+        endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
+    }
+    else if (!device.GetEndpointForCluster(ra.clusterId, endpointId))
+    {
+        icError("Failed to find endpoint for cluster 0x%x (readAttribute)", ra.clusterId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Read from cache
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR err = device.GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
+
+    std::optional<ParsedResult> result;
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icWarn("Cache miss for cluster 0x%x attr 0x%x (readAttribute): %s",
+               ra.clusterId, ra.attributeId, err.AsString());
+
+        // Call onError handler
+        if (!JS_IsUndefined(ra.onError))
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                ctx, hctx, "readFailed", "Attribute not in cache");
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
+        }
+
+        if (!result.has_value())
+        {
+            FailOperation(promises);
+            return;
+        }
+    }
+    else
+    {
+        // Encode cached TLV as base64
+        uint8_t tlvBuf[256];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        {
+            icError("Failed to copy cached attribute TLV for readAttribute");
+            FailOperation(promises);
+            return;
+        }
+
+        uint32_t tlvLen = writer.GetLengthWritten();
+        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+        std::string tlvBase64(maxBase64Len, '\0');
+        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+        tlvBase64.resize(encoded);
+
+        // Call onResponse handler
+        if (!JS_IsUndefined(ra.onResponse))
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
+        }
+
+        if (!result.has_value())
+        {
+            icError("readAttribute onResponse handler returned no result");
+            FailOperation(promises);
+            return;
+        }
+    }
+
+    // Execute the response handler's non-terminal ops
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+    // Execute the terminal — may recurse into another deferred terminal
+    ExecuteTerminal(promises, device, result->terminal, hctx, "(deferred-readAttribute)", readValue, executeResponse,
+                    exchangeMgr, sessionHandle);
+}
+
+void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
+                                                                const chip::app::ConcreteCommandPath &path,
+                                                                chip::TLV::TLVReader *data)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        icWarn("Received deferred response for unknown pending operation %" PRIu64, pendingId);
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    // Check overall deadline
+    if (std::chrono::steady_clock::now() > pending.overallDeadline)
+    {
+        icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
+
+        // Call onError with timeout
+        std::optional<ParsedResult> errorResult;
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onErrorRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                    ctx, pending.handlerContext, "timeout", "Overall operation deadline exceeded");
+                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+            }
+        }
+
+        if (errorResult.has_value())
+        {
+            SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, errorResult->ops);
+        }
+
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Encode response data as base64
+    std::string tlvBase64;
+
+    if (data != nullptr)
+    {
+        uint8_t tlvBuf[1024];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), *data) == CHIP_NO_ERROR)
+        {
+            uint32_t tlvLen = writer.GetLengthWritten();
+            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+            tlvBase64.resize(maxBase64Len, '\0');
+            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+            tlvBase64.resize(encoded);
+        }
+    }
+
+    // Invoke the onResponse handler
+    std::optional<ParsedResult> result;
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (pending.onResponseRooted)
+        {
+            JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
+                ctx, pending.handlerContext,
+                path.mClusterId, path.mCommandId, tlvBase64);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+        }
+    }
+
+    if (!result.has_value())
+    {
+        icError("Deferred onResponse handler returned no result for operation %" PRIu64, pendingId);
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Execute non-terminal ops
+    SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, result->ops);
+
+    // Continue the chain
+    ContinueDeferredChain(pending, *result);
+}
+
+void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId, CHIP_ERROR error)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        icWarn("Received deferred error for unknown pending operation %" PRIu64, pendingId);
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    icError("Deferred command failed for operation %" PRIu64 ": %s", pendingId, error.AsString());
+
+    // Call onError handler
+    std::optional<ParsedResult> errorResult;
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (pending.onErrorRooted)
+        {
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                ctx, pending.handlerContext, "commandFailed", error.AsString());
+            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+        }
+    }
+
+    if (errorResult.has_value())
+    {
+        SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, errorResult->ops);
+
+        // Check if onError returned a recovery terminal
+        if (!std::holds_alternative<ResultTerminal::Error>(errorResult->terminal.data))
+        {
+            ContinueDeferredChain(pending, *errorResult);
+            return;
+        }
+    }
+
+    CompletePendingOperation(pendingId, false);
+}
+
+void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pending, const ParsedResult &result)
+{
+    uint64_t pendingId = pending.id;
+
+    // Check deferral depth
+    if (pending.deferralDepth >= PendingOperation::MAX_DEFERRAL_DEPTH)
+    {
+        icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
+                pendingId, PendingOperation::MAX_DEFERRAL_DEPTH);
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Handle the terminal
+    if (std::holds_alternative<ResultTerminal::Success>(result.terminal.data))
+    {
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::Error>(result.terminal.data))
+    {
+        const auto &err = std::get<ResultTerminal::Error>(result.terminal.data);
+        icError("Deferred handler returned error: %s", err.message.c_str());
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::SendCommand>(result.terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::SendCommand>(result.terminal.data);
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (cmd.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x in deferred chain", cmd.clusterId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Decode base64 TLV
+        const uint8_t *tlvBuffer = nullptr;
+        size_t tlvLength = 0;
+        std::unique_ptr<uint8_t[]> decodedTlv;
+
+        if (!cmd.tlvBase64.empty())
+        {
+            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+            uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
+                                                  static_cast<uint16_t>(cmd.tlvBase64.size()),
+                                                  decodedTlv.get());
+
+            if (decoded == UINT16_MAX)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            tlvBuffer = decodedTlv.get();
+            tlvLength = decoded;
+        }
+
+        // Send the command — this resolves immediately via OnDone
+        std::forward_list<std::promise<bool>> tempPromises;
+
+        if (!pending.device->SendCommandFromTlv(tempPromises, cmd.clusterId, cmd.commandId,
+                                                cmd.timedInvokeTimeoutMs, endpointId,
+                                                tlvBuffer, tlvLength,
+                                                *pending.exchangeMgr, *pending.sessionHandle,
+                                                nullptr, pending.executeResponse))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // The command was sent. Completion comes via the command's own promise.
+        // The parking promise remains pending until that resolves.
+        // For sendCommand in a chain, we complete the parking promise when the
+        // command completes, which happens via OnDone → promise.set_value(true).
+        // We need to wait for that promise and then complete ours.
+        // Actually, the tempPromises will be resolved when the command completes.
+        // We'll complete the parking promise as success since the command was accepted.
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::WriteAttribute>(result.terminal.data))
+    {
+        const auto &wa = std::get<ResultTerminal::WriteAttribute>(result.terminal.data);
+
+        chip::EndpointId endpointId = 0;
+
+        if (wa.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(wa.clusterId, endpointId))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        if (wa.tlvBase64.empty())
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
+        auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+        uint16_t decoded = chip::Base64Decode(wa.tlvBase64.c_str(),
+                                              static_cast<uint16_t>(wa.tlvBase64.size()),
+                                              decodedTlv.get());
+
+        if (decoded == UINT16_MAX)
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        std::forward_list<std::promise<bool>> tempPromises;
+
+        if (!pending.device->WriteAttributeFromTlv(tempPromises, endpointId, wa.clusterId, wa.attributeId,
+                                                   decodedTlv.get(), decoded,
+                                                   *pending.exchangeMgr, *pending.sessionHandle, nullptr))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::RequestCommand>(result.terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::RequestCommand>(result.terminal.data);
+
+        // Re-arm: release old GC roots, root new handlers
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = false;
+            }
+
+            if (pending.onErrorRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = false;
+            }
+
+            if (!JS_IsUndefined(cmd.onResponse))
+            {
+                pending.onResponseRef.val = cmd.onResponse;
+                JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = true;
+            }
+
+            if (!JS_IsUndefined(cmd.onError))
+            {
+                pending.onErrorRef.val = cmd.onError;
+                JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = true;
+            }
+        }
+
+        pending.clusterId = cmd.clusterId;
+        pending.responseCommandId = cmd.responseCommandId;
+        pending.deferralDepth++;
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (cmd.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x in deferred re-arm", cmd.clusterId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Decode base64 TLV
+        const uint8_t *tlvBuffer = nullptr;
+        size_t tlvLength = 0;
+        std::unique_ptr<uint8_t[]> decodedTlv;
+
+        if (!cmd.tlvBase64.empty())
+        {
+            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+            uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
+                                                  static_cast<uint16_t>(cmd.tlvBase64.size()),
+                                                  decodedTlv.get());
+
+            if (decoded == UINT16_MAX)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            tlvBuffer = decodedTlv.get();
+            tlvLength = decoded;
+        }
+
+        // Send next command with deferred callbacks
+        bool sent = pending.device->SendCommandWithCallbacks(
+            cmd.clusterId, cmd.commandId, cmd.timedInvokeTimeoutMs,
+            endpointId, tlvBuffer, tlvLength,
+            *pending.exchangeMgr, *pending.sessionHandle,
+            [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
+                HandleDeferredCommandResponse(pendingId, path, data);
+            },
+            [this, pendingId](CHIP_ERROR error) {
+                HandleDeferredCommandError(pendingId, error);
+            });
+
+        if (!sent)
+        {
+            icError("Failed to send re-armed deferred command");
+            CompletePendingOperation(pendingId, false);
+        }
+
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::ReadAttribute>(result.terminal.data))
+    {
+        const auto &ra = std::get<ResultTerminal::ReadAttribute>(result.terminal.data);
+
+        // Release old GC roots and root new handlers
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = false;
+            }
+
+            if (pending.onErrorRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = false;
+            }
+
+            if (!JS_IsUndefined(ra.onResponse))
+            {
+                pending.onResponseRef.val = ra.onResponse;
+                JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = true;
+            }
+
+            if (!JS_IsUndefined(ra.onError))
+            {
+                pending.onErrorRef.val = ra.onError;
+                JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = true;
+            }
+        }
+
+        pending.deferralDepth++;
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (ra.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(ra.clusterId, endpointId))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Read from cache
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR err = pending.device->GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
+
+        std::optional<ParsedResult> nextResult;
+
+        if (err != CHIP_NO_ERROR)
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onErrorRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                    ctx, pending.handlerContext, "readFailed", "Attribute not in cache");
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+            }
+        }
+        else
+        {
+            uint8_t tlvBuf[256];
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuf, sizeof(tlvBuf));
+
+            if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            uint32_t tlvLen = writer.GetLengthWritten();
+            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+            std::string tlvBase64(maxBase64Len, '\0');
+            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+            tlvBase64.resize(encoded);
+
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                    ctx, pending.handlerContext, ra.clusterId, ra.attributeId, tlvBase64);
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+            }
+        }
+
+        if (!nextResult.has_value())
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, nextResult->ops);
+        ContinueDeferredChain(pending, *nextResult);
+        return;
+    }
+
+    icError("Unknown terminal type in deferred chain");
+    CompletePendingOperation(pendingId, false);
+}
+
+void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, bool success)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    // Resolve the parking promise
+    if (pending.parkingPromise != nullptr)
+    {
+        try
+        {
+            pending.parkingPromise->set_value(success);
+        }
+        catch (const std::future_error &e)
+        {
+            icDebug("Parking promise already satisfied for operation %" PRIu64, pendingId);
+        }
+    }
+
+    // Release GC roots
+    ReleasePendingGcRoots(pending);
+
+    pendingOperations.erase(it);
+}
+
+void SpecBasedMatterDeviceDriver::ReleasePendingGcRoots(PendingOperation &pending)
+{
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    if (pending.onResponseRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.onResponseRef);
+        pending.onResponseRooted = false;
+    }
+
+    if (pending.onErrorRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.onErrorRef);
+        pending.onErrorRooted = false;
+    }
 }
 
 void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &deviceId,

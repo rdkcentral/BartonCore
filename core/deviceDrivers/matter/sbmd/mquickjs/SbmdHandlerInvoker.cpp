@@ -198,4 +198,62 @@ namespace barton
         }
     }
 
+    JSValue SbmdHandlerInvoker::BuildCommandResponseArgs(JSContext *ctx,
+                                                         const HandlerContext &hctx,
+                                                         uint32_t clusterId,
+                                                         uint32_t commandId,
+                                                         const std::string &tlvBase64)
+    {
+        JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSValue response = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, response, "clusterId", JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, response, "commandId", JS_NewUint32(ctx, commandId));
+
+        if (!tlvBase64.empty())
+        {
+            JS_SetPropertyStr(ctx, response, "data", JS_NewString(ctx, tlvBase64.c_str()));
+        }
+        else
+        {
+            JS_SetPropertyStr(ctx, response, "data", JS_NULL);
+        }
+
+        JS_SetPropertyStr(ctx, args, "response", response);
+
+        return args;
+    }
+
+    JSValue SbmdHandlerInvoker::BuildAttributeReadResponseArgs(JSContext *ctx,
+                                                               const HandlerContext &hctx,
+                                                               uint32_t clusterId,
+                                                               uint32_t attributeId,
+                                                               const std::string &tlvBase64)
+    {
+        JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSValue attribute = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, attribute, "clusterId", JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, attribute, "attributeId", JS_NewUint32(ctx, attributeId));
+        JS_SetPropertyStr(ctx, attribute, "value", JS_NewString(ctx, tlvBase64.c_str()));
+        JS_SetPropertyStr(ctx, args, "attribute", attribute);
+
+        return args;
+    }
+
+    JSValue SbmdHandlerInvoker::BuildDeferredErrorArgs(JSContext *ctx,
+                                                       const HandlerContext &hctx,
+                                                       const std::string &errorType,
+                                                       const std::string &errorMessage)
+    {
+        JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSValue error = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, error, "type", JS_NewString(ctx, errorType.c_str()));
+        JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, errorMessage.c_str()));
+        JS_SetPropertyStr(ctx, args, "error", error);
+
+        return args;
+    }
+
 } // namespace barton

@@ -32,6 +32,7 @@
 #include "lib/core/TLVReader.h"
 #include "subsystems/matter/DeviceDataCache.h"
 #include <forward_list>
+#include <functional>
 #include <future>
 #include <map>
 #include <string>
@@ -218,6 +219,26 @@ namespace barton
                                 char **response);
 
         /**
+         * Send a command with deferred callbacks instead of promise-based completion.
+         * Used by requestCommand terminals where the driver manages the promise.
+         *
+         * @param onResponse Called on successful response with path and optional data TLV.
+         * @param onError Called when the command fails (path error or transport error).
+         * @return true if the command was successfully initiated.
+         */
+        bool SendCommandWithCallbacks(chip::ClusterId clusterId,
+                                      chip::CommandId commandId,
+                                      std::optional<uint16_t> timedInvokeTimeoutMs,
+                                      chip::EndpointId endpointId,
+                                      const uint8_t *tlvBuffer,
+                                      size_t encodedLength,
+                                      chip::Messaging::ExchangeManager &exchangeMgr,
+                                      const chip::SessionHandle &sessionHandle,
+                                      std::function<void(const chip::app::ConcreteCommandPath &,
+                                                         chip::TLV::TLVReader *)> onResponse,
+                                      std::function<void(CHIP_ERROR)> onError);
+
+        /**
          * Write an attribute to the device using pre-encoded TLV data.
          */
         bool WriteAttributeFromTlv(std::forward_list<std::promise<bool>> &promises,
@@ -376,9 +397,16 @@ namespace barton
         // Context for tracking active command operations
         struct CommandContext
         {
-            std::promise<bool> *commandPromise;
+            std::promise<bool> *commandPromise = nullptr;
             std::unique_ptr<chip::app::CommandSender> commandSender;
-            char **response;
+            char **response = nullptr;
+
+            // Deferred mode: when set, OnResponse/OnError call these instead of resolving the promise
+            std::function<void(const chip::app::ConcreteCommandPath &,
+                               chip::TLV::TLVReader *)> deferredOnResponse;
+            std::function<void(CHIP_ERROR)> deferredOnError;
+
+            bool IsDeferred() const { return deferredOnResponse != nullptr; }
         };
         std::map<chip::app::CommandSender *, CommandContext> activeCommandContexts;
     };
