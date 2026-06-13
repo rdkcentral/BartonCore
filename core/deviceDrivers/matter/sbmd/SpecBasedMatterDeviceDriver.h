@@ -127,7 +127,6 @@ namespace barton
                              const chip::SessionHandle &sessionHandle) override;
 
     private:
-
         SbmdDriver *driver = nullptr; // Non-owning. Owned by SbmdFactory.
 
         // Driver-based internal methods
@@ -144,8 +143,9 @@ namespace barton
          * Invoke a seed handler for a resource. Returns the seed value or empty string.
          */
         std::string InvokeSeedHandler(const std::string &deviceId,
-                                        const std::string &endpointId,
-                                        const SbmdResource &resource);
+                                      const std::string &endpointId,
+                                      const SbmdResource &resource,
+                                      MatterDevice *device = nullptr);
 
         /**
          * Find a resource by endpoint ID and resource ID.
@@ -156,28 +156,28 @@ namespace barton
          * Handle a read/write/execute resource operation through the handler system.
          */
         void HandleResourceOp(std::forward_list<std::promise<bool>> &promises,
-                                MatterDevice &device,
-                                icDeviceResource *resource,
-                                const char *input,
-                                char **readValue,
-                                char **executeResponse,
-                                chip::Messaging::ExchangeManager &exchangeMgr,
-                                const chip::SessionHandle &sessionHandle,
-                                const char *opType);
+                              MatterDevice &device,
+                              icDeviceResource *resource,
+                              const char *input,
+                              char **readValue,
+                              char **executeResponse,
+                              chip::Messaging::ExchangeManager &exchangeMgr,
+                              const chip::SessionHandle &sessionHandle,
+                              const char *opType);
 
         /**
          * Execute a result chain terminal — success, error, sendCommand, writeAttribute,
          * requestCommand, or readAttribute.
          */
         void ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
-                              MatterDevice &device,
-                              const ResultTerminal &terminal,
-                              const HandlerContext &hctx,
-                              const char *uri,
-                              char **readValue,
-                              char **executeResponse,
-                              chip::Messaging::ExchangeManager &exchangeMgr,
-                              const chip::SessionHandle &sessionHandle);
+                             MatterDevice &device,
+                             const ResultTerminal &terminal,
+                             const HandlerContext &hctx,
+                             const char *uri,
+                             char **readValue,
+                             char **executeResponse,
+                             chip::Messaging::ExchangeManager &exchangeMgr,
+                             const chip::SessionHandle &sessionHandle);
 
         /**
          * Execute a requestCommand deferred terminal.
@@ -236,14 +236,27 @@ namespace barton
         void ReleasePendingGcRoots(PendingOperation &pending);
 
         /**
+         * Create an AttributeSupplementFetcher for the given device.
+         * Resolves alias names via the driver's alias map, reads cached TLV,
+         * and returns base64-encoded values.
+         */
+        AttributeSupplementFetcher MakeAttrFetcher(MatterDevice &device) const;
+
+        /**
+         * Create a ResourceSupplementFetcher for the given device UUID.
+         * Reads resource values via deviceServiceGetResourceById.
+         */
+        ResourceSupplementFetcher MakeResFetcher(const std::string &deviceUuid) const;
+
+        /**
          * Handle a attribute report via the dispatch tables.
          * Called from MatterDevice::CacheCallback via the AttributeCallback.
          */
         void HandleAttributeReport(const std::string &deviceId,
-                                     chip::EndpointId endpointId,
-                                     chip::ClusterId clusterId,
-                                     chip::AttributeId attributeId,
-                                     chip::TLV::TLVReader &reader);
+                                   chip::EndpointId endpointId,
+                                   chip::ClusterId clusterId,
+                                   chip::AttributeId attributeId,
+                                   chip::TLV::TLVReader &reader);
 
         uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
 

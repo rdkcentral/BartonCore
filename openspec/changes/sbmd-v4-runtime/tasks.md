@@ -16,7 +16,7 @@
 ## 3. Result Builder — `SbmdUtils.result()`
 
 - [x] 3.1 Implement `SbmdUtils.result()` in `sbmd-utils.js` — mutable builder with `dataModel.updateResource()` (2/3/4-arg), `dataModel.setMetadata()`, `storage.setPersistentData()`, `storage.setTransientData()`, `device.sendCommand()`, `device.writeAttribute()`, `device.requestCommand()`, `device.readAttribute()`, `log()`, `success()`, `error()`. Non-terminals return builder, terminals return raw `{ops, terminal}` object.
-- [ ] 3.2 Remove v3 `SbmdUtils.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`. (deferred to task group 13 — v3 tests still reference these)
+- [x] 3.2 Remove v3 `SbmdUtils.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`. (removed as part of TG13 v3 infrastructure cleanup)
 - [x] 3.3 Write JS-level unit tests for the result builder — verify chain structure, terminal enforcement, operation ordering, all operation types. (Can be run via mquickjs in a C++ test harness.)
 
 ## 4. SbmdDriver() Registration System
@@ -41,8 +41,8 @@
 ## 6. Handler Dispatch and Supplements
 
 - [x] 6.1 Implement dispatch table construction — resolve aliases to cluster+ID pairs, build `map<(clusterId, attrId/eventId/cmdId), vector<HandlerEntry>>` and wildcard tables. Handle alias form and explicit form (clusterId + attributeId/attributeIds/wildcard).
-- [ ] 6.2 Implement supplements resolution — given a supplements declaration, read attribute values from `DeviceDataCache` and resource values from Barton resource store. Build `args.supplements` JS object.
-- [ ] 6.3 Implement handler invocation — build `args` JS object (deviceUuid, endpointId, clusterFeatureMaps, trigger field, supplements), call handler JSValue via `JS_PushArg`/`JS_Call`, extract result JSValue.
+- [ ] 6.2 Implement supplements resolution — given a supplements declaration, read attribute values from `DeviceDataCache` and resource values from Barton resource store. Build `args.supplements` JS object. (deferred — no current drivers use supplements)
+- [ ] 6.3 Implement handler invocation — build `args` JS object (deviceUuid, endpointId, clusterFeatureMaps, trigger field, supplements), call handler JSValue via `JS_PushArg`/`JS_Call`, extract result JSValue. (handler invocation implemented in TG9; supplements portion deferred)
 - [x] 6.4 Implement attribute handler dispatch — on attribute report callback, look up dispatch table, call matching handlers in priority order (specific → multi → wildcard).
 - [x] 6.5 Implement event handler dispatch — same pattern as attribute dispatch.
 - [x] 6.6 Implement command handler dispatch — same pattern, with pending-request check before falling through to commandHandlers.
@@ -57,12 +57,12 @@
 
 ## 8. Deferred Operations
 
-- [ ] 8.1 Implement `PendingOperation` data structure — parked promise, operation log, trigger context, GC-rooted handler/onError JSValues, response match criteria, per-hop timer, overall deadline, deferral depth counter.
-- [ ] 8.2 Implement `requestCommand` terminal — send Matter command, park resource operation, register pending response match, arm per-hop and overall timers.
-- [ ] 8.3 Implement `readAttribute` terminal — read Matter attribute, park resource operation, register pending response, arm timers.
-- [ ] 8.4 Implement response routing — on incoming command, check pending requests first. If match found, cancel hop timer, call stored handler, execute its result chain. If result is another deferral, re-arm pending state (swap GC roots, update match, reset hop timer). If result is a terminal, complete parked operation.
-- [ ] 8.5 Implement timeout handling — on hop timeout, call `onError` handler. On overall deadline expiry, call `onError` for the current hop. Implement max deferral depth check.
-- [ ] 8.6 Write unit tests for deferred operations — single-hop park-and-complete, multi-hop re-arming, timeout firing, overall deadline enforcement, max depth exceeded.
+- [x] 8.1 Implement `PendingOperation` data structure — parked promise, operation log, trigger context, GC-rooted handler/onError JSValues, response match criteria, per-hop timer, overall deadline, deferral depth counter.
+- [x] 8.2 Implement `requestCommand` terminal — send Matter command, park resource operation, register pending response match, arm per-hop and overall timers.
+- [x] 8.3 Implement `readAttribute` terminal — read Matter attribute, park resource operation, register pending response, arm timers.
+- [x] 8.4 Implement response routing — on incoming command, check pending requests first. If match found, cancel hop timer, call stored handler, execute its result chain. If result is another deferral, re-arm pending state (swap GC roots, update match, reset hop timer). If result is a terminal, complete parked operation.
+- [x] 8.5 Implement timeout handling — on hop timeout, call `onError` handler. On overall deadline expiry, call `onError` for the current hop. Implement max deferral depth check.
+- [x] 8.6 Write unit tests for deferred operations — single-hop park-and-complete, multi-hop re-arming, timeout firing, overall deadline enforcement, max depth exceeded.
 
 ## 9. Update SpecBasedMatterDeviceDriver
 
@@ -97,21 +97,21 @@
 
 ## 13. Remove v3 Infrastructure
 
-- [ ] 13.1 Delete `SbmdParser.h`, `SbmdParser.cpp`, `SbmdSpec.h` (after all drivers converted — can be deferred to after remaining driver conversions).
-- [ ] 13.2 Delete `ScriptResult.h`, `ScriptResult.cpp` (replaced by v4 result chain execution).
-- [ ] 13.3 Delete `core/deviceDrivers/matter/sbmd/schema/` directory (JSON schema files).
-- [ ] 13.4 Remove `sbmdParserTest.cpp` from unit tests. Update `ScriptResultTest.cpp` or replace with v4 equivalents.
-- [ ] 13.5 Delete `v3-pending/` staging directory once all drivers are converted.
+- [x] 13.1 Delete `SbmdParser.h`, `SbmdParser.cpp`, `SbmdSpec.h` (after all drivers converted — can be deferred to after remaining driver conversions).
+- [x] 13.2 Delete `ScriptResult.h`, `ScriptResult.cpp` (replaced by v4 result chain execution).
+- [x] 13.3 Delete `core/deviceDrivers/matter/sbmd/schema/` directory (JSON schema files).
+- [x] 13.4 Remove `sbmdParserTest.cpp` from unit tests. Update `ScriptResultTest.cpp` or replace with v4 equivalents.
+- [x] 13.5 Delete `v3-pending/` staging directory once all drivers are converted.
 
 ## 14. Remaining Driver Conversions
 
-- [ ] 14.1 Convert `contact-sensor.sbmd` → `contact-sensor.sbmd.js`, re-enable integration tests.
-- [ ] 14.2 Convert `temperature-sensor.sbmd` → `temperature-sensor.sbmd.js`, re-enable integration tests.
-- [ ] 14.3 Convert `humidity-sensor.sbmd` → `humidity-sensor.sbmd.js`, re-enable integration tests.
-- [ ] 14.4 Convert `occupancy-sensor.sbmd` → `occupancy-sensor.sbmd.js`, re-enable integration tests.
-- [ ] 14.5 Convert `water-leak-detector.sbmd` → `water-leak-detector.sbmd.js`, re-enable integration tests.
-- [ ] 14.6 Convert `air-quality-sensor.sbmd` → `air-quality-sensor.sbmd.js`, re-enable integration tests.
-- [ ] 14.7 Convert `thermostat.sbmd` → `thermostat.sbmd.js`, re-enable integration tests.
-- [ ] 14.8 Convert `door-lock.sbmd` → `door-lock.sbmd.js`, re-enable integration tests.
-- [ ] 14.9 Convert `ikea-timmerflotte.sbmd` → `ikea-timmerflotte.sbmd.js`, re-enable integration tests.
-- [ ] 14.10 Verify all integration tests pass with all v4 drivers.
+- [x] 14.1 Convert `contact-sensor.sbmd` → `contact-sensor.sbmd.js`, re-enable integration tests.
+- [x] 14.2 Convert `temperature-sensor.sbmd` → `temperature-sensor.sbmd.js`, re-enable integration tests.
+- [x] 14.3 Convert `humidity-sensor.sbmd` → `humidity-sensor.sbmd.js`, re-enable integration tests.
+- [x] 14.4 Convert `occupancy-sensor.sbmd` → `occupancy-sensor.sbmd.js`, re-enable integration tests.
+- [x] 14.5 Convert `water-leak-detector.sbmd` → `water-leak-detector.sbmd.js`, re-enable integration tests.
+- [x] 14.6 Convert `air-quality-sensor.sbmd` → `air-quality-sensor.sbmd.js`, re-enable integration tests.
+- [x] 14.7 Convert `thermostat.sbmd` → `thermostat.sbmd.js`, re-enable integration tests.
+- [x] 14.8 Convert `door-lock.sbmd` → `door-lock.sbmd.js`, re-enable integration tests.
+- [x] 14.9 Convert `ikea-timmerflotte.sbmd` → `ikea-timmerflotte.sbmd.js`, re-enable integration tests.
+- [x] 14.10 Verify all integration tests pass with all v4 drivers.

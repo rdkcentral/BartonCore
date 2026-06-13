@@ -38,6 +38,7 @@
 #include "../SbmdRegistration.h"
 #include "SbmdResultExecutor.h"
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -56,9 +57,27 @@ namespace barton
     struct HandlerContext
     {
         std::string deviceUuid;
-        std::string endpointId; // The trigger endpoint
+        std::string endpointId;                          // The trigger endpoint
         std::map<uint32_t, uint32_t> clusterFeatureMaps; // clusterId → featureBitmap
     };
+
+    /**
+     * Callback to fetch a cached attribute value by alias name.
+     *
+     * The implementation should resolve the alias to (clusterId, attributeId),
+     * read the TLV from the device data cache, and return it as a base64 string.
+     * Returns nullopt if the attribute is not cached or the alias is unknown.
+     */
+    using AttributeSupplementFetcher = std::function<std::optional<std::string>(const std::string &aliasName)>;
+
+    /**
+     * Callback to fetch a resource value by path.
+     *
+     * Path format: "endpointId/resourceId" for endpoint resources, or
+     * "resourceId" for device-level resources.
+     * Returns nullopt if the resource is not found.
+     */
+    using ResourceSupplementFetcher = std::function<std::optional<std::string>(const std::string &path)>;
 
     /**
      * Invokes handler functions and parses their results.
@@ -119,6 +138,24 @@ namespace barton
          * @param ops The ops to execute
          */
         static void ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops);
+
+        /**
+         * Add supplements to an args object. Fetches pre-declared attribute and
+         * resource values and attaches them as `args.supplements`.
+         *
+         * If supplements is empty (no attributes and no resources), this is a no-op.
+         *
+         * @param ctx JS context (caller holds mutex)
+         * @param args The args object to augment (modified in place)
+         * @param supplements The supplement declarations
+         * @param attrFetcher Callback to fetch attribute values by alias name
+         * @param resFetcher Callback to fetch resource values by path
+         */
+        static void AddSupplements(JSContext *ctx,
+                                   JSValue args,
+                                   const SbmdSupplements &supplements,
+                                   const AttributeSupplementFetcher &attrFetcher,
+                                   const ResourceSupplementFetcher &resFetcher);
 
         /**
          * Build an args object for a deferred command response handler.

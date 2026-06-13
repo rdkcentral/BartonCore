@@ -105,14 +105,13 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     }
 
     // Set the attribute callback so CacheCallback delegates to our dispatch tables
-    device->SetAttributeCallback(
-        [this](const std::string &deviceId,
-               chip::EndpointId endpointId,
-               chip::ClusterId clusterId,
-               chip::AttributeId attributeId,
-               chip::TLV::TLVReader &reader) {
-            HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
-        });
+    device->SetAttributeCallback([this](const std::string &deviceId,
+                                        chip::EndpointId endpointId,
+                                        chip::ClusterId clusterId,
+                                        chip::AttributeId attributeId,
+                                        chip::TLV::TLVReader &reader) {
+        HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
+    });
 
     // Check prerequisites for resources
     const auto &reg = driver->GetRegistration();
@@ -131,8 +130,7 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                     continue;
                 }
 
-                icError("Required resource '%s' prerequisites not met, aborting commissioning",
-                        resource.id.c_str());
+                icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
 
                 return false;
             }
@@ -282,9 +280,8 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 {
     bool result = true;
     const auto &reg = driver->GetRegistration();
-    const auto *skipped = skippedOptionalResources.count(device->uuid)
-                              ? &skippedOptionalResources[device->uuid]
-                              : nullptr;
+    const auto *skipped =
+        skippedOptionalResources.count(device->uuid) ? &skippedOptionalResources[device->uuid] : nullptr;
 
     icDebug("Registering resources for device %s", device->uuid);
 
@@ -355,10 +352,9 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
                 }
             }
 
-            result &=
-                createEndpointResource(
-                    ep, resource.id.c_str(), initialValue, resource.type.c_str(), resourceMode, cachingPolicy) !=
-                nullptr;
+            result &= createEndpointResource(
+                          ep, resource.id.c_str(), initialValue, resource.type.c_str(), resourceMode, cachingPolicy) !=
+                      nullptr;
         }
     }
 
@@ -371,6 +367,8 @@ void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &d
 
     const auto &reg = driver->GetRegistration();
     const auto *skipped = skippedOptionalResources.count(deviceId) ? &skippedOptionalResources[deviceId] : nullptr;
+
+    auto matterDevice = GetDevice(deviceId);
 
     for (const auto &endpoint : reg.endpoints)
     {
@@ -388,7 +386,7 @@ void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &d
                 continue;
             }
 
-            std::string seedValue = InvokeSeedHandler(deviceId, endpoint.id, resource);
+            std::string seedValue = InvokeSeedHandler(deviceId, endpoint.id, resource, matterDevice.get());
 
             if (!seedValue.empty())
             {
@@ -399,8 +397,9 @@ void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &d
 }
 
 std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &deviceId,
-                                                             const std::string &endpointId,
-                                                             const SbmdResource &resource)
+                                                           const std::string &endpointId,
+                                                           const SbmdResource &resource,
+                                                           MatterDevice *device)
 {
     if (!resource.seed.has_value() || !driver->IsActivated())
     {
@@ -415,6 +414,13 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     hctx.endpointId = endpointId;
 
     JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
+
+    if (device != nullptr)
+    {
+        SbmdHandlerInvoker::AddSupplements(
+            ctx, args, resource.seed->supplements, MakeAttrFetcher(*device), MakeResFetcher(deviceId));
+    }
+
     auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
 
     if (!result.has_value())
@@ -457,8 +463,7 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
     if (!cache)
     {
-        icWarn("No device data cache for device %s; prerequisites cannot be evaluated",
-               device.GetDeviceId().c_str());
+        icWarn("No device data cache for device %s; prerequisites cannot be evaluated", device.GetDeviceId().c_str());
         return false;
     }
 
@@ -496,9 +501,8 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
         if (!clusterFound)
         {
-            icDebug("Prerequisite cluster 0x%08" PRIx32 " not found on device %s",
-                    clusterId,
-                    device.GetDeviceId().c_str());
+            icDebug(
+                "Prerequisite cluster 0x%08" PRIx32 " not found on device %s", clusterId, device.GetDeviceId().c_str());
 
             return false;
         }
@@ -507,7 +511,8 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
     return true;
 }
 
-const SbmdResource *SpecBasedMatterDeviceDriver::FindDriverResource(const char *endpointId, const char *resourceId) const
+const SbmdResource *SpecBasedMatterDeviceDriver::FindDriverResource(const char *endpointId,
+                                                                    const char *resourceId) const
 {
     const auto &reg = driver->GetRegistration();
 
@@ -532,14 +537,14 @@ const SbmdResource *SpecBasedMatterDeviceDriver::FindDriverResource(const char *
 }
 
 void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promise<bool>> &promises,
-                                                     MatterDevice &device,
-                                                     icDeviceResource *resource,
-                                                     const char *input,
-                                                     char **readValue,
-                                                     char **executeResponse,
-                                                     chip::Messaging::ExchangeManager &exchangeMgr,
-                                                     const chip::SessionHandle &sessionHandle,
-                                                     const char *opType)
+                                                   MatterDevice &device,
+                                                   icDeviceResource *resource,
+                                                   const char *input,
+                                                   char **readValue,
+                                                   char **executeResponse,
+                                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                                   const chip::SessionHandle &sessionHandle,
+                                                   const char *opType)
 {
     // Extract endpoint ID and resource ID from the resource
     const char *endpointId = resource->endpointId;
@@ -610,6 +615,10 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
+
+        SbmdHandlerInvoker::AddSupplements(
+            ctx, args, handler->supplements, MakeAttrFetcher(device), MakeResFetcher(device.GetDeviceId()));
+
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
     }
 
@@ -624,19 +633,26 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
 
     // Handle the terminal
-    ExecuteTerminal(promises, device, result->terminal, hctx, resource->uri, readValue, executeResponse,
-                     exchangeMgr, sessionHandle);
+    ExecuteTerminal(promises,
+                    device,
+                    result->terminal,
+                    hctx,
+                    resource->uri,
+                    readValue,
+                    executeResponse,
+                    exchangeMgr,
+                    sessionHandle);
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
-                                                    MatterDevice &device,
-                                                    const ResultTerminal &terminal,
-                                                    const HandlerContext &hctx,
-                                                    const char *uri,
-                                                    char **readValue,
-                                                    char **executeResponse,
-                                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                                    const chip::SessionHandle &sessionHandle)
+                                                  MatterDevice &device,
+                                                  const ResultTerminal &terminal,
+                                                  const HandlerContext &hctx,
+                                                  const char *uri,
+                                                  char **readValue,
+                                                  char **executeResponse,
+                                                  chip::Messaging::ExchangeManager &exchangeMgr,
+                                                  const chip::SessionHandle &sessionHandle)
 {
     if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
     {
@@ -679,9 +695,8 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
         {
             size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
             decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
-                                                  static_cast<uint16_t>(cmd.tlvBase64.size()),
-                                                  decodedTlv.get());
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
 
             if (decoded == UINT16_MAX)
             {
@@ -694,10 +709,17 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
             tlvLength = decoded;
         }
 
-        if (!device.SendCommandFromTlv(promises, cmd.clusterId, cmd.commandId,
-                                       cmd.timedInvokeTimeoutMs, endpointId,
-                                       tlvBuffer, tlvLength,
-                                       exchangeMgr, sessionHandle, uri, executeResponse))
+        if (!device.SendCommandFromTlv(promises,
+                                       cmd.clusterId,
+                                       cmd.commandId,
+                                       cmd.timedInvokeTimeoutMs,
+                                       endpointId,
+                                       tlvBuffer,
+                                       tlvLength,
+                                       exchangeMgr,
+                                       sessionHandle,
+                                       uri,
+                                       executeResponse))
         {
             FailOperation(promises);
         }
@@ -732,9 +754,8 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
 
         size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
         auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded = chip::Base64Decode(wa.tlvBase64.c_str(),
-                                              static_cast<uint16_t>(wa.tlvBase64.size()),
-                                              decodedTlv.get());
+        uint16_t decoded =
+            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
 
         if (decoded == UINT16_MAX)
         {
@@ -743,8 +764,15 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
             return;
         }
 
-        if (!device.WriteAttributeFromTlv(promises, endpointId, wa.clusterId, wa.attributeId,
-                                          decodedTlv.get(), decoded, exchangeMgr, sessionHandle, uri))
+        if (!device.WriteAttributeFromTlv(promises,
+                                          endpointId,
+                                          wa.clusterId,
+                                          wa.attributeId,
+                                          decodedTlv.get(),
+                                          decoded,
+                                          exchangeMgr,
+                                          sessionHandle,
+                                          uri))
         {
             FailOperation(promises);
         }
@@ -755,16 +783,14 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
     {
         const auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
-        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse,
-                              exchangeMgr, sessionHandle);
+        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
         const auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
-        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse,
-                             exchangeMgr, sessionHandle);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
         return;
     }
 
@@ -808,9 +834,8 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     {
         size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
         decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
-                                              static_cast<uint16_t>(cmd.tlvBase64.size()),
-                                              decodedTlv.get());
+        uint16_t decoded =
+            chip::Base64Decode(cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
 
         if (decoded == UINT16_MAX)
         {
@@ -876,14 +901,18 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
 
     // Send the command with deferred callbacks
     bool sent = device.SendCommandWithCallbacks(
-        cmd.clusterId, cmd.commandId, cmd.timedInvokeTimeoutMs,
-        endpointId, tlvBuffer, tlvLength, exchangeMgr, sessionHandle,
+        cmd.clusterId,
+        cmd.commandId,
+        cmd.timedInvokeTimeoutMs,
+        endpointId,
+        tlvBuffer,
+        tlvLength,
+        exchangeMgr,
+        sessionHandle,
         [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
             HandleDeferredCommandResponse(pendingId, path, data);
         },
-        [this, pendingId](CHIP_ERROR error) {
-            HandleDeferredCommandError(pendingId, error);
-        });
+        [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
 
     if (!sent)
     {
@@ -923,8 +952,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
     if (err != CHIP_NO_ERROR)
     {
-        icWarn("Cache miss for cluster 0x%x attr 0x%x (readAttribute): %s",
-               ra.clusterId, ra.attributeId, err.AsString());
+        icWarn(
+            "Cache miss for cluster 0x%x attr 0x%x (readAttribute): %s", ra.clusterId, ra.attributeId, err.AsString());
 
         // Call onError handler
         if (!JS_IsUndefined(ra.onError))
@@ -932,8 +961,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                ctx, hctx, "readFailed", "Attribute not in cache");
+            JSValue args =
+                SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx, hctx, "readFailed", "Attribute not in cache");
             result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
         }
 
@@ -969,8 +998,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64);
+            JSValue args =
+                SbmdHandlerInvoker::BuildAttributeReadResponseArgs(ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
         }
 
@@ -986,8 +1015,15 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
     SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
 
     // Execute the terminal — may recurse into another deferred terminal
-    ExecuteTerminal(promises, device, result->terminal, hctx, "(deferred-readAttribute)", readValue, executeResponse,
-                    exchangeMgr, sessionHandle);
+    ExecuteTerminal(promises,
+                    device,
+                    result->terminal,
+                    hctx,
+                    "(deferred-readAttribute)",
+                    readValue,
+                    executeResponse,
+                    exchangeMgr,
+                    sessionHandle);
 }
 
 void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
@@ -1060,8 +1096,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
         if (pending.onResponseRooted)
         {
             JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
-                ctx, pending.handlerContext,
-                path.mClusterId, path.mCommandId, tlvBase64);
+                ctx, pending.handlerContext, path.mClusterId, path.mCommandId, tlvBase64);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
         }
     }
@@ -1131,7 +1166,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
     if (pending.deferralDepth >= PendingOperation::MAX_DEFERRAL_DEPTH)
     {
         icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
-                pendingId, PendingOperation::MAX_DEFERRAL_DEPTH);
+                pendingId,
+                PendingOperation::MAX_DEFERRAL_DEPTH);
         CompletePendingOperation(pendingId, false);
         return;
     }
@@ -1178,9 +1214,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
             decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
-                                                  static_cast<uint16_t>(cmd.tlvBase64.size()),
-                                                  decodedTlv.get());
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
 
             if (decoded == UINT16_MAX)
             {
@@ -1195,11 +1230,17 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         // Send the command — this resolves immediately via OnDone
         std::forward_list<std::promise<bool>> tempPromises;
 
-        if (!pending.device->SendCommandFromTlv(tempPromises, cmd.clusterId, cmd.commandId,
-                                                cmd.timedInvokeTimeoutMs, endpointId,
-                                                tlvBuffer, tlvLength,
-                                                *pending.exchangeMgr, *pending.sessionHandle,
-                                                nullptr, pending.executeResponse))
+        if (!pending.device->SendCommandFromTlv(tempPromises,
+                                                cmd.clusterId,
+                                                cmd.commandId,
+                                                cmd.timedInvokeTimeoutMs,
+                                                endpointId,
+                                                tlvBuffer,
+                                                tlvLength,
+                                                *pending.exchangeMgr,
+                                                *pending.sessionHandle,
+                                                nullptr,
+                                                pending.executeResponse))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1240,9 +1281,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
         auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded = chip::Base64Decode(wa.tlvBase64.c_str(),
-                                              static_cast<uint16_t>(wa.tlvBase64.size()),
-                                              decodedTlv.get());
+        uint16_t decoded =
+            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
 
         if (decoded == UINT16_MAX)
         {
@@ -1252,9 +1292,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         std::forward_list<std::promise<bool>> tempPromises;
 
-        if (!pending.device->WriteAttributeFromTlv(tempPromises, endpointId, wa.clusterId, wa.attributeId,
-                                                   decodedTlv.get(), decoded,
-                                                   *pending.exchangeMgr, *pending.sessionHandle, nullptr))
+        if (!pending.device->WriteAttributeFromTlv(tempPromises,
+                                                   endpointId,
+                                                   wa.clusterId,
+                                                   wa.attributeId,
+                                                   decodedTlv.get(),
+                                                   decoded,
+                                                   *pending.exchangeMgr,
+                                                   *pending.sessionHandle,
+                                                   nullptr))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1327,9 +1373,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
             decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(cmd.tlvBase64.c_str(),
-                                                  static_cast<uint16_t>(cmd.tlvBase64.size()),
-                                                  decodedTlv.get());
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
 
             if (decoded == UINT16_MAX)
             {
@@ -1343,15 +1388,18 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         // Send next command with deferred callbacks
         bool sent = pending.device->SendCommandWithCallbacks(
-            cmd.clusterId, cmd.commandId, cmd.timedInvokeTimeoutMs,
-            endpointId, tlvBuffer, tlvLength,
-            *pending.exchangeMgr, *pending.sessionHandle,
+            cmd.clusterId,
+            cmd.commandId,
+            cmd.timedInvokeTimeoutMs,
+            endpointId,
+            tlvBuffer,
+            tlvLength,
+            *pending.exchangeMgr,
+            *pending.sessionHandle,
             [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
                 HandleDeferredCommandResponse(pendingId, path, data);
             },
-            [this, pendingId](CHIP_ERROR error) {
-                HandleDeferredCommandError(pendingId, error);
-            });
+            [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
 
         if (!sent)
         {
@@ -1523,11 +1571,104 @@ void SpecBasedMatterDeviceDriver::ReleasePendingGcRoots(PendingOperation &pendin
     }
 }
 
+AttributeSupplementFetcher SpecBasedMatterDeviceDriver::MakeAttrFetcher(MatterDevice &device) const
+{
+    return [this, &device](const std::string &aliasName) -> std::optional<std::string> {
+        const auto &aliases = driver->GetRegistration().aliases;
+        auto it = aliases.find(aliasName);
+
+        if (it == aliases.end() || !it->second.attributeId.has_value())
+        {
+            icWarn("supplement alias '%s' not found or not an attribute", aliasName.c_str());
+            return std::nullopt;
+        }
+
+        const auto &alias = it->second;
+        chip::EndpointId endpointId = 0;
+
+        if (!device.GetEndpointForCluster(alias.clusterId, endpointId))
+        {
+            icWarn("no endpoint for cluster 0x%x (supplement '%s')", alias.clusterId, aliasName.c_str());
+            return std::nullopt;
+        }
+
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR err = device.GetCachedAttributeData(endpointId, alias.clusterId, alias.attributeId.value(), reader);
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icDebug("cache miss for supplement '%s' (cluster 0x%x attr 0x%x)",
+                    aliasName.c_str(),
+                    alias.clusterId,
+                    alias.attributeId.value());
+            return std::nullopt;
+        }
+
+        uint8_t tlvBuf[256];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        {
+            icWarn("failed to copy TLV for supplement '%s'", aliasName.c_str());
+            return std::nullopt;
+        }
+
+        uint32_t tlvLen = writer.GetLengthWritten();
+        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+        std::string tlvBase64(maxBase64Len, '\0');
+        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+        tlvBase64.resize(encoded);
+
+        return tlvBase64;
+    };
+}
+
+ResourceSupplementFetcher SpecBasedMatterDeviceDriver::MakeResFetcher(const std::string &deviceUuid) const
+{
+    return [deviceUuid](const std::string &path) -> std::optional<std::string> {
+        // Parse path: "endpointId/resourceId" or just "resourceId"
+        const char *epId = nullptr;
+        std::string resourceId;
+        auto slashPos = path.find('/');
+
+        if (slashPos != std::string::npos)
+        {
+            std::string endpointPart = path.substr(0, slashPos);
+            resourceId = path.substr(slashPos + 1);
+            // deviceServiceGetResourceById expects NULL for device-level
+            icDeviceResource *res =
+                deviceServiceGetResourceById(deviceUuid.c_str(), endpointPart.c_str(), resourceId.c_str());
+
+            if (res != nullptr && res->value != nullptr)
+            {
+                std::string val(res->value);
+                return val;
+            }
+
+            return std::nullopt;
+        }
+        else
+        {
+            resourceId = path;
+            icDeviceResource *res = deviceServiceGetResourceById(deviceUuid.c_str(), nullptr, resourceId.c_str());
+
+            if (res != nullptr && res->value != nullptr)
+            {
+                std::string val(res->value);
+                return val;
+            }
+
+            return std::nullopt;
+        }
+    };
+}
+
 void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &deviceId,
-                                                          chip::EndpointId endpointId,
-                                                          chip::ClusterId clusterId,
-                                                          chip::AttributeId attributeId,
-                                                          chip::TLV::TLVReader &reader)
+                                                        chip::EndpointId endpointId,
+                                                        chip::ClusterId clusterId,
+                                                        chip::AttributeId attributeId,
+                                                        chip::TLV::TLVReader &reader)
 {
     if (!driver || !driver->IsActivated())
     {
@@ -1567,8 +1708,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     // Base64 encode the TLV data
     size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
     std::string tlvBase64(maxBase64Len, '\0');
-    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen),
-                                          tlvBase64.data());
+    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
     tlvBase64.resize(encoded);
 
     // Build handler context
@@ -1576,6 +1716,8 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     hctx.deviceUuid = deviceId;
     hctx.endpointId = std::to_string(endpointId);
     // TODO: populate clusterFeatureMaps from MatterDevice
+
+    auto matterDevice = GetDevice(deviceId);
 
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -1588,12 +1730,21 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         }
 
         JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(
+                ctx, args, entry->handler->supplements, MakeAttrFetcher(*matterDevice), MakeResFetcher(deviceId));
+        }
+
         auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
 
         if (!result.has_value())
         {
             icWarn("Attribute handler '%s' returned no result for cluster 0x%x attr 0x%x",
-                   entry->handler->name.c_str(), clusterId, attributeId);
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   attributeId);
             continue;
         }
 
@@ -1605,8 +1756,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
         {
             const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
-            icWarn("Attribute handler '%s' returned error: %s",
-                   entry->handler->name.c_str(), err.message.c_str());
+            icWarn("Attribute handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
         }
     }
 }

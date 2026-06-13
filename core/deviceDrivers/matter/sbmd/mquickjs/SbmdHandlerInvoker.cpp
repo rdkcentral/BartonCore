@@ -25,7 +25,7 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdHandlerInvoker"
+#define LOG_TAG     "SbmdHandlerInvoker"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdHandlerInvoker.h"
@@ -49,10 +49,7 @@ extern void updateResource(const char *deviceUuid,
                            const char *newValue,
                            void *metadata);
 
-extern void setMetadata(const char *deviceUuid,
-                        const char *endpointId,
-                        const char *name,
-                        const char *value);
+extern void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value);
 }
 
 namespace barton
@@ -78,10 +75,10 @@ namespace barton
     }
 
     JSValue SbmdHandlerInvoker::BuildAttributeArgs(JSContext *ctx,
-                                                     const HandlerContext &hctx,
-                                                     uint32_t clusterId,
-                                                     uint32_t attributeId,
-                                                     const std::string &tlvBase64)
+                                                   const HandlerContext &hctx,
+                                                   uint32_t clusterId,
+                                                   uint32_t attributeId,
+                                                   const std::string &tlvBase64)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
@@ -101,9 +98,9 @@ namespace barton
     }
 
     JSValue SbmdHandlerInvoker::BuildResourceArgs(JSContext *ctx,
-                                                    const HandlerContext &hctx,
-                                                    const std::string &resourceId,
-                                                    const std::optional<std::string> &input)
+                                                  const HandlerContext &hctx,
+                                                  const std::string &resourceId,
+                                                  const std::optional<std::string> &input)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
@@ -160,6 +157,64 @@ namespace barton
         }
 
         return SbmdResultExecutor::Parse(ctx, result);
+    }
+
+    void SbmdHandlerInvoker::AddSupplements(JSContext *ctx,
+                                            JSValue args,
+                                            const SbmdSupplements &supplements,
+                                            const AttributeSupplementFetcher &attrFetcher,
+                                            const ResourceSupplementFetcher &resFetcher)
+    {
+        if (supplements.attributes.empty() && supplements.resources.empty())
+        {
+            return;
+        }
+
+        JSValue supObj = JS_NewObject(ctx);
+
+        if (!supplements.attributes.empty())
+        {
+            JSValue attrsObj = JS_NewObject(ctx);
+
+            for (const auto &aliasName : supplements.attributes)
+            {
+                auto value = attrFetcher(aliasName);
+
+                if (value.has_value())
+                {
+                    JS_SetPropertyStr(ctx, attrsObj, aliasName.c_str(), JS_NewString(ctx, value->c_str()));
+                }
+                else
+                {
+                    JS_SetPropertyStr(ctx, attrsObj, aliasName.c_str(), JS_NULL);
+                }
+            }
+
+            JS_SetPropertyStr(ctx, supObj, "attributes", attrsObj);
+        }
+
+        if (!supplements.resources.empty())
+        {
+            JSValue resObj = JS_NewObject(ctx);
+
+            for (const auto &path : supplements.resources)
+            {
+                auto value = resFetcher(path);
+
+                if (value.has_value())
+                {
+                    JS_SetPropertyStr(ctx, resObj, path.c_str(), JS_NewString(ctx, value->c_str()));
+                }
+                else
+                {
+                    JS_SetPropertyStr(ctx, resObj, path.c_str(), JS_NULL);
+                }
+            }
+
+            JS_SetPropertyStr(ctx, supObj, "resources", resObj);
+        }
+
+        JS_SetPropertyStr(ctx, args, "supplements", supObj);
     }
 
     void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops)
