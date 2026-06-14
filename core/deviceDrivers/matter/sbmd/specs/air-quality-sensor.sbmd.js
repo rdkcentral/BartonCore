@@ -104,56 +104,31 @@ SbmdDriver({
                 airQuality: {
                     type: 'com.icontrol.airQuality',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_AIR_QUALITY],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_AIR_QUALITY, 'unknown')
-                            .success();
-                    }
+                    prerequisites: [CL_AIR_QUALITY]
                 },
                 temperature: {
                     type: 'com.icontrol.temperature',
                     optional: true,
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_TEMP_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_TEMPERATURE, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_TEMP_MEASUREMENT]
                 },
                 humidity: {
                     type: 'com.icontrol.humidity',
                     optional: true,
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_HUMIDITY_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_HUMIDITY, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_HUMIDITY_MEASUREMENT]
                 },
                 co2Concentration: {
                     type: 'com.icontrol.co2',
                     optional: true,
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_CO2_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_CO2, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_CO2_MEASUREMENT]
                 },
                 pm25Concentration: {
                     type: 'com.icontrol.ugm3',
                     optional: true,
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_PM25_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_PM25, '0.0')
-                            .success();
-                    }
+                    prerequisites: [CL_PM25_MEASUREMENT]
                 }
             }
         }
