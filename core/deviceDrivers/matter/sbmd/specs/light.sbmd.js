@@ -109,12 +109,6 @@ SbmdDriver({
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: ['onOff'],
 
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(EP_LIGHT, RES_IS_ON, 'false')
-                            .success();
-                    },
-
                     write: function(args) {
                         var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
 
@@ -128,12 +122,6 @@ SbmdDriver({
                     optional: true,
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: ['currentLevel'],
-
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, '0')
-                            .success();
-                    },
 
                     write: function(args) {
                         var percent = parseInt(args.resource.input, 10);

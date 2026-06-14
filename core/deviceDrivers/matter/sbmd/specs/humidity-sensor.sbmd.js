@@ -70,12 +70,7 @@ SbmdDriver({
                 humidity: {
                     type: 'com.icontrol.humidity',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_HUMIDITY_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_HUMIDITY, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_HUMIDITY_MEASUREMENT]
                 }
             }
         }

@@ -70,12 +70,7 @@ SbmdDriver({
                 faulted: {
                     type: 'com.icontrol.boolean',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_OCCUPANCY_SENSING],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_FAULTED, 'false')
-                            .success();
-                    }
+                    prerequisites: [CL_OCCUPANCY_SENSING]
                 }
             }
         }

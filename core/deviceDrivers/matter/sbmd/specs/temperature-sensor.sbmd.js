@@ -70,12 +70,7 @@ SbmdDriver({
                 temperature: {
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_TEMP_MEASUREMENT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_TEMPERATURE, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_TEMP_MEASUREMENT]
                 }
             }
         }

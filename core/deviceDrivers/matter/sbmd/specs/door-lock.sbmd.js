@@ -85,12 +85,7 @@ SbmdDriver({
                 locked: {
                     type: 'boolean',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_DOOR_LOCK],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_LOCKED, 'true')
-                            .success();
-                    }
+                    prerequisites: [CL_DOOR_LOCK]
                 },
                 lock: {
                     type: 'function',

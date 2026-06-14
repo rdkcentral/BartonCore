@@ -157,22 +157,12 @@ SbmdDriver({
                 localTemperature: {
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_LOCAL_TEMP, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 heatSetpoint: {
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_HEAT_SETPOINT, '0')
-                            .success();
-                    },
                     write: function(args) {
                         var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
 
@@ -188,11 +178,6 @@ SbmdDriver({
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_COOL_SETPOINT, '0')
-                            .success();
-                    },
                     write: function(args) {
                         var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
 
@@ -207,52 +192,27 @@ SbmdDriver({
                 absoluteMinHeatLimit: {
                     type: 'com.icontrol.temperature',
                     modes: ['read'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_ABS_MIN_HEAT, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 absoluteMaxHeatLimit: {
                     type: 'com.icontrol.temperature',
                     modes: ['read'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_ABS_MAX_HEAT, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 absoluteMinCoolLimit: {
                     type: 'com.icontrol.temperature',
                     modes: ['read'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_ABS_MIN_COOL, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 absoluteMaxCoolLimit: {
                     type: 'com.icontrol.temperature',
                     modes: ['read'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_ABS_MAX_COOL, '0')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 controlSequenceOfOperation: {
                     type: 'com.icontrol.tstatCtrlSeqOp',
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_CTRL_SEQ_OP, 'coolingAndHeatingFourPipes')
-                            .success();
-                    },
                     write: function(args) {
                         var seqValues = [
                             'coolingOnly', 'coolingWithReheat',
@@ -282,11 +242,6 @@ SbmdDriver({
                     type: 'com.icontrol.tstatSystemMode',
                     modes: ['read', 'write', 'dynamic', 'emitEvents'],
                     prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_SYSTEM_MODE, 'off')
-                            .success();
-                    },
                     write: function(args) {
                         var reverseModeMap = {
                             'off': 0, 'auto': 1, 'cool': 3,
@@ -308,12 +263,7 @@ SbmdDriver({
                     type: 'com.icontrol.tstatSystemState',
                     optional: true,
                     modes: ['read', 'dynamic', 'emitEvents'],
-                    prerequisites: [CL_THERMOSTAT],
-                    seed: function(args) {
-                        return SbmdUtils.result()
-                            .dataModel.updateResource(RES_SYSTEM_STATE, 'off')
-                            .success();
-                    }
+                    prerequisites: [CL_THERMOSTAT]
                 },
                 fanMode: {
                     type: 'com.icontrol.tstatFanMode',
