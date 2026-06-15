@@ -28,14 +28,15 @@
 
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
 
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
 extern "C" {
+#include <cjson/cJSON.h>
 #include <mquickjs/mquickjs.h>
 }
 
@@ -53,6 +54,7 @@ namespace
         std::string endpointId;
         std::string resourceId;
         std::string value;
+        std::string metadata; // JSON string, empty if null
     };
 
     struct SetMetadataCall
@@ -63,8 +65,15 @@ namespace
         std::string value;
     };
 
+    struct SetPersistentDataCall
+    {
+        std::string uri;
+        std::string value;
+    };
+
     std::vector<UpdateResourceCall> g_updateResourceCalls;
     std::vector<SetMetadataCall> g_setMetadataCalls;
+    std::vector<SetPersistentDataCall> g_setPersistentDataCalls;
 } // namespace
 
 extern "C" {
@@ -74,16 +83,37 @@ void updateResource(const char *deviceUuid,
                     const char *newValue,
                     void *metadata)
 {
+    std::string metaStr;
+
+    if (metadata != nullptr)
+    {
+        char *printed = cJSON_PrintUnformatted(static_cast<cJSON *>(metadata));
+
+        if (printed != nullptr)
+        {
+            metaStr = printed;
+            free(printed);
+        }
+    }
+
     g_updateResourceCalls.push_back({deviceUuid ? deviceUuid : "",
                                      endpointId ? endpointId : "",
                                      resourceId ? resourceId : "",
-                                     newValue ? newValue : ""});
+                                     newValue ? newValue : "",
+                                     metaStr});
 }
 
 void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value)
 {
     g_setMetadataCalls.push_back(
         {deviceUuid ? deviceUuid : "", endpointId ? endpointId : "", name ? name : "", value ? value : ""});
+}
+
+bool deviceServiceSetMetadata(const char *uri, const char *value)
+{
+    g_setPersistentDataCalls.push_back({uri ? uri : "", value ? value : ""});
+
+    return true;
 }
 }
 
@@ -97,7 +127,7 @@ namespace
             ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
@@ -107,6 +137,7 @@ namespace
         {
             g_updateResourceCalls.clear();
             g_setMetadataCalls.clear();
+            g_setPersistentDataCalls.clear();
         }
 
         JSContext *Ctx() { return MQuickJsRuntime::GetSharedContext(); }
@@ -263,7 +294,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue handler = EvalFunc("(function(args) { return SbmdUtils.result().success(); })");
+        JSValue handler = EvalFunc("(function(args) { return Sbmd.result().success(); })");
         ASSERT_FALSE(JS_IsException(handler));
 
         JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
@@ -280,7 +311,7 @@ namespace
         auto hctx = MakeContext();
 
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .dataModel.updateResource(args.endpointId, 'isOn', 'true')"
                                    "    .success();"
                                    "})");
@@ -305,7 +336,7 @@ namespace
         auto hctx = MakeContext();
 
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .device.sendCommand(6, 1);"
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
@@ -387,6 +418,43 @@ namespace
         EXPECT_EQ(g_updateResourceCalls[0].endpointId, "1"); // default from context
     }
 
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceWithMetadata)
+    {
+        auto hctx = MakeContext();
+
+        std::vector<ResultOp> ops;
+        ResultOp::UpdateResource ur;
+        ur.endpoint = "1";
+        ur.resource = "isOn";
+        ur.value = "true";
+        ur.metadata = R"({"source":"matter"})";
+        ops.push_back(ResultOp {ur});
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].value, "true");
+        EXPECT_EQ(g_updateResourceCalls[0].metadata, R"({"source":"matter"})");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceWithoutMetadata)
+    {
+        auto hctx = MakeContext();
+
+        std::vector<ResultOp> ops;
+        ResultOp::UpdateResource ur;
+        ur.endpoint = "1";
+        ur.resource = "isOn";
+        ur.value = "false";
+        // No metadata set
+        ops.push_back(ResultOp {ur});
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_TRUE(g_updateResourceCalls[0].metadata.empty());
+    }
+
     TEST_F(SbmdHandlerInvokerTest, ExecuteOpsSetMetadata)
     {
         auto hctx = MakeContext();
@@ -449,7 +517,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .log('attribute changed')"
                                    "    .dataModel.updateResource(args.endpointId, 'isOn', 'true')"
                                    "    .success();"
@@ -487,6 +555,8 @@ namespace
             args,
             empty,
             [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
             [](const std::string &) { return std::nullopt; });
 
         // No supplements property should be added
@@ -522,6 +592,8 @@ namespace
 
                 return std::nullopt;
             },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
             [](const std::string &) { return std::nullopt; });
 
         JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
@@ -566,7 +638,9 @@ namespace
                 }
 
                 return std::nullopt;
-            });
+            },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; });
 
         JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
         ASSERT_FALSE(JS_IsUndefined(supObj));
@@ -613,7 +687,9 @@ namespace
                 }
 
                 return std::nullopt;
-            });
+            },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; });
 
         JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
         ASSERT_FALSE(JS_IsUndefined(supObj));
@@ -642,6 +718,8 @@ namespace
             args,
             sup,
             [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
             [](const std::string &) { return std::nullopt; });
 
         JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
@@ -665,7 +743,7 @@ namespace
         JSValue handler = EvalFunc("(function(args) {"
                                    "  var onOff = args.supplements.attributes.onOff;"
                                    "  var locked = args.supplements.resources['1/locked'];"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .dataModel.updateResource('1', 'combined', onOff + ':' + locked)"
                                    "    .success();"
                                    "})");
@@ -696,7 +774,9 @@ namespace
                 }
 
                 return std::nullopt;
-            });
+            },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; });
 
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
@@ -718,7 +798,7 @@ namespace
         JSValue handler = EvalFunc("(function(args) {"
                                    "  var val = args.supplements.attributes.missing;"
                                    "  var out = (val === null) ? 'was-null' : 'had-value';"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .dataModel.updateResource('1', 'result', out)"
                                    "    .success();"
                                    "})");
@@ -734,6 +814,8 @@ namespace
             args,
             sup,
             [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
             [](const std::string &) { return std::nullopt; });
 
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
@@ -743,6 +825,168 @@ namespace
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
         EXPECT_EQ(g_updateResourceCalls[0].value, "was-null");
+    }
+
+    // ================================================================
+    // Tests for persistent/transient data supplements
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, AddSupplementsPersistentDataOnly)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements sup;
+        sup.persistentData = {"lastOp", "counter"};
+
+        SbmdHandlerInvoker::AddSupplements(
+            Ctx(),
+            args,
+            sup,
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &key) -> std::optional<std::string> {
+                if (key == "lastOp")
+                {
+                    return "lock";
+                }
+
+                return std::nullopt;
+            },
+            [](const std::string &) { return std::nullopt; });
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        ASSERT_FALSE(JS_IsUndefined(supObj));
+
+        JSValue pd = JS_GetPropertyStr(Ctx(), supObj, "persistentData");
+        ASSERT_FALSE(JS_IsUndefined(pd));
+
+        EXPECT_EQ(GetStringProp(pd, "lastOp"), "lock");
+
+        JSValue counter = JS_GetPropertyStr(Ctx(), pd, "counter");
+        EXPECT_TRUE(JS_IsNull(counter));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, AddSupplementsTransientDataOnly)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements sup;
+        sup.transientData = {"debounce"};
+
+        SbmdHandlerInvoker::AddSupplements(
+            Ctx(),
+            args,
+            sup,
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &key) -> std::optional<std::string> {
+                if (key == "debounce")
+                {
+                    return "1";
+                }
+
+                return std::nullopt;
+            });
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        ASSERT_FALSE(JS_IsUndefined(supObj));
+
+        JSValue td = JS_GetPropertyStr(Ctx(), supObj, "transientData");
+        ASSERT_FALSE(JS_IsUndefined(td));
+
+        EXPECT_EQ(GetStringProp(td, "debounce"), "1");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, StorageSupplementsAccessibleFromHandler)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  var p = args.supplements.persistentData.lastOp;"
+                                   "  var t = args.supplements.transientData.debounce;"
+                                   "  return Sbmd.result()"
+                                   "    .dataModel.updateResource('1', 'combined', p + ':' + t)"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements sup;
+        sup.persistentData = {"lastOp"};
+        sup.transientData = {"debounce"};
+
+        SbmdHandlerInvoker::AddSupplements(
+            Ctx(),
+            args,
+            sup,
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) { return std::nullopt; },
+            [](const std::string &) -> std::optional<std::string> { return "lock"; },
+            [](const std::string &) -> std::optional<std::string> { return "1"; });
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].value, "lock:1");
+    }
+
+    // ================================================================
+    // Tests for storage op execution
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsPersistentData)
+    {
+        auto hctx = MakeContext();
+        ResultOp::SetPersistentData sp;
+        sp.key = "lastAction";
+        sp.value = "unlock";
+        std::vector<ResultOp> ops = {ResultOp {sp}};
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops);
+
+        ASSERT_EQ(g_setPersistentDataCalls.size(), 1u);
+        EXPECT_EQ(g_setPersistentDataCalls[0].uri, "/devices/test-device-uuid/metadata/sbmd.lastAction");
+        EXPECT_EQ(g_setPersistentDataCalls[0].value, "unlock");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsTransientDataWithSetter)
+    {
+        auto hctx = MakeContext();
+        ResultOp::SetTransientData st;
+        st.key = "debounce";
+        st.value = "active";
+        st.ttlSecs = 30;
+        std::vector<ResultOp> ops = {ResultOp {st}};
+
+        std::string capturedKey;
+        std::string capturedValue;
+        uint32_t capturedTtl = 0;
+        TransientDataSetter setter = [&](const std::string &k, const std::string &v, uint32_t t) {
+            capturedKey = k;
+            capturedValue = v;
+            capturedTtl = t;
+        };
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, ops, setter);
+
+        EXPECT_EQ(capturedKey, "debounce");
+        EXPECT_EQ(capturedValue, "active");
+        EXPECT_EQ(capturedTtl, 30u);
     }
 
     // ================================================================
@@ -830,7 +1074,7 @@ namespace
 
         // Create a deferred onResponse handler that reads the response data
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .log('response cmd=' + args.response.commandId)"
                                    "    .success();"
                                    "})");
@@ -855,7 +1099,7 @@ namespace
 
         // Create an onError handler that reads the error type
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .log('error type=' + args.error.type)"
                                    "    .error(args.error.message);"
                                    "})");
@@ -881,11 +1125,11 @@ namespace
 
         // onResponse handler that returns another requestCommand (chaining)
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .device.requestCommand(0x0101, 5, {"
                                    "      responseCommandId: 6,"
-                                   "      onResponse: function(a) { return SbmdUtils.result().success(); },"
-                                   "      onError: function(a) { return SbmdUtils.result().error('fail'); }"
+                                   "      onResponse: function(a) { return Sbmd.result().success(); },"
+                                   "      onError: function(a) { return Sbmd.result().error('fail'); }"
                                    "    });"
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
@@ -908,7 +1152,7 @@ namespace
 
         // onResponse handler that reads attribute value from args
         JSValue handler = EvalFunc("(function(args) {"
-                                   "  return SbmdUtils.result()"
+                                   "  return Sbmd.result()"
                                    "    .dataModel.updateResource('result', args.attribute.value)"
                                    "    .success();"
                                    "})");

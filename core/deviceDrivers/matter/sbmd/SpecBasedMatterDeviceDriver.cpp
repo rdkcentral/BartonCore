@@ -430,8 +430,13 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
 
     if (device != nullptr)
     {
-        SbmdHandlerInvoker::AddSupplements(
-            ctx, args, resource.seed->supplements, MakeAttrFetcher(*device), MakeResFetcher(deviceId));
+        SbmdHandlerInvoker::AddSupplements(ctx,
+                                           args,
+                                           resource.seed->supplements,
+                                           MakeAttrFetcher(*device),
+                                           MakeResFetcher(deviceId),
+                                           MakePersistFetcher(deviceId),
+                                           MakeTransientFetcher(deviceId));
     }
 
     auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
@@ -442,7 +447,7 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
         return "";
     }
 
-    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
 
     // For seed, we expect a success terminal — check if any ops produced an updateResource
     // for this resource. If so, the seed value was set via ops. Return empty to avoid
@@ -629,8 +634,13 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
         JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
 
-        SbmdHandlerInvoker::AddSupplements(
-            ctx, args, handler->supplements, MakeAttrFetcher(device), MakeResFetcher(device.GetDeviceId()));
+        SbmdHandlerInvoker::AddSupplements(ctx,
+                                           args,
+                                           handler->supplements,
+                                           MakeAttrFetcher(device),
+                                           MakeResFetcher(device.GetDeviceId()),
+                                           MakePersistFetcher(device.GetDeviceId()),
+                                           MakeTransientFetcher(device.GetDeviceId()));
 
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
     }
@@ -643,7 +653,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     }
 
     // Execute non-terminal ops
-    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(hctx.deviceUuid));
 
     // Handle the terminal
     ExecuteTerminal(promises,
@@ -669,7 +679,20 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
 {
     if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
     {
-        // Success — nothing more to do. For read ops, the value was set via ops.
+        const auto &success = std::get<ResultTerminal::Success>(terminal.data);
+
+        if (!success.value.empty())
+        {
+            if (executeResponse != nullptr)
+            {
+                *executeResponse = strdup(success.value.c_str());
+            }
+            else if (readValue != nullptr)
+            {
+                *readValue = strdup(success.value.c_str());
+            }
+        }
+
         return;
     }
 
@@ -1025,7 +1048,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
     }
 
     // Execute the response handler's non-terminal ops
-    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(hctx.deviceUuid));
 
     // Execute the terminal — may recurse into another deferred terminal
     ExecuteTerminal(promises,
@@ -1074,7 +1097,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
 
         if (errorResult.has_value())
         {
-            SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, errorResult->ops);
+            SbmdHandlerInvoker::ExecuteOps(
+                pending.handlerContext, errorResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
         }
 
         CompletePendingOperation(pendingId, false);
@@ -1122,7 +1146,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     }
 
     // Execute non-terminal ops
-    SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, result->ops);
+    SbmdHandlerInvoker::ExecuteOps(
+        pending.handlerContext, result->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
 
     // Continue the chain
     ContinueDeferredChain(pending, *result);
@@ -1158,7 +1183,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
 
     if (errorResult.has_value())
     {
-        SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, errorResult->ops);
+        SbmdHandlerInvoker::ExecuteOps(
+            pending.handlerContext, errorResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
 
         // Check if onError returned a recovery terminal
         if (!std::holds_alternative<ResultTerminal::Error>(errorResult->terminal.data))
@@ -1188,6 +1214,20 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
     // Handle the terminal
     if (std::holds_alternative<ResultTerminal::Success>(result.terminal.data))
     {
+        const auto &success = std::get<ResultTerminal::Success>(result.terminal.data);
+
+        if (!success.value.empty())
+        {
+            if (pending.executeResponse != nullptr)
+            {
+                *pending.executeResponse = strdup(success.value.c_str());
+            }
+            else if (pending.readValue != nullptr)
+            {
+                *pending.readValue = strdup(success.value.c_str());
+            }
+        }
+
         CompletePendingOperation(pendingId, true);
         return;
     }
@@ -1527,7 +1567,8 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             return;
         }
 
-        SbmdHandlerInvoker::ExecuteOps(pending.handlerContext, nextResult->ops);
+        SbmdHandlerInvoker::ExecuteOps(
+            pending.handlerContext, nextResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
         ContinueDeferredChain(pending, *nextResult);
         return;
     }
@@ -1677,6 +1718,75 @@ ResourceSupplementFetcher SpecBasedMatterDeviceDriver::MakeResFetcher(const std:
     };
 }
 
+PersistentDataFetcher SpecBasedMatterDeviceDriver::MakePersistFetcher(const std::string &deviceUuid) const
+{
+    return [deviceUuid](const std::string &key) -> std::optional<std::string> {
+        std::string uri = "/devices/" + deviceUuid + "/metadata/sbmd." + key;
+        char *value = nullptr;
+
+        if (deviceServiceGetMetadata(uri.c_str(), &value) && value != nullptr)
+        {
+            std::string result(value);
+            free(value);
+
+            return result;
+        }
+
+        return std::nullopt;
+    };
+}
+
+TransientDataFetcher SpecBasedMatterDeviceDriver::MakeTransientFetcher(const std::string &deviceUuid)
+{
+    return [this, deviceUuid](const std::string &key) -> std::optional<std::string> {
+        return GetTransientData(deviceUuid, key);
+    };
+}
+
+void SpecBasedMatterDeviceDriver::SetTransientData(const std::string &deviceUuid,
+                                                   const std::string &key,
+                                                   const std::string &value,
+                                                   uint32_t ttlSecs)
+{
+    auto expiry = std::chrono::steady_clock::now() + std::chrono::seconds(ttlSecs);
+    transientStore[deviceUuid][key] = TransientEntry {value, expiry};
+}
+
+std::optional<std::string> SpecBasedMatterDeviceDriver::GetTransientData(const std::string &deviceUuid,
+                                                                         const std::string &key)
+{
+    auto deviceIt = transientStore.find(deviceUuid);
+
+    if (deviceIt == transientStore.end())
+    {
+        return std::nullopt;
+    }
+
+    auto &deviceMap = deviceIt->second;
+    auto it = deviceMap.find(key);
+
+    if (it == deviceMap.end())
+    {
+        return std::nullopt;
+    }
+
+    if (std::chrono::steady_clock::now() >= it->second.expiry)
+    {
+        deviceMap.erase(it);
+
+        return std::nullopt;
+    }
+
+    return it->second.value;
+}
+
+TransientDataSetter SpecBasedMatterDeviceDriver::MakeTransientSetter(const std::string &deviceUuid)
+{
+    return [this, deviceUuid](const std::string &key, const std::string &value, uint32_t ttlSecs) {
+        SetTransientData(deviceUuid, key, value, ttlSecs);
+    };
+}
+
 void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &deviceId,
                                                         chip::EndpointId endpointId,
                                                         chip::ClusterId clusterId,
@@ -1746,8 +1856,13 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
 
         if (matterDevice)
         {
-            SbmdHandlerInvoker::AddSupplements(
-                ctx, args, entry->handler->supplements, MakeAttrFetcher(*matterDevice), MakeResFetcher(deviceId));
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
         }
 
         auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
@@ -1762,7 +1877,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         }
 
         // Execute ops (updateResource, setMetadata, etc.)
-        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
 
         // For attribute handlers, we typically expect a success terminal.
         // Error terminals are logged but don't abort other handler processing.

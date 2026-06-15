@@ -182,7 +182,7 @@ if (BCORE_MATTER)
         NAME testResultBuilder
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ResultBuilderTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -198,7 +198,7 @@ if (BCORE_MATTER)
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdLoaderTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -214,7 +214,7 @@ if (BCORE_MATTER)
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdResultExecutorTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -233,7 +233,7 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -252,7 +252,7 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
@@ -270,9 +270,9 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-        LIBS mquickjs gmock BartonCommon::xhLog
+        LIBS mquickjs gmock BartonCommon::xhLog cjson
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/core
     )
@@ -289,7 +289,7 @@ if (BCORE_MATTER)
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
         LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
