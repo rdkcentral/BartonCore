@@ -30,6 +30,7 @@
 
 #include "app/WriteClient.h"
 #include <algorithm>
+#include <app/CommandHandlerInterfaceRegistry.h>
 #include <clusters/shared/GlobalIds.h>
 #include <platform/CHIPDeviceLayer.h>
 
@@ -59,6 +60,8 @@ MatterDevice::MatterDevice(std::string deviceId, std::shared_ptr<DeviceDataCache
 MatterDevice::~MatterDevice()
 {
     icDebug("Destroying MatterDevice %s", deviceId.c_str());
+    UnregisterIncomingCommandHandlers();
+
     if (deviceDataCache)
     {
         deviceDataCache->SetCallback(nullptr);
@@ -139,6 +142,60 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
                               aEventHeader.mPath.mEventId,
                               *apData);
     }
+}
+
+// ============================================================================
+// IncomingCommandHandler — server-side command handling
+// ============================================================================
+
+MatterDevice::IncomingCommandHandler::IncomingCommandHandler(MatterDevice *device, chip::ClusterId clusterId) :
+    CommandHandlerInterface(chip::Optional<chip::EndpointId>::Missing(), clusterId), device(device)
+{
+}
+
+MatterDevice::IncomingCommandHandler::~IncomingCommandHandler()
+{
+    chip::app::CommandHandlerInterfaceRegistry::Instance().UnregisterCommandHandler(this);
+}
+
+void MatterDevice::IncomingCommandHandler::InvokeCommand(HandlerContext &handlerContext)
+{
+    handlerContext.SetCommandHandled();
+
+    if (device->commandCallback)
+    {
+        device->commandCallback(device->deviceId,
+                                handlerContext.mRequestPath.mEndpointId,
+                                handlerContext.mRequestPath.mClusterId,
+                                handlerContext.mRequestPath.mCommandId,
+                                handlerContext.mPayload);
+    }
+
+    handlerContext.mCommandHandler.AddStatus(handlerContext.mRequestPath,
+                                             chip::Protocols::InteractionModel::Status::Success);
+}
+
+void MatterDevice::RegisterIncomingCommandHandler(chip::ClusterId clusterId)
+{
+    auto handler = std::make_unique<IncomingCommandHandler>(this, clusterId);
+    CHIP_ERROR err = chip::app::CommandHandlerInterfaceRegistry::Instance().RegisterCommandHandler(handler.get());
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icWarn("Failed to register command handler for cluster 0x%x on device %s: %s",
+               clusterId,
+               deviceId.c_str(),
+               err.AsString());
+        return;
+    }
+
+    icDebug("Registered incoming command handler for cluster 0x%x on device %s", clusterId, deviceId.c_str());
+    incomingCommandHandlers.push_back(std::move(handler));
+}
+
+void MatterDevice::UnregisterIncomingCommandHandlers()
+{
+    incomingCommandHandlers.clear(); // Destructors call UnregisterCommandHandler
 }
 
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)

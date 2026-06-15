@@ -121,6 +121,41 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                chip::EventId eventId,
                chip::TLV::TLVReader &reader) { HandleEvent(deviceId, endpointId, clusterId, eventId, reader); });
 
+    // Set the command callback for incoming (server-side) commands
+    device->SetCommandCallback([this](const std::string &deviceId,
+                                      chip::EndpointId endpointId,
+                                      chip::ClusterId clusterId,
+                                      chip::CommandId commandId,
+                                      chip::TLV::TLVReader &reader) {
+        // Encode TLV as base64 for HandleCommand
+        uint8_t tlvBuf[1024];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        std::string tlvBase64;
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) == CHIP_NO_ERROR)
+        {
+            uint32_t tlvLen = writer.GetLengthWritten();
+
+            if (tlvLen > 0)
+            {
+                size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+                tlvBase64.resize(maxBase64Len, '\0');
+                uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+                tlvBase64.resize(encoded);
+            }
+        }
+
+        HandleCommand(deviceId, endpointId, clusterId, commandId, tlvBase64);
+    });
+
+    // Register incoming command handlers for clusters in the command dispatch table
+    for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+    {
+        device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+    }
+
     // Check prerequisites for resources
     const auto &reg = driver->GetRegistration();
 

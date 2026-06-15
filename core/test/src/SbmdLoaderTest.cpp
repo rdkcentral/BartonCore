@@ -508,6 +508,41 @@ namespace
         EXPECT_EQ(reg->matter.defaultTimeoutMs.value(), 10000u);
     }
 
+    TEST_F(SbmdLoaderTest, DefaultTimeoutAbsentWhenNotSpecified)
+    {
+        auto reg = LoadDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "NoTimeout",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )");
+
+        ASSERT_NE(reg, nullptr);
+        EXPECT_FALSE(reg->matter.defaultTimeoutMs.has_value());
+    }
+
+    TEST_F(SbmdLoaderTest, ReportingDefaultsToZeroWhenAbsent)
+    {
+        auto reg = LoadDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "NoReporting",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )");
+
+        ASSERT_NE(reg, nullptr);
+        EXPECT_EQ(reg->reporting.minSecs, 0u);
+        EXPECT_EQ(reg->reporting.maxSecs, 0u);
+    }
+
     TEST_F(SbmdLoaderTest, LoadDriverMissingNameFails)
     {
         auto reg = LoadDriver(R"(

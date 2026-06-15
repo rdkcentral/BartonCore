@@ -438,6 +438,93 @@ namespace
         }
     }
 
+    TEST_F(SbmdDriverTest, CommandHandlerCallableAfterActivation)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "CmdLifecycleTest",
+                constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: {
+                    echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
+                },
+                commandHandlers: {
+                    handleEcho: {
+                        aliases: ["echoCmd"],
+                        handler: handleEchoCmd,
+                    },
+                },
+            });
+            function handleEchoCmd(args) {
+                return Sbmd.result()
+                    .dataModel.updateResource("1", "lastCommand", "echo")
+                    .success();
+            }
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_EQ(reg.commandHandlers.size(), 1u);
+        EXPECT_EQ(reg.commandHandlers[0].name, "handleEcho");
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto result = CallHandler(reg.commandHandlers[0].handler);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_EQ(result->ops.size(), 1u);
+            ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(result->ops[0].data));
+            ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
+        }
+
+        // Clean up
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDriverTest, CommandHandlersUndefinedAfterDeactivation)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "CmdDeactivateTest",
+                constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
+                commandHandlers: {
+                    handleEcho: { aliases: ["echoCmd"], handler: fn },
+                },
+            });
+            function fn(args) { return Sbmd.result().success(); }
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+            driver->Deactivate(Ctx());
+        }
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_EQ(reg.commandHandlers.size(), 1u);
+        EXPECT_TRUE(JS_IsUndefined(reg.commandHandlers[0].handler));
+    }
+
     // ========================================================================
     // Edge cases
     // ========================================================================
@@ -471,6 +558,258 @@ namespace
         }
 
         EXPECT_FALSE(driver->IsActivated());
+    }
+
+    // ========================================================================
+    // Timeout configuration
+    // ========================================================================
+
+    TEST_F(SbmdDriverTest, DefaultTimeoutMsParsedFromMatterBlock)
+    {
+        // kDriverSource has defaultTimeoutMs: 5000 in the matter block
+        auto driver = CreateDriver();
+        ASSERT_NE(driver, nullptr);
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_TRUE(reg.matter.defaultTimeoutMs.has_value());
+        EXPECT_EQ(reg.matter.defaultTimeoutMs.value(), 5000u);
+    }
+
+    TEST_F(SbmdDriverTest, DefaultTimeoutMsAbsentWhenNotSpecified)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "NoTimeout",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+        EXPECT_FALSE(driver->GetRegistration().matter.defaultTimeoutMs.has_value());
+    }
+
+    TEST_F(SbmdDriverTest, ReportingIntervalsParsed)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "WithReporting",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                reporting: { minSecs: 5, maxSecs: 600 },
+            });
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        auto &reg = driver->GetRegistration();
+        EXPECT_EQ(reg.reporting.minSecs, 5u);
+        EXPECT_EQ(reg.reporting.maxSecs, 600u);
+    }
+
+    TEST_F(SbmdDriverTest, HandlerWithTimedInvokeTimeout)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "TimedInvokeTest",
+                constants: { CL_DOOR_LOCK: 257, CMD_LOCK: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x000A] },
+                endpoints: {
+                    "1": {
+                        profile: "lock",
+                        profileVersion: 1,
+                        resources: {
+                            lockState: {
+                                type: "boolean",
+                                modes: ["write"],
+                                write: writeLock,
+                            },
+                        },
+                    },
+                },
+            });
+            function writeLock(args) {
+                return Sbmd.result()
+                    .device.sendCommand(CL_DOOR_LOCK, CMD_LOCK, null, {timedInvokeTimeoutMs: 10000});
+            }
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_TRUE(reg.endpoints[0].resources[0].write.has_value());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto result = CallHandler(reg.endpoints[0].resources[0].write->handler);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(result->terminal.data));
+
+            auto &cmd = std::get<ResultTerminal::SendCommand>(result->terminal.data);
+            EXPECT_EQ(cmd.clusterId, 257u);
+            EXPECT_EQ(cmd.commandId, 0u);
+            ASSERT_TRUE(cmd.timedInvokeTimeoutMs.has_value());
+            EXPECT_EQ(*cmd.timedInvokeTimeoutMs, 10000u);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDriverTest, HandlerWithDeferredTimeoutAndTimedInvoke)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "DeferredTimeoutTest",
+                constants: { CL_DOOR_LOCK: 257, CMD_GET_USER: 0x1C, CMD_GET_USER_RESP: 0x1D },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x000A] },
+                endpoints: {
+                    "1": {
+                        profile: "lock",
+                        profileVersion: 1,
+                        resources: {
+                            users: {
+                                type: "string",
+                                modes: ["read"],
+                                read: readUsers,
+                            },
+                        },
+                    },
+                },
+            });
+            function readUsers(args) {
+                return Sbmd.result()
+                    .device.requestCommand(CL_DOOR_LOCK, CMD_GET_USER, null, {
+                        responseCommandId: CMD_GET_USER_RESP,
+                        onResponse: function(a) { return Sbmd.result().success('data'); },
+                        onError: function(a) { return Sbmd.result().error(a.error.type); },
+                        timeoutMs: 5000,
+                        timedInvokeTimeoutMs: 10000,
+                    });
+            }
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_TRUE(reg.endpoints[0].resources[0].read.has_value());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto result = CallHandler(reg.endpoints[0].resources[0].read->handler);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data));
+
+            auto &rc = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
+            EXPECT_EQ(rc.clusterId, 257u);
+            EXPECT_EQ(rc.commandId, 0x1Cu);
+            EXPECT_EQ(rc.responseCommandId, 0x1Du);
+            ASSERT_TRUE(rc.timeoutMs.has_value());
+            EXPECT_EQ(*rc.timeoutMs, 5000u);
+            ASSERT_TRUE(rc.timedInvokeTimeoutMs.has_value());
+            EXPECT_EQ(*rc.timedInvokeTimeoutMs, 10000u);
+            EXPECT_FALSE(JS_IsUndefined(rc.onResponse));
+            EXPECT_FALSE(JS_IsUndefined(rc.onError));
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDriverTest, HandlerWithDeferredReadAttributeTimeout)
+    {
+        const char *source = R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: "1.0",
+                name: "DeferredReadTest",
+                constants: { CL_COLOR: 0x0300, ATTR_HUE: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                endpoints: {
+                    "1": {
+                        profile: "light",
+                        profileVersion: 1,
+                        resources: {
+                            hue: {
+                                type: "number",
+                                modes: ["read"],
+                                read: readHue,
+                            },
+                        },
+                    },
+                },
+            });
+            function readHue(args) {
+                return Sbmd.result()
+                    .device.readAttribute(CL_COLOR, ATTR_HUE, {
+                        onResponse: function(a) { return Sbmd.result().success(String(a.attribute.value)); },
+                        onError: function(a) { return Sbmd.result().error(a.error.message); },
+                        timeoutMs: 3000,
+                    });
+            }
+        )";
+
+        auto driver = CreateDriver(source);
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        auto &reg = driver->GetRegistration();
+        ASSERT_TRUE(reg.endpoints[0].resources[0].read.has_value());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto result = CallHandler(reg.endpoints[0].resources[0].read->handler);
+            ASSERT_TRUE(result.has_value());
+            ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data));
+
+            auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
+            EXPECT_EQ(ra.clusterId, 0x0300u);
+            EXPECT_EQ(ra.attributeId, 0u);
+            ASSERT_TRUE(ra.timeoutMs.has_value());
+            EXPECT_EQ(*ra.timeoutMs, 3000u);
+            EXPECT_FALSE(JS_IsUndefined(ra.onResponse));
+            EXPECT_FALSE(JS_IsUndefined(ra.onError));
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
     }
 
 } // namespace

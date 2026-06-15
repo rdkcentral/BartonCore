@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "app/CommandHandlerInterface.h"
 #include "app/CommandSender.h"
 #include "lib/core/DataModelTypes.h"
 #include "lib/core/TLVReader.h"
@@ -35,9 +36,11 @@
 #include <functional>
 #include <future>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
-#include <optional>
+#include <vector>
 
 extern "C" {
 #include <device/icDeviceResource.h>
@@ -103,10 +106,42 @@ namespace barton
         }
 
         /**
+         * Callback type for incoming (server-side) command handling.
+         * Receives the endpoint, cluster, and command IDs along with a TLV reader positioned
+         * at the command payload. Called from IncomingCommandHandler::InvokeCommand when set.
+         */
+        using CommandCallback = std::function<void(const std::string &deviceId,
+                                                   chip::EndpointId endpointId,
+                                                   chip::ClusterId clusterId,
+                                                   chip::CommandId commandId,
+                                                   chip::TLV::TLVReader &reader)>;
+
+        /**
          * Set an event callback. When set, CacheCallback::OnEventData will
          * call this to dispatch event data to the driver.
          */
         void SetEventCallback(EventCallback callback) { eventCallback = std::move(callback); }
+
+        /**
+         * Set a command callback for incoming (server-side) commands.
+         * When set, IncomingCommandHandler::InvokeCommand will call this.
+         */
+        void SetCommandCallback(CommandCallback callback) { commandCallback = std::move(callback); }
+
+        /**
+         * Register a CommandHandlerInterface for the given cluster so that incoming
+         * commands on that cluster are routed to the commandCallback.
+         * Uses Optional<EndpointId>::Missing() to handle all endpoints.
+         *
+         * @param clusterId The Matter cluster ID to handle incoming commands for.
+         */
+        void RegisterIncomingCommandHandler(chip::ClusterId clusterId);
+
+        /**
+         * Unregister all incoming command handlers previously registered via
+         * RegisterIncomingCommandHandler. Called from the destructor.
+         */
+        void UnregisterIncomingCommandHandlers();
 
         /**
          * Set the list of cluster IDs to get feature maps from.
@@ -394,11 +429,29 @@ namespace barton
             MatterDevice *device;
         };
 
+        /**
+         * Implements CommandHandlerInterface for a single cluster, routing
+         * incoming commands to the owning MatterDevice's commandCallback.
+         */
+        class IncomingCommandHandler : public chip::app::CommandHandlerInterface
+        {
+        public:
+            IncomingCommandHandler(MatterDevice *device, chip::ClusterId clusterId);
+            ~IncomingCommandHandler() override;
+
+            void InvokeCommand(HandlerContext &handlerContext) override;
+
+        private:
+            MatterDevice *device;
+        };
+
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         AttributeCallback attributeCallback;
         EventCallback eventCallback;
+        CommandCallback commandCallback;
         std::unique_ptr<CacheCallback> cacheCallback;
+        std::vector<std::unique_ptr<IncomingCommandHandler>> incomingCommandHandlers;
         std::vector<uint32_t> featureClusters;
         std::map<uint32_t, uint32_t> cachedClusterFeatureMaps;
         std::map<uint32_t, chip::EndpointId> sbmdEndpointMap; // SBMD endpoint index -> resolved Matter EndpointId

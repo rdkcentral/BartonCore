@@ -44,6 +44,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -141,6 +142,12 @@ namespace barton
          * Get the number of wildcard entries (for diagnostics).
          */
         size_t GetWildcardEntryCount() const;
+
+        /**
+         * Get all unique cluster IDs that have at least one handler registered.
+         * Used to register CommandHandlerInterface instances for incoming commands.
+         */
+        std::set<uint32_t> GetRegisteredClusterIds() const;
 
     private:
         // Specific + multi entries: (clusterId, elementId) → sorted entries
