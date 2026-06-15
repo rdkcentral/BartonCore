@@ -318,7 +318,7 @@ matter: {
 | `vendorId` | number | no | Matter vendor ID for vendor-specific matching. |
 | `productId` | number | no | Matter product ID for vendor-specific matching. Requires `vendorId`. |
 | `featureClusters` | number[] | no | Cluster IDs whose feature maps should be cached and made available to handlers via `args.clusterFeatureMaps`. |
-| `defaultTimeoutMs` | number | no | Default timeout in milliseconds for all device interactions (`sendCommand`, `requestCommand`, `writeAttribute`, `readAttribute`). Overrides the system default. Can be overridden per-operation via `timeoutMs`. |
+| `defaultTimeoutMs` | number | no | Default timeout in milliseconds for deferred operations (`requestCommand`, `readAttribute`). Overrides the system default. Can be overridden per-operation via `timeoutMs`. |
 
 **Driver claiming**: When a Matter device is commissioned, the runtime uses a
 two-pass claiming process to select the driver:
@@ -613,8 +613,7 @@ Same dispatch rules and aliases/explicit mutual exclusivity as attribute handler
 
 **Important**: When a command arrives that matches a pending `requestCommand`'s
 `responseCommandId`, the request's response handler is called instead. Command
-handlers only fire for truly unsolicited commands or when `passthrough: true` is
-set on the `requestCommand` (see [Section 6.2](#62-flow-2-command-with-response)).
+handlers only fire for truly unsolicited commands.
 
 ### 4.12 Supplements
 
@@ -689,7 +688,8 @@ A handler can inspect which trigger field is present to determine the context.
 |---|---|---|---|
 | `args.attribute` | `{ clusterId, attributeId, value, alias }` | attribute handler | The attribute that triggered the handler. `value` is the decoded attribute value. `alias` is the alias name if the handler was registered via `aliases`, otherwise `null`. |
 | `args.event` | `{ clusterId, eventId, data, alias }` | event handler | The event that triggered the handler. `data` is the decoded event payload (array of TLV field values). `alias` is the alias name if registered via `aliases`, otherwise `null`. |
-| `args.command` | `{ clusterId, commandId, data, alias }` | command handler, command response handler | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.command` | `{ clusterId, commandId, data, alias }` | command handler | The command that triggered the handler. `data` is the decoded command payload. `alias` is the alias name if registered via `aliases`, otherwise `null`. |
+| `args.response` | `{ clusterId, commandId, data }` | command response handler | The response to a pending `requestCommand`. `data` is the base64-encoded TLV payload, or `null`. |
 | `args.resource` | `{ resourceId, input }` | resource handler (read/write/execute/seed) | The resource being operated on. `input` is the write value or execute argument (string), `null` for reads. |
 
 #### Supplements (present when declared)
@@ -703,7 +703,7 @@ A handler can inspect which trigger field is present to determine the context.
 
 #### Deferred handler context (present on response/error handlers)
 
-A **deferred handler** is a `handler` or `onError` callback provided on a
+A **deferred handler** is an `onResponse` or `onError` callback provided on a
 `.device.requestCommand()` or `.device.readAttribute()` call. These handlers
 run later — when the device responds or a timeout occurs — rather than inline
 with the originating handler. They receive the following additional fields:
@@ -725,7 +725,7 @@ with the originating handler. They receive the following additional fields:
 | Attribute handler | `args.attribute` | React to an incoming attribute report from the device. |
 | Event handler | `args.event` | React to an incoming event from the device. |
 | Command handler | `args.command` | React to an unsolicited command from the device. |
-| Invoke response handler | `args.command` + `args.resource` + `args.handlerContext` | Process a command response correlated to a pending `requestCommand`. |
+| Invoke response handler | `args.response` + `args.resource` + `args.handlerContext` | Process a command response correlated to a pending `requestCommand`. |
 | Read response handler | `args.attribute` + `args.resource` + `args.handlerContext` | Process an attribute value from a pending `readAttribute`. |
 
 ---
@@ -769,10 +769,12 @@ function executeGetCredentialStatus(args) {
   return Sbmd.result()
     .device.requestCommand(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
-      handler: function(args) {
-        var response = args.command.data;
+      onResponse: function(args) {
+        var response = args.response.data;
+        var requested = args.handlerContext.requestedCredential;
 
         return Sbmd.result()
+          .log("got credential status for: " + requested)
           .success(JSON.stringify(response));
       },
       onError: function(args) {
@@ -782,7 +784,6 @@ function executeGetCredentialStatus(args) {
       },
       context: { requestedCredential: args.resource.input },
       timeoutMs: 5000,
-      passthrough: false,
     });
 }
 ```
@@ -792,11 +793,10 @@ function executeGetCredentialStatus(args) {
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `responseCommandId` | number | yes | The command ID expected as a response. |
-| `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with a terminal (`.success()` or `.error()`). Its result completes the original resource operation. |
+| `onResponse` | function | yes | Response handler. Receives `args.response` and `args.handlerContext`. Must end with a terminal (`.success()` or `.error()`). Its result completes the original resource operation. |
 | `onError` | function | yes | Error handler for infrastructure failures (timeout, transport, internal). Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with a terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. Must be a JSON-serializable value. |
 | `timeoutMs` | number | no | Maximum time to wait for the response in milliseconds. Timeout routes to `onError` with `type: "timeout"`. Default: `matter.defaultTimeoutMs` or system default. |
-| `passthrough` | boolean | no | If `true`, the response command also fires any matching `commandHandlers` entry after the response handler runs. Default `false`. |
 | `timedInvokeTimeoutMs` | number | no | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
 
 **Runtime behavior**:
@@ -804,13 +804,11 @@ function executeGetCredentialStatus(args) {
 1. Resource operation triggers the execute handler, which returns a result with
    `.device.requestCommand(...)`.
 2. Runtime sends the command and **parks** the resource operation, storing the
-   `handler`, `onError`, `context`, and timeout.
+   `onResponse`, `onError`, `context`, and timeout.
 3. When a command with matching `clusterId` + `responseCommandId` arrives:
    - Runtime checks for a pending request first.
-   - **Match found**: routes to the request's `handler`. The handler's terminal
+   - **Match found**: routes to the request's `onResponse`. The handler's terminal
      completes the parked resource operation.
-   - If `passthrough: true`, the matching `commandHandlers` entry also fires
-     afterward.
 4. **No match** (no pending request): falls through to `commandHandlers` for
    unsolicited processing.
 5. **Timeout or failure**: routes to `onError`. The `onError` handler's terminal
@@ -909,13 +907,12 @@ device's Matter status response (success or failure).
 | Field | Type | Description |
 |---|---|---|
 | `timedInvokeTimeoutMs` | number | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
-| `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
 | `successValue` | string | Optional. If the command succeeds, return this value as the execute response. Same semantics as `success(value)`. Only valid on execute handlers. |
 
 #### `device.requestCommand(clusterId, commandId, payload, options)` — **not a terminal**
 
 Send a Matter command and wait for a specific command response from the device.
-Completion is deferred to the `handler` or `onError` callback.
+Completion is deferred to the `onResponse` or `onError` callback.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -929,11 +926,10 @@ Completion is deferred to the `handler` or `onError` callback.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `responseCommandId` | number | yes | The command ID expected as a response. |
-| `handler` | function | yes | Response handler. Receives `args.command` and `args.handlerContext`. Must end with an explicit terminal. |
+| `onResponse` | function | yes | Response handler. Receives `args.response` and `args.handlerContext`. Must end with an explicit terminal. |
 | `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
 | `timeoutMs` | number | no | Response timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
-| `passthrough` | boolean | no | Also fire `commandHandlers` for the response. Default `false`. |
 | `timedInvokeTimeoutMs` | number | no | Timed invoke timeout (for commands that require it). |
 
 See [Section 6.2](#62-flow-2-command-with-response) for the full runtime flow.
@@ -954,12 +950,12 @@ device's Matter status response.
 
 | Field | Type | Description |
 |---|---|---|
-| `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
+| `endpointId` | number | Target endpoint. If omitted, resolved from cluster ID. |
 
 #### `device.readAttribute(clusterId, attributeId, options)` — **not a terminal**
 
-Read a Matter attribute from the device. Completion is deferred to the `handler`
-or `onError` callback.
+Read a Matter attribute from the device. Completion is deferred to the
+`onResponse` or `onError` callback.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -971,7 +967,7 @@ or `onError` callback.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `handler` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`) and `args.handlerContext`. Must end with an explicit terminal. |
+| `onResponse` | function | yes | Response handler. Receives `args.attribute` (`{ clusterId, attributeId, value }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `onError` | function | yes | Error handler. Receives `args.error` (`{ message, type, matterCode }`) and `args.handlerContext`. Must end with an explicit terminal. |
 | `context` | any | no | Arbitrary data forwarded to both handlers via `args.handlerContext`. |
 | `timeoutMs` | number | no | Read timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
@@ -1086,8 +1082,8 @@ ultimately resolve to success or failure. The rules are:
 | `.error()` | yes | Failure. See [7.6](#76-error). |
 | `.device.sendCommand()` | yes | Delegates to Matter status response. See [7.2](#72-device-interaction--device). |
 | `.device.writeAttribute()` | yes | Delegates to Matter status response. See [7.2](#72-device-interaction--device). |
-| `.device.requestCommand()` | no | Defers to response `handler` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
-| `.device.readAttribute()` | no | Defers to response `handler` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
+| `.device.requestCommand()` | no | Defers to `onResponse` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
+| `.device.readAttribute()` | no | Defers to `onResponse` or `onError`, which must provide a terminal. See [7.2](#72-device-interaction--device). |
 | *(none)* | — | **Runtime error.** Every chain must end with an explicit terminal. |
 
 **Single path to terminal**: A result chain must contain exactly **one** path to
@@ -1119,7 +1115,7 @@ function writeLockState(args) {
 
 // Response handler: decode, decide, complete
 function handleCredentialResponse(args) {
-  var response = args.command.data;
+  var response = args.response.data;
 
   if (!response.credentialExists) {
     return Sbmd.result()
@@ -1270,9 +1266,8 @@ When an incoming attribute/event/command matches multiple registered handlers:
 1. **Specific handlers** (single `attributeId`/`eventId`/`commandId`) fire first.
 2. **Multi handlers** (arrays like `attributeIds`) fire next.
 3. **Wildcard handlers** (`"*"`) fire last.
-4. For command response requests: the response handler fires first. If
-   `passthrough: true`, matching `commandHandlers` fire afterward in the order
-   above.
+4. For command response requests: the response handler fires first; matching
+   `commandHandlers` do not fire for the same command.
 
 ---
 
@@ -1952,7 +1947,7 @@ function handleLockEventCatchAll(args) {
 // ---------------------------------------------------------------------------
 
 function handleGetCredentialStatusResponse(args) {
-  var response = args.command.data;
+  var response = args.response.data;
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return Sbmd.result()

@@ -27,7 +27,7 @@
  */
 
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <gtest/gtest.h>
@@ -49,7 +49,7 @@ namespace
             ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
@@ -335,13 +335,13 @@ namespace
             });
 
             function readIsOn(args) {
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource("1", "isOn", "true")
                     .success();
             }
 
             function writeIsOn(args) {
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .device.sendCommand(CL, 1);
             }
         )");
@@ -391,7 +391,7 @@ namespace
             });
 
             function handleOnOff(args) {
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource("1", "isOn", "true")
                     .success();
             }
@@ -457,7 +457,7 @@ namespace
             });
 
             function readLevel(args) {
-                return SbmdUtils.result().success();
+                return Sbmd.result().success();
             }
         )");
 
@@ -590,7 +590,7 @@ namespace
 
             function writeIsOn(args) {
                 // Constants should be in scope here
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .device.sendCommand(CL_ON_OFF, CMD_ON);
             }
         )");
@@ -622,7 +622,7 @@ namespace
                     },
                 },
             });
-            function myRead(args) { return SbmdUtils.result().success(); }
+            function myRead(args) { return Sbmd.result().success(); }
         )");
 
         ASSERT_NE(reg1, nullptr);
@@ -646,7 +646,7 @@ namespace
                     },
                 },
             });
-            function myRead(args) { return SbmdUtils.result().success(); }
+            function myRead(args) { return Sbmd.result().success(); }
         )");
 
         ASSERT_NE(reg2, nullptr);

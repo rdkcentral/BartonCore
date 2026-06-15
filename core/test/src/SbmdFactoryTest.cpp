@@ -31,7 +31,7 @@
 
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <chrono>
@@ -74,13 +74,13 @@ SbmdDriver({
                     type: 'com.icontrol.boolean',
                     modes: ['read', 'write'],
                     seed: function(args) {
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .dataModel.updateResource(args.endpointId, 'isOn', 'false')
                             .success();
                     },
                     write: function(args) {
                         var on = args.resource.input === 'true';
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.sendCommand(6, on ? 1 : 0);
                     },
                 },
@@ -91,7 +91,7 @@ SbmdDriver({
         handleOnOff: {
             aliases: ['onOff'],
             handler: function(args) {
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(args.endpointId, 'isOn', args.attribute.tlvBase64 ? 'true' : 'false')
                     .success();
             },
@@ -108,7 +108,7 @@ SbmdDriver({
             ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 

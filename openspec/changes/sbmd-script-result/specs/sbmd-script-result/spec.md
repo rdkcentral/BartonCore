@@ -116,12 +116,12 @@ The SBMD script JSON schema version 3.0 SHALL define the following valid top-lev
 - **WHEN** a mapper script returns `{ error: "PIN required but not provided" }`
 - **THEN** `ScriptResult::IsError()` SHALL return `true` and the error string SHALL appear in system logs
 
-#### Scenario: Script uses `SbmdUtils.Response.value()` helper
-- **WHEN** a read mapper script calls `return SbmdUtils.Response.value("locked")`
+#### Scenario: Script uses `Sbmd.Response.value()` helper
+- **WHEN** a read mapper script calls `return Sbmd.Response.value("locked")`
 - **THEN** the returned JSON SHALL be `{ "value": "locked" }` and the resource SHALL be updated
 
-#### Scenario: Script uses `SbmdUtils.Response.error()` helper
-- **WHEN** a mapper script calls `return SbmdUtils.Response.error("unexpected TLV format")`
+#### Scenario: Script uses `Sbmd.Response.error()` helper
+- **WHEN** a mapper script calls `return Sbmd.Response.error("unexpected TLV format")`
 - **THEN** the returned JSON SHALL be `{ "error": "unexpected TLV format" }` and `ScriptResult::IsError()` SHALL return `true`
 
 ---

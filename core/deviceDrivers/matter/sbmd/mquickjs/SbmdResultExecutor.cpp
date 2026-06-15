@@ -206,9 +206,7 @@ namespace barton
         else if (opType == "setMetadata")
         {
             ResultOp::SetMetadata data;
-            data.endpoint = GetStringProp(ctx, opVal, "endpoint");
-            data.resource = GetStringProp(ctx, opVal, "resource");
-            data.key = GetStringProp(ctx, opVal, "key");
+            data.name = GetStringProp(ctx, opVal, "name");
             data.value = GetStringProp(ctx, opVal, "value");
 
             return ResultOp{std::move(data)};
@@ -269,13 +267,14 @@ namespace barton
             data.commandId = GetUint32Prop(ctx, termVal, "commandId");
             data.tlvBase64 = GetStringProp(ctx, termVal, "tlvBase64");
 
-            // options: { endpointId?, timedInvokeTimeoutMs? }
+            // options: { endpointId?, timedInvokeTimeoutMs?, successValue? }
             JSValue opts = JS_GetPropertyStr(ctx, termVal, "options");
 
             if (!JS_IsUndefined(opts) && !JS_IsNull(opts))
             {
                 data.endpointId = GetOptUint32Prop(ctx, opts, "endpointId");
                 data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, "timedInvokeTimeoutMs");
+                data.successValue = GetStringProp(ctx, opts, "successValue");
             }
 
             return ResultTerminal{std::move(data)};
@@ -313,6 +312,7 @@ namespace barton
                 data.onResponse = JS_GetPropertyStr(ctx, deferred, "onResponse");
                 data.onError = JS_GetPropertyStr(ctx, deferred, "onError");
                 data.timeoutMs = GetOptUint32Prop(ctx, deferred, "timeoutMs");
+                data.context = JS_GetPropertyStr(ctx, deferred, "context");
             }
 
             // options: { endpointId?, timedInvokeTimeoutMs? }
@@ -340,6 +340,7 @@ namespace barton
                 data.onResponse = JS_GetPropertyStr(ctx, deferred, "onResponse");
                 data.onError = JS_GetPropertyStr(ctx, deferred, "onError");
                 data.timeoutMs = GetOptUint32Prop(ctx, deferred, "timeoutMs");
+                data.context = JS_GetPropertyStr(ctx, deferred, "context");
             }
 
             // options: { endpointId? }

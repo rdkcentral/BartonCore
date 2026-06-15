@@ -32,7 +32,7 @@
 #include "deviceDrivers/matter/sbmd/SbmdDispatch.h"
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
@@ -367,7 +367,7 @@ namespace
             ASSERT_TRUE(MQuickJsRuntime::Initialize(512 * 1024));
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
             ASSERT_TRUE(SbmdLoader::InjectCaptureFunction(ctx));
         }
 
@@ -454,8 +454,8 @@ namespace
                     },
                 },
             });
-            function handleOnOff(args) { return SbmdUtils.result().success(); }
-            function handleLockOp(args) { return SbmdUtils.result().success(); }
+            function handleOnOff(args) { return Sbmd.result().success(); }
+            function handleLockOp(args) { return Sbmd.result().success(); }
         )");
         ASSERT_NE(driver, nullptr);
 
@@ -502,7 +502,7 @@ namespace
                     },
                 },
             });
-            function fn(args) { return SbmdUtils.result().success(); }
+            function fn(args) { return Sbmd.result().success(); }
         )");
         ASSERT_NE(driver, nullptr);
 
@@ -540,7 +540,7 @@ namespace
                 },
             });
             function handleOnOff(args) {
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource("1", "isOn", "true")
                     .success();
             }
