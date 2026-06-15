@@ -49,6 +49,7 @@ extern "C" {
 #include <deviceService/resourceModes.h>
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>
+#include <icTypes/icHashMap.h>
 #include <resourceTypes.h>
 }
 
@@ -68,6 +69,26 @@ SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     driver(driver)
 {
     icDebug("Created SBMD driver for: %s", driver->GetName().c_str());
+
+    // Register endpoint profile versions so deviceServiceDeviceNeedsReconfiguring()
+    // can detect profile version changes and trigger reconfiguration.
+    DeviceDriver *dd = GetDriver();
+    const auto &endpoints = driver->GetRegistration().endpoints;
+
+    for (const auto &endpoint : endpoints)
+    {
+        if (dd->endpointProfileVersions == nullptr)
+        {
+            dd->endpointProfileVersions = hashMapCreate();
+        }
+
+        auto *version = static_cast<uint8_t *>(malloc(sizeof(uint8_t)));
+        *version = static_cast<uint8_t>(endpoint.profileVersion);
+        hashMapPut(dd->endpointProfileVersions,
+                   strdup(endpoint.profile.c_str()),
+                   static_cast<uint16_t>(endpoint.profile.length() + 1),
+                   version);
+    }
 }
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const

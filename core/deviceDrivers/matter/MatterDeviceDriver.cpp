@@ -176,6 +176,7 @@ MatterDeviceDriver::~MatterDeviceDriver()
     free(driver.driverName);
     free(driver.subsystemName);
     linkedListDestroy(driver.supportedDeviceClasses, nullptr);
+    hashMapDestroy(driver.endpointProfileVersions, nullptr);
 }
 
 bool MatterDeviceDriver::ClaimDevice(const DeviceDataCache *deviceDataCache)

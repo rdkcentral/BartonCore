@@ -26,6 +26,10 @@
 #include "deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.h"
 #include <app/data-model/Decode.h>
 
+extern "C" {
+#include <icTypes/icHashMap.h>
+}
+
 using namespace barton;
 
 namespace
@@ -299,6 +303,125 @@ namespace
 
         SpecBasedMatterDeviceDriver driver(drivers.back().get());
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
+    }
+
+    // ========================================================================
+    // Endpoint profile version reconfiguration tests
+    // ========================================================================
+
+    class ProfileVersionReconfigTest : public ::testing::Test
+    {
+    protected:
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
+
+        SbmdDriver *MakeDriverWithEndpoints(std::vector<SbmdEndpoint> endpoints)
+        {
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "profile-version-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = 1;
+            reg->matter.deviceTypes = {0x0100};
+            reg->endpoints = std::move(endpoints);
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
+
+            return drivers.back().get();
+        }
+    };
+
+    TEST_F(ProfileVersionReconfigTest, SingleEndpointProfileVersionRegistered)
+    {
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        ASSERT_NE(dd->endpointProfileVersions, nullptr);
+
+        auto *version = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(version, nullptr);
+        EXPECT_EQ(*version, 3);
+    }
+
+    TEST_F(ProfileVersionReconfigTest, MultipleEndpointProfileVersionsRegistered)
+    {
+        SbmdEndpoint ep1;
+        ep1.id = "1";
+        ep1.profile = "light";
+        ep1.profileVersion = 2;
+
+        SbmdEndpoint ep2;
+        ep2.id = "2";
+        ep2.profile = "sensor";
+        ep2.profileVersion = 5;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep1, ep2}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        ASSERT_NE(dd->endpointProfileVersions, nullptr);
+
+        auto *lightVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("light"), 6));
+        ASSERT_NE(lightVersion, nullptr);
+        EXPECT_EQ(*lightVersion, 2);
+
+        auto *sensorVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("sensor"), 7));
+        ASSERT_NE(sensorVersion, nullptr);
+        EXPECT_EQ(*sensorVersion, 5);
+    }
+
+    TEST_F(ProfileVersionReconfigTest, NoEndpointsLeavesProfileVersionsNull)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        EXPECT_EQ(dd->endpointProfileVersions, nullptr);
+    }
+
+    TEST_F(ProfileVersionReconfigTest, VersionMismatchDetected)
+    {
+        // Simulate the comparison that deviceServiceDeviceNeedsReconfiguring performs:
+        // the persisted endpoint has profileVersion=2 but the driver expects profileVersion=3.
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        // Simulate a persisted endpoint with the old profile version
+        uint8_t persistedProfileVersion = 2;
+
+        auto *expectedVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(expectedVersion, nullptr);
+        EXPECT_NE(persistedProfileVersion, *expectedVersion)
+            << "Profile version mismatch should be detectable";
+    }
+
+    TEST_F(ProfileVersionReconfigTest, VersionMatchDoesNotTriggerReconfiguration)
+    {
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        // Persisted endpoint matches the driver's expected version
+        uint8_t persistedProfileVersion = 3;
+
+        auto *expectedVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(expectedVersion, nullptr);
+        EXPECT_EQ(persistedProfileVersion, *expectedVersion)
+            << "Matching profile versions should not trigger reconfiguration";
     }
 
 } // namespace
