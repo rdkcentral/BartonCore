@@ -158,10 +158,9 @@ namespace
 
     TEST_F(ResultBuilderTest, SetMetadata)
     {
-        auto json = EvalAsJson("Sbmd.result().dataModel.setMetadata('1', 'isOn', 'label', 'On/Off').success()");
-        EXPECT_EQ(
-            json,
-            R"({"ops":[{"op":"setMetadata","endpoint":"1","resource":"isOn","key":"label","value":"On/Off"}],"terminal":{"op":"success"}})");
+        auto json = EvalAsJson("Sbmd.result().dataModel.setMetadata('label', 'On/Off').success()");
+        EXPECT_EQ(json,
+                  R"({"ops":[{"op":"setMetadata","name":"label","value":"On/Off"}],"terminal":{"op":"success"}})");
     }
 
     TEST_F(ResultBuilderTest, SetPersistentData)

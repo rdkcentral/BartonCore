@@ -180,15 +180,13 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSetMetadata)
     {
-        auto parsed = EvalAndParse("Sbmd.result().dataModel.setMetadata('1', 'dimLevel', 'unit', 'percent').success()");
+        auto parsed = EvalAndParse("Sbmd.result().dataModel.setMetadata('unit', 'percent').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::SetMetadata>(parsed->ops[0].data));
 
         auto &sm = std::get<ResultOp::SetMetadata>(parsed->ops[0].data);
-        EXPECT_EQ(sm.endpoint, "1");
-        EXPECT_EQ(sm.resource, "dimLevel");
-        EXPECT_EQ(sm.key, "unit");
+        EXPECT_EQ(sm.name, "unit");
         EXPECT_EQ(sm.value, "percent");
     }
 
@@ -283,6 +281,18 @@ namespace
         EXPECT_EQ(*cmd.timedInvokeTimeoutMs, 10000u);
     }
 
+    TEST_F(SbmdResultExecutorTest, ParseSendCommandWithSuccessValue)
+    {
+        auto parsed = EvalAndParse("Sbmd.result().device.sendCommand(6, 1, null, {successValue: 'locked'})");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(parsed->terminal.data));
+
+        auto &cmd = std::get<ResultTerminal::SendCommand>(parsed->terminal.data);
+        EXPECT_EQ(cmd.clusterId, 6u);
+        EXPECT_EQ(cmd.commandId, 1u);
+        EXPECT_EQ(cmd.successValue, "locked");
+    }
+
     // ========================================================================
     // Device terminal: writeAttribute
     // ========================================================================
@@ -322,13 +332,13 @@ namespace
     {
         // Use IIFE to allow var declarations
         auto parsed = EvalAndParse("(function() {"
-                                   "  var deferred = {"
+                                   "  var opts = {"
                                    "    responseCommandId: 42,"
                                    "    onResponse: function(args) { return Sbmd.result().success(); },"
                                    "    onError: function(args) { return Sbmd.result().error('timeout'); },"
                                    "    timeoutMs: 5000"
                                    "  };"
-                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, deferred, 'AB==');"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, 'AB==', opts);"
                                    "})()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
@@ -346,6 +356,33 @@ namespace
         EXPECT_FALSE(JS_IsUndefined(rc.onError));
     }
 
+    TEST_F(SbmdResultExecutorTest, ParseRequestCommandWithContext)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    responseCommandId: 42,"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    context: { key: 'test-value' }"
+                                   "  };"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, null, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
+
+        auto &rc = std::get<ResultTerminal::RequestCommand>(parsed->terminal.data);
+        EXPECT_FALSE(JS_IsUndefined(rc.context));
+
+        // Verify context content
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        JSValue keyVal = JS_GetPropertyStr(ctx, rc.context, "key");
+        JSCStringBuf buf;
+        const char *str = JS_ToCString(ctx, keyVal, &buf);
+        ASSERT_NE(str, nullptr);
+        EXPECT_STREQ(str, "test-value");
+    }
+
     // ========================================================================
     // Device terminal: readAttribute (deferred)
     // ========================================================================
@@ -353,12 +390,12 @@ namespace
     TEST_F(SbmdResultExecutorTest, ParseReadAttribute)
     {
         auto parsed = EvalAndParse("(function() {"
-                                   "  var deferred = {"
+                                   "  var opts = {"
                                    "    onResponse: function(args) { return Sbmd.result().success(); },"
                                    "    onError: function(args) { return Sbmd.result().error('fail'); },"
                                    "    timeoutMs: 3000"
                                    "  };"
-                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, deferred);"
+                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, opts);"
                                    "})()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(parsed->terminal.data));
@@ -371,6 +408,31 @@ namespace
         EXPECT_EQ(*ra.timeoutMs, 3000u);
         EXPECT_FALSE(JS_IsUndefined(ra.onResponse));
         EXPECT_FALSE(JS_IsUndefined(ra.onError));
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseReadAttributeWithContext)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    context: 'my-context-string'"
+                                   "  };"
+                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(parsed->terminal.data));
+
+        auto &ra = std::get<ResultTerminal::ReadAttribute>(parsed->terminal.data);
+        EXPECT_FALSE(JS_IsUndefined(ra.context));
+
+        // Verify context content
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        JSCStringBuf buf;
+        const char *str = JS_ToCString(ctx, ra.context, &buf);
+        ASSERT_NE(str, nullptr);
+        EXPECT_STREQ(str, "my-context-string");
     }
 
     // ========================================================================

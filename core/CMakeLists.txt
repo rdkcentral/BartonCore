@@ -155,9 +155,11 @@ if (BCORE_MATTER)
         list(APPEND XTRA_LIBS quickjs)
     endif()
 
-    # Embed SbmdUtils bundle (always available for SBMD scripts)
+    # Embed SBMD bundles (always available for SBMD scripts)
     set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
     set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
+    set(SBMD_RESULT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-result.js")
+    set(SBMD_RESULT_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdResultEmbedded.h")
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
 
     add_custom_command(
@@ -173,9 +175,22 @@ if (BCORE_MATTER)
         VERBATIM
     )
 
+    add_custom_command(
+        OUTPUT "${SBMD_RESULT_EMBEDDED_HEADER}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD result bundle as C header..."
+        COMMAND python3 "${EMBED_SCRIPT}"
+            --input "${SBMD_RESULT_SOURCE}"
+            --output "${SBMD_RESULT_EMBEDDED_HEADER}"
+            --variable "kSbmdResultBundle"
+        DEPENDS "${SBMD_RESULT_SOURCE}" "${EMBED_SCRIPT}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        COMMENT "Generating embedded C header for SBMD result bundle"
+        VERBATIM
+    )
+
     # Add header generation as a source dependency
     add_custom_target(generate_sbmd_embedded_headers
-        DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
+        DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER} ${SBMD_RESULT_EMBEDDED_HEADER}
     )
 
     # Include the generated header directory

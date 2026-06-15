@@ -138,19 +138,15 @@
                 },
 
                 /**
-                 * Set metadata on a resource.
-                 * @param {string} endpoint - Endpoint ID
-                 * @param {string} resource - Resource ID
-                 * @param {string} key - Metadata key
+                 * Set metadata on the device.
+                 * @param {string} name - Metadata key
                  * @param {string} value - Metadata value
                  */
-                setMetadata: function(endpoint, resource, key, value)
+                setMetadata: function(name, value)
                 {
                     return builder._addOp({
                         op: 'setMetadata',
-                        endpoint: endpoint,
-                        resource: resource,
-                        key: key,
+                        name: name,
                         value: value
                     });
                 }
@@ -256,27 +252,72 @@
                  * Deferred terminal: request a Matter command and wait for a response.
                  * @param {number} clusterId
                  * @param {number} commandId
-                 * @param {Object} deferred - { responseCommandId, onResponse, onError, timeoutMs }
-                 * @param {string} [tlvBase64]
-                 * @param {Object} [options]
+                 * @param {string|null} [payload] - Base64-encoded TLV payload
+                 * @param {Object} options - { responseCommandId, onResponse, onError, timeoutMs, endpointId, timedInvokeTimeoutMs }
                  */
-                requestCommand: function(clusterId, commandId, deferred, tlvBase64, options)
+                requestCommand: function(clusterId, commandId, payload, options)
                 {
+                    var opts = options || payload;
+                    var tlv = options ? payload : undefined;
+
                     var t = {
                         op: 'requestCommand',
                         clusterId: clusterId,
                         commandId: commandId,
-                        deferred: deferred
+                        deferred: {}
                     };
 
-                    if (tlvBase64 !== undefined)
+                    if (tlv !== undefined && tlv !== null)
                     {
-                        t.tlvBase64 = tlvBase64;
+                        t.tlvBase64 = tlv;
                     }
 
-                    if (options !== undefined)
+                    if (opts !== undefined)
                     {
-                        t.options = options;
+                        if (opts.responseCommandId !== undefined)
+                        {
+                            t.deferred.responseCommandId = opts.responseCommandId;
+                        }
+
+                        if (opts.onResponse !== undefined)
+                        {
+                            t.deferred.onResponse = opts.onResponse;
+                        }
+
+                        if (opts.onError !== undefined)
+                        {
+                            t.deferred.onError = opts.onError;
+                        }
+
+                        if (opts.timeoutMs !== undefined)
+                        {
+                            t.deferred.timeoutMs = opts.timeoutMs;
+                        }
+
+                        if (opts.context !== undefined)
+                        {
+                            t.deferred.context = opts.context;
+                        }
+
+                        var cmdOpts = {};
+                        var hasCmdOpts = false;
+
+                        if (opts.endpointId !== undefined)
+                        {
+                            cmdOpts.endpointId = opts.endpointId;
+                            hasCmdOpts = true;
+                        }
+
+                        if (opts.timedInvokeTimeoutMs !== undefined)
+                        {
+                            cmdOpts.timedInvokeTimeoutMs = opts.timedInvokeTimeoutMs;
+                            hasCmdOpts = true;
+                        }
+
+                        if (hasCmdOpts)
+                        {
+                            t.options = cmdOpts;
+                        }
                     }
 
                     return builder._setTerminal(t);
@@ -286,21 +327,43 @@
                  * Deferred terminal: read a Matter attribute and wait for the response.
                  * @param {number} clusterId
                  * @param {number} attributeId
-                 * @param {Object} deferred - { onResponse, onError, timeoutMs }
-                 * @param {Object} [options]
+                 * @param {Object} options - { onResponse, onError, timeoutMs, endpointId }
                  */
-                readAttribute: function(clusterId, attributeId, deferred, options)
+                readAttribute: function(clusterId, attributeId, options)
                 {
                     var t = {
                         op: 'readAttribute',
                         clusterId: clusterId,
                         attributeId: attributeId,
-                        deferred: deferred
+                        deferred: {}
                     };
 
                     if (options !== undefined)
                     {
-                        t.options = options;
+                        if (options.onResponse !== undefined)
+                        {
+                            t.deferred.onResponse = options.onResponse;
+                        }
+
+                        if (options.onError !== undefined)
+                        {
+                            t.deferred.onError = options.onError;
+                        }
+
+                        if (options.timeoutMs !== undefined)
+                        {
+                            t.deferred.timeoutMs = options.timeoutMs;
+                        }
+
+                        if (options.context !== undefined)
+                        {
+                            t.deferred.context = options.context;
+                        }
+
+                        if (options.endpointId !== undefined)
+                        {
+                            t.options = { endpointId: options.endpointId };
+                        }
                     }
 
                     return builder._setTerminal(t);

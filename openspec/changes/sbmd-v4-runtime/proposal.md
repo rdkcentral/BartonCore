@@ -7,8 +7,8 @@ SBMD v4 replaces YAML `.sbmd` files with self-contained `.sbmd.js` JavaScript fi
 ## What Changes
 
 - **New file format**: `.sbmd.js` files replace `.sbmd` YAML files. Each file is a complete JavaScript driver evaluated by the mquickjs engine.
-- **Handler-based architecture**: Replace per-resource mapper scripts with handler functions that receive a common `args` object and return a result chain via `SbmdUtils.result()` builder.
-- **Result builder pattern**: `SbmdUtils.result()` builds a plain JS object describing operations (resource updates, device commands, storage writes, logging) and a terminal (success, error, sendCommand, writeAttribute, requestCommand, readAttribute). The C++ runtime executes these after leaving the JS context.
+- **Handler-based architecture**: Replace per-resource mapper scripts with handler functions that receive a common `args` object and return a result chain via `Sbmd.result()` builder.
+- **Result builder pattern**: `Sbmd.result()` builds a plain JS object describing operations (resource updates, device commands, storage writes, logging) and a terminal (success, error, sendCommand, writeAttribute, requestCommand, readAttribute). The C++ runtime executes these after leaving the JS context.
 - **First-class device message handlers**: Dedicated `attributeHandlers`, `eventHandlers`, and `commandHandlers` registrations replace the v3 pattern of reusing read mapper scripts for attribute reports.
 - **Deferred command/response chains**: `requestCommand` and `readAttribute` park a resource operation and register response/error handlers that fire when the device responds or times out. Chains can extend through multiple deferrals with an overall operation timeout.
 - **Supplements**: Handlers declare data dependencies (attributes from device cache, resource values) that the runtime pre-fetches before calling the handler — no callbacks from JS to C++.
@@ -16,7 +16,7 @@ SBMD v4 replaces YAML `.sbmd` files with self-contained `.sbmd.js` JavaScript fi
 - **Constants injection**: Two-pass file evaluation extracts the `constants` block, injects values as `var` declarations, then evaluates the full file wrapped in an IIFE for namespace isolation.
 - **Remove v3 infrastructure**: `SbmdParser` (YAML parser), `SbmdSpec` C++ data structures, JSON schema validation files, and the v3 mapper-based `SbmdScript` interface are removed. The yaml-cpp dependency is removed from SBMD (retained if used elsewhere).
 - **v3 driver staging**: Existing `.sbmd` drivers are moved aside during conversion. The light driver is converted first as proof of life, then remaining drivers in complexity order.
-- **Result builder in sbmd-utils.js**: `SbmdUtils.result()` is implemented in the existing JS utilities bundle. `SbmdUtils.Response.*` v3 helpers are removed.
+- **Result builder in sbmd-utils.js**: `Sbmd.result()` is implemented in the existing JS utilities bundle. `Sbmd.Response.*` v3 helpers are removed.
 - **Observability foundation** (separate PR, merged first): Lightweight metric instruments (counters, gauges, histograms) with a `gettelemetry`/`gt` JSON dump command, used to track driver resource consumption (JS heap, handler invocation times).
 
 ## Non-goals
@@ -31,7 +31,7 @@ SBMD v4 replaces YAML `.sbmd` files with self-contained `.sbmd.js` JavaScript fi
 ## Capabilities
 
 ### New Capabilities
-- `sbmd-v4-runtime`: The v4 SBMD runtime — file evaluation, registration extraction, handler dispatch, result execution, deferred operations, driver lifecycle (activate/deactivate), supplements resolution, and the `SbmdUtils.result()` builder.
+- `sbmd-v4-runtime`: The v4 SBMD runtime — file evaluation, registration extraction, handler dispatch, result execution, deferred operations, driver lifecycle (activate/deactivate), supplements resolution, and the `Sbmd.result()` builder.
 - `sbmd-v4-light-driver`: The light driver converted from v3 YAML to v4 JavaScript, serving as the proof-of-life for the new runtime.
 - `observability-metrics`: Lightweight in-process metric instruments (counter, gauge, histogram) with JSON dump via `gettelemetry`/`gt` command flow, independent of OpenTelemetry.
 
@@ -42,8 +42,8 @@ SBMD v4 replaces YAML `.sbmd` files with self-contained `.sbmd.js` JavaScript fi
 ## Impact
 
 - **Core drivers layer** (`core/deviceDrivers/matter/sbmd/`): Major rework — new registration system, handler dispatch, result execution engine, driver lifecycle. `SbmdParser`, `SbmdSpec`, `ScriptResult` replaced. `SbmdScript` interface changes significantly. `SpecBasedMatterDeviceDriver` rewritten to dispatch to handlers and execute result chains.
-- **mquickjs integration** (`core/deviceDrivers/matter/sbmd/mquickjs/`): `SbmdScriptImpl` rewritten for v4 handler invocation, JSValue extraction from registration objects, GC root management for handler lifetime. `SbmdUtilsLoader` updated with result builder additions.
-- **JS utilities** (`core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js`): Extended with `SbmdUtils.result()` builder. v3 `SbmdUtils.Response.*` helpers removed. `SbmdUtils.Tlv.*` and `SbmdUtils.Base64.*` unchanged.
+- **mquickjs integration** (`core/deviceDrivers/matter/sbmd/mquickjs/`): `SbmdScriptImpl` rewritten for v4 handler invocation, JSValue extraction from registration objects, GC root management for handler lifetime. `SbmdBundleLoader` updated with result builder additions.
+- **JS utilities** (`core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js`): Extended with `Sbmd.result()` builder. v3 `Sbmd.Response.*` helpers removed. `Sbmd.Tlv.*` and `Sbmd.Base64.*` unchanged.
 - **Spec files** (`core/deviceDrivers/matter/sbmd/specs/`): All 10 `.sbmd` files replaced with `.sbmd.js` equivalents over the course of this change.
 - **Build system** (`core/CMakeLists.txt`, `config/cmake/`): Source file lists updated. YAML schema validation replaced with JS syntax validation. `BCORE_MATTER_SBMD_JS_ENGINE` CMake option unchanged (mquickjs remains default).
 - **Unit tests** (`core/test/src/`): `sbmdParserTest.cpp` removed. `SbmdScriptTest.cpp` rewritten for v4 handler model. New tests for result execution, handler dispatch, deferred operations, driver lifecycle.

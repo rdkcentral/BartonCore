@@ -38,10 +38,10 @@ The runtime SHALL extract the following from the `SbmdDriver({...})` registratio
 - **THEN** the runtime stores the JSValue reference to `writeIsOn` for later invocation
 
 ### Requirement: Result builder
-`SbmdUtils.result()` SHALL return a mutable builder object that accumulates an ordered list of operations and a terminal. Non-terminal methods SHALL return the builder. Terminal methods (`success`, `error`, `sendCommand`, `writeAttribute`, `requestCommand`, `readAttribute`) SHALL set the terminal and return the raw `{ops, terminal}` result object.
+`Sbmd.result()` SHALL return a mutable builder object that accumulates an ordered list of operations and a terminal. Non-terminal methods SHALL return the builder. Terminal methods (`success`, `error`, `sendCommand`, `writeAttribute`, `requestCommand`, `readAttribute`) SHALL set the terminal and return the raw `{ops, terminal}` result object.
 
 #### Scenario: Linear chain produces correct structure
-- **WHEN** a handler returns `SbmdUtils.result().dataModel.updateResource("1", "isOn", "true").log("updated").success()`
+- **WHEN** a handler returns `Sbmd.result().dataModel.updateResource("1", "isOn", "true").log("updated").success()`
 - **THEN** the result contains `ops: [{op: "updateResource", endpoint: "1", resource: "isOn", value: "true"}, {op: "log", message: "updated"}]` and `terminal: {op: "success"}`
 
 #### Scenario: Terminal cuts off further chaining

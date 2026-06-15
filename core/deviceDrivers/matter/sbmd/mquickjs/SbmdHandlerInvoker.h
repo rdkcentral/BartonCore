@@ -185,54 +185,62 @@ namespace barton
         /**
          * Build an args object for a deferred command response handler.
          *
-         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, response: { clusterId, commandId, data } }
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, response, handlerContext }
          *
          * @param ctx JS context (caller holds mutex)
          * @param hctx Device/handler context
          * @param clusterId The response cluster ID
          * @param commandId The response command ID
          * @param tlvBase64 The TLV-encoded response data as base64 (may be empty if no data)
+         * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
         static JSValue BuildCommandResponseArgs(JSContext *ctx,
                                                 const HandlerContext &hctx,
                                                 uint32_t clusterId,
                                                 uint32_t commandId,
-                                                const std::string &tlvBase64);
+                                                const std::string &tlvBase64,
+                                                JSValue handlerContext = JS_UNDEFINED);
 
         /**
          * Build an args object for a deferred attribute read response handler.
          *
-         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, attribute: { clusterId, attributeId, value } }
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, attribute, handlerContext }
          *
          * @param ctx JS context (caller holds mutex)
          * @param hctx Device/handler context
          * @param clusterId The attribute cluster ID
          * @param attributeId The attribute ID
          * @param tlvBase64 The TLV-encoded attribute value as base64
+         * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
         static JSValue BuildAttributeReadResponseArgs(JSContext *ctx,
                                                       const HandlerContext &hctx,
                                                       uint32_t clusterId,
                                                       uint32_t attributeId,
-                                                      const std::string &tlvBase64);
+                                                      const std::string &tlvBase64,
+                                                      JSValue handlerContext = JS_UNDEFINED);
 
         /**
          * Build an args object for a deferred error handler.
          *
-         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, error: { type, message } }
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, error: { type, message, matterCode } }
          *
          * @param ctx JS context (caller holds mutex)
          * @param hctx Device/handler context
          * @param errorType The error type string (e.g., "timeout", "commandFailed")
          * @param errorMessage A descriptive error message
+         * @param matterCode Optional numeric CHIP_ERROR code (-1 = not available)
+         * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
         static JSValue BuildDeferredErrorArgs(JSContext *ctx,
                                               const HandlerContext &hctx,
                                               const std::string &errorType,
-                                              const std::string &errorMessage);
+                                              const std::string &errorMessage,
+                                              int32_t matterCode = -1,
+                                              JSValue handlerContext = JS_UNDEFINED);
 
     private:
         /**

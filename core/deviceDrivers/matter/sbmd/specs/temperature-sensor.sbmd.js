@@ -80,15 +80,15 @@ SbmdDriver({
         handleTemperature: {
             aliases: ['tempMeasuredValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 // -32768 (0x8000): Matter null for int16 MeasuredValue
                 if (value === null || value === -32768) {
-                    return SbmdUtils.result()
+                    return Sbmd.result()
                         .error('TLV decode failed for MeasuredValue');
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_TEMPERATURE, value.toString())
                     .success();
             }

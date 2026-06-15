@@ -138,10 +138,10 @@ SbmdDriver({
         handleAirQuality: {
             aliases: ['airQualityValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
                 var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_AIR_QUALITY, levels[value] || 'unknown')
                     .success();
             }
@@ -149,14 +149,14 @@ SbmdDriver({
         handleTemperature: {
             aliases: ['tempMeasuredValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null || value === -32768) {
-                    return SbmdUtils.result()
+                    return Sbmd.result()
                         .error('TLV decode failed for MeasuredValue');
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_TEMPERATURE, value.toString())
                     .success();
             }
@@ -164,16 +164,16 @@ SbmdDriver({
         handleHumidity: {
             aliases: ['humidityMeasuredValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null || value === 0xFFFF) {
-                    return SbmdUtils.result()
+                    return Sbmd.result()
                         .error('TLV decode failed for MeasuredValue');
                 }
 
                 var percent = Math.round(value / 100);
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_HUMIDITY, percent.toString())
                     .success();
             }
@@ -181,13 +181,13 @@ SbmdDriver({
         handleCO2: {
             aliases: ['co2MeasuredValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().success();
+                    return Sbmd.result().success();
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_CO2, Math.round(value).toString())
                     .success();
             }
@@ -195,13 +195,13 @@ SbmdDriver({
         handlePM25: {
             aliases: ['pm25MeasuredValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().success();
+                    return Sbmd.result().success();
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_PM25, value.toFixed(1))
                     .success();
             }

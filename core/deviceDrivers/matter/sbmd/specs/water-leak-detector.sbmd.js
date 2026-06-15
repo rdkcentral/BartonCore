@@ -80,10 +80,10 @@ SbmdDriver({
         handleStateValue: {
             aliases: ['stateValue'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 // StateValue=true means water detected (faulted=true)
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_FAULTED, (value === true) ? 'true' : 'false')
                     .success();
             }
