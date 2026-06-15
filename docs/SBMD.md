@@ -44,10 +44,9 @@ supported device type adds too much friction to the goal of broad device support
 
 SBMD addresses this by using textual specification files that map between Matter
 types and Barton resources, enabling new device type support without rebuilding or
-redeploying firmware. Earlier versions used declarative YAML specifications with
-embedded JavaScript mapper scripts. The current format (schema version 4)
-consolidates everything into single `.sbmd.js` files where the full driver —
-metadata, resources, and handler logic — is expressed in JavaScript.
+redeploying firmware. Each driver is a single `.sbmd.js` file (schema version 4)
+where the full driver — metadata, resources, and handler logic — is expressed
+in JavaScript.
 
 ### 1.3 File Layout
 

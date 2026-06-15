@@ -36,6 +36,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -258,7 +259,7 @@ namespace barton
                                    chip::AttributeId attributeId,
                                    chip::TLV::TLVReader &reader);
 
-        uint8_t ConvertModesToBitmask(const std::vector<std::string> &modes);
+        std::optional<uint8_t> ConvertModesToBitmask(const std::vector<std::string> &modes);
 
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
          * configuration */

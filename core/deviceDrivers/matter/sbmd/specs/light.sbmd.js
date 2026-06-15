@@ -106,7 +106,7 @@ SbmdDriver({
             resources: {
                 isOn: {
                     type: 'boolean',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: ['onOff'],
 
                     write: function(args) {
@@ -120,7 +120,7 @@ SbmdDriver({
                 currentLevel: {
                     type: 'com.icontrol.lightLevel',
                     optional: true,
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: ['currentLevel'],
 
                     write: function(args) {

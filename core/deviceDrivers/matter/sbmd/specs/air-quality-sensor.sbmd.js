@@ -103,31 +103,31 @@ SbmdDriver({
             resources: {
                 airQuality: {
                     type: 'com.icontrol.airQuality',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_AIR_QUALITY]
                 },
                 temperature: {
                     type: 'com.icontrol.temperature',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_TEMP_MEASUREMENT]
                 },
                 humidity: {
                     type: 'com.icontrol.humidity',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_HUMIDITY_MEASUREMENT]
                 },
                 co2Concentration: {
                     type: 'com.icontrol.co2',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_CO2_MEASUREMENT]
                 },
                 pm25Concentration: {
                     type: 'com.icontrol.ugm3',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_PM25_MEASUREMENT]
                 }
             }

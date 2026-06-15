@@ -28,7 +28,7 @@
 // Uses LockState attribute for real-time lock state updates.
 // Lock/Unlock commands sent via execute handlers with optional PIN code.
 //
-// Note: LockOperation event handler support is deferred until v4 event
+// Note: LockOperation event handler support is deferred until event
 // infrastructure is implemented.
 //
 
@@ -84,7 +84,7 @@ SbmdDriver({
             resources: {
                 locked: {
                     type: 'boolean',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK]
                 },
                 lock: {

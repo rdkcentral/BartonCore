@@ -69,7 +69,7 @@ SbmdDriver({
             resources: {
                 temperature: {
                     type: 'com.icontrol.temperature',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_TEMP_MEASUREMENT]
                 }
             }

@@ -69,7 +69,7 @@ SbmdDriver({
             resources: {
                 faulted: {
                     type: 'com.icontrol.boolean',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_OCCUPANCY_SENSING]
                 }
             }

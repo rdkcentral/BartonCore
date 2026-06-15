@@ -156,12 +156,12 @@ SbmdDriver({
             resources: {
                 localTemperature: {
                     type: 'com.icontrol.temperature',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_THERMOSTAT]
                 },
                 heatSetpoint: {
                     type: 'com.icontrol.temperature',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
                         var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
@@ -176,7 +176,7 @@ SbmdDriver({
                 },
                 coolSetpoint: {
                     type: 'com.icontrol.temperature',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
                         var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
@@ -211,7 +211,7 @@ SbmdDriver({
                 },
                 controlSequenceOfOperation: {
                     type: 'com.icontrol.tstatCtrlSeqOp',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
                         var seqValues = [
@@ -240,7 +240,7 @@ SbmdDriver({
                 },
                 systemMode: {
                     type: 'com.icontrol.tstatSystemMode',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
                         var reverseModeMap = {
@@ -262,13 +262,13 @@ SbmdDriver({
                 systemState: {
                     type: 'com.icontrol.tstatSystemState',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_THERMOSTAT]
                 },
                 fanMode: {
                     type: 'com.icontrol.tstatFanMode',
                     optional: true,
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     prerequisites: [CL_FAN_CONTROL],
                     write: function(args) {
                         var reverseModeMap = {
@@ -289,7 +289,7 @@ SbmdDriver({
                 fanOn: {
                     type: 'boolean',
                     optional: true,
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_FAN_CONTROL]
                 }
             }

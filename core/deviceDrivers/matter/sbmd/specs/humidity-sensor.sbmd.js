@@ -69,7 +69,7 @@ SbmdDriver({
             resources: {
                 humidity: {
                     type: 'com.icontrol.humidity',
-                    modes: ['read', 'dynamic', 'emitEvents'],
+                    modes: ['read'],
                     prerequisites: [CL_HUMIDITY_MEASUREMENT]
                 }
             }

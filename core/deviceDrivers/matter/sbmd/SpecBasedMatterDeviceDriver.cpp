@@ -229,9 +229,10 @@ void SpecBasedMatterDeviceDriver::ExecuteResource(std::forward_list<std::promise
     HandleResourceOp(promises, *device, resource, arg, nullptr, response, exchangeMgr, sessionHandle, "execute");
 }
 
-uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std::string> &modes)
+std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std::string> &modes)
 {
-    uint8_t bitmask = 0;
+    // dynamic and emitEvents are on by default; "static" and "noEvents" opt out.
+    uint8_t bitmask = RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE | RESOURCE_MODE_EMIT_EVENTS;
 
     for (const auto &mode : modes)
     {
@@ -247,13 +248,13 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
-        else if (mode == "dynamic")
+        else if (mode == "static")
         {
-            bitmask |= RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE;
+            bitmask &= ~(RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE);
         }
-        else if (mode == "emitEvents")
+        else if (mode == "noEvents")
         {
-            bitmask |= RESOURCE_MODE_EMIT_EVENTS;
+            bitmask &= ~RESOURCE_MODE_EMIT_EVENTS;
         }
         else if (mode == "lazySaveNext")
         {
@@ -265,7 +266,9 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
         }
         else
         {
-            icWarn("Unknown resource mode: %s", mode.c_str());
+            icError("Unsupported resource mode: %s", mode.c_str());
+
+            return std::nullopt;
         }
     }
 
@@ -325,7 +328,17 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
                 continue;
             }
 
-            uint8_t resourceMode = ConvertModesToBitmask(resource.modes);
+            auto modeResult = ConvertModesToBitmask(resource.modes);
+
+            if (!modeResult.has_value())
+            {
+                icError("Invalid modes for resource '%s' on endpoint '%s'", resource.id.c_str(), endpoint.id.c_str());
+                result = false;
+
+                continue;
+            }
+
+            uint8_t resourceMode = *modeResult;
 
             if (resource.execute.has_value())
             {

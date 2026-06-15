@@ -72,7 +72,7 @@ SbmdDriver({
             resources: {
                 isOn: {
                     type: 'com.icontrol.boolean',
-                    modes: ['read', 'write', 'dynamic', 'emitEvents'],
+                    modes: ['read', 'write'],
                     seed: function(args) {
                         return SbmdUtils.result()
                             .dataModel.updateResource(args.endpointId, 'isOn', 'false')
