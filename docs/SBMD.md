@@ -28,7 +28,7 @@ or redeployment required.
   (resource reads, writes, executes) from device-initiated data (attribute reports,
   events, command responses).
 - **Composable results**: Handler functions return an immutable result object built
-  via `SbmdUtils.result()` that can express multiple operations
+  via `Sbmd.result()` that can express multiple operations
   (resource updates, device interactions, logging, persistent storage).
 
 ### 1.2 Historical Context
@@ -60,7 +60,7 @@ core/deviceDrivers/matter/sbmd/specs/
 ```
 
 Each file is evaluated by the C runtime's embedded JavaScript engine (e.g., MQuickJS).
-The runtime provides `SbmdDriver()`, `SbmdUtils`, and injected constants as globals
+The runtime provides `SbmdDriver()`, `Sbmd`, and injected constants as globals
 before evaluation.
 
 ---
@@ -111,7 +111,7 @@ flowchart TB
 |---|---|
 | **SbmdFactory** | Scans the `specs/` directory at startup, evaluates each `.sbmd.js` file, and registers a driver instance per file. |
 | **SpecBasedMatterDeviceDriver** | The device driver implementation that uses a parsed SBMD registration to handle Barton resource operations and Matter device interactions. |
-| **SBMD Runtime** | Sandboxed JavaScript engine (MQuickJS) that evaluates driver files and dispatches handler calls. Provides `SbmdDriver()`, `SbmdUtils`, and injected constants as globals. |
+| **SBMD Runtime** | Sandboxed JavaScript engine (MQuickJS) that evaluates driver files and dispatches handler calls. Provides `SbmdDriver()`, `Sbmd`, and injected constants as globals. |
 | **DeviceDataCache** | Per-device attribute cache kept current via Matter subscriptions. Handlers read from this cache for current device state. |
 | **Handler functions** | Plain JavaScript functions authored in the `.sbmd.js` file that translate between Barton and Matter representations. |
 
@@ -629,6 +629,8 @@ supplements: {
     EP_LOCK + "/" + RES_LOCKED,
     RES_IDENTIFY,
   ],
+  persistentData: ["lastLockOp"],
+  transientData: ["debounce"],
 }
 ```
 
@@ -636,6 +638,8 @@ supplements: {
 |---|---|---|
 | `attributes` | string[] | Alias names (defined in `aliases`) identifying Matter attributes to read from the device data cache. |
 | `resources` | string[] | Barton resource values to fetch. Format: `"endpointId/resourceName"` for endpoint resources, or `"resourceName"` for device-level resources. |
+| `persistentData` | string[] | Persistent storage keys to fetch. Values survive reboots. Stored in device metadata with an `sbmd.` prefix. |
+| `transientData` | string[] | Transient storage keys to fetch. Values are in-memory with TTL-based expiry. Returns `null` if the key has expired or was never set. |
 
 The fetched data is delivered to the handler in `args.supplements` (see
 [Section 5.1](#51-handler-arguments)). All supplement values are **immutable
@@ -647,7 +651,7 @@ resource state.
 ## 5. Handler Functions
 
 All handler functions receive a single `args` object and return a result built
-with `SbmdUtils.result()`.
+with `Sbmd.result()`.
 
 Handler functions can be declared as named functions or inline (anonymous)
 functions. Named functions are recommended for readability and reuse. Inline
@@ -656,7 +660,7 @@ functions are acceptable for short, single-use handlers.
 ```js
 function myHandler(args) {
   // ... logic ...
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(ENDPOINT, RESOURCE, value)
     .success();
 }
@@ -694,6 +698,8 @@ A handler can inspect which trigger field is present to determine the context.
 |---|---|---|
 | `args.supplements.attributes` | `{ [aliasName]: value }` | Pre-fetched attribute values, keyed by alias name. |
 | `args.supplements.resources` | `{ [path]: value }` | Pre-fetched resource values. Keys are `"endpointId/resourceName"` or `"resourceName"`. |
+| `args.supplements.persistentData` | `{ [key]: string \| null }` | Pre-fetched persistent storage values. `null` if the key was never set. |
+| `args.supplements.transientData` | `{ [key]: string \| null }` | Pre-fetched transient storage values. `null` if the key was never set or has expired. |
 
 #### Deferred handler context (present on response/error handlers)
 
@@ -741,7 +747,7 @@ This is the behavior when using `.device.sendCommand()`.
 function executeLockAction(args) {
   var commandId = (args.resource.resourceId === RES_LOCK) ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
 }
 ```
@@ -760,17 +766,17 @@ Use `.device.requestCommand()` to declare the expected response:
 function executeGetCredentialStatus(args) {
   var payload = buildCredentialRequest(args.resource.input);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.requestCommand(CL_DOOR_LOCK, CMD_GET_CREDENTIAL_STATUS, payload, {
       responseCommandId: CMD_GET_CREDENTIAL_STATUS_RESP,
       handler: function(args) {
         var response = args.command.data;
 
-        return SbmdUtils.result()
+        return Sbmd.result()
           .success(JSON.stringify(response));
       },
       onError: function(args) {
-        return SbmdUtils.result()
+        return Sbmd.result()
           .log("credential request failed: " + args.error.message)
           .error(args.error.message);
       },
@@ -826,7 +832,7 @@ commandHandlers: {
 }
 
 function handleUserCommandResponses(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
     .success();
 }
@@ -834,15 +840,15 @@ function handleUserCommandResponses(args) {
 
 ---
 
-## 7. Result Builder — `SbmdUtils.result()`
+## 7. Result Builder — `Sbmd.result()`
 
-All handler functions return a result object built with the `SbmdUtils.result()`
+All handler functions return a result object built with the `Sbmd.result()`
 builder. The builder is immutable — each method returns a new builder instance,
 allowing chaining. When a handler returns, the runtime executes all operations
 in the chain **in order**.
 
 ```js
-return SbmdUtils.result()
+return Sbmd.result()
   .dataModel.updateResource(EP_LOCK, RES_LOCKED, "true")
   .storage.setPersistentData("lastLockOperation", "lock")
   .log("lock operation applied")
@@ -869,7 +875,7 @@ Update an **endpoint-level** resource.
 | `endpoint` | string | Endpoint ID (use an `EP_*` constant). |
 | `resource` | string | Resource name (use a `RES_*` constant). |
 | `value` | string | New resource value. |
-| `metadata` | string | Optional. JSON string of metadata to attach to the update. |
+| `metadata` | object | Optional. Metadata object to attach to the resource updated event. Serialized to JSON by the runtime. |
 
 The runtime distinguishes the two forms by argument count: use the 2-arg form
 for device-level resources, and the 3-arg (or 4-arg with `metadata`) form for
@@ -904,7 +910,7 @@ device's Matter status response (success or failure).
 |---|---|---|
 | `timedInvokeTimeoutMs` | number | Timed invoke timeout (for commands that require it, e.g., lock/unlock). |
 | `timeoutMs` | number | Operation timeout in milliseconds. Overrides `matter.defaultTimeoutMs`. |
-| `successValue` | string | Optional. If the command succeeds, set the result value for the resource operation. For read/seed/write handlers, updates the resource. For execute handlers, returns the value to the caller. Same semantics as `success(value)`. Only valid on resource handlers. |
+| `successValue` | string | Optional. If the command succeeds, return this value as the execute response. Same semantics as `success(value)`. Only valid on execute handlers. |
 
 #### `device.requestCommand(clusterId, commandId, payload, options)` — **not a terminal**
 
@@ -975,17 +981,26 @@ or `onError` callback.
 #### `storage.setPersistentData(name, value)`
 
 Store a key-value pair in non-volatile storage. Survives device and service
-reboots. Values are always strings.
+reboots. Values are always strings. Stored in device metadata with an `sbmd.`
+key prefix.
 
 #### `storage.setTransientData(name, value, ttlSecs)`
 
 Store a key-value pair in memory with automatic cleanup after `ttlSecs` seconds.
-Useful for short-lived diagnostic or debounce state.
+Useful for short-lived diagnostic or debounce state. Does not survive service
+restarts.
 
-These are also available as standalone read accessors:
+To **read** stored values, declare them in the handler's `supplements`:
 
-- `SbmdUtils.getPersistentData(name)` — returns `string | null`
-- `SbmdUtils.getTransientData(name)` — returns `string | null`
+```js
+supplements: {
+  persistentData: ["lastLockOp"],
+  transientData: ["debounce"],
+}
+```
+
+The values are delivered in `args.supplements.persistentData` and
+`args.supplements.transientData`. See [4.12 Supplements](#412-supplements).
 
 ### 7.4 Logging
 
@@ -995,27 +1010,21 @@ Emit a diagnostic log message associated with this handler invocation.
 
 ### 7.5 Success
 
-#### `success(value?, metadata?)`
+#### `success(value?)`
 
 Explicitly mark the operation as completed successfully. All operations
 (resource updates, device interactions, storage writes, logs) earlier in the
 chain are executed in order regardless.
 
-The optional `value` parameter (string) sets the result of the resource
-operation. For read/seed/write handlers, this updates the resource value
-(shorthand for `dataModel.updateResource(<current resource>, value).success()`).
-For execute handlers and their deferred response handlers, this returns the
-value to the caller that invoked the execute — it does not store a value in the
-resource. This is valid only when the handler is servicing a resource operation:
-resource handlers (read, write, execute, seed) and deferred response handlers
-(`requestCommand` handler, `readAttribute` handler). Using `success(value)` on
-a device-initiated handler (attribute, event, command) is a **runtime error**
-because there is no resource operation to complete.
+The optional `value` parameter (string) sets the return value of a resource
+execute operation. For execute handlers and their deferred response handlers
+(`requestCommand` handler, `readAttribute` handler), this returns the value to
+the caller that invoked the execute — it does not store a value in the resource.
+Using `success(value)` on a device-initiated handler (attribute, event, command)
+is a **runtime error** because there is no resource operation to complete.
 
-The optional `metadata` parameter (string) is a JSON string of metadata to
-attach to the resource update. Only valid when `value` is also provided and the
-handler updates a resource (read/seed/write handlers). Ignored for execute
-handlers.
+For read/seed/write handlers that need to set the resource value, use
+`dataModel.updateResource()` before calling `.success()`.
 
 When `value` is omitted, the resource value comes from any preceding
 `dataModel.updateResource()` call; if none was made, the runtime returns the
@@ -1027,10 +1036,10 @@ function handleLockOperation(args) {
 
   if (opType !== 0 && opType !== 1) {
     // Non-state-change event — nothing to do
-    return SbmdUtils.result().success();
+    return Sbmd.result().success();
   }
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_LOCKED, (opType === 0) ? "true" : "false")
     .success();
 }
@@ -1054,14 +1063,14 @@ function writeIsOn(args) {
   var value = args.resource.input;
 
   if (value !== "true" && value !== "false") {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .log("rejected invalid write: " + value)
       .error("invalid value: " + value);
   }
 
   var commandId = (value === "true") ? CMD_ON : CMD_OFF;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_ON_OFF, commandId, null, {});
 }
 ```
@@ -1102,7 +1111,7 @@ can trigger a failure status response back to the device.
 function writeLockState(args) {
   var commandId = (args.resource.input === "true") ? CMD_LOCK_DOOR : CMD_UNLOCK_DOOR;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .storage.setPersistentData("lastWriteAttempt", args.resource.input)
     .device.sendCommand(CL_DOOR_LOCK, commandId, null, { timedInvokeTimeoutMs: 10000 });
     // No .success() needed — sendCommand is a terminal that defers to Matter status
@@ -1113,12 +1122,12 @@ function handleCredentialResponse(args) {
   var response = args.command.data;
 
   if (!response.credentialExists) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .log("credential not found")
       .error("credential not found");
   }
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .success();
 }
@@ -1131,7 +1140,7 @@ function handleCredentialResponse(args) {
 The runtime provides TLV encoding/decoding helpers for constructing command
 payloads and interpreting attribute/event data.
 
-### 8.1 `SbmdUtils.Tlv.encodeStruct(fields, schema)`
+### 8.1 `Sbmd.Tlv.encodeStruct(fields, schema)`
 
 Encode a JavaScript object into a base64-encoded Matter TLV struct.
 
@@ -1139,7 +1148,7 @@ Encode a JavaScript object into a base64-encoded Matter TLV struct.
 var schema = {
   IdentifyTime: { tag: 0, type: "uint16" },
 };
-var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
+var tlvBase64 = Sbmd.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
 ```
 
 **Schema entry fields**:
@@ -1149,16 +1158,16 @@ var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: 10 }, schema);
 | `tag` | number | TLV context tag. |
 | `type` | string | TLV type (see [8.6 Supported Data Types](#86-supported-data-types)). |
 
-### 8.2 `SbmdUtils.Tlv.encode(value, type, base)`
+### 8.2 `Sbmd.Tlv.encode(value, type, base)`
 
 Encode a single primitive value into a base64-encoded Matter TLV element.
 Returns `null` if the value cannot be parsed or is out of range for the
 specified type.
 
 ```js
-var tlvBase64 = SbmdUtils.Tlv.encode(42, "uint16");
-var tlvBool = SbmdUtils.Tlv.encode(true, "bool");
-var tlvFromHex = SbmdUtils.Tlv.encode("FF", "uint8", 16);
+var tlvBase64 = Sbmd.Tlv.encode(42, "uint16");
+var tlvBool = Sbmd.Tlv.encode(true, "bool");
+var tlvFromHex = Sbmd.Tlv.encode("FF", "uint8", 16);
 ```
 
 | Parameter | Type | Description |
@@ -1167,26 +1176,26 @@ var tlvFromHex = SbmdUtils.Tlv.encode("FF", "uint8", 16);
 | `type` | string | TLV type (see [8.6 Supported Data Types](#86-supported-data-types)). For type `"string"`, the value is coerced via `String()` and encoded as a TLV UTF-8 string. |
 | `base` | number | Optional. Radix for string-to-integer parsing (2, 8, 10, 16). Default `10`. Invalid with type `"string"`. |
 
-### 8.3 `SbmdUtils.Tlv.decode(tlvBase64)`
+### 8.3 `Sbmd.Tlv.decode(tlvBase64)`
 
 Decode a base64-encoded TLV value into a JavaScript value.
 
-### 8.4 `SbmdUtils.Tlv.emptyStruct()`
+### 8.4 `Sbmd.Tlv.emptyStruct()`
 
 Create a base64-encoded empty TLV struct (STRUCT + END_CONTAINER). Useful for
 commands that take no arguments but require a struct payload.
 
 ```js
-var payload = SbmdUtils.Tlv.emptyStruct();
+var payload = Sbmd.Tlv.emptyStruct();
 ```
 
-### 8.5 `SbmdUtils.Base64.encode(bytes)` / `SbmdUtils.Base64.decode(base64)`
+### 8.5 `Sbmd.Base64.encode(bytes)` / `Sbmd.Base64.decode(base64)`
 
 Encode a byte array to a base64 string, or decode a base64 string to a byte array.
 
 ```js
-var encoded = SbmdUtils.Base64.encode([0x01, 0x02, 0x03]);
-var bytes = SbmdUtils.Base64.decode("AQID");
+var encoded = Sbmd.Base64.encode([0x01, 0x02, 0x03]);
+var bytes = Sbmd.Base64.decode("AQID");
 ```
 
 ### 8.6 Supported Data Types
@@ -1209,7 +1218,7 @@ arguments, and alias `type` documentation fields.
 | **Complex** | `struct`, `array` |
 | **Null** | `null` |
 
-The decoder (`SbmdUtils.Tlv.decode`) handles all TLV types automatically and
+The decoder (`Sbmd.Tlv.decode`) handles all TLV types automatically and
 returns native JavaScript values:
 - Booleans → `true`/`false`
 - Numbers → JavaScript numbers
@@ -1239,7 +1248,7 @@ Attempting to reassign a constant results in a runtime error.
 ### 9.2 Handler Isolation
 
 - Each handler invocation receives a fresh `args` object. Handlers cannot modify
-  shared state except through `SbmdUtils.result()` operations.
+  shared state except through `Sbmd.result()` operations.
 - Handler functions must be **synchronous** and **deterministic**. They must not
   use timers, promises, or any asynchronous APIs.
 - The result builder is the **only** way to produce side effects. Direct mutation
@@ -1251,7 +1260,7 @@ Attempting to reassign a constant results in a runtime error.
   temporaries. The runtime reclaims these allocations when the handler returns.
 - No global `var` declarations are permitted at file scope. The runtime may
   reject files that declare `var` outside of function bodies.
-- `SbmdUtils` and `SbmdDriver` are the only runtime-provided globals (aside
+- `Sbmd` and `SbmdDriver` are the only runtime-provided globals (aside
   from injected constants and standard JavaScript built-ins).
 
 ### 9.4 Handler Dispatch Order
@@ -1365,7 +1374,7 @@ SbmdDriver({
 function readIsOn(args) {
   var value = args.supplements.attributes.onOff;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (value === true) ? "true" : "false")
     .success();
 }
@@ -1373,7 +1382,7 @@ function readIsOn(args) {
 function writeIsOn(args) {
   var commandId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_ON_OFF, commandId, null, {});
 }
 
@@ -1381,7 +1390,7 @@ function readCurrentLevel(args) {
   var level = args.supplements.attributes.currentLevel;
   var percent = Math.round(level / 254 * 100);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
     .success();
 }
@@ -1402,13 +1411,13 @@ function writeCurrentLevel(args) {
     OptionsOverride: { tag: 3, type: "bitmap8" }
   };
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_LEVEL_CONTROL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
-            SbmdUtils.Tlv.encodeStruct(payload, schema), {});
+            Sbmd.Tlv.encodeStruct(payload, schema), {});
 }
 
 function handleOnOffAttribute(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LIGHT, RES_IS_ON, (args.attribute.value === true) ? "true" : "false")
     .success();
 }
@@ -1416,7 +1425,7 @@ function handleOnOffAttribute(args) {
 function handleCurrentLevelAttribute(args) {
   var percent = Math.round(args.attribute.value / 254 * 100);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LIGHT, RES_CURRENT_LEVEL, percent.toString())
     .success();
 }
@@ -1456,13 +1465,13 @@ SbmdDriver({
           read: {
             supplements: { attributes: [] },
             handler: function (args) {
-              return SbmdUtils.result().success();
+              return Sbmd.result().success();
             },
           },
           write: function (args) {
             var cmdId = (args.resource.input === "true") ? 0x0001 : 0x0000;
 
-            return SbmdUtils.result()
+            return Sbmd.result()
               .device.sendCommand(0x0006, cmdId, null, {});
           },
         },
@@ -1475,7 +1484,7 @@ SbmdDriver({
       clusterId: 0x0006,
       attributeId: 0x0000,
       handler: function (args) {
-        return SbmdUtils.result()
+        return Sbmd.result()
           .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
           .success();
       },
@@ -1534,7 +1543,7 @@ SbmdDriver({
 
 function lightHandler(args) {
   if (args.attribute) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .dataModel.updateResource("1", "isOn", args.attribute.value ? "true" : "false")
       .success();
   }
@@ -1542,13 +1551,13 @@ function lightHandler(args) {
   if (args.resource.input !== null) {
     var cmdId = (args.resource.input === "true") ? CMD_ON : CMD_OFF;
 
-    return SbmdUtils.result()
+    return Sbmd.result()
       .device.sendCommand(CL_ON_OFF, cmdId, null, {});
   }
 
   var value = args.supplements.attributes.onOff;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource("1", "isOn", value ? "true" : "false")
     .success();
 }
@@ -1765,6 +1774,9 @@ SbmdDriver({
       clusterId: CL_DOOR_LOCK,
       eventIds: [EVT_DOOR_LOCK_ALARM, EVT_LOCK_USER_CHANGE],
       handler: handleLockAlarms,
+      supplements: {
+        persistentData: ["alarmCount"],
+      },
     },
 
     // Wildcard
@@ -1809,7 +1821,7 @@ function seedLockedResource(args) {
   var value = args.supplements.attributes.lockState;
   var isLocked = (value === 1);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
     .success();
 }
@@ -1817,7 +1829,7 @@ function seedLockedResource(args) {
 function readIdentify(args) {
   var value = args.supplements.attributes.identifyTime;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(RES_IDENTIFY, String(value))
     .success();
 }
@@ -1829,14 +1841,14 @@ function writeIdentify(args) {
   if (isNaN(secs) || secs < 0) secs = 0;
   if (secs > 0xFFFF) secs = 0xFFFF;
 
-  var tlvBase64 = SbmdUtils.Tlv.encodeStruct({ IdentifyTime: secs }, schema);
+  var tlvBase64 = Sbmd.Tlv.encodeStruct({ IdentifyTime: secs }, schema);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.writeAttribute(CL_IDENTIFY, ATTR_IDENTIFY_TIME, tlvBase64, {});
 }
 
 function executeReboot(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_GENERAL_DIAGNOSTICS, CMD_REBOOT, null, {});
 }
 
@@ -1845,7 +1857,7 @@ function executeLockAction(args) {
   var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
   var tlvBase64 = buildPinPayload(featureMap, args.resource.input);
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .device.sendCommand(CL_DOOR_LOCK, commandId, tlvBase64, { timedInvokeTimeoutMs: 10000 });
 }
 
@@ -1859,7 +1871,7 @@ function handleLockStateAttribute(args) {
   // This handler is included as an example of a handler with a single alias.
   // This overall lock example should not really do this since the state
   // of the locked resource is managed by seed initially, then by events.
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_LOCKED, isLocked ? "true" : "false")
     .success();
 }
@@ -1868,21 +1880,21 @@ function handleActuatorAttributes(args) {
   var currentLocked = args.supplements.resources[EP_LOCK + "/" + RES_LOCKED];
 
   if (args.attribute.attributeId === ATTR_ACTUATOR_ENABLED) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .dataModel.updateResource(EP_LOCK, RES_ACTUATOR_ENABLED, args.attribute.value ? "true" : "false")
       .success();
   } else if (args.attribute.attributeId === ATTR_DOOR_STATE) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .dataModel.updateResource(EP_LOCK, RES_DOOR_STATE, String(args.attribute.value))
       .log("doorState changed while locked=" + currentLocked)
       .success();
   }
 
-  return SbmdUtils.result().success();
+  return Sbmd.result().success();
 }
 
 function handleLockDiagnostics(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .log("DoorLock attr 0x" + args.attribute.attributeId.toString(16) + " changed")
     .success();
 }
@@ -1896,31 +1908,32 @@ function handleLockOperation(args) {
   var actuatorEnabled = args.supplements.attributes.actuatorEnabled;
 
   if (!actuatorEnabled) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .log("lock operation ignored — actuator disabled")
       .success();
   }
 
   if (opType === 0) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .dataModel.updateResource(EP_LOCK, RES_LOCKED, "true")
       .storage.setPersistentData("lastLockOperation", "lock")
       .success();
   } else if (opType === 1) {
-    return SbmdUtils.result()
+    return Sbmd.result()
       .dataModel.updateResource(EP_LOCK, RES_LOCKED, "false")
       .storage.setPersistentData("lastLockOperation", "unlock")
       .success();
   }
 
-  return SbmdUtils.result().success();
+  return Sbmd.result().success();
 }
 
 function handleLockAlarms(args) {
   var alarmCode = args.event.data[0];
-  var count = parseInt(SbmdUtils.getPersistentData("alarmCount") || "0", 10) + 1;
+  var prev = args.supplements.persistentData.alarmCount;
+  var count = parseInt(prev || "0", 10) + 1;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .storage.setTransientData("lastAlarmCode", String(alarmCode), 300)
     .storage.setPersistentData("alarmCount", String(count))
     .log("DoorLock alarm 0x" + args.event.eventId.toString(16)
@@ -1929,7 +1942,7 @@ function handleLockAlarms(args) {
 }
 
 function handleLockEventCatchAll(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .log("DoorLock event 0x" + args.event.eventId.toString(16) + " received")
     .success();
 }
@@ -1942,20 +1955,20 @@ function handleGetCredentialStatusResponse(args) {
   var response = args.command.data;
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_CREDENTIAL_STATUS, JSON.stringify(response))
     .log("credential status updated (rules=" + credRules + ")")
     .success();
 }
 
 function handleUserCommandResponses(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .dataModel.updateResource(EP_LOCK, RES_USER_COMMAND_RESULT, JSON.stringify(args.command.data))
     .success();
 }
 
 function handleLockCommandCatchAll(args) {
-  return SbmdUtils.result()
+  return Sbmd.result()
     .log("DoorLock command 0x" + args.command.commandId.toString(16) + " received")
     .success();
 }
@@ -1976,6 +1989,6 @@ function buildPinPayload(featureMap, pinString) {
     pinBytes[i] = pinString.charCodeAt(i);
   }
 
-  return SbmdUtils.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+  return Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
 }
 ```

@@ -26,9 +26,9 @@
  * and extracts typed ParsedResult structures.
  */
 
-#include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
-#include "deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
 
 #include <gtest/gtest.h>
 #include <string>
@@ -49,7 +49,7 @@ namespace
             ASSERT_TRUE(MQuickJsRuntime::Initialize(256 * 1024));
             auto *ctx = MQuickJsRuntime::GetSharedContext();
             ASSERT_NE(ctx, nullptr);
-            ASSERT_TRUE(SbmdUtilsLoader::LoadBundle(ctx));
+            ASSERT_TRUE(SbmdBundleLoader::LoadBundle(ctx));
         }
 
         static void TearDownTestSuite()
@@ -95,15 +95,25 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSuccessTerminal)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().success()");
+        auto parsed = EvalAndParse("Sbmd.result().success()");
         ASSERT_TRUE(parsed.has_value());
         EXPECT_TRUE(parsed->ops.empty());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(parsed->terminal.data));
+        EXPECT_TRUE(std::get<ResultTerminal::Success>(parsed->terminal.data).value.empty());
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseSuccessTerminalWithValue)
+    {
+        auto parsed = EvalAndParse("Sbmd.result().success('hello')");
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_TRUE(parsed->ops.empty());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(parsed->terminal.data));
+        EXPECT_EQ(std::get<ResultTerminal::Success>(parsed->terminal.data).value, "hello");
     }
 
     TEST_F(SbmdResultExecutorTest, ParseErrorTerminal)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().error('something broke')");
+        auto parsed = EvalAndParse("Sbmd.result().error('something broke')");
         ASSERT_TRUE(parsed.has_value());
         EXPECT_TRUE(parsed->ops.empty());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data));
@@ -116,7 +126,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseLogOp)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().log('hello world').success()");
+        auto parsed = EvalAndParse("Sbmd.result().log('hello world').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::Log>(parsed->ops[0].data));
@@ -125,7 +135,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseUpdateResource2Arg)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().dataModel.updateResource('isOn', 'true').success()");
+        auto parsed = EvalAndParse("Sbmd.result().dataModel.updateResource('isOn', 'true').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[0].data));
@@ -138,7 +148,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseUpdateResource3Arg)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().dataModel.updateResource('1', 'isOn', 'true').success()");
+        auto parsed = EvalAndParse("Sbmd.result().dataModel.updateResource('1', 'isOn', 'true').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[0].data));
@@ -148,12 +158,29 @@ namespace
         EXPECT_EQ(*ur.endpoint, "1");
         EXPECT_EQ(ur.resource, "isOn");
         EXPECT_EQ(ur.value, "true");
+        EXPECT_FALSE(ur.metadata.has_value());
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseUpdateResource4ArgWithMetadata)
+    {
+        auto parsed =
+            EvalAndParse("Sbmd.result().dataModel.updateResource('1', 'isOn', 'true', {source: 'matter'}).success()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_EQ(parsed->ops.size(), 1u);
+        ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[0].data));
+
+        auto &ur = std::get<ResultOp::UpdateResource>(parsed->ops[0].data);
+        ASSERT_TRUE(ur.endpoint.has_value());
+        EXPECT_EQ(*ur.endpoint, "1");
+        EXPECT_EQ(ur.resource, "isOn");
+        EXPECT_EQ(ur.value, "true");
+        ASSERT_TRUE(ur.metadata.has_value());
+        EXPECT_EQ(*ur.metadata, R"({"source":"matter"})");
     }
 
     TEST_F(SbmdResultExecutorTest, ParseSetMetadata)
     {
-        auto parsed =
-            EvalAndParse("SbmdUtils.result().dataModel.setMetadata('1', 'dimLevel', 'unit', 'percent').success()");
+        auto parsed = EvalAndParse("Sbmd.result().dataModel.setMetadata('1', 'dimLevel', 'unit', 'percent').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::SetMetadata>(parsed->ops[0].data));
@@ -167,7 +194,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSetPersistentData)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().storage.setPersistentData('lastState', 'on').success()");
+        auto parsed = EvalAndParse("Sbmd.result().storage.setPersistentData('lastState', 'on').success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::SetPersistentData>(parsed->ops[0].data));
@@ -179,7 +206,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSetTransientData)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().storage.setTransientData('debounce', '1').success()");
+        auto parsed = EvalAndParse("Sbmd.result().storage.setTransientData('debounce', '1', 30).success()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_EQ(parsed->ops.size(), 1u);
         ASSERT_TRUE(std::holds_alternative<ResultOp::SetTransientData>(parsed->ops[0].data));
@@ -187,6 +214,7 @@ namespace
         auto &st = std::get<ResultOp::SetTransientData>(parsed->ops[0].data);
         EXPECT_EQ(st.key, "debounce");
         EXPECT_EQ(st.value, "1");
+        EXPECT_EQ(st.ttlSecs, 30u);
     }
 
     // ========================================================================
@@ -195,7 +223,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseMultipleOps)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result()"
+        auto parsed = EvalAndParse("Sbmd.result()"
                                    ".log('updating')"
                                    ".dataModel.updateResource('1', 'temp', '72')"
                                    ".storage.setPersistentData('last', 'ok')"
@@ -214,7 +242,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSendCommandMinimal)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().device.sendCommand(6, 1)");
+        auto parsed = EvalAndParse("Sbmd.result().device.sendCommand(6, 1)");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(parsed->terminal.data));
 
@@ -228,7 +256,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseSendCommandWithPayload)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().device.sendCommand(257, 0, 'AB==')");
+        auto parsed = EvalAndParse("Sbmd.result().device.sendCommand(257, 0, 'AB==')");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(parsed->terminal.data));
 
@@ -241,7 +269,7 @@ namespace
     TEST_F(SbmdResultExecutorTest, ParseSendCommandWithOptions)
     {
         auto parsed = EvalAndParse(
-            "SbmdUtils.result().device.sendCommand(257, 0, 'AB==', {timedInvokeTimeoutMs: 10000, endpointId: 5})");
+            "Sbmd.result().device.sendCommand(257, 0, 'AB==', {timedInvokeTimeoutMs: 10000, endpointId: 5})");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(parsed->terminal.data));
 
@@ -261,7 +289,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseWriteAttribute)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().device.writeAttribute(3, 0, 'AQID')");
+        auto parsed = EvalAndParse("Sbmd.result().device.writeAttribute(3, 0, 'AQID')");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::WriteAttribute>(parsed->terminal.data));
 
@@ -274,7 +302,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseWriteAttributeWithOptions)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result().device.writeAttribute(3, 0, 'AQID', {endpointId: 2})");
+        auto parsed = EvalAndParse("Sbmd.result().device.writeAttribute(3, 0, 'AQID', {endpointId: 2})");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::WriteAttribute>(parsed->terminal.data));
 
@@ -293,16 +321,15 @@ namespace
     TEST_F(SbmdResultExecutorTest, ParseRequestCommand)
     {
         // Use IIFE to allow var declarations
-        auto parsed = EvalAndParse(
-            "(function() {"
-            "  var deferred = {"
-            "    responseCommandId: 42,"
-            "    onResponse: function(args) { return SbmdUtils.result().success(); },"
-            "    onError: function(args) { return SbmdUtils.result().error('timeout'); },"
-            "    timeoutMs: 5000"
-            "  };"
-            "  return SbmdUtils.result().device.requestCommand(0x0101, 0, deferred, 'AB==');"
-            "})()");
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var deferred = {"
+                                   "    responseCommandId: 42,"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('timeout'); },"
+                                   "    timeoutMs: 5000"
+                                   "  };"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, deferred, 'AB==');"
+                                   "})()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
 
@@ -325,15 +352,14 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseReadAttribute)
     {
-        auto parsed = EvalAndParse(
-            "(function() {"
-            "  var deferred = {"
-            "    onResponse: function(args) { return SbmdUtils.result().success(); },"
-            "    onError: function(args) { return SbmdUtils.result().error('fail'); },"
-            "    timeoutMs: 3000"
-            "  };"
-            "  return SbmdUtils.result().device.readAttribute(0x0300, 0x0001, deferred);"
-            "})()");
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var deferred = {"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    timeoutMs: 3000"
+                                   "  };"
+                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, deferred);"
+                                   "})()");
         ASSERT_TRUE(parsed.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(parsed->terminal.data));
 
@@ -353,7 +379,7 @@ namespace
 
     TEST_F(SbmdResultExecutorTest, ParseOpsBeforeDeviceTerminal)
     {
-        auto parsed = EvalAndParse("SbmdUtils.result()"
+        auto parsed = EvalAndParse("Sbmd.result()"
                                    ".log('sending lock command')"
                                    ".storage.setPersistentData('lastLockOp', 'lock')"
                                    ".device.sendCommand(0x0101, 0)");

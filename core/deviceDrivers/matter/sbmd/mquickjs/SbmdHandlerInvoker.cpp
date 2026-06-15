@@ -36,6 +36,7 @@
 #include <variant>
 
 extern "C" {
+#include <cjson/cJSON.h>
 #include <icLog/logging.h>
 #include <mquickjs/mquickjs.h>
 }
@@ -50,6 +51,8 @@ extern void updateResource(const char *deviceUuid,
                            void *metadata);
 
 extern void setMetadata(const char *deviceUuid, const char *endpointId, const char *name, const char *value);
+
+extern bool deviceServiceSetMetadata(const char *uri, const char *value);
 }
 
 namespace barton
@@ -163,9 +166,12 @@ namespace barton
                                             JSValue args,
                                             const SbmdSupplements &supplements,
                                             const AttributeSupplementFetcher &attrFetcher,
-                                            const ResourceSupplementFetcher &resFetcher)
+                                            const ResourceSupplementFetcher &resFetcher,
+                                            const PersistentDataFetcher &persistFetcher,
+                                            const TransientDataFetcher &transientFetcher)
     {
-        if (supplements.attributes.empty() && supplements.resources.empty())
+        if (supplements.attributes.empty() && supplements.resources.empty() && supplements.persistentData.empty() &&
+            supplements.transientData.empty())
         {
             return;
         }
@@ -214,10 +220,54 @@ namespace barton
             JS_SetPropertyStr(ctx, supObj, "resources", resObj);
         }
 
+        if (!supplements.persistentData.empty())
+        {
+            JSValue pdObj = JS_NewObject(ctx);
+
+            for (const auto &key : supplements.persistentData)
+            {
+                auto value = persistFetcher(key);
+
+                if (value.has_value())
+                {
+                    JS_SetPropertyStr(ctx, pdObj, key.c_str(), JS_NewString(ctx, value->c_str()));
+                }
+                else
+                {
+                    JS_SetPropertyStr(ctx, pdObj, key.c_str(), JS_NULL);
+                }
+            }
+
+            JS_SetPropertyStr(ctx, supObj, "persistentData", pdObj);
+        }
+
+        if (!supplements.transientData.empty())
+        {
+            JSValue tdObj = JS_NewObject(ctx);
+
+            for (const auto &key : supplements.transientData)
+            {
+                auto value = transientFetcher(key);
+
+                if (value.has_value())
+                {
+                    JS_SetPropertyStr(ctx, tdObj, key.c_str(), JS_NewString(ctx, value->c_str()));
+                }
+                else
+                {
+                    JS_SetPropertyStr(ctx, tdObj, key.c_str(), JS_NULL);
+                }
+            }
+
+            JS_SetPropertyStr(ctx, supObj, "transientData", tdObj);
+        }
+
         JS_SetPropertyStr(ctx, args, "supplements", supObj);
     }
 
-    void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops)
+    void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx,
+                                        const std::vector<ResultOp> &ops,
+                                        const TransientDataSetter &transientSetter)
     {
         for (const auto &op : ops)
         {
@@ -226,7 +276,19 @@ namespace barton
                 const auto &ur = std::get<ResultOp::UpdateResource>(op.data);
                 const char *epId = ur.endpoint.has_value() ? ur.endpoint->c_str() : hctx.endpointId.c_str();
 
-                updateResource(hctx.deviceUuid.c_str(), epId, ur.resource.c_str(), ur.value.c_str(), nullptr);
+                cJSON *meta = nullptr;
+
+                if (ur.metadata.has_value())
+                {
+                    meta = cJSON_Parse(ur.metadata->c_str());
+                }
+
+                updateResource(hctx.deviceUuid.c_str(), epId, ur.resource.c_str(), ur.value.c_str(), meta);
+
+                if (meta != nullptr)
+                {
+                    cJSON_Delete(meta);
+                }
             }
             else if (std::holds_alternative<ResultOp::SetMetadata>(op.data))
             {
@@ -236,14 +298,25 @@ namespace barton
             else if (std::holds_alternative<ResultOp::SetPersistentData>(op.data))
             {
                 const auto &sp = std::get<ResultOp::SetPersistentData>(op.data);
-                icDebug("setPersistentData('%s', '%s') — not yet implemented", sp.key.c_str(), sp.value.c_str());
-                // TODO: implement persistent data storage
+                std::string uri = "/devices/" + hctx.deviceUuid + "/metadata/sbmd." + sp.key;
+
+                if (!deviceServiceSetMetadata(uri.c_str(), sp.value.c_str()))
+                {
+                    icError("failed to set persistent data '%s'", sp.key.c_str());
+                }
             }
             else if (std::holds_alternative<ResultOp::SetTransientData>(op.data))
             {
                 const auto &st = std::get<ResultOp::SetTransientData>(op.data);
-                icDebug("setTransientData('%s', '%s') — not yet implemented", st.key.c_str(), st.value.c_str());
-                // TODO: implement transient data storage
+
+                if (transientSetter)
+                {
+                    transientSetter(st.key, st.value, st.ttlSecs);
+                }
+                else
+                {
+                    icWarn("setTransientData('%s') called but no transient setter provided", st.key.c_str());
+                }
             }
             else if (std::holds_alternative<ResultOp::Log>(op.data))
             {

@@ -1066,6 +1066,20 @@ namespace barton
             supplements.resources = GetStringArray(ctx, resVal);
         }
 
+        JSValue persistVal = JS_GetPropertyStr(ctx, supplementsObj, "persistentData");
+
+        if (!JS_IsUndefined(persistVal) && !JS_IsNull(persistVal))
+        {
+            supplements.persistentData = GetStringArray(ctx, persistVal);
+        }
+
+        JSValue transientVal = JS_GetPropertyStr(ctx, supplementsObj, "transientData");
+
+        if (!JS_IsUndefined(transientVal) && !JS_IsNull(transientVal))
+        {
+            supplements.transientData = GetStringArray(ctx, transientVal);
+        }
+
         return supplements;
     }
 

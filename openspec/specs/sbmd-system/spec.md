@@ -222,23 +222,23 @@ When using the mquickjs engine, the system SHALL support configuring the pre-all
 - **WHEN** `BCORE_SBMD_SCRIPT_TIMEOUT_MS=10000` is set
 - **THEN** the mquickjs engine SHALL allow scripts up to 10 seconds of execution time before interrupting
 
-### Requirement: SbmdUtils built-in library
-The system SHALL provide a built-in JavaScript library `SbmdUtils` (loaded into every QuickJS context) with: `SbmdUtils.Tlv.decode(base64)` for Matter TLV decoding, `SbmdUtils.Tlv.decodeStruct(base64)` for struct TLV decoding, `SbmdUtils.Tlv.encode(value, type)` for TLV encoding, `SbmdUtils.Tlv.encodeStruct(obj, schema)` for struct encoding, `SbmdUtils.Tlv.emptyStruct()` for empty struct TLV, `SbmdUtils.Response.write(clusterId, attributeId, tlvBase64, options?)` for write operation construction, `SbmdUtils.Response.invoke(clusterId, commandId, tlvBase64, opts)` for invoke operation construction, `SbmdUtils.Base64` for base64 encode/decode, and `SbmdUtils.TLV_TYPE` with TLV type constants.
+### Requirement: Sbmd built-in library
+The system SHALL provide a built-in JavaScript library `Sbmd` (loaded into every QuickJS context) with: `Sbmd.Tlv.decode(base64)` for Matter TLV decoding, `Sbmd.Tlv.decodeStruct(base64)` for struct TLV decoding, `Sbmd.Tlv.encode(value, type)` for TLV encoding, `Sbmd.Tlv.encodeStruct(obj, schema)` for struct encoding, `Sbmd.Tlv.emptyStruct()` for empty struct TLV, `Sbmd.Response.write(clusterId, attributeId, tlvBase64, options?)` for write operation construction, `Sbmd.Response.invoke(clusterId, commandId, tlvBase64, opts)` for invoke operation construction, `Sbmd.Base64` for base64 encode/decode, and `Sbmd.Tlv.TYPE` with TLV type constants.
 
 #### Scenario: Decode boolean TLV
-- **WHEN** `SbmdUtils.Tlv.decode(base64)` is called with a TLV-encoded boolean `true`
+- **WHEN** `Sbmd.Tlv.decode(base64)` is called with a TLV-encoded boolean `true`
 - **THEN** it SHALL return JavaScript `true`
 
 #### Scenario: Encode uint8 TLV
-- **WHEN** `SbmdUtils.Tlv.encode(128, 'uint8')` is called
+- **WHEN** `Sbmd.Tlv.encode(128, 'uint8')` is called
 - **THEN** it SHALL return a base64 string containing the TLV-encoded uint8 value 128
 
 #### Scenario: Construct invoke response
-- **WHEN** `SbmdUtils.Response.invoke(6, 1, tlvBase64)` is called
+- **WHEN** `Sbmd.Response.invoke(6, 1, tlvBase64)` is called
 - **THEN** it SHALL return `{invoke: {clusterId: 6, commandId: 1, tlvBase64: <value>}}`
 
 #### Scenario: Decode invalid Base64 input
-- **WHEN** `SbmdUtils.Tlv.decode(base64)` or `SbmdUtils.Base64.decode(base64)` is called with a string containing characters outside the Base64 alphabet (not A–Z, a–z, 0–9, `+`, `/`, or `=`)
+- **WHEN** `Sbmd.Tlv.decode(base64)` or `Sbmd.Base64.decode(base64)` is called with a string containing characters outside the Base64 alphabet (not A–Z, a–z, 0–9, `+`, `/`, or `=`)
 - **THEN** it SHALL throw a JavaScript `Error` describing the invalid input
 
 ### Requirement: Script context variables
@@ -251,7 +251,7 @@ SBMD scripts SHALL receive context via global JavaScript variables: `sbmdReadArg
 ### Requirement: Current SBMD spec catalog
 The system SHALL ship with SBMD specs for: `light` (13 Matter device types, JavaScript), `door-lock` (device type 0x000a, JavaScript), `air-quality-sensor` (device type 0x002c, JavaScript), `occupancy-sensor` (device type 0x0107, JavaScript), `water-leak-detector` (device type 0x0043, JavaScript), `contact-sensor` (device type 0x0015, JavaScript), `temperature-sensor` (JavaScript), `humidity-sensor` (JavaScript), `thermostat` (JavaScript), and `ikea-timmerflotte` (JavaScript).
 
-All specs SHALL use `scriptType: "JavaScript"` and the `SbmdUtils` built-in library for TLV encoding/decoding.
+All specs SHALL use `scriptType: "JavaScript"` and the `Sbmd` built-in library for TLV encoding/decoding.
 
 #### Scenario: Light SBMD spec coverage
 - **WHEN** a Matter device with device type 0x0100 (On/Off Light) is commissioned
@@ -259,7 +259,7 @@ All specs SHALL use `scriptType: "JavaScript"` and the `SbmdUtils` built-in libr
 
 #### Scenario: Door lock SBMD spec
 - **WHEN** a Matter device with device type 0x000a (Door Lock) is commissioned
-- **THEN** the `door-lock.sbmd` driver SHALL claim it and register lock-related resources using `SbmdUtils.Tlv` for TLV encoding
+- **THEN** the `door-lock.sbmd` driver SHALL claim it and register lock-related resources using `Sbmd.Tlv` for TLV encoding
 
 #### Scenario: Air quality sensor SBMD spec
 - **WHEN** a Matter device with device type 0x002c (Air Quality Sensor) is commissioned

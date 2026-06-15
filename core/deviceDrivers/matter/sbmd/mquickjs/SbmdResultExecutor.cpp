@@ -188,10 +188,6 @@ namespace barton
         {
             ResultOp::UpdateResource data;
 
-            // 2-arg: (resource, value) — no endpoint
-            // 3-arg: (endpoint, resource, value)
-            // 4-arg: (endpoint, resource, value, metadata) — metadata ignored for now
-            // The builder emits: {op, endpoint?, resource, value}
             if (HasProperty(ctx, opVal, "endpoint"))
             {
                 data.endpoint = GetStringProp(ctx, opVal, "endpoint");
@@ -199,6 +195,11 @@ namespace barton
 
             data.resource = GetStringProp(ctx, opVal, "resource");
             data.value = GetStringProp(ctx, opVal, "value");
+
+            if (HasProperty(ctx, opVal, "metadata"))
+            {
+                data.metadata = GetStringProp(ctx, opVal, "metadata");
+            }
 
             return ResultOp{std::move(data)};
         }
@@ -225,6 +226,7 @@ namespace barton
             ResultOp::SetTransientData data;
             data.key = GetStringProp(ctx, opVal, "key");
             data.value = GetStringProp(ctx, opVal, "value");
+            data.ttlSecs = GetUint32Prop(ctx, opVal, "ttlSecs");
 
             return ResultOp{std::move(data)};
         }
@@ -248,7 +250,10 @@ namespace barton
 
         if (opType == "success")
         {
-            return ResultTerminal{ResultTerminal::Success{}};
+            ResultTerminal::Success data;
+            data.value = GetStringProp(ctx, termVal, "value");
+
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "error")
         {
