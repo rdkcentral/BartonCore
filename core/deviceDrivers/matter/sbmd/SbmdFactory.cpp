@@ -28,11 +28,15 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdFactory.h"
-#include "SbmdParser.h"
 #include "SpecBasedMatterDeviceDriver.h"
 #include "../MatterDriverFactory.h"
 
+#include "mquickjs/MQuickJsRuntime.h"
+#include "mquickjs/SbmdUtilsLoader.h"
+#include "mquickjs/SbmdLoader.h"
+
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -87,13 +91,16 @@ bool SbmdFactory::RegisterDrivers()
 void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered)
 {
     std::error_code ec;
+
     bool exists = std::filesystem::exists(dirPath, ec);
+
     if (ec)
     {
         icError("Failed to check if SBMD directory exists %s: %s", dirPath.c_str(), ec.message().c_str());
         allRegistered = false;
         return;
     }
+
     if (!exists)
     {
         icWarn("SBMD specs directory does not exist: %s", dirPath.c_str());
@@ -101,68 +108,157 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
         return;
     }
 
-    bool isDir = std::filesystem::is_directory(dirPath, ec);
-    if (ec)
+    if (!std::filesystem::is_directory(dirPath, ec) || ec)
     {
-        icError("Failed to check if SBMD path is a directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        allRegistered = false;
-        return;
-    }
-    if (!isDir)
-    {
-        icWarn("SBMD specs path is not a directory: %s", dirPath.c_str());
-        allRegistered = false;
         return;
     }
 
     std::filesystem::directory_iterator dirIterator(dirPath, ec);
+
     if (ec)
     {
-        icError("Failed to open SBMD directory %s: %s", dirPath.c_str(), ec.message().c_str());
-        allRegistered = false;
         return;
+    }
+
+    // Ensure the shared JS runtime is initialized before loading any drivers.
+    // SbmdScriptImpl::Create lazily initializes, but drivers
+    // need it at factory registration time.
+    // Note: do NOT hold the JS mutex across these calls — LoadBundle and
+    // InjectCaptureFunction may acquire it internally.
+    if (!runtimeReady)
+    {
+        if (!MQuickJsRuntime::IsInitialized())
+        {
+            if (!MQuickJsRuntime::Initialize(BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES))
+            {
+                icError("Failed to initialize mquickjs runtime for drivers");
+                allRegistered = false;
+                return;
+            }
+        }
+
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (!SbmdUtilsLoader::LoadBundle(ctx))
+        {
+            icError("Failed to load SBMD utilities bundle for drivers");
+            allRegistered = false;
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+            if (!SbmdLoader::InjectCaptureFunction(ctx))
+            {
+                icError("Failed to inject SbmdDriver capture function");
+                allRegistered = false;
+                return;
+            }
+        }
+
+        runtimeReady = true;
+        icInfo("mquickjs runtime initialized for SBMD drivers");
     }
 
     try
     {
-        for (const auto& entry : dirIterator)
+        for (const auto &entry : dirIterator)
         {
-            if (entry.is_regular_file() && (entry.path().extension() == ".sbmd"))
+            if (!entry.is_regular_file() || entry.path().extension() != ".js")
             {
-                try
+                continue;
+            }
+
+            // Check for .sbmd.js double extension
+            auto stem = entry.path().stem(); // e.g. "light.sbmd"
+
+            if (stem.extension() != ".sbmd")
+            {
+                continue;
+            }
+
+            try
+            {
+                icDebug("Loading SBMD driver: %s", entry.path().c_str());
+
+                // Read file contents
+                std::ifstream file(entry.path(), std::ios::binary | std::ios::ate);
+
+                if (!file.is_open())
                 {
-                    icDebug("Loading SBMD spec: %s", entry.path().c_str());
-
-                    auto spec = SbmdParser::ParseFile(entry.path().string());
-                    if (!spec)
-                    {
-                        icError("Failed to parse SBMD spec: %s", entry.path().c_str());
-                        allRegistered = false;
-                        continue;
-                    }
-
-                    auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(spec);
-
-                    if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
-                    {
-                        icError("FATAL: Failed to register SBMD driver from: %s. "
-                                "This is a fatal error. Matter subsystem will not be ready.",
-                                entry.path().c_str());
-                        allRegistered = false;
-                        continue;
-                    }
-
-                    icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
-                }
-                catch (const std::exception& e)
-                {
-                    icError("Exception loading SBMD spec %s: %s", entry.path().c_str(), e.what());
+                    icError("Failed to open SBMD driver: %s", entry.path().c_str());
                     allRegistered = false;
+                    continue;
                 }
+
+                auto fileSize = file.tellg();
+                file.seekg(0, std::ios::beg);
+                std::string source(static_cast<size_t>(fileSize), '\0');
+                file.read(source.data(), fileSize);
+
+                if (!file)
+                {
+                    icError("Failed to read SBMD driver: %s", entry.path().c_str());
+                    allRegistered = false;
+                    continue;
+                }
+
+                // Load the driver registration under the JS mutex
+                std::unique_ptr<SbmdRegistration> registration;
+                {
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+                    registration =
+                        SbmdLoader::LoadDriver(ctx, entry.path().string(), source.c_str(), source.size());
+                }
+
+                if (!registration)
+                {
+                    icError("Failed to load SBMD driver: %s", entry.path().c_str());
+                    allRegistered = false;
+                    continue;
+                }
+
+                // Create the driver and activate it
+                auto sbmdDriver = std::make_unique<SbmdDriver>(std::move(registration), std::move(source));
+
+                {
+                    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+                    if (!sbmdDriver->Activate(ctx))
+                    {
+                        icError("Failed to activate SBMD driver: %s", entry.path().c_str());
+                        allRegistered = false;
+                        continue;
+                    }
+                }
+
+                // Create the SpecBasedMatterDeviceDriver wrapper
+                auto driver = std::make_unique<SpecBasedMatterDeviceDriver>(sbmdDriver.get());
+
+                if (!MatterDriverFactory::Instance().RegisterDriver(std::move(driver)))
+                {
+                    icError("FATAL: Failed to register SBMD driver from: %s", entry.path().c_str());
+                    allRegistered = false;
+                    continue;
+                }
+
+                // Store the driver for lifetime management
+                drivers.push_back(std::move(sbmdDriver));
+
+                icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
+            }
+            catch (const std::exception &e)
+            {
+                icError("Exception loading SBMD driver %s: %s", entry.path().c_str(), e.what());
+                allRegistered = false;
             }
         }
     }
-    catch (const std::filesystem::filesystem_error& e)
+    catch (const std::filesystem::filesystem_error &e)
     {
         icError("Filesystem error during SBMD directory iteration: %s", e.what());
         allRegistered = false;
