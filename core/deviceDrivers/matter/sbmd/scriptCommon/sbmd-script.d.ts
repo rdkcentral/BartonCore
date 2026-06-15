@@ -222,30 +222,24 @@ interface SbmdCommandArgs {
 /**
  * Output object for command execute mapper scripts.
  *
- * Must return either an `invoke` operation with pre-encoded TLV,
- * or a `value` result for local-only results (no Matter interaction).
- * Use `SbmdUtils.Response.invoke()` or `SbmdUtils.Response.value()` helpers.
+ * Must return an `invoke` operation with pre-encoded TLV.
+ * Use `SbmdUtils.Response.invoke()` helper.
  *
  * @example
  * return { invoke: { clusterId: 6, commandId: 2 } };
  *
  * @example
  * return { invoke: { clusterId: 257, commandId: 0, tlvBase64: "...", timedInvokeTimeoutMs: 10000 } };
- *
- * @example
- * return { value: "session-id-1" };
  */
-type SbmdCommandResult =
-    | {
-          invoke: {
-              clusterId: number;
-              commandId: number;
-              tlvBase64?: string;
-              endpointId?: string;
-              timedInvokeTimeoutMs?: number;
-          };
-      }
-    | { value: string };
+interface SbmdCommandResult {
+    invoke: {
+        clusterId: number;
+        commandId: number;
+        tlvBase64?: string;
+        endpointId?: string;
+        timedInvokeTimeoutMs?: number;
+    };
+}
 
 // =============================================================================
 // Execute Response Mapper Interface
@@ -376,36 +370,3 @@ declare var sbmdWriteArgs: SbmdWriteArgs;
 declare var sbmdCommandArgs: SbmdCommandArgs;
 declare var sbmdCommandResponseArgs: SbmdCommandResponseArgs;
 declare var sbmdEventArgs: SbmdEventArgs;
-
-// =============================================================================
-// SbmdUtils Helpers
-// =============================================================================
-
-interface SessionManagerInstance {
-    /** Create a new session with optional data, returns auto-incrementing ID */
-    create(data?: any): number;
-    /** Retrieve session data by ID, or undefined if not found */
-    get(id: number): any;
-    /** Destroy a session by ID, returns true if it existed */
-    destroy(id: number): boolean;
-}
-
-interface SessionManagerStatic {
-    /** Get or create a SessionManager scoped to a device UUID */
-    getForDevice(deviceUuid: string): SessionManagerInstance;
-    /** Remove the SessionManager for a device (cleanup on device removal) */
-    removeForDevice(deviceUuid: string): void;
-}
-
-declare var SbmdUtils: {
-    Base64: any;
-    Tlv: any;
-    TLV_TYPE: any;
-    Response: {
-        invoke(clusterId: number, commandId: number, tlvBase64?: string, options?: { endpointId?: number; timedInvokeTimeoutMs?: number }): SbmdCommandResult;
-        write(clusterId: number, attributeId: number, tlvBase64?: string, options?: { endpointId?: number }): SbmdWriteResult;
-        value(value: string): SbmdCommandResult;
-        error(message: string): SbmdErrorResult;
-    };
-    SessionManager: SessionManagerStatic;
-};
