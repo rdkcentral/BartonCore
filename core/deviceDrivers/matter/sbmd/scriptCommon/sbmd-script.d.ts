@@ -78,7 +78,7 @@ interface SbmdReadArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for read mapper scripts (v3.0 format).
+ * Output object for read mapper scripts (legacy format).
  *
  * Return one of: SbmdReadResult, SbmdErrorResult, or {} (suppress).
  *
@@ -277,7 +277,7 @@ interface SbmdCommandResponseArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for command response mapper scripts (v3.0 format).
+ * Output object for command response mapper scripts (legacy format).
  *
  * Return one of: SbmdCommandResponseResult, SbmdErrorResult, or {} (suppress).
  *
@@ -328,7 +328,7 @@ interface SbmdEventArgs extends SbmdBaseContext {
 }
 
 /**
- * Output object for event mapper scripts (v3.0 format).
+ * Output object for event mapper scripts (legacy format).
  *
  * Return one of: SbmdEventResult, SbmdErrorResult, or {} (suppress).
  *

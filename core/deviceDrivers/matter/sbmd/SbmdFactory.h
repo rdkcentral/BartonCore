@@ -27,7 +27,11 @@
 
 #pragma once
 
+#include "SbmdDriver.h"
+
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace barton
 {
@@ -43,6 +47,7 @@ namespace barton
         /**
          * Register SBMD drivers from all configured directories.
          * Directories are specified as a semicolon-delimited list.
+         * Loads SBMD drivers (.sbmd.js) from configured directories.
          */
         bool RegisterDrivers();
 
@@ -51,8 +56,21 @@ namespace barton
         ~SbmdFactory() = default;
 
         /**
-         * Load and register SBMD drivers from a single directory.
+         * Load and register SBMD drivers (.sbmd.js) from a single directory.
+         * Drivers are activated immediately and stored in drivers for lifetime management.
          */
-        static void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+        void RegisterDriversFromDirectory(const std::string &dirPath, bool &allRegistered);
+
+        /**
+         * Owned driver instances. These must outlive the SpecBasedMatterDeviceDriver
+         * instances that reference them (those are owned by the C device manager).
+         */
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
+
+        /**
+         * Whether the mquickjs runtime, utilities bundle, and capture function
+         * have been initialized for driver loading.
+         */
+        bool runtimeReady = false;
     };
 } //namespace barton
