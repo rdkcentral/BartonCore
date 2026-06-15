@@ -303,6 +303,26 @@ namespace barton
                                    chip::AttributeId attributeId,
                                    chip::TLV::TLVReader &reader);
 
+        /**
+         * Handle an event report via the dispatch tables.
+         * Called from MatterDevice::CacheCallback via the EventCallback.
+         */
+        void HandleEvent(const std::string &deviceId,
+                         chip::EndpointId endpointId,
+                         chip::ClusterId clusterId,
+                         chip::EventId eventId,
+                         chip::TLV::TLVReader &reader);
+
+        /**
+         * Handle an unsolicited command via the dispatch tables.
+         * Called when a command response does not match any pending requestCommand.
+         */
+        void HandleCommand(const std::string &deviceId,
+                           chip::EndpointId endpointId,
+                           chip::ClusterId clusterId,
+                           uint32_t commandId,
+                           const std::string &tlvBase64);
+
         std::optional<uint8_t> ConvertModesToBitmask(const std::vector<std::string> &modes);
 
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed

@@ -113,6 +113,14 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
     });
 
+    // Set the event callback so CacheCallback delegates to our dispatch tables
+    device->SetEventCallback(
+        [this](const std::string &deviceId,
+               chip::EndpointId endpointId,
+               chip::ClusterId clusterId,
+               chip::EventId eventId,
+               chip::TLV::TLVReader &reader) { HandleEvent(deviceId, endpointId, clusterId, eventId, reader); });
+
     // Check prerequisites for resources
     const auto &reg = driver->GetRegistration();
 
@@ -1941,6 +1949,173 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         {
             const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
             icWarn("Attribute handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
+        }
+    }
+}
+
+void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
+                                              chip::EndpointId endpointId,
+                                              chip::ClusterId clusterId,
+                                              chip::EventId eventId,
+                                              chip::TLV::TLVReader &reader)
+{
+    if (!driver || !driver->IsActivated())
+    {
+        return;
+    }
+
+    // Look up matching handlers in the event dispatch table
+    auto matches = driver->GetEventDispatch().Lookup(clusterId, eventId);
+
+    if (matches.empty())
+    {
+        return;
+    }
+
+    // Encode TLV element as base64 for passing to JS handlers
+    uint8_t tlvBuf[1024]; // Events may contain structured data; use larger buffer
+    chip::TLV::TLVWriter writer;
+    writer.Init(tlvBuf, sizeof(tlvBuf));
+
+    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    {
+        icWarn("Failed to copy TLV element for cluster 0x%x event 0x%x", clusterId, eventId);
+        return;
+    }
+
+    uint32_t tlvLen = writer.GetLengthWritten();
+
+    if (tlvLen == 0)
+    {
+        icDebug("Empty TLV data for event 0x%x", eventId);
+        return;
+    }
+
+    // Base64 encode the TLV data
+    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+    std::string tlvBase64(maxBase64Len, '\0');
+    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+    tlvBase64.resize(encoded);
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = std::to_string(endpointId);
+
+    auto matterDevice = GetDevice(deviceId);
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        {
+            continue;
+        }
+
+        JSValue args = SbmdHandlerInvoker::BuildEventArgs(ctx, hctx, clusterId, eventId, tlvBase64);
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
+        }
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        if (!result.has_value())
+        {
+            icWarn("Event handler '%s' returned no result for cluster 0x%x event 0x%x",
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   eventId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("Event handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
+        }
+    }
+}
+
+void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
+                                                chip::EndpointId endpointId,
+                                                chip::ClusterId clusterId,
+                                                uint32_t commandId,
+                                                const std::string &tlvBase64)
+{
+    if (!driver || !driver->IsActivated())
+    {
+        return;
+    }
+
+    // Look up matching handlers in the command dispatch table
+    auto matches = driver->GetCommandDispatch().Lookup(clusterId, commandId);
+
+    if (matches.empty())
+    {
+        return;
+    }
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = std::to_string(endpointId);
+
+    auto matterDevice = GetDevice(deviceId);
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        {
+            continue;
+        }
+
+        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
+        }
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        if (!result.has_value())
+        {
+            icWarn("Command handler '%s' returned no result for cluster 0x%x command 0x%x",
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   commandId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("Command handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
         }
     }
 }

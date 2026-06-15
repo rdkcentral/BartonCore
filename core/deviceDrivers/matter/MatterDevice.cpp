@@ -131,7 +131,14 @@ void MatterDevice::CacheCallback::OnEventData(const chip::app::EventHeader &aEve
             aEventHeader.mPath.mClusterId,
             aEventHeader.mPath.mEventId);
 
-    // Event handling is performed by the driver's dispatch system via attributeCallback
+    if (device->eventCallback)
+    {
+        device->eventCallback(device->deviceId,
+                              aEventHeader.mPath.mEndpointId,
+                              aEventHeader.mPath.mClusterId,
+                              aEventHeader.mPath.mEventId,
+                              *apData);
+    }
 }
 
 bool MatterDevice::GetEndpointForCluster(chip::ClusterId clusterId, chip::EndpointId &outEndpointId)

@@ -83,6 +83,17 @@ namespace barton
                                                        chip::TLV::TLVReader &reader)>;
 
         /**
+         * Callback type for event data handling.
+         * Receives the endpoint, cluster, and event IDs along with a TLV reader positioned
+         * at the event data. Called from CacheCallback::OnEventData when set.
+         */
+        using EventCallback = std::function<void(const std::string &deviceId,
+                                                 chip::EndpointId endpointId,
+                                                 chip::ClusterId clusterId,
+                                                 chip::EventId eventId,
+                                                 chip::TLV::TLVReader &reader)>;
+
+        /**
          * Set a attribute callback. When set, CacheCallback::OnAttributeChanged will
          * call this instead of using the script mapper.
          */
@@ -90,6 +101,12 @@ namespace barton
         {
             attributeCallback = std::move(callback);
         }
+
+        /**
+         * Set an event callback. When set, CacheCallback::OnEventData will
+         * call this to dispatch event data to the driver.
+         */
+        void SetEventCallback(EventCallback callback) { eventCallback = std::move(callback); }
 
         /**
          * Set the list of cluster IDs to get feature maps from.
@@ -380,6 +397,7 @@ namespace barton
         std::string deviceId;
         std::shared_ptr<DeviceDataCache> deviceDataCache;
         AttributeCallback attributeCallback;
+        EventCallback eventCallback;
         std::unique_ptr<CacheCallback> cacheCallback;
         std::vector<uint32_t> featureClusters;
         std::map<uint32_t, uint32_t> cachedClusterFeatureMaps;

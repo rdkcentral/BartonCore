@@ -100,6 +100,52 @@ namespace barton
         return args;
     }
 
+    JSValue SbmdHandlerInvoker::BuildEventArgs(JSContext *ctx,
+                                               const HandlerContext &hctx,
+                                               uint32_t clusterId,
+                                               uint32_t eventId,
+                                               const std::string &tlvBase64)
+    {
+        JSValue args = BuildBaseArgs(ctx, hctx);
+
+        // Add trigger info
+        JSValue trigger = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, trigger, "eventId", JS_NewUint32(ctx, eventId));
+
+        if (!tlvBase64.empty())
+        {
+            JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+        }
+
+        JS_SetPropertyStr(ctx, args, "event", trigger);
+
+        return args;
+    }
+
+    JSValue SbmdHandlerInvoker::BuildCommandArgs(JSContext *ctx,
+                                                 const HandlerContext &hctx,
+                                                 uint32_t clusterId,
+                                                 uint32_t commandId,
+                                                 const std::string &tlvBase64)
+    {
+        JSValue args = BuildBaseArgs(ctx, hctx);
+
+        // Add trigger info
+        JSValue trigger = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, trigger, "commandId", JS_NewUint32(ctx, commandId));
+
+        if (!tlvBase64.empty())
+        {
+            JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+        }
+
+        JS_SetPropertyStr(ctx, args, "command", trigger);
+
+        return args;
+    }
+
     JSValue SbmdHandlerInvoker::BuildResourceArgs(JSContext *ctx,
                                                   const HandlerContext &hctx,
                                                   const std::string &resourceId,
