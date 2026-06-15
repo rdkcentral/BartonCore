@@ -525,7 +525,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "DispatchTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0, CL_DOOR_LOCK: 257, EVT_LOCK_OP: 2 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -582,7 +582,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "ClearTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -619,7 +619,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "InvokeTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0, CMD_ON: 1 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -676,7 +676,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdDispatchTest",
                 constants: {
                     CL_TEST: 0xFFF10000,
@@ -743,7 +743,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdClearTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -779,7 +779,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdInvokeTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0, EP: "1" },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -851,7 +851,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdWildcardTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -911,7 +911,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "AllTablesTest",
                 constants: {
                     CL_ON_OFF: 6,

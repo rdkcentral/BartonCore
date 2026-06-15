@@ -46,7 +46,7 @@ namespace
     const char *kDriverSource = R"(
         SbmdDriver({
             schemaVersion: "4.0",
-            driverVersion: "1.0",
+            driverVersion: 1,
             name: "TestDriver",
             constants: {
                 EP: "1",
@@ -236,7 +236,7 @@ namespace
         EXPECT_EQ(reg.name, "TestDriver");
         EXPECT_EQ(reg.barton.deviceClass, "light");
         EXPECT_EQ(reg.schemaVersion, "4.0");
-        EXPECT_EQ(reg.driverVersion, "1.0");
+        EXPECT_EQ(reg.driverVersion, 1u);
 
         // Clean up
         {
@@ -443,7 +443,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdLifecycleTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -498,7 +498,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "CmdDeactivateTest",
                 constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -534,7 +534,7 @@ namespace
         const char *minimalSource = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "Minimal",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -580,7 +580,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "NoTimeout",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -598,7 +598,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithReporting",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -620,7 +620,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "TimedInvokeTest",
                 constants: { CL_DOOR_LOCK: 257, CMD_LOCK: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -680,7 +680,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "DeferredTimeoutTest",
                 constants: { CL_DOOR_LOCK: 257, CMD_GET_USER: 0x1C, CMD_GET_USER_RESP: 0x1D },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -751,7 +751,7 @@ namespace
         const char *source = R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "DeferredReadTest",
                 constants: { CL_COLOR: 0x0300, ATTR_HUE: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },

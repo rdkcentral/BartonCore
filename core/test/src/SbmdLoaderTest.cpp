@@ -220,7 +220,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "Minimal",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -230,7 +230,7 @@ namespace
 
         ASSERT_NE(reg, nullptr);
         EXPECT_EQ(reg->schemaVersion, "4.0");
-        EXPECT_EQ(reg->driverVersion, "1.0");
+        EXPECT_EQ(reg->driverVersion, 1u);
         EXPECT_EQ(reg->name, "Minimal");
         EXPECT_EQ(reg->barton.deviceClass, "test");
         EXPECT_EQ(reg->barton.deviceClassVersion, 0u);
@@ -243,7 +243,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithConstants",
                 constants: {
                     EP_LIGHT: "1",
@@ -272,7 +272,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithAliases",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0, CL_DOOR_LOCK: 257, EVT_LOCK_OP: 2 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -307,7 +307,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithHandlers",
                 constants: { EP: "1", CL: 6, ATTR: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -374,7 +374,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "AttrHandlers",
                 constants: { CL: 6, ATTR: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -410,7 +410,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithReporting",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -431,7 +431,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "WithPrereqs",
                 constants: { EP: "1" },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -476,7 +476,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "MatterOpts",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -513,7 +513,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "NoTimeout",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -530,7 +530,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "NoReporting",
                 constants: {},
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -548,7 +548,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 constants: {},
                 barton: { deviceClass: "test" },
                 matter: { deviceTypes: [] },
@@ -563,7 +563,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "First",
                 constants: {},
                 barton: { deviceClass: "test" },
@@ -571,7 +571,7 @@ namespace
             });
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "Second",
                 constants: {},
                 barton: { deviceClass: "test" },
@@ -599,7 +599,7 @@ namespace
         auto reg = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "ConstInHandlers",
                 constants: {
                     EP: "1",
@@ -642,7 +642,7 @@ namespace
         auto reg1 = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "Driver1",
                 constants: {},
                 barton: { deviceClass: "test1", deviceClassVersion: 0 },
@@ -666,7 +666,7 @@ namespace
         auto reg2 = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "Driver2",
                 constants: {},
                 barton: { deviceClass: "test2", deviceClassVersion: 0 },

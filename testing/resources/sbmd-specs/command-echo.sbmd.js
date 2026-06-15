@@ -36,7 +36,7 @@
 
 SbmdDriver({
     schemaVersion: '4.0',
-    driverVersion: '1.0.0',
+    driverVersion: 1,
     name: 'Command Echo Test',
 
     constants: {
