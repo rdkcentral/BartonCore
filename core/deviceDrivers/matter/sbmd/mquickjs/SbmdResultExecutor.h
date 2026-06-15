@@ -64,6 +64,7 @@ namespace barton
             std::optional<std::string> endpoint; // absent = use trigger endpoint
             std::string resource;
             std::string value;
+            std::optional<std::string> metadata; // JSON string for resource updated event
         };
 
         struct SetMetadata
@@ -84,6 +85,7 @@ namespace barton
         {
             std::string key;
             std::string value;
+            uint32_t ttlSecs;
         };
 
         struct Log
@@ -102,6 +104,7 @@ namespace barton
     {
         struct Success
         {
+            std::string value; // optional: execute/deferred handler return value (empty = no value)
         };
 
         struct Error

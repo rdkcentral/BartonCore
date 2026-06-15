@@ -80,6 +80,23 @@ namespace barton
     using ResourceSupplementFetcher = std::function<std::optional<std::string>(const std::string &path)>;
 
     /**
+     * Callback to fetch a persistent data value by key.
+     * Returns nullopt if the key is not stored.
+     */
+    using PersistentDataFetcher = std::function<std::optional<std::string>(const std::string &key)>;
+
+    /**
+     * Callback to fetch a transient data value by key.
+     * Returns nullopt if the key is not stored or has expired.
+     */
+    using TransientDataFetcher = std::function<std::optional<std::string>(const std::string &key)>;
+
+    /**
+     * Callback to store a transient data value with TTL.
+     */
+    using TransientDataSetter = std::function<void(const std::string &key, const std::string &value, uint32_t ttlSecs)>;
+
+    /**
      * Invokes handler functions and parses their results.
      *
      * Usage:
@@ -136,26 +153,34 @@ namespace barton
          *
          * @param hctx Handler context (for device UUID and default endpoint)
          * @param ops The ops to execute
+         * @param transientSetter Callback to store transient data (with TTL)
          */
-        static void ExecuteOps(const HandlerContext &hctx, const std::vector<ResultOp> &ops);
+        static void ExecuteOps(const HandlerContext &hctx,
+                               const std::vector<ResultOp> &ops,
+                               const TransientDataSetter &transientSetter = {});
 
         /**
-         * Add supplements to an args object. Fetches pre-declared attribute and
-         * resource values and attaches them as `args.supplements`.
+         * Add supplements to an args object. Fetches pre-declared attribute,
+         * resource, persistent data, and transient data values and attaches them
+         * as `args.supplements`.
          *
-         * If supplements is empty (no attributes and no resources), this is a no-op.
+         * If supplements is empty (no declared keys), this is a no-op.
          *
          * @param ctx JS context (caller holds mutex)
          * @param args The args object to augment (modified in place)
          * @param supplements The supplement declarations
          * @param attrFetcher Callback to fetch attribute values by alias name
          * @param resFetcher Callback to fetch resource values by path
+         * @param persistFetcher Callback to fetch persistent data values by key
+         * @param transientFetcher Callback to fetch transient data values by key
          */
         static void AddSupplements(JSContext *ctx,
                                    JSValue args,
                                    const SbmdSupplements &supplements,
                                    const AttributeSupplementFetcher &attrFetcher,
-                                   const ResourceSupplementFetcher &resFetcher);
+                                   const ResourceSupplementFetcher &resFetcher,
+                                   const PersistentDataFetcher &persistFetcher,
+                                   const TransientDataFetcher &transientFetcher);
 
         /**
          * Build an args object for a deferred command response handler.

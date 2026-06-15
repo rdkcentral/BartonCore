@@ -61,8 +61,10 @@ namespace barton
      */
     struct SbmdSupplements
     {
-        std::vector<std::string> attributes; // Alias names to resolve and fetch from device data cache
-        std::vector<std::string> resources;  // Resource paths ("endpointId/resourceId") to fetch
+        std::vector<std::string> attributes;     // Alias names to resolve and fetch from device data cache
+        std::vector<std::string> resources;      // Resource paths ("endpointId/resourceId") to fetch
+        std::vector<std::string> persistentData; // Persistent data keys (sbmd. prefix added at fetch time)
+        std::vector<std::string> transientData;  // Transient data keys (in-memory, TTL-based)
     };
 
     /**

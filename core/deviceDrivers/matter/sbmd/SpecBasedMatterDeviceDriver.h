@@ -39,6 +39,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 namespace barton
 {
@@ -248,6 +249,45 @@ namespace barton
          * Reads resource values via deviceServiceGetResourceById.
          */
         ResourceSupplementFetcher MakeResFetcher(const std::string &deviceUuid) const;
+
+        /**
+         * Create a PersistentDataFetcher for the given device UUID.
+         * Reads values via deviceServiceGetMetadata with sbmd. prefix.
+         */
+        PersistentDataFetcher MakePersistFetcher(const std::string &deviceUuid) const;
+
+        /**
+         * Create a TransientDataFetcher for the given device UUID.
+         * Reads values from the in-memory transient store, checking TTL.
+         */
+        TransientDataFetcher MakeTransientFetcher(const std::string &deviceUuid);
+
+        /**
+         * Store a transient data value with TTL for a device.
+         */
+        void SetTransientData(const std::string &deviceUuid,
+                              const std::string &key,
+                              const std::string &value,
+                              uint32_t ttlSecs);
+
+        /**
+         * Retrieve a transient data value for a device, returning nullopt if missing or expired.
+         */
+        std::optional<std::string> GetTransientData(const std::string &deviceUuid, const std::string &key);
+
+        /**
+         * Create a TransientDataSetter for the given device UUID.
+         */
+        TransientDataSetter MakeTransientSetter(const std::string &deviceUuid);
+
+        struct TransientEntry
+        {
+            std::string value;
+            std::chrono::steady_clock::time_point expiry;
+        };
+
+        /** Per-device transient storage: deviceUuid → (key → entry) */
+        std::unordered_map<std::string, std::unordered_map<std::string, TransientEntry>> transientStore;
 
         /**
          * Handle a attribute report via the dispatch tables.
