@@ -112,7 +112,7 @@ SbmdDriver({
                     write: function(args) {
                         var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.sendCommand(CL_ON_OFF, commandId);
                     },
                 },
@@ -153,9 +153,9 @@ SbmdDriver({
                             OptionsMask: { tag: 2, type: 'uint8' },
                             OptionsOverride: { tag: 3, type: 'uint8' },
                         };
-                        var tlvBase64 = SbmdUtils.Tlv.encodeStruct(cmdArgs, schema);
+                        var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
                     },
                 },
@@ -167,10 +167,10 @@ SbmdDriver({
         handleOnOff: {
             aliases: ['onOff'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
                 var isOn = (value === true) ? 'true' : 'false';
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(args.endpointId, RES_IS_ON, isOn)
                     .success();
             },
@@ -179,10 +179,10 @@ SbmdDriver({
         handleCurrentLevel: {
             aliases: ['currentLevel'],
             handler: function(args) {
-                var level = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
                 var percent = Math.round(level / 254 * 100);
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
                     .success();
             },

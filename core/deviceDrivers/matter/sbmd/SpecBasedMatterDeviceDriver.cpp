@@ -758,6 +758,14 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
                                        executeResponse))
         {
             FailOperation(promises);
+            return;
+        }
+
+        // Set the response value optimistically — if the command fails,
+        // the caller ignores executeResponse.
+        if (!cmd.successValue.empty() && executeResponse != nullptr)
+        {
+            *executeResponse = strdup(cmd.successValue.c_str());
         }
 
         return;
@@ -902,10 +910,14 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.readValue = readValue;
     pending.executeResponse = executeResponse;
 
-    // Set overall deadline from driver's defaultTimeoutMs or fallback
+    // Set overall deadline: per-operation timeoutMs > driver defaultTimeoutMs > system default
     uint32_t overallMs = PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS;
 
-    if (driver && driver->GetRegistration().matter.defaultTimeoutMs.has_value())
+    if (cmd.timeoutMs.has_value())
+    {
+        overallMs = cmd.timeoutMs.value();
+    }
+    else if (driver && driver->GetRegistration().matter.defaultTimeoutMs.has_value())
     {
         overallMs = driver->GetRegistration().matter.defaultTimeoutMs.value();
     }
@@ -930,6 +942,13 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
             pending.onErrorRef.val = cmd.onError;
             JS_AddGCRef(ctx, &pending.onErrorRef);
             pending.onErrorRooted = true;
+        }
+
+        if (!JS_IsUndefined(cmd.context))
+        {
+            pending.contextRef.val = cmd.context;
+            JS_AddGCRef(ctx, &pending.contextRef);
+            pending.contextRooted = true;
         }
     }
 
@@ -997,8 +1016,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            JSValue args =
-                SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx, hctx, "readFailed", "Attribute not in cache");
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
         }
 
@@ -1034,8 +1053,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            JSValue args =
-                SbmdHandlerInvoker::BuildAttributeReadResponseArgs(ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64);
+            JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
         }
 
@@ -1089,8 +1108,13 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
 
             if (pending.onErrorRooted)
             {
-                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                    ctx, pending.handlerContext, "timeout", "Overall operation deadline exceeded");
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                          pending.handlerContext,
+                                                                          "timeout",
+                                                                          "Overall operation deadline exceeded",
+                                                                          -1,
+                                                                          pending.contextRooted ? pending.contextRef.val
+                                                                                                : JS_UNDEFINED);
                 errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
             }
         }
@@ -1132,8 +1156,13 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
 
         if (pending.onResponseRooted)
         {
-            JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
-                ctx, pending.handlerContext, path.mClusterId, path.mCommandId, tlvBase64);
+            JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(ctx,
+                                                                        pending.handlerContext,
+                                                                        path.mClusterId,
+                                                                        path.mCommandId,
+                                                                        tlvBase64,
+                                                                        pending.contextRooted ? pending.contextRef.val
+                                                                                              : JS_UNDEFINED);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
         }
     }
@@ -1175,8 +1204,13 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
 
         if (pending.onErrorRooted)
         {
-            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                ctx, pending.handlerContext, "commandFailed", error.AsString());
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                      pending.handlerContext,
+                                                                      "commandFailed",
+                                                                      error.AsString(),
+                                                                      static_cast<int32_t>(error.AsInteger()),
+                                                                      pending.contextRooted ? pending.contextRef.val
+                                                                                            : JS_UNDEFINED);
             errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
         }
     }
@@ -1297,6 +1331,12 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             CompletePendingOperation(pendingId, false);
             return;
+        }
+
+        // Set the response value optimistically
+        if (!cmd.successValue.empty() && pending.executeResponse != nullptr)
+        {
+            *pending.executeResponse = strdup(cmd.successValue.c_str());
         }
 
         // The command was sent. Completion comes via the command's own promise.
@@ -1527,8 +1567,13 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             if (pending.onErrorRooted)
             {
-                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                    ctx, pending.handlerContext, "readFailed", "Attribute not in cache");
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                          pending.handlerContext,
+                                                                          "readFailed",
+                                                                          "Attribute not in cache",
+                                                                          -1,
+                                                                          pending.contextRooted ? pending.contextRef.val
+                                                                                                : JS_UNDEFINED);
                 nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
             }
         }
@@ -1556,7 +1601,12 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             if (pending.onResponseRooted)
             {
                 JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                    ctx, pending.handlerContext, ra.clusterId, ra.attributeId, tlvBase64);
+                    ctx,
+                    pending.handlerContext,
+                    ra.clusterId,
+                    ra.attributeId,
+                    tlvBase64,
+                    pending.contextRooted ? pending.contextRef.val : JS_UNDEFINED);
                 nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
             }
         }
@@ -1622,6 +1672,12 @@ void SpecBasedMatterDeviceDriver::ReleasePendingGcRoots(PendingOperation &pendin
     {
         JS_DeleteGCRef(ctx, &pending.onErrorRef);
         pending.onErrorRooted = false;
+    }
+
+    if (pending.contextRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.contextRef);
+        pending.contextRooted = false;
     }
 }
 

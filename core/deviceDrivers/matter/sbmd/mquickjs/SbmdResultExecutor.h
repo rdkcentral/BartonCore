@@ -69,9 +69,7 @@ namespace barton
 
         struct SetMetadata
         {
-            std::string endpoint;
-            std::string resource;
-            std::string key;
+            std::string name;
             std::string value;
         };
 
@@ -119,6 +117,7 @@ namespace barton
             std::string tlvBase64; // raw base64 string, empty if no payload
             std::optional<uint32_t> endpointId;
             std::optional<uint16_t> timedInvokeTimeoutMs;
+            std::string successValue; // optional: value to return on success (empty = none)
         };
 
         struct WriteAttribute
@@ -141,6 +140,7 @@ namespace barton
             JSValue onResponse = JS_UNDEFINED;
             JSValue onError = JS_UNDEFINED;
             std::optional<uint32_t> timeoutMs;
+            JSValue context = JS_UNDEFINED;
         };
 
         struct ReadAttribute
@@ -151,6 +151,7 @@ namespace barton
             JSValue onResponse = JS_UNDEFINED;
             JSValue onError = JS_UNDEFINED;
             std::optional<uint32_t> timeoutMs;
+            JSValue context = JS_UNDEFINED;
         };
 
         using Data = std::variant<Success, Error, SendCommand, WriteAttribute, RequestCommand, ReadAttribute>;

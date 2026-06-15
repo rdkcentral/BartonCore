@@ -164,13 +164,13 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
-                        var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
+                        var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
 
                         if (tlvBase64 === null) {
-                            return SbmdUtils.result().error('Invalid temperature value');
+                            return Sbmd.result().error('Invalid temperature value');
                         }
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_HEATING_SETPOINT, tlvBase64);
                     }
                 },
@@ -179,13 +179,13 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
                     write: function(args) {
-                        var tlvBase64 = SbmdUtils.Tlv.encode(args.resource.input, 'int16');
+                        var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
 
                         if (tlvBase64 === null) {
-                            return SbmdUtils.result().error('Invalid temperature value');
+                            return Sbmd.result().error('Invalid temperature value');
                         }
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_COOLING_SETPOINT, tlvBase64);
                     }
                 },
@@ -229,12 +229,12 @@ SbmdDriver({
                         }
 
                         if (seqValue < 0) {
-                            return SbmdUtils.result().error('Unknown control sequence: ' + args.resource.input);
+                            return Sbmd.result().error('Unknown control sequence: ' + args.resource.input);
                         }
 
-                        var tlvBase64 = SbmdUtils.Tlv.encode(seqValue, 'enum8');
+                        var tlvBase64 = Sbmd.Tlv.encode(seqValue, 'enum8');
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.writeAttribute(CL_THERMOSTAT, ATTR_CTRL_SEQ_OP, tlvBase64);
                     }
                 },
@@ -250,12 +250,12 @@ SbmdDriver({
                         var modeValue = reverseModeMap[args.resource.input];
 
                         if (modeValue === undefined) {
-                            return SbmdUtils.result().error('Unknown system mode: ' + args.resource.input);
+                            return Sbmd.result().error('Unknown system mode: ' + args.resource.input);
                         }
 
-                        var tlvBase64 = SbmdUtils.Tlv.encode(modeValue, 'enum8');
+                        var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.writeAttribute(CL_THERMOSTAT, ATTR_SYSTEM_MODE, tlvBase64);
                     }
                 },
@@ -277,12 +277,12 @@ SbmdDriver({
                         var modeValue = reverseModeMap[args.resource.input];
 
                         if (modeValue === undefined) {
-                            return SbmdUtils.result().error('Unknown fan mode: ' + args.resource.input);
+                            return Sbmd.result().error('Unknown fan mode: ' + args.resource.input);
                         }
 
-                        var tlvBase64 = SbmdUtils.Tlv.encode(modeValue, 'enum8');
+                        var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.writeAttribute(CL_FAN_CONTROL, ATTR_FAN_MODE, tlvBase64);
                     }
                 },
@@ -300,10 +300,10 @@ SbmdDriver({
         handleLocalTemperature: {
             aliases: ['localTemperature'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().success();
+                    return Sbmd.result().success();
                 }
 
                 var neg = value < 0;
@@ -313,7 +313,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_LOCAL_TEMP, (neg ? '-' : '') + s)
                     .success();
             }
@@ -321,10 +321,10 @@ SbmdDriver({
         handleHeatSetpoint: {
             aliases: ['occupiedHeatingSetpoint'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed for OccupiedHeatingSetpoint');
+                    return Sbmd.result().error('TLV decode failed for OccupiedHeatingSetpoint');
                 }
 
                 var neg = value < 0;
@@ -334,7 +334,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_HEAT_SETPOINT, (neg ? '-' : '') + s)
                     .success();
             }
@@ -342,10 +342,10 @@ SbmdDriver({
         handleCoolSetpoint: {
             aliases: ['occupiedCoolingSetpoint'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed for OccupiedCoolingSetpoint');
+                    return Sbmd.result().error('TLV decode failed for OccupiedCoolingSetpoint');
                 }
 
                 var neg = value < 0;
@@ -355,7 +355,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_COOL_SETPOINT, (neg ? '-' : '') + s)
                     .success();
             }
@@ -363,10 +363,10 @@ SbmdDriver({
         handleAbsMinHeat: {
             aliases: ['absMinHeat'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var neg = value < 0;
@@ -376,7 +376,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_ABS_MIN_HEAT, (neg ? '-' : '') + s)
                     .success();
             }
@@ -384,10 +384,10 @@ SbmdDriver({
         handleAbsMaxHeat: {
             aliases: ['absMaxHeat'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var neg = value < 0;
@@ -397,7 +397,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_ABS_MAX_HEAT, (neg ? '-' : '') + s)
                     .success();
             }
@@ -405,10 +405,10 @@ SbmdDriver({
         handleAbsMinCool: {
             aliases: ['absMinCool'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var neg = value < 0;
@@ -418,7 +418,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_ABS_MIN_COOL, (neg ? '-' : '') + s)
                     .success();
             }
@@ -426,10 +426,10 @@ SbmdDriver({
         handleAbsMaxCool: {
             aliases: ['absMaxCool'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var neg = value < 0;
@@ -439,7 +439,7 @@ SbmdDriver({
                     s = '0' + s;
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_ABS_MAX_COOL, (neg ? '-' : '') + s)
                     .success();
             }
@@ -447,10 +447,10 @@ SbmdDriver({
         handleCtrlSeqOp: {
             aliases: ['ctrlSeqOp'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var seqValues = [
@@ -461,10 +461,10 @@ SbmdDriver({
                 var seq = seqValues[value];
 
                 if (seq === undefined) {
-                    return SbmdUtils.result().error('Unknown ControlSequenceOfOperation: ' + value);
+                    return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_CTRL_SEQ_OP, seq)
                     .success();
             }
@@ -472,10 +472,10 @@ SbmdDriver({
         handleSystemMode: {
             aliases: ['systemMode'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var modeMap = {
@@ -488,7 +488,7 @@ SbmdDriver({
                     mode = 'unknown';
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_SYSTEM_MODE, mode)
                     .success();
             }
@@ -496,10 +496,10 @@ SbmdDriver({
         handleRunningState: {
             aliases: ['runningState'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 var state = 'off';
@@ -510,7 +510,7 @@ SbmdDriver({
                     state = 'cooling';
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_SYSTEM_STATE, state)
                     .success();
             }
@@ -518,10 +518,10 @@ SbmdDriver({
         handleFanMode: {
             aliases: ['fanMode'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
                 // FanMode: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto
@@ -534,7 +534,7 @@ SbmdDriver({
                     mode = 'unknown';
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_FAN_MODE, mode)
                     .success();
             }
@@ -542,13 +542,13 @@ SbmdDriver({
         handleFanPercentCurrent: {
             aliases: ['fanPercentCurrent'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 if (value === null) {
-                    return SbmdUtils.result().error('TLV decode failed');
+                    return Sbmd.result().error('TLV decode failed');
                 }
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_FAN_ON, String(value !== 0))
                     .success();
             }

@@ -50,7 +50,7 @@ C++ extracts metadata (always in memory) + handler JSValues (GC-rooted only when
 SpecBasedMatterDeviceDriver (reworked)
     │
     ├── resource read/seed ──▶ resolve supplements, call handler(args)
-    │     handler returns SbmdUtils.result() chain → C++ executes ops
+    │     handler returns Sbmd.result() chain → C++ executes ops
     ├── resource write ──▶ call handler(args) → result chain
     ├── resource execute ──▶ call handler(args) → result chain (may defer)
     ├── attr report ──▶ dispatch to attributeHandlers → result chain
@@ -145,7 +145,7 @@ C++ builds args → [acquire mutex] → call handler → get result → [release
 
 ### 5. Mutable result builder with linear chaining
 
-**Decision**: `SbmdUtils.result()` returns a mutable builder. Each method mutates the internal `{ops, terminal}` structure and returns `this` (for non-terminals) or the raw result object (for terminals). Branching is not supported.
+**Decision**: `Sbmd.result()` returns a mutable builder. Each method mutates the internal `{ops, terminal}` structure and returns `this` (for non-terminals) or the raw result object (for terminals). Branching is not supported.
 
 **Rationale**: Immutable builders (new object per method call) create GC pressure in mquickjs's constrained heap. Mutable builders with linear chaining are safe because handlers are synchronous, single-threaded, and the spec requires exactly one terminal per chain.
 

@@ -13,10 +13,10 @@
 - [x] 2.2 Disable non-light integration tests by adding a `@pytest.mark.skip(reason="pending v4 conversion")` or equivalent exclusion for thermostat, door-lock, contact-sensor, temperature-sensor, humidity-sensor, occupancy-sensor, air-quality-sensor, water-leak-detector, and IKEA Timmerflotte test files.
 - [x] 2.3 Verify the build succeeds with no `.sbmd` files in the active specs directory and only light tests enabled.
 
-## 3. Result Builder — `SbmdUtils.result()`
+## 3. Result Builder — `Sbmd.result()`
 
-- [x] 3.1 Implement `SbmdUtils.result()` in `sbmd-utils.js` — mutable builder with `dataModel.updateResource()` (2/3/4-arg), `dataModel.setMetadata()`, `storage.setPersistentData()`, `storage.setTransientData()`, `device.sendCommand()`, `device.writeAttribute()`, `device.requestCommand()`, `device.readAttribute()`, `log()`, `success()`, `error()`. Non-terminals return builder, terminals return raw `{ops, terminal}` object.
-- [x] 3.2 Remove v3 `SbmdUtils.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`. (removed as part of TG13 v3 infrastructure cleanup)
+- [x] 3.1 Implement `Sbmd.result()` in `sbmd-utils.js` — mutable builder with `dataModel.updateResource()` (2/3/4-arg), `dataModel.setMetadata()`, `storage.setPersistentData()`, `storage.setTransientData()`, `device.sendCommand()`, `device.writeAttribute()`, `device.requestCommand()`, `device.readAttribute()`, `log()`, `success()`, `error()`. Non-terminals return builder, terminals return raw `{ops, terminal}` object.
+- [x] 3.2 Remove v3 `Sbmd.Response.*` helpers (`value`, `error`, `invoke`, `write`) from `sbmd-utils.js`. (removed as part of TG13 v3 infrastructure cleanup)
 - [x] 3.3 Write JS-level unit tests for the result builder — verify chain structure, terminal enforcement, operation ordering, all operation types. (Can be run via mquickjs in a C++ test harness.)
 
 ## 4. SbmdDriver() Registration System

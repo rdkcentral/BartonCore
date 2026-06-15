@@ -461,9 +461,7 @@ namespace
 
         std::vector<ResultOp> ops;
         ResultOp::SetMetadata sm;
-        sm.endpoint = "1";
-        sm.resource = "dimLevel";
-        sm.key = "unit";
+        sm.name = "unit";
         sm.value = "percent";
         ops.push_back(ResultOp {sm});
 
@@ -471,7 +469,7 @@ namespace
 
         ASSERT_EQ(g_setMetadataCalls.size(), 1u);
         EXPECT_EQ(g_setMetadataCalls[0].deviceUuid, "test-device-uuid");
-        EXPECT_EQ(g_setMetadataCalls[0].endpointId, "1");
+        EXPECT_EQ(g_setMetadataCalls[0].endpointId, "");
         EXPECT_EQ(g_setMetadataCalls[0].key, "unit");
         EXPECT_EQ(g_setMetadataCalls[0].value, "percent");
     }
@@ -493,9 +491,7 @@ namespace
         ops.push_back(ResultOp {ur});
 
         ResultOp::SetMetadata sm;
-        sm.endpoint = "1";
-        sm.resource = "isOn";
-        sm.key = "source";
+        sm.name = "source";
         sm.value = "device";
         ops.push_back(ResultOp {sm});
 
@@ -1025,6 +1021,23 @@ namespace
         EXPECT_TRUE(JS_IsNull(data));
     }
 
+    TEST_F(SbmdHandlerInvokerTest, BuildCommandResponseArgsWithHandlerContext)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        // Create a context object
+        JSValue context = JS_Eval(Ctx(), "({requestId: 42})", 18, "<test>", JS_EVAL_RETVAL);
+        ASSERT_FALSE(JS_IsException(context));
+
+        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
+
+        JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
+        ASSERT_FALSE(JS_IsUndefined(hc));
+        ASSERT_FALSE(JS_IsNull(hc));
+        EXPECT_EQ(GetUint32Prop(hc, "requestId"), 42u);
+    }
+
     TEST_F(SbmdHandlerInvokerTest, BuildAttributeReadResponseArgs)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -1038,6 +1051,22 @@ namespace
         EXPECT_EQ(GetUint32Prop(attribute, "clusterId"), 0x0300u);
         EXPECT_EQ(GetUint32Prop(attribute, "attributeId"), 7u);
         EXPECT_EQ(GetStringProp(attribute, "value"), "AB==");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, BuildAttributeReadResponseArgsWithHandlerContext)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        JSValue context = JS_Eval(Ctx(), "('read-ctx')", 12, "<test>", JS_EVAL_RETVAL);
+        ASSERT_FALSE(JS_IsException(context));
+
+        JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==", context);
+
+        JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
+        ASSERT_FALSE(JS_IsUndefined(hc));
+        ASSERT_FALSE(JS_IsNull(hc));
+        EXPECT_EQ(GetStringProp(args, "handlerContext"), "read-ctx");
     }
 
     TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgs)
@@ -1067,6 +1096,53 @@ namespace
         EXPECT_EQ(GetStringProp(error, "message"), "CHIP Error 0x00000032");
     }
 
+    TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithMatterCode)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error", 0x32);
+
+        JSValue error = JS_GetPropertyStr(Ctx(), args, "error");
+        EXPECT_EQ(GetStringProp(error, "type"), "commandFailed");
+        EXPECT_EQ(GetStringProp(error, "message"), "CHIP Error");
+
+        // matterCode should be present as a number
+        JSValue mc = JS_GetPropertyStr(Ctx(), error, "matterCode");
+        ASSERT_FALSE(JS_IsNull(mc));
+        ASSERT_FALSE(JS_IsUndefined(mc));
+        int32_t code = 0;
+        JS_ToInt32(Ctx(), &code, mc);
+        EXPECT_EQ(code, 0x32);
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsMatterCodeNullWhenNotProvided)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        // matterCode = -1 means "not available" → should be null
+        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1);
+
+        JSValue error = JS_GetPropertyStr(Ctx(), args, "error");
+        JSValue mc = JS_GetPropertyStr(Ctx(), error, "matterCode");
+        EXPECT_TRUE(JS_IsNull(mc));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, BuildDeferredErrorArgsWithHandlerContext)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        JSValue context = JS_Eval(Ctx(), "({retryCount: 3})", 18, "<test>", JS_EVAL_RETVAL);
+        ASSERT_FALSE(JS_IsException(context));
+
+        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1, context);
+
+        JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
+        ASSERT_FALSE(JS_IsUndefined(hc));
+        ASSERT_FALSE(JS_IsNull(hc));
+        EXPECT_EQ(GetUint32Prop(hc, "retryCount"), 3u);
+    }
+
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnResponseHandler)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -1090,6 +1166,31 @@ namespace
         ASSERT_EQ(result->ops.size(), 1u);
         const auto &logOp = std::get<ResultOp::Log>(result->ops[0].data);
         EXPECT_EQ(logOp.message, "response cmd=26");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnResponseHandlerWithContext)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        // Handler that reads handlerContext
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  return Sbmd.result()"
+                                   "    .log('ctx=' + JSON.stringify(args.handlerContext))"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        JSValue context = JS_Eval(Ctx(), "({id: 99})", 10, "<test>", JS_EVAL_RETVAL);
+        ASSERT_FALSE(JS_IsException(context));
+
+        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+
+        ASSERT_EQ(result->ops.size(), 1u);
+        const auto &logOp = std::get<ResultOp::Log>(result->ops[0].data);
+        EXPECT_EQ(logOp.message, "ctx={\"id\":99}");
     }
 
     TEST_F(SbmdHandlerInvokerTest, InvokeDeferredOnErrorHandler)

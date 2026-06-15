@@ -80,12 +80,12 @@ SbmdDriver({
         handleOccupancy: {
             aliases: ['occupancy'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 // Bit 0 of occupancy bitmap = occupied = faulted
                 var occupied = ((value & 0x01) !== 0);
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_FAULTED, occupied ? 'true' : 'false')
                     .success();
             }

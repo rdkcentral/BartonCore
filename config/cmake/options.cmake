@@ -285,7 +285,7 @@ macro(bcore_removed_option NAME error)
     endif()
 endmacro()
 
-bcore_removed_option(BCORE_MATTER_USE_MATTERJS "matter.js integration has been removed. Use scriptType 'JavaScript' with SbmdUtils helpers instead.")
+bcore_removed_option(BCORE_MATTER_USE_MATTERJS "matter.js integration has been removed. Use scriptType 'JavaScript' with Sbmd helpers instead.")
 
 # Validate JS engine selection
 if (BCORE_MATTER)

@@ -13,7 +13,7 @@ The `SbmdScript` virtual interface currently expresses results via `bool` return
 - Centralize all JSON parsing and validation in `ScriptResult::FromJsonValue()`, shared by both engine implementations
 - Replace `bool + out-param` returns on the `SbmdScript` virtual interface with `ScriptResult` returns
 - Formalize the script JSON schema (rename `output` → `value`, introduce `error` key) and bump schema version to 3.0
-- Add `SbmdUtils.Response.value()` and `SbmdUtils.Response.error()` JavaScript helpers for symmetry
+- Add `Sbmd.Response.value()` and `Sbmd.Response.error()` JavaScript helpers for symmetry
 
 **Non-Goals:**
 - Changes to SBMD YAML schema structure, device type mappings, alias definitions, or reporting config

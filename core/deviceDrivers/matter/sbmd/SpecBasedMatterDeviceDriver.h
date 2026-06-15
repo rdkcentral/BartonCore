@@ -65,6 +65,10 @@ namespace barton
         uint32_t clusterId = 0;
         uint32_t responseCommandId = 0;
 
+        // Deferred handler options
+        JSGCRef contextRef {};
+        bool contextRooted = false;
+
         // Context for handler invocation
         HandlerContext handlerContext;
 

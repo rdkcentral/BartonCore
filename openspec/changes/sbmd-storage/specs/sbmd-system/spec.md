@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Sbmd built-in library
-The system SHALL provide a built-in JavaScript library `Sbmd` (loaded into every QuickJS context) with: `Sbmd.Tlv.decode(base64)` for Matter TLV decoding, `Sbmd.Tlv.decodeStruct(base64)` for struct TLV decoding, `Sbmd.Tlv.encode(value, type)` for TLV encoding, `Sbmd.Tlv.encodeStruct(obj, schema)` for struct encoding, `Sbmd.Tlv.emptyStruct()` for empty struct TLV, `Sbmd.Base64` for base64 encode/decode, `Sbmd.Tlv.TYPE` with TLV type constants, and `Sbmd.result()` for building handler result chains. The library SHALL NOT provide `Sbmd.getPersistentData()` or `Sbmd.getTransientData()` functions — all storage reads go through supplements.
+The system SHALL provide a built-in JavaScript library `Sbmd` (loaded into every QuickJS context) with: `Sbmd.Tlv.decode(base64)` for Matter TLV decoding, `Sbmd.Tlv.encode(value, type)` for TLV encoding, `Sbmd.Tlv.encodeStruct(obj, schema)` for struct encoding, `Sbmd.Tlv.emptyStruct()` for empty struct TLV, `Sbmd.Base64` for base64 encode/decode, `Sbmd.Tlv.TYPE` with TLV type constants, and `Sbmd.result()` for building handler result chains. The library SHALL NOT provide `Sbmd.getPersistentData()` or `Sbmd.getTransientData()` functions — all storage reads go through supplements.
 
 #### Scenario: Decode boolean TLV
 - **WHEN** `Sbmd.Tlv.decode(base64)` is called with a TLV-encoded boolean `true`

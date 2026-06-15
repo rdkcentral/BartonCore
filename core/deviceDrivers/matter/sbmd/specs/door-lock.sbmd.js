@@ -106,10 +106,10 @@ SbmdDriver({
                                 pinBytes[i] = pinString.charCodeAt(i);
                             }
 
-                            tlvBase64 = SbmdUtils.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+                            tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
                         }
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
                     }
                 },
@@ -132,10 +132,10 @@ SbmdDriver({
                                 pinBytes[i] = pinString.charCodeAt(i);
                             }
 
-                            tlvBase64 = SbmdUtils.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+                            tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
                         }
 
-                        return SbmdUtils.result()
+                        return Sbmd.result()
                             .device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
                     }
                 }
@@ -147,12 +147,12 @@ SbmdDriver({
         handleLockState: {
             aliases: ['lockState'],
             handler: function(args) {
-                var value = SbmdUtils.Tlv.decode(args.attribute.tlvBase64);
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
                 var isLocked = value === 1;
 
-                return SbmdUtils.result()
+                return Sbmd.result()
                     .dataModel.updateResource(RES_LOCKED, isLocked ? 'true' : 'false')
                     .success();
             }

@@ -293,7 +293,7 @@ namespace barton
             else if (std::holds_alternative<ResultOp::SetMetadata>(op.data))
             {
                 const auto &sm = std::get<ResultOp::SetMetadata>(op.data);
-                setMetadata(hctx.deviceUuid.c_str(), sm.endpoint.c_str(), sm.key.c_str(), sm.value.c_str());
+                setMetadata(hctx.deviceUuid.c_str(), nullptr, sm.name.c_str(), sm.value.c_str());
             }
             else if (std::holds_alternative<ResultOp::SetPersistentData>(op.data))
             {
@@ -330,7 +330,8 @@ namespace barton
                                                          const HandlerContext &hctx,
                                                          uint32_t clusterId,
                                                          uint32_t commandId,
-                                                         const std::string &tlvBase64)
+                                                         const std::string &tlvBase64,
+                                                         JSValue handlerContext)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
@@ -349,6 +350,15 @@ namespace barton
 
         JS_SetPropertyStr(ctx, args, "response", response);
 
+        if (!JS_IsUndefined(handlerContext))
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+        }
+        else
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+        }
+
         return args;
     }
 
@@ -356,7 +366,8 @@ namespace barton
                                                                const HandlerContext &hctx,
                                                                uint32_t clusterId,
                                                                uint32_t attributeId,
-                                                               const std::string &tlvBase64)
+                                                               const std::string &tlvBase64,
+                                                               JSValue handlerContext)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
@@ -366,20 +377,50 @@ namespace barton
         JS_SetPropertyStr(ctx, attribute, "value", JS_NewString(ctx, tlvBase64.c_str()));
         JS_SetPropertyStr(ctx, args, "attribute", attribute);
 
+        if (!JS_IsUndefined(handlerContext))
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+        }
+        else
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+        }
+
         return args;
     }
 
     JSValue SbmdHandlerInvoker::BuildDeferredErrorArgs(JSContext *ctx,
                                                        const HandlerContext &hctx,
                                                        const std::string &errorType,
-                                                       const std::string &errorMessage)
+                                                       const std::string &errorMessage,
+                                                       int32_t matterCode,
+                                                       JSValue handlerContext)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSValue error = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, error, "type", JS_NewString(ctx, errorType.c_str()));
         JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, errorMessage.c_str()));
+
+        if (matterCode >= 0)
+        {
+            JS_SetPropertyStr(ctx, error, "matterCode", JS_NewInt32(ctx, matterCode));
+        }
+        else
+        {
+            JS_SetPropertyStr(ctx, error, "matterCode", JS_NULL);
+        }
+
         JS_SetPropertyStr(ctx, args, "error", error);
+
+        if (!JS_IsUndefined(handlerContext))
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+        }
+        else
+        {
+            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+        }
 
         return args;
     }

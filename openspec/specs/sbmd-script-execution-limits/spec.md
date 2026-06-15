@@ -40,5 +40,5 @@ The interrupt handler SHALL be installed once during `MQuickJsRuntime::Initializ
 - **THEN** `JS_SetInterruptHandler` SHALL be called on the shared context with the timeout handler
 
 #### Scenario: Handler inactive outside script execution
-- **WHEN** the interrupt handler is called outside of `ExecuteScript` (e.g., during `SbmdUtilsLoader::LoadBundle`)
+- **WHEN** the interrupt handler is called outside of `ExecuteScript` (e.g., during `SbmdBundleLoader::LoadBundle`)
 - **THEN** the handler SHALL return 0, allowing execution to continue uninterrupted

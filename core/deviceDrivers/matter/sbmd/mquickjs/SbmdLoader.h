@@ -55,7 +55,7 @@ namespace barton
         /**
          * Inject the SbmdDriver capture function and __sbmd_registration global
          * into the shared mquickjs context. Must be called once during initialization,
-         * after MQuickJsRuntime::Initialize() and SbmdUtilsLoader::LoadBundle().
+         * after MQuickJsRuntime::Initialize() and SbmdBundleLoader::LoadBundle().
          *
          * @param ctx The mquickjs context
          * @return true if injection succeeded

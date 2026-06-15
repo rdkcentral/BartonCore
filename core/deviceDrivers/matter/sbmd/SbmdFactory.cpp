@@ -32,7 +32,7 @@
 #include "../MatterDriverFactory.h"
 
 #include "mquickjs/MQuickJsRuntime.h"
-#include "mquickjs/SbmdUtilsLoader.h"
+#include "mquickjs/SbmdBundleLoader.h"
 #include "mquickjs/SbmdLoader.h"
 
 #include <filesystem>
@@ -139,9 +139,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
 
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        if (!SbmdUtilsLoader::LoadBundle(ctx))
+        if (!SbmdBundleLoader::LoadBundle(ctx))
         {
-            icError("Failed to load SBMD utilities bundle for drivers");
+            icError("Failed to load SBMD bundles for drivers");
             allRegistered = false;
             return;
         }
