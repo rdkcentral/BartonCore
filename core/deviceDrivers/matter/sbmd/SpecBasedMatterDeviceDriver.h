@@ -102,6 +102,12 @@ namespace barton
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
+        void DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
+                               const std::string &deviceId,
+                               const DeviceDescriptor *deviceDescriptor,
+                               chip::Messaging::ExchangeManager &exchangeMgr,
+                               const chip::SessionHandle &sessionHandle) override;
+
         bool DoRegisterResources(icDevice *device) override;
 
         void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,

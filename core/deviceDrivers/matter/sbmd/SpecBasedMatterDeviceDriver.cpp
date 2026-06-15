@@ -213,6 +213,69 @@ SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionInte
     return {r.minSecs, r.maxSecs};
 }
 
+void SpecBasedMatterDeviceDriver::DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
+                                                    const std::string &deviceId,
+                                                    const DeviceDescriptor *deviceDescriptor,
+                                                    chip::Messaging::ExchangeManager &exchangeMgr,
+                                                    const chip::SessionHandle &sessionHandle)
+{
+    icDebug("Reconfiguring SBMD device %s", deviceId.c_str());
+
+    auto device = GetDevice(deviceId);
+
+    if (device == nullptr)
+    {
+        icError("Device %s not found during reconfiguration", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    // Update feature clusters in case the spec changed
+    device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
+
+    // Re-resolve endpoint map against the (possibly updated) device type list
+    if (!device->ResolveEndpointMap(driver->GetRegistration().matter.deviceTypes))
+    {
+        icError("Failed to resolve endpoint map for device %s during reconfiguration", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    // Tear down old incoming command handlers and re-register from the current spec
+    device->UnregisterIncomingCommandHandlers();
+
+    for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+    {
+        device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+    }
+
+    // Re-check prerequisites — update the set of skipped optional resources
+    skippedOptionalResources.erase(deviceId);
+    const auto &reg = driver->GetRegistration();
+
+    for (const auto &endpoint : reg.endpoints)
+    {
+        for (const auto &resource : endpoint.resources)
+        {
+            if (!CheckPrerequisites(resource, *device))
+            {
+                if (resource.optional)
+                {
+                    icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
+                    std::string key = endpoint.id + ":" + resource.id;
+                    skippedOptionalResources[deviceId].insert(key);
+                    continue;
+                }
+
+                icError("Required resource '%s' prerequisites not met during reconfiguration", resource.id.c_str());
+                FailOperation(promises);
+
+                return;
+            }
+        }
+    }
+}
+
 bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
 {
     return DoRegisterDriverResources(device);

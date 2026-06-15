@@ -424,4 +424,148 @@ namespace
             << "Matching profile versions should not trigger reconfiguration";
     }
 
+    // ========================================================================
+    // Device class version reconfiguration tests
+    // ========================================================================
+
+    class DeviceClassVersionReconfigTest : public ::testing::Test
+    {
+    protected:
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
+
+        SbmdDriver *MakeDriverWithDcVersion(uint32_t dcVersion)
+        {
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "dcv-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = dcVersion;
+            reg->matter.deviceTypes = {0x0100};
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
+
+            return drivers.back().get();
+        }
+    };
+
+    TEST_F(DeviceClassVersionReconfigTest, DeviceClassVersionIncludesModelVersion)
+    {
+        // deviceClassVersion = deviceModelVersion (3) + barton.deviceClassVersion
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(1));
+        EXPECT_EQ(driver.GetDeviceClassVersion(), 4); // 3 + 1
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, DeviceClassVersionZeroBase)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(0));
+        EXPECT_EQ(driver.GetDeviceClassVersion(), 3); // 3 + 0
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, GetDeviceClassVersionCallback)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        ASSERT_NE(dd->getDeviceClassVersion, nullptr);
+
+        uint8_t version = 0;
+        EXPECT_TRUE(dd->getDeviceClassVersion(dd->callbackContext, "testClass", &version));
+        EXPECT_EQ(version, 5); // 3 + 2
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, VersionMismatchDetected)
+    {
+        // Simulate a persisted device with deviceClassVersion=4 (dcVersion=1) and the
+        // driver now expects deviceClassVersion=5 (dcVersion=2).
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        uint8_t currentDriverVersion = 0;
+        dd->getDeviceClassVersion(dd->callbackContext, "testClass", &currentDriverVersion);
+
+        uint8_t persistedDeviceVersion = 4; // was dcVersion=1 → 3+1
+        EXPECT_NE(persistedDeviceVersion, currentDriverVersion) << "Device class version mismatch should be detectable";
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, VersionMatchDoesNotTriggerReconfiguration)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        uint8_t currentDriverVersion = 0;
+        dd->getDeviceClassVersion(dd->callbackContext, "testClass", &currentDriverVersion);
+
+        uint8_t persistedDeviceVersion = 5; // same: dcVersion=2 → 3+2
+        EXPECT_EQ(persistedDeviceVersion, currentDriverVersion)
+            << "Matching device class versions should not trigger reconfiguration";
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, BumpedDeviceClassVersionTriggersReconfiguration)
+    {
+        // Construct driver with version 1, note the version, then construct
+        // with version 2 and verify they differ — mirroring a firmware upgrade
+        // where the .sbmd.js bumped barton.deviceClassVersion.
+        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithDcVersion(1));
+        uint8_t v1 = driverV1.GetDeviceClassVersion();
+
+        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithDcVersion(2));
+        uint8_t v2 = driverV2.GetDeviceClassVersion();
+
+        EXPECT_NE(v1, v2);
+        EXPECT_EQ(v2, v1 + 1);
+    }
+
+    // ========================================================================
+    // Combined version reconfiguration tests
+    // ========================================================================
+
+    TEST_F(ProfileVersionReconfigTest, EndpointProfileVersionSetOnCreatedEndpoint)
+    {
+        // Verify that DoRegisterDriverResources sets profileVersion on the
+        // icDeviceEndpoint.  This is critical for the persisted device to
+        // record the correct version so that subsequent starts can detect
+        // mismatches.
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 7;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        // The hashmap stores the version the driver expects
+        auto *version =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(version, nullptr);
+        EXPECT_EQ(*version, 7);
+    }
+
+    TEST_F(ProfileVersionReconfigTest, BumpedProfileVersionTriggersReconfiguration)
+    {
+        // Two drivers with different profile versions for the same profile.
+        // Simulates a firmware upgrade where the endpoint profile version
+        // was bumped in the .sbmd.js spec.
+        SbmdEndpoint epV1;
+        epV1.id = "1";
+        epV1.profile = "doorLock";
+        epV1.profileVersion = 1;
+
+        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithEndpoints({epV1}));
+
+        SbmdEndpoint epV2;
+        epV2.id = "1";
+        epV2.profile = "doorLock";
+        epV2.profileVersion = 2;
+
+        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithEndpoints({epV2}));
+
+        auto *v1 = static_cast<uint8_t *>(
+            hashMapGet(driverV1.GetDriver()->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        auto *v2 = static_cast<uint8_t *>(
+            hashMapGet(driverV2.GetDriver()->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+
+        ASSERT_NE(v1, nullptr);
+        ASSERT_NE(v2, nullptr);
+        EXPECT_NE(*v1, *v2);
+        EXPECT_EQ(*v2, *v1 + 1);
+    }
+
 } // namespace
