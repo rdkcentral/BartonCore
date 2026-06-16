@@ -38,19 +38,12 @@ extern "C" {
 #include <quickjs/quickjs.h>
 }
 
-// Try to include the embedded bundle headers if they were generated
-#if __has_include("SbmdUtilsEmbedded.h")
-#include "SbmdUtilsEmbedded.h"
-#define HAS_EMBEDDED_UTILS 1
+// Try to include the embedded bundle header if it was generated
+#if __has_include("SbmdBundleEmbedded.h")
+#include "SbmdBundleEmbedded.h"
+#define HAS_EMBEDDED_BUNDLE 1
 #else
-#define HAS_EMBEDDED_UTILS 0
-#endif
-
-#if __has_include("SbmdResultEmbedded.h")
-#include "SbmdResultEmbedded.h"
-#define HAS_EMBEDDED_RESULT 1
-#else
-#define HAS_EMBEDDED_RESULT 0
+#define HAS_EMBEDDED_BUNDLE 0
 #endif
 
 namespace barton
@@ -112,21 +105,21 @@ namespace barton
             return false;
         }
 
-        // Load from embedded bundles
+        // Load from embedded bundle
         if (LoadFromEmbedded(ctx))
         {
             source_ = "embedded";
-            icInfo("SBMD bundles loaded from embedded");
+            icInfo("SBMD bundle loaded from embedded");
             return true;
         }
 
-        icError("SBMD bundles not available (not compiled in)");
+        icError("SBMD bundle not available (not compiled in)");
         return false;
     }
 
     bool SbmdBundleLoader::IsAvailable()
     {
-#if HAS_EMBEDDED_UTILS && HAS_EMBEDDED_RESULT
+#if HAS_EMBEDDED_BUNDLE
         return true;
 #else
         return false;
@@ -140,15 +133,10 @@ namespace barton
 
     bool SbmdBundleLoader::LoadFromEmbedded(JSContext *ctx)
     {
-#if HAS_EMBEDDED_UTILS && HAS_EMBEDDED_RESULT
-        icDebug("Attempting to load SBMD bundles from embedded source...");
+#if HAS_EMBEDDED_BUNDLE
+        icDebug("Attempting to load SBMD bundle from embedded source...");
 
-        if (!ExecuteBundle(ctx, kSbmdUtilsBundle, kSbmdUtilsBundleSize, "sbmd-utils"))
-        {
-            return false;
-        }
-
-        if (!ExecuteBundle(ctx, kSbmdResultBundle, kSbmdResultBundleSize, "sbmd-result"))
+        if (!ExecuteBundle(ctx, kSbmdBundle, kSbmdBundleSize, "sbmd-bundle"))
         {
             return false;
         }
@@ -156,7 +144,7 @@ namespace barton
         return true;
 #else
         (void) ctx;
-        icDebug("Embedded SBMD bundles not available");
+        icDebug("Embedded SBMD bundle not available");
         return false;
 #endif
     }

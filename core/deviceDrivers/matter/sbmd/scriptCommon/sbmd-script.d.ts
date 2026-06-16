@@ -136,8 +136,8 @@ interface SbmdSupplements {
 // Resources
 // =============================================================================
 
-/** A seed or read handler with optional supplements. */
-interface SbmdReadOrSeedHandler {
+/** A resource handler with optional supplements. */
+interface SbmdResourceHandler {
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
@@ -162,16 +162,16 @@ interface SbmdResource {
     optional?: boolean;
 
     /** Initialization handler (runs on discovery and each startup). */
-    seed?: SbmdReadOrSeedHandler | SbmdHandlerFunction;
+    seed?: SbmdResourceHandler | SbmdHandlerFunction;
 
     /** Read handler (runs on every read request). */
-    read?: SbmdReadOrSeedHandler | SbmdHandlerFunction;
+    read?: SbmdResourceHandler | SbmdHandlerFunction;
 
-    /** Write handler function. */
-    write?: SbmdHandlerFunction;
+    /** Write handler (with optional supplements) or bare function. */
+    write?: SbmdResourceHandler | SbmdHandlerFunction;
 
-    /** Execute handler function (for type: "function" resources). */
-    execute?: SbmdHandlerFunction;
+    /** Execute handler (with optional supplements) or bare function (for type: "function" resources). */
+    execute?: SbmdResourceHandler | SbmdHandlerFunction;
 }
 
 // =============================================================================

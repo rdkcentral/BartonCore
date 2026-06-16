@@ -24,9 +24,9 @@
 /*
  * Unit tests for the Sbmd.result() builder (result chain).
  *
- * These tests initialize the mquickjs runtime, load sbmd-utils.js,
- * then evaluate JS expressions to verify the builder API produces
- * the expected {ops, terminal} structures.
+ * These tests initialize the mquickjs runtime, load the assembled
+ * SBMD bundle, then evaluate JS expressions to verify the builder
+ * API produces the expected {ops, terminal} structures.
  */
 
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"

@@ -155,42 +155,48 @@ if (BCORE_MATTER)
         list(APPEND XTRA_LIBS quickjs)
     endif()
 
-    # Embed SBMD bundles (always available for SBMD scripts)
-    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
-    set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
-    set(SBMD_RESULT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-result.js")
-    set(SBMD_RESULT_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdResultEmbedded.h")
+    # Embed SBMD bundle (assembled from individual source files)
+    set(SBMD_SCRIPT_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon")
+    set(SBMD_BUNDLE_SOURCES
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-namespace.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-utf8.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-base64.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-tlv.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-result.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-cleanup.js"
+    )
+    set(SBMD_ASSEMBLED_BUNDLE "${CMAKE_CURRENT_BINARY_DIR}/sbmd-bundle.js")
+    set(SBMD_BUNDLE_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdBundleEmbedded.h")
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
 
+    # Concatenate individual source files into one assembled bundle
     add_custom_command(
-        OUTPUT "${SBMD_UTILS_EMBEDDED_HEADER}"
-        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD utilities bundle as C header..."
-        COMMAND python3 "${EMBED_SCRIPT}"
-            --input "${SBMD_UTILS_SOURCE}"
-            --output "${SBMD_UTILS_EMBEDDED_HEADER}"
-            --variable "kSbmdUtilsBundle"
-        DEPENDS "${SBMD_UTILS_SOURCE}" "${EMBED_SCRIPT}"
+        OUTPUT "${SBMD_ASSEMBLED_BUNDLE}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Assembling SBMD bundle from source files..."
+        COMMAND cat ${SBMD_BUNDLE_SOURCES} > "${SBMD_ASSEMBLED_BUNDLE}"
+        DEPENDS ${SBMD_BUNDLE_SOURCES}
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        COMMENT "Generating embedded C header for SBMD utilities bundle"
+        COMMENT "Assembling SBMD bundle from individual source files"
         VERBATIM
     )
 
+    # Embed the assembled bundle as a C header
     add_custom_command(
-        OUTPUT "${SBMD_RESULT_EMBEDDED_HEADER}"
-        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD result bundle as C header..."
+        OUTPUT "${SBMD_BUNDLE_EMBEDDED_HEADER}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD bundle as C header..."
         COMMAND python3 "${EMBED_SCRIPT}"
-            --input "${SBMD_RESULT_SOURCE}"
-            --output "${SBMD_RESULT_EMBEDDED_HEADER}"
-            --variable "kSbmdResultBundle"
-        DEPENDS "${SBMD_RESULT_SOURCE}" "${EMBED_SCRIPT}"
+            --input "${SBMD_ASSEMBLED_BUNDLE}"
+            --output "${SBMD_BUNDLE_EMBEDDED_HEADER}"
+            --variable "kSbmdBundle"
+        DEPENDS "${SBMD_ASSEMBLED_BUNDLE}" "${EMBED_SCRIPT}"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        COMMENT "Generating embedded C header for SBMD result bundle"
+        COMMENT "Generating embedded C header for SBMD bundle"
         VERBATIM
     )
 
     # Add header generation as a source dependency
     add_custom_target(generate_sbmd_embedded_headers
-        DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER} ${SBMD_RESULT_EMBEDDED_HEADER}
+        DEPENDS ${SBMD_BUNDLE_EMBEDDED_HEADER}
     )
 
     # Include the generated header directory
