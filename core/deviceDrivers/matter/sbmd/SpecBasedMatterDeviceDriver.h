@@ -102,6 +102,12 @@ namespace barton
     protected:
         SubscriptionIntervalSecs GetDesiredSubscriptionIntervalSecs() override;
 
+        void DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
+                               const std::string &deviceId,
+                               const DeviceDescriptor *deviceDescriptor,
+                               chip::Messaging::ExchangeManager &exchangeMgr,
+                               const chip::SessionHandle &sessionHandle) override;
+
         bool DoRegisterResources(icDevice *device) override;
 
         void DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
@@ -302,6 +308,26 @@ namespace barton
                                    chip::ClusterId clusterId,
                                    chip::AttributeId attributeId,
                                    chip::TLV::TLVReader &reader);
+
+        /**
+         * Handle an event report via the dispatch tables.
+         * Called from MatterDevice::CacheCallback via the EventCallback.
+         */
+        void HandleEvent(const std::string &deviceId,
+                         chip::EndpointId endpointId,
+                         chip::ClusterId clusterId,
+                         chip::EventId eventId,
+                         chip::TLV::TLVReader &reader);
+
+        /**
+         * Handle an unsolicited command via the dispatch tables.
+         * Called when a command response does not match any pending requestCommand.
+         */
+        void HandleCommand(const std::string &deviceId,
+                           chip::EndpointId endpointId,
+                           chip::ClusterId clusterId,
+                           uint32_t commandId,
+                           const std::string &tlvBase64);
 
         std::optional<uint8_t> ConvertModesToBitmask(const std::vector<std::string> &modes);
 

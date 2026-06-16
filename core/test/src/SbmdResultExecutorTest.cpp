@@ -436,6 +436,120 @@ namespace
     }
 
     // ========================================================================
+    // Timeout variants
+    // ========================================================================
+
+    TEST_F(SbmdResultExecutorTest, ParseSendCommandTimedInvokeOnly)
+    {
+        auto parsed = EvalAndParse("Sbmd.result().device.sendCommand(257, 0, 'AB==', {timedInvokeTimeoutMs: 8000})");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::SendCommand>(parsed->terminal.data));
+
+        auto &cmd = std::get<ResultTerminal::SendCommand>(parsed->terminal.data);
+        EXPECT_EQ(cmd.clusterId, 257u);
+        EXPECT_EQ(cmd.commandId, 0u);
+        ASSERT_TRUE(cmd.timedInvokeTimeoutMs.has_value());
+        EXPECT_EQ(*cmd.timedInvokeTimeoutMs, 8000u);
+        EXPECT_FALSE(cmd.endpointId.has_value());
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseRequestCommandWithTimedInvoke)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    responseCommandId: 42,"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    timeoutMs: 5000,"
+                                   "    timedInvokeTimeoutMs: 10000"
+                                   "  };"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, 'AB==', opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
+
+        auto &rc = std::get<ResultTerminal::RequestCommand>(parsed->terminal.data);
+        ASSERT_TRUE(rc.timeoutMs.has_value());
+        EXPECT_EQ(*rc.timeoutMs, 5000u);
+        ASSERT_TRUE(rc.timedInvokeTimeoutMs.has_value());
+        EXPECT_EQ(*rc.timedInvokeTimeoutMs, 10000u);
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseRequestCommandNoTimeoutMs)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    responseCommandId: 42,"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); }"
+                                   "  };"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, null, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
+
+        auto &rc = std::get<ResultTerminal::RequestCommand>(parsed->terminal.data);
+        EXPECT_FALSE(rc.timeoutMs.has_value());
+        EXPECT_FALSE(rc.timedInvokeTimeoutMs.has_value());
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseReadAttributeNoTimeoutMs)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); }"
+                                   "  };"
+                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(parsed->terminal.data));
+
+        auto &ra = std::get<ResultTerminal::ReadAttribute>(parsed->terminal.data);
+        EXPECT_FALSE(ra.timeoutMs.has_value());
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseRequestCommandWithEndpoint)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    responseCommandId: 42,"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    endpointId: 3"
+                                   "  };"
+                                   "  return Sbmd.result().device.requestCommand(0x0101, 0, null, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(parsed->terminal.data));
+
+        auto &rc = std::get<ResultTerminal::RequestCommand>(parsed->terminal.data);
+        ASSERT_TRUE(rc.endpointId.has_value());
+        EXPECT_EQ(*rc.endpointId, 3u);
+    }
+
+    TEST_F(SbmdResultExecutorTest, ParseReadAttributeWithEndpoint)
+    {
+        auto parsed = EvalAndParse("(function() {"
+                                   "  var opts = {"
+                                   "    onResponse: function(args) { return Sbmd.result().success(); },"
+                                   "    onError: function(args) { return Sbmd.result().error('fail'); },"
+                                   "    endpointId: 7,"
+                                   "    timeoutMs: 2000"
+                                   "  };"
+                                   "  return Sbmd.result().device.readAttribute(0x0300, 0x0001, opts);"
+                                   "})()");
+        ASSERT_TRUE(parsed.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::ReadAttribute>(parsed->terminal.data));
+
+        auto &ra = std::get<ResultTerminal::ReadAttribute>(parsed->terminal.data);
+        ASSERT_TRUE(ra.endpointId.has_value());
+        EXPECT_EQ(*ra.endpointId, 7u);
+        ASSERT_TRUE(ra.timeoutMs.has_value());
+        EXPECT_EQ(*ra.timeoutMs, 2000u);
+    }
+
+    // ========================================================================
     // Ops before device terminal
     // ========================================================================
 

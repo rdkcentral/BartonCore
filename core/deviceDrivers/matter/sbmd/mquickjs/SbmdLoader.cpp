@@ -32,6 +32,7 @@
 #include "MQuickJsRuntime.h"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cstring>
 #include <string>
 
@@ -668,11 +669,11 @@ namespace barton
             return nullptr;
         }
 
-        icInfo("Loaded driver '%s' from %s (schema %s, driver %s)",
+        icInfo("Loaded driver '%s' from %s (schema %s, driver %" PRIu32 ")",
                reg->name.c_str(),
                filePath.c_str(),
                reg->schemaVersion.c_str(),
-               reg->driverVersion.c_str());
+               reg->driverVersion);
 
         return reg;
     }
@@ -774,7 +775,7 @@ namespace barton
     bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
     {
         out.schemaVersion = GetStringProp(ctx, reg, "schemaVersion");
-        out.driverVersion = GetStringProp(ctx, reg, "driverVersion");
+        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion");
         out.name = GetStringProp(ctx, reg, "name");
 
         if (out.name.empty())

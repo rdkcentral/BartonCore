@@ -48,7 +48,7 @@ namespace
     constexpr const char *kMinimalDriver = R"(
 SbmdDriver({
     schemaVersion: '4.0',
-    driverVersion: '1.0.0',
+    driverVersion: 1,
     name: 'test-light',
     barton: {
         deviceClass: 'light',

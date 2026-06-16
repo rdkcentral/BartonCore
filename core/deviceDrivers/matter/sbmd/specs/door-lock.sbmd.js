@@ -27,14 +27,13 @@
 // Maps Matter Door Lock device type to Barton doorLock device class.
 // Uses LockState attribute for real-time lock state updates.
 // Lock/Unlock commands sent via execute handlers with optional PIN code.
-//
-// Note: LockOperation event handler support is deferred until event
-// infrastructure is implemented.
+// The locked resource is seeded at commission time and kept current by
+// the LockState attribute subscription.
 //
 
 SbmdDriver({
     schemaVersion: '4.0',
-    driverVersion: '1.0.0',
+    driverVersion: 1,
     name: 'Door Lock',
 
     constants: {
@@ -85,7 +84,12 @@ SbmdDriver({
                 locked: {
                     type: 'boolean',
                     modes: ['read'],
-                    prerequisites: [CL_DOOR_LOCK]
+                    prerequisites: [CL_DOOR_LOCK],
+                    seed: function(args) {
+                        return Sbmd.result()
+                            .dataModel.updateResource(RES_LOCKED, 'true')
+                            .success();
+                    }
                 },
                 lock: {
                     type: 'function',
