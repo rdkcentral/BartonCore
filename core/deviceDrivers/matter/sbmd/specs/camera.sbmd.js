@@ -40,178 +40,91 @@
 
 SbmdDriver({
     schemaVersion: '4.0',
-    driverVersion: '1.0.0',
+    driverVersion: 1,
     name: 'Camera',
 
     constants: {
-                // Endpoint
+        // Endpoint
         EP_CAMERA: 'camera',
 
-                // Clusters
+        // Clusters
         CL_WEBRTC_TRANSPORT_PROVIDER: 0x0553,
-                CL_CAMERA_AV_STREAM_MGMT: 0x0551,
+        CL_CAMERA_AV_STREAM_MGMT: 0x0551,
 
-                // Session status values
+        // Session status values
         STATUS_SETUP: 'setup',
-                STATUS_DONE: 'done',
-                STATUS_ERROR: 'error',
+        STATUS_DONE: 'done',
+        STATUS_ERROR: 'error',
 
-                // Transient data keys
+        // Transient data keys
         TD_SESSIONS: 'sessions',
-                TD_NEXT_SESSION_ID: 'nextSessionId',
+        TD_NEXT_SESSION_ID: 'nextSessionId',
 
-                // Protocol identifiers
+        // Protocol identifiers
         PROTO_WEBRTC: 'webrtc',
 
-                // Timing
+        // Timing
         ONE_HOUR_SECS: 3600,
-                },
+    },
 
     barton: {
-                deviceClass: 'camera',
-                deviceClassVersion: 1,
-                },
+        deviceClass: 'camera',
+        deviceClassVersion: 1,
+    },
 
     matter: {
-                deviceTypes: [0x0142],
-                revision: 1,
-                featureClusters: [CL_WEBRTC_TRANSPORT_PROVIDER],
-                },
+        deviceTypes: [0x0142],
+        revision: 1,
+        featureClusters: [CL_WEBRTC_TRANSPORT_PROVIDER],
+    },
 
     reporting: {
-                minSecs: 1,
-                maxSecs: ONE_HOUR_SECS,
-                },
+        minSecs: 1,
+        maxSecs: ONE_HOUR_SECS,
+    },
 
     aliases: {},
 
     endpoints: {
-                camera: {
+        camera: {
             profile: 'camera',
             profileVersion: 1,
             resources: {
                 createSession: {
                     type: 'function',
-                    modes: ['execute'],
 
                     execute: {
                         supplements: {
                             transientData: [TD_SESSIONS, TD_NEXT_SESSION_ID],
                         },
-
-                        handler: function(args) {
-                            var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-                            var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
-
-                            var nextIdStr = args.supplements.transientData[TD_NEXT_SESSION_ID];
-                            var nextId = nextIdStr ? parseInt(nextIdStr, 10) : 1;
-
-                            var sessionId = nextId.toString();
-
-                            sessions[sessionId] = {
-                                state: 'created',
-                                protocol: PROTO_WEBRTC,
-                            };
-
-                            return Sbmd.result()
-                                .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
-                                .storage.setTransientData(TD_NEXT_SESSION_ID, (nextId + 1).toString(), ONE_HOUR_SECS)
-                                .success(sessionId);
-                        },
+                        handler: executeCreateSession,
                     },
                 },
 
                 stream: {
                     type: 'function',
-                    modes: ['execute'],
 
                     execute: {
                         supplements: {
                             transientData: [TD_SESSIONS],
                         },
-
-                        handler: function(args) {
-                            var input = args.resource.input;
-
-                            if (!input)
-                            {
-                                return Sbmd.result().error('sessionId required');
-                            }
-
-                            var sessionId = input.toString();
-
-                            var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-                            var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
-
-                            if (!sessions[sessionId])
-                            {
-                                return Sbmd.result().error('unknown sessionId: ' + sessionId);
-                            }
-
-                            sessions[sessionId].state = 'streaming';
-                            sessions[sessionId].action = 'stream';
-
-                            var protocol = sessions[sessionId].protocol;
-                            var deviceId = args.deviceUuid;
-                            var nextAction = '/devices/' + deviceId + '/ep/webrtc/r/offerSdp';
-
-                            var metadata = {
-                                sessionId: parseInt(sessionId, 10),
-                                protocol: protocol,
-                                nextAction: nextAction,
-                            };
-
-                            return Sbmd.result()
-                                .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
-                                .dataModel.updateResource(EP_CAMERA, 'sessionStatus', STATUS_SETUP, metadata)
-                                .success();
-                        },
+                        handler: executeStream,
                     },
                 },
 
                 takePicture: {
                     type: 'function',
-                    modes: ['execute'],
-
-                    execute: function(args) {
-                        // TODO: implement snapshot capture via CameraAvStreamManagement
-                        return Sbmd.result().error('takePicture not yet implemented');
-                    },
+                    execute: executeTakePicture,
                 },
 
                 destroySession: {
                     type: 'function',
-                    modes: ['execute'],
 
                     execute: {
                         supplements: {
                             transientData: [TD_SESSIONS],
                         },
-
-                        handler: function(args) {
-                            var input = args.resource.input;
-
-                            if (!input)
-                            {
-                                return Sbmd.result().error('sessionId required');
-                            }
-
-                            var sessionId = input.toString();
-
-                            var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-                            var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
-
-                            if (!sessions[sessionId])
-                            {
-                                return Sbmd.result().error('unknown sessionId: ' + sessionId);
-                            }
-
-                            delete sessions[sessionId];
-
-                            return Sbmd.result()
-                                .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
-                                .success();
-                        },
+                        handler: executeDestroySession,
                     },
                 },
 
@@ -220,7 +133,106 @@ SbmdDriver({
                     modes: [],
                 },
             },
-        }, },
+        },
+    },
 
     attributeHandlers: {},
 });
+
+// =============================================================================
+// Handler Functions
+// =============================================================================
+
+function executeCreateSession(args)
+{
+    var sessionsJson = args.supplements.transientData[TD_SESSIONS];
+    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+
+    var nextIdStr = args.supplements.transientData[TD_NEXT_SESSION_ID];
+    var nextId = nextIdStr ? parseInt(nextIdStr, 10) : 1;
+
+    if (isNaN(nextId) || nextId < 1)
+    {
+        nextId = 1;
+    }
+
+    var sessionId = nextId.toString();
+
+    sessions[sessionId] = {
+        state: 'created',
+        protocol: PROTO_WEBRTC,
+    };
+
+    return Sbmd.result()
+        .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
+        .storage.setTransientData(TD_NEXT_SESSION_ID, (nextId + 1).toString(), ONE_HOUR_SECS)
+        .success(sessionId);
+}
+
+function executeStream(args)
+{
+    var input = args.resource.input;
+
+    if (!input)
+    {
+        return Sbmd.result().error('sessionId required');
+    }
+
+    var sessionId = input.toString();
+
+    var sessionsJson = args.supplements.transientData[TD_SESSIONS];
+    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+
+    if (!sessions[sessionId])
+    {
+        return Sbmd.result().error('unknown sessionId: ' + sessionId);
+    }
+
+    sessions[sessionId].state = 'streaming';
+    sessions[sessionId].action = 'stream';
+
+    var protocol = sessions[sessionId].protocol;
+    var deviceId = args.deviceUuid;
+    var nextAction = '/devices/' + deviceId + '/ep/webrtc/r/offerSdp';
+
+    var metadata = {
+        sessionId: parseInt(sessionId, 10),
+        protocol: protocol,
+        nextAction: nextAction,
+    };
+
+    return Sbmd.result()
+        .storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS)
+        .dataModel.updateResource(EP_CAMERA, 'sessionStatus', STATUS_SETUP, metadata)
+        .success();
+}
+
+function executeTakePicture(args)
+{
+    // TODO: implement snapshot capture via CameraAvStreamManagement
+    return Sbmd.result().error('takePicture not yet implemented');
+}
+
+function executeDestroySession(args)
+{
+    var input = args.resource.input;
+
+    if (!input)
+    {
+        return Sbmd.result().error('sessionId required');
+    }
+
+    var sessionId = input.toString();
+
+    var sessionsJson = args.supplements.transientData[TD_SESSIONS];
+    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+
+    if (!sessions[sessionId])
+    {
+        return Sbmd.result().error('unknown sessionId: ' + sessionId);
+    }
+
+    delete sessions[sessionId];
+
+    return Sbmd.result().storage.setTransientData(TD_SESSIONS, JSON.stringify(sessions), ONE_HOUR_SECS).success();
+}
