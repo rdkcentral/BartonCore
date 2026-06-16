@@ -211,8 +211,8 @@
       }
     },
 
-    "readOrSeedHandler": {
-      "description": "A seed or read handler: either an object with handler + optional supplements, or a direct function reference.",
+    "resourceHandler": {
+      "description": "A resource handler: either an object with handler + optional supplements, or a direct function reference.",
       "oneOf": [
         {
           "type": "object",
@@ -259,10 +259,10 @@
           "type": "boolean",
           "description": "If true, silently skip when prerequisites are not met instead of failing commissioning."
         },
-        "seed": { "$ref": "#/$defs/readOrSeedHandler" },
-        "read": { "$ref": "#/$defs/readOrSeedHandler" },
-        "write": { "$ref": "#/$defs/functionRef" },
-        "execute": { "$ref": "#/$defs/functionRef" }
+        "seed": { "$ref": "#/$defs/resourceHandler" },
+        "read": { "$ref": "#/$defs/resourceHandler" },
+        "write": { "$ref": "#/$defs/resourceHandler" },
+        "execute": { "$ref": "#/$defs/resourceHandler" }
       }
     },
 

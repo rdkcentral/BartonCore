@@ -380,6 +380,23 @@ resources: {
 }
 ```
 
+All resource handler fields (`seed`, `read`, `write`, `execute`) accept either a
+bare function reference or an object with `{ supplements, handler }`:
+
+```js
+// Bare function form (no supplements needed):
+write: writeIdentify,
+
+// Object form (with supplements):
+write: {
+  supplements: {
+    attributes: ["lockState"],
+    persistentData: ["lastMode"],
+  },
+  handler: writeLock,
+},
+```
+
 See [4.8.1 Resource Declaration](#481-resource-declaration) for the full schema.
 
 ### 4.8 Endpoints
@@ -434,10 +451,10 @@ endpoints: {
 | `modes` | string[] | no | Access modes. See below. |
 | `prerequisites` | string[] | no | Alias names that must be satisfied before the resource is created (see [4.3 Aliases](#43-aliases)). Default: none (always created). |
 | `optional` | boolean | no | Controls behavior when `prerequisites` are not met. If `false` (default), commissioning **fails**. If `true`, the resource is **silently skipped**. Has no effect without `prerequisites`. |
-| `seed` | object | no | Initialization handler, run on device discovery and each Barton startup. |
-| `read` | object | no | Read handler (for readable resources). |
-| `write` | function | no | Write handler function reference. |
-| `execute` | function | no | Execute handler function reference (for `type: "function"` resources). |
+| `seed` | object \| function | no | Initialization handler, run on device discovery and each Barton startup. |
+| `read` | object \| function | no | Read handler (for readable resources). |
+| `write` | object \| function | no | Write handler. Object form `{ supplements, handler }` for pre-fetched data; bare function otherwise. |
+| `execute` | object \| function | no | Execute handler (for `type: "function"` resources). Object form `{ supplements, handler }` for pre-fetched data; bare function otherwise. |
 
 **Prerequisites and Optional**
 

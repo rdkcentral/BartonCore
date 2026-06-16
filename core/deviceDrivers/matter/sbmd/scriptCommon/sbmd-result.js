@@ -25,7 +25,8 @@
  * SBMD Result Builder
  *
  * Provides the Sbmd.result() builder for constructing handler return values.
- * Loaded after sbmd-utils.js, which creates the Sbmd namespace.
+ *
+ * Requires: sbmd-namespace.js (Sbmd object must exist)
  *
  * Usage:
  *   Sbmd.result()
@@ -41,7 +42,7 @@
  * operations after a terminal has been set, the builder throws.
  */
 
-(function(globalThis)
+(function(Sbmd)
 {
     'use strict';
 
@@ -377,7 +378,7 @@
         return new ResultBuilder();
     }
 
-    // Attach result builder to existing Sbmd namespace
-    globalThis.Sbmd.result = createResultBuilder;
+    // Attach result builder to Sbmd namespace
+    Sbmd.result = createResultBuilder;
 
-})(globalThis);
+})(globalThis.Sbmd);
