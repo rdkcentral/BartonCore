@@ -38,15 +38,19 @@ namespace barton
     /**
      * Loader for SBMD JavaScript bundles.
      *
-     * Loads the SBMD bundles into a mquickjs context, exposing a
+     * Loads the SBMD bundle into a mquickjs context, exposing a
      * global 'Sbmd' object with:
      * - Base64: encode/decode utilities
      * - Tlv: TLV encoding/decoding for Matter types
      * - result(): builder for handler return values
      *
-     * The bundles are loaded in order:
-     *   1. sbmd-utils.js  — creates the Sbmd namespace (Base64, Tlv, TLV_TYPE)
-     *   2. sbmd-result.js — adds Sbmd.result() builder
+     * The bundle is assembled at build time from individual source files:
+     *   1. sbmd-namespace.js — creates the Sbmd namespace and _internal
+     *   2. sbmd-utf8.js      — adds Sbmd._internal.Utf8
+     *   3. sbmd-base64.js    — adds Sbmd.Base64
+     *   4. sbmd-tlv.js       — adds Sbmd.Tlv
+     *   5. sbmd-result.js    — adds Sbmd.result() builder
+     *   6. sbmd-cleanup.js   — removes Sbmd._internal
      */
     class SbmdBundleLoader
     {
