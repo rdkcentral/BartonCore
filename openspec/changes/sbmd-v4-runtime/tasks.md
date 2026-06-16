@@ -41,8 +41,8 @@
 ## 6. Handler Dispatch and Supplements
 
 - [x] 6.1 Implement dispatch table construction — resolve aliases to cluster+ID pairs, build `map<(clusterId, attrId/eventId/cmdId), vector<HandlerEntry>>` and wildcard tables. Handle alias form and explicit form (clusterId + attributeId/attributeIds/wildcard).
-- [ ] 6.2 Implement supplements resolution — given a supplements declaration, read attribute values from `DeviceDataCache` and resource values from Barton resource store. Build `args.supplements` JS object. (deferred — no current drivers use supplements)
-- [ ] 6.3 Implement handler invocation — build `args` JS object (deviceUuid, endpointId, clusterFeatureMaps, trigger field, supplements), call handler JSValue via `JS_PushArg`/`JS_Call`, extract result JSValue. (handler invocation implemented in TG9; supplements portion deferred)
+- [x] 6.2 Implement supplements resolution — given a supplements declaration, read attribute values from `DeviceDataCache` and resource values from Barton resource store. Build `args.supplements` JS object. (implemented: MakeAttrFetcher reads cached TLV, MakeResFetcher reads Barton resources)
+- [x] 6.3 Implement handler invocation — build `args` JS object (deviceUuid, endpointId, clusterFeatureMaps, trigger field, supplements), call handler JSValue via `JS_PushArg`/`JS_Call`, extract result JSValue. (implemented in SbmdHandlerInvoker; supplements wired at all call sites)
 - [x] 6.4 Implement attribute handler dispatch — on attribute report callback, look up dispatch table, call matching handlers in priority order (specific → multi → wildcard).
 - [x] 6.5 Implement event handler dispatch — same pattern as attribute dispatch.
 - [x] 6.6 Implement command handler dispatch — same pattern, with pending-request check before falling through to commandHandlers.
