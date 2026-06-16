@@ -61,6 +61,12 @@ namespace barton
     {
         JSValue args = JS_NewObject(ctx);
 
+        // GC-root args during construction: subsequent allocations (JS_NewString,
+        // JS_NewObject) may trigger mquickjs GC which would sweep the unrooted args.
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         JS_SetPropertyStr(ctx, args, "deviceUuid", JS_NewString(ctx, hctx.deviceUuid.c_str()));
         JS_SetPropertyStr(ctx, args, "endpointId", JS_NewString(ctx, hctx.endpointId.c_str()));
 
@@ -74,6 +80,8 @@ namespace barton
 
         JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -84,6 +92,10 @@ namespace barton
                                                    const std::string &tlvBase64)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         // Add trigger info
         JSValue trigger = JS_NewObject(ctx);
@@ -97,6 +109,8 @@ namespace barton
 
         JS_SetPropertyStr(ctx, args, "attribute", trigger);
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -107,6 +121,10 @@ namespace barton
                                                const std::string &tlvBase64)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         // Add trigger info
         JSValue trigger = JS_NewObject(ctx);
@@ -120,6 +138,8 @@ namespace barton
 
         JS_SetPropertyStr(ctx, args, "event", trigger);
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -130,6 +150,10 @@ namespace barton
                                                  const std::string &tlvBase64)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         // Add trigger info
         JSValue trigger = JS_NewObject(ctx);
@@ -143,6 +167,8 @@ namespace barton
 
         JS_SetPropertyStr(ctx, args, "command", trigger);
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -152,6 +178,10 @@ namespace barton
                                                   const std::optional<std::string> &input)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         // Add resource info
         JSValue resource = JS_NewObject(ctx);
@@ -167,6 +197,8 @@ namespace barton
         }
 
         JS_SetPropertyStr(ctx, args, "resource", resource);
+
+        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
@@ -381,6 +413,10 @@ namespace barton
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
 
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         JSValue response = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, response, "clusterId", JS_NewUint32(ctx, clusterId));
         JS_SetPropertyStr(ctx, response, "commandId", JS_NewUint32(ctx, commandId));
@@ -405,6 +441,8 @@ namespace barton
             JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
         }
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -416,6 +454,10 @@ namespace barton
                                                                JSValue handlerContext)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         JSValue attribute = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, attribute, "clusterId", JS_NewUint32(ctx, clusterId));
@@ -432,6 +474,8 @@ namespace barton
             JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
         }
 
+        JS_DeleteGCRef(ctx, &argsRef);
+
         return args;
     }
 
@@ -443,6 +487,10 @@ namespace barton
                                                        JSValue handlerContext)
     {
         JSValue args = BuildBaseArgs(ctx, hctx);
+
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
 
         JSValue error = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, error, "type", JS_NewString(ctx, errorType.c_str()));
@@ -467,6 +515,8 @@ namespace barton
         {
             JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
         }
+
+        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
