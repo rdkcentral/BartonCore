@@ -305,3 +305,18 @@ if (BCORE_MATTER)
         bcore_configure_glib()
     endif()
 endif()
+
+# Observability metrics test — uses the active backend (inmemory or noop).
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "inmemory")
+    file(GLOB _inmemory_obs_src ${PROJECT_SOURCE_DIR}/core/src/observability/inmemory/*.c)
+else()
+    file(GLOB _inmemory_obs_src "")
+endif()
+
+bcore_add_cmocka_test(
+    NAME testObservabilityMetrics
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityMetricsTest.c
+                 ${_inmemory_obs_src}
+    LINK_LIBRARIES cjson
+    INCLUDES ${BARTON_PRIVATE_INCLUDES}
+)

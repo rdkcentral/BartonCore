@@ -1,11 +1,11 @@
 ## 1. Observability Foundation (separate PR)
 
-- [ ] 1.1 Create `core/src/observability/observabilityMetrics.h` with counter, gauge, histogram opaque types and C API (`observabilityCounterCreate`, `observabilityCounterAdd`, `observabilityGaugeCreate`, `observabilityGaugeRecord`, `observabilityHistogramCreate`, `observabilityHistogramRecord`, plus `WithAttrs` variants). Include no-op inline stubs when `BARTON_CONFIG_OBSERVABILITY` is OFF.
-- [ ] 1.2 Implement `observabilityMetrics.cpp` — back instruments with in-process data structures (atomic counters, gauge maps keyed by attribute tuples, histogram with fixed bucket boundaries). Thread-safe.
-- [ ] 1.3 Add `BARTON_CONFIG_OBSERVABILITY` CMake option (default ON). Wire `core/src/observability/` sources into `core/CMakeLists.txt`.
-- [ ] 1.4 Add `gettelemetry`/`gt` command to the reference app. Route through the existing command IPC flow (like `getstatus`). Dump all registered metrics as JSON to stdout.
-- [ ] 1.5 Write unit tests for counter, gauge, histogram instruments — verify increment, record, attribute-keyed tracking, and histogram bucket distribution.
-- [ ] 1.6 Write unit test for JSON dump output format.
+- [x] 1.1 Create `core/src/observability/observabilityMetrics.h` with counter, gauge, histogram opaque types and C API (`observabilityCounterCreate`, `observabilityCounterAdd`, `observabilityGaugeCreate`, `observabilityGaugeRecord`, `observabilityHistogramCreate`, `observabilityHistogramRecord`, plus `WithAttrs` variants). Include no-op inline stubs when `BARTON_CONFIG_OBSERVABILITY` is OFF.
+- [x] 1.2 Implement `observabilityMetrics.cpp` — back instruments with in-process data structures (atomic counters, gauge maps keyed by attribute tuples, histogram with fixed bucket boundaries). Thread-safe.
+- [x] 1.3 Add `BARTON_CONFIG_OBSERVABILITY` CMake option (default ON). Wire `core/src/observability/` sources into `core/CMakeLists.txt`.
+- [x] 1.4 Add `gettelemetry`/`gt` command to the reference app. Route through the existing command IPC flow (like `getstatus`). Dump all registered metrics as JSON to stdout.
+- [x] 1.5 Write unit tests for counter, gauge, histogram instruments — verify increment, record, attribute-keyed tracking, and histogram bucket distribution.
+- [x] 1.6 Write unit test for JSON dump output format.
 
 ## 2. Staging — Move v3 Drivers Aside
 
