@@ -135,7 +135,14 @@ function parseSessions(sessionsJson)
 
     try
     {
-        return JSON.parse(sessionsJson);
+        var parsed = JSON.parse(sessionsJson);
+
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+        {
+            return null;
+        }
+
+        return parsed;
     }
     catch (e)
     {
@@ -156,13 +163,22 @@ function executeCreateSession(args)
     }
 
     var nextIdStr = args.supplements.transientData[TD_NEXT_SESSION_ID];
-    var nextId = nextIdStr ? parseInt(nextIdStr, 10) : 1;
+    var nextId = nextIdStr ? parseInt(nextIdStr, 10) : NaN;
 
     if (isNaN(nextId) || nextId < 1)
     {
         nextId = 1;
-    }
 
+        for (var id in sessions)
+        {
+            var n = parseInt(id, 10);
+
+            if (!isNaN(n) && n >= nextId)
+            {
+                nextId = n + 1;
+            }
+        }
+    }
     var sessionId = nextId.toString();
 
     sessions[sessionId] = {
