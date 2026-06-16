@@ -93,7 +93,7 @@
 - [x] 12.1 Write `light.sbmd.js` — constants (EP, CL, ATTR, CMD, RES), aliases (onOff, currentLevel), barton/matter metadata, endpoints with resources (isOn with seed+write, currentLevel optional with seed+write), attributeHandlers for onOff and currentLevel. Match v3 behavior exactly.
 - [x] 12.2 Place `light.sbmd.js` in `core/deviceDrivers/matter/sbmd/specs/`.
 - [x] 12.3 Run light integration tests (`testing/test/light_test.py`) — all must pass.
-- [ ] 12.4 Profile JS heap usage with the v4 light driver loaded — compare against v3 baseline using `MQuickJsRuntime::LogMemoryUsage` and observability metrics.
+- [x] 12.4 Profile JS heap usage with the v4 light driver loaded — compare against v3 baseline using `MQuickJsRuntime::LogMemoryUsage` and observability metrics.
 
 ## 13. Remove v3 Infrastructure
 
