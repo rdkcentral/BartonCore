@@ -157,7 +157,7 @@ namespace barton
     {
         // Metadata — always available
         std::string schemaVersion;
-        std::string driverVersion;
+        uint32_t driverVersion = 0;
         std::string name;
         std::string filePath; // Source file path for diagnostics
 

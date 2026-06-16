@@ -124,6 +124,42 @@ namespace barton
                                           const std::string &tlvBase64);
 
         /**
+         * Build an args object for an event handler invocation.
+         *
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, event: { clusterId, eventId, tlvBase64 } }
+         *
+         * @param ctx JS context (caller holds mutex)
+         * @param hctx Device/handler context
+         * @param clusterId The triggering cluster ID
+         * @param eventId The triggering event ID
+         * @param tlvBase64 The TLV-encoded event data as base64 (may be empty)
+         * @return JS args object, or JS_EXCEPTION on failure
+         */
+        static JSValue BuildEventArgs(JSContext *ctx,
+                                      const HandlerContext &hctx,
+                                      uint32_t clusterId,
+                                      uint32_t eventId,
+                                      const std::string &tlvBase64);
+
+        /**
+         * Build an args object for an unsolicited command handler invocation.
+         *
+         * Creates: { deviceUuid, endpointId, clusterFeatureMaps, command: { clusterId, commandId, tlvBase64 } }
+         *
+         * @param ctx JS context (caller holds mutex)
+         * @param hctx Device/handler context
+         * @param clusterId The triggering cluster ID
+         * @param commandId The triggering command ID
+         * @param tlvBase64 The TLV-encoded command data as base64 (may be empty)
+         * @return JS args object, or JS_EXCEPTION on failure
+         */
+        static JSValue BuildCommandArgs(JSContext *ctx,
+                                        const HandlerContext &hctx,
+                                        uint32_t clusterId,
+                                        uint32_t commandId,
+                                        const std::string &tlvBase64);
+
+        /**
          * Build an args object for a resource handler (seed/read/write/execute).
          *
          * @param ctx JS context (caller holds mutex)

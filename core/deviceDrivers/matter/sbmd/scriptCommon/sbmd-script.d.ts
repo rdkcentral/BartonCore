@@ -1,372 +1,450 @@
 /**
- * SBMD Script Interface Type Definitions
+ * SBMD v4 Type Definitions
  *
- * This file provides TypeScript type definitions for the JSON interfaces
- * used by SBMD (Specification-Based Matter Driver) mapper scripts.
+ * TypeScript type definitions for SBMD (Specification-Based Matter Driver)
+ * v4 `.sbmd.js` driver files.
  *
- * Scripts are executed in a QuickJS JavaScript runtime. Each script type
- * receives a specific input object as a global variable and must return
- * a result object with the expected structure.
+ * Each driver file calls `SbmdDriver({...})` with a registration object.
+ * Handler functions receive an `args` object and return a result built
+ * with the `Sbmd.result()` builder.
  *
  * @file sbmd-script.d.ts
  * @see docs/SBMD.md for detailed documentation
  */
 
 // =============================================================================
-// Common Types
+// SbmdDriver Registration Object
 // =============================================================================
 
 /**
- * Base context available to all SBMD scripts.
+ * Top-level registration object passed to `SbmdDriver()`.
  */
-interface SbmdBaseContext {
-    /** Device UUID */
-    deviceUuid: string;
+interface SbmdRegistration {
+    /** Schema version. Must be "4.0". */
+    schemaVersion: "4.0";
 
-    /**
-     * Cluster feature maps keyed by cluster ID (as string).
-     * Use to check cluster capabilities before encoding.
-     * Clusters listed in matterMeta.featureClusters are available here.
-     */
-    clusterFeatureMaps: Record<string, number>;
+    /** Driver-specific version string or number. */
+    driverVersion: string | number;
 
-    /** Endpoint ID (empty string for device-level resources) */
-    endpointId: string;
+    /** Human-readable driver name. */
+    name: string;
+
+    /** Named constants injected as read-only globals. Values must be primitives. */
+    constants: Record<string, number | string | boolean>;
+
+    /** Named references to Matter cluster attributes, events, or commands. */
+    aliases?: Record<string, SbmdAlias>;
+
+    /** Barton device class mapping. */
+    barton: SbmdBarton;
+
+    /** Matter device type matching. */
+    matter: SbmdMatter;
+
+    /** Attribute reporting interval. */
+    reporting?: SbmdReporting;
+
+    /** Device-level resource declarations keyed by resource name. */
+    resources?: Record<string, SbmdResource>;
+
+    /** Endpoint definitions keyed by endpoint ID string. */
+    endpoints?: Record<string, SbmdEndpoint>;
+
+    /** Attribute report handlers keyed by handler name. */
+    attributeHandlers?: Record<string, SbmdAttributeHandler>;
+
+    /** Event handlers keyed by handler name. */
+    eventHandlers?: Record<string, SbmdEventHandler>;
+
+    /** Unsolicited command handlers keyed by handler name. */
+    commandHandlers?: Record<string, SbmdCommandHandler>;
 }
 
 // =============================================================================
-// Read Mapper Interface
+// Registration Sub-Types
 // =============================================================================
 
 /**
- * Input object for read mapper scripts.
- *
- * Available as global variable: `sbmdReadArgs`
- *
- * @example
- * // Boolean passthrough
- * var val = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
- * return SbmdUtils.Response.value(val ? 'true' : 'false');
- *
- * @example
- * // Enum to boolean conversion (Door Lock state)
- * // LockState enum: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
- * var lockState = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
- * return SbmdUtils.Response.value(lockState === 1 ? 'true' : 'false');
- *
- * @example
- * // Percentage conversion (Level Control 0-254 to 0-100)
- * var level = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
- * var percent = Math.round(level / 254 * 100);
- * return SbmdUtils.Response.value(percent.toString());
+ * Alias: a named reference to a Matter cluster element.
+ * Must have `clusterId` and at most one of `attributeId`, `eventId`, `commandId`.
+ * A cluster-only alias (no ID field) matches all elements on that cluster.
  */
-interface SbmdReadArgs extends SbmdBaseContext {
-    /** Base64-encoded TLV data from Matter attribute */
-    tlvBase64: string;
-
-    /** Matter cluster ID */
+interface SbmdAlias {
     clusterId: number;
+    attributeId?: number;
+    eventId?: number;
+    commandId?: number;
+    /** Matter data type (documentation only, ignored by runtime). */
+    type?: string;
+}
 
-    /** Matter attribute ID */
+interface SbmdBarton {
+    deviceClass: string;
+    deviceClassVersion: number;
+}
+
+interface SbmdMatter {
+    /** Matter device type IDs this driver handles. */
+    deviceTypes: number[];
+    /** Minimum Matter device type revision required. */
+    revision?: number;
+    /** Matter vendor ID for vendor-specific matching. */
+    vendorId?: number;
+    /** Matter product ID for vendor-specific matching. Requires vendorId. */
+    productId?: number;
+    /** Cluster IDs whose feature maps should be cached. */
+    featureClusters?: number[];
+    /** Default timeout in ms for deferred operations. */
+    defaultTimeoutMs?: number;
+}
+
+interface SbmdReporting {
+    /** Minimum attribute reporting interval in seconds. */
+    minSecs: number;
+    /** Maximum attribute reporting interval in seconds. */
+    maxSecs: number;
+}
+
+interface SbmdEndpoint {
+    /** Barton resource profile name. */
+    profile: string;
+    /** Profile version. */
+    profileVersion: number;
+    /** Resource declarations keyed by resource name. */
+    resources: Record<string, SbmdResource>;
+}
+
+// =============================================================================
+// Supplements
+// =============================================================================
+
+/**
+ * Pre-fetched data delivered to the handler in `args.supplements`.
+ */
+interface SbmdSupplements {
+    /** Alias names for Matter attributes to read from device data cache. */
+    attributes?: string[];
+    /** Barton resource paths: "endpointId/resourceName" or "resourceName". */
+    resources?: string[];
+    /** Persistent storage keys to fetch. */
+    persistentData?: string[];
+    /** Transient storage keys to fetch (TTL-based). */
+    transientData?: string[];
+}
+
+// =============================================================================
+// Resources
+// =============================================================================
+
+/** A seed or read handler with optional supplements. */
+interface SbmdReadOrSeedHandler {
+    supplements?: SbmdSupplements;
+    handler: SbmdHandlerFunction;
+}
+
+/**
+ * Resource declaration.
+ */
+interface SbmdResource {
+    /** Resource value type: "boolean", "string", "function", or a custom type. */
+    type: string;
+
+    /**
+     * Access modes: "read", "write", "dynamic" (default on), "static" (opts out of dynamic),
+     * "emitEvents" (default on), "noEvents", "lazySaveNext", "sensitive".
+     */
+    modes?: Array<"read" | "write" | "dynamic" | "static" | "emitEvents" | "noEvents" | "lazySaveNext" | "sensitive">;
+
+    /** Alias names or cluster IDs that must be present before creating this resource. */
+    prerequisites?: Array<string | number>;
+
+    /** If true, silently skip when prerequisites are not met. Default false. */
+    optional?: boolean;
+
+    /** Initialization handler (runs on discovery and each startup). */
+    seed?: SbmdReadOrSeedHandler | SbmdHandlerFunction;
+
+    /** Read handler (runs on every read request). */
+    read?: SbmdReadOrSeedHandler | SbmdHandlerFunction;
+
+    /** Write handler function. */
+    write?: SbmdHandlerFunction;
+
+    /** Execute handler function (for type: "function" resources). */
+    execute?: SbmdHandlerFunction;
+}
+
+// =============================================================================
+// Attribute / Event / Command Handlers
+// =============================================================================
+
+interface SbmdAttributeHandler {
+    /** Alias names to match. Mutually exclusive with clusterId. */
+    aliases?: string[];
+    /** Cluster to match. Mutually exclusive with aliases. */
+    clusterId?: number;
+    /** Single attribute ID or "*" wildcard. */
+    attributeId?: number | "*";
+    /** Multiple attribute IDs. */
+    attributeIds?: number[];
+    supplements?: SbmdSupplements;
+    handler: SbmdHandlerFunction;
+}
+
+interface SbmdEventHandler {
+    aliases?: string[];
+    clusterId?: number;
+    eventId?: number | "*";
+    eventIds?: number[];
+    supplements?: SbmdSupplements;
+    handler: SbmdHandlerFunction;
+}
+
+interface SbmdCommandHandler {
+    aliases?: string[];
+    clusterId?: number;
+    commandId?: number | "*";
+    commandIds?: number[];
+    supplements?: SbmdSupplements;
+    handler: SbmdHandlerFunction;
+}
+
+// =============================================================================
+// Handler Arguments
+// =============================================================================
+
+/** Handler function signature. All handlers receive `args` and return a result. */
+type SbmdHandlerFunction = (args: SbmdHandlerArgs) => SbmdResultTerminal;
+
+/** Common fields present on all handler args. */
+interface SbmdHandlerArgsBase {
+    /** The Barton device UUID. */
+    deviceUuid: string;
+
+    /** Barton endpoint ID, or null for device-level resources. */
+    endpointId: string | null;
+
+    /** Feature maps for clusters declared in matter.featureClusters. */
+    clusterFeatureMaps: Record<string, number>;
+
+    /** Pre-fetched supplement data, present when supplements are declared. */
+    supplements?: {
+        attributes?: Record<string, any>;
+        resources?: Record<string, string | null>;
+        persistentData?: Record<string, string | null>;
+        transientData?: Record<string, string | null>;
+    };
+
+    /** Arbitrary context from a requestCommand/readAttribute call. */
+    handlerContext?: any;
+
+    /** Error details, present only on onError handlers. */
+    error?: {
+        message: string;
+        type: "timeout" | "transport" | "internal";
+        matterCode: number | null;
+    };
+}
+
+/** Attribute trigger (present on attribute handlers and readAttribute response handlers). */
+interface SbmdAttributeTrigger {
+    clusterId: number;
     attributeId: number;
-
-    /** Attribute name from the SBMD spec */
-    attributeName: string;
-
-    /** Matter attribute type (e.g., "bool", "uint8", "enum8") */
-    attributeType: string;
-}
-
-/**
- * Output object for read mapper scripts (legacy format).
- *
- * Return one of: SbmdReadResult, SbmdErrorResult, or {} (suppress).
- *
- * @example
- * return SbmdUtils.Response.value('true');
- * return SbmdUtils.Response.value(50);  // Numbers are converted to strings
- * return {};  // suppress — skip the resource update
- */
-interface SbmdReadResult {
-    /**
-     * Value for the Barton resource.
-     * Will be converted to a string for the resource value.
-     */
-    value: string | number | boolean;
-}
-
-// =============================================================================
-// Write Mapper Interface
-// =============================================================================
-
-/**
- * Input object for write mapper scripts.
- *
- * Write mappers are script-only. The script determines the full Matter operation
- * and returns either a `write` (attribute) or `invoke` (command) result with
- * pre-encoded TLV.
- *
- * Available as global variable: `sbmdWriteArgs`
- *
- * @example
- * // Attribute write - encode value as TLV
- * const secs = parseInt(sbmdWriteArgs.input, 10);
- * const tlvBase64 = SbmdUtils.Tlv.encode(secs, 'uint16');
- * return SbmdUtils.Response.write(3, 0, tlvBase64);
- *
- * @example
- * // Command invocation - On/Off
- * const isOn = sbmdWriteArgs.input === 'true';
- * return SbmdUtils.Response.invoke(6, isOn ? 1 : 0);
- */
-interface SbmdWriteArgs {
-    /** Barton resource string value to write */
-    input: string;
-
-    /** Device UUID */
-    deviceUuid: string;
-
-    /** Barton endpoint ID */
-    endpointId: string;
-
-    /** Barton resource ID */
-    resourceId: string;
-
-    /**
-     * Cluster feature maps keyed by cluster ID (as string).
-     * Use to check cluster capabilities before encoding.
-     */
-    clusterFeatureMaps: Record<string, number>;
-}
-
-/**
- * Output object for write mapper scripts.
- *
- * Must return either an `invoke` or `write` operation with pre-encoded TLV.
- * Use `SbmdUtils.Response.write()` or `SbmdUtils.Response.invoke()` helpers.
- *
- * @example
- * // Attribute write
- * return { write: { clusterId: 3, attributeId: 0, tlvBase64: "..." } };
- *
- * @example
- * // Command invocation
- * return { invoke: { clusterId: 6, commandId: 1 } };
- */
-interface SbmdWriteResult {
-    write?: {
-        clusterId: number;
-        attributeId: number;
-        tlvBase64: string;
-        endpointId?: string;
-    };
-    invoke?: {
-        clusterId: number;
-        commandId: number;
-        tlvBase64?: string;
-        endpointId?: string;
-        timedInvokeTimeoutMs?: number;
-    };
-}
-
-// =============================================================================
-// Execute Mapper Interface (Command Execute)
-// =============================================================================
-
-/**
- * Input object for command execute mapper scripts.
- *
- * Execute mappers are script-only. The script determines the full Matter command
- * to invoke and returns an `invoke` result with pre-encoded TLV.
- *
- * Available as global variable: `sbmdCommandArgs`
- *
- * @example
- * // No-argument command (Toggle)
- * return SbmdUtils.Response.invoke(6, 2);
- *
- * @example
- * // Lock with optional PIN using clusterFeatureMaps
- * const featureMap = sbmdCommandArgs.clusterFeatureMaps['257'] || 0;
- * var args = { PINCode: null };
- * if (((featureMap & 0x81) === 0x81) && sbmdCommandArgs.input.length > 0) {
- *     var pinBytes = [];
- *     for (let i = 0; i < sbmdCommandArgs.input.length; i++) {
- *         pinBytes.push(sbmdCommandArgs.input.charCodeAt(i));
- *     }
- *     args.PINCode = pinBytes;
- * }
- * const tlvBase64 = SbmdUtils.Tlv.encodeStruct(args, {PINCode: {tag: 0, type: 'octstr'}});
- * return SbmdUtils.Response.invoke(257, 0, tlvBase64, {timedInvokeTimeoutMs: 10000});
- */
-interface SbmdCommandArgs {
-    /** Barton argument string */
-    input: string;
-
-    /** Device UUID */
-    deviceUuid: string;
-
-    /** Barton endpoint ID */
-    endpointId: string;
-
-    /** Barton resource ID */
-    resourceId: string;
-
-    /**
-     * Cluster feature maps keyed by cluster ID (as string).
-     * Use to check cluster capabilities before encoding.
-     */
-    clusterFeatureMaps: Record<string, number>;
-}
-
-/**
- * Output object for command execute mapper scripts.
- *
- * Must return an `invoke` operation with pre-encoded TLV.
- * Use `SbmdUtils.Response.invoke()` helper.
- *
- * @example
- * return { invoke: { clusterId: 6, commandId: 2 } };
- *
- * @example
- * return { invoke: { clusterId: 257, commandId: 0, tlvBase64: "...", timedInvokeTimeoutMs: 10000 } };
- */
-interface SbmdCommandResult {
-    invoke: {
-        clusterId: number;
-        commandId: number;
-        tlvBase64?: string;
-        endpointId?: string;
-        timedInvokeTimeoutMs?: number;
-    };
-}
-
-// =============================================================================
-// Execute Response Mapper Interface
-// =============================================================================
-
-/**
- * Input object for command response mapper scripts.
- *
- * Used for commands that return response data.
- *
- * Available as global variable: `sbmdCommandResponseArgs`
- *
- * @example
- * // Decode TLV response and return a field
- * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
- * return SbmdUtils.Response.value(resp.userName || "");
- *
- * @example
- * // Return decoded response as JSON string
- * var resp = SbmdUtils.Tlv.decode(sbmdCommandResponseArgs.tlvBase64);
- * return SbmdUtils.Response.value(JSON.stringify(resp));
- */
-interface SbmdCommandResponseArgs extends SbmdBaseContext {
-    /** Base64-encoded TLV response data */
+    /** Decoded attribute value. */
+    value: any;
+    /** Base64-encoded TLV data. */
     tlvBase64: string;
-
-    /** Matter cluster ID */
-    clusterId: number;
-
-    /** Matter command ID */
-    commandId: number;
-
-    /** Command name from the SBMD spec */
-    commandName: string;
+    /** Alias name if registered via aliases, otherwise null. */
+    alias: string | null;
 }
 
-/**
- * Output object for command response mapper scripts (legacy format).
- *
- * Return one of: SbmdCommandResponseResult, SbmdErrorResult, or {} (suppress).
- *
- * @example
- * return SbmdUtils.Response.value("success");
- * return SbmdUtils.Response.value(JSON.stringify(result));
- */
-interface SbmdCommandResponseResult {
-    /**
-     * Response value for Barton.
-     * Will be converted to a string.
-     */
-    value: string | number | boolean;
-}
-
-// =============================================================================
-// Event Mapper Interface
-// =============================================================================
-
-/**
- * Input object for event mapper scripts.
- *
- * Event mappers process Matter device events (e.g., LockOperation)
- * and produce a resource value.
- *
- * Available as global variable: `sbmdEventArgs`
- *
- * @example
- * // DoorLock LockOperation event
- * var event = SbmdUtils.Tlv.decode(sbmdEventArgs.tlvBase64);
- * var opType = event[0]; // LockOperationType at context tag 0
- * if (opType === 0) return SbmdUtils.Response.value('true');  // Lock
- * if (opType === 1) return SbmdUtils.Response.value('false'); // Unlock
- * return {};  // suppress other operation types
- */
-interface SbmdEventArgs extends SbmdBaseContext {
-    /** Base64-encoded TLV data from Matter event */
-    tlvBase64: string;
-
-    /** Matter cluster ID */
+/** Event trigger (present on event handlers). */
+interface SbmdEventTrigger {
     clusterId: number;
-
-    /** Matter event ID */
     eventId: number;
-
-    /** Event name from the SBMD spec */
-    eventName: string;
+    /** Decoded event payload (array of TLV field values). */
+    data: any[];
+    /** Base64-encoded TLV data. */
+    tlvBase64: string;
+    alias: string | null;
 }
 
-/**
- * Output object for event mapper scripts (legacy format).
- *
- * Return one of: SbmdEventResult, SbmdErrorResult, or {} (suppress).
- *
- * @example
- * return SbmdUtils.Response.value("true");
- * return {};  // suppress — skip the resource update
- */
-interface SbmdEventResult {
-    /**
-     * Value for the Barton resource.
-     * Will be converted to a string for the resource value.
-     */
-    value: string | number | boolean;
+/** Command trigger (present on unsolicited command handlers). */
+interface SbmdCommandTrigger {
+    clusterId: number;
+    commandId: number;
+    /** Decoded command payload. */
+    data: any;
+    /** Base64-encoded TLV data. */
+    tlvBase64: string;
+    alias: string | null;
 }
 
-/**
- * Error result returned by any SBMD mapper script.
- *
- * The engine logs the error message and skips the resource update.
- * Use SbmdUtils.Response.error() to construct.
- *
- * @example
- * return SbmdUtils.Response.error('Unexpected lock state: ' + state);
- */
-interface SbmdErrorResult {
-    error: string;
+/** Response trigger (present on requestCommand response handlers). */
+interface SbmdResponseTrigger {
+    clusterId: number;
+    commandId: number;
+    /** Base64-encoded TLV response data, or null. */
+    data: string | null;
+}
+
+/** Resource trigger (present on read/write/execute/seed handlers). */
+interface SbmdResourceTrigger {
+    resourceId: string;
+    /** Write value or execute argument (string), null for reads/seeds. */
+    input: string | null;
+}
+
+/** Union handler args — exactly one trigger field is present depending on context. */
+interface SbmdHandlerArgs extends SbmdHandlerArgsBase {
+    attribute?: SbmdAttributeTrigger;
+    event?: SbmdEventTrigger;
+    command?: SbmdCommandTrigger;
+    response?: SbmdResponseTrigger;
+    resource?: SbmdResourceTrigger;
 }
 
 // =============================================================================
-// Global Variable Declarations
+// Result Builder — Sbmd.result()
 // =============================================================================
 
+/** Terminal result returned by `.success()`, `.error()`, `.device.sendCommand()`, etc. */
+interface SbmdResultTerminal {
+    ops: any[];
+    terminal: any;
+}
+
 /**
- * Global variables available to SBMD scripts.
- * The specific variable depends on the script type.
+ * Result builder. Returned by `Sbmd.result()`.
+ * Non-terminal methods return the builder; terminal methods return `SbmdResultTerminal`.
  */
-declare var sbmdReadArgs: SbmdReadArgs;
-declare var sbmdWriteArgs: SbmdWriteArgs;
-declare var sbmdCommandArgs: SbmdCommandArgs;
-declare var sbmdCommandResponseArgs: SbmdCommandResponseArgs;
-declare var sbmdEventArgs: SbmdEventArgs;
+interface SbmdResultBuilder {
+    /** Emit a diagnostic log message. */
+    log(message: string): SbmdResultBuilder;
+
+    /** Mark operation as successful. Optional value for execute response. */
+    success(value?: string): SbmdResultTerminal;
+
+    /** Mark operation as failed. */
+    error(message: string): SbmdResultTerminal;
+
+    /** Barton device data model operations. */
+    dataModel: {
+        /** Update a device-level resource. */
+        updateResource(resource: string, value: string): SbmdResultBuilder;
+        /** Update an endpoint-level resource. */
+        updateResource(endpoint: string, resource: string, value: string, metadata?: any): SbmdResultBuilder;
+        /** Set device metadata. */
+        setMetadata(name: string, value: string): SbmdResultBuilder;
+    };
+
+    /** Persistent and transient storage operations. */
+    storage: {
+        /** Store a key-value pair in non-volatile storage. */
+        setPersistentData(key: string, value: string): SbmdResultBuilder;
+        /** Store a key-value pair in memory with TTL-based expiry. */
+        setTransientData(key: string, value: string, ttlSecs: number): SbmdResultBuilder;
+    };
+
+    /** Matter device interaction operations. */
+    device: {
+        /** Terminal: send a Matter command. */
+        sendCommand(
+            clusterId: number,
+            commandId: number,
+            tlvBase64?: string | null,
+            options?: { timedInvokeTimeoutMs?: number; successValue?: string },
+        ): SbmdResultTerminal;
+
+        /** Terminal: write a Matter attribute. */
+        writeAttribute(
+            clusterId: number,
+            attributeId: number,
+            tlvBase64: string,
+            options?: { endpointId?: number },
+        ): SbmdResultTerminal;
+
+        /** Deferred: send command and wait for response. */
+        requestCommand(
+            clusterId: number,
+            commandId: number,
+            payload: string | null,
+            options: {
+                responseCommandId: number;
+                onResponse: SbmdHandlerFunction;
+                onError: SbmdHandlerFunction;
+                context?: any;
+                timeoutMs?: number;
+                timedInvokeTimeoutMs?: number;
+            },
+        ): SbmdResultTerminal;
+
+        /** Deferred: read attribute and wait for response. */
+        readAttribute(
+            clusterId: number,
+            attributeId: number,
+            options: {
+                onResponse: SbmdHandlerFunction;
+                onError: SbmdHandlerFunction;
+                context?: any;
+                timeoutMs?: number;
+            },
+        ): SbmdResultTerminal;
+    };
+}
+
+// =============================================================================
+// TLV Utilities — Sbmd.Tlv
+// =============================================================================
+
+interface SbmdTlv {
+    /** Encode a JS object into base64-encoded Matter TLV struct. */
+    encodeStruct(
+        fields: Record<string, any>,
+        schema: Record<string, { tag: number; type: string }>,
+    ): string;
+
+    /** Encode a single primitive value into base64-encoded TLV. */
+    encode(value: any, type: string, base?: number): string | null;
+
+    /** Decode base64-encoded TLV to a JS value. */
+    decode(tlvBase64: string): any;
+
+    /** Create a base64-encoded empty TLV struct. */
+    emptyStruct(): string;
+}
+
+// =============================================================================
+// Base64 Utilities — Sbmd.Base64
+// =============================================================================
+
+interface SbmdBase64 {
+    /** Encode byte array to base64 string. */
+    encode(bytes: number[] | Uint8Array): string;
+    /** Decode base64 string to byte array. */
+    decode(base64: string): number[];
+}
+
+// =============================================================================
+// Sbmd Namespace
+// =============================================================================
+
+interface SbmdNamespace {
+    /** Create a new result builder. */
+    result(): SbmdResultBuilder;
+    /** TLV encoding/decoding utilities. */
+    Tlv: SbmdTlv;
+    /** Base64 encoding/decoding utilities. */
+    Base64: SbmdBase64;
+}
+
+// =============================================================================
+// Global Declarations
+// =============================================================================
+
+/** Register an SBMD driver with the runtime. */
+declare function SbmdDriver(registration: SbmdRegistration): void;
+
+/** SBMD runtime namespace. */
+declare var Sbmd: SbmdNamespace;
+

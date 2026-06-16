@@ -1270,4 +1270,124 @@ namespace
         EXPECT_EQ(ur.value, "QUJD");
     }
 
+    // ================================================================
+    // Tests for event args builder
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, BuildEventArgsHasEventFields)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 0x02, "AQID");
+
+        // Check base fields
+        EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
+        EXPECT_EQ(GetStringProp(args, "endpointId"), "1");
+
+        // Check event object
+        JSValue event = JS_GetPropertyStr(Ctx(), args, "event");
+        ASSERT_FALSE(JS_IsUndefined(event));
+        EXPECT_EQ(GetUint32Prop(event, "clusterId"), 0x0101u);
+        EXPECT_EQ(GetUint32Prop(event, "eventId"), 0x02u);
+        EXPECT_EQ(GetStringProp(event, "tlvBase64"), "AQID");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, BuildEventArgsEmptyTlv)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0006, 0, "");
+
+        JSValue event = JS_GetPropertyStr(Ctx(), args, "event");
+        ASSERT_FALSE(JS_IsUndefined(event));
+        EXPECT_EQ(GetUint32Prop(event, "clusterId"), 0x0006u);
+        EXPECT_EQ(GetUint32Prop(event, "eventId"), 0u);
+
+        // tlvBase64 should be absent (not set when empty)
+        JSValue tlv = JS_GetPropertyStr(Ctx(), event, "tlvBase64");
+        EXPECT_TRUE(JS_IsUndefined(tlv));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, InvokeEventHandler)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  return Sbmd.result()"
+                                   "    .log('event=' + args.event.eventId)"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 5, "AQID");
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
+
+        ASSERT_EQ(result->ops.size(), 1u);
+        const auto &logOp = std::get<ResultOp::Log>(result->ops[0].data);
+        EXPECT_EQ(logOp.message, "event=5");
+    }
+
+    // ================================================================
+    // Tests for command args builder
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, BuildCommandArgsHasCommandFields)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
+
+        // Check base fields
+        EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
+        EXPECT_EQ(GetStringProp(args, "endpointId"), "1");
+
+        // Check command object
+        JSValue command = JS_GetPropertyStr(Ctx(), args, "command");
+        ASSERT_FALSE(JS_IsUndefined(command));
+        EXPECT_EQ(GetUint32Prop(command, "clusterId"), 0x0101u);
+        EXPECT_EQ(GetUint32Prop(command, "commandId"), 0x1Cu);
+        EXPECT_EQ(GetStringProp(command, "tlvBase64"), "AQID");
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, BuildCommandArgsEmptyTlv)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0006, 1, "");
+
+        JSValue command = JS_GetPropertyStr(Ctx(), args, "command");
+        ASSERT_FALSE(JS_IsUndefined(command));
+        EXPECT_EQ(GetUint32Prop(command, "clusterId"), 0x0006u);
+        EXPECT_EQ(GetUint32Prop(command, "commandId"), 1u);
+
+        // tlvBase64 should be absent (not set when empty)
+        JSValue tlv = JS_GetPropertyStr(Ctx(), command, "tlvBase64");
+        EXPECT_TRUE(JS_IsUndefined(tlv));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, InvokeCommandHandler)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto hctx = MakeContext();
+
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  return Sbmd.result()"
+                                   "    .log('cmd=' + args.command.commandId)"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+        ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
+
+        ASSERT_EQ(result->ops.size(), 1u);
+        const auto &logOp = std::get<ResultOp::Log>(result->ops[0].data);
+        EXPECT_EQ(logOp.message, "cmd=28");
+    }
+
 } // namespace

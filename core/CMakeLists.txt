@@ -198,6 +198,26 @@ if (BCORE_MATTER)
 
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
+
+    # SBMD v4 specification validation
+    if (BCORE_MATTER_VALIDATE_SCHEMAS)
+        set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
+        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_v4_specs.py")
+        set(SBMD_EXTRACTOR "${CMAKE_SOURCE_DIR}/scripts/ci/sbmd_extract_registration.js")
+
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        find_program(NODE_EXECUTABLE node REQUIRED)
+
+        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
+        file(GLOB SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
+
+        add_custom_target(validate_sbmd_specs ALL
+            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
+            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_VALIDATOR} ${SBMD_EXTRACTOR}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Validating SBMD v4 specification files against schema..."
+        )
+    endif()
 endif()
 
 if (BCORE_THREAD)

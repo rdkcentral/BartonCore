@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sbmd-spec-schema-v4.0.json",
+  "title": "SBMD v4.0 Registration Schema",
+  "description": "JSON Schema for the SbmdDriver() registration object in .sbmd.js spec files (schema version 4.0). Functions are represented as `true` after extraction.",
+  "type": "object",
+  "required": ["schemaVersion", "driverVersion", "name", "constants", "barton", "matter"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "4.0",
+      "description": "Schema version. Must be '4.0'."
+    },
+    "driverVersion": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" }
+      ],
+      "description": "Driver-specific version string or number."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable driver name."
+    },
+    "constants": {
+      "type": "object",
+      "description": "Named constants. Values must be primitives (number, string, boolean).",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "number" },
+          { "type": "string" },
+          { "type": "boolean" }
+        ]
+      }
+    },
+    "aliases": {
+      "type": "object",
+      "description": "Named references to Matter cluster attributes, events, or commands.",
+      "additionalProperties": { "$ref": "#/$defs/alias" }
+    },
+    "barton": { "$ref": "#/$defs/barton" },
+    "matter": { "$ref": "#/$defs/matter" },
+    "reporting": { "$ref": "#/$defs/reporting" },
+    "resources": {
+      "type": "object",
+      "description": "Device-level resource declarations keyed by resource name.",
+      "additionalProperties": { "$ref": "#/$defs/resource" }
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Endpoint definitions keyed by endpoint ID string.",
+      "additionalProperties": { "$ref": "#/$defs/endpoint" }
+    },
+    "attributeHandlers": {
+      "type": "object",
+      "description": "Attribute report handlers keyed by handler name.",
+      "additionalProperties": { "$ref": "#/$defs/attributeHandler" }
+    },
+    "eventHandlers": {
+      "type": "object",
+      "description": "Event handlers keyed by handler name.",
+      "additionalProperties": { "$ref": "#/$defs/eventHandler" }
+    },
+    "commandHandlers": {
+      "type": "object",
+      "description": "Unsolicited command handlers keyed by handler name.",
+      "additionalProperties": { "$ref": "#/$defs/commandHandler" }
+    }
+  },
+
+  "$defs": {
+    "functionRef": {
+      "description": "A function reference. Represented as `true` in extracted JSON.",
+      "const": true
+    },
+
+    "alias": {
+      "type": "object",
+      "required": ["clusterId"],
+      "additionalProperties": false,
+      "properties": {
+        "clusterId": {
+          "type": "number",
+          "description": "Matter cluster ID."
+        },
+        "attributeId": {
+          "type": "number",
+          "description": "Attribute ID. Mutually exclusive with eventId and commandId."
+        },
+        "eventId": {
+          "type": "number",
+          "description": "Event ID. Mutually exclusive with attributeId and commandId."
+        },
+        "commandId": {
+          "type": "number",
+          "description": "Command ID. Mutually exclusive with attributeId and eventId."
+        },
+        "type": {
+          "type": "string",
+          "description": "Matter data type (documentation only, ignored by runtime)."
+        }
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["attributeId", "eventId"] },
+          { "required": ["attributeId", "commandId"] },
+          { "required": ["eventId", "commandId"] }
+        ]
+      }
+    },
+
+    "barton": {
+      "type": "object",
+      "required": ["deviceClass", "deviceClassVersion"],
+      "additionalProperties": false,
+      "properties": {
+        "deviceClass": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Barton device class identifier."
+        },
+        "deviceClassVersion": {
+          "type": "number",
+          "description": "Version of the device class schema."
+        }
+      }
+    },
+
+    "matter": {
+      "type": "object",
+      "required": ["deviceTypes"],
+      "additionalProperties": false,
+      "properties": {
+        "deviceTypes": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1,
+          "description": "Matter device type IDs this driver handles."
+        },
+        "revision": {
+          "type": "number",
+          "description": "Minimum Matter device type revision required."
+        },
+        "vendorId": {
+          "type": "number",
+          "description": "Matter vendor ID for vendor-specific matching."
+        },
+        "productId": {
+          "type": "number",
+          "description": "Matter product ID for vendor-specific matching. Requires vendorId."
+        },
+        "featureClusters": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Cluster IDs whose feature maps should be cached."
+        },
+        "defaultTimeoutMs": {
+          "type": "number",
+          "description": "Default timeout in milliseconds for deferred operations."
+        }
+      },
+      "dependentRequired": {
+        "productId": ["vendorId"]
+      }
+    },
+
+    "reporting": {
+      "type": "object",
+      "required": ["minSecs", "maxSecs"],
+      "additionalProperties": false,
+      "properties": {
+        "minSecs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum attribute reporting interval in seconds."
+        },
+        "maxSecs": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Maximum attribute reporting interval in seconds."
+        }
+      }
+    },
+
+    "supplements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alias names identifying Matter attributes to pre-fetch from device data cache."
+        },
+        "resources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Barton resource paths to pre-fetch. Format: 'endpointId/resourceName' or 'resourceName'."
+        },
+        "persistentData": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Persistent storage keys to pre-fetch."
+        },
+        "transientData": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Transient storage keys to pre-fetch."
+        }
+      }
+    },
+
+    "readOrSeedHandler": {
+      "description": "A seed or read handler: either an object with handler + optional supplements, or a direct function reference.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["handler"],
+          "additionalProperties": false,
+          "properties": {
+            "supplements": { "$ref": "#/$defs/supplements" },
+            "handler": { "$ref": "#/$defs/functionRef" }
+          }
+        },
+        { "$ref": "#/$defs/functionRef" }
+      ]
+    },
+
+    "resource": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resource value type: 'boolean', 'string', 'function', or a custom type."
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive"]
+          },
+          "description": "Access modes controlling resource behavior."
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" }
+            ]
+          },
+          "description": "Alias names or cluster IDs that must be satisfied before the resource is created."
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "If true, silently skip when prerequisites are not met instead of failing commissioning."
+        },
+        "seed": { "$ref": "#/$defs/readOrSeedHandler" },
+        "read": { "$ref": "#/$defs/readOrSeedHandler" },
+        "write": { "$ref": "#/$defs/functionRef" },
+        "execute": { "$ref": "#/$defs/functionRef" }
+      }
+    },
+
+    "endpoint": {
+      "type": "object",
+      "required": ["profile", "profileVersion", "resources"],
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Barton resource profile name."
+        },
+        "profileVersion": {
+          "type": "number",
+          "description": "Profile version."
+        },
+        "resources": {
+          "type": "object",
+          "description": "Resource declarations keyed by resource name.",
+          "additionalProperties": { "$ref": "#/$defs/resource" }
+        }
+      }
+    },
+
+    "attributeHandler": {
+      "type": "object",
+      "required": ["handler"],
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Alias names to match. Mutually exclusive with clusterId."
+        },
+        "clusterId": {
+          "type": "number",
+          "description": "Cluster to match. Mutually exclusive with aliases."
+        },
+        "attributeId": {
+          "oneOf": [
+            { "type": "number" },
+            { "const": "*" }
+          ],
+          "description": "Single attribute ID or '*' wildcard. Mutually exclusive with attributeIds."
+        },
+        "attributeIds": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1,
+          "description": "Multiple attribute IDs. Mutually exclusive with attributeId."
+        },
+        "supplements": { "$ref": "#/$defs/supplements" },
+        "handler": { "$ref": "#/$defs/functionRef" }
+      },
+      "oneOf": [
+        { "required": ["aliases"] },
+        { "required": ["clusterId"] }
+      ]
+    },
+
+    "eventHandler": {
+      "type": "object",
+      "required": ["handler"],
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Alias names to match. Mutually exclusive with clusterId."
+        },
+        "clusterId": {
+          "type": "number",
+          "description": "Cluster to match. Mutually exclusive with aliases."
+        },
+        "eventId": {
+          "oneOf": [
+            { "type": "number" },
+            { "const": "*" }
+          ],
+          "description": "Single event ID or '*' wildcard. Mutually exclusive with eventIds."
+        },
+        "eventIds": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1,
+          "description": "Multiple event IDs. Mutually exclusive with eventId."
+        },
+        "supplements": { "$ref": "#/$defs/supplements" },
+        "handler": { "$ref": "#/$defs/functionRef" }
+      },
+      "oneOf": [
+        { "required": ["aliases"] },
+        { "required": ["clusterId"] }
+      ]
+    },
+
+    "commandHandler": {
+      "type": "object",
+      "required": ["handler"],
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Alias names to match. Mutually exclusive with clusterId."
+        },
+        "clusterId": {
+          "type": "number",
+          "description": "Cluster to match. Mutually exclusive with aliases."
+        },
+        "commandId": {
+          "oneOf": [
+            { "type": "number" },
+            { "const": "*" }
+          ],
+          "description": "Single command ID or '*' wildcard. Mutually exclusive with commandIds."
+        },
+        "commandIds": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1,
+          "description": "Multiple command IDs. Mutually exclusive with commandId."
+        },
+        "supplements": { "$ref": "#/$defs/supplements" },
+        "handler": { "$ref": "#/$defs/functionRef" }
+      },
+      "oneOf": [
+        { "required": ["aliases"] },
+        { "required": ["clusterId"] }
+      ]
+    }
+  }
+}

@@ -172,4 +172,21 @@ namespace barton
         return count;
     }
 
+    std::set<uint32_t> SbmdDispatchTable::GetRegisteredClusterIds() const
+    {
+        std::set<uint32_t> clusterIds;
+
+        for (const auto &[key, entries] : specificTable)
+        {
+            clusterIds.insert(key.clusterId);
+        }
+
+        for (const auto &[clusterId, entries] : wildcardTable)
+        {
+            clusterIds.insert(clusterId);
+        }
+
+        return clusterIds;
+    }
+
 } // namespace barton

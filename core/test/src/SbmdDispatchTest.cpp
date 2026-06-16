@@ -33,6 +33,7 @@
 #include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.h"
+#include "deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.h"
 
@@ -41,6 +42,16 @@
 
 extern "C" {
 #include <mquickjs/mquickjs.h>
+
+// Stubs for C APIs referenced by SbmdHandlerInvoker
+void updateResource(const char *, const char *, const char *, const char *, void *) {}
+
+void setMetadata(const char *, const char *, const char *, const char *) {}
+
+bool deviceServiceSetMetadata(const char *, const char *)
+{
+    return true;
+}
 }
 
 using namespace barton;
@@ -319,6 +330,88 @@ namespace
         EXPECT_EQ(results[0]->handler->name, "lockCmdHandler");
     }
 
+    TEST_F(SbmdDispatchTableTest, GetRegisteredClusterIdsEmpty)
+    {
+        SbmdDispatchTable table;
+        auto ids = table.GetRegisteredClusterIds();
+        EXPECT_TRUE(ids.empty());
+    }
+
+    TEST_F(SbmdDispatchTableTest, GetRegisteredClusterIdsFromSpecific)
+    {
+        std::unordered_map<std::string, SbmdAlias> aliases;
+        aliases["lockDoor"] = MakeCmdAlias("lockDoor", 0x0101, 0);
+        aliases["unlockDoor"] = MakeCmdAlias("unlockDoor", 0x0101, 1);
+        aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0);
+
+        std::vector<SbmdDeviceHandler> handlers;
+        handlers.push_back(MakeHandler("lockHandler", {"lockDoor"}));
+        handlers.push_back(MakeHandler("unlockHandler", {"unlockDoor"}));
+        handlers.push_back(MakeHandler("onOffHandler", {"onOff"}));
+
+        SbmdDispatchTable table;
+        table.Build(aliases, handlers);
+
+        auto ids = table.GetRegisteredClusterIds();
+        EXPECT_EQ(ids.size(), 2u);
+        EXPECT_TRUE(ids.count(0x0101));
+        EXPECT_TRUE(ids.count(0x0006));
+    }
+
+    TEST_F(SbmdDispatchTableTest, GetRegisteredClusterIdsFromWildcard)
+    {
+        std::unordered_map<std::string, SbmdAlias> aliases;
+        aliases["anyDoorLock"] = MakeWildcardAlias("anyDoorLock", 0x0101);
+
+        std::vector<SbmdDeviceHandler> handlers;
+        handlers.push_back(MakeHandler("wildcardHandler", {"anyDoorLock"}));
+
+        SbmdDispatchTable table;
+        table.Build(aliases, handlers);
+
+        auto ids = table.GetRegisteredClusterIds();
+        EXPECT_EQ(ids.size(), 1u);
+        EXPECT_TRUE(ids.count(0x0101));
+    }
+
+    TEST_F(SbmdDispatchTableTest, GetRegisteredClusterIdsMixed)
+    {
+        std::unordered_map<std::string, SbmdAlias> aliases;
+        aliases["lockDoor"] = MakeCmdAlias("lockDoor", 0x0101, 0);
+        aliases["anyOnOff"] = MakeWildcardAlias("anyOnOff", 0x0006);
+        aliases["level"] = MakeAttrAlias("level", 0x0008, 0);
+
+        std::vector<SbmdDeviceHandler> handlers;
+        handlers.push_back(MakeHandler("lockHandler", {"lockDoor"}));
+        handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
+        handlers.push_back(MakeHandler("levelHandler", {"level"}));
+
+        SbmdDispatchTable table;
+        table.Build(aliases, handlers);
+
+        auto ids = table.GetRegisteredClusterIds();
+        EXPECT_EQ(ids.size(), 3u);
+        EXPECT_TRUE(ids.count(0x0101));
+        EXPECT_TRUE(ids.count(0x0006));
+        EXPECT_TRUE(ids.count(0x0008));
+    }
+
+    TEST_F(SbmdDispatchTableTest, GetRegisteredClusterIdsClearedAfterClear)
+    {
+        std::unordered_map<std::string, SbmdAlias> aliases;
+        aliases["lockDoor"] = MakeCmdAlias("lockDoor", 0x0101, 0);
+
+        std::vector<SbmdDeviceHandler> handlers;
+        handlers.push_back(MakeHandler("handler", {"lockDoor"}));
+
+        SbmdDispatchTable table;
+        table.Build(aliases, handlers);
+        EXPECT_EQ(table.GetRegisteredClusterIds().size(), 1u);
+
+        table.Clear();
+        EXPECT_TRUE(table.GetRegisteredClusterIds().empty());
+    }
+
     TEST_F(SbmdDispatchTableTest, ClearRemovesAllEntries)
     {
         std::unordered_map<std::string, SbmdAlias> aliases;
@@ -432,7 +525,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "DispatchTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0, CL_DOOR_LOCK: 257, EVT_LOCK_OP: 2 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -489,7 +582,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "ClearTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -526,7 +619,7 @@ namespace
         auto driver = CreateDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
-                driverVersion: "1.0",
+                driverVersion: 1,
                 name: "InvokeTest",
                 constants: { CL_ON_OFF: 6, ATTR_ON_OFF: 0, CMD_ON: 1 },
                 barton: { deviceClass: "test", deviceClassVersion: 0 },
@@ -570,6 +663,303 @@ namespace
             EXPECT_EQ(ur.value, "true");
             ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(parsed->terminal.data));
         }
+
+        // Clean up
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDispatchDriverTest, CommandDispatchBuiltOnActivation)
+    {
+        auto driver = CreateDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "CmdDispatchTest",
+                constants: {
+                    CL_TEST: 0xFFF10000,
+                    CMD_ECHO: 0x00,
+                    CMD_PING: 0x01,
+                },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: {
+                    echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
+                    pingCmd: { clusterId: CL_TEST, commandId: CMD_PING },
+                },
+                commandHandlers: {
+                    handleEcho: {
+                        aliases: ["echoCmd"],
+                        handler: onEcho,
+                    },
+                    handlePing: {
+                        aliases: ["pingCmd"],
+                        handler: onPing,
+                    },
+                },
+            });
+            function onEcho(args) { return Sbmd.result().success(); }
+            function onPing(args) { return Sbmd.result().success(); }
+        )");
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        // Command dispatch should match both commands
+        auto echoResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0x00);
+        ASSERT_EQ(echoResults.size(), 1u);
+        EXPECT_EQ(echoResults[0]->handler->name, "handleEcho");
+
+        auto pingResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0x01);
+        ASSERT_EQ(pingResults.size(), 1u);
+        EXPECT_EQ(pingResults[0]->handler->name, "handlePing");
+
+        // Different cluster — no match
+        EXPECT_TRUE(driver->GetCommandDispatch().Lookup(0x0006, 0x00).empty());
+
+        // Attribute and event dispatch should be empty
+        EXPECT_TRUE(driver->GetAttributeDispatch().Lookup(0xFFF10000, 0x00).empty());
+        EXPECT_TRUE(driver->GetEventDispatch().Lookup(0xFFF10000, 0x00).empty());
+
+        // GetRegisteredClusterIds should return the test cluster
+        auto clusterIds = driver->GetCommandDispatch().GetRegisteredClusterIds();
+        EXPECT_EQ(clusterIds.size(), 1u);
+        EXPECT_TRUE(clusterIds.count(0xFFF10000));
+
+        // Clean up
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDispatchDriverTest, CommandDispatchClearedOnDeactivation)
+    {
+        auto driver = CreateDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "CmdClearTest",
+                constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
+                commandHandlers: {
+                    handleEcho: { aliases: ["echoCmd"], handler: fn },
+                },
+            });
+            function fn(args) { return Sbmd.result().success(); }
+        )");
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        EXPECT_FALSE(driver->GetCommandDispatch().Lookup(0xFFF10000, 0).empty());
+        EXPECT_FALSE(driver->GetCommandDispatch().GetRegisteredClusterIds().empty());
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+
+        EXPECT_TRUE(driver->GetCommandDispatch().Lookup(0xFFF10000, 0).empty());
+        EXPECT_TRUE(driver->GetCommandDispatch().GetRegisteredClusterIds().empty());
+    }
+
+    TEST_F(SbmdDispatchDriverTest, CommandHandlerInvocation)
+    {
+        auto driver = CreateDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "CmdInvokeTest",
+                constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0, EP: "1" },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: { echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO } },
+                commandHandlers: {
+                    handleEcho: {
+                        aliases: ["echoCmd"],
+                        handler: handleEchoCmd,
+                    },
+                },
+            });
+            function handleEchoCmd(args) {
+                return Sbmd.result()
+                    .dataModel.updateResource(EP, "lastCommand", "echo")
+                    .dataModel.updateResource(EP, "echoData", args.command.tlvBase64 || "empty")
+                    .success();
+            }
+        )");
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        auto results = driver->GetCommandDispatch().Lookup(0xFFF10000, 0);
+        ASSERT_EQ(results.size(), 1u);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+            // Build command args with TLV data and invoke the handler
+            HandlerContext hctx;
+            hctx.deviceUuid = "test-device";
+            hctx.endpointId = "1";
+            JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
+            auto parsed = SbmdHandlerInvoker::InvokeHandler(Ctx(), results[0]->handler->handler, args);
+
+            ASSERT_TRUE(parsed.has_value());
+            ASSERT_EQ(parsed->ops.size(), 2u);
+
+            // First op: updateResource("1", "lastCommand", "echo")
+            ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[0].data));
+            auto &op1 = std::get<ResultOp::UpdateResource>(parsed->ops[0].data);
+            EXPECT_EQ(*op1.endpoint, "1");
+            EXPECT_EQ(op1.resource, "lastCommand");
+            EXPECT_EQ(op1.value, "echo");
+
+            // Second op: updateResource("1", "echoData", "AQID")
+            ASSERT_TRUE(std::holds_alternative<ResultOp::UpdateResource>(parsed->ops[1].data));
+            auto &op2 = std::get<ResultOp::UpdateResource>(parsed->ops[1].data);
+            EXPECT_EQ(*op2.endpoint, "1");
+            EXPECT_EQ(op2.resource, "echoData");
+            EXPECT_EQ(op2.value, "AQID");
+
+            ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(parsed->terminal.data));
+        }
+
+        // Clean up
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDispatchDriverTest, CommandWildcardDispatch)
+    {
+        auto driver = CreateDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "CmdWildcardTest",
+                constants: { CL_TEST: 0xFFF10000, CMD_ECHO: 0 },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0xFFF10000] },
+                aliases: {
+                    echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
+                    anyTestCmd: { clusterId: CL_TEST },
+                },
+                commandHandlers: {
+                    handleEcho: {
+                        aliases: ["echoCmd"],
+                        handler: onEcho,
+                    },
+                    handleAny: {
+                        aliases: ["anyTestCmd"],
+                        handler: onAny,
+                    },
+                },
+            });
+            function onEcho(args) { return Sbmd.result().success(); }
+            function onAny(args) {
+                return Sbmd.result()
+                    .log("wildcard: " + args.command.commandId)
+                    .success();
+            }
+        )");
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        // CMD_ECHO should match both specific and wildcard
+        auto echoResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0);
+        ASSERT_EQ(echoResults.size(), 2u);
+        EXPECT_EQ(echoResults[0]->handler->name, "handleEcho");
+        EXPECT_EQ(echoResults[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(echoResults[1]->handler->name, "handleAny");
+        EXPECT_EQ(echoResults[1]->priority, HandlerPriority::Wildcard);
+
+        // Unknown command should still match the wildcard
+        auto unknownResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0xFF);
+        ASSERT_EQ(unknownResults.size(), 1u);
+        EXPECT_EQ(unknownResults[0]->handler->name, "handleAny");
+        EXPECT_EQ(unknownResults[0]->priority, HandlerPriority::Wildcard);
+
+        // Clean up
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            driver->Deactivate(Ctx());
+        }
+    }
+
+    TEST_F(SbmdDispatchDriverTest, AllThreeDispatchTables)
+    {
+        auto driver = CreateDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "AllTablesTest",
+                constants: {
+                    CL_ON_OFF: 6,
+                    CL_DOOR_LOCK: 257,
+                    ATTR_ON_OFF: 0,
+                    EVT_LOCK_OP: 2,
+                    CMD_LOCK: 0,
+                },
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+                aliases: {
+                    onOff: { clusterId: CL_ON_OFF, attributeId: ATTR_ON_OFF, type: "bool" },
+                    lockOp: { clusterId: CL_DOOR_LOCK, eventId: EVT_LOCK_OP },
+                    lockCmd: { clusterId: CL_DOOR_LOCK, commandId: CMD_LOCK },
+                },
+                attributeHandlers: {
+                    onOffHandler: { aliases: ["onOff"], handler: fn },
+                },
+                eventHandlers: {
+                    lockOpHandler: { aliases: ["lockOp"], handler: fn },
+                },
+                commandHandlers: {
+                    lockCmdHandler: { aliases: ["lockCmd"], handler: fn },
+                },
+            });
+            function fn(args) { return Sbmd.result().success(); }
+        )");
+        ASSERT_NE(driver, nullptr);
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            EXPECT_TRUE(driver->Activate(Ctx()));
+        }
+
+        // All three dispatch tables populated
+        EXPECT_EQ(driver->GetAttributeDispatch().Lookup(0x0006, 0x0000).size(), 1u);
+        EXPECT_EQ(driver->GetEventDispatch().Lookup(0x0101, 2).size(), 1u);
+        EXPECT_EQ(driver->GetCommandDispatch().Lookup(0x0101, 0).size(), 1u);
+
+        // Cross-table: attribute lookup doesn't find commands
+        EXPECT_TRUE(driver->GetAttributeDispatch().Lookup(0x0101, 0).empty());
+        // Cross-table: command lookup doesn't find attributes
+        EXPECT_TRUE(driver->GetCommandDispatch().Lookup(0x0006, 0).empty());
+
+        // Command cluster IDs for registration
+        auto cmdClusters = driver->GetCommandDispatch().GetRegisteredClusterIds();
+        EXPECT_EQ(cmdClusters.size(), 1u);
+        EXPECT_TRUE(cmdClusters.count(0x0101));
 
         // Clean up
         {
