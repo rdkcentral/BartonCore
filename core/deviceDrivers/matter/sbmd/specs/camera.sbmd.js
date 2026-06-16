@@ -21,23 +21,6 @@
 //
 // ------------------------------ tabstop = 4 ----------------------------------
 
-//
-// Camera SBMD Driver — Abstract Camera Endpoint
-//
-// Provides the protocol-agnostic camera session lifecycle:
-//   createSession  — allocate a new session, return sessionId
-//   stream         — request streaming for a session
-//   takePicture    — request a snapshot for a session
-//   destroySession — tear down a session
-//   sessionStatus  — event-only resource for session state coordination
-//
-// This driver owns the abstract "camera" endpoint only. Protocol-specific
-// endpoints (webrtc, direct) are handled separately.
-//
-// Session state is tracked in transient storage as a JSON map keyed by
-// sessionId. Each entry holds the session's current state and protocol info.
-//
-
 SbmdDriver({
     schemaVersion: '4.0',
     driverVersion: 1,
@@ -143,10 +126,34 @@ SbmdDriver({
 // Handler Functions
 // =============================================================================
 
+function parseSessions(sessionsJson)
+{
+    if (!sessionsJson)
+    {
+        return {};
+    }
+
+    try
+    {
+        return JSON.parse(sessionsJson);
+    }
+    catch (e)
+    {
+        return null;
+    }
+}
+
 function executeCreateSession(args)
 {
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+    var sessions = parseSessions(sessionsJson);
+
+    if (sessions === null)
+    {
+        return Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, '', 0)
+            .error('Corrupt session data. Sessions data reset.');
+    }
 
     var nextIdStr = args.supplements.transientData[TD_NEXT_SESSION_ID];
     var nextId = nextIdStr ? parseInt(nextIdStr, 10) : 1;
@@ -181,7 +188,14 @@ function executeStream(args)
     var sessionId = input.toString();
 
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+    var sessions = parseSessions(sessionsJson);
+
+    if (sessions === null)
+    {
+        return Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, '', 0)
+            .error('Corrupt session data. Sessions data reset.');
+    }
 
     if (!sessions[sessionId])
     {
@@ -196,7 +210,7 @@ function executeStream(args)
     var nextAction = '/devices/' + deviceId + '/ep/webrtc/r/offerSdp';
 
     var metadata = {
-        sessionId: parseInt(sessionId, 10),
+        sessionId: sessionId,
         protocol: protocol,
         nextAction: nextAction,
     };
@@ -225,7 +239,14 @@ function executeDestroySession(args)
     var sessionId = input.toString();
 
     var sessionsJson = args.supplements.transientData[TD_SESSIONS];
-    var sessions = sessionsJson ? JSON.parse(sessionsJson) : {};
+    var sessions = parseSessions(sessionsJson);
+
+    if (sessions === null)
+    {
+        return Sbmd.result()
+            .storage.setTransientData(TD_SESSIONS, '', 0)
+            .error('Corrupt session data. Sessions data reset.');
+    }
 
     if (!sessions[sessionId])
     {
