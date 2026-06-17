@@ -255,6 +255,15 @@ if (BCORE_THREAD)
         ${DBUS_LIBRARIES})
 endif()
 
+
+# Observability backend selection
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "inmemory")
+    file(GLOB inmemoryObsSrc "src/observability/inmemory/*.c")
+    list(APPEND SOURCES ${inmemoryObsSrc})
+else()
+    file(GLOB noopObsSrc "src/observability/noop/*.c")
+    list(APPEND SOURCES ${noopObsSrc})
+endif()
 list(APPEND SOURCES
         ${SOURCES}
         ${zigSubSrc}
