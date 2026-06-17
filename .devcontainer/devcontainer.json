@@ -44,7 +44,9 @@
 
         // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
         // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
-        "LD_LIBRARY_PATH": "${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
+        // Build-tree path comes first so freshly compiled libraries are used without `make install`.
+        // The installed system path is kept as a fallback for libraries not built locally.
+        "LD_LIBRARY_PATH": "${containerWorkspaceFolder}/build/core:${containerEnv:LD_LIBRARY_PATH}:${containerEnv:LIB_BARTON_SHARED_PATH}",
         "PYTHONPATH": "${containerEnv:PYTHONPATH}:${containerEnv:BARTON_PYTHONPATH}",
 
         // ASAN-instrumented libBartonCore.so requires the link order check to be disabled
