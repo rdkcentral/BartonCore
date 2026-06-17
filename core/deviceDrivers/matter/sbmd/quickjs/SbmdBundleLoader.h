@@ -33,55 +33,47 @@
 namespace barton
 {
     /**
-     * Loader for the SBMD utilities bundle.
+     * Loader for SBMD JavaScript bundles.
      *
-     * This class loads the SBMD utilities into a QuickJS context, exposing a
-     * global 'SbmdUtils' object with:
+     * Loads the SBMD bundle into a QuickJS context, exposing a
+     * global 'Sbmd' object with:
      * - Base64: encode/decode utilities
      * - Tlv: TLV encoding/decoding for Matter types
-     * - Response: helpers for building invoke/write responses
+     * - result(): builder for handler return values
      *
-     * Unlike the MatterClusters bundle, this is always loaded into every
-     * SBMD QuickJS context since it provides essential utilities for all
-     * SBMD scripts regardless of whether they use matter.js.
-     *
-     * Example usage in SBMD scripts:
-     * @code
-     *   // Decode TLV attribute value
-     *   const value = SbmdUtils.Tlv.decode(sbmdReadArgs.tlvBase64);
-     *
-     *   // Encode a value for attribute write
-     *   const tlv = SbmdUtils.Tlv.encode(42, 'uint16');
-     *   return SbmdUtils.Response.write(0x0008, 0x0000, tlv);
-     *
-     *   // Create invoke response for command
-     *   return SbmdUtils.Response.invoke(0x0006, 0x0001);  // On command
-     * @endcode
+     * The bundle is assembled at build time from individual source files:
+     *   1. sbmd-namespace.js — creates the Sbmd namespace and _internal
+     *   2. sbmd-utf8.js      — adds Sbmd._internal.Utf8
+     *   3. sbmd-base64.js    — adds Sbmd.Base64
+     *   4. sbmd-tlv.js       — adds Sbmd.Tlv
+     *   5. sbmd-result.js    — adds Sbmd.result() builder
+     *   6. sbmd-cleanup.js   — removes Sbmd._internal
      */
-    class SbmdUtilsLoader
+    class SbmdBundleLoader
     {
     public:
         /**
-         * Load the SBMD utilities bundle into the given QuickJS context.
+         * Load all SBMD bundles into the given QuickJS context.
          *
-         * This creates a global 'SbmdUtils' object in the context. The object
-         * is frozen after loading to prevent modification by scripts.
+         * This creates a global 'Sbmd' object in the context with all
+         * sub-namespaces. The object is frozen after loading to prevent
+         * modification by scripts.
          *
-         * @param ctx The QuickJS context to load the utilities into
-         * @return true if the utilities were loaded successfully, false otherwise
+         * @param ctx The QuickJS context to load the bundles into
+         * @return true if all bundles were loaded successfully, false otherwise
          */
         static bool LoadBundle(JSContext *ctx);
 
         /**
-         * Check if the SBMD utilities bundle is available.
+         * Check if the SBMD bundles are available.
          *
-         * @return true if the bundle is available (should always be true when
+         * @return true if the bundles are available (should always be true when
          *         properly built)
          */
         static bool IsAvailable();
 
         /**
-         * Get the source of the loaded bundle.
+         * Get the source of the loaded bundles.
          *
          * @return "embedded" if loaded from compiled-in source, or "none" if not loaded
          */
@@ -89,7 +81,7 @@ namespace barton
 
     private:
         static bool LoadFromEmbedded(JSContext *ctx);
-        static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length);
+        static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length, const char *name);
 
         static const char *source_;
     };

@@ -28,17 +28,17 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SpecBasedMatterDeviceDriver.h"
-#include "matter/sbmd/SbmdSpec.h"
+#include "matter/sbmd/SbmdDriver.h"
 
 #if defined(BCORE_USE_MQUICKJS)
-#include "matter/sbmd/mquickjs/SbmdScriptImpl.h"
-#elif defined(BCORE_USE_QUICKJS)
-#include "matter/sbmd/quickjs/SbmdScriptImpl.h"
+#include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #endif
 
 #include <app/ConcreteAttributePath.h>
 #include <cinttypes>
 #include <lib/core/TLVReader.h>
+#include <lib/core/TLVWriter.h>
 #include <memory>
 
 extern "C" {
@@ -49,197 +49,153 @@ extern "C" {
 #include <deviceService/resourceModes.h>
 #include <deviceServicePrivate.h>
 #include <icLog/logging.h>
+#include <icTypes/icHashMap.h>
 #include <resourceTypes.h>
 }
 
 #include <subsystems/matter/Matter.h>
+
+#include <lib/support/Base64.h>
 
 using namespace barton;
 using namespace std::chrono_literals;
 
 #define BASE_SBMD_DRIVER_NAME "sbmd-"
 
-SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(std::shared_ptr<SbmdSpec> spec) :
-    MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + spec->name).c_str(),
-                       spec->bartonMeta.deviceClass.c_str(),
-                       spec->bartonMeta.deviceClassVersion),
-    spec(std::move(spec))
+SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
+    MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
+                       driver->GetRegistration().barton.deviceClass.c_str(),
+                       driver->GetRegistration().barton.deviceClassVersion),
+    driver(driver)
 {
-    icDebug("Created SBMD driver for: %s", this->spec->name.c_str());
+    icDebug("Created SBMD driver for: %s", driver->GetName().c_str());
+
+    // Register endpoint profile versions so deviceServiceDeviceNeedsReconfiguring()
+    // can detect profile version changes and trigger reconfiguration.
+    DeviceDriver *dd = GetDriver();
+    const auto &endpoints = driver->GetRegistration().endpoints;
+
+    for (const auto &endpoint : endpoints)
+    {
+        if (dd->endpointProfileVersions == nullptr)
+        {
+            dd->endpointProfileVersions = hashMapCreate();
+        }
+
+        auto *version = static_cast<uint8_t *>(malloc(sizeof(uint8_t)));
+        *version = static_cast<uint8_t>(endpoint.profileVersion);
+        hashMapPut(dd->endpointProfileVersions,
+                   strdup(endpoint.profile.c_str()),
+                   static_cast<uint16_t>(endpoint.profile.length() + 1),
+                   version);
+    }
 }
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedVendorId() const
 {
-    return spec->matterMeta.vendorId.value_or(0);
+    return driver->GetRegistration().matter.vendorId.value_or(0);
 }
 
 uint16_t SpecBasedMatterDeviceDriver::GetSupportedProductId() const
 {
-    return spec->matterMeta.productId.value_or(0);
+    return driver->GetRegistration().matter.productId.value_or(0);
 }
 
 bool SpecBasedMatterDeviceDriver::IsVendorSpecificDriver() const
 {
-    return spec->matterMeta.vendorId.has_value() && spec->matterMeta.productId.has_value();
+    const auto &m = driver->GetRegistration().matter;
+
+    return m.vendorId.has_value() && m.productId.has_value();
 }
 
 std::vector<uint16_t> SpecBasedMatterDeviceDriver::GetSupportedDeviceTypes()
 {
-    return spec->matterMeta.deviceTypes;
+    return driver->GetRegistration().matter.deviceTypes;
 }
 
 bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device)
 {
-    auto script = CreateConfiguredScript(device->GetDeviceId());
-    if (!script)
-    {
-        icLogError(LOG_TAG, "Failed to create script for device %s, cannot add device", device->GetDeviceId().c_str());
-        return false;
-    }
-    device->SetScript(std::move(script));
+    // The dispatch tables on the driver handle everything.
+    device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
 
-    // Set feature clusters from the spec for featureMap lookup
-    device->SetFeatureClusters(spec->matterMeta.featureClusters);
-
-    // Resolve the endpoint map before resource binding
-    if (!device->ResolveEndpointMap(spec->matterMeta.deviceTypes))
+    if (!device->ResolveEndpointMap(driver->GetRegistration().matter.deviceTypes))
     {
         icError("Failed to resolve endpoint map for device %s, no matching device types found",
                 device->GetDeviceId().c_str());
         return false;
     }
 
-    // for each resource in the spec, configure mapper bindings.
-    // Note: resource modes ("read", "dynamic", "emitEvents") describe client-facing capabilities
-    // (e.g. "read" means the resource can be read by clients). Mappers describe how the resource
-    // is populated: read mappers query the device, event mappers update the value from events.
-    // A resource can be readable without a read mapper if its value is populated by events.
-    auto configureResource = [&device](const SbmdResource &sbmdResource,
-                                       std::optional<uint32_t> sbmdEndpointIndex) -> bool {
-        icDebug("Configuring resource %s for device %s", sbmdResource.id.c_str(), device->GetDeviceId().c_str());
+    // Set the attribute callback so CacheCallback delegates to our dispatch tables
+    device->SetAttributeCallback([this](const std::string &deviceId,
+                                        chip::EndpointId endpointId,
+                                        chip::ClusterId clusterId,
+                                        chip::AttributeId attributeId,
+                                        chip::TLV::TLVReader &reader) {
+        HandleAttributeReport(deviceId, endpointId, clusterId, attributeId, reader);
+    });
 
-        g_autofree char *uri = nullptr;
-        if (sbmdResource.resourceEndpointId.has_value())
-        {
-            uri = createEndpointResourceUri(device->GetDeviceId().c_str(),
-                                            sbmdResource.resourceEndpointId.value().c_str(),
-                                            sbmdResource.id.c_str());
-        }
-        else
-        {
-            uri = createDeviceResourceUri(device->GetDeviceId().c_str(), sbmdResource.id.c_str());
-        }
+    // Set the event callback so CacheCallback delegates to our dispatch tables
+    device->SetEventCallback(
+        [this](const std::string &deviceId,
+               chip::EndpointId endpointId,
+               chip::ClusterId clusterId,
+               chip::EventId eventId,
+               chip::TLV::TLVReader &reader) { HandleEvent(deviceId, endpointId, clusterId, eventId, reader); });
 
-        // a resource can have different mappers for read, write, and execute
-        if (sbmdResource.mapper.hasRead)
+    // Set the command callback for incoming (server-side) commands
+    device->SetCommandCallback([this](const std::string &deviceId,
+                                      chip::EndpointId endpointId,
+                                      chip::ClusterId clusterId,
+                                      chip::CommandId commandId,
+                                      chip::TLV::TLVReader &reader) {
+        // Encode TLV as base64 for HandleCommand
+        uint8_t tlvBuf[1024];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        std::string tlvBase64;
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) == CHIP_NO_ERROR)
         {
-            if (!device->BindResourceReadInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
+            uint32_t tlvLen = writer.GetLengthWritten();
+
+            if (tlvLen > 0)
             {
-                icError("  Failed to bind read script for resource %s", sbmdResource.id.c_str());
-                return false;
-            }
-        }
-        if (sbmdResource.mapper.hasWrite)
-        {
-            // Write mappers are script-only - script returns full operation details
-            std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
-            if (!device->BindWriteInfo(
-                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
-            {
-                icError("  Failed to bind write script for resource %s", sbmdResource.id.c_str());
-                return false;
-            }
-        }
-        if (sbmdResource.mapper.hasExecute)
-        {
-            // Execute mappers are script-only - script returns full operation details
-            std::string resourceKey = sbmdResource.resourceEndpointId.value_or("") + ":" + sbmdResource.id;
-            if (!device->BindExecuteInfo(
-                    uri, resourceKey, sbmdResource.resourceEndpointId.value_or(""), sbmdResource.id, sbmdEndpointIndex))
-            {
-                icError("  Failed to bind execute script for resource %s", sbmdResource.id.c_str());
-                return false;
-            }
-        }
-        if (sbmdResource.mapper.event.has_value())
-        {
-            // Event mappers - bind event to resource for automatic updates
-            if (!device->BindResourceEventInfo(uri, sbmdResource.mapper.event.value(), sbmdEndpointIndex))
-            {
-                icError("  Failed to bind event for resource %s", sbmdResource.id.c_str());
-                return false;
+                size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+                tlvBase64.resize(maxBase64Len, '\0');
+                uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+                tlvBase64.resize(encoded);
             }
         }
 
-        if (sbmdResource.mapper.seedFromAttribute.has_value())
-        {
-            if (!device->BindResourceSeedFromInfo(uri, sbmdResource.mapper, sbmdEndpointIndex))
-            {
-                icError("  Failed to bind seedFrom for resource %s", sbmdResource.id.c_str());
-                return false;
-            }
-        }
+        HandleCommand(deviceId, endpointId, clusterId, commandId, tlvBase64);
+    });
 
-        return true;
-    };
-
-    // Helper lambda that evaluates prerequisites and, if satisfied, attempts to configure the resource.
-    // Handles optional/required branching and skip bookkeeping so that the two loops below stay symmetric.
-    // Returns false if commissioning must be aborted (required resource failed), true otherwise.
-    auto processResource = [&](const SbmdResource &resource, std::optional<uint32_t> endpointIndex) -> bool {
-        if (!CheckPrerequisites(resource, *device))
-        {
-            if (resource.optional)
-            {
-                icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
-                skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-
-                return true;
-            }
-
-            icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
-
-            return false;
-        }
-
-        if (!configureResource(resource, endpointIndex))
-        {
-            if (resource.optional)
-            {
-                icWarn("Optional resource %s failed to configure for device %s, skipping",
-                       resource.id.c_str(),
-                       device->GetDeviceId().c_str());
-                skippedOptionalResources[device->GetDeviceId()].insert(MakeResourceKey(resource));
-
-                return true;
-            }
-
-            icError("Required resource '%s' failed to configure, aborting commissioning", resource.id.c_str());
-
-            return false;
-        }
-
-        return true;
-    };
-
-    // Configure device-level resources (no SBMD endpoint index — uses cluster-based lookup)
-    for (const auto &resource : spec->resources)
+    // Register incoming command handlers for clusters in the command dispatch table
+    for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
     {
-        if (!processResource(resource, std::nullopt))
-        {
-            return false;
-        }
+        device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
     }
 
-    // Configure endpoint-level resources
-    for (uint32_t epIdx = 0; epIdx < static_cast<uint32_t>(spec->endpoints.size()); ++epIdx)
-    {
-        const auto &endpoint = spec->endpoints[epIdx];
+    // Check prerequisites for resources
+    const auto &reg = driver->GetRegistration();
 
+    for (const auto &endpoint : reg.endpoints)
+    {
         for (const auto &resource : endpoint.resources)
         {
-            if (!processResource(resource, epIdx))
+            if (!CheckPrerequisites(resource, *device))
             {
+                if (resource.optional)
+                {
+                    icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
+                    std::string key = endpoint.id + ":" + resource.id;
+                    skippedOptionalResources[device->GetDeviceId()].insert(key);
+                    continue;
+                }
+
+                icError("Required resource '%s' prerequisites not met, aborting commissioning", resource.id.c_str());
+
                 return false;
             }
         }
@@ -248,214 +204,81 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
     return MatterDeviceDriver::AddDevice(std::move(device));
 }
 
-std::unique_ptr<SbmdScript> SpecBasedMatterDeviceDriver::CreateConfiguredScript(const std::string &deviceId)
-{
-    auto script = SbmdScriptImpl::Create(deviceId);
-    if (!script)
-    {
-        icLogError(LOG_TAG, "Failed to create script for device %s", deviceId.c_str());
-        return nullptr;
-    }
-
-    // Add mappers from top-level resources
-    for (const auto &resource : spec->resources)
-    {
-        AddResourceMappers(*script, resource);
-    }
-
-    // Add mappers from endpoint resources
-    for (const auto &endpoint : spec->endpoints)
-    {
-        for (const auto &resource : endpoint.resources)
-        {
-            AddResourceMappers(*script, resource);
-        }
-    }
-
-    return script;
-}
-
-void SpecBasedMatterDeviceDriver::AddResourceMappers(SbmdScript &script, const SbmdResource &resource)
-{
-    if (resource.mapper.hasRead && !resource.mapper.readScript.empty())
-    {
-        if (resource.mapper.readAttribute.has_value())
-        {
-            script.AddAttributeReadMapper(resource.mapper.readAttribute.value(), resource.mapper.readScript);
-        }
-        else if (resource.mapper.readCommand.has_value())
-        {
-            icError("Read mapper with command not yet supported for resource %s", resource.id.c_str());
-        }
-    }
-    if (resource.mapper.hasWrite && !resource.mapper.writeScript.empty())
-    {
-        // Write mappers are script-only - script returns full operation details (invoke/write)
-        std::string resourceKey = resource.resourceEndpointId.value_or("") + ":" + resource.id;
-        script.AddWriteMapper(resourceKey, resource.mapper.writeScript);
-    }
-    if (resource.mapper.hasExecute && !resource.mapper.executeScript.empty())
-    {
-        // Execute mappers are script-only - script returns full operation details (invoke)
-        std::string resourceKey = resource.resourceEndpointId.value_or("") + ":" + resource.id;
-        script.AddExecuteMapper(resourceKey, resource.mapper.executeScript, resource.mapper.executeResponseScript);
-    }
-    if (resource.mapper.event.has_value() && !resource.mapper.eventScript.empty())
-    {
-        // Event mappers convert event TLV to resource values
-        script.AddEventMapper(resource.mapper.event.value(), resource.mapper.eventScript);
-    }
-
-    if (resource.mapper.seedFromAttribute.has_value() && !resource.mapper.seedFromScript.empty())
-    {
-        // SeedFrom mappers reuse the attribute read mapper interface — same script shape as read mappers
-        script.AddAttributeReadMapper(resource.mapper.seedFromAttribute.value(), resource.mapper.seedFromScript);
-    }
-}
-
 SubscriptionIntervalSecs SpecBasedMatterDeviceDriver::GetDesiredSubscriptionIntervalSecs()
 {
     icDebug();
 
-    return {spec->reporting.minSecs, spec->reporting.maxSecs};
+    const auto &r = driver->GetRegistration().reporting;
+
+    return {r.minSecs, r.maxSecs};
 }
 
-void SpecBasedMatterDeviceDriver::ForEachNonSkippedResource(
-    const std::string &deviceId,
-    const std::function<void(const SbmdResource &, const SbmdEndpoint *)> &callback) const
+void SpecBasedMatterDeviceDriver::DoConfigureDevice(std::forward_list<std::promise<bool>> &promises,
+                                                    const std::string &deviceId,
+                                                    const DeviceDescriptor *deviceDescriptor,
+                                                    chip::Messaging::ExchangeManager &exchangeMgr,
+                                                    const chip::SessionHandle &sessionHandle)
 {
-    auto skipIt = skippedOptionalResources.find(deviceId);
-    const auto *skipped = (skipIt != skippedOptionalResources.end()) ? &skipIt->second : nullptr;
+    icDebug("Reconfiguring SBMD device %s", deviceId.c_str());
 
-    for (const auto &resource : spec->resources)
+    auto device = GetDevice(deviceId);
+
+    if (device == nullptr)
     {
-        if (skipped && skipped->count(MakeResourceKey(resource)))
-        {
-            continue;
-        }
-
-        callback(resource, nullptr);
+        icError("Device %s not found during reconfiguration", deviceId.c_str());
+        FailOperation(promises);
+        return;
     }
 
-    for (const auto &endpoint : spec->endpoints)
+    // Update feature clusters in case the spec changed
+    device->SetFeatureClusters(driver->GetRegistration().matter.featureClusters);
+
+    // Re-resolve endpoint map against the (possibly updated) device type list
+    if (!device->ResolveEndpointMap(driver->GetRegistration().matter.deviceTypes))
+    {
+        icError("Failed to resolve endpoint map for device %s during reconfiguration", deviceId.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    // Tear down old incoming command handlers and re-register from the current spec
+    device->UnregisterIncomingCommandHandlers();
+
+    for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+    {
+        device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+    }
+
+    // Re-check prerequisites — update the set of skipped optional resources
+    skippedOptionalResources.erase(deviceId);
+    const auto &reg = driver->GetRegistration();
+
+    for (const auto &endpoint : reg.endpoints)
     {
         for (const auto &resource : endpoint.resources)
         {
-            if (skipped && skipped->count(MakeResourceKey(resource)))
+            if (!CheckPrerequisites(resource, *device))
             {
-                continue;
-            }
+                if (resource.optional)
+                {
+                    icDebug("Optional resource '%s' prerequisites not met, skipping", resource.id.c_str());
+                    std::string key = endpoint.id + ":" + resource.id;
+                    skippedOptionalResources[deviceId].insert(key);
+                    continue;
+                }
 
-            callback(resource, &endpoint);
+                icError("Required resource '%s' prerequisites not met during reconfiguration", resource.id.c_str());
+                FailOperation(promises);
+
+                return;
+            }
         }
     }
 }
 
 bool SpecBasedMatterDeviceDriver::DoRegisterResources(icDevice *device)
 {
-    bool result = true;
-
-    icDebug();
-
-    auto matterDevice = GetDevice(device->uuid);
-    std::map<const SbmdEndpoint *, icDeviceEndpoint *> icEndpoints;
-
-    ForEachNonSkippedResource(device->uuid, [&](const SbmdResource &sbmdResource, const SbmdEndpoint *sbmdEndpoint) {
-        uint8_t resourceMode = ConvertModesToBitmask(sbmdResource.modes);
-
-        // if an executable mapper was provided, we need to make sure the resource is executable
-        if (sbmdResource.mapper.hasExecute)
-        {
-            resourceMode |= RESOURCE_MODE_EXECUTABLE;
-        }
-
-        // Use CACHING_POLICY_ALWAYS when the resource value is kept up to date
-        // automatically — either via attribute subscription or event mapper updates.
-        // With CACHING_POLICY_ALWAYS, the device service returns the stored value on read
-        // without calling the driver's readResource callback.
-        // Note: resource modes ("read", "dynamic", etc.) describe client-facing capabilities,
-        // while mappers describe how the value is populated (attribute read, event, etc.).
-        ResourceCachingPolicy cachingPolicy =
-            (sbmdResource.mapper.hasRead && sbmdResource.mapper.readAttribute.has_value()) ||
-                    sbmdResource.mapper.event.has_value()
-                ? CACHING_POLICY_ALWAYS
-                : CACHING_POLICY_NEVER;
-
-        // Seed resource with value from attribute cache if specified
-        const char *initialValue = nullptr;
-        std::string seedValue;
-
-        if (sbmdEndpoint == nullptr)
-        {
-            if (sbmdResource.mapper.seedFromAttribute.has_value() && matterDevice != nullptr)
-            {
-                g_autofree char *uri = createDeviceResourceUri(device->uuid, sbmdResource.id.c_str());
-                auto maybeSeedValue = matterDevice->ReadSeedValueFromAttribute(uri);
-
-                if (maybeSeedValue.has_value())
-                {
-                    seedValue = std::move(*maybeSeedValue);
-                    initialValue = seedValue.c_str();
-                }
-            }
-
-            result &= createDeviceResource(device,
-                                           sbmdResource.id.c_str(),
-                                           initialValue,
-                                           sbmdResource.type.c_str(),
-                                           resourceMode,
-                                           cachingPolicy) != nullptr;
-
-            return;
-        }
-
-        auto [epIt, inserted] = icEndpoints.emplace(sbmdEndpoint, nullptr);
-
-        if (inserted)
-        {
-            auto *ep = createEndpoint(device, sbmdEndpoint->id.c_str(), sbmdEndpoint->profile.c_str(), true);
-
-            if (ep == nullptr)
-            {
-                icError("Failed to create endpoint '%s' with profile '%s'",
-                        sbmdEndpoint->id.c_str(),
-                        sbmdEndpoint->profile.c_str());
-                result = false;
-
-                return;
-            }
-
-            ep->profileVersion = sbmdEndpoint->profileVersion;
-            epIt->second = ep;
-        }
-
-        auto *ep = epIt->second;
-
-        if (ep == nullptr)
-        {
-            return;
-        }
-
-        if (sbmdResource.mapper.seedFromAttribute.has_value() && matterDevice != nullptr)
-        {
-            g_autofree char *uri = createEndpointResourceUri(
-                device->uuid, sbmdResource.resourceEndpointId.value_or("").c_str(), sbmdResource.id.c_str());
-            auto maybeSeedValue = matterDevice->ReadSeedValueFromAttribute(uri);
-
-            if (maybeSeedValue.has_value())
-            {
-                seedValue = std::move(*maybeSeedValue);
-                initialValue = seedValue.c_str();
-            }
-        }
-
-        result &=
-            createEndpointResource(
-                ep, sbmdResource.id.c_str(), initialValue, sbmdResource.type.c_str(), resourceMode, cachingPolicy) !=
-            nullptr;
-    });
-
-    return result;
+    return DoRegisterDriverResources(device);
 }
 
 void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::promise<bool>> &promises,
@@ -476,6 +299,7 @@ void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<
     icDebug("%s", resource->id);
 
     auto device = GetDevice(deviceId);
+
     if (device == nullptr)
     {
         icError("Device %s not found", deviceId.c_str());
@@ -483,7 +307,7 @@ void SpecBasedMatterDeviceDriver::DoReadResource(std::forward_list<std::promise<
         return;
     }
 
-    device->HandleResourceRead(promises, resource, value, exchangeMgr, sessionHandle);
+    HandleResourceOp(promises, *device, resource, nullptr, value, nullptr, exchangeMgr, sessionHandle, "read");
 }
 
 bool SpecBasedMatterDeviceDriver::DoWriteResource(std::forward_list<std::promise<bool>> &promises,
@@ -497,6 +321,7 @@ bool SpecBasedMatterDeviceDriver::DoWriteResource(std::forward_list<std::promise
     icDebug("%s = %s", resource->id, newValue);
 
     auto device = GetDevice(deviceId);
+
     if (device == nullptr)
     {
         icError("Device %s not found", deviceId.c_str());
@@ -504,7 +329,7 @@ bool SpecBasedMatterDeviceDriver::DoWriteResource(std::forward_list<std::promise
         return false;
     }
 
-    device->HandleResourceWrite(promises, resource, previousValue, newValue, exchangeMgr, sessionHandle);
+    HandleResourceOp(promises, *device, resource, newValue, nullptr, nullptr, exchangeMgr, sessionHandle, "write");
 
     return true; // let the base driver update the resource
 }
@@ -520,6 +345,7 @@ void SpecBasedMatterDeviceDriver::ExecuteResource(std::forward_list<std::promise
     icDebug("%s(%s)", resource->id, arg);
 
     auto device = GetDevice(deviceId);
+
     if (device == nullptr)
     {
         icError("Device %s not found", deviceId.c_str());
@@ -527,12 +353,13 @@ void SpecBasedMatterDeviceDriver::ExecuteResource(std::forward_list<std::promise
         return;
     }
 
-    device->HandleResourceExecute(promises, resource, arg, response, exchangeMgr, sessionHandle);
+    HandleResourceOp(promises, *device, resource, arg, nullptr, response, exchangeMgr, sessionHandle, "execute");
 }
 
-uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std::string> &modes)
+std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std::string> &modes)
 {
-    uint8_t bitmask = 0;
+    // dynamic and emitEvents are on by default; "static" and "noEvents" opt out.
+    uint8_t bitmask = RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE | RESOURCE_MODE_EMIT_EVENTS;
 
     for (const auto &mode : modes)
     {
@@ -548,13 +375,13 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
-        else if (mode == "dynamic")
+        else if (mode == "static")
         {
-            bitmask |= RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE;
+            bitmask &= ~(RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE);
         }
-        else if (mode == "emitEvents")
+        else if (mode == "noEvents")
         {
-            bitmask |= RESOURCE_MODE_EMIT_EVENTS;
+            bitmask &= ~RESOURCE_MODE_EMIT_EVENTS;
         }
         else if (mode == "lazySaveNext")
         {
@@ -566,72 +393,254 @@ uint8_t SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const std::vector<std
         }
         else
         {
-            icWarn("Unknown resource mode: %s", mode.c_str());
+            icError("Unsupported resource mode: %s", mode.c_str());
+
+            return std::nullopt;
         }
     }
 
     return bitmask;
 }
 
-std::string SpecBasedMatterDeviceDriver::MakeResourceKey(const SbmdResource &resource)
+// =============================================================================
+// Driver-based implementation methods
+// =============================================================================
+
+bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 {
-    return resource.resourceEndpointId.value_or("") + ":" + resource.id;
+    bool result = true;
+    const auto &reg = driver->GetRegistration();
+    const auto *skipped =
+        skippedOptionalResources.count(device->uuid) ? &skippedOptionalResources[device->uuid] : nullptr;
+
+    icDebug("Registering resources for device %s", device->uuid);
+
+    std::map<std::string, icDeviceEndpoint *> icEndpoints; // endpoint id → created endpoint
+
+    for (const auto &endpoint : reg.endpoints)
+    {
+        for (const auto &resource : endpoint.resources)
+        {
+            std::string key = endpoint.id + ":" + resource.id;
+
+            if (skipped && skipped->count(key))
+            {
+                continue;
+            }
+
+            // Create endpoint on first resource that needs it
+            auto [epIt, inserted] = icEndpoints.emplace(endpoint.id, nullptr);
+
+            if (inserted)
+            {
+                auto *ep = createEndpoint(device, endpoint.id.c_str(), endpoint.profile.c_str(), true);
+
+                if (ep == nullptr)
+                {
+                    icError("Failed to create endpoint '%s' with profile '%s'",
+                            endpoint.id.c_str(),
+                            endpoint.profile.c_str());
+                    result = false;
+                    continue;
+                }
+
+                ep->profileVersion = endpoint.profileVersion;
+                epIt->second = ep;
+            }
+
+            auto *ep = epIt->second;
+
+            if (ep == nullptr)
+            {
+                continue;
+            }
+
+            auto modeResult = ConvertModesToBitmask(resource.modes);
+
+            if (!modeResult.has_value())
+            {
+                icError("Invalid modes for resource '%s' on endpoint '%s'", resource.id.c_str(), endpoint.id.c_str());
+                result = false;
+
+                continue;
+            }
+
+            uint8_t resourceMode = *modeResult;
+
+            if (resource.execute.has_value())
+            {
+                resourceMode |= RESOURCE_MODE_EXECUTABLE;
+            }
+
+            // Resources without explicit read handlers are updated via attribute subscriptions,
+            // so use CACHING_POLICY_ALWAYS to return the DB-cached value on read.
+            // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
+            ResourceCachingPolicy cachingPolicy =
+                resource.read.has_value() ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
+
+            // Seed initial value if there's a seed handler
+            const char *initialValue = nullptr;
+            std::string seedValue;
+
+            if (resource.seed.has_value())
+            {
+                seedValue = InvokeSeedHandler(device->uuid, endpoint.id, resource);
+
+                if (!seedValue.empty())
+                {
+                    initialValue = seedValue.c_str();
+                }
+            }
+
+            result &= createEndpointResource(
+                          ep, resource.id.c_str(), initialValue, resource.type.c_str(), resourceMode, cachingPolicy) !=
+                      nullptr;
+        }
+    }
+
+    return result;
 }
 
 void SpecBasedMatterDeviceDriver::SeedInitialResourceValues(const std::string &deviceId)
 {
     icDebug("Seeding initial resource values for device %s", deviceId.c_str());
 
-    auto device = GetDevice(deviceId);
+    const auto &reg = driver->GetRegistration();
+    const auto *skipped = skippedOptionalResources.count(deviceId) ? &skippedOptionalResources[deviceId] : nullptr;
 
-    if (device == nullptr)
+    auto matterDevice = GetDevice(deviceId);
+
+    for (const auto &endpoint : reg.endpoints)
     {
-        icError("Device %s not found for seedFrom seeding", deviceId.c_str());
-        return;
+        for (const auto &resource : endpoint.resources)
+        {
+            if (!resource.seed.has_value())
+            {
+                continue;
+            }
+
+            std::string key = endpoint.id + ":" + resource.id;
+
+            if (skipped && skipped->count(key))
+            {
+                continue;
+            }
+
+            std::string seedValue = InvokeSeedHandler(deviceId, endpoint.id, resource, matterDevice.get());
+
+            if (!seedValue.empty())
+            {
+                updateResource(deviceId.c_str(), endpoint.id.c_str(), resource.id.c_str(), seedValue.c_str(), nullptr);
+            }
+        }
+    }
+}
+
+std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &deviceId,
+                                                           const std::string &endpointId,
+                                                           const SbmdResource &resource,
+                                                           MatterDevice *device)
+{
+    if (!resource.seed.has_value() || !driver->IsActivated())
+    {
+        return "";
     }
 
-    ForEachNonSkippedResource(deviceId, [&](const SbmdResource &resource, const SbmdEndpoint *sbmdEndpoint) {
-        if (!resource.mapper.seedFromAttribute.has_value())
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = endpointId;
+
+    JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
+
+    // GC-root args across AddSupplements (which allocates) and InvokeHandler
+    JSGCRef argsRef {};
+    JS_AddGCRef(ctx, &argsRef);
+    argsRef.val = args;
+
+
+    if (device != nullptr)
+    {
+        SbmdHandlerInvoker::AddSupplements(ctx,
+                                           args,
+                                           resource.seed->supplements,
+                                           MakeAttrFetcher(*device),
+                                           MakeResFetcher(deviceId),
+                                           MakePersistFetcher(deviceId),
+                                           MakeTransientFetcher(deviceId));
+    }
+
+    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
+
+    JS_DeleteGCRef(ctx, &argsRef);
+
+    if (!result.has_value())
+    {
+        icDebug("Seed handler for resource '%s' returned no result", resource.id.c_str());
+        return "";
+    }
+
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+    // For seed, we expect a success terminal — check if any ops produced an updateResource
+    // for this resource. If so, the seed value was set via ops. Return empty to avoid
+    // double-setting.
+    for (const auto &op : result->ops)
+    {
+        if (std::holds_alternative<ResultOp::UpdateResource>(op.data))
         {
-            return;
+            const auto &ur = std::get<ResultOp::UpdateResource>(op.data);
+
+            if (ur.resource == resource.id)
+            {
+                return ur.value;
+            }
         }
+    }
 
-        g_autofree char *uri = (sbmdEndpoint == nullptr)
-                                   ? createDeviceResourceUri(deviceId.c_str(), resource.id.c_str())
-                                   : createEndpointResourceUri(deviceId.c_str(),
-                                                               resource.resourceEndpointId.value_or("").c_str(),
-                                                               resource.id.c_str());
-
-        device->SeedResourceFromAttribute(uri);
-    });
+    return "";
 }
 
 bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resource, const MatterDevice &device)
 {
-    // Empty prerequisites vector means always attempt to register (declared as "none" in the spec)
     if (resource.prerequisites.empty())
     {
         return true;
     }
 
+    // Prerequisites are alias names. We need the driver's alias map to resolve them
+    // to (clusterId, attributeId) pairs. For now, prerequisites just check cluster presence.
     auto cache = device.GetDeviceDataCache();
 
     if (!cache)
     {
-        icWarn("No device data cache for device %s; prerequisites cannot be evaluated and will be treated as unmet",
-               device.GetDeviceId().c_str());
-
+        icWarn("No device data cache for device %s; prerequisites cannot be evaluated", device.GetDeviceId().c_str());
         return false;
     }
 
     const auto endpointIds = cache->GetEndpointIds();
 
-    for (const auto &prereq : resource.prerequisites)
+    for (const auto &prereqAlias : resource.prerequisites)
     {
-        uint32_t clusterId = prereq.clusterId;
-        const std::vector<uint32_t> &attributeIds = prereq.attributeIds;
+        // Prerequisites are cluster IDs specified as alias names.
+        // For now, we just check that at least one endpoint has the cluster.
+        // TODO: resolve aliases through registration's alias map for attribute-level prereqs
 
-        // Check cluster presence on any endpoint
+        // Try parsing as a numeric cluster ID first
+        uint32_t clusterId = 0;
+        char *endPtr = nullptr;
+        unsigned long parsed = strtoul(prereqAlias.c_str(), &endPtr, 0);
+
+        if (endPtr == prereqAlias.c_str() || *endPtr != '\0')
+        {
+            icDebug("Prerequisite '%s' is not a numeric cluster ID, skipping", prereqAlias.c_str());
+            continue;
+        }
+
+        clusterId = static_cast<uint32_t>(parsed);
+
         bool clusterFound = false;
 
         for (auto endpointId : endpointIds)
@@ -645,50 +654,1634 @@ bool SpecBasedMatterDeviceDriver::CheckPrerequisites(const SbmdResource &resourc
 
         if (!clusterFound)
         {
-            icDebug("Resource '%s': prerequisite cluster 0x%08" PRIx32 " not found on device %s; prerequisite not met",
-                    resource.id.c_str(),
-                    clusterId,
-                    device.GetDeviceId().c_str());
+            icDebug(
+                "Prerequisite cluster 0x%08" PRIx32 " not found on device %s", clusterId, device.GetDeviceId().c_str());
 
             return false;
-        }
-
-        // Check attribute presence for each required attribute ID
-        for (uint32_t attributeId : attributeIds)
-        {
-            bool attributeFound = false;
-
-            for (auto endpointId : endpointIds)
-            {
-                // find the endpoint with the cluster and then check for the attribute
-                if (!cache->EndpointHasServerCluster(endpointId, clusterId))
-                {
-                    continue;
-                }
-
-                chip::app::ConcreteDataAttributePath path(endpointId, clusterId, attributeId);
-                chip::TLV::TLVReader reader;
-
-                if (cache->GetAttributeData(path, reader) == CHIP_NO_ERROR)
-                {
-                    attributeFound = true;
-                    break;
-                }
-            }
-
-            if (!attributeFound)
-            {
-                icDebug("Resource '%s': prerequisite attribute 0x%08" PRIx32 " on cluster 0x%08" PRIx32
-                        " not found on device %s; prerequisite not met",
-                        resource.id.c_str(),
-                        attributeId,
-                        clusterId,
-                        device.GetDeviceId().c_str());
-
-                return false;
-            }
         }
     }
 
     return true;
+}
+
+const SbmdResource *SpecBasedMatterDeviceDriver::FindDriverResource(const char *endpointId,
+                                                                    const char *resourceId) const
+{
+    const auto &reg = driver->GetRegistration();
+
+    for (const auto &endpoint : reg.endpoints)
+    {
+        // If endpointId is provided, match it
+        if (endpointId != nullptr && !endpoint.id.empty() && endpoint.id != endpointId)
+        {
+            continue;
+        }
+
+        for (const auto &resource : endpoint.resources)
+        {
+            if (resource.id == resourceId)
+            {
+                return &resource;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promise<bool>> &promises,
+                                                   MatterDevice &device,
+                                                   icDeviceResource *resource,
+                                                   const char *input,
+                                                   char **readValue,
+                                                   char **executeResponse,
+                                                   chip::Messaging::ExchangeManager &exchangeMgr,
+                                                   const chip::SessionHandle &sessionHandle,
+                                                   const char *opType)
+{
+    // Extract endpoint ID and resource ID from the resource
+    const char *endpointId = resource->endpointId;
+    const char *resourceId = resource->id;
+
+    const SbmdResource *driverResource = FindDriverResource(endpointId, resourceId);
+
+    if (driverResource == nullptr)
+    {
+        icError("Resource %s not found in registration", resourceId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Determine which handler to use
+    const SbmdResourceHandler *handler = nullptr;
+    std::optional<std::string> inputValue;
+
+    if (strcmp(opType, "read") == 0)
+    {
+        handler = driverResource->read.has_value() ? &driverResource->read.value() : nullptr;
+    }
+    else if (strcmp(opType, "write") == 0)
+    {
+        handler = driverResource->write.has_value() ? &driverResource->write.value() : nullptr;
+        inputValue = input ? std::string(input) : std::string();
+    }
+    else if (strcmp(opType, "execute") == 0)
+    {
+        handler = driverResource->execute.has_value() ? &driverResource->execute.value() : nullptr;
+        inputValue = input ? std::string(input) : std::string();
+    }
+
+    if (handler == nullptr)
+    {
+        if (strcmp(opType, "read") == 0)
+        {
+            // No explicit read handler — resource value is populated by attribute subscription.
+            // With CACHING_POLICY_ALWAYS this path shouldn't normally be reached,
+            // but return success with the cached value as a safety net.
+            icDebug("No read handler for resource %s, returning cached value", resourceId);
+
+            if (readValue != nullptr && resource->value != nullptr)
+            {
+                *readValue = strdup(resource->value);
+            }
+
+            std::promise<bool> ok;
+            ok.set_value(true);
+            promises.push_front(std::move(ok));
+            return;
+        }
+
+        icError("No %s handler for resource %s", opType, resourceId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = device.GetDeviceId();
+    hctx.endpointId = endpointId ? endpointId : "";
+
+    // Invoke the handler under the JS mutex
+    std::optional<ParsedResult> result;
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
+
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
+
+        SbmdHandlerInvoker::AddSupplements(ctx,
+                                           args,
+                                           handler->supplements,
+                                           MakeAttrFetcher(device),
+                                           MakeResFetcher(device.GetDeviceId()),
+                                           MakePersistFetcher(device.GetDeviceId()),
+                                           MakeTransientFetcher(device.GetDeviceId()));
+
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
+    }
+
+    if (!result.has_value())
+    {
+        icError("%s handler for resource %s returned no result", opType, resourceId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Execute non-terminal ops
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(hctx.deviceUuid));
+
+    // Handle the terminal
+    ExecuteTerminal(promises,
+                    device,
+                    result->terminal,
+                    hctx,
+                    resource->uri,
+                    readValue,
+                    executeResponse,
+                    exchangeMgr,
+                    sessionHandle);
+}
+
+void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
+                                                  MatterDevice &device,
+                                                  const ResultTerminal &terminal,
+                                                  const HandlerContext &hctx,
+                                                  const char *uri,
+                                                  char **readValue,
+                                                  char **executeResponse,
+                                                  chip::Messaging::ExchangeManager &exchangeMgr,
+                                                  const chip::SessionHandle &sessionHandle)
+{
+    if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
+    {
+        const auto &success = std::get<ResultTerminal::Success>(terminal.data);
+
+        if (!success.value.empty())
+        {
+            if (executeResponse != nullptr)
+            {
+                *executeResponse = strdup(success.value.c_str());
+            }
+            else if (readValue != nullptr)
+            {
+                *readValue = strdup(success.value.c_str());
+            }
+        }
+
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::Error>(terminal.data))
+    {
+        const auto &err = std::get<ResultTerminal::Error>(terminal.data);
+        icError("Handler returned error: %s", err.message.c_str());
+        FailOperation(promises);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::SendCommand>(terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::SendCommand>(terminal.data);
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (cmd.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+        }
+        else if (!device.GetEndpointForCluster(cmd.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x", cmd.clusterId);
+            FailOperation(promises);
+            return;
+        }
+
+        // Decode base64 TLV
+        const uint8_t *tlvBuffer = nullptr;
+        size_t tlvLength = 0;
+        std::unique_ptr<uint8_t[]> decodedTlv;
+
+        if (!cmd.tlvBase64.empty())
+        {
+            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
+
+            if (decoded == UINT16_MAX)
+            {
+                icError("Failed to base64 decode TLV for sendCommand");
+                FailOperation(promises);
+                return;
+            }
+
+            tlvBuffer = decodedTlv.get();
+            tlvLength = decoded;
+        }
+
+        if (!device.SendCommandFromTlv(promises,
+                                       cmd.clusterId,
+                                       cmd.commandId,
+                                       cmd.timedInvokeTimeoutMs,
+                                       endpointId,
+                                       tlvBuffer,
+                                       tlvLength,
+                                       exchangeMgr,
+                                       sessionHandle,
+                                       uri,
+                                       executeResponse))
+        {
+            FailOperation(promises);
+            return;
+        }
+
+        // Set the response value optimistically — if the command fails,
+        // the caller ignores executeResponse.
+        if (!cmd.successValue.empty() && executeResponse != nullptr)
+        {
+            *executeResponse = strdup(cmd.successValue.c_str());
+        }
+
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::WriteAttribute>(terminal.data))
+    {
+        const auto &wa = std::get<ResultTerminal::WriteAttribute>(terminal.data);
+
+        chip::EndpointId endpointId = 0;
+
+        if (wa.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
+        }
+        else if (!device.GetEndpointForCluster(wa.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x", wa.clusterId);
+            FailOperation(promises);
+            return;
+        }
+
+        // Decode base64 TLV
+        if (wa.tlvBase64.empty())
+        {
+            icError("Empty TLV for writeAttribute");
+            FailOperation(promises);
+            return;
+        }
+
+        size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
+        auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+        uint16_t decoded =
+            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
+
+        if (decoded == UINT16_MAX)
+        {
+            icError("Failed to base64 decode TLV for writeAttribute");
+            FailOperation(promises);
+            return;
+        }
+
+        if (!device.WriteAttributeFromTlv(promises,
+                                          endpointId,
+                                          wa.clusterId,
+                                          wa.attributeId,
+                                          decodedTlv.get(),
+                                          decoded,
+                                          exchangeMgr,
+                                          sessionHandle,
+                                          uri))
+        {
+            FailOperation(promises);
+        }
+
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
+        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
+    {
+        const auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        return;
+    }
+
+    icError("Unknown terminal type");
+    FailOperation(promises);
+}
+
+// ================================================================
+// Deferred operations — requestCommand and readAttribute terminals
+// ================================================================
+
+void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::promise<bool>> &promises,
+                                                        MatterDevice &device,
+                                                        const ResultTerminal::RequestCommand &cmd,
+                                                        const HandlerContext &hctx,
+                                                        char **readValue,
+                                                        char **executeResponse,
+                                                        chip::Messaging::ExchangeManager &exchangeMgr,
+                                                        const chip::SessionHandle &sessionHandle)
+{
+    // Resolve endpoint
+    chip::EndpointId endpointId = 0;
+
+    if (cmd.endpointId.has_value())
+    {
+        endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+    }
+    else if (!device.GetEndpointForCluster(cmd.clusterId, endpointId))
+    {
+        icError("Failed to find endpoint for cluster 0x%x (requestCommand)", cmd.clusterId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Decode base64 TLV
+    const uint8_t *tlvBuffer = nullptr;
+    size_t tlvLength = 0;
+    std::unique_ptr<uint8_t[]> decodedTlv;
+
+    if (!cmd.tlvBase64.empty())
+    {
+        size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+        decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+        uint16_t decoded =
+            chip::Base64Decode(cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
+
+        if (decoded == UINT16_MAX)
+        {
+            icError("Failed to base64 decode TLV for requestCommand");
+            FailOperation(promises);
+            return;
+        }
+
+        tlvBuffer = decodedTlv.get();
+        tlvLength = decoded;
+    }
+
+    // Create parking promise
+    promises.emplace_front();
+    auto &parkingPromise = promises.front();
+
+    // Register pending operation
+    uint64_t pendingId = nextPendingId++;
+    PendingOperation pending;
+    pending.id = pendingId;
+    pending.parkingPromise = &parkingPromise;
+    pending.clusterId = cmd.clusterId;
+    pending.responseCommandId = cmd.responseCommandId;
+    pending.handlerContext = hctx;
+    pending.device = &device;
+    pending.exchangeMgr = &exchangeMgr;
+    pending.sessionHandle = &sessionHandle;
+    pending.readValue = readValue;
+    pending.executeResponse = executeResponse;
+
+    // Set overall deadline: per-operation timeoutMs > driver defaultTimeoutMs > system default
+    uint32_t overallMs = PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS;
+
+    if (cmd.timeoutMs.has_value())
+    {
+        overallMs = cmd.timeoutMs.value();
+    }
+    else if (driver && driver->GetRegistration().matter.defaultTimeoutMs.has_value())
+    {
+        overallMs = driver->GetRegistration().matter.defaultTimeoutMs.value();
+    }
+
+    pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
+    pending.deferralDepth = 0;
+
+    // GC-root the deferred handlers so they survive until we need them
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (!JS_IsUndefined(cmd.onResponse))
+        {
+            JS_AddGCRef(ctx, &pending.onResponseRef);
+            pending.onResponseRef.val = cmd.onResponse;
+
+            pending.onResponseRooted = true;
+        }
+
+        if (!JS_IsUndefined(cmd.onError))
+        {
+            JS_AddGCRef(ctx, &pending.onErrorRef);
+            pending.onErrorRef.val = cmd.onError;
+
+            pending.onErrorRooted = true;
+        }
+
+        if (!JS_IsUndefined(cmd.context))
+        {
+            JS_AddGCRef(ctx, &pending.contextRef);
+            pending.contextRef.val = cmd.context;
+
+            pending.contextRooted = true;
+        }
+    }
+
+    pendingOperations.emplace(pendingId, std::move(pending));
+
+    // Send the command with deferred callbacks
+    bool sent = device.SendCommandWithCallbacks(
+        cmd.clusterId,
+        cmd.commandId,
+        cmd.timedInvokeTimeoutMs,
+        endpointId,
+        tlvBuffer,
+        tlvLength,
+        exchangeMgr,
+        sessionHandle,
+        [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
+            HandleDeferredCommandResponse(pendingId, path, data);
+        },
+        [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
+
+    if (!sent)
+    {
+        icError("Failed to send deferred command");
+        CompletePendingOperation(pendingId, false);
+    }
+}
+
+void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::promise<bool>> &promises,
+                                                       MatterDevice &device,
+                                                       const ResultTerminal::ReadAttribute &ra,
+                                                       const HandlerContext &hctx,
+                                                       char **readValue,
+                                                       char **executeResponse,
+                                                       chip::Messaging::ExchangeManager &exchangeMgr,
+                                                       const chip::SessionHandle &sessionHandle)
+{
+    // Resolve endpoint
+    chip::EndpointId endpointId = 0;
+
+    if (ra.endpointId.has_value())
+    {
+        endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
+    }
+    else if (!device.GetEndpointForCluster(ra.clusterId, endpointId))
+    {
+        icError("Failed to find endpoint for cluster 0x%x (readAttribute)", ra.clusterId);
+        FailOperation(promises);
+        return;
+    }
+
+    // Read from cache
+    chip::TLV::TLVReader reader;
+    CHIP_ERROR err = device.GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
+
+    std::optional<ParsedResult> result;
+
+    if (err != CHIP_NO_ERROR)
+    {
+        icWarn(
+            "Cache miss for cluster 0x%x attr 0x%x (readAttribute): %s", ra.clusterId, ra.attributeId, err.AsString());
+
+        // Call onError handler
+        if (!JS_IsUndefined(ra.onError))
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
+        }
+
+        if (!result.has_value())
+        {
+            FailOperation(promises);
+            return;
+        }
+    }
+    else
+    {
+        // Encode cached TLV as base64
+        uint8_t tlvBuf[256];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        {
+            icError("Failed to copy cached attribute TLV for readAttribute");
+            FailOperation(promises);
+            return;
+        }
+
+        uint32_t tlvLen = writer.GetLengthWritten();
+        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+        std::string tlvBase64(maxBase64Len, '\0');
+        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+        tlvBase64.resize(encoded);
+
+        // Call onResponse handler
+        if (!JS_IsUndefined(ra.onResponse))
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
+        }
+
+        if (!result.has_value())
+        {
+            icError("readAttribute onResponse handler returned no result");
+            FailOperation(promises);
+            return;
+        }
+    }
+
+    // Execute the response handler's non-terminal ops
+    SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(hctx.deviceUuid));
+
+    // Execute the terminal — may recurse into another deferred terminal
+    ExecuteTerminal(promises,
+                    device,
+                    result->terminal,
+                    hctx,
+                    "(deferred-readAttribute)",
+                    readValue,
+                    executeResponse,
+                    exchangeMgr,
+                    sessionHandle);
+}
+
+void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
+                                                                const chip::app::ConcreteCommandPath &path,
+                                                                chip::TLV::TLVReader *data)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        icWarn("Received deferred response for unknown pending operation %" PRIu64, pendingId);
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    // Check overall deadline
+    if (std::chrono::steady_clock::now() > pending.overallDeadline)
+    {
+        icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
+
+        // Call onError with timeout
+        std::optional<ParsedResult> errorResult;
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onErrorRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                          pending.handlerContext,
+                                                                          "timeout",
+                                                                          "Overall operation deadline exceeded",
+                                                                          -1,
+                                                                          pending.contextRooted ? pending.contextRef.val
+                                                                                                : JS_UNDEFINED);
+                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+            }
+        }
+
+        if (errorResult.has_value())
+        {
+            SbmdHandlerInvoker::ExecuteOps(
+                pending.handlerContext, errorResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
+        }
+
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Encode response data as base64
+    std::string tlvBase64;
+
+    if (data != nullptr)
+    {
+        uint8_t tlvBuf[1024];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), *data) == CHIP_NO_ERROR)
+        {
+            uint32_t tlvLen = writer.GetLengthWritten();
+            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+            tlvBase64.resize(maxBase64Len, '\0');
+            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+            tlvBase64.resize(encoded);
+        }
+    }
+
+    // Invoke the onResponse handler
+    std::optional<ParsedResult> result;
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (pending.onResponseRooted)
+        {
+            JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(ctx,
+                                                                        pending.handlerContext,
+                                                                        path.mClusterId,
+                                                                        path.mCommandId,
+                                                                        tlvBase64,
+                                                                        pending.contextRooted ? pending.contextRef.val
+                                                                                              : JS_UNDEFINED);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+        }
+    }
+
+    if (!result.has_value())
+    {
+        icError("Deferred onResponse handler returned no result for operation %" PRIu64, pendingId);
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Execute non-terminal ops
+    SbmdHandlerInvoker::ExecuteOps(
+        pending.handlerContext, result->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
+
+    // Continue the chain
+    ContinueDeferredChain(pending, *result);
+}
+
+void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId, CHIP_ERROR error)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        icWarn("Received deferred error for unknown pending operation %" PRIu64, pendingId);
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    icError("Deferred command failed for operation %" PRIu64 ": %s", pendingId, error.AsString());
+
+    // Call onError handler
+    std::optional<ParsedResult> errorResult;
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        if (pending.onErrorRooted)
+        {
+            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                      pending.handlerContext,
+                                                                      "commandFailed",
+                                                                      error.AsString(),
+                                                                      static_cast<int32_t>(error.AsInteger()),
+                                                                      pending.contextRooted ? pending.contextRef.val
+                                                                                            : JS_UNDEFINED);
+            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+        }
+    }
+
+    if (errorResult.has_value())
+    {
+        SbmdHandlerInvoker::ExecuteOps(
+            pending.handlerContext, errorResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
+
+        // Check if onError returned a recovery terminal
+        if (!std::holds_alternative<ResultTerminal::Error>(errorResult->terminal.data))
+        {
+            ContinueDeferredChain(pending, *errorResult);
+            return;
+        }
+    }
+
+    CompletePendingOperation(pendingId, false);
+}
+
+void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pending, const ParsedResult &result)
+{
+    uint64_t pendingId = pending.id;
+
+    // Check deferral depth
+    if (pending.deferralDepth >= PendingOperation::MAX_DEFERRAL_DEPTH)
+    {
+        icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
+                pendingId,
+                PendingOperation::MAX_DEFERRAL_DEPTH);
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    // Handle the terminal
+    if (std::holds_alternative<ResultTerminal::Success>(result.terminal.data))
+    {
+        const auto &success = std::get<ResultTerminal::Success>(result.terminal.data);
+
+        if (!success.value.empty())
+        {
+            if (pending.executeResponse != nullptr)
+            {
+                *pending.executeResponse = strdup(success.value.c_str());
+            }
+            else if (pending.readValue != nullptr)
+            {
+                *pending.readValue = strdup(success.value.c_str());
+            }
+        }
+
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::Error>(result.terminal.data))
+    {
+        const auto &err = std::get<ResultTerminal::Error>(result.terminal.data);
+        icError("Deferred handler returned error: %s", err.message.c_str());
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::SendCommand>(result.terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::SendCommand>(result.terminal.data);
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (cmd.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x in deferred chain", cmd.clusterId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Decode base64 TLV
+        const uint8_t *tlvBuffer = nullptr;
+        size_t tlvLength = 0;
+        std::unique_ptr<uint8_t[]> decodedTlv;
+
+        if (!cmd.tlvBase64.empty())
+        {
+            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
+
+            if (decoded == UINT16_MAX)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            tlvBuffer = decodedTlv.get();
+            tlvLength = decoded;
+        }
+
+        // Send the command — this resolves immediately via OnDone
+        std::forward_list<std::promise<bool>> tempPromises;
+
+        if (!pending.device->SendCommandFromTlv(tempPromises,
+                                                cmd.clusterId,
+                                                cmd.commandId,
+                                                cmd.timedInvokeTimeoutMs,
+                                                endpointId,
+                                                tlvBuffer,
+                                                tlvLength,
+                                                *pending.exchangeMgr,
+                                                *pending.sessionHandle,
+                                                nullptr,
+                                                pending.executeResponse))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Set the response value optimistically
+        if (!cmd.successValue.empty() && pending.executeResponse != nullptr)
+        {
+            *pending.executeResponse = strdup(cmd.successValue.c_str());
+        }
+
+        // The command was sent. Completion comes via the command's own promise.
+        // The parking promise remains pending until that resolves.
+        // For sendCommand in a chain, we complete the parking promise when the
+        // command completes, which happens via OnDone → promise.set_value(true).
+        // We need to wait for that promise and then complete ours.
+        // Actually, the tempPromises will be resolved when the command completes.
+        // We'll complete the parking promise as success since the command was accepted.
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::WriteAttribute>(result.terminal.data))
+    {
+        const auto &wa = std::get<ResultTerminal::WriteAttribute>(result.terminal.data);
+
+        chip::EndpointId endpointId = 0;
+
+        if (wa.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(wa.clusterId, endpointId))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        if (wa.tlvBase64.empty())
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
+        auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+        uint16_t decoded =
+            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
+
+        if (decoded == UINT16_MAX)
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        std::forward_list<std::promise<bool>> tempPromises;
+
+        if (!pending.device->WriteAttributeFromTlv(tempPromises,
+                                                   endpointId,
+                                                   wa.clusterId,
+                                                   wa.attributeId,
+                                                   decodedTlv.get(),
+                                                   decoded,
+                                                   *pending.exchangeMgr,
+                                                   *pending.sessionHandle,
+                                                   nullptr))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        CompletePendingOperation(pendingId, true);
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::RequestCommand>(result.terminal.data))
+    {
+        const auto &cmd = std::get<ResultTerminal::RequestCommand>(result.terminal.data);
+
+        // Re-arm: release old GC roots, root new handlers
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = false;
+            }
+
+            if (pending.onErrorRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = false;
+            }
+
+            if (!JS_IsUndefined(cmd.onResponse))
+            {
+                JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRef.val = cmd.onResponse;
+
+                pending.onResponseRooted = true;
+            }
+
+            if (!JS_IsUndefined(cmd.onError))
+            {
+                JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRef.val = cmd.onError;
+
+                pending.onErrorRooted = true;
+            }
+        }
+
+        pending.clusterId = cmd.clusterId;
+        pending.responseCommandId = cmd.responseCommandId;
+        pending.deferralDepth++;
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (cmd.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        {
+            icError("Failed to find endpoint for cluster 0x%x in deferred re-arm", cmd.clusterId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Decode base64 TLV
+        const uint8_t *tlvBuffer = nullptr;
+        size_t tlvLength = 0;
+        std::unique_ptr<uint8_t[]> decodedTlv;
+
+        if (!cmd.tlvBase64.empty())
+        {
+            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
+            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
+            uint16_t decoded = chip::Base64Decode(
+                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
+
+            if (decoded == UINT16_MAX)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            tlvBuffer = decodedTlv.get();
+            tlvLength = decoded;
+        }
+
+        // Send next command with deferred callbacks
+        bool sent = pending.device->SendCommandWithCallbacks(
+            cmd.clusterId,
+            cmd.commandId,
+            cmd.timedInvokeTimeoutMs,
+            endpointId,
+            tlvBuffer,
+            tlvLength,
+            *pending.exchangeMgr,
+            *pending.sessionHandle,
+            [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
+                HandleDeferredCommandResponse(pendingId, path, data);
+            },
+            [this, pendingId](CHIP_ERROR error) { HandleDeferredCommandError(pendingId, error); });
+
+        if (!sent)
+        {
+            icError("Failed to send re-armed deferred command");
+            CompletePendingOperation(pendingId, false);
+        }
+
+        return;
+    }
+
+    if (std::holds_alternative<ResultTerminal::ReadAttribute>(result.terminal.data))
+    {
+        const auto &ra = std::get<ResultTerminal::ReadAttribute>(result.terminal.data);
+
+        // Release old GC roots and root new handlers
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRooted = false;
+            }
+
+            if (pending.onErrorRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRooted = false;
+            }
+
+            if (!JS_IsUndefined(ra.onResponse))
+            {
+                JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRef.val = ra.onResponse;
+
+                pending.onResponseRooted = true;
+            }
+
+            if (!JS_IsUndefined(ra.onError))
+            {
+                JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRef.val = ra.onError;
+
+                pending.onErrorRooted = true;
+            }
+        }
+
+        pending.deferralDepth++;
+
+        // Resolve endpoint
+        chip::EndpointId endpointId = 0;
+
+        if (ra.endpointId.has_value())
+        {
+            endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
+        }
+        else if (!pending.device->GetEndpointForCluster(ra.clusterId, endpointId))
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        // Read from cache
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR err = pending.device->GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
+
+        std::optional<ParsedResult> nextResult;
+
+        if (err != CHIP_NO_ERROR)
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onErrorRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                          pending.handlerContext,
+                                                                          "readFailed",
+                                                                          "Attribute not in cache",
+                                                                          -1,
+                                                                          pending.contextRooted ? pending.contextRef.val
+                                                                                                : JS_UNDEFINED);
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+            }
+        }
+        else
+        {
+            uint8_t tlvBuf[256];
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuf, sizeof(tlvBuf));
+
+            if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+            {
+                CompletePendingOperation(pendingId, false);
+                return;
+            }
+
+            uint32_t tlvLen = writer.GetLengthWritten();
+            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+            std::string tlvBase64(maxBase64Len, '\0');
+            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+            tlvBase64.resize(encoded);
+
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            if (pending.onResponseRooted)
+            {
+                JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                    ctx,
+                    pending.handlerContext,
+                    ra.clusterId,
+                    ra.attributeId,
+                    tlvBase64,
+                    pending.contextRooted ? pending.contextRef.val : JS_UNDEFINED);
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+            }
+        }
+
+        if (!nextResult.has_value())
+        {
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
+        SbmdHandlerInvoker::ExecuteOps(
+            pending.handlerContext, nextResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
+        ContinueDeferredChain(pending, *nextResult);
+        return;
+    }
+
+    icError("Unknown terminal type in deferred chain");
+    CompletePendingOperation(pendingId, false);
+}
+
+void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, bool success)
+{
+    auto it = pendingOperations.find(pendingId);
+
+    if (it == pendingOperations.end())
+    {
+        return;
+    }
+
+    PendingOperation &pending = it->second;
+
+    // Resolve the parking promise
+    if (pending.parkingPromise != nullptr)
+    {
+        try
+        {
+            pending.parkingPromise->set_value(success);
+        }
+        catch (const std::future_error &e)
+        {
+            icDebug("Parking promise already satisfied for operation %" PRIu64, pendingId);
+        }
+    }
+
+    // Release GC roots
+    ReleasePendingGcRoots(pending);
+
+    pendingOperations.erase(it);
+}
+
+void SpecBasedMatterDeviceDriver::ReleasePendingGcRoots(PendingOperation &pending)
+{
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    if (pending.onResponseRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.onResponseRef);
+        pending.onResponseRooted = false;
+    }
+
+    if (pending.onErrorRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.onErrorRef);
+        pending.onErrorRooted = false;
+    }
+
+    if (pending.contextRooted)
+    {
+        JS_DeleteGCRef(ctx, &pending.contextRef);
+        pending.contextRooted = false;
+    }
+}
+
+AttributeSupplementFetcher SpecBasedMatterDeviceDriver::MakeAttrFetcher(MatterDevice &device) const
+{
+    return [this, &device](const std::string &aliasName) -> std::optional<std::string> {
+        const auto &aliases = driver->GetRegistration().aliases;
+        auto it = aliases.find(aliasName);
+
+        if (it == aliases.end() || !it->second.attributeId.has_value())
+        {
+            icWarn("supplement alias '%s' not found or not an attribute", aliasName.c_str());
+            return std::nullopt;
+        }
+
+        const auto &alias = it->second;
+        chip::EndpointId endpointId = 0;
+
+        if (!device.GetEndpointForCluster(alias.clusterId, endpointId))
+        {
+            icWarn("no endpoint for cluster 0x%x (supplement '%s')", alias.clusterId, aliasName.c_str());
+            return std::nullopt;
+        }
+
+        chip::TLV::TLVReader reader;
+        CHIP_ERROR err = device.GetCachedAttributeData(endpointId, alias.clusterId, alias.attributeId.value(), reader);
+
+        if (err != CHIP_NO_ERROR)
+        {
+            icDebug("cache miss for supplement '%s' (cluster 0x%x attr 0x%x)",
+                    aliasName.c_str(),
+                    alias.clusterId,
+                    alias.attributeId.value());
+            return std::nullopt;
+        }
+
+        uint8_t tlvBuf[256];
+        chip::TLV::TLVWriter writer;
+        writer.Init(tlvBuf, sizeof(tlvBuf));
+
+        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        {
+            icWarn("failed to copy TLV for supplement '%s'", aliasName.c_str());
+            return std::nullopt;
+        }
+
+        uint32_t tlvLen = writer.GetLengthWritten();
+        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+        std::string tlvBase64(maxBase64Len, '\0');
+        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+        tlvBase64.resize(encoded);
+
+        return tlvBase64;
+    };
+}
+
+ResourceSupplementFetcher SpecBasedMatterDeviceDriver::MakeResFetcher(const std::string &deviceUuid) const
+{
+    return [deviceUuid](const std::string &path) -> std::optional<std::string> {
+        // Parse path: "endpointId/resourceId" or just "resourceId"
+        const char *epId = nullptr;
+        std::string resourceId;
+        auto slashPos = path.find('/');
+
+        if (slashPos != std::string::npos)
+        {
+            std::string endpointPart = path.substr(0, slashPos);
+            resourceId = path.substr(slashPos + 1);
+            // deviceServiceGetResourceById expects NULL for device-level
+            icDeviceResource *res =
+                deviceServiceGetResourceById(deviceUuid.c_str(), endpointPart.c_str(), resourceId.c_str());
+
+            if (res != nullptr && res->value != nullptr)
+            {
+                std::string val(res->value);
+                return val;
+            }
+
+            return std::nullopt;
+        }
+        else
+        {
+            resourceId = path;
+            icDeviceResource *res = deviceServiceGetResourceById(deviceUuid.c_str(), nullptr, resourceId.c_str());
+
+            if (res != nullptr && res->value != nullptr)
+            {
+                std::string val(res->value);
+                return val;
+            }
+
+            return std::nullopt;
+        }
+    };
+}
+
+PersistentDataFetcher SpecBasedMatterDeviceDriver::MakePersistFetcher(const std::string &deviceUuid) const
+{
+    return [deviceUuid](const std::string &key) -> std::optional<std::string> {
+        std::string uri = "/devices/" + deviceUuid + "/metadata/sbmd." + key;
+        char *value = nullptr;
+
+        if (deviceServiceGetMetadata(uri.c_str(), &value) && value != nullptr)
+        {
+            std::string result(value);
+            free(value);
+
+            return result;
+        }
+
+        return std::nullopt;
+    };
+}
+
+TransientDataFetcher SpecBasedMatterDeviceDriver::MakeTransientFetcher(const std::string &deviceUuid)
+{
+    return [this, deviceUuid](const std::string &key) -> std::optional<std::string> {
+        return GetTransientData(deviceUuid, key);
+    };
+}
+
+void SpecBasedMatterDeviceDriver::SetTransientData(const std::string &deviceUuid,
+                                                   const std::string &key,
+                                                   const std::string &value,
+                                                   uint32_t ttlSecs)
+{
+    auto expiry = std::chrono::steady_clock::now() + std::chrono::seconds(ttlSecs);
+    transientStore[deviceUuid][key] = TransientEntry {value, expiry};
+}
+
+std::optional<std::string> SpecBasedMatterDeviceDriver::GetTransientData(const std::string &deviceUuid,
+                                                                         const std::string &key)
+{
+    auto deviceIt = transientStore.find(deviceUuid);
+
+    if (deviceIt == transientStore.end())
+    {
+        return std::nullopt;
+    }
+
+    auto &deviceMap = deviceIt->second;
+    auto it = deviceMap.find(key);
+
+    if (it == deviceMap.end())
+    {
+        return std::nullopt;
+    }
+
+    if (std::chrono::steady_clock::now() >= it->second.expiry)
+    {
+        deviceMap.erase(it);
+
+        return std::nullopt;
+    }
+
+    return it->second.value;
+}
+
+TransientDataSetter SpecBasedMatterDeviceDriver::MakeTransientSetter(const std::string &deviceUuid)
+{
+    return [this, deviceUuid](const std::string &key, const std::string &value, uint32_t ttlSecs) {
+        SetTransientData(deviceUuid, key, value, ttlSecs);
+    };
+}
+
+void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &deviceId,
+                                                        chip::EndpointId endpointId,
+                                                        chip::ClusterId clusterId,
+                                                        chip::AttributeId attributeId,
+                                                        chip::TLV::TLVReader &reader)
+{
+    if (!driver || !driver->IsActivated())
+    {
+        return;
+    }
+
+    // Look up matching handlers in the attribute dispatch table
+    auto matches = driver->GetAttributeDispatch().Lookup(clusterId, attributeId);
+
+    if (matches.empty())
+    {
+        return;
+    }
+
+    // Encode TLV element as base64 for passing to JS handlers.
+    // The reader from ClusterStateCache::Get() is positioned at the attribute value
+    // element but GetRemainingLength() may be 0 for in-memory cache data.
+    // Use TLVWriter::CopyElement to extract the element into a scratch buffer.
+    uint8_t tlvBuf[256]; // Attributes rarely exceed this; grow if needed
+    chip::TLV::TLVWriter writer;
+    writer.Init(tlvBuf, sizeof(tlvBuf));
+
+    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    {
+        icWarn("Failed to copy TLV element for cluster 0x%x attribute 0x%x", clusterId, attributeId);
+        return;
+    }
+
+    uint32_t tlvLen = writer.GetLengthWritten();
+
+    if (tlvLen == 0)
+    {
+        icDebug("Empty TLV data for attribute 0x%x", attributeId);
+        return;
+    }
+
+    // Base64 encode the TLV data
+    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+    std::string tlvBase64(maxBase64Len, '\0');
+    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+    tlvBase64.resize(encoded);
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = std::to_string(endpointId);
+    // TODO: populate clusterFeatureMaps from MatterDevice
+
+    auto matterDevice = GetDevice(deviceId);
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        {
+            continue;
+        }
+
+        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
+        }
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
+
+        if (!result.has_value())
+        {
+            icWarn("Attribute handler '%s' returned no result for cluster 0x%x attr 0x%x",
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   attributeId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        // For attribute handlers, we typically expect a success terminal.
+        // Error terminals are logged but don't abort other handler processing.
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("Attribute handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
+        }
+    }
+}
+
+void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
+                                              chip::EndpointId endpointId,
+                                              chip::ClusterId clusterId,
+                                              chip::EventId eventId,
+                                              chip::TLV::TLVReader &reader)
+{
+    if (!driver || !driver->IsActivated())
+    {
+        return;
+    }
+
+    // Look up matching handlers in the event dispatch table
+    auto matches = driver->GetEventDispatch().Lookup(clusterId, eventId);
+
+    if (matches.empty())
+    {
+        return;
+    }
+
+    // Encode TLV element as base64 for passing to JS handlers
+    uint8_t tlvBuf[1024]; // Events may contain structured data; use larger buffer
+    chip::TLV::TLVWriter writer;
+    writer.Init(tlvBuf, sizeof(tlvBuf));
+
+    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    {
+        icWarn("Failed to copy TLV element for cluster 0x%x event 0x%x", clusterId, eventId);
+        return;
+    }
+
+    uint32_t tlvLen = writer.GetLengthWritten();
+
+    if (tlvLen == 0)
+    {
+        icDebug("Empty TLV data for event 0x%x", eventId);
+        return;
+    }
+
+    // Base64 encode the TLV data
+    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+    std::string tlvBase64(maxBase64Len, '\0');
+    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
+    tlvBase64.resize(encoded);
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = std::to_string(endpointId);
+
+    auto matterDevice = GetDevice(deviceId);
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        {
+            continue;
+        }
+
+        JSValue args = SbmdHandlerInvoker::BuildEventArgs(ctx, hctx, clusterId, eventId, tlvBase64);
+
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
+        }
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
+
+        if (!result.has_value())
+        {
+            icWarn("Event handler '%s' returned no result for cluster 0x%x event 0x%x",
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   eventId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("Event handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
+        }
+    }
+}
+
+void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
+                                                chip::EndpointId endpointId,
+                                                chip::ClusterId clusterId,
+                                                uint32_t commandId,
+                                                const std::string &tlvBase64)
+{
+    if (!driver || !driver->IsActivated())
+    {
+        return;
+    }
+
+    // Look up matching handlers in the command dispatch table
+    auto matches = driver->GetCommandDispatch().Lookup(clusterId, commandId);
+
+    if (matches.empty())
+    {
+        return;
+    }
+
+    // Build handler context
+    HandlerContext hctx;
+    hctx.deviceUuid = deviceId;
+    hctx.endpointId = std::to_string(endpointId);
+
+    auto matterDevice = GetDevice(deviceId);
+
+    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+    auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        {
+            continue;
+        }
+
+        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
+
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
+
+        if (matterDevice)
+        {
+            SbmdHandlerInvoker::AddSupplements(ctx,
+                                               args,
+                                               entry->handler->supplements,
+                                               MakeAttrFetcher(*matterDevice),
+                                               MakeResFetcher(deviceId),
+                                               MakePersistFetcher(deviceId),
+                                               MakeTransientFetcher(deviceId));
+        }
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
+
+        if (!result.has_value())
+        {
+            icWarn("Command handler '%s' returned no result for cluster 0x%x command 0x%x",
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   commandId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("Command handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
+        }
+    }
 }

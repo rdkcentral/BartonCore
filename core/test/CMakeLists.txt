@@ -157,30 +157,10 @@ if (BCORE_MATTER)
     include(BCoreAddCppTest)
     include(BCoreConfigureGLib)
 
-    bcore_add_cmocka_test(
-        NAME sbmdParserTest
-        INCLUDES ${PRIVATE_API_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/..
-        TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/sbmdParserTest.cpp
-        LINK_LIBRARIES BartonCoreStatic yaml-cpp
-    )
-
-    if (TARGET sbmdParserTest)
-        target_compile_definitions(sbmdParserTest PRIVATE -DSBMD_SPEC_DIR="${CMAKE_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/specs/")
-    endif()
 
     bcore_add_cpp_test(
         NAME testMatterDeviceEndpointMap
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/MatterDeviceEndpointMapTest.cpp
-        LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
-        INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${PROJECT_SOURCE_DIR}/api/c/public
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
-                 ${PROJECT_SOURCE_DIR}/core
-    )
-
-    bcore_add_cpp_test(
-        NAME testMatterDevice
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/MatterDeviceTest.cpp
         LIBS BartonCoreStatic ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
                  ${PROJECT_SOURCE_DIR}/api/c/public
@@ -198,54 +178,128 @@ if (BCORE_MATTER)
                  ${PROJECT_SOURCE_DIR}/core
     )
 
-    # Select engine-specific sources and libraries for the SbmdScript test
-    if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
-        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdScriptImpl.cpp
+    bcore_add_cpp_test(
+        NAME testResultBuilder
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ResultBuilderTest.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdUtilsLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
-        )
-        set(SBMD_SCRIPT_TEST_ENGINE_LIBS mquickjs)
-    elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
-        set(SBMD_SCRIPT_TEST_ENGINE_SOURCES
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdScriptImpl.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/QuickJsRuntime.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/quickjs/SbmdUtilsLoader.cpp
-        )
-        set(SBMD_SCRIPT_TEST_ENGINE_LIBS quickjs)
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testResultBuilder)
+        target_link_libraries(testResultBuilder bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testSbmdScript
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdScriptTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
-                ${SBMD_SCRIPT_TEST_ENGINE_SOURCES}
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock ${SBMD_SCRIPT_TEST_ENGINE_LIBS} jsoncpp BartonCommon::xhLog
+        NAME testSbmdLoader
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdLoaderTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core
-                 ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd
     )
 
-    if (TARGET testSbmdScript)
-        target_link_libraries(testSbmdScript bCoreConfig)
-        # Use a short timeout for tests so they don't wait 5 seconds.
-        # The -U removes the definition from bCoreConfig before -D redefines it.
-        target_compile_options(testSbmdScript PRIVATE
-            -UBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS
-            -DBARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS=100)
+    if (TARGET testSbmdLoader)
+        target_link_libraries(testSbmdLoader bCoreConfig)
     endif()
 
     bcore_add_cpp_test(
-        NAME testScriptResult
-        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/ScriptResultTest.cpp
-                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/ScriptResult.cpp
-        LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} gmock jsoncpp BartonCommon::xhLog
+        NAME testSbmdResultExecutor
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdResultExecutorTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
         INCLUDES ${BARTON_PRIVATE_INCLUDES}
-                 ${CMAKE_BINARY_DIR}/matter-install/include/matter
                  ${PROJECT_SOURCE_DIR}/core
     )
+
+    if (TARGET testSbmdResultExecutor)
+        target_link_libraries(testSbmdResultExecutor bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdDriver
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDriverTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdDriver)
+        target_link_libraries(testSbmdDriver bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdDispatch
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdDispatchTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog cjson
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdDispatch)
+        target_link_libraries(testSbmdDispatch bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdHandlerInvoker
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdHandlerInvokerTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdHandlerInvoker.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog cjson
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdHandlerInvoker)
+        target_link_libraries(testSbmdHandlerInvoker bCoreConfig)
+    endif()
+
+    bcore_add_cpp_test(
+        NAME testSbmdFactory
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SbmdFactoryTest.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDriver.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/SbmdDispatch.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdResultExecutor.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsRuntime.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/SbmdBundleLoader.cpp
+                ${PROJECT_SOURCE_DIR}/core/deviceDrivers/matter/sbmd/mquickjs/MQuickJsStdlib.c
+        LIBS mquickjs gmock BartonCommon::xhLog
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+                 ${PROJECT_SOURCE_DIR}/core
+    )
+
+    if (TARGET testSbmdFactory)
+        target_link_libraries(testSbmdFactory bCoreConfig)
+    endif()
 
     if (BUILD_TESTING)
         bcore_configure_glib()

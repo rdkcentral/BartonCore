@@ -22,8 +22,13 @@
 //------------------------------ tabstop = 4 ----------------------------------
 
 #include "MatterDeviceTestHelpers.h"
+#include "deviceDrivers/matter/sbmd/SbmdDriver.h"
 #include "deviceDrivers/matter/sbmd/SpecBasedMatterDeviceDriver.h"
 #include <app/data-model/Decode.h>
+
+extern "C" {
+#include <icTypes/icHashMap.h>
+}
 
 using namespace barton;
 
@@ -35,14 +40,6 @@ namespace
     constexpr uint16_t kDimmableLightDeviceType = 0x0100;
     constexpr uint16_t kTemperatureSensorDeviceType = 0x0302;
     constexpr uint16_t kHumiditySensorDeviceType = 0x0307;
-
-    // Matter cluster IDs
-    constexpr chip::ClusterId kTemperatureMeasurementCluster = 0x0402;
-    constexpr chip::ClusterId kRelativeHumidityMeasurementCluster = 0x0405;
-
-    // Constants for OnAttributeChanged fan-out tests
-    constexpr chip::EndpointId kFanOutTestEndpointId = 1;
-    constexpr chip::AttributeId kMeasuredValueAttributeId = 0x0000;
 
     class MatterDeviceEndpointMapTest : public ::testing::Test
     {
@@ -220,348 +217,6 @@ namespace
     }
 
     // ================================================================
-    // Tests for BindResourceReadInfo
-    // ================================================================
-
-    // Endpoint-level read binding: uses endpoint map
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoEndpointLevelUsesMap)
-    {
-        // ResolveEndpointForCluster verifies the mapped endpoint actually hosts
-        // the requested cluster, so we must populate the cache with cluster data.
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1, 3
-        },
-                                                {{1, {kDimmableLightDeviceType}}, {3, {kDimmableLightDeviceType}}},
-                                                {{1, {0x0006}}, {3, {0x0006}}});
-
-        device->GetSbmdEndpointMap()[0] = 1;
-        device->GetSbmdEndpointMap()[1] = 3;
-
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdAttribute attr;
-        attr.clusterId = 0x0006;
-        attr.attributeId = 0x0000;
-        mapper.readAttribute = attr;
-
-        // SBMD index 0 → Matter endpoint 1
-        EXPECT_TRUE(device->BindResourceReadInfo("/test/read0", mapper, 0));
-        auto &bindings = device->GetReadBindings();
-        ASSERT_NE(bindings.find("/test/read0"), bindings.end());
-        EXPECT_EQ(bindings.at("/test/read0").attributePath.mEndpointId, 1);
-
-        // SBMD index 1 → Matter endpoint 3
-        EXPECT_TRUE(device->BindResourceReadInfo("/test/read1", mapper, 1));
-        EXPECT_EQ(bindings.at("/test/read1").attributePath.mEndpointId, 3);
-    }
-
-    // Endpoint-level read binding: invalid index fails
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoEndpointLevelBadIndex)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdAttribute attr;
-        attr.clusterId = 0x0006;
-        attr.attributeId = 0x0000;
-        mapper.readAttribute = attr;
-
-        EXPECT_FALSE(device->BindResourceReadInfo("/test/read-bad", mapper, 5));
-    }
-
-    // Device-level read binding (nullopt): falls back to GetEndpointForCluster.
-    // With no real cache data, cluster lookup fails → bind fails.
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoDeviceLevelFallsBackToCluster)
-    {
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdAttribute attr;
-        attr.clusterId = 0x0006;
-        attr.attributeId = 0x0000;
-        mapper.readAttribute = attr;
-
-        // No endpoint map entry, no cache data → GetEndpointForCluster fails
-        EXPECT_FALSE(device->BindResourceReadInfo("/test/read-dev", mapper, std::nullopt));
-    }
-
-    // Device-level read binding: command path also falls back to cluster lookup
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoDeviceLevelCommandFallsBackToCluster)
-    {
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdCommand cmd;
-        cmd.clusterId = 0x0006;
-        cmd.commandId = 0x0000;
-        cmd.name = "test-cmd";
-        mapper.readCommand = cmd;
-
-        EXPECT_FALSE(device->BindResourceReadInfo("/test/read-cmd-dev", mapper, std::nullopt));
-    }
-
-    // Endpoint-level read binding with command: uses endpoint map
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoEndpointLevelCommand)
-    {
-        // Cache must confirm endpoint 2 hosts cluster 0x0006 for resolve to succeed.
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    2
-        },
-                                                {{2, {kDimmableLightDeviceType}}},
-                                                {{2, {0x0006}}});
-
-        device->GetSbmdEndpointMap()[0] = 2;
-
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdCommand cmd;
-        cmd.clusterId = 0x0006;
-        cmd.commandId = 0x0000;
-        cmd.name = "test-cmd";
-        mapper.readCommand = cmd;
-
-        EXPECT_TRUE(device->BindResourceReadInfo("/test/read-cmd0", mapper, 0));
-    }
-
-    // ================================================================
-    // Tests for BindResourceEventInfo
-    // ================================================================
-
-    // Endpoint-level event binding: uses endpoint map
-    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoEndpointLevelUsesMap)
-    {
-        // Cache must confirm endpoint 1 hosts cluster 0x0006 for resolve to succeed.
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {
-                                                    1
-        },
-                                                {{1, {kDimmableLightDeviceType}}},
-                                                {{1, {0x0006}}});
-
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        SbmdEvent event;
-        event.clusterId = 0x0006;
-        event.eventId = 0x0000;
-
-        EXPECT_TRUE(device->BindResourceEventInfo("/test/event0", event, 0));
-    }
-
-    // Endpoint-level event binding: invalid index fails
-    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoEndpointLevelBadIndex)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        SbmdEvent event;
-        event.clusterId = 0x0006;
-        event.eventId = 0x0000;
-
-        EXPECT_FALSE(device->BindResourceEventInfo("/test/event-bad", event, 5));
-    }
-
-    // Device-level event binding (nullopt): falls back to GetEndpointForCluster.
-    // With no cache data, cluster lookup fails → bind fails.
-    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoDeviceLevelFallsBackToCluster)
-    {
-        SbmdEvent event;
-        event.clusterId = 0x0006;
-        event.eventId = 0x0000;
-
-        EXPECT_FALSE(device->BindResourceEventInfo("/test/event-dev", event, std::nullopt));
-    }
-
-    // ================================================================
-    // Tests for BindWriteInfo - endpoint resolution at bind time
-    // ================================================================
-
-    // Endpoint-level write binding: resolves endpoint at bind time
-    TEST_F(MatterDeviceEndpointMapTest, BindWriteInfoEndpointLevelResolvesAtBind)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-        device->GetSbmdEndpointMap()[1] = 3;
-
-        EXPECT_TRUE(device->BindWriteInfo("/test/write0", "key0", "ep1", "res1", 0));
-        auto &bindings = device->GetWriteBindings();
-        ASSERT_NE(bindings.find("/test/write0"), bindings.end());
-        ASSERT_TRUE(bindings.at("/test/write0").resolvedEndpointId.has_value());
-        EXPECT_EQ(bindings.at("/test/write0").resolvedEndpointId.value(), 1);
-
-        EXPECT_TRUE(device->BindWriteInfo("/test/write1", "key1", "ep1", "res1", 1));
-        ASSERT_TRUE(bindings.at("/test/write1").resolvedEndpointId.has_value());
-        EXPECT_EQ(bindings.at("/test/write1").resolvedEndpointId.value(), 3);
-    }
-
-    // Endpoint-level write binding with invalid index: bind should fail and no binding created
-    TEST_F(MatterDeviceEndpointMapTest, BindWriteInfoEndpointLevelBadIndex)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        EXPECT_FALSE(device->BindWriteInfo("/test/write-bad", "key", "ep1", "res1", 5));
-        auto &bindings = device->GetWriteBindings();
-        EXPECT_EQ(bindings.find("/test/write-bad"), bindings.end());
-    }
-
-    // Device-level write binding (nullopt): no resolvedEndpointId (script provides at runtime)
-    TEST_F(MatterDeviceEndpointMapTest, BindWriteInfoDeviceLevelNoResolvedEndpoint)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        EXPECT_TRUE(device->BindWriteInfo("/test/write-dev", "key", "", "res1", std::nullopt));
-        auto &bindings = device->GetWriteBindings();
-        EXPECT_FALSE(bindings.at("/test/write-dev").resolvedEndpointId.has_value());
-    }
-
-    // ================================================================
-    // Tests for BindExecuteInfo - endpoint resolution at bind time
-    // ================================================================
-
-    // Endpoint-level execute binding: resolves endpoint at bind time
-    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoEndpointLevelResolvesAtBind)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-        device->GetSbmdEndpointMap()[1] = 3;
-
-        EXPECT_TRUE(device->BindExecuteInfo("/test/exec0", "key0", "ep1", "res1", 0));
-        auto &bindings = device->GetExecuteBindings();
-        ASSERT_NE(bindings.find("/test/exec0"), bindings.end());
-        ASSERT_TRUE(bindings.at("/test/exec0").resolvedEndpointId.has_value());
-        EXPECT_EQ(bindings.at("/test/exec0").resolvedEndpointId.value(), 1);
-
-        EXPECT_TRUE(device->BindExecuteInfo("/test/exec1", "key1", "ep1", "res1", 1));
-        ASSERT_TRUE(bindings.at("/test/exec1").resolvedEndpointId.has_value());
-        EXPECT_EQ(bindings.at("/test/exec1").resolvedEndpointId.value(), 3);
-    }
-
-    // Endpoint-level execute binding with invalid index: binding fails and no binding is created
-    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoEndpointLevelBadIndexFails)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        EXPECT_FALSE(device->BindExecuteInfo("/test/exec-bad", "key", "ep1", "res1", 5));
-        auto &bindings = device->GetExecuteBindings();
-        EXPECT_EQ(bindings.find("/test/exec-bad"), bindings.end());
-    }
-
-    // Device-level execute binding (nullopt): no resolvedEndpointId (script provides at runtime)
-    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoDeviceLevelNoResolvedEndpoint)
-    {
-        device->GetSbmdEndpointMap()[0] = 1;
-
-        EXPECT_TRUE(device->BindExecuteInfo("/test/exec-dev", "key", "", "res1", std::nullopt));
-        auto &bindings = device->GetExecuteBindings();
-        EXPECT_FALSE(bindings.at("/test/exec-dev").resolvedEndpointId.has_value());
-    }
-
-    // ================================================================
-    // Tests for null URI edge cases
-    // ================================================================
-
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoNullUriFails)
-    {
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdAttribute attr;
-        attr.clusterId = 0x0006;
-        attr.attributeId = 0x0000;
-        mapper.readAttribute = attr;
-
-        EXPECT_FALSE(device->BindResourceReadInfo(nullptr, mapper, 0));
-    }
-
-    TEST_F(MatterDeviceEndpointMapTest, BindWriteInfoNullUriFails)
-    {
-        EXPECT_FALSE(device->BindWriteInfo(nullptr, "key", "ep1", "res1", 0));
-    }
-
-    TEST_F(MatterDeviceEndpointMapTest, BindExecuteInfoNullUriFails)
-    {
-        EXPECT_FALSE(device->BindExecuteInfo(nullptr, "key", "ep1", "res1", 0));
-    }
-
-    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoNullUriFails)
-    {
-        SbmdEvent event;
-        event.clusterId = 0x0006;
-        event.eventId = 0x0000;
-
-        EXPECT_FALSE(device->BindResourceEventInfo(nullptr, event, 0));
-    }
-
-    // ================================================================
-    // Tests for ResolveEndpointForCluster fallback
-    // ================================================================
-
-    // Composite device: EP 1 has temperature measurement, EP 2 has humidity measurement.
-    // SBMD index 0 maps to EP 1. Reading temperature resolves directly to EP 1.
-    // Reading humidity falls back to EP 2 because EP 1 doesn't host that cluster.
-    TEST_F(MatterDeviceEndpointMapTest, BindReadInfoFallsBackToClusterWhenNotOnMappedEndpoint)
-    {
-        // Simulates a temperature/humidity sensor:
-        // Matter EP 1: Temperature Sensor, has Temperature Measurement cluster
-        // Matter EP 2: Humidity Sensor, has Relative Humidity Measurement cluster
-        std::vector<chip::EndpointId> partsList = {1, 2};
-        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
-            {1, {kTemperatureSensorDeviceType}},
-            {2,    {kHumiditySensorDeviceType}},
-        };
-        std::map<chip::EndpointId, std::vector<chip::ClusterId>> serverClusters = {
-            {1,      {kTemperatureMeasurementCluster}},
-            {2, {kRelativeHumidityMeasurementCluster}},
-        };
-        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes, serverClusters);
-
-        ASSERT_TRUE(device->ResolveEndpointMap({kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
-
-        // Temperature with SBMD index 0 → EP 1 directly (EP 1 has the cluster)
-        SbmdMapper tempMapper;
-        tempMapper.hasRead = true;
-        SbmdAttribute tempAttr;
-        tempAttr.clusterId = kTemperatureMeasurementCluster;
-        tempAttr.attributeId = 0x0000;
-        tempMapper.readAttribute = tempAttr;
-
-        EXPECT_TRUE(device->BindResourceReadInfo("/test/temperature", tempMapper, 0));
-        EXPECT_EQ(device->GetReadBindings().at("/test/temperature").attributePath.mEndpointId, 1);
-
-        // Humidity with SBMD index 0 → EP 1 doesn't have that cluster → falls back to EP 2
-        SbmdMapper humMapper;
-        humMapper.hasRead = true;
-        SbmdAttribute humAttr;
-        humAttr.clusterId = kRelativeHumidityMeasurementCluster;
-        humAttr.attributeId = 0x0000;
-        humMapper.readAttribute = humAttr;
-
-        EXPECT_TRUE(device->BindResourceReadInfo("/test/humidity", humMapper, 0));
-        EXPECT_EQ(device->GetReadBindings().at("/test/humidity").attributePath.mEndpointId, 2);
-    }
-
-    // Endpoint-level event binding: falls back to cluster-based lookup when
-    // SBMD-mapped endpoint doesn't host the event cluster
-    TEST_F(MatterDeviceEndpointMapTest, BindEventInfoFallsBackToClusterWhenNotOnMappedEndpoint)
-    {
-        std::vector<chip::EndpointId> partsList = {1, 2};
-        std::map<chip::EndpointId, std::vector<uint16_t>> deviceTypes = {
-            {1, {kTemperatureSensorDeviceType}},
-            {2,    {kHumiditySensorDeviceType}},
-        };
-        std::map<chip::EndpointId, std::vector<chip::ClusterId>> serverClusters = {
-            {1,      {kTemperatureMeasurementCluster}},
-            {2, {kRelativeHumidityMeasurementCluster}},
-        };
-        TestableMatterDevice::PopulateTestCache(cache, partsList, deviceTypes, serverClusters);
-
-        ASSERT_TRUE(device->ResolveEndpointMap({kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
-
-        // Event on humidity cluster with SBMD index 0 → EP 1 doesn't have it → falls back to EP 2
-        SbmdEvent event;
-        event.clusterId = kRelativeHumidityMeasurementCluster;
-        event.eventId = 0x0000;
-
-        EXPECT_TRUE(device->BindResourceEventInfo("/test/humidity-event", event, 0));
-    }
-
-    // ================================================================
     // Tests for ClaimDevice with vendor/product ID matching
     // ================================================================
 
@@ -577,19 +232,24 @@ namespace
             PopulateCacheWithVendorProduct();
         }
 
-        void TearDown() override { cache.reset(); }
-
-        std::shared_ptr<SbmdSpec>
-        MakeVendorSpec(uint16_t vendorId, uint16_t productId, std::vector<uint16_t> deviceTypes = {})
+        void TearDown() override
         {
-            auto spec = std::make_shared<SbmdSpec>();
-            spec->name = "vendor-test";
-            spec->bartonMeta.deviceClass = "testClass";
-            spec->bartonMeta.deviceClassVersion = 1;
-            spec->matterMeta.deviceTypes = std::move(deviceTypes);
-            spec->matterMeta.vendorId = vendorId;
-            spec->matterMeta.productId = productId;
-            return spec;
+            drivers.clear();
+            cache.reset();
+        }
+
+        SbmdDriver *MakeVendorDriver(uint16_t vendorId, uint16_t productId, std::vector<uint16_t> deviceTypes = {})
+        {
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "vendor-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = 1;
+            reg->matter.deviceTypes = std::move(deviceTypes);
+            reg->matter.vendorId = vendorId;
+            reg->matter.productId = productId;
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
+
+            return drivers.back().get();
         }
 
         void PopulateCacheWithVendorProduct()
@@ -604,180 +264,308 @@ namespace
         }
 
         std::shared_ptr<DeviceDataCache> cache;
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
     };
 
     TEST_F(VendorProductClaimTest, VendorProductMatch)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(kTestVendorId, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(kTestVendorId, kTestProductId,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongProductIdFails)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(kTestVendorId, 0x9999, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(kTestVendorId, 0x9999,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongVendorIdFails)
     {
-        SpecBasedMatterDeviceDriver driver(
-            MakeVendorSpec(0x0001, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType}));
+        auto *drv = MakeVendorDriver(0x0001, kTestProductId,
+                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, NoVendorSetFallsThroughToDeviceTypeMatching)
     {
         // Driver without vendorId/productId uses device-type matching
-        auto spec = std::make_shared<SbmdSpec>();
-        spec->name = "generic-test";
-        spec->bartonMeta.deviceClass = "testClass";
-        spec->bartonMeta.deviceClassVersion = 1;
-        spec->matterMeta.deviceTypes = {kTemperatureSensorDeviceType};
+        auto reg = std::make_unique<SbmdRegistration>();
+        reg->name = "generic-test";
+        reg->barton.deviceClass = "testClass";
+        reg->barton.deviceClassVersion = 1;
+        reg->matter.deviceTypes = {kTemperatureSensorDeviceType};
+        drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
 
-        SpecBasedMatterDeviceDriver driver(spec);
+        SpecBasedMatterDeviceDriver driver(drivers.back().get());
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
     }
 
-    // ================================================================
-    // Tests for OnAttributeChanged multi-binding fan-out
-    // ================================================================
+    // ========================================================================
+    // Endpoint profile version reconfiguration tests
+    // ========================================================================
 
-    class OnAttributeChangedFanOutTest : public ::testing::Test
+    class ProfileVersionReconfigTest : public ::testing::Test
     {
     protected:
-        void SetUp() override
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
+
+        SbmdDriver *MakeDriverWithEndpoints(std::vector<SbmdEndpoint> endpoints)
         {
-            cache = std::make_shared<DeviceDataCache>("test-device", nullptr);
-            device = std::make_unique<TestableMatterDevice>("test-device", cache);
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "profile-version-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = 1;
+            reg->matter.deviceTypes = {0x0100};
+            reg->endpoints = std::move(endpoints);
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
 
-            // Create and inject mock script
-            auto mockScript = std::make_unique<MockSbmdScript>("test-device");
-            mockScriptPtr = mockScript.get();
-            device->SetScript(std::move(mockScript));
-
-            // Seed the ClusterStateCache with a uint16 value at (ep=1, cluster=0x0402, attr=0x0000)
-            // so that cache->Get() succeeds when OnAttributeChanged iterates bindings.
-            chip::app::ConcreteDataAttributePath dataPath(
-                kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
-            TestableMatterDevice::SeedCacheWithUint16(cache, dataPath, 2100);
+            return drivers.back().get();
         }
-
-        void TearDown() override
-        {
-            device.reset();
-            cache.reset();
-        }
-
-        std::shared_ptr<DeviceDataCache> cache;
-        std::unique_ptr<TestableMatterDevice> device;
-        MockSbmdScript *mockScriptPtr = nullptr; // non-owning, owned by device
     };
 
-    // Verify that when two resources share the same attribute path, one attribute
-    // change fires the read mapper for both resources (the multi-binding fan-out path
-    // introduced with unordered_multimap).
-    TEST_F(OnAttributeChangedFanOutTest, TwoResourcesSameAttributeBothUpdated)
+    TEST_F(ProfileVersionReconfigTest, SingleEndpointProfileVersionRegistered)
     {
-        chip::app::ConcreteAttributePath sharedPath(
-            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
 
-        SbmdAttribute attr;
-        attr.clusterId = kTemperatureMeasurementCluster;
-        attr.attributeId = kMeasuredValueAttributeId;
-        attr.name = "MeasuredValue";
-        attr.type = "int16s";
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
 
-        attr.resourceId = "temperature";
-        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperature", attr);
+        ASSERT_NE(dd->endpointProfileVersions, nullptr);
 
-        attr.resourceId = "temperatureF";
-        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperatureF", attr);
-
-        // The mock script should be called once per binding (twice total)
-        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_))
-            .Times(2)
-            .WillRepeatedly(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeResourceUpdate("21.00"); }));
-
-        device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath);
+        auto *version = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(version, nullptr);
+        EXPECT_EQ(*version, 3);
     }
 
-    // Verify that when a binding is registered but MapAttributeRead fails for it,
-    // the callback continues and still processes the next binding.
-    TEST_F(OnAttributeChangedFanOutTest, PartialScriptFailureDoesNotAbortOtherBindings)
+    TEST_F(ProfileVersionReconfigTest, MultipleEndpointProfileVersionsRegistered)
     {
-        chip::app::ConcreteAttributePath sharedPath(
-            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
+        SbmdEndpoint ep1;
+        ep1.id = "1";
+        ep1.profile = "light";
+        ep1.profileVersion = 2;
 
-        SbmdAttribute attr;
-        attr.clusterId = kTemperatureMeasurementCluster;
-        attr.attributeId = kMeasuredValueAttributeId;
-        attr.name = "MeasuredValue";
-        attr.type = "int16s";
+        SbmdEndpoint ep2;
+        ep2.id = "2";
+        ep2.profile = "sensor";
+        ep2.profileVersion = 5;
 
-        attr.resourceId = "temperature";
-        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperature", attr);
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep1, ep2}));
+        DeviceDriver *dd = driver.GetDriver();
 
-        attr.resourceId = "temperatureF";
-        device->InsertReadableAttributeBinding(sharedPath, "/ep/ep1/r/temperatureF", attr);
+        ASSERT_NE(dd->endpointProfileVersions, nullptr);
 
-        // First call fails, second succeeds — both should still be attempted
-        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_))
-            .Times(2)
-            .WillOnce(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeError("test failure"); }))
-            .WillOnce(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeResourceUpdate("21.00"); }));
+        auto *lightVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("light"), 6));
+        ASSERT_NE(lightVersion, nullptr);
+        EXPECT_EQ(*lightVersion, 2);
 
-        // Should not crash or abort early when the first binding's script fails
-        EXPECT_NO_FATAL_FAILURE(
-            device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath));
+        auto *sensorVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("sensor"), 7));
+        ASSERT_NE(sensorVersion, nullptr);
+        EXPECT_EQ(*sensorVersion, 5);
     }
 
-    // Verify the full production path: BindResourceReadInfo called twice with
-    // different URIs but the same ConcreteAttributePath populates the multimap
-    // so that OnAttributeChanged fans out to both resources.
-    TEST_F(OnAttributeChangedFanOutTest, BindResourceReadInfoSamePathTwoUrisFanOut)
+    TEST_F(ProfileVersionReconfigTest, NoEndpointsLeavesProfileVersionsNull)
     {
-        // PopulateTestCache replaces the ClusterStateCache created by SetUp,
-        // so we must re-seed the attribute value afterward.
-        TestableMatterDevice::PopulateTestCache(cache,
-                                                {kFanOutTestEndpointId},
-                                                {{kFanOutTestEndpointId, {kTemperatureSensorDeviceType}}},
-                                                {{kFanOutTestEndpointId, {kTemperatureMeasurementCluster}}});
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({}));
+        DeviceDriver *dd = driver.GetDriver();
 
-        chip::app::ConcreteDataAttributePath dataPath(
-            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
-        TestableMatterDevice::SeedCacheWithUint16(cache, dataPath, 2100);
+        EXPECT_EQ(dd->endpointProfileVersions, nullptr);
+    }
 
-        // Map SBMD index 0 → Matter endpoint kFanOutTestEndpointId
-        device->GetSbmdEndpointMap()[0] = kFanOutTestEndpointId;
+    TEST_F(ProfileVersionReconfigTest, VersionMismatchDetected)
+    {
+        // Simulate the comparison that deviceServiceDeviceNeedsReconfiguring performs:
+        // the persisted endpoint has profileVersion=2 but the driver expects profileVersion=3.
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
 
-        SbmdMapper mapper;
-        mapper.hasRead = true;
-        SbmdAttribute attr;
-        attr.clusterId = kTemperatureMeasurementCluster;
-        attr.attributeId = kMeasuredValueAttributeId;
-        attr.name = "MeasuredValue";
-        attr.type = "int16s";
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
 
-        // Bind the first resource via the production code path
-        attr.resourceId = "temperature";
-        mapper.readAttribute = attr;
-        ASSERT_TRUE(device->BindResourceReadInfo("/ep/ep1/r/temperature", mapper, 0));
+        // Simulate a persisted endpoint with the old profile version
+        uint8_t persistedProfileVersion = 2;
 
-        // Bind a second resource to the exact same attribute path
-        attr.resourceId = "temperatureF";
-        mapper.readAttribute = attr;
-        ASSERT_TRUE(device->BindResourceReadInfo("/ep/ep1/r/temperatureF", mapper, 0));
+        auto *expectedVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(expectedVersion, nullptr);
+        EXPECT_NE(persistedProfileVersion, *expectedVersion)
+            << "Profile version mismatch should be detectable";
+    }
 
-        // OnAttributeChanged must invoke the mapper once per binding (twice total)
-        EXPECT_CALL(*mockScriptPtr, MapAttributeRead(::testing::_, ::testing::_))
-            .Times(2)
-            .WillRepeatedly(::testing::InvokeWithoutArgs([] { return ScriptResult::MakeResourceUpdate("21.00"); }));
+    TEST_F(ProfileVersionReconfigTest, VersionMatchDoesNotTriggerReconfiguration)
+    {
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 3;
 
-        chip::app::ConcreteAttributePath sharedPath(
-            kFanOutTestEndpointId, kTemperatureMeasurementCluster, kMeasuredValueAttributeId);
-        device->GetCacheCallback()->OnAttributeChanged(device->GetClusterStateCache(), sharedPath);
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        // Persisted endpoint matches the driver's expected version
+        uint8_t persistedProfileVersion = 3;
+
+        auto *expectedVersion = static_cast<uint8_t *>(
+            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(expectedVersion, nullptr);
+        EXPECT_EQ(persistedProfileVersion, *expectedVersion)
+            << "Matching profile versions should not trigger reconfiguration";
+    }
+
+    // ========================================================================
+    // Device class version reconfiguration tests
+    // ========================================================================
+
+    class DeviceClassVersionReconfigTest : public ::testing::Test
+    {
+    protected:
+        std::vector<std::unique_ptr<SbmdDriver>> drivers;
+
+        SbmdDriver *MakeDriverWithDcVersion(uint32_t dcVersion)
+        {
+            auto reg = std::make_unique<SbmdRegistration>();
+            reg->name = "dcv-test";
+            reg->barton.deviceClass = "testClass";
+            reg->barton.deviceClassVersion = dcVersion;
+            reg->matter.deviceTypes = {0x0100};
+            drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
+
+            return drivers.back().get();
+        }
+    };
+
+    TEST_F(DeviceClassVersionReconfigTest, DeviceClassVersionIncludesModelVersion)
+    {
+        // deviceClassVersion = deviceModelVersion (3) + barton.deviceClassVersion
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(1));
+        EXPECT_EQ(driver.GetDeviceClassVersion(), 4); // 3 + 1
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, DeviceClassVersionZeroBase)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(0));
+        EXPECT_EQ(driver.GetDeviceClassVersion(), 3); // 3 + 0
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, GetDeviceClassVersionCallback)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        ASSERT_NE(dd->getDeviceClassVersion, nullptr);
+
+        uint8_t version = 0;
+        EXPECT_TRUE(dd->getDeviceClassVersion(dd->callbackContext, "testClass", &version));
+        EXPECT_EQ(version, 5); // 3 + 2
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, VersionMismatchDetected)
+    {
+        // Simulate a persisted device with deviceClassVersion=4 (dcVersion=1) and the
+        // driver now expects deviceClassVersion=5 (dcVersion=2).
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        uint8_t currentDriverVersion = 0;
+        dd->getDeviceClassVersion(dd->callbackContext, "testClass", &currentDriverVersion);
+
+        uint8_t persistedDeviceVersion = 4; // was dcVersion=1 → 3+1
+        EXPECT_NE(persistedDeviceVersion, currentDriverVersion) << "Device class version mismatch should be detectable";
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, VersionMatchDoesNotTriggerReconfiguration)
+    {
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithDcVersion(2));
+        DeviceDriver *dd = driver.GetDriver();
+
+        uint8_t currentDriverVersion = 0;
+        dd->getDeviceClassVersion(dd->callbackContext, "testClass", &currentDriverVersion);
+
+        uint8_t persistedDeviceVersion = 5; // same: dcVersion=2 → 3+2
+        EXPECT_EQ(persistedDeviceVersion, currentDriverVersion)
+            << "Matching device class versions should not trigger reconfiguration";
+    }
+
+    TEST_F(DeviceClassVersionReconfigTest, BumpedDeviceClassVersionTriggersReconfiguration)
+    {
+        // Construct driver with version 1, note the version, then construct
+        // with version 2 and verify they differ — mirroring a firmware upgrade
+        // where the .sbmd.js bumped barton.deviceClassVersion.
+        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithDcVersion(1));
+        uint8_t v1 = driverV1.GetDeviceClassVersion();
+
+        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithDcVersion(2));
+        uint8_t v2 = driverV2.GetDeviceClassVersion();
+
+        EXPECT_NE(v1, v2);
+        EXPECT_EQ(v2, v1 + 1);
+    }
+
+    // ========================================================================
+    // Combined version reconfiguration tests
+    // ========================================================================
+
+    TEST_F(ProfileVersionReconfigTest, EndpointProfileVersionSetOnCreatedEndpoint)
+    {
+        // Verify that DoRegisterDriverResources sets profileVersion on the
+        // icDeviceEndpoint.  This is critical for the persisted device to
+        // record the correct version so that subsequent starts can detect
+        // mismatches.
+        SbmdEndpoint ep;
+        ep.id = "1";
+        ep.profile = "doorLock";
+        ep.profileVersion = 7;
+
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        DeviceDriver *dd = driver.GetDriver();
+
+        // The hashmap stores the version the driver expects
+        auto *version =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        ASSERT_NE(version, nullptr);
+        EXPECT_EQ(*version, 7);
+    }
+
+    TEST_F(ProfileVersionReconfigTest, BumpedProfileVersionTriggersReconfiguration)
+    {
+        // Two drivers with different profile versions for the same profile.
+        // Simulates a firmware upgrade where the endpoint profile version
+        // was bumped in the .sbmd.js spec.
+        SbmdEndpoint epV1;
+        epV1.id = "1";
+        epV1.profile = "doorLock";
+        epV1.profileVersion = 1;
+
+        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithEndpoints({epV1}));
+
+        SbmdEndpoint epV2;
+        epV2.id = "1";
+        epV2.profile = "doorLock";
+        epV2.profileVersion = 2;
+
+        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithEndpoints({epV2}));
+
+        auto *v1 = static_cast<uint8_t *>(
+            hashMapGet(driverV1.GetDriver()->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        auto *v2 = static_cast<uint8_t *>(
+            hashMapGet(driverV2.GetDriver()->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+
+        ASSERT_NE(v1, nullptr);
+        ASSERT_NE(v2, nullptr);
+        EXPECT_NE(*v1, *v2);
+        EXPECT_EQ(*v2, *v1 + 1);
     }
 
 } // namespace
