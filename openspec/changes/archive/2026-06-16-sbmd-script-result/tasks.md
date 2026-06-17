@@ -53,11 +53,11 @@
 
 ## 8. JSON schema v3.0 — JS helpers and TypeScript types
 
-- [x] 8.1 Add `SbmdUtils.Response.value(v)` helper to `sbmd-utils.js` (returns `{ value: String(v) }`)
-- [x] 8.2 Add `SbmdUtils.Response.error(msg)` helper to `sbmd-utils.js` (returns `{ error: msg }`)
+- [x] 8.1 Add `Sbmd.Response.value(v)` helper to `sbmd-utils.js` (returns `{ value: String(v) }`)
+- [x] 8.2 Add `Sbmd.Response.error(msg)` helper to `sbmd-utils.js` (returns `{ error: msg }`)
 - [x] 8.3 Update `sbmd-script.d.ts` — rename `output` to `value` in `SbmdReadResult`, `SbmdEventResult`, `SbmdCommandResponseResult`
 - [x] 8.4 Add `SbmdErrorResult` interface to `sbmd-script.d.ts` (`{ error: string }`)
-- [x] 8.5 Update JSDoc examples in `sbmd-script.d.ts` to use `SbmdUtils.Response.value()` for read/event results
+- [x] 8.5 Update JSDoc examples in `sbmd-script.d.ts` to use `Sbmd.Response.value()` for read/event results
 
 ## 9. Migrate bundled SBMD spec files to schema v3.0
 
@@ -73,4 +73,4 @@
 
 ## 11. Documentation update
 
-- [x] 11.1 Update `docs/SBMD.md` — document the v3.0 script return contract: `value`, `invoke`, `write`, `error`, and empty-object suppress; document `SbmdUtils.Response.*` helpers; note schema version history
+- [x] 11.1 Update `docs/SBMD.md` — document the v3.0 script return contract: `value`, `invoke`, `write`, `error`, and empty-object suppress; document `Sbmd.Response.*` helpers; note schema version history
