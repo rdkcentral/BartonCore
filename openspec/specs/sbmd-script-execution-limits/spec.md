@@ -1,44 +1,28 @@
-### Requirement: Script execution timeout
-The mquickjs runtime SHALL enforce a maximum execution time for SBMD mapper scripts. The timeout SHALL be implemented using the mquickjs `JS_SetInterruptHandler` mechanism. When a script exceeds the configured timeout, the interrupt handler SHALL cause the engine to throw an exception, terminating the script.
+## MODIFIED Requirements
 
-#### Scenario: Script completes within timeout
-- **WHEN** a mapper script executes and completes within the configured timeout period
-- **THEN** the script SHALL return its result normally and the interrupt handler SHALL not interfere
+### Requirement: Script timeout enforcement for handler invocations
+The mquickjs interrupt handler SHALL enforce per-invocation timeouts for v4 handler function calls, using the same `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS` configuration as v3 mapper scripts. The deadline SHALL be set before each handler call and cleared immediately after.
 
-#### Scenario: Infinite loop terminated by timeout
-- **WHEN** a mapper script contains an infinite loop (e.g., `while(true){}`)
-- **THEN** the interrupt handler SHALL terminate the script after the configured timeout and `ExecuteScript` SHALL return `false`
+#### Scenario: Handler exceeds timeout
+- **WHEN** a handler function runs longer than `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS`
+- **THEN** the mquickjs interrupt handler terminates execution and the runtime reports the operation as failed
 
-#### Scenario: Long-running computation terminated
-- **WHEN** a mapper script performs a computation that exceeds the configured timeout
-- **THEN** the interrupt handler SHALL terminate the script and the operation SHALL fail gracefully without crashing
+## ADDED Requirements
 
-#### Scenario: Timeout produces diagnostic logging
-- **WHEN** a script is terminated due to timeout
-- **THEN** the system SHALL log an error message indicating the script was interrupted due to exceeding the execution time limit
+### Requirement: Overall operation timeout for deferred chains
+The runtime SHALL enforce an overall operation deadline for resource operations that involve deferred chains. The deadline SHALL be set when the first deferral occurs (from `matter.defaultTimeoutMs` or a system default) and SHALL NOT reset on subsequent deferrals. Per-hop `timeoutMs` values SHALL be capped at the remaining overall budget.
 
-#### Scenario: Context remains usable after timeout
-- **WHEN** a script is terminated due to timeout
-- **THEN** subsequent script executions on other devices or resources SHALL succeed normally
+#### Scenario: Overall timeout prevents runaway chains
+- **WHEN** a deferred chain makes multiple successful hops but exceeds the overall deadline
+- **THEN** the next deferral attempt triggers `onError` with `type: "timeout"` without sending the command
 
-### Requirement: Script execution timeout configuration
-The script execution timeout SHALL be configurable via the `BCORE_SBMD_SCRIPT_TIMEOUT_MS` CMake integer option with a default value of 5000 (5 seconds). The value SHALL be compiled into the binary as `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS`.
+#### Scenario: Per-hop timeout capped by overall budget
+- **WHEN** a deferral specifies `timeoutMs: 30000` but only 5000ms remain in the overall budget
+- **THEN** the effective per-hop timeout is 5000ms
 
-#### Scenario: Default timeout value
-- **WHEN** `BCORE_SBMD_SCRIPT_TIMEOUT_MS` is not explicitly set
-- **THEN** the default timeout SHALL be 5000 milliseconds
+### Requirement: Maximum deferral depth
+The runtime SHALL enforce a maximum deferral depth (configurable, default 10). When exceeded, the current hop's `onError` handler SHALL be called with an error indicating the depth limit was reached.
 
-#### Scenario: Custom timeout value
-- **WHEN** `BCORE_SBMD_SCRIPT_TIMEOUT_MS=10000` is set at CMake configuration time
-- **THEN** scripts SHALL be allowed up to 10 seconds of execution time
-
-### Requirement: Interrupt handler lifecycle
-The interrupt handler SHALL be installed once during `MQuickJsRuntime::Initialize()` and remain installed for the lifetime of the context. The handler SHALL use a static deadline variable to determine whether a timeout is active. `ExecuteScript` SHALL arm the deadline via `SetDeadline()` before `JS_Call` and disarm it via `ClearDeadline()` after. When no deadline is active (cleared), the handler SHALL return 0 (do not interrupt).
-
-#### Scenario: Handler installed at initialization
-- **WHEN** `MQuickJsRuntime::Initialize()` is called
-- **THEN** `JS_SetInterruptHandler` SHALL be called on the shared context with the timeout handler
-
-#### Scenario: Handler inactive outside script execution
-- **WHEN** the interrupt handler is called outside of `ExecuteScript` (e.g., during `SbmdBundleLoader::LoadBundle`)
-- **THEN** the handler SHALL return 0, allowing execution to continue uninterrupted
+#### Scenario: Depth limit exceeded
+- **WHEN** a deferred chain reaches the maximum deferral depth
+- **THEN** the `onError` handler is called with a message indicating deferral depth exceeded and the parked operation completes with failure
