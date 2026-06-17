@@ -555,6 +555,11 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
 
     JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
 
+    // GC-root args across AddSupplements (which allocates) and InvokeHandler
+    JSGCRef argsRef {};
+    argsRef.val = args;
+    JS_AddGCRef(ctx, &argsRef);
+
     if (device != nullptr)
     {
         SbmdHandlerInvoker::AddSupplements(ctx,
@@ -567,6 +572,8 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     }
 
     auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
+
+    JS_DeleteGCRef(ctx, &argsRef);
 
     if (!result.has_value())
     {
@@ -761,6 +768,11 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
         JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
 
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         SbmdHandlerInvoker::AddSupplements(ctx,
                                            args,
                                            handler->supplements,
@@ -770,6 +782,8 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                                            MakeTransientFetcher(device.GetDeviceId()));
 
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
     }
 
     if (!result.has_value())
@@ -2037,6 +2051,11 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
 
         JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
 
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         if (matterDevice)
         {
             SbmdHandlerInvoker::AddSupplements(ctx,
@@ -2049,6 +2068,8 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         }
 
         auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
 
         if (!result.has_value())
         {
@@ -2135,6 +2156,11 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
 
         JSValue args = SbmdHandlerInvoker::BuildEventArgs(ctx, hctx, clusterId, eventId, tlvBase64);
 
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         if (matterDevice)
         {
             SbmdHandlerInvoker::AddSupplements(ctx,
@@ -2147,6 +2173,8 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
         }
 
         auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
 
         if (!result.has_value())
         {
@@ -2206,6 +2234,11 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
 
         JSValue args = SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
 
+        // GC-root args across AddSupplements (which allocates) and InvokeHandler
+        JSGCRef argsRef {};
+        argsRef.val = args;
+        JS_AddGCRef(ctx, &argsRef);
+
         if (matterDevice)
         {
             SbmdHandlerInvoker::AddSupplements(ctx,
@@ -2218,6 +2251,8 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
         }
 
         auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+
+        JS_DeleteGCRef(ctx, &argsRef);
 
         if (!result.has_value())
         {
