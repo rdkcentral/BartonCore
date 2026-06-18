@@ -64,21 +64,22 @@ namespace barton
         // GC-root args during construction: subsequent allocations (JS_NewString,
         // JS_NewObject) may trigger mquickjs GC which would sweep the unrooted args.
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         JS_SetPropertyStr(ctx, args, "deviceUuid", JS_NewString(ctx, hctx.deviceUuid.c_str()));
         JS_SetPropertyStr(ctx, args, "endpointId", JS_NewString(ctx, hctx.endpointId.c_str()));
 
-        // Build clusterFeatureMaps object
+        // Build clusterFeatureMaps object — attach to args BEFORE populating
+        // so that featureMaps is reachable from the GC-rooted args during the loop.
         JSValue featureMaps = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
 
         for (const auto &[clusterId, featureMap] : hctx.clusterFeatureMaps)
         {
             JS_SetPropertyStr(ctx, featureMaps, std::to_string(clusterId).c_str(), JS_NewUint32(ctx, featureMap));
         }
-
-        JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -94,11 +95,13 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
 
-        // Add trigger info
+
+        // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "attribute", trigger);
         JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
         JS_SetPropertyStr(ctx, trigger, "attributeId", JS_NewUint32(ctx, attributeId));
 
@@ -106,8 +109,6 @@ namespace barton
         {
             JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
         }
-
-        JS_SetPropertyStr(ctx, args, "attribute", trigger);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -123,11 +124,13 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
 
-        // Add trigger info
+
+        // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "event", trigger);
         JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
         JS_SetPropertyStr(ctx, trigger, "eventId", JS_NewUint32(ctx, eventId));
 
@@ -135,8 +138,6 @@ namespace barton
         {
             JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
         }
-
-        JS_SetPropertyStr(ctx, args, "event", trigger);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -152,11 +153,13 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
 
-        // Add trigger info
+
+        // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "command", trigger);
         JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
         JS_SetPropertyStr(ctx, trigger, "commandId", JS_NewUint32(ctx, commandId));
 
@@ -164,8 +167,6 @@ namespace barton
         {
             JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
         }
-
-        JS_SetPropertyStr(ctx, args, "command", trigger);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -180,11 +181,13 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
 
-        // Add resource info
+
+        // Add resource info — attach to args first so resource is reachable from GC root
         JSValue resource = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "resource", resource);
         JS_SetPropertyStr(ctx, resource, "resourceId", JS_NewString(ctx, resourceId.c_str()));
 
         if (input.has_value())
@@ -195,8 +198,6 @@ namespace barton
         {
             JS_SetPropertyStr(ctx, resource, "input", JS_NULL);
         }
-
-        JS_SetPropertyStr(ctx, args, "resource", resource);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -216,6 +217,7 @@ namespace barton
             icError("stack overflow before handler call");
             return std::nullopt;
         }
+
 
         // Stack order for JS_Call: arg, func, this
         JS_PushArg(ctx, args);
@@ -254,11 +256,16 @@ namespace barton
             return;
         }
 
+        // Attach supObj to args immediately so it is reachable from the caller's
+        // GC-rooted args.  Subsequent allocations (JS_NewObject, JS_NewString) may
+        // trigger GC; without this attachment supObj would be swept.
         JSValue supObj = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, args, "supplements", supObj);
 
         if (!supplements.attributes.empty())
         {
             JSValue attrsObj = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, supObj, "attributes", attrsObj);
 
             for (const auto &aliasName : supplements.attributes)
             {
@@ -273,13 +280,12 @@ namespace barton
                     JS_SetPropertyStr(ctx, attrsObj, aliasName.c_str(), JS_NULL);
                 }
             }
-
-            JS_SetPropertyStr(ctx, supObj, "attributes", attrsObj);
         }
 
         if (!supplements.resources.empty())
         {
             JSValue resObj = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, supObj, "resources", resObj);
 
             for (const auto &path : supplements.resources)
             {
@@ -294,13 +300,12 @@ namespace barton
                     JS_SetPropertyStr(ctx, resObj, path.c_str(), JS_NULL);
                 }
             }
-
-            JS_SetPropertyStr(ctx, supObj, "resources", resObj);
         }
 
         if (!supplements.persistentData.empty())
         {
             JSValue pdObj = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, supObj, "persistentData", pdObj);
 
             for (const auto &key : supplements.persistentData)
             {
@@ -315,13 +320,12 @@ namespace barton
                     JS_SetPropertyStr(ctx, pdObj, key.c_str(), JS_NULL);
                 }
             }
-
-            JS_SetPropertyStr(ctx, supObj, "persistentData", pdObj);
         }
 
         if (!supplements.transientData.empty())
         {
             JSValue tdObj = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, supObj, "transientData", tdObj);
 
             for (const auto &key : supplements.transientData)
             {
@@ -336,11 +340,7 @@ namespace barton
                     JS_SetPropertyStr(ctx, tdObj, key.c_str(), JS_NULL);
                 }
             }
-
-            JS_SetPropertyStr(ctx, supObj, "transientData", tdObj);
         }
-
-        JS_SetPropertyStr(ctx, args, "supplements", supObj);
     }
 
     void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx,
@@ -414,8 +414,9 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         JSValue response = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, response, "clusterId", JS_NewUint32(ctx, clusterId));
@@ -456,8 +457,9 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         JSValue attribute = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, attribute, "clusterId", JS_NewUint32(ctx, clusterId));
@@ -489,8 +491,9 @@ namespace barton
         JSValue args = BuildBaseArgs(ctx, hctx);
 
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         JSValue error = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, error, "type", JS_NewString(ctx, errorType.c_str()));

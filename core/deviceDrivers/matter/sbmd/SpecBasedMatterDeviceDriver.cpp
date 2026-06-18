@@ -557,8 +557,9 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
 
     // GC-root args across AddSupplements (which allocates) and InvokeHandler
     JSGCRef argsRef {};
-    argsRef.val = args;
     JS_AddGCRef(ctx, &argsRef);
+    argsRef.val = args;
+
 
     if (device != nullptr)
     {
@@ -770,8 +771,9 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
         // GC-root args across AddSupplements (which allocates) and InvokeHandler
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         SbmdHandlerInvoker::AddSupplements(ctx,
                                            args,
@@ -1073,22 +1075,25 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
 
         if (!JS_IsUndefined(cmd.onResponse))
         {
-            pending.onResponseRef.val = cmd.onResponse;
             JS_AddGCRef(ctx, &pending.onResponseRef);
+            pending.onResponseRef.val = cmd.onResponse;
+
             pending.onResponseRooted = true;
         }
 
         if (!JS_IsUndefined(cmd.onError))
         {
-            pending.onErrorRef.val = cmd.onError;
             JS_AddGCRef(ctx, &pending.onErrorRef);
+            pending.onErrorRef.val = cmd.onError;
+
             pending.onErrorRooted = true;
         }
 
         if (!JS_IsUndefined(cmd.context))
         {
-            pending.contextRef.val = cmd.context;
             JS_AddGCRef(ctx, &pending.contextRef);
+            pending.contextRef.val = cmd.context;
+
             pending.contextRooted = true;
         }
     }
@@ -1567,15 +1572,17 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             if (!JS_IsUndefined(cmd.onResponse))
             {
-                pending.onResponseRef.val = cmd.onResponse;
                 JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRef.val = cmd.onResponse;
+
                 pending.onResponseRooted = true;
             }
 
             if (!JS_IsUndefined(cmd.onError))
             {
-                pending.onErrorRef.val = cmd.onError;
                 JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRef.val = cmd.onError;
+
                 pending.onErrorRooted = true;
             }
         }
@@ -1667,15 +1674,17 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             if (!JS_IsUndefined(ra.onResponse))
             {
-                pending.onResponseRef.val = ra.onResponse;
                 JS_AddGCRef(ctx, &pending.onResponseRef);
+                pending.onResponseRef.val = ra.onResponse;
+
                 pending.onResponseRooted = true;
             }
 
             if (!JS_IsUndefined(ra.onError))
             {
-                pending.onErrorRef.val = ra.onError;
                 JS_AddGCRef(ctx, &pending.onErrorRef);
+                pending.onErrorRef.val = ra.onError;
+
                 pending.onErrorRooted = true;
             }
         }
@@ -2053,8 +2062,9 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
 
         // GC-root args across AddSupplements (which allocates) and InvokeHandler
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         if (matterDevice)
         {
@@ -2158,8 +2168,9 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
 
         // GC-root args across AddSupplements (which allocates) and InvokeHandler
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         if (matterDevice)
         {
@@ -2236,8 +2247,9 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
 
         // GC-root args across AddSupplements (which allocates) and InvokeHandler
         JSGCRef argsRef {};
-        argsRef.val = args;
         JS_AddGCRef(ctx, &argsRef);
+        argsRef.val = args;
+
 
         if (matterDevice)
         {

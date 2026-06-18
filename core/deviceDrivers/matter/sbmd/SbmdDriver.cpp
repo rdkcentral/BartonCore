@@ -150,8 +150,8 @@ namespace barton
         }
 
         auto &ref = gcRefs.emplace_back();
-        ref.val = handler;
         JS_AddGCRef(ctx, &ref);
+        ref.val = handler;
     }
 
     void SbmdDriver::RootHandlers(JSContext *ctx)
