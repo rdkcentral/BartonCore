@@ -81,6 +81,8 @@ extern "C" {
 #include <setup_payload/SetupPayload.h>
 #include <transport/SessionMessageDelegate.h>
 
+#include <platform/Linux/KeyValueStoreManagerImpl.h>
+
 #include <lib/support/TestGroupData.h>
 
 #include <lib/core/NodeId.h>
@@ -188,7 +190,7 @@ void EventHandler(const DeviceLayer::ChipDeviceEvent *event, intptr_t arg)
     icDebug("EventType=%" PRIx16, event->Type);
 }
 
-bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
+bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, const std::string &configDir)
 {
     icDebug();
 
@@ -204,6 +206,12 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     }
     icDebug("Local node ID: 0x%" PRIx64, myNodeId);
 
+    mkdir_p(configDir.c_str(), 0700);
+
+    // Also ensure the compile-time config directory exists. The Matter SDK's
+    // PosixConfig storage objects (chip_factory.ini, chip_config.ini,
+    // chip_counters.ini) are static globals that always use the compile-time
+    // paths and cannot be redirected at runtime.
     mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
 
     myFabricId = accountId;
@@ -215,6 +223,19 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath)
     if ((err = chip::Platform::MemoryInit()) != CHIP_NO_ERROR)
     {
         icError("MemoryInit failed: %s", err.AsString());
+        return false;
+    }
+
+    // Pre-initialize the KVS with the runtime path before InitChipStack.
+    // ChipLinuxStorage::Init() has an mInitialized guard, so the first Init() wins.
+    // This ensures PosixConfig::Init() (called by InitChipStack) will skip its
+    // compile-time CHIP_CONFIG_KVS_PATH since the KVS is already initialized.
+    std::string kvsPath = configDir + "/" + KV_STORAGE_NAMESPACE;
+    icInfo("Pre-initializing KVS at: %s", kvsPath.c_str());
+
+    if ((err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgrImpl().Init(kvsPath.c_str())) != CHIP_NO_ERROR)
+    {
+        icError("KeyValueStoreMgr pre-init failed: %s", err.AsString());
         return false;
     }
 
