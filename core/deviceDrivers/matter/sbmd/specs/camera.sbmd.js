@@ -21,6 +21,68 @@
 //
 // ------------------------------ tabstop = 4 ----------------------------------
 
+// =============================================================================
+// Camera SBMD Driver — Abstract Session Interface
+// =============================================================================
+//
+// This driver implements the abstract camera endpoint (profile: "camera") that
+// provides a protocol-agnostic session lifecycle for camera streaming. It is
+// the client-facing layer in a two-layer architecture:
+//
+//   ep/camera   (this driver)   — abstract session lifecycle
+//   ep/webrtc, ep/direct, ...   — protocol-specific signaling (separate drivers)
+//
+// Clients interact exclusively with the camera endpoint to manage sessions.
+// Protocol-specific details are handled by dedicated endpoints that the client
+// is directed to via sessionStatus event metadata.
+//
+// Session Lifecycle
+// -----------------
+// The session interface exposes four resources:
+//
+//   createSession  [execute]  — Allocates a new session and returns a sessionId.
+//   stream         [execute]  — Starts streaming for a given sessionId. Emits a
+//                               sessionStatus event with status "setup" and
+//                               metadata containing the protocol in use and the
+//                               nextAction URI on the protocol-specific endpoint.
+//   takePicture    [execute]  — Captures a snapshot (not yet implemented).
+//   destroySession [execute]  — Tears down a session and releases resources.
+//   sessionStatus  [events]   — Emits events to coordinate the multi-step flow.
+//                               Not readable — events are the source of truth.
+//
+// Client Flow
+// -----------
+//   1. Execute createSession         → receive sessionId
+//   2. Execute stream with sessionId → receive sessionStatus "setup" event
+//   3. Follow nextAction URI from metadata to the protocol-specific endpoint
+//      (e.g., /devices/<id>/ep/webrtc/r/offerSdp)
+//   4. Complete protocol-specific exchange (SDP, ICE, media URL, etc.)
+//   5. Receive sessionStatus "done" event when streaming is established
+//   6. Execute destroySession with sessionId when finished
+//
+// Session State
+// -------------
+// Sessions are stored in transient data as a JSON object keyed by sessionId.
+// Each session tracks its current state and protocol. Transient data entries
+// expire after one hour (ONE_HOUR_SECS) as a leak-prevention backstop, but
+// clients are expected to call destroySession for proper cleanup.
+//
+// The sessionStatus resource is registered with no read modes — it is
+// event-only. Multiple sessions may be active simultaneously, each correlated
+// by sessionId in the event metadata.
+//
+// Protocol Abstraction
+// --------------------
+// The camera endpoint does not know or care which streaming protocol is in use.
+// The protocol identifier (e.g., "webrtc", "direct") is stored per session and
+// included in sessionStatus metadata so clients can identify the technology.
+// Currently, this driver hardcodes PROTO_WEBRTC for Matter cameras. Other camera
+// technologies would have their own SBMD drivers that create the same abstract
+// camera endpoint with a different protocol identifier.
+//
+// See also: openspec/changes/archive/2026-05-04-camera-architecture-redesign/
+// =============================================================================
+
 SbmdDriver({
     schemaVersion: '4.0',
     driverVersion: 1,
