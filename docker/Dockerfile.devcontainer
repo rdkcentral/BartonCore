@@ -52,4 +52,4 @@ RUN ln -sf /usr/bin/python3 /usr/bin/python
 ENV ASAN_OPTIONS=verify_asan_link_order=0
 
 ENV OPENSPEC_TELEMETRY=0
-RUN npm install -g @fission-ai/openspec@v1.2.0
+RUN npm install -g @fission-ai/openspec@v1.4.1
