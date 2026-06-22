@@ -29,7 +29,9 @@
 set -e
 
 sudo service dbus start
-cmake --build $BARTON_TOP/build --target install
+JOBS=$(nproc)
+(( JOBS > 1 )) && JOBS=$((JOBS - 1))
+cmake --build $BARTON_TOP/build --parallel "$JOBS" --target install
 
 # Install matter.js virtual device dependencies
 npm --prefix $BARTON_TOP/testing/mocks/devices/matterjs ci
