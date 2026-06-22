@@ -10,7 +10,7 @@ SBMD mapper scripts return JSON objects whose structure is inconsistently define
 - **MODIFIED**: `SbmdScript` virtual interface — all mapper methods (`MapAttributeRead`, `MapWrite`, `MapExecute`, `MapEvent`, `MapCommandExecuteResponse`) return `ScriptResult` by value instead of `bool` + output parameters
 - **MODIFIED**: Engine implementations (`quickjs/SbmdScriptImpl.cpp`, `mquickjs/SbmdScriptImpl.cpp`) — all field extraction and validation logic removed; engines become thin wrappers that run the script, catch JS exceptions as error `ScriptResult`s, extract result fields from the JSValue into a `Json::Value`, and call `ScriptResult::FromJsonValue()`
 - **BREAKING**: SBMD script JSON schema revision 2.0 → 3.0: `output` key renamed to `value`; `error` string key introduced as a valid return
-- **NEW**: `SbmdUtils.Response.value(v)` and `SbmdUtils.Response.error(msg)` JavaScript helpers in `sbmd-utils.js`
+- **NEW**: `Sbmd.Response.value(v)` and `Sbmd.Response.error(msg)` JavaScript helpers in `sbmd-utils.js`
 - **MODIFIED**: All `.sbmd` spec files — `{output: ...}` → `{value: ...}`, `schemaVersion` bumped to `"3.0"`
 - **MODIFIED**: `sbmd-script.d.ts` TypeScript interface — `SbmdReadResult`, `SbmdEventResult`, `SbmdCommandResponseResult` updated to use `value`; new `SbmdErrorResult` type added
 
