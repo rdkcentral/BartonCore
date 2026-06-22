@@ -1964,7 +1964,7 @@ function handleLockEventCatchAll(args) {
 // ---------------------------------------------------------------------------
 
 function handleGetCredentialStatusResponse(args) {
-  var response = args.response.data;
+  var response = args.command.data;
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return Sbmd.result()
