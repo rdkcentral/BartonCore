@@ -29,7 +29,7 @@ The reference app (`build/reference/barton-core-reference`) is an interactive CL
 
 ### Isolation Strategy (IMPORTANT)
 
-Each session MUST use its own **unique storage directory** and **unique sample-app KVS path**. This ensures complete isolation from any other running or previously-run instances — no need to kill previous processes or clear existing state.
+Each session MUST use its own **unique storage directory** and **unique sample-app KVS path**. This isolates the main Matter KVS and BartonCore storage between sessions; the Matter SDK `chip_*.ini` files may still be shared via the compile-time config directory (see "Matter: Shared `.ini` Config Files" below).
 
 The dev build is compiled with `BCORE_MATTER_USE_RANDOM_PORT=ON`, which means the reference app's Matter controller binds to a random OS-assigned port (not a fixed port). This eliminates port conflicts between concurrent reference app instances.
 
@@ -41,9 +41,9 @@ STORAGE_DIR="/tmp/barton-ref-${SESSION}"
 SAMPLE_KVS="/tmp/chip-${SESSION}-kvs"
 ```
 
-Using a fresh `STORAGE_DIR` guarantees a clean Matter KVS (stored at `<STORAGE_DIR>/matter/`), clean general storage, and no interaction with other sessions. You do NOT need to:
+Using a fresh `STORAGE_DIR` guarantees a clean Matter KVS (stored at `<STORAGE_DIR>/matter/`) and clean general storage. You generally do NOT need to:
 - Kill previous processes
-- Remove `~/.brtn-ds/matter/` or any other directories
+- Remove `~/.brtn-ds/matter/` (except the shared `chip_*.ini` files if you hit conflicts; see below)
 - Check whether ports are free
 
 ### Launch sequence
