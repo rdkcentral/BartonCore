@@ -198,6 +198,9 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 
     CHIP_ERROR err = CHIP_NO_ERROR;
 
+    // Resolve effective config directory: use caller-supplied path, fall back to compile-time default.
+    std::string effectiveConfigDir = configDir.empty() ? CHIP_BARTON_CONF_DIR : configDir;
+
     myNodeId = LoadOrGenerateLocalNodeId();
     if (!IsOperationalNodeId(myNodeId))
     {
@@ -206,7 +209,11 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     }
     icDebug("Local node ID: 0x%" PRIx64, myNodeId);
 
-    mkdir_p(configDir.c_str(), 0700);
+    if (mkdir_p(effectiveConfigDir.c_str(), 0700) != 0)
+    {
+        icError("Failed to create config directory: %s", effectiveConfigDir.c_str());
+        return false;
+    }
 
     // Also ensure the compile-time config directory exists. The Matter SDK's
     // PosixConfig storage objects (chip_factory.ini, chip_config.ini,
@@ -230,7 +237,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     // ChipLinuxStorage::Init() has an mInitialized guard, so the first Init() wins.
     // This ensures PosixConfig::Init() (called by InitChipStack) will skip its
     // compile-time CHIP_CONFIG_KVS_PATH since the KVS is already initialized.
-    std::string kvsPath = configDir + "/" + KV_STORAGE_NAMESPACE;
+    std::string kvsPath = effectiveConfigDir + "/" + KV_STORAGE_NAMESPACE;
     icInfo("Pre-initializing KVS at: %s", kvsPath.c_str());
 
     if ((err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgrImpl().Init(kvsPath.c_str())) != CHIP_NO_ERROR)
