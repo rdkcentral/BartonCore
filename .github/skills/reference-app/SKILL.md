@@ -1,11 +1,11 @@
 ---
 name: reference-app
-description: Run and interact with the BartonCore reference application. Use when the user wants to start the reference app, commission devices, execute/read/write resources, or troubleshoot runtime issues. Covers CLI flags, interactive commands, port management, storage cleanup, and known pitfalls.
+description: Run and interact with the BartonCore reference application. Use when the user wants to start the reference app, commission devices, execute/read/write resources, or troubleshoot runtime issues. Covers CLI flags, interactive commands, isolated session management, and known pitfalls.
 license: Apache-2.0
 compatibility: Requires the BartonCore Docker development container and a completed build.
 metadata:
   author: rdkcentral
-  version: "1.0"
+  version: "2.0"
 ---
 
 # Reference App
@@ -27,16 +27,55 @@ The reference app (`build/reference/barton-core-reference`) is an interactive CL
 
 ## Starting the Reference App
 
-Always supply at minimum the storage directory and SBMD spec directory. Disable subsystems you are not using to avoid DBus/daemon dependency errors:
+### Isolation Strategy (IMPORTANT)
+
+Each session MUST use its own **unique storage directory** and **unique sample-app KVS path**. This isolates the main Matter KVS and BartonCore storage between sessions; the Matter SDK `chip_*.ini` files may still be shared via the compile-time config directory (see "Matter: Shared `.ini` Config Files" below).
+
+The dev build is compiled with `BCORE_MATTER_USE_RANDOM_PORT=ON`, which means the reference app's Matter controller binds to a random OS-assigned port (not a fixed port). This eliminates port conflicts between concurrent reference app instances.
+
+Choose a unique session name (e.g., based on the feature or test you're running) and derive all paths from it:
+
+```bash
+SESSION="my-session-name"
+STORAGE_DIR="/tmp/barton-ref-${SESSION}"
+SAMPLE_KVS="/tmp/chip-${SESSION}-kvs"
+```
+
+Using a fresh `STORAGE_DIR` guarantees a clean Matter KVS (stored at `<STORAGE_DIR>/matter/`) and clean general storage. You generally do NOT need to:
+- Kill previous processes
+- Remove `~/.brtn-ds/matter/` (except the shared `chip_*.ini` files if you hit conflicts; see below)
+- Check whether ports are free
+
+### Launch sequence
+
+**Step 1 — Start the sample app first**, with the session-specific KVS and a unique port:
+
+```bash
+<sample-app> --discriminator <disc> --KVS "$SAMPLE_KVS" --secured-device-port <unique-port>
+```
+
+Pick a `--secured-device-port` that differs from any other running sample app (e.g., 5542, 5544, 5546). Scrape the sample app's startup log for the setup code (look for `SetupQRCode` or `Manual pairing code`).
+
+**Step 2 — Start the reference app.** Always supply at minimum the storage directory and SBMD spec directory. Disable subsystems you are not using to avoid DBus/daemon dependency errors:
 
 ```bash
 cd /path/to/worktree
-build/reference/barton-core-reference -z -t -d /tmp/barton-ref-cam -b /tmp/sbmd-only-v4
+build/reference/barton-core-reference -z -t -d "$STORAGE_DIR" -b <path-to-sbmd-specs>
 ```
 
-Wait for these log lines before sending commands:
+**Step 3 — Wait** for these log lines before sending commands:
 - `Server Listening...`
 - `Subsystem manager is ready for devices`
+
+### Cleaning up a session (optional)
+
+If you want to start a session completely fresh (e.g., to re-commission a device), delete only that session's state:
+
+```bash
+rm -rf "$STORAGE_DIR" "$SAMPLE_KVS"
+```
+
+This does not affect any other sessions or the default `~/.brtn-ds/` directory.
 
 ## Interactive Commands
 
@@ -60,29 +99,29 @@ er /36c8c685ed5dcc8e/ep/camera/r/stream 1
 
 ## Known Pitfalls
 
-### Matter: TCP Port 5540 Conflict
+### Matter: Sample App Port Conflicts
 
-The reference app uses TCP port 5540 for its Matter controller. If a Matter sample app (e.g. `chip-camera-app`, `chip-lighting-app`) is also running on the default port, the reference app will fail with "Incorrect state" or "port already in use."
+If multiple sample apps are running, each must use a distinct `--secured-device-port`. If two sample apps bind the same port, the second will fail with "Address already in use."
 
-**Solution:** Start sample apps on a different port:
-
-```bash
-chip-camera-app --discriminator 3841 --KVS /tmp/chip-camera-kvs --secured-device-port 5542
-```
-
-The reference app always uses 5540 — there is no flag to change it.
+**Solution:** Assign unique ports per sample app instance (e.g., 5542, 5544, 5546).
 
 ### Matter: Stale KVS Causes Init Failures
 
-The Matter SDK persists fabric/commissioning state in `~/.brtn-ds/matter/`. If this gets corrupted or was left from a previous session, the controller factory fails to reinitialize with errors like "Device Controller Factory already initialized" or "Incorrect state."
+If you reuse a `--storage-dir` from a previous session that ended badly, the Matter controller factory may fail with "Device Controller Factory already initialized" or "Incorrect state."
 
-**Solution:** Delete stale state before a fresh start:
+**Solution:** Use a fresh storage directory, or delete the old one:
 
 ```bash
-rm -rf ~/.brtn-ds/matter/ /tmp/barton-ref-cam /tmp/chip-camera-kvs
+rm -rf "$STORAGE_DIR"
 ```
 
-Always clean all three locations (reference app storage, hidden Matter KVS, and sample app KVS) together.
+The Matter KVS lives at `<storage-dir>/matter/`, so deleting the storage directory removes it.
+
+### Matter: Shared `.ini` Config Files
+
+The Matter SDK's PosixConfig storage objects (`chip_factory.ini`, `chip_config.ini`, `chip_counters.ini`) are `static` globals that always write to the compile-time path `~/.brtn-ds/matter/`. These files are **shared** across all concurrent sessions and cannot be redirected at runtime without Matter SDK changes. The main KVS (`matterkv`) IS properly isolated per session.
+
+In practice, the `.ini` files rarely cause conflicts between concurrent sessions. If you encounter issues, stop all sessions, delete `~/.brtn-ds/matter/chip_*.ini`, and restart.
 
 ### Matter: Missing CLI Flags
 
@@ -93,38 +132,13 @@ The reference app will fail or misbehave without the proper flags:
 | `-b <sbmd-dir>` | Devices commission but are never claimed — no endpoints or resources appear |
 | `-z` (when no Zigbee daemon) | Startup hangs or errors connecting to Zigbee DBus |
 | `-t` (when no Thread daemon) | Startup hangs or errors connecting to Thread DBus |
-| `-d <dir>` | Writes to default storage which may conflict with other sessions |
+| `-d <dir>` | Writes to default `~/.brtn-ds/` which may conflict with other sessions |
 
 **Minimum viable invocation for Matter-only testing:**
 
 ```bash
-build/reference/barton-core-reference -z -t -d /tmp/barton-ref-storage -b <path-to-sbmd-specs>
+SESSION="test1"
+build/reference/barton-core-reference -z -t -d "/tmp/barton-ref-${SESSION}" -b <path-to-sbmd-specs>
 ```
 
----
 
-## Clean Start Procedure
-
-When things go wrong, use this sequence to reset completely:
-
-```bash
-# 1. Kill running processes
-pkill -9 barton-core-reference 2>/dev/null
-pkill -9 chip-camera-app 2>/dev/null  # or whatever sample app
-
-# 2. Remove all persisted state
-rm -rf /tmp/barton-ref-cam /tmp/chip-camera-kvs ~/.brtn-ds/matter/
-
-# 3. Start sample app on non-conflicting port
-chip-camera-app --discriminator 3841 --KVS /tmp/chip-camera-kvs --secured-device-port 5542
-
-# 4. Start reference app
-build/reference/barton-core-reference -z -t -d /tmp/barton-ref-cam -b core/deviceDrivers/matter/sbmd/specs
-```
-
-## Default Pairing Codes
-
-| Sample App | Discriminator | Passcode | Setup Code |
-|-----------|---------------|----------|------------|
-| chip-camera-app | 3841 | 20202021 | `MT:-24J0CEK01KA0648G00` |
-| chip-lighting-app | 3840 | 20202021 | `MT:-24J0AFN00KA0648G00` |
