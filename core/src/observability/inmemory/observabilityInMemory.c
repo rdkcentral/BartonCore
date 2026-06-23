@@ -42,9 +42,6 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 /* ------------------------------------------------------------------ */
 /* Attribute key-value pair                                           */
@@ -114,7 +111,7 @@ static bool attrSetEqual(const AttrSet *a, const AttrSet *b)
         AttrPair *pairA = nodeA->data;
         AttrPair *pairB = nodeB->data;
 
-        if (strcmp(pairA->key, pairB->key) != 0 || strcmp(pairA->value, pairB->value) != 0)
+        if (g_strcmp0(pairA->key, pairB->key) != 0 || g_strcmp0(pairA->value, pairB->value) != 0)
         {
             return false;
         }
@@ -167,7 +164,7 @@ static const double histogramBounds[] = {0, 5, 10, 25, 50, 75, 100, 250, 500, 75
 
 enum
 {
-    numBounds = ARRAY_SIZE(histogramBounds)
+    numBounds = G_N_ELEMENTS(histogramBounds)
 };
 
 typedef struct HistogramDataPoint
@@ -224,7 +221,7 @@ struct ObservabilityHistogram
 /* Global registry                                                    */
 /* ------------------------------------------------------------------ */
 
-static pthread_mutex_t registryLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t registryLock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static GSList *registry = NULL;
 static bool initialized = false;
 
@@ -240,6 +237,15 @@ static void registryRemove(InstrumentBase *inst)
     pthread_mutex_lock(&registryLock);
     registry = g_slist_remove(registry, inst);
     pthread_mutex_unlock(&registryLock);
+}
+
+static void initMutex(pthread_mutex_t *mutex)
+{
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
 }
 
 /* ------------------------------------------------------------------ */
@@ -301,7 +307,7 @@ ObservabilityCounter *observabilityCounterCreate(const char *name, const char *d
     c->base.name = g_strdup(name);
     c->base.description = g_strdup(description != NULL ? description : "");
     c->base.unit = g_strdup(unit != NULL ? unit : "1");
-    pthread_mutex_init(&c->lock, NULL);
+    initMutex(&c->lock);
 
     registryAdd(&c->base);
 
@@ -368,7 +374,6 @@ void observabilityCounterRelease(ObservabilityCounter *counter)
         return;
     }
 
-    registryRemove(&counter->base);
     g_atomic_rc_box_release_full(counter, counterDestroy);
 }
 
@@ -405,7 +410,7 @@ ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *descr
     g->base.name = g_strdup(name);
     g->base.description = g_strdup(description != NULL ? description : "");
     g->base.unit = g_strdup(unit != NULL ? unit : "1");
-    pthread_mutex_init(&g->lock, NULL);
+    initMutex(&g->lock);
 
     registryAdd(&g->base);
 
@@ -472,7 +477,6 @@ void observabilityGaugeRelease(ObservabilityGauge *gauge)
         return;
     }
 
-    registryRemove(&gauge->base);
     g_atomic_rc_box_release_full(gauge, gaugeDestroy);
 }
 
@@ -547,7 +551,7 @@ ObservabilityHistogram *observabilityHistogramCreate(const char *name, const cha
     h->base.name = g_strdup(name);
     h->base.description = g_strdup(description != NULL ? description : "");
     h->base.unit = g_strdup(unit != NULL ? unit : "1");
-    pthread_mutex_init(&h->lock, NULL);
+    initMutex(&h->lock);
 
     registryAdd(&h->base);
 
@@ -614,7 +618,6 @@ void observabilityHistogramRelease(ObservabilityHistogram *histogram)
         return;
     }
 
-    registryRemove(&histogram->base);
     g_atomic_rc_box_release_full(histogram, histogramDestroy);
 }
 

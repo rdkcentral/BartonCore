@@ -176,9 +176,10 @@ bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
            ENABLE)
 
-set(BCORE_OBSERVABILITY_BACKEND "memory" CACHE STRING "Observability backend (none, memory)")
-set_property(CACHE BCORE_OBSERVABILITY_BACKEND PROPERTY STRINGS none memory)
-message(STATUS "BCORE_OBSERVABILITY_BACKEND=${BCORE_OBSERVABILITY_BACKEND}")
+bcore_string_option(NAME BCORE_OBSERVABILITY_BACKEND
+                    DEFINITION BARTON_CONFIG_OBSERVABILITY_BACKEND
+                    DESCRIPTION "Observability backend (none, memory)"
+                    VALUE "memory")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
