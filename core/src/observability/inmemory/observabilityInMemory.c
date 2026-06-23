@@ -25,11 +25,9 @@
  * In-memory observability backend.
  *
  * Backs all metric instruments with thread-safe in-process data structures.
- * Counters use atomic uint64, gauges use atomic int64, histograms use a
- * mutex-protected fixed-bucket distribution.
- *
- * Instruments are registered in a global list so observabilityDumpJson()
- * can enumerate and serialize them.
+ * Each instrument holds a per-instrument mutex that protects its data points.
+ * A separate global registry mutex protects the list of registered instruments
+ * enumerated by observabilityDumpJson().
  */
 
 #include "observability/observability.h"
@@ -103,24 +101,35 @@ static void attrSetFree(AttrSet *set)
 
 static bool attrSetEqual(const AttrSet *a, const AttrSet *b)
 {
-    GSList *nodeA = a->pairs;
-    GSList *nodeB = b->pairs;
+    if (g_slist_length(a->pairs) != g_slist_length(b->pairs))
+    {
+        return false;
+    }
 
-    while (nodeA != NULL && nodeB != NULL)
+    /* Order-insensitive: every pair in a must have a matching pair in b */
+    for (GSList *nodeA = a->pairs; nodeA != NULL; nodeA = nodeA->next)
     {
         AttrPair *pairA = nodeA->data;
-        AttrPair *pairB = nodeB->data;
+        bool found = false;
 
-        if (g_strcmp0(pairA->key, pairB->key) != 0 || g_strcmp0(pairA->value, pairB->value) != 0)
+        for (GSList *nodeB = b->pairs; nodeB != NULL; nodeB = nodeB->next)
+        {
+            AttrPair *pairB = nodeB->data;
+
+            if (g_strcmp0(pairA->key, pairB->key) == 0 && g_strcmp0(pairA->value, pairB->value) == 0)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
         {
             return false;
         }
-
-        nodeA = nodeA->next;
-        nodeB = nodeB->next;
     }
 
-    return nodeA == NULL && nodeB == NULL;
+    return true;
 }
 
 static AttrSet attrSetClone(const AttrSet *src)
@@ -223,7 +232,6 @@ struct ObservabilityHistogram
 
 static pthread_mutex_t registryLock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 static GSList *registry = NULL;
-static bool initialized = false;
 
 static void registryAdd(InstrumentBase *inst)
 {
@@ -254,17 +262,12 @@ static void initMutex(pthread_mutex_t *mutex)
 
 int observabilityInit(void)
 {
-    pthread_mutex_lock(&registryLock);
-    initialized = true;
-    pthread_mutex_unlock(&registryLock);
-
     return 0;
 }
 
 void observabilityShutdown(void)
 {
     pthread_mutex_lock(&registryLock);
-    initialized = false;
 
     /* Detach all instruments from the registry — does not free them;
      * instruments may still be referenced and must be released individually. */
@@ -302,6 +305,11 @@ static CounterDataPoint *counterGetOrCreateDataPoint(ObservabilityCounter *count
 
 ObservabilityCounter *observabilityCounterCreate(const char *name, const char *description, const char *unit)
 {
+    if (name == NULL || name[0] == '\0')
+    {
+        return NULL;
+    }
+
     ObservabilityCounter *c = g_atomic_rc_box_new0(ObservabilityCounter);
     c->base.type = INSTRUMENT_COUNTER;
     c->base.name = g_strdup(name);
@@ -405,6 +413,11 @@ static GaugeDataPoint *gaugeGetOrCreateDataPoint(ObservabilityGauge *gauge, cons
 
 ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *description, const char *unit)
 {
+    if (name == NULL || name[0] == '\0')
+    {
+        return NULL;
+    }
+
     ObservabilityGauge *g = g_atomic_rc_box_new0(ObservabilityGauge);
     g->base.type = INSTRUMENT_GAUGE;
     g->base.name = g_strdup(name);
@@ -546,6 +559,11 @@ static void histogramRecordValue(HistogramDataPoint *dp, double value)
 
 ObservabilityHistogram *observabilityHistogramCreate(const char *name, const char *description, const char *unit)
 {
+    if (name == NULL || name[0] == '\0')
+    {
+        return NULL;
+    }
+
     ObservabilityHistogram *h = g_atomic_rc_box_new0(ObservabilityHistogram);
     h->base.type = INSTRUMENT_HISTOGRAM;
     h->base.name = g_strdup(name);

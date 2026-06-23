@@ -301,3 +301,8 @@ if (BCORE_MATTER)
     endif()
 
 endif()
+
+# Validate observability backend selection
+if (NOT BCORE_OBSERVABILITY_BACKEND STREQUAL "memory" AND NOT BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
+    message(FATAL_ERROR "BCORE_OBSERVABILITY_BACKEND='${BCORE_OBSERVABILITY_BACKEND}' is not valid. Must be 'memory' or 'none'.")
+endif()

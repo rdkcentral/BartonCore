@@ -260,9 +260,11 @@ endif()
 if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
     file(GLOB inmemoryObsSrc "src/observability/inmemory/*.c")
     list(APPEND SOURCES ${inmemoryObsSrc})
-else()
+elseif (BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
     file(GLOB noopObsSrc "src/observability/noop/*.c")
     list(APPEND SOURCES ${noopObsSrc})
+else()
+    message(FATAL_ERROR "Unknown BCORE_OBSERVABILITY_BACKEND value: '${BCORE_OBSERVABILITY_BACKEND}'. Valid values: memory, none")
 endif()
 list(APPEND SOURCES
         ${SOURCES}
