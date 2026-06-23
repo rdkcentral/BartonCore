@@ -162,7 +162,7 @@ if (BCORE_MATTER)
 
     if (BCORE_MATTER_VALIDATE_SCHEMAS)
         # SBMD specification validation
-        
+
         # Validates all .sbmd files against the versioned JSON schemas during build.
         # SBMD_SCHEMA_DIR points to the top-level schema directory; the validator
         # recursively searches subdirectories (e.g. v2/, v3/) for a schema file
@@ -257,7 +257,7 @@ endif()
 
 
 # Observability backend selection
-if (BCORE_OBSERVABILITY_BACKEND STREQUAL "inmemory")
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
     file(GLOB inmemoryObsSrc "src/observability/inmemory/*.c")
     list(APPEND SOURCES ${inmemoryObsSrc})
 else()

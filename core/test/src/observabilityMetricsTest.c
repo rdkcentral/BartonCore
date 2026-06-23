@@ -35,6 +35,7 @@
 #include "observability/observabilityMetrics.h"
 
 #include <cjson/cJSON.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -257,9 +258,9 @@ static void test_histogram_record(void **state)
 
     cJSON *dp = cJSON_GetArrayItem(dataPoints, 0);
     assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "count")), 3);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "sum")) == 6.0);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "min")) == 1.0);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "max")) == 3.0);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "sum")) - 6.0) < 1e-9);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "min")) - 1.0) < 1e-9);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "max")) - 3.0) < 1e-9);
 
     /* Verify buckets exist */
     cJSON *buckets = cJSON_GetObjectItem(dp, "buckets");
@@ -345,6 +346,33 @@ static void test_histogram_null_safe(void **state)
 }
 
 /* ------------------------------------------------------------------ */
+/* Release tests                                                      */
+/* ------------------------------------------------------------------ */
+
+static void test_counter_release_removes_from_dump(void **state)
+{
+    (void) state;
+
+    ObservabilityCounter *c = observabilityCounterCreate("release.counter", "Release test", "1");
+    assert_non_null(c);
+
+    observabilityCounterAdd(c, 1);
+    observabilityCounterRelease(c);
+
+    char *json = observabilityDumpJson();
+    assert_non_null(json);
+
+    cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
+
+    cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_null(cJSON_GetObjectItem(metrics, "release.counter"));
+
+    cJSON_Delete(root);
+    free(json);
+}
+
+/* ------------------------------------------------------------------ */
 /* JSON dump tests                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -362,7 +390,7 @@ static void test_dump_empty(void **state)
     assert_non_null(metrics);
 
     /* No instruments registered in this test, so metrics should be empty */
-    assert_null(metrics->child);
+    assert_int_equal(cJSON_GetArraySize(metrics), 0);
 
     cJSON_Delete(root);
     free(json);
@@ -427,6 +455,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_histogram_bucket_distribution, setup, teardown),
         cmocka_unit_test_setup_teardown(test_histogram_with_attrs, setup, teardown),
         cmocka_unit_test_setup_teardown(test_histogram_null_safe, setup, teardown),
+        /* Release */
+        cmocka_unit_test_setup_teardown(test_counter_release_removes_from_dump, setup, teardown),
         /* JSON dump */
         cmocka_unit_test_setup_teardown(test_dump_empty, setup, teardown),
         cmocka_unit_test_setup_teardown(test_dump_multiple_instruments, setup, teardown),

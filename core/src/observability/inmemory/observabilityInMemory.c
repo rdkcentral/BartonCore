@@ -37,12 +37,14 @@
 
 #include <cjson/cJSON.h>
 
+#include <glib.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 /* ------------------------------------------------------------------ */
 /* Attribute key-value pair                                           */
@@ -56,15 +58,12 @@ typedef struct AttrPair
 
 typedef struct AttrSet
 {
-    AttrPair *pairs;
-    int count;
+    GSList *pairs;
 } AttrSet;
 
 static AttrSet attrSetFromVa(va_list ap)
 {
-    AttrSet set = {NULL, 0};
-    int cap = 4;
-    set.pairs = malloc(sizeof(AttrPair) * cap);
+    AttrSet set = {NULL};
 
     while (true)
     {
@@ -82,15 +81,10 @@ static AttrSet attrSetFromVa(va_list ap)
             break;
         }
 
-        if (set.count >= cap)
-        {
-            cap *= 2;
-            set.pairs = realloc(set.pairs, sizeof(AttrPair) * cap);
-        }
-
-        set.pairs[set.count].key = strdup(key);
-        set.pairs[set.count].value = strdup(val);
-        set.count++;
+        AttrPair *pair = g_new(AttrPair, 1);
+        pair->key = g_strdup(key);
+        pair->value = g_strdup(val);
+        set.pairs = g_slist_append(set.pairs, pair);
     }
 
     return set;
@@ -98,49 +92,51 @@ static AttrSet attrSetFromVa(va_list ap)
 
 static void attrSetFree(AttrSet *set)
 {
-    for (int i = 0; i < set->count; i++)
+    for (GSList *node = set->pairs; node != NULL; node = node->next)
     {
-        free(set->pairs[i].key);
-        free(set->pairs[i].value);
+        AttrPair *pair = node->data;
+        g_free(pair->key);
+        g_free(pair->value);
+        g_free(pair);
     }
 
-    free(set->pairs);
+    g_slist_free(set->pairs);
     set->pairs = NULL;
-    set->count = 0;
 }
 
 static bool attrSetEqual(const AttrSet *a, const AttrSet *b)
 {
-    if (a->count != b->count)
-    {
-        return false;
-    }
+    GSList *nodeA = a->pairs;
+    GSList *nodeB = b->pairs;
 
-    for (int i = 0; i < a->count; i++)
+    while (nodeA != NULL && nodeB != NULL)
     {
-        if (strcmp(a->pairs[i].key, b->pairs[i].key) != 0 ||
-            strcmp(a->pairs[i].value, b->pairs[i].value) != 0)
+        AttrPair *pairA = nodeA->data;
+        AttrPair *pairB = nodeB->data;
+
+        if (strcmp(pairA->key, pairB->key) != 0 || strcmp(pairA->value, pairB->value) != 0)
         {
             return false;
         }
+
+        nodeA = nodeA->next;
+        nodeB = nodeB->next;
     }
 
-    return true;
+    return nodeA == NULL && nodeB == NULL;
 }
 
 static AttrSet attrSetClone(const AttrSet *src)
 {
-    AttrSet dst = {NULL, src->count};
+    AttrSet dst = {NULL};
 
-    if (src->count > 0)
+    for (GSList *node = src->pairs; node != NULL; node = node->next)
     {
-        dst.pairs = malloc(sizeof(AttrPair) * src->count);
-
-        for (int i = 0; i < src->count; i++)
-        {
-            dst.pairs[i].key = strdup(src->pairs[i].key);
-            dst.pairs[i].value = strdup(src->pairs[i].value);
-        }
+        AttrPair *srcPair = node->data;
+        AttrPair *dstPair = g_new(AttrPair, 1);
+        dstPair->key = g_strdup(srcPair->key);
+        dstPair->value = g_strdup(srcPair->value);
+        dst.pairs = g_slist_append(dst.pairs, dstPair);
     }
 
     return dst;
@@ -167,9 +163,12 @@ typedef struct GaugeDataPoint
 /* ------------------------------------------------------------------ */
 
 /* Default bucket boundaries matching OpenTelemetry SDK defaults */
-static const double kHistogramBounds[] = {
-    0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000};
-static const int kNumBounds = sizeof(kHistogramBounds) / sizeof(kHistogramBounds[0]);
+static const double histogramBounds[] = {0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000};
+
+enum
+{
+    numBounds = ARRAY_SIZE(histogramBounds)
+};
 
 typedef struct HistogramDataPoint
 {
@@ -178,7 +177,7 @@ typedef struct HistogramDataPoint
     double sum;
     double min;
     double max;
-    uint64_t buckets[sizeof(kHistogramBounds) / sizeof(kHistogramBounds[0]) + 1];
+    uint64_t buckets[numBounds + 1];
 } HistogramDataPoint;
 
 /* ------------------------------------------------------------------ */
@@ -198,35 +197,27 @@ typedef struct InstrumentBase
     char *name;
     char *description;
     char *unit;
-    int refCount;
-    struct InstrumentBase *next; /* linked list in global registry */
 } InstrumentBase;
 
 struct ObservabilityCounter
 {
     InstrumentBase base;
     pthread_mutex_t lock;
-    CounterDataPoint *dataPoints;
-    int dataPointCount;
-    int dataPointCapacity;
+    GSList *dataPoints;
 };
 
 struct ObservabilityGauge
 {
     InstrumentBase base;
     pthread_mutex_t lock;
-    GaugeDataPoint *dataPoints;
-    int dataPointCount;
-    int dataPointCapacity;
+    GSList *dataPoints;
 };
 
 struct ObservabilityHistogram
 {
     InstrumentBase base;
     pthread_mutex_t lock;
-    HistogramDataPoint *dataPoints;
-    int dataPointCount;
-    int dataPointCapacity;
+    GSList *dataPoints;
 };
 
 /* ------------------------------------------------------------------ */
@@ -234,33 +225,20 @@ struct ObservabilityHistogram
 /* ------------------------------------------------------------------ */
 
 static pthread_mutex_t registryLock = PTHREAD_MUTEX_INITIALIZER;
-static InstrumentBase *registryHead = NULL;
+static GSList *registry = NULL;
 static bool initialized = false;
 
 static void registryAdd(InstrumentBase *inst)
 {
     pthread_mutex_lock(&registryLock);
-    inst->next = registryHead;
-    registryHead = inst;
+    registry = g_slist_prepend(registry, inst);
     pthread_mutex_unlock(&registryLock);
 }
 
 static void registryRemove(InstrumentBase *inst)
 {
     pthread_mutex_lock(&registryLock);
-    InstrumentBase **pp = &registryHead;
-
-    while (*pp)
-    {
-        if (*pp == inst)
-        {
-            *pp = inst->next;
-            break;
-        }
-
-        pp = &(*pp)->next;
-    }
-
+    registry = g_slist_remove(registry, inst);
     pthread_mutex_unlock(&registryLock);
 }
 
@@ -282,16 +260,10 @@ void observabilityShutdown(void)
     pthread_mutex_lock(&registryLock);
     initialized = false;
 
-    /* Release all instruments still in the registry */
-    while (registryHead)
-    {
-        InstrumentBase *inst = registryHead;
-        registryHead = inst->next;
-        inst->next = NULL;
-
-        /* We don't free here — instruments may still be referenced.
-         * Just detach from registry. */
-    }
+    /* Detach all instruments from the registry — does not free them;
+     * instruments may still be referenced and must be released individually. */
+    g_slist_free(registry);
+    registry = NULL;
 
     pthread_mutex_unlock(&registryLock);
 }
@@ -300,37 +272,35 @@ void observabilityShutdown(void)
 /* Counter                                                            */
 /* ------------------------------------------------------------------ */
 
-static CounterDataPoint *counterFindOrAdd(ObservabilityCounter *counter, const AttrSet *attrs)
+/* Returns the data point for the given attribute set, lazily allocating
+ * a new slot if no existing data point matches. Each unique attribute
+ * set gets its own data point. */
+static CounterDataPoint *counterGetOrCreateDataPoint(ObservabilityCounter *counter, const AttrSet *attrs)
 {
-    for (int i = 0; i < counter->dataPointCount; i++)
+    for (GSList *node = counter->dataPoints; node != NULL; node = node->next)
     {
-        if (attrSetEqual(&counter->dataPoints[i].attrs, attrs))
+        CounterDataPoint *dp = node->data;
+
+        if (attrSetEqual(&dp->attrs, attrs))
         {
-            return &counter->dataPoints[i];
+            return dp;
         }
     }
 
-    if (counter->dataPointCount >= counter->dataPointCapacity)
-    {
-        counter->dataPointCapacity = counter->dataPointCapacity == 0 ? 4 : counter->dataPointCapacity * 2;
-        counter->dataPoints = realloc(counter->dataPoints, sizeof(CounterDataPoint) * counter->dataPointCapacity);
-    }
-
-    CounterDataPoint *dp = &counter->dataPoints[counter->dataPointCount++];
+    CounterDataPoint *dp = g_new0(CounterDataPoint, 1);
     dp->attrs = attrSetClone(attrs);
-    dp->value = 0;
+    counter->dataPoints = g_slist_append(counter->dataPoints, dp);
 
     return dp;
 }
 
 ObservabilityCounter *observabilityCounterCreate(const char *name, const char *description, const char *unit)
 {
-    ObservabilityCounter *c = calloc(1, sizeof(ObservabilityCounter));
+    ObservabilityCounter *c = g_atomic_rc_box_new0(ObservabilityCounter);
     c->base.type = INSTRUMENT_COUNTER;
-    c->base.name = strdup(name);
-    c->base.description = description ? strdup(description) : strdup("");
-    c->base.unit = unit ? strdup(unit) : strdup("1");
-    c->base.refCount = 1;
+    c->base.name = g_strdup(name);
+    c->base.description = g_strdup(description != NULL ? description : "");
+    c->base.unit = g_strdup(unit != NULL ? unit : "1");
     pthread_mutex_init(&c->lock, NULL);
 
     registryAdd(&c->base);
@@ -345,9 +315,9 @@ void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t value)
         return;
     }
 
-    AttrSet empty = {NULL, 0};
+    AttrSet empty = {NULL};
     pthread_mutex_lock(&counter->lock);
-    CounterDataPoint *dp = counterFindOrAdd(counter, &empty);
+    CounterDataPoint *dp = counterGetOrCreateDataPoint(counter, &empty);
     dp->value += value;
     pthread_mutex_unlock(&counter->lock);
 }
@@ -365,11 +335,30 @@ void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t va
     va_end(ap);
 
     pthread_mutex_lock(&counter->lock);
-    CounterDataPoint *dp = counterFindOrAdd(counter, &attrs);
+    CounterDataPoint *dp = counterGetOrCreateDataPoint(counter, &attrs);
     dp->value += value;
     pthread_mutex_unlock(&counter->lock);
 
     attrSetFree(&attrs);
+}
+
+static void counterDestroy(gpointer data)
+{
+    ObservabilityCounter *counter = data;
+    registryRemove(&counter->base);
+    pthread_mutex_destroy(&counter->lock);
+
+    for (GSList *node = counter->dataPoints; node != NULL; node = node->next)
+    {
+        CounterDataPoint *dp = node->data;
+        attrSetFree(&dp->attrs);
+        g_free(dp);
+    }
+
+    g_slist_free(counter->dataPoints);
+    g_free(counter->base.name);
+    g_free(counter->base.description);
+    g_free(counter->base.unit);
 }
 
 void observabilityCounterRelease(ObservabilityCounter *counter)
@@ -379,61 +368,43 @@ void observabilityCounterRelease(ObservabilityCounter *counter)
         return;
     }
 
-    int remaining = __sync_sub_and_fetch(&counter->base.refCount, 1);
-
-    if (remaining <= 0)
-    {
-        registryRemove(&counter->base);
-        pthread_mutex_destroy(&counter->lock);
-
-        for (int i = 0; i < counter->dataPointCount; i++)
-        {
-            attrSetFree(&counter->dataPoints[i].attrs);
-        }
-
-        free(counter->dataPoints);
-        free(counter->base.name);
-        free(counter->base.description);
-        free(counter->base.unit);
-        free(counter);
-    }
+    registryRemove(&counter->base);
+    g_atomic_rc_box_release_full(counter, counterDestroy);
 }
 
 /* ------------------------------------------------------------------ */
 /* Gauge                                                              */
 /* ------------------------------------------------------------------ */
 
-static GaugeDataPoint *gaugeFindOrAdd(ObservabilityGauge *gauge, const AttrSet *attrs)
+/* Returns the data point for the given attribute set, lazily allocating
+ * a new slot if no existing data point matches. Each unique attribute
+ * set gets its own data point. */
+static GaugeDataPoint *gaugeGetOrCreateDataPoint(ObservabilityGauge *gauge, const AttrSet *attrs)
 {
-    for (int i = 0; i < gauge->dataPointCount; i++)
+    for (GSList *node = gauge->dataPoints; node != NULL; node = node->next)
     {
-        if (attrSetEqual(&gauge->dataPoints[i].attrs, attrs))
+        GaugeDataPoint *dp = node->data;
+
+        if (attrSetEqual(&dp->attrs, attrs))
         {
-            return &gauge->dataPoints[i];
+            return dp;
         }
     }
 
-    if (gauge->dataPointCount >= gauge->dataPointCapacity)
-    {
-        gauge->dataPointCapacity = gauge->dataPointCapacity == 0 ? 4 : gauge->dataPointCapacity * 2;
-        gauge->dataPoints = realloc(gauge->dataPoints, sizeof(GaugeDataPoint) * gauge->dataPointCapacity);
-    }
-
-    GaugeDataPoint *dp = &gauge->dataPoints[gauge->dataPointCount++];
+    GaugeDataPoint *dp = g_new0(GaugeDataPoint, 1);
     dp->attrs = attrSetClone(attrs);
-    dp->value = 0;
+    gauge->dataPoints = g_slist_append(gauge->dataPoints, dp);
 
     return dp;
 }
 
 ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *description, const char *unit)
 {
-    ObservabilityGauge *g = calloc(1, sizeof(ObservabilityGauge));
+    ObservabilityGauge *g = g_atomic_rc_box_new0(ObservabilityGauge);
     g->base.type = INSTRUMENT_GAUGE;
-    g->base.name = strdup(name);
-    g->base.description = description ? strdup(description) : strdup("");
-    g->base.unit = unit ? strdup(unit) : strdup("1");
-    g->base.refCount = 1;
+    g->base.name = g_strdup(name);
+    g->base.description = g_strdup(description != NULL ? description : "");
+    g->base.unit = g_strdup(unit != NULL ? unit : "1");
     pthread_mutex_init(&g->lock, NULL);
 
     registryAdd(&g->base);
@@ -448,9 +419,9 @@ void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t value)
         return;
     }
 
-    AttrSet empty = {NULL, 0};
+    AttrSet empty = {NULL};
     pthread_mutex_lock(&gauge->lock);
-    GaugeDataPoint *dp = gaugeFindOrAdd(gauge, &empty);
+    GaugeDataPoint *dp = gaugeGetOrCreateDataPoint(gauge, &empty);
     dp->value = value;
     pthread_mutex_unlock(&gauge->lock);
 }
@@ -468,11 +439,30 @@ void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value,
     va_end(ap);
 
     pthread_mutex_lock(&gauge->lock);
-    GaugeDataPoint *dp = gaugeFindOrAdd(gauge, &attrs);
+    GaugeDataPoint *dp = gaugeGetOrCreateDataPoint(gauge, &attrs);
     dp->value = value;
     pthread_mutex_unlock(&gauge->lock);
 
     attrSetFree(&attrs);
+}
+
+static void gaugeDestroy(gpointer data)
+{
+    ObservabilityGauge *gauge = data;
+    registryRemove(&gauge->base);
+    pthread_mutex_destroy(&gauge->lock);
+
+    for (GSList *node = gauge->dataPoints; node != NULL; node = node->next)
+    {
+        GaugeDataPoint *dp = node->data;
+        attrSetFree(&dp->attrs);
+        g_free(dp);
+    }
+
+    g_slist_free(gauge->dataPoints);
+    g_free(gauge->base.name);
+    g_free(gauge->base.description);
+    g_free(gauge->base.unit);
 }
 
 void observabilityGaugeRelease(ObservabilityGauge *gauge)
@@ -482,53 +472,32 @@ void observabilityGaugeRelease(ObservabilityGauge *gauge)
         return;
     }
 
-    int remaining = __sync_sub_and_fetch(&gauge->base.refCount, 1);
-
-    if (remaining <= 0)
-    {
-        registryRemove(&gauge->base);
-        pthread_mutex_destroy(&gauge->lock);
-
-        for (int i = 0; i < gauge->dataPointCount; i++)
-        {
-            attrSetFree(&gauge->dataPoints[i].attrs);
-        }
-
-        free(gauge->dataPoints);
-        free(gauge->base.name);
-        free(gauge->base.description);
-        free(gauge->base.unit);
-        free(gauge);
-    }
+    registryRemove(&gauge->base);
+    g_atomic_rc_box_release_full(gauge, gaugeDestroy);
 }
 
 /* ------------------------------------------------------------------ */
 /* Histogram                                                          */
 /* ------------------------------------------------------------------ */
 
-static HistogramDataPoint *histogramFindOrAdd(ObservabilityHistogram *h, const AttrSet *attrs)
+/* Returns the data point for the given attribute set, lazily allocating
+ * a new slot if no existing data point matches. Each unique attribute
+ * set gets its own data point. */
+static HistogramDataPoint *histogramGetOrCreateDataPoint(ObservabilityHistogram *h, const AttrSet *attrs)
 {
-    for (int i = 0; i < h->dataPointCount; i++)
+    for (GSList *node = h->dataPoints; node != NULL; node = node->next)
     {
-        if (attrSetEqual(&h->dataPoints[i].attrs, attrs))
+        HistogramDataPoint *dp = node->data;
+
+        if (attrSetEqual(&dp->attrs, attrs))
         {
-            return &h->dataPoints[i];
+            return dp;
         }
     }
 
-    if (h->dataPointCount >= h->dataPointCapacity)
-    {
-        h->dataPointCapacity = h->dataPointCapacity == 0 ? 4 : h->dataPointCapacity * 2;
-        h->dataPoints = realloc(h->dataPoints, sizeof(HistogramDataPoint) * h->dataPointCapacity);
-    }
-
-    HistogramDataPoint *dp = &h->dataPoints[h->dataPointCount++];
+    HistogramDataPoint *dp = g_new0(HistogramDataPoint, 1);
     dp->attrs = attrSetClone(attrs);
-    dp->count = 0;
-    dp->sum = 0;
-    dp->min = 0;
-    dp->max = 0;
-    memset(dp->buckets, 0, sizeof(dp->buckets));
+    h->dataPoints = g_slist_append(h->dataPoints, dp);
 
     return dp;
 }
@@ -557,11 +526,11 @@ static void histogramRecordValue(HistogramDataPoint *dp, double value)
     }
 
     /* Find bucket: first boundary where value <= bound */
-    int bucket = kNumBounds; /* overflow bucket */
+    int bucket = numBounds; /* overflow bucket */
 
-    for (int i = 0; i < kNumBounds; i++)
+    for (int i = 0; i < numBounds; i++)
     {
-        if (value <= kHistogramBounds[i])
+        if (value <= histogramBounds[i])
         {
             bucket = i;
             break;
@@ -573,12 +542,11 @@ static void histogramRecordValue(HistogramDataPoint *dp, double value)
 
 ObservabilityHistogram *observabilityHistogramCreate(const char *name, const char *description, const char *unit)
 {
-    ObservabilityHistogram *h = calloc(1, sizeof(ObservabilityHistogram));
+    ObservabilityHistogram *h = g_atomic_rc_box_new0(ObservabilityHistogram);
     h->base.type = INSTRUMENT_HISTOGRAM;
-    h->base.name = strdup(name);
-    h->base.description = description ? strdup(description) : strdup("");
-    h->base.unit = unit ? strdup(unit) : strdup("1");
-    h->base.refCount = 1;
+    h->base.name = g_strdup(name);
+    h->base.description = g_strdup(description != NULL ? description : "");
+    h->base.unit = g_strdup(unit != NULL ? unit : "1");
     pthread_mutex_init(&h->lock, NULL);
 
     registryAdd(&h->base);
@@ -593,9 +561,9 @@ void observabilityHistogramRecord(ObservabilityHistogram *histogram, double valu
         return;
     }
 
-    AttrSet empty = {NULL, 0};
+    AttrSet empty = {NULL};
     pthread_mutex_lock(&histogram->lock);
-    HistogramDataPoint *dp = histogramFindOrAdd(histogram, &empty);
+    HistogramDataPoint *dp = histogramGetOrCreateDataPoint(histogram, &empty);
     histogramRecordValue(dp, value);
     pthread_mutex_unlock(&histogram->lock);
 }
@@ -613,11 +581,30 @@ void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, do
     va_end(ap);
 
     pthread_mutex_lock(&histogram->lock);
-    HistogramDataPoint *dp = histogramFindOrAdd(histogram, &attrs);
+    HistogramDataPoint *dp = histogramGetOrCreateDataPoint(histogram, &attrs);
     histogramRecordValue(dp, value);
     pthread_mutex_unlock(&histogram->lock);
 
     attrSetFree(&attrs);
+}
+
+static void histogramDestroy(gpointer data)
+{
+    ObservabilityHistogram *histogram = data;
+    registryRemove(&histogram->base);
+    pthread_mutex_destroy(&histogram->lock);
+
+    for (GSList *node = histogram->dataPoints; node != NULL; node = node->next)
+    {
+        HistogramDataPoint *dp = node->data;
+        attrSetFree(&dp->attrs);
+        g_free(dp);
+    }
+
+    g_slist_free(histogram->dataPoints);
+    g_free(histogram->base.name);
+    g_free(histogram->base.description);
+    g_free(histogram->base.unit);
 }
 
 void observabilityHistogramRelease(ObservabilityHistogram *histogram)
@@ -627,24 +614,8 @@ void observabilityHistogramRelease(ObservabilityHistogram *histogram)
         return;
     }
 
-    int remaining = __sync_sub_and_fetch(&histogram->base.refCount, 1);
-
-    if (remaining <= 0)
-    {
-        registryRemove(&histogram->base);
-        pthread_mutex_destroy(&histogram->lock);
-
-        for (int i = 0; i < histogram->dataPointCount; i++)
-        {
-            attrSetFree(&histogram->dataPoints[i].attrs);
-        }
-
-        free(histogram->dataPoints);
-        free(histogram->base.name);
-        free(histogram->base.description);
-        free(histogram->base.unit);
-        free(histogram);
-    }
+    registryRemove(&histogram->base);
+    g_atomic_rc_box_release_full(histogram, histogramDestroy);
 }
 
 /* ------------------------------------------------------------------ */
@@ -653,16 +624,17 @@ void observabilityHistogramRelease(ObservabilityHistogram *histogram)
 
 static cJSON *attrSetToJson(const AttrSet *attrs)
 {
-    if (attrs->count == 0)
+    if (attrs->pairs == NULL)
     {
         return NULL;
     }
 
     cJSON *obj = cJSON_CreateObject();
 
-    for (int i = 0; i < attrs->count; i++)
+    for (GSList *node = attrs->pairs; node != NULL; node = node->next)
     {
-        cJSON_AddStringToObject(obj, attrs->pairs[i].key, attrs->pairs[i].value);
+        AttrPair *pair = node->data;
+        cJSON_AddStringToObject(obj, pair->key, pair->value);
     }
 
     return obj;
@@ -679,12 +651,13 @@ static cJSON *counterToJson(ObservabilityCounter *c)
 
     pthread_mutex_lock(&c->lock);
 
-    for (int i = 0; i < c->dataPointCount; i++)
+    for (GSList *node = c->dataPoints; node != NULL; node = node->next)
     {
+        CounterDataPoint *cdp = node->data;
         cJSON *dp = cJSON_CreateObject();
-        cJSON_AddNumberToObject(dp, "value", (double) c->dataPoints[i].value);
+        cJSON_AddNumberToObject(dp, "value", (double) cdp->value);
 
-        cJSON *attrs = attrSetToJson(&c->dataPoints[i].attrs);
+        cJSON *attrs = attrSetToJson(&cdp->attrs);
 
         if (attrs)
         {
@@ -712,12 +685,13 @@ static cJSON *gaugeToJson(ObservabilityGauge *g)
 
     pthread_mutex_lock(&g->lock);
 
-    for (int i = 0; i < g->dataPointCount; i++)
+    for (GSList *node = g->dataPoints; node != NULL; node = node->next)
     {
+        GaugeDataPoint *gdp = node->data;
         cJSON *dp = cJSON_CreateObject();
-        cJSON_AddNumberToObject(dp, "value", (double) g->dataPoints[i].value);
+        cJSON_AddNumberToObject(dp, "value", (double) gdp->value);
 
-        cJSON *attrs = attrSetToJson(&g->dataPoints[i].attrs);
+        cJSON *attrs = attrSetToJson(&gdp->attrs);
 
         if (attrs)
         {
@@ -745,9 +719,9 @@ static cJSON *histogramToJson(ObservabilityHistogram *h)
 
     pthread_mutex_lock(&h->lock);
 
-    for (int i = 0; i < h->dataPointCount; i++)
+    for (GSList *node = h->dataPoints; node != NULL; node = node->next)
     {
-        HistogramDataPoint *hdp = &h->dataPoints[i];
+        HistogramDataPoint *hdp = node->data;
         cJSON *dp = cJSON_CreateObject();
         cJSON_AddNumberToObject(dp, "count", (double) hdp->count);
         cJSON_AddNumberToObject(dp, "sum", hdp->sum);
@@ -756,13 +730,13 @@ static cJSON *histogramToJson(ObservabilityHistogram *h)
 
         cJSON *buckets = cJSON_CreateArray();
 
-        for (int b = 0; b <= kNumBounds; b++)
+        for (int b = 0; b <= numBounds; b++)
         {
             cJSON *bucket = cJSON_CreateObject();
 
-            if (b < kNumBounds)
+            if (b < numBounds)
             {
-                cJSON_AddNumberToObject(bucket, "le", kHistogramBounds[b]);
+                cJSON_AddNumberToObject(bucket, "le", histogramBounds[b]);
             }
             else
             {
@@ -799,8 +773,9 @@ char *observabilityDumpJson(void)
 
     pthread_mutex_lock(&registryLock);
 
-    for (InstrumentBase *inst = registryHead; inst != NULL; inst = inst->next)
+    for (GSList *node = registry; node != NULL; node = node->next)
     {
+        InstrumentBase *inst = node->data;
         cJSON *metric = NULL;
 
         switch (inst->type)
