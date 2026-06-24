@@ -258,7 +258,7 @@ endif()
 
 # Observability backend selection
 if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
-    file(GLOB inmemoryObsSrc "src/observability/inmemory/*.c")
+    file(GLOB inmemoryObsSrc "src/observability/memory/*.c")
     list(APPEND SOURCES ${inmemoryObsSrc})
 elseif (BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
     file(GLOB noopObsSrc "src/observability/noop/*.c")
