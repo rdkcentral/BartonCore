@@ -77,9 +77,7 @@ void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t va
 
 ObservabilityCounter *observabilityCounterAcquire(ObservabilityCounter *counter)
 {
-    (void) counter;
-
-    return NULL;
+    return counter;
 }
 
 void observabilityCounterRelease(ObservabilityCounter *counter)
