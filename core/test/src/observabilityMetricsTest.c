@@ -365,11 +365,13 @@ static void test_histogram_bucket_distribution(void **state)
 
     /* Check that the overflow bucket has the 99999 value */
     cJSON *buckets = cJSON_GetObjectItem(dp, "buckets");
+    assert_non_null(buckets);
     int numBuckets = cJSON_GetArraySize(buckets);
+    assert_true(numBuckets > 0);
     cJSON *lastBucket = cJSON_GetArrayItem(buckets, numBuckets - 1);
+    assert_non_null(lastBucket);
     assert_string_equal(cJSON_GetStringValue(cJSON_GetObjectItem(lastBucket, "le")), "+Inf");
     assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(lastBucket, "count")), 1);
-
     cJSON_Delete(root);
     free(json);
     observabilityHistogramRelease(h);
