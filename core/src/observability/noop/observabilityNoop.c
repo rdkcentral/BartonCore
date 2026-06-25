@@ -110,9 +110,7 @@ void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value,
 
 ObservabilityGauge *observabilityGaugeAcquire(ObservabilityGauge *gauge)
 {
-    (void) gauge;
-
-    return NULL;
+    return gauge;
 }
 
 void observabilityGaugeRelease(ObservabilityGauge *gauge)
@@ -145,9 +143,7 @@ void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, do
 
 ObservabilityHistogram *observabilityHistogramAcquire(ObservabilityHistogram *histogram)
 {
-    (void) histogram;
-
-    return NULL;
+    return histogram;
 }
 
 void observabilityHistogramRelease(ObservabilityHistogram *histogram)

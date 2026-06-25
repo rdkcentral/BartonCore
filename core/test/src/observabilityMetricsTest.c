@@ -106,6 +106,7 @@ static void test_counter_with_attrs(void **state)
     (void) state;
 
     ObservabilityCounter *c = observabilityCounterCreate("test.counter.attrs", "Counter with attrs", "1");
+    assert_non_null(c);
 
     observabilityCounterAddWithAttrs(c, 1, "driver", "light", NULL);
     observabilityCounterAddWithAttrs(c, 2, "driver", "light", NULL);
@@ -164,6 +165,7 @@ static void test_counter_attrs_order_insensitive(void **state)
     (void) state;
 
     ObservabilityCounter *c = observabilityCounterCreate("test.counter.order", "Order test", "1");
+    assert_non_null(c);
 
     /* Add with attrs in one order, then in reverse order — should merge into one data point */
     observabilityCounterAddWithAttrs(c, 1, "a", "1", "b", "2", NULL);
@@ -333,7 +335,7 @@ static void test_histogram_bucket_distribution(void **state)
     (void) state;
 
     ObservabilityHistogram *h = observabilityHistogramCreate("test.histogram.buckets", "Bucket test", "ms");
-
+    assert_non_null(h);
     /* Record values that span multiple buckets:
      * Bounds: 0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000
      * Value 0 -> bucket[0] (le=0)
@@ -536,6 +538,9 @@ static void test_dump_multiple_instruments(void **state)
     ObservabilityCounter *c = observabilityCounterCreate("multi.counter", "counter", "1");
     ObservabilityGauge *g = observabilityGaugeCreate("multi.gauge", "gauge", "bytes");
     ObservabilityHistogram *h = observabilityHistogramCreate("multi.histogram", "histogram", "ms");
+    assert_non_null(c);
+    assert_non_null(g);
+    assert_non_null(h);
 
     observabilityCounterAdd(c, 1);
     observabilityGaugeRecord(g, 42);
