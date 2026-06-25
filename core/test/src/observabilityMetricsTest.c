@@ -447,6 +447,65 @@ static void test_counter_release_removes_from_dump(void **state)
 }
 
 /* ------------------------------------------------------------------ */
+/* Acquire / refcount tests                                           */
+/* ------------------------------------------------------------------ */
+
+static void test_counter_acquire_keeps_alive(void **state)
+{
+    (void) state;
+
+    ObservabilityCounter *c = observabilityCounterCreate("acquire.counter", "Acquire test", "1");
+    assert_non_null(c);
+
+    /* Acquiring an additional reference must return the same handle */
+    ObservabilityCounter *c2 = observabilityCounterAcquire(c);
+    assert_ptr_equal(c, c2);
+
+    observabilityCounterAdd(c, 7);
+
+    /* Dropping the first reference must NOT free the instrument while a second
+     * reference is still held — it must remain visible and usable. */
+    observabilityCounterRelease(c);
+
+    char *json = observabilityDumpJson();
+    assert_non_null(json);
+    cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
+    cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    cJSON *counter = cJSON_GetObjectItem(metrics, "acquire.counter");
+    assert_non_null(counter);
+
+    cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");
+    cJSON *dp = cJSON_GetArrayItem(dataPoints, 0);
+    assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "value")), 7);
+
+    cJSON_Delete(root);
+    free(json);
+
+    /* Dropping the last reference frees it and removes it from the dump. */
+    observabilityCounterRelease(c2);
+
+    json = observabilityDumpJson();
+    assert_non_null(json);
+    root = cJSON_Parse(json);
+    assert_non_null(root);
+    metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_null(cJSON_GetObjectItem(metrics, "acquire.counter"));
+
+    cJSON_Delete(root);
+    free(json);
+}
+
+static void test_acquire_null_safe(void **state)
+{
+    (void) state;
+
+    assert_null(observabilityCounterAcquire(NULL));
+    assert_null(observabilityGaugeAcquire(NULL));
+    assert_null(observabilityHistogramAcquire(NULL));
+}
+
+/* ------------------------------------------------------------------ */
 /* JSON dump tests                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -535,6 +594,9 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_histogram_null_safe, setup, teardown),
         /* Release */
         cmocka_unit_test_setup_teardown(test_counter_release_removes_from_dump, setup, teardown),
+        /* Acquire / refcount */
+        cmocka_unit_test_setup_teardown(test_counter_acquire_keeps_alive, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_acquire_null_safe, setup, teardown),
         /* JSON dump */
         cmocka_unit_test_setup_teardown(test_dump_empty, setup, teardown),
         cmocka_unit_test_setup_teardown(test_dump_multiple_instruments, setup, teardown),

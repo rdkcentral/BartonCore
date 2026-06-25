@@ -75,6 +75,13 @@ void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t va
     (void) value;
 }
 
+ObservabilityCounter *observabilityCounterAcquire(ObservabilityCounter *counter)
+{
+    (void) counter;
+
+    return NULL;
+}
+
 void observabilityCounterRelease(ObservabilityCounter *counter)
 {
     (void) counter;
@@ -103,6 +110,13 @@ void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value,
     (void) value;
 }
 
+ObservabilityGauge *observabilityGaugeAcquire(ObservabilityGauge *gauge)
+{
+    (void) gauge;
+
+    return NULL;
+}
+
 void observabilityGaugeRelease(ObservabilityGauge *gauge)
 {
     (void) gauge;
@@ -129,6 +143,13 @@ void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, do
 {
     (void) histogram;
     (void) value;
+}
+
+ObservabilityHistogram *observabilityHistogramAcquire(ObservabilityHistogram *histogram)
+{
+    (void) histogram;
+
+    return NULL;
 }
 
 void observabilityHistogramRelease(ObservabilityHistogram *histogram)

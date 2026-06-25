@@ -33,6 +33,8 @@
 #include "observability/observability.h"
 #include "observability/observabilityMetrics.h"
 
+#include <icConcurrent/threadUtils.h>
+
 #include <cjson/cJSON.h>
 
 #include <glib.h>
@@ -235,25 +237,14 @@ static GSList *registry = NULL;
 
 static void registryAdd(InstrumentBase *inst)
 {
-    pthread_mutex_lock(&registryLock);
+    LOCK_SCOPE(registryLock);
     registry = g_slist_prepend(registry, inst);
-    pthread_mutex_unlock(&registryLock);
 }
 
 static void registryRemove(InstrumentBase *inst)
 {
-    pthread_mutex_lock(&registryLock);
+    LOCK_SCOPE(registryLock);
     registry = g_slist_remove(registry, inst);
-    pthread_mutex_unlock(&registryLock);
-}
-
-static void initMutex(pthread_mutex_t *mutex)
-{
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-    pthread_mutex_init(mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,14 +258,12 @@ int observabilityInit(void)
 
 void observabilityShutdown(void)
 {
-    pthread_mutex_lock(&registryLock);
+    LOCK_SCOPE(registryLock);
 
     /* Detach all instruments from the registry — does not free them;
      * instruments may still be referenced and must be released individually. */
     g_slist_free(registry);
     registry = NULL;
-
-    pthread_mutex_unlock(&registryLock);
 }
 
 /* ------------------------------------------------------------------ */
@@ -315,7 +304,7 @@ ObservabilityCounter *observabilityCounterCreate(const char *name, const char *d
     c->base.name = g_strdup(name);
     c->base.description = g_strdup(description != NULL ? description : "");
     c->base.unit = g_strdup(unit != NULL ? unit : "1");
-    initMutex(&c->lock);
+    mutexInitWithType(&c->lock, PTHREAD_MUTEX_ERRORCHECK);
 
     registryAdd(&c->base);
 
@@ -330,10 +319,9 @@ void observabilityCounterAdd(ObservabilityCounter *counter, uint64_t value)
     }
 
     AttrSet empty = {NULL};
-    pthread_mutex_lock(&counter->lock);
+    LOCK_SCOPE_ALIAS(counter->lock, counter);
     CounterDataPoint *dp = counterGetOrCreateDataPoint(counter, &empty);
     dp->value += value;
-    pthread_mutex_unlock(&counter->lock);
 }
 
 void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t value, ...)
@@ -348,10 +336,11 @@ void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t va
     AttrSet attrs = attrSetFromVa(ap);
     va_end(ap);
 
-    pthread_mutex_lock(&counter->lock);
-    CounterDataPoint *dp = counterGetOrCreateDataPoint(counter, &attrs);
-    dp->value += value;
-    pthread_mutex_unlock(&counter->lock);
+    {
+        LOCK_SCOPE_ALIAS(counter->lock, counter);
+        CounterDataPoint *dp = counterGetOrCreateDataPoint(counter, &attrs);
+        dp->value += value;
+    }
 
     attrSetFree(&attrs);
 }
@@ -373,6 +362,16 @@ static void counterDestroy(gpointer data)
     g_free(counter->base.name);
     g_free(counter->base.description);
     g_free(counter->base.unit);
+}
+
+ObservabilityCounter *observabilityCounterAcquire(ObservabilityCounter *counter)
+{
+    if (counter == NULL)
+    {
+        return NULL;
+    }
+
+    return g_atomic_rc_box_acquire(counter);
 }
 
 void observabilityCounterRelease(ObservabilityCounter *counter)
@@ -423,7 +422,7 @@ ObservabilityGauge *observabilityGaugeCreate(const char *name, const char *descr
     g->base.name = g_strdup(name);
     g->base.description = g_strdup(description != NULL ? description : "");
     g->base.unit = g_strdup(unit != NULL ? unit : "1");
-    initMutex(&g->lock);
+    mutexInitWithType(&g->lock, PTHREAD_MUTEX_ERRORCHECK);
 
     registryAdd(&g->base);
 
@@ -438,10 +437,9 @@ void observabilityGaugeRecord(ObservabilityGauge *gauge, int64_t value)
     }
 
     AttrSet empty = {NULL};
-    pthread_mutex_lock(&gauge->lock);
+    LOCK_SCOPE_ALIAS(gauge->lock, gauge);
     GaugeDataPoint *dp = gaugeGetOrCreateDataPoint(gauge, &empty);
     dp->value = value;
-    pthread_mutex_unlock(&gauge->lock);
 }
 
 void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value, ...)
@@ -456,10 +454,11 @@ void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value,
     AttrSet attrs = attrSetFromVa(ap);
     va_end(ap);
 
-    pthread_mutex_lock(&gauge->lock);
-    GaugeDataPoint *dp = gaugeGetOrCreateDataPoint(gauge, &attrs);
-    dp->value = value;
-    pthread_mutex_unlock(&gauge->lock);
+    {
+        LOCK_SCOPE_ALIAS(gauge->lock, gauge);
+        GaugeDataPoint *dp = gaugeGetOrCreateDataPoint(gauge, &attrs);
+        dp->value = value;
+    }
 
     attrSetFree(&attrs);
 }
@@ -481,6 +480,16 @@ static void gaugeDestroy(gpointer data)
     g_free(gauge->base.name);
     g_free(gauge->base.description);
     g_free(gauge->base.unit);
+}
+
+ObservabilityGauge *observabilityGaugeAcquire(ObservabilityGauge *gauge)
+{
+    if (gauge == NULL)
+    {
+        return NULL;
+    }
+
+    return g_atomic_rc_box_acquire(gauge);
 }
 
 void observabilityGaugeRelease(ObservabilityGauge *gauge)
@@ -569,7 +578,7 @@ ObservabilityHistogram *observabilityHistogramCreate(const char *name, const cha
     h->base.name = g_strdup(name);
     h->base.description = g_strdup(description != NULL ? description : "");
     h->base.unit = g_strdup(unit != NULL ? unit : "1");
-    initMutex(&h->lock);
+    mutexInitWithType(&h->lock, PTHREAD_MUTEX_ERRORCHECK);
 
     registryAdd(&h->base);
 
@@ -584,10 +593,9 @@ void observabilityHistogramRecord(ObservabilityHistogram *histogram, double valu
     }
 
     AttrSet empty = {NULL};
-    pthread_mutex_lock(&histogram->lock);
+    LOCK_SCOPE_ALIAS(histogram->lock, histogram);
     HistogramDataPoint *dp = histogramGetOrCreateDataPoint(histogram, &empty);
     histogramRecordValue(dp, value);
-    pthread_mutex_unlock(&histogram->lock);
 }
 
 void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...)
@@ -602,10 +610,11 @@ void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, do
     AttrSet attrs = attrSetFromVa(ap);
     va_end(ap);
 
-    pthread_mutex_lock(&histogram->lock);
-    HistogramDataPoint *dp = histogramGetOrCreateDataPoint(histogram, &attrs);
-    histogramRecordValue(dp, value);
-    pthread_mutex_unlock(&histogram->lock);
+    {
+        LOCK_SCOPE_ALIAS(histogram->lock, histogram);
+        HistogramDataPoint *dp = histogramGetOrCreateDataPoint(histogram, &attrs);
+        histogramRecordValue(dp, value);
+    }
 
     attrSetFree(&attrs);
 }
@@ -627,6 +636,16 @@ static void histogramDestroy(gpointer data)
     g_free(histogram->base.name);
     g_free(histogram->base.description);
     g_free(histogram->base.unit);
+}
+
+ObservabilityHistogram *observabilityHistogramAcquire(ObservabilityHistogram *histogram)
+{
+    if (histogram == NULL)
+    {
+        return NULL;
+    }
+
+    return g_atomic_rc_box_acquire(histogram);
 }
 
 void observabilityHistogramRelease(ObservabilityHistogram *histogram)
@@ -670,25 +689,25 @@ static cJSON *counterToJson(ObservabilityCounter *c)
 
     cJSON *dataPoints = cJSON_CreateArray();
 
-    pthread_mutex_lock(&c->lock);
-
-    for (GSList *node = c->dataPoints; node != NULL; node = node->next)
     {
-        CounterDataPoint *cdp = node->data;
-        cJSON *dp = cJSON_CreateObject();
-        cJSON_AddNumberToObject(dp, "value", (double) cdp->value);
+        LOCK_SCOPE_ALIAS(c->lock, c);
 
-        cJSON *attrs = attrSetToJson(&cdp->attrs);
-
-        if (attrs)
+        for (GSList *node = c->dataPoints; node != NULL; node = node->next)
         {
-            cJSON_AddItemToObject(dp, "attributes", attrs);
+            CounterDataPoint *cdp = node->data;
+            cJSON *dp = cJSON_CreateObject();
+            cJSON_AddNumberToObject(dp, "value", (double) cdp->value);
+
+            cJSON *attrs = attrSetToJson(&cdp->attrs);
+
+            if (attrs)
+            {
+                cJSON_AddItemToObject(dp, "attributes", attrs);
+            }
+
+            cJSON_AddItemToArray(dataPoints, dp);
         }
-
-        cJSON_AddItemToArray(dataPoints, dp);
     }
-
-    pthread_mutex_unlock(&c->lock);
 
     cJSON_AddItemToObject(obj, "dataPoints", dataPoints);
 
@@ -704,25 +723,25 @@ static cJSON *gaugeToJson(ObservabilityGauge *g)
 
     cJSON *dataPoints = cJSON_CreateArray();
 
-    pthread_mutex_lock(&g->lock);
-
-    for (GSList *node = g->dataPoints; node != NULL; node = node->next)
     {
-        GaugeDataPoint *gdp = node->data;
-        cJSON *dp = cJSON_CreateObject();
-        cJSON_AddNumberToObject(dp, "value", (double) gdp->value);
+        LOCK_SCOPE_ALIAS(g->lock, g);
 
-        cJSON *attrs = attrSetToJson(&gdp->attrs);
-
-        if (attrs)
+        for (GSList *node = g->dataPoints; node != NULL; node = node->next)
         {
-            cJSON_AddItemToObject(dp, "attributes", attrs);
+            GaugeDataPoint *gdp = node->data;
+            cJSON *dp = cJSON_CreateObject();
+            cJSON_AddNumberToObject(dp, "value", (double) gdp->value);
+
+            cJSON *attrs = attrSetToJson(&gdp->attrs);
+
+            if (attrs)
+            {
+                cJSON_AddItemToObject(dp, "attributes", attrs);
+            }
+
+            cJSON_AddItemToArray(dataPoints, dp);
         }
-
-        cJSON_AddItemToArray(dataPoints, dp);
     }
-
-    pthread_mutex_unlock(&g->lock);
 
     cJSON_AddItemToObject(obj, "dataPoints", dataPoints);
 
@@ -738,49 +757,49 @@ static cJSON *histogramToJson(ObservabilityHistogram *h)
 
     cJSON *dataPoints = cJSON_CreateArray();
 
-    pthread_mutex_lock(&h->lock);
-
-    for (GSList *node = h->dataPoints; node != NULL; node = node->next)
     {
-        HistogramDataPoint *hdp = node->data;
-        cJSON *dp = cJSON_CreateObject();
-        cJSON_AddNumberToObject(dp, "count", (double) hdp->count);
-        cJSON_AddNumberToObject(dp, "sum", hdp->sum);
-        cJSON_AddNumberToObject(dp, "min", hdp->min);
-        cJSON_AddNumberToObject(dp, "max", hdp->max);
+        LOCK_SCOPE_ALIAS(h->lock, h);
 
-        cJSON *buckets = cJSON_CreateArray();
-
-        for (int b = 0; b <= numBounds; b++)
+        for (GSList *node = h->dataPoints; node != NULL; node = node->next)
         {
-            cJSON *bucket = cJSON_CreateObject();
+            HistogramDataPoint *hdp = node->data;
+            cJSON *dp = cJSON_CreateObject();
+            cJSON_AddNumberToObject(dp, "count", (double) hdp->count);
+            cJSON_AddNumberToObject(dp, "sum", hdp->sum);
+            cJSON_AddNumberToObject(dp, "min", hdp->min);
+            cJSON_AddNumberToObject(dp, "max", hdp->max);
 
-            if (b < numBounds)
+            cJSON *buckets = cJSON_CreateArray();
+
+            for (int b = 0; b <= numBounds; b++)
             {
-                cJSON_AddNumberToObject(bucket, "le", histogramBounds[b]);
+                cJSON *bucket = cJSON_CreateObject();
+
+                if (b < numBounds)
+                {
+                    cJSON_AddNumberToObject(bucket, "le", histogramBounds[b]);
+                }
+                else
+                {
+                    cJSON_AddStringToObject(bucket, "le", "+Inf");
+                }
+
+                cJSON_AddNumberToObject(bucket, "count", (double) hdp->buckets[b]);
+                cJSON_AddItemToArray(buckets, bucket);
             }
-            else
+
+            cJSON_AddItemToObject(dp, "buckets", buckets);
+
+            cJSON *attrs = attrSetToJson(&hdp->attrs);
+
+            if (attrs)
             {
-                cJSON_AddStringToObject(bucket, "le", "+Inf");
+                cJSON_AddItemToObject(dp, "attributes", attrs);
             }
 
-            cJSON_AddNumberToObject(bucket, "count", (double) hdp->buckets[b]);
-            cJSON_AddItemToArray(buckets, bucket);
+            cJSON_AddItemToArray(dataPoints, dp);
         }
-
-        cJSON_AddItemToObject(dp, "buckets", buckets);
-
-        cJSON *attrs = attrSetToJson(&hdp->attrs);
-
-        if (attrs)
-        {
-            cJSON_AddItemToObject(dp, "attributes", attrs);
-        }
-
-        cJSON_AddItemToArray(dataPoints, dp);
     }
-
-    pthread_mutex_unlock(&h->lock);
 
     cJSON_AddItemToObject(obj, "dataPoints", dataPoints);
 
@@ -792,35 +811,35 @@ char *observabilityDumpJson(void)
     cJSON *root = cJSON_CreateObject();
     cJSON *metrics = cJSON_CreateObject();
 
-    pthread_mutex_lock(&registryLock);
-
-    for (GSList *node = registry; node != NULL; node = node->next)
     {
-        InstrumentBase *inst = node->data;
-        cJSON *metric = NULL;
+        LOCK_SCOPE(registryLock);
 
-        switch (inst->type)
+        for (GSList *node = registry; node != NULL; node = node->next)
         {
-            case INSTRUMENT_COUNTER:
-                metric = counterToJson((ObservabilityCounter *) inst);
-                break;
+            InstrumentBase *inst = node->data;
+            cJSON *metric = NULL;
 
-            case INSTRUMENT_GAUGE:
-                metric = gaugeToJson((ObservabilityGauge *) inst);
-                break;
+            switch (inst->type)
+            {
+                case INSTRUMENT_COUNTER:
+                    metric = counterToJson((ObservabilityCounter *) inst);
+                    break;
 
-            case INSTRUMENT_HISTOGRAM:
-                metric = histogramToJson((ObservabilityHistogram *) inst);
-                break;
-        }
+                case INSTRUMENT_GAUGE:
+                    metric = gaugeToJson((ObservabilityGauge *) inst);
+                    break;
 
-        if (metric)
-        {
-            cJSON_AddItemToObject(metrics, inst->name, metric);
+                case INSTRUMENT_HISTOGRAM:
+                    metric = histogramToJson((ObservabilityHistogram *) inst);
+                    break;
+            }
+
+            if (metric)
+            {
+                cJSON_AddItemToObject(metrics, inst->name, metric);
+            }
         }
     }
-
-    pthread_mutex_unlock(&registryLock);
 
     cJSON_AddItemToObject(root, "metrics", metrics);
 

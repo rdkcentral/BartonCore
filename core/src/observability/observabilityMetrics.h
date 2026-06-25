@@ -117,16 +117,40 @@ void observabilityHistogramRecord(ObservabilityHistogram *histogram, double valu
 void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, double value, ...);
 
 /**
+ * Acquire an additional reference to a counter. The returned handle refers to
+ * the same instrument and must be balanced by a matching observabilityCounterRelease().
+ * @param counter  Counter to acquire (NULL is safe and returns NULL)
+ * @return The same counter handle, or NULL if counter was NULL
+ */
+ObservabilityCounter *observabilityCounterAcquire(ObservabilityCounter *counter);
+
+/**
  * Release a counter reference. Frees when the last reference is dropped.
  * @param counter  Counter to release (NULL is safe no-op)
  */
 void observabilityCounterRelease(ObservabilityCounter *counter);
 
 /**
+ * Acquire an additional reference to a gauge. The returned handle refers to
+ * the same instrument and must be balanced by a matching observabilityGaugeRelease().
+ * @param gauge  Gauge to acquire (NULL is safe and returns NULL)
+ * @return The same gauge handle, or NULL if gauge was NULL
+ */
+ObservabilityGauge *observabilityGaugeAcquire(ObservabilityGauge *gauge);
+
+/**
  * Release a gauge reference. Frees when the last reference is dropped.
  * @param gauge  Gauge to release (NULL is safe no-op)
  */
 void observabilityGaugeRelease(ObservabilityGauge *gauge);
+
+/**
+ * Acquire an additional reference to a histogram. The returned handle refers to
+ * the same instrument and must be balanced by a matching observabilityHistogramRelease().
+ * @param histogram  Histogram to acquire (NULL is safe and returns NULL)
+ * @return The same histogram handle, or NULL if histogram was NULL
+ */
+ObservabilityHistogram *observabilityHistogramAcquire(ObservabilityHistogram *histogram);
 
 /**
  * Release a histogram reference. Frees when the last reference is dropped.
