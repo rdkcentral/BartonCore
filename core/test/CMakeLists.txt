@@ -251,3 +251,13 @@ if (BCORE_MATTER)
         bcore_configure_glib()
     endif()
 endif()
+
+# Observability metrics test — only meaningful with the in-memory backend.
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
+    bcore_add_cmocka_test(
+        NAME testObservabilityMetrics
+        TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/observabilityMetricsTest.c
+        LINK_LIBRARIES BartonCoreStatic cjson
+        INCLUDES ${BARTON_PRIVATE_INCLUDES}
+    )
+endif()
