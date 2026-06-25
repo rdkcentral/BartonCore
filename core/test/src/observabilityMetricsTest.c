@@ -87,6 +87,7 @@ static void test_counter_add(void **state)
     assert_non_null(counter);
 
     cJSON *type = cJSON_GetObjectItem(counter, "type");
+    assert_non_null(type);
     assert_string_equal(cJSON_GetStringValue(type), "counter");
 
     cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");

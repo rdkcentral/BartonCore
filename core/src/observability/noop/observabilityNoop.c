@@ -34,6 +34,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* --- init / shutdown / dump --- */
 
@@ -48,7 +49,7 @@ void observabilityShutdown(void)
 
 char *observabilityDumpJson(void)
 {
-    return NULL;
+    return strdup("{\"metrics\":{}}");
 }
 
 /* --- counters --- */
