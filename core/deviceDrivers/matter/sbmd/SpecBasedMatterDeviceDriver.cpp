@@ -291,6 +291,22 @@ void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::pro
                                                       chip::Messaging::ExchangeManager &exchangeMgr,
                                                       const chip::SessionHandle &sessionHandle)
 {
+    auto device = GetDevice(deviceId);
+
+    if (device != nullptr)
+    {
+        // Re-register incoming (server-side) command handlers. On app restart a previously
+        // commissioned device is restored via this synchronize path rather than AddDevice,
+        // so the CommandHandlerInterface for server clusters (e.g. WebRTCTransportRequestor)
+        // must be re-established here or inbound commands from the device will go unhandled.
+        device->UnregisterIncomingCommandHandlers();
+
+        for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+        {
+            device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+        }
+    }
+
     SeedInitialResourceValues(deviceId);
 }
 
