@@ -300,7 +300,7 @@ namespace barton
         std::unordered_map<std::string, std::unordered_map<std::string, TransientEntry>> transientStore;
 
         /**
-         * Handle a attribute report via the dispatch tables.
+         * Handle an attribute report via the dispatch tables.
          * Called from MatterDevice::CacheCallback via the AttributeCallback.
          */
         void HandleAttributeReport(const std::string &deviceId,
@@ -320,8 +320,8 @@ namespace barton
                          chip::TLV::TLVReader &reader);
 
         /**
-         * Handle an unsolicited command via the dispatch tables.
-         * Called when a command response does not match any pending requestCommand.
+         * Handle an incoming (server-side) command via the dispatch tables.
+         * Called from MatterDevice::IncomingCommandHandler via the CommandCallback.
          */
         void HandleCommand(const std::string &deviceId,
                            chip::EndpointId endpointId,
@@ -332,7 +332,7 @@ namespace barton
         std::optional<uint8_t> ConvertModesToBitmask(const std::vector<std::string> &modes);
 
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
-         * configuration */
+         * prerequisite checks */
         std::map<std::string, std::set<std::string>> skippedOptionalResources;
 
         /** Active deferred operations indexed by unique ID */

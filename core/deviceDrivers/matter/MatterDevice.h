@@ -97,8 +97,8 @@ namespace barton
                                                  chip::TLV::TLVReader &reader)>;
 
         /**
-         * Set a attribute callback. When set, CacheCallback::OnAttributeChanged will
-         * call this instead of using the script mapper.
+         * Set an attribute callback. When set, CacheCallback::OnAttributeChanged will
+         * dispatch attribute data through this callback.
          */
         void SetAttributeCallback(AttributeCallback callback)
         {
@@ -146,7 +146,6 @@ namespace barton
         /**
          * Set the list of cluster IDs to get feature maps from.
          * These are specified in the SBMD spec's matterMeta.featureClusters.
-         * If the device cache is already available, also updates the cached feature maps.
          */
         void SetFeatureClusters(std::vector<uint32_t> clusters)
         {
@@ -167,7 +166,6 @@ namespace barton
         /**
          * Build the SBMD-endpoint-to-Matter-endpoint mapping by matching device type lists
          * from the Descriptor cluster against the provided device types.
-         * Must be called before resource binding.
          *
          * @param driverSupportedDeviceTypes The Matter device type IDs to match against.
          * @return True if at least one matching endpoint was found, false otherwise.
@@ -379,7 +377,7 @@ namespace barton
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
 
         /**
-         * Compute feature maps for all configured featureClusters and pass them to the script.
+         * Compute feature maps for all configured featureClusters and cache them.
          * Called when subscription is established and cluster data is available.
          */
         void UpdateCachedFeatureMaps();
