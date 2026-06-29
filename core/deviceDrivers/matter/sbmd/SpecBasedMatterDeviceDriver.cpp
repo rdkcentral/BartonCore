@@ -1049,7 +1049,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.handlerContext = hctx;
     pending.device = &device;
     pending.exchangeMgr = &exchangeMgr;
-    pending.sessionHandle = &sessionHandle;
+    pending.sessionHandle.Grab(sessionHandle);
     pending.readValue = readValue;
     pending.executeResponse = executeResponse;
 
@@ -1463,6 +1463,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         // Send the command — this resolves immediately via OnDone
         std::forward_list<std::promise<bool>> tempPromises;
 
+        auto session = pending.sessionHandle.Get();
+
+        if (!session.HasValue())
+        {
+            icError("Session expired before deferred sendCommand for operation %" PRIu64, pendingId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
         if (!pending.device->SendCommandFromTlv(tempPromises,
                                                 cmd.clusterId,
                                                 cmd.commandId,
@@ -1471,7 +1480,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                                                 tlvBuffer,
                                                 tlvLength,
                                                 *pending.exchangeMgr,
-                                                *pending.sessionHandle,
+                                                session.Value(),
                                                 nullptr,
                                                 pending.executeResponse))
         {
@@ -1531,6 +1540,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         std::forward_list<std::promise<bool>> tempPromises;
 
+        auto session = pending.sessionHandle.Get();
+
+        if (!session.HasValue())
+        {
+            icError("Session expired before deferred writeAttribute for operation %" PRIu64, pendingId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
         if (!pending.device->WriteAttributeFromTlv(tempPromises,
                                                    endpointId,
                                                    wa.clusterId,
@@ -1538,7 +1556,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                                                    decodedTlv.get(),
                                                    decoded,
                                                    *pending.exchangeMgr,
-                                                   *pending.sessionHandle,
+                                                   session.Value(),
                                                    nullptr))
         {
             CompletePendingOperation(pendingId, false);
@@ -1628,6 +1646,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         }
 
         // Send next command with deferred callbacks
+        auto session = pending.sessionHandle.Get();
+
+        if (!session.HasValue())
+        {
+            icError("Session expired before deferred requestCommand re-arm for operation %" PRIu64, pendingId);
+            CompletePendingOperation(pendingId, false);
+            return;
+        }
+
         bool sent = pending.device->SendCommandWithCallbacks(
             cmd.clusterId,
             cmd.commandId,
@@ -1636,7 +1663,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             tlvBuffer,
             tlvLength,
             *pending.exchangeMgr,
-            *pending.sessionHandle,
+            session.Value(),
             [this, pendingId](const chip::app::ConcreteCommandPath &path, chip::TLV::TLVReader *data) {
                 HandleDeferredCommandResponse(pendingId, path, data);
             },
