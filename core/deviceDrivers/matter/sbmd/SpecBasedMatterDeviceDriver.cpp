@@ -1068,37 +1068,42 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
-    // GC-root the deferred handlers so they survive until we need them
+    // Record which JS callbacks need rooting before inserting into the map.
+    // JS_AddGCRef registers the *address* of the JSGCRef, so it must not be called
+    // until after the emplace — moving the PendingOperation into the map would
+    // otherwise invalidate the registered address. Note also that JS_AddGCRef
+    // resets ref->val, so values must be assigned AFTER the call.
+    pending.onResponseRooted = !JS_IsUndefined(cmd.onResponse);
+    pending.onErrorRooted = !JS_IsUndefined(cmd.onError);
+    pending.contextRooted = !JS_IsUndefined(cmd.context);
+
+    auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
+    PendingOperation &stored = it->second;
+
+    // GC-root the deferred handlers using the stable map-node addresses so they
+    // survive until we need them.
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        if (!JS_IsUndefined(cmd.onResponse))
+        if (stored.onResponseRooted)
         {
-            JS_AddGCRef(ctx, &pending.onResponseRef);
-            pending.onResponseRef.val = cmd.onResponse;
-
-            pending.onResponseRooted = true;
+            JS_AddGCRef(ctx, &stored.onResponseRef);
+            stored.onResponseRef.val = cmd.onResponse;
         }
 
-        if (!JS_IsUndefined(cmd.onError))
+        if (stored.onErrorRooted)
         {
-            JS_AddGCRef(ctx, &pending.onErrorRef);
-            pending.onErrorRef.val = cmd.onError;
-
-            pending.onErrorRooted = true;
+            JS_AddGCRef(ctx, &stored.onErrorRef);
+            stored.onErrorRef.val = cmd.onError;
         }
 
-        if (!JS_IsUndefined(cmd.context))
+        if (stored.contextRooted)
         {
-            JS_AddGCRef(ctx, &pending.contextRef);
-            pending.contextRef.val = cmd.context;
-
-            pending.contextRooted = true;
+            JS_AddGCRef(ctx, &stored.contextRef);
+            stored.contextRef.val = cmd.context;
         }
     }
-
-    pendingOperations.emplace(pendingId, std::move(pending));
 
     // Send the command with deferred callbacks
     bool sent = device.SendCommandWithCallbacks(
