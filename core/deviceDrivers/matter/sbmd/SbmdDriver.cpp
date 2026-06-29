@@ -142,8 +142,10 @@ namespace barton
         return commandDispatch;
     }
 
-    void SbmdDriver::RootIfValid(JSContext *ctx, JSValue &handler)
+    void SbmdDriver::RootIfValid(JSContext *ctx, JSValue &handler, JSValue *&rootedOut)
     {
+        rootedOut = nullptr;
+
         if (JS_IsUndefined(handler))
         {
             return;
@@ -152,6 +154,11 @@ namespace barton
         auto &ref = gcRefs.emplace_back();
         JS_AddGCRef(ctx, &ref);
         ref.val = handler;
+
+        // mquickjs uses a moving GC that updates ref.val (a stable std::list node) on collection but
+        // not the raw 'handler' copy. Point the handler at ref.val so invocation always sees the
+        // relocated function object.
+        rootedOut = &ref.val;
     }
 
     void SbmdDriver::RootHandlers(JSContext *ctx)
@@ -165,22 +172,22 @@ namespace barton
             {
                 if (resource.seed.has_value())
                 {
-                    RootIfValid(ctx, resource.seed->handler);
+                    RootIfValid(ctx, resource.seed->handler, resource.seed->rooted);
                 }
 
                 if (resource.read.has_value())
                 {
-                    RootIfValid(ctx, resource.read->handler);
+                    RootIfValid(ctx, resource.read->handler, resource.read->rooted);
                 }
 
                 if (resource.write.has_value())
                 {
-                    RootIfValid(ctx, resource.write->handler);
+                    RootIfValid(ctx, resource.write->handler, resource.write->rooted);
                 }
 
                 if (resource.execute.has_value())
                 {
-                    RootIfValid(ctx, resource.execute->handler);
+                    RootIfValid(ctx, resource.execute->handler, resource.execute->rooted);
                 }
             }
         }
@@ -188,17 +195,17 @@ namespace barton
         // Root device handlers (attribute, event, command)
         for (auto &handler : registration->attributeHandlers)
         {
-            RootIfValid(ctx, handler.handler);
+            RootIfValid(ctx, handler.handler, handler.rooted);
         }
 
         for (auto &handler : registration->eventHandlers)
         {
-            RootIfValid(ctx, handler.handler);
+            RootIfValid(ctx, handler.handler, handler.rooted);
         }
 
         for (auto &handler : registration->commandHandlers)
         {
-            RootIfValid(ctx, handler.handler);
+            RootIfValid(ctx, handler.handler, handler.rooted);
         }
     }
 
@@ -220,21 +227,25 @@ namespace barton
                 if (resource.seed.has_value())
                 {
                     resource.seed->handler = JS_UNDEFINED;
+                    resource.seed->rooted = nullptr;
                 }
 
                 if (resource.read.has_value())
                 {
                     resource.read->handler = JS_UNDEFINED;
+                    resource.read->rooted = nullptr;
                 }
 
                 if (resource.write.has_value())
                 {
                     resource.write->handler = JS_UNDEFINED;
+                    resource.write->rooted = nullptr;
                 }
 
                 if (resource.execute.has_value())
                 {
                     resource.execute->handler = JS_UNDEFINED;
+                    resource.execute->rooted = nullptr;
                 }
             }
         }
@@ -242,16 +253,19 @@ namespace barton
         for (auto &handler : registration->attributeHandlers)
         {
             handler.handler = JS_UNDEFINED;
+            handler.rooted = nullptr;
         }
 
         for (auto &handler : registration->eventHandlers)
         {
             handler.handler = JS_UNDEFINED;
+            handler.rooted = nullptr;
         }
 
         for (auto &handler : registration->commandHandlers)
         {
             handler.handler = JS_UNDEFINED;
+            handler.rooted = nullptr;
         }
     }
 

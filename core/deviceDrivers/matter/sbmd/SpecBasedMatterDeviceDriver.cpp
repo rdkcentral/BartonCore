@@ -572,7 +572,7 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
                                            MakeTransientFetcher(deviceId));
     }
 
-    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
+    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
 
     JS_DeleteGCRef(ctx, &argsRef);
 
@@ -783,7 +783,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                                            MakePersistFetcher(device.GetDeviceId()),
                                            MakeTransientFetcher(device.GetDeviceId()));
 
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
     }
@@ -2080,7 +2080,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2104,7 +2104,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -2186,7 +2186,7 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2210,7 +2210,7 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -2265,7 +2265,7 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2289,7 +2289,7 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 

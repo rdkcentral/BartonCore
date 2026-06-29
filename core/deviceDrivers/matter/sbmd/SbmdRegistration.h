@@ -74,8 +74,14 @@ namespace barton
      */
     struct SbmdResourceHandler
     {
-        JSValue handler = JS_UNDEFINED; // GC-rooted function reference
+        JSValue handler = JS_UNDEFINED; // Loaded function reference (valid before activation)
+        // Points at the GC-tracked storage (the JSGCRef::val that JS_AddGCRef roots). mquickjs has a
+        // moving/compacting GC: it updates this location on collection but NOT the raw 'handler' copy
+        // above. Always invoke via Fn() so a GC that relocates the function object is observed.
+        JSValue *rooted = nullptr;
         SbmdSupplements supplements;
+
+        JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
     };
 
     /**
@@ -111,10 +117,14 @@ namespace barton
      */
     struct SbmdDeviceHandler
     {
-        std::string name;                    // Handler registration name
-        std::vector<std::string> aliases;    // Alias names this handler matches
-        JSValue handler = JS_UNDEFINED;      // GC-rooted function reference
+        std::string name;                 // Handler registration name
+        std::vector<std::string> aliases; // Alias names this handler matches
+        JSValue handler = JS_UNDEFINED;   // Loaded function reference (valid before activation)
+        // See SbmdResourceHandler::rooted — points at the GC-tracked storage; invoke via Fn().
+        JSValue *rooted = nullptr;
         SbmdSupplements supplements;
+
+        JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
     };
 
     /**
