@@ -763,6 +763,15 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
     // Invoke the handler under the JS mutex
     std::optional<ParsedResult> result;
+
+    // Temporary GC roots for deferred JSValues in RequestCommand/ReadAttribute terminals.
+    // These protect the function objects from GC between InvokeHandler (mutex held) and
+    // ExecuteRequestCommand/ExecuteReadAttribute (which establishes permanent roots).
+    JSGCRef tempOnResponse {};
+    JSGCRef tempOnError {};
+    JSGCRef tempContext {};
+    bool hasTempRoots = false;
+
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -786,6 +795,44 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
+
+        // If the result has a deferred terminal (RequestCommand or ReadAttribute),
+        // root its JSValues now while we still hold the mutex, preventing GC from
+        // sweeping them before ExecuteRequestCommand/ExecuteReadAttribute can establish
+        // permanent roots.
+        if (result.has_value())
+        {
+            if (std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data))
+            {
+                const auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
+
+                if (!JS_IsUndefined(cmd.onResponse) || !JS_IsUndefined(cmd.onError) || !JS_IsUndefined(cmd.context))
+                {
+                    JS_AddGCRef(ctx, &tempOnResponse);
+                    JS_AddGCRef(ctx, &tempOnError);
+                    JS_AddGCRef(ctx, &tempContext);
+                    tempOnResponse.val = cmd.onResponse;
+                    tempOnError.val = cmd.onError;
+                    tempContext.val = cmd.context;
+                    hasTempRoots = true;
+                }
+            }
+            else if (std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data))
+            {
+                const auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
+
+                if (!JS_IsUndefined(ra.onResponse) || !JS_IsUndefined(ra.onError) || !JS_IsUndefined(ra.context))
+                {
+                    JS_AddGCRef(ctx, &tempOnResponse);
+                    JS_AddGCRef(ctx, &tempOnError);
+                    JS_AddGCRef(ctx, &tempContext);
+                    tempOnResponse.val = ra.onResponse;
+                    tempOnError.val = ra.onError;
+                    tempContext.val = ra.context;
+                    hasTempRoots = true;
+                }
+            }
+        }
     }
 
     if (!result.has_value())
@@ -808,6 +855,17 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     executeResponse,
                     exchangeMgr,
                     sessionHandle);
+
+    // Release temporary GC roots — by now ExecuteRequestCommand/ExecuteReadAttribute
+    // has established permanent roots at stable map addresses.
+    if (hasTempRoots)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        JS_DeleteGCRef(ctx, &tempOnResponse);
+        JS_DeleteGCRef(ctx, &tempOnError);
+        JS_DeleteGCRef(ctx, &tempContext);
+    }
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
