@@ -44,13 +44,7 @@ namespace barton
      * - Tlv: TLV encoding/decoding for Matter types
      * - result(): builder for handler return values
      *
-     * The bundle is assembled at build time from individual source files:
-     *   1. sbmd-namespace.js — creates the Sbmd namespace and _internal
-     *   2. sbmd-utf8.js      — adds Sbmd._internal.Utf8
-     *   3. sbmd-base64.js    — adds Sbmd.Base64
-     *   4. sbmd-tlv.js       — adds Sbmd.Tlv
-     *   5. sbmd-result.js    — adds Sbmd.result() builder
-     *   6. sbmd-cleanup.js   — removes Sbmd._internal
+     * The bundle is assembled at build time from individual source files.
      */
     class SbmdBundleLoader
     {
