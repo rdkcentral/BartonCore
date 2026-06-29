@@ -40,6 +40,7 @@
 #include <lib/core/TLVReader.h>
 #include <lib/core/TLVWriter.h>
 #include <memory>
+#include <vector>
 
 extern "C" {
 #include <commonDeviceDefs.h>
@@ -153,24 +154,52 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                                       chip::ClusterId clusterId,
                                       chip::CommandId commandId,
                                       chip::TLV::TLVReader &reader) {
-        // Encode TLV as base64 for HandleCommand
-        uint8_t tlvBuf[1024];
-        chip::TLV::TLVWriter writer;
-        writer.Init(tlvBuf, sizeof(tlvBuf));
-
+        // Encode the incoming command's TLV payload as base64 for HandleCommand.
+        // The buffer must hold the entire command fields struct; WebRTC SDP
+        // offers/answers can be several KB, so grow on demand until the copy fits.
         std::string tlvBase64;
+        size_t bufSize = 2048;
+        constexpr size_t maxTlvBufSize = 32768;
 
-        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) == CHIP_NO_ERROR)
+        while (bufSize <= maxTlvBufSize)
         {
-            uint32_t tlvLen = writer.GetLengthWritten();
+            std::vector<uint8_t> tlvBuf(bufSize);
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuf.data(), static_cast<uint32_t>(tlvBuf.size()));
 
-            if (tlvLen > 0)
+            // Copy the reader so a retry after a too-small buffer restarts cleanly
+            chip::TLV::TLVReader readerCopy(reader);
+            CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+
+            if (err == CHIP_ERROR_BUFFER_TOO_SMALL || err == CHIP_ERROR_NO_MEMORY)
             {
-                size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-                tlvBase64.resize(maxBase64Len, '\0');
-                uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-                tlvBase64.resize(encoded);
+                bufSize *= 2;
+                continue;
             }
+
+            if (err == CHIP_NO_ERROR)
+            {
+                uint32_t tlvLen = writer.GetLengthWritten();
+
+                if (tlvLen > 0)
+                {
+                    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+                    tlvBase64.resize(maxBase64Len, '\0');
+                    uint16_t encoded =
+                        chip::Base64Encode(tlvBuf.data(), static_cast<uint16_t>(tlvLen), tlvBase64.data());
+                    tlvBase64.resize(encoded);
+                }
+            }
+            else
+            {
+                icError("Failed to copy command TLV for cluster 0x%x command 0x%x on device %s: %s",
+                        clusterId,
+                        commandId,
+                        deviceId.c_str(),
+                        err.AsString());
+            }
+
+            break;
         }
 
         HandleCommand(deviceId, endpointId, clusterId, commandId, tlvBase64);
