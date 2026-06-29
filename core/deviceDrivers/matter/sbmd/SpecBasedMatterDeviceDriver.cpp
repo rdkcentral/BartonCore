@@ -760,6 +760,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     HandlerContext hctx;
     hctx.deviceUuid = device.GetDeviceId();
     hctx.endpointId = endpointId ? endpointId : "";
+    hctx.clusterFeatureMaps = device.GetCachedClusterFeatureMaps();
 
     // Invoke the handler under the JS mutex
     std::optional<ParsedResult> result;
@@ -2134,9 +2135,13 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
     hctx.endpointId = std::to_string(endpointId);
-    // TODO: populate clusterFeatureMaps from MatterDevice
 
     auto matterDevice = GetDevice(deviceId);
+
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
 
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -2244,6 +2249,11 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
 
     auto matterDevice = GetDevice(deviceId);
 
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
+
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
@@ -2322,6 +2332,11 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
     hctx.endpointId = std::to_string(endpointId);
 
     auto matterDevice = GetDevice(deviceId);
+
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
 
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
