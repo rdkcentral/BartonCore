@@ -288,6 +288,22 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
                     exMsg += stackStr;
                 }
             }
+
+            // Pull name/fileName/lineNumber to help localize throws that carry no
+            // useful stack (e.g. exceptions raised from native bindings).
+            for (const char *prop : {"name", "fileName", "lineNumber"})
+            {
+                JSValue propVal = JS_GetPropertyStr(ctx, pendingEx, prop);
+                JSCStringBuf buf;
+                const char *propStr = JS_ToCString(ctx, propVal, &buf);
+                if (propStr)
+                {
+                    exMsg += " | ";
+                    exMsg += prop;
+                    exMsg += "=";
+                    exMsg += propStr;
+                }
+            }
         }
         else
         {
