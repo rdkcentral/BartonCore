@@ -125,6 +125,11 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return false;
     }
 
+    // The cache subscription's priming report may have completed (and OnSubscriptionEstablished
+    // fired) before this device registered its CacheCallback, in which case the feature maps were
+    // never cached. Populate them now that featureClusters are set and the cache is primed.
+    device->UpdateCachedFeatureMaps();
+
     // Set the attribute callback so CacheCallback delegates to our dispatch tables
     device->SetAttributeCallback([this](const std::string &deviceId,
                                         chip::EndpointId endpointId,
