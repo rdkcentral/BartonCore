@@ -828,13 +828,11 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     // Invoke the handler under the JS mutex
     std::optional<ParsedResult> result;
 
-    // Temporary GC roots for deferred JSValues in RequestCommand/ReadAttribute terminals.
-    // These protect the function objects from GC between InvokeHandler (mutex held) and
-    // ExecuteRequestCommand/ExecuteReadAttribute (which establishes permanent roots).
-    JSGCRef tempOnResponse {};
-    JSGCRef tempOnError {};
-    JSGCRef tempContext {};
-    bool hasTempRoots = false;
+    // GC roots for a deferred terminal's callbacks. Allocated below if the handler returns a
+    // RequestCommand/ReadAttribute terminal, and attached to that terminal so downstream code
+    // reads GC-current callback values directly from it. Kept here so the roots are released
+    // (under the mutex) once the deferred terminal has been fully executed.
+    std::shared_ptr<DeferredHandlerRoots> deferredRoots;
 
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
@@ -860,42 +858,46 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
 
         JS_DeleteGCRef(ctx, &argsRef);
 
-        // If the result has a deferred terminal (RequestCommand or ReadAttribute),
-        // root its JSValues now while we still hold the mutex, preventing GC from
-        // sweeping them before ExecuteRequestCommand/ExecuteReadAttribute can establish
-        // permanent roots.
+        // If the result has a deferred terminal (RequestCommand or ReadAttribute), root its
+        // callbacks now — while we still hold the mutex and the raw JSValues are current — into
+        // a heap-stable holder that travels with the terminal. The moving GC keeps the holder's
+        // refs current, so ExecuteRequestCommand/ExecuteReadAttribute read live values even
+        // though the JS mutex is released and re-acquired in between.
         if (result.has_value())
         {
-            const JSValue *deferredOnResponse = nullptr;
-            const JSValue *deferredOnError = nullptr;
-            const JSValue *deferredContext = nullptr;
+            JSValue *onResponse = nullptr;
+            JSValue *onError = nullptr;
+            JSValue *context = nullptr;
+            std::shared_ptr<DeferredHandlerRoots> *rootsSlot = nullptr;
 
             if (std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data))
             {
-                const auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
-                deferredOnResponse = &cmd.onResponse;
-                deferredOnError = &cmd.onError;
-                deferredContext = &cmd.context;
+                auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
+                onResponse = &cmd.onResponse;
+                onError = &cmd.onError;
+                context = &cmd.context;
+                rootsSlot = &cmd.roots;
             }
             else if (std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data))
             {
-                const auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
-                deferredOnResponse = &ra.onResponse;
-                deferredOnError = &ra.onError;
-                deferredContext = &ra.context;
+                auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
+                onResponse = &ra.onResponse;
+                onError = &ra.onError;
+                context = &ra.context;
+                rootsSlot = &ra.roots;
             }
 
-            if (deferredOnResponse != nullptr &&
-                (!JS_IsUndefined(*deferredOnResponse) || !JS_IsUndefined(*deferredOnError) ||
-                 !JS_IsUndefined(*deferredContext)))
+            if (onResponse != nullptr &&
+                (!JS_IsUndefined(*onResponse) || !JS_IsUndefined(*onError) || !JS_IsUndefined(*context)))
             {
-                JS_AddGCRef(ctx, &tempOnResponse);
-                JS_AddGCRef(ctx, &tempOnError);
-                JS_AddGCRef(ctx, &tempContext);
-                tempOnResponse.val = *deferredOnResponse;
-                tempOnError.val = *deferredOnError;
-                tempContext.val = *deferredContext;
-                hasTempRoots = true;
+                deferredRoots = std::make_shared<DeferredHandlerRoots>();
+                JS_AddGCRef(ctx, &deferredRoots->onResponse);
+                JS_AddGCRef(ctx, &deferredRoots->onError);
+                JS_AddGCRef(ctx, &deferredRoots->context);
+                deferredRoots->onResponse.val = *onResponse;
+                deferredRoots->onError.val = *onError;
+                deferredRoots->context.val = *context;
+                *rootsSlot = deferredRoots;
             }
         }
     }
@@ -921,15 +923,15 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     exchangeMgr,
                     sessionHandle);
 
-    // Release temporary GC roots — by now ExecuteRequestCommand/ExecuteReadAttribute
-    // has established permanent roots at stable map addresses.
-    if (hasTempRoots)
+    // Release the deferred-callback GC roots — by now ExecuteRequestCommand has copied the
+    // values into permanent roots, and ExecuteReadAttribute has invoked synchronously.
+    if (deferredRoots)
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
-        JS_DeleteGCRef(ctx, &tempOnResponse);
-        JS_DeleteGCRef(ctx, &tempOnError);
-        JS_DeleteGCRef(ctx, &tempContext);
+        JS_DeleteGCRef(ctx, &deferredRoots->onResponse);
+        JS_DeleteGCRef(ctx, &deferredRoots->onError);
+        JS_DeleteGCRef(ctx, &deferredRoots->context);
     }
 }
 
@@ -1212,19 +1214,19 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
         if (stored.onResponseRooted)
         {
             JS_AddGCRef(ctx, &stored.onResponseRef);
-            stored.onResponseRef.val = cmd.onResponse;
+            stored.onResponseRef.val = cmd.roots ? cmd.roots->onResponse.val : cmd.onResponse;
         }
 
         if (stored.onErrorRooted)
         {
             JS_AddGCRef(ctx, &stored.onErrorRef);
-            stored.onErrorRef.val = cmd.onError;
+            stored.onErrorRef.val = cmd.roots ? cmd.roots->onError.val : cmd.onError;
         }
 
         if (stored.contextRooted)
         {
             JS_AddGCRef(ctx, &stored.contextRef);
-            stored.contextRef.val = cmd.context;
+            stored.contextRef.val = cmd.roots ? cmd.roots->context.val : cmd.context;
         }
     }
 
@@ -1290,9 +1292,13 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
+            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
+            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
+            JSValue onErrorVal = ra.roots ? ra.roots->onError.val : ra.onError;
+
             JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
+                ctx, hctx, "readFailed", "Attribute not in cache", -1, contextVal);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, onErrorVal, args);
         }
 
         if (!result.has_value())
@@ -1327,9 +1333,13 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
+            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
+            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
+            JSValue onResponseVal = ra.roots ? ra.roots->onResponse.val : ra.onResponse;
+
             JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, contextVal);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, onResponseVal, args);
         }
 
         if (!result.has_value())
