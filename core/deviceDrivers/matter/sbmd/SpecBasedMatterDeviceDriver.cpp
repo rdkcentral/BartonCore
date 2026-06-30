@@ -205,11 +205,15 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             }
             else
             {
+                // Non-retryable copy failure: drop the command rather than delivering it with an
+                // empty payload, which JS handlers would mis-read as a command with no arguments.
                 icError("Failed to copy command TLV for cluster 0x%x command 0x%x on device %s: %s",
                         clusterId,
                         commandId,
                         deviceId.c_str(),
                         err.AsString());
+
+                return;
             }
 
             break;
