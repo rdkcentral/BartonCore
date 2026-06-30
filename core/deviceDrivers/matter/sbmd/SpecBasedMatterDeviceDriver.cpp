@@ -155,8 +155,8 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                                       chip::CommandId commandId,
                                       chip::TLV::TLVReader &reader) {
         // Encode the incoming command's TLV payload as base64 for HandleCommand.
-        // The buffer must hold the entire command fields struct; WebRTC SDP
-        // offers/answers can be several KB, so grow on demand until the copy fits.
+        // The buffer must hold the entire command fields struct, which can be
+        // several KB for some commands, so grow on demand until the copy fits.
         std::string tlvBase64;
         size_t bufSize = 2048;
         constexpr size_t maxTlvBufSize = 32768;
@@ -174,6 +174,19 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
             if (err == CHIP_ERROR_BUFFER_TOO_SMALL || err == CHIP_ERROR_NO_MEMORY)
             {
                 bufSize *= 2;
+
+                if (bufSize > maxTlvBufSize)
+                {
+                    icError("Command TLV for cluster 0x%x command 0x%x on device %s exceeds the maximum "
+                            "buffer size of %zu bytes; dropping command",
+                            clusterId,
+                            commandId,
+                            deviceId.c_str(),
+                            maxTlvBufSize);
+
+                    return;
+                }
+
                 continue;
             }
 
@@ -853,35 +866,36 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         // permanent roots.
         if (result.has_value())
         {
+            const JSValue *deferredOnResponse = nullptr;
+            const JSValue *deferredOnError = nullptr;
+            const JSValue *deferredContext = nullptr;
+
             if (std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data))
             {
                 const auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
-
-                if (!JS_IsUndefined(cmd.onResponse) || !JS_IsUndefined(cmd.onError) || !JS_IsUndefined(cmd.context))
-                {
-                    JS_AddGCRef(ctx, &tempOnResponse);
-                    JS_AddGCRef(ctx, &tempOnError);
-                    JS_AddGCRef(ctx, &tempContext);
-                    tempOnResponse.val = cmd.onResponse;
-                    tempOnError.val = cmd.onError;
-                    tempContext.val = cmd.context;
-                    hasTempRoots = true;
-                }
+                deferredOnResponse = &cmd.onResponse;
+                deferredOnError = &cmd.onError;
+                deferredContext = &cmd.context;
             }
             else if (std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data))
             {
                 const auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
+                deferredOnResponse = &ra.onResponse;
+                deferredOnError = &ra.onError;
+                deferredContext = &ra.context;
+            }
 
-                if (!JS_IsUndefined(ra.onResponse) || !JS_IsUndefined(ra.onError) || !JS_IsUndefined(ra.context))
-                {
-                    JS_AddGCRef(ctx, &tempOnResponse);
-                    JS_AddGCRef(ctx, &tempOnError);
-                    JS_AddGCRef(ctx, &tempContext);
-                    tempOnResponse.val = ra.onResponse;
-                    tempOnError.val = ra.onError;
-                    tempContext.val = ra.context;
-                    hasTempRoots = true;
-                }
+            if (deferredOnResponse != nullptr &&
+                (!JS_IsUndefined(*deferredOnResponse) || !JS_IsUndefined(*deferredOnError) ||
+                 !JS_IsUndefined(*deferredContext)))
+            {
+                JS_AddGCRef(ctx, &tempOnResponse);
+                JS_AddGCRef(ctx, &tempOnError);
+                JS_AddGCRef(ctx, &tempContext);
+                tempOnResponse.val = *deferredOnResponse;
+                tempOnError.val = *deferredOnError;
+                tempContext.val = *deferredContext;
+                hasTempRoots = true;
             }
         }
     }

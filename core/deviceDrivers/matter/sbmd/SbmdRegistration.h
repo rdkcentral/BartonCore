@@ -68,12 +68,12 @@ namespace barton
     };
 
     /**
-     * A resource handler declaration (seed, read, write, or execute).
-     * For simple declarations (just a function), only handler is set.
-     * For object declarations, supplements and handler are both set.
+     * Common state shared by every loaded handler declaration: the JS function
+     * reference, its GC-tracked storage location, and any supplement requests.
      */
-    struct SbmdResourceHandler
+    class SbmdHandlerBase
     {
+    public:
         JSValue handler = JS_UNDEFINED; // Loaded function reference (valid before activation)
         // Points at the GC-tracked storage (the JSGCRef::val that JS_AddGCRef roots). mquickjs has a
         // moving/compacting GC: it updates this location on collection but NOT the raw 'handler' copy
@@ -81,7 +81,24 @@ namespace barton
         JSValue *rooted = nullptr;
         SbmdSupplements supplements;
 
+        // Invoke through the GC-tracked slot when rooted, otherwise the raw reference.
         JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
+
+        // Return to the unloaded/unrooted state (Intended to be used when handlers are unrooted at deactivation).
+        void Reset()
+        {
+            handler = JS_UNDEFINED;
+            rooted = nullptr;
+        }
+    };
+
+    /**
+     * A resource handler declaration (seed, read, write, or execute).
+     * For simple declarations (just a function), only handler is set.
+     * For object declarations, supplements and handler are both set.
+     */
+    struct SbmdResourceHandler : SbmdHandlerBase
+    {
     };
 
     /**
@@ -115,16 +132,10 @@ namespace barton
     /**
      * An attribute/event/command handler registration.
      */
-    struct SbmdDeviceHandler
+    struct SbmdDeviceHandler : SbmdHandlerBase
     {
         std::string name;                 // Handler registration name
         std::vector<std::string> aliases; // Alias names this handler matches
-        JSValue handler = JS_UNDEFINED;   // Loaded function reference (valid before activation)
-        // See SbmdResourceHandler::rooted — points at the GC-tracked storage; invoke via Fn().
-        JSValue *rooted = nullptr;
-        SbmdSupplements supplements;
-
-        JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
     };
 
     /**

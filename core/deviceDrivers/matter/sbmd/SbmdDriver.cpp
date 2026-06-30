@@ -25,7 +25,7 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdDriver"
+#define LOG_TAG     "SbmdDriver"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdDriver.h"
@@ -37,8 +37,8 @@ extern "C" {
 
 namespace barton
 {
-    SbmdDriver::SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source)
-        : registration(std::move(registration)), source(std::move(source))
+    SbmdDriver::SbmdDriver(std::unique_ptr<SbmdRegistration> registration, std::string source) :
+        registration(std::move(registration)), source(std::move(source))
     {
     }
 
@@ -142,23 +142,23 @@ namespace barton
         return commandDispatch;
     }
 
-    void SbmdDriver::RootIfValid(JSContext *ctx, JSValue &handler, JSValue *&rootedOut)
+    void SbmdDriver::RootIfValid(JSContext *ctx, SbmdHandlerBase &entry)
     {
-        rootedOut = nullptr;
+        entry.rooted = nullptr;
 
-        if (JS_IsUndefined(handler))
+        if (JS_IsUndefined(entry.handler))
         {
             return;
         }
 
         auto &ref = gcRefs.emplace_back();
         JS_AddGCRef(ctx, &ref);
-        ref.val = handler;
+        ref.val = entry.handler;
 
         // mquickjs uses a moving GC that updates ref.val (a stable std::list node) on collection but
         // not the raw 'handler' copy. Point the handler at ref.val so invocation always sees the
         // relocated function object.
-        rootedOut = &ref.val;
+        entry.rooted = &ref.val;
     }
 
     void SbmdDriver::RootHandlers(JSContext *ctx)
@@ -172,22 +172,22 @@ namespace barton
             {
                 if (resource.seed.has_value())
                 {
-                    RootIfValid(ctx, resource.seed->handler, resource.seed->rooted);
+                    RootIfValid(ctx, *resource.seed);
                 }
 
                 if (resource.read.has_value())
                 {
-                    RootIfValid(ctx, resource.read->handler, resource.read->rooted);
+                    RootIfValid(ctx, *resource.read);
                 }
 
                 if (resource.write.has_value())
                 {
-                    RootIfValid(ctx, resource.write->handler, resource.write->rooted);
+                    RootIfValid(ctx, *resource.write);
                 }
 
                 if (resource.execute.has_value())
                 {
-                    RootIfValid(ctx, resource.execute->handler, resource.execute->rooted);
+                    RootIfValid(ctx, *resource.execute);
                 }
             }
         }
@@ -195,17 +195,17 @@ namespace barton
         // Root device handlers (attribute, event, command)
         for (auto &handler : registration->attributeHandlers)
         {
-            RootIfValid(ctx, handler.handler, handler.rooted);
+            RootIfValid(ctx, handler);
         }
 
         for (auto &handler : registration->eventHandlers)
         {
-            RootIfValid(ctx, handler.handler, handler.rooted);
+            RootIfValid(ctx, handler);
         }
 
         for (auto &handler : registration->commandHandlers)
         {
-            RootIfValid(ctx, handler.handler, handler.rooted);
+            RootIfValid(ctx, handler);
         }
     }
 
@@ -226,46 +226,39 @@ namespace barton
             {
                 if (resource.seed.has_value())
                 {
-                    resource.seed->handler = JS_UNDEFINED;
-                    resource.seed->rooted = nullptr;
+                    resource.seed->Reset();
                 }
 
                 if (resource.read.has_value())
                 {
-                    resource.read->handler = JS_UNDEFINED;
-                    resource.read->rooted = nullptr;
+                    resource.read->Reset();
                 }
 
                 if (resource.write.has_value())
                 {
-                    resource.write->handler = JS_UNDEFINED;
-                    resource.write->rooted = nullptr;
+                    resource.write->Reset();
                 }
 
                 if (resource.execute.has_value())
                 {
-                    resource.execute->handler = JS_UNDEFINED;
-                    resource.execute->rooted = nullptr;
+                    resource.execute->Reset();
                 }
             }
         }
 
         for (auto &handler : registration->attributeHandlers)
         {
-            handler.handler = JS_UNDEFINED;
-            handler.rooted = nullptr;
+            handler.Reset();
         }
 
         for (auto &handler : registration->eventHandlers)
         {
-            handler.handler = JS_UNDEFINED;
-            handler.rooted = nullptr;
+            handler.Reset();
         }
 
         for (auto &handler : registration->commandHandlers)
         {
-            handler.handler = JS_UNDEFINED;
-            handler.rooted = nullptr;
+            handler.Reset();
         }
     }
 
