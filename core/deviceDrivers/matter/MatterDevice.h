@@ -161,6 +161,14 @@ namespace barton
             return cachedClusterFeatureMaps;
         }
 
+        /**
+         * Compute feature maps for all configured featureClusters and cache them.
+         * Normally invoked when the cache subscription is established, but may be called
+         * explicitly once the priming report has populated the cache (e.g. after the device's
+         * CacheCallback is registered, which can happen after the subscription was established).
+         */
+        void UpdateCachedFeatureMaps();
+
         std::shared_ptr<DeviceDataCache> GetDeviceDataCache() const { return deviceDataCache; }
 
         /**
@@ -375,12 +383,6 @@ namespace barton
          * @return True if feature map was successfully read, false otherwise
          */
         bool GetClusterFeatureMap(chip::EndpointId endpointId, chip::ClusterId clusterId, uint32_t &featureMap);
-
-        /**
-         * Compute feature maps for all configured featureClusters and cache them.
-         * Called when subscription is established and cluster data is available.
-         */
-        void UpdateCachedFeatureMaps();
 
         /**
          * @brief Call to ensure a driver operation is considered failed, e.g.,

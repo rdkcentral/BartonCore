@@ -43,6 +43,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -96,6 +97,25 @@ namespace barton
     };
 
     /**
+     * Heap-stable GC roots for a deferred terminal's JS callbacks.
+     *
+     * A deferred terminal (requestCommand/readAttribute) stashes its onResponse/onError/context
+     * functions as raw JSValues. Under the moving GC those raw copies go stale if JS runs on
+     * another thread before the callbacks are consumed. Rooting them in a heap-allocated holder
+     * (kept alive by the terminal via shared_ptr) gives the GC a stable address to update, so
+     * consumers always read current values through holder->onResponse.val and friends.
+     *
+     * Registration/release of the JSGCRefs is performed by the owner under MQuickJsRuntime's
+     * mutex; this struct is just the stable storage.
+     */
+    struct DeferredHandlerRoots
+    {
+        JSGCRef onResponse {};
+        JSGCRef onError {};
+        JSGCRef context {};
+    };
+
+    /**
      * Parsed terminal operation.
      */
     struct ResultTerminal
@@ -141,6 +161,9 @@ namespace barton
             JSValue onError = JS_UNDEFINED;
             std::optional<uint32_t> timeoutMs;
             JSValue context = JS_UNDEFINED;
+            // GC-stable roots for the deferred callbacks above; populated by the owner before
+            // execution so consumers read current values across a moving GC (null when unset).
+            std::shared_ptr<DeferredHandlerRoots> roots;
         };
 
         struct ReadAttribute
@@ -152,6 +175,9 @@ namespace barton
             JSValue onError = JS_UNDEFINED;
             std::optional<uint32_t> timeoutMs;
             JSValue context = JS_UNDEFINED;
+            // GC-stable roots for the deferred callbacks above; populated by the owner before
+            // execution so consumers read current values across a moving GC (null when unset).
+            std::shared_ptr<DeferredHandlerRoots> roots;
         };
 
         using Data = std::variant<Success, Error, SendCommand, WriteAttribute, RequestCommand, ReadAttribute>;

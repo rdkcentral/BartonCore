@@ -138,9 +138,11 @@ namespace barton
         void UnrootHandlers(JSContext *ctx);
 
         /**
-         * Add a GC root for a handler JSValue if it is not JS_UNDEFINED.
+         * Add a GC root for a handler's JSValue if it is not JS_UNDEFINED.
+         * On success, entry.rooted is set to the GC-tracked storage location (updated by the moving GC);
+         * callers must invoke through entry.Fn(), not the raw handler copy.
          */
-        void RootIfValid(JSContext *ctx, JSValue &handler);
+        void RootIfValid(JSContext *ctx, SbmdHandler &entry);
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation

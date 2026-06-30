@@ -68,14 +68,29 @@ namespace barton
     };
 
     /**
-     * A resource handler declaration (seed, read, write, or execute).
-     * For simple declarations (just a function), only handler is set.
-     * For object declarations, supplements and handler are both set.
+     * A loaded handler declaration (resource seed/read/write/execute, or a
+     * device attribute/event/command handler): the JS function reference, its
+     * GC-tracked storage location, and any supplement requests.
      */
-    struct SbmdResourceHandler
+    class SbmdHandler
     {
-        JSValue handler = JS_UNDEFINED; // GC-rooted function reference
+    public:
+        JSValue handler = JS_UNDEFINED; // Loaded function reference (valid before activation)
+        // Points at the GC-tracked storage (the JSGCRef::val that JS_AddGCRef roots). mquickjs has a
+        // moving/compacting GC: it updates this location on collection but NOT the raw 'handler' copy
+        // above. Always invoke via Fn() so a GC that relocates the function object is observed.
+        JSValue *rooted = nullptr;
         SbmdSupplements supplements;
+
+        // Invoke through the GC-tracked slot when rooted, otherwise the raw reference.
+        JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
+
+        // Return to the unloaded/unrooted state (Intended to be used when handlers are unrooted at deactivation).
+        void Reset()
+        {
+            handler = JS_UNDEFINED;
+            rooted = nullptr;
+        }
     };
 
     /**
@@ -89,10 +104,10 @@ namespace barton
         bool optional = false;
         std::vector<std::string> prerequisites; // Alias names for prerequisite checks
 
-        std::optional<SbmdResourceHandler> seed;
-        std::optional<SbmdResourceHandler> read;
-        std::optional<SbmdResourceHandler> write;
-        std::optional<SbmdResourceHandler> execute;
+        std::optional<SbmdHandler> seed;
+        std::optional<SbmdHandler> read;
+        std::optional<SbmdHandler> write;
+        std::optional<SbmdHandler> execute;
     };
 
     /**
@@ -109,12 +124,10 @@ namespace barton
     /**
      * An attribute/event/command handler registration.
      */
-    struct SbmdDeviceHandler
+    struct SbmdDeviceHandler : SbmdHandler
     {
-        std::string name;                    // Handler registration name
-        std::vector<std::string> aliases;    // Alias names this handler matches
-        JSValue handler = JS_UNDEFINED;      // GC-rooted function reference
-        SbmdSupplements supplements;
+        std::string name;                 // Handler registration name
+        std::vector<std::string> aliases; // Alias names this handler matches
     };
 
     /**

@@ -966,9 +966,9 @@ namespace barton
         return true;
     }
 
-    std::optional<SbmdResourceHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
+    std::optional<SbmdHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
     {
-        SbmdResourceHandler handler;
+        SbmdHandler handler;
 
         if (JS_IsFunction(ctx, val))
         {

@@ -40,6 +40,7 @@
 #include <lib/core/TLVReader.h>
 #include <lib/core/TLVWriter.h>
 #include <memory>
+#include <vector>
 
 extern "C" {
 #include <commonDeviceDefs.h>
@@ -125,6 +126,11 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
         return false;
     }
 
+    // The cache subscription's priming report may have completed (and OnSubscriptionEstablished
+    // fired) before this device registered its CacheCallback, in which case the feature maps were
+    // never cached. Populate them now that featureClusters are set and the cache is primed.
+    device->UpdateCachedFeatureMaps();
+
     // Set the attribute callback so CacheCallback delegates to our dispatch tables
     device->SetAttributeCallback([this](const std::string &deviceId,
                                         chip::EndpointId endpointId,
@@ -148,24 +154,69 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                                       chip::ClusterId clusterId,
                                       chip::CommandId commandId,
                                       chip::TLV::TLVReader &reader) {
-        // Encode TLV as base64 for HandleCommand
-        uint8_t tlvBuf[1024];
-        chip::TLV::TLVWriter writer;
-        writer.Init(tlvBuf, sizeof(tlvBuf));
-
+        // Encode the incoming command's TLV payload as base64 for HandleCommand.
+        // The buffer must hold the entire command fields struct, which can be
+        // several KB for some commands, so grow on demand until the copy fits.
         std::string tlvBase64;
+        size_t bufSize = 2048;
+        constexpr size_t maxTlvBufSize = 32768;
 
-        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) == CHIP_NO_ERROR)
+        while (bufSize <= maxTlvBufSize)
         {
-            uint32_t tlvLen = writer.GetLengthWritten();
+            std::vector<uint8_t> tlvBuf(bufSize);
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuf.data(), static_cast<uint32_t>(tlvBuf.size()));
 
-            if (tlvLen > 0)
+            // Copy the reader so a retry after a too-small buffer restarts cleanly
+            chip::TLV::TLVReader readerCopy(reader);
+            CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+
+            if (err == CHIP_ERROR_BUFFER_TOO_SMALL || err == CHIP_ERROR_NO_MEMORY)
             {
-                size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-                tlvBase64.resize(maxBase64Len, '\0');
-                uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-                tlvBase64.resize(encoded);
+                bufSize *= 2;
+
+                if (bufSize > maxTlvBufSize)
+                {
+                    icError("Command TLV for cluster 0x%x command 0x%x on device %s exceeds the maximum "
+                            "buffer size of %zu bytes; dropping command",
+                            clusterId,
+                            commandId,
+                            deviceId.c_str(),
+                            maxTlvBufSize);
+
+                    return;
+                }
+
+                continue;
             }
+
+            if (err == CHIP_NO_ERROR)
+            {
+                uint32_t tlvLen = writer.GetLengthWritten();
+
+                if (tlvLen > 0)
+                {
+                    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
+                    tlvBase64.resize(maxBase64Len, '\0');
+                    uint16_t encoded =
+                        chip::Base64Encode(tlvBuf.data(), static_cast<uint16_t>(tlvLen), tlvBase64.data());
+                    tlvBase64.resize(encoded);
+                }
+            }
+            else
+            {
+                // Non-retryable copy failure: drop the command rather than delivering it with an
+                // empty payload, which JS handlers would mis-read as a command with no arguments.
+                icError("Failed to copy command TLV for cluster 0x%x command 0x%x on device %s: %s",
+                        clusterId,
+                        commandId,
+                        deviceId.c_str(),
+                        err.AsString());
+
+                return;
+            }
+
+            break;
         }
 
         HandleCommand(deviceId, endpointId, clusterId, commandId, tlvBase64);
@@ -286,6 +337,25 @@ void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::pro
                                                       chip::Messaging::ExchangeManager &exchangeMgr,
                                                       const chip::SessionHandle &sessionHandle)
 {
+    auto device = GetDevice(deviceId);
+
+    if (device != nullptr)
+    {
+        // Re-register incoming (server-side) command handlers. On app restart a previously
+        // commissioned device is restored via this synchronize path rather than AddDevice,
+        // so the CommandHandlerInterface for server clusters (e.g. WebRTCTransportRequestor)
+        // must be re-established here or inbound commands from the device will go unhandled.
+        device->UnregisterIncomingCommandHandlers();
+
+        if (driver != nullptr)
+        {
+            for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+            {
+                device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+            }
+        }
+    }
+
     SeedInitialResourceValues(deviceId);
 }
 
@@ -572,7 +642,7 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
                                            MakeTransientFetcher(deviceId));
     }
 
-    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->handler, args);
+    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
 
     JS_DeleteGCRef(ctx, &argsRef);
 
@@ -713,7 +783,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     }
 
     // Determine which handler to use
-    const SbmdResourceHandler *handler = nullptr;
+    const SbmdHandler *handler = nullptr;
     std::optional<std::string> inputValue;
 
     if (strcmp(opType, "read") == 0)
@@ -760,9 +830,17 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     HandlerContext hctx;
     hctx.deviceUuid = device.GetDeviceId();
     hctx.endpointId = endpointId ? endpointId : "";
+    hctx.clusterFeatureMaps = device.GetCachedClusterFeatureMaps();
 
     // Invoke the handler under the JS mutex
     std::optional<ParsedResult> result;
+
+    // GC roots for a deferred terminal's callbacks. Allocated below if the handler returns a
+    // RequestCommand/ReadAttribute terminal, and attached to that terminal so downstream code
+    // reads GC-current callback values directly from it. Kept here so the roots are released
+    // (under the mutex) once the deferred terminal has been fully executed.
+    std::shared_ptr<DeferredHandlerRoots> deferredRoots;
+
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
@@ -783,9 +861,52 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                                            MakePersistFetcher(device.GetDeviceId()),
                                            MakeTransientFetcher(device.GetDeviceId()));
 
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->handler, args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
+
+        // If the result has a deferred terminal (RequestCommand or ReadAttribute), root its
+        // callbacks now — while we still hold the mutex and the raw JSValues are current — into
+        // a heap-stable holder that travels with the terminal. The moving GC keeps the holder's
+        // refs current, so ExecuteRequestCommand/ExecuteReadAttribute read live values even
+        // though the JS mutex is released and re-acquired in between.
+        if (result.has_value())
+        {
+            JSValue *onResponse = nullptr;
+            JSValue *onError = nullptr;
+            JSValue *context = nullptr;
+            std::shared_ptr<DeferredHandlerRoots> *rootsSlot = nullptr;
+
+            if (std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data))
+            {
+                auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
+                onResponse = &cmd.onResponse;
+                onError = &cmd.onError;
+                context = &cmd.context;
+                rootsSlot = &cmd.roots;
+            }
+            else if (std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data))
+            {
+                auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
+                onResponse = &ra.onResponse;
+                onError = &ra.onError;
+                context = &ra.context;
+                rootsSlot = &ra.roots;
+            }
+
+            if (onResponse != nullptr &&
+                (!JS_IsUndefined(*onResponse) || !JS_IsUndefined(*onError) || !JS_IsUndefined(*context)))
+            {
+                deferredRoots = std::make_shared<DeferredHandlerRoots>();
+                JS_AddGCRef(ctx, &deferredRoots->onResponse);
+                JS_AddGCRef(ctx, &deferredRoots->onError);
+                JS_AddGCRef(ctx, &deferredRoots->context);
+                deferredRoots->onResponse.val = *onResponse;
+                deferredRoots->onError.val = *onError;
+                deferredRoots->context.val = *context;
+                *rootsSlot = deferredRoots;
+            }
+        }
     }
 
     if (!result.has_value())
@@ -808,6 +929,17 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     executeResponse,
                     exchangeMgr,
                     sessionHandle);
+
+    // Release the deferred-callback GC roots — by now ExecuteRequestCommand has copied the
+    // values into permanent roots, and ExecuteReadAttribute has invoked synchronously.
+    if (deferredRoots)
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+        JS_DeleteGCRef(ctx, &deferredRoots->onResponse);
+        JS_DeleteGCRef(ctx, &deferredRoots->onError);
+        JS_DeleteGCRef(ctx, &deferredRoots->context);
+    }
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
@@ -1068,37 +1200,42 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
-    // GC-root the deferred handlers so they survive until we need them
+    // Record which JS callbacks need rooting before inserting into the map.
+    // JS_AddGCRef registers the *address* of the JSGCRef, so it must not be called
+    // until after the emplace — moving the PendingOperation into the map would
+    // otherwise invalidate the registered address. Note also that JS_AddGCRef
+    // resets ref->val, so values must be assigned AFTER the call.
+    pending.onResponseRooted = !JS_IsUndefined(cmd.onResponse);
+    pending.onErrorRooted = !JS_IsUndefined(cmd.onError);
+    pending.contextRooted = !JS_IsUndefined(cmd.context);
+
+    auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
+    PendingOperation &stored = it->second;
+
+    // GC-root the deferred handlers using the stable map-node addresses so they
+    // survive until we need them.
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        if (!JS_IsUndefined(cmd.onResponse))
+        if (stored.onResponseRooted)
         {
-            JS_AddGCRef(ctx, &pending.onResponseRef);
-            pending.onResponseRef.val = cmd.onResponse;
-
-            pending.onResponseRooted = true;
+            JS_AddGCRef(ctx, &stored.onResponseRef);
+            stored.onResponseRef.val = cmd.roots ? cmd.roots->onResponse.val : cmd.onResponse;
         }
 
-        if (!JS_IsUndefined(cmd.onError))
+        if (stored.onErrorRooted)
         {
-            JS_AddGCRef(ctx, &pending.onErrorRef);
-            pending.onErrorRef.val = cmd.onError;
-
-            pending.onErrorRooted = true;
+            JS_AddGCRef(ctx, &stored.onErrorRef);
+            stored.onErrorRef.val = cmd.roots ? cmd.roots->onError.val : cmd.onError;
         }
 
-        if (!JS_IsUndefined(cmd.context))
+        if (stored.contextRooted)
         {
-            JS_AddGCRef(ctx, &pending.contextRef);
-            pending.contextRef.val = cmd.context;
-
-            pending.contextRooted = true;
+            JS_AddGCRef(ctx, &stored.contextRef);
+            stored.contextRef.val = cmd.roots ? cmd.roots->context.val : cmd.context;
         }
     }
-
-    pendingOperations.emplace(pendingId, std::move(pending));
 
     // Send the command with deferred callbacks
     bool sent = device.SendCommandWithCallbacks(
@@ -1162,9 +1299,13 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
+            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
+            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
+            JSValue onErrorVal = ra.roots ? ra.roots->onError.val : ra.onError;
+
             JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError, args);
+                ctx, hctx, "readFailed", "Attribute not in cache", -1, contextVal);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, onErrorVal, args);
         }
 
         if (!result.has_value())
@@ -1199,9 +1340,13 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
+            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
+            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
+            JSValue onResponseVal = ra.roots ? ra.roots->onResponse.val : ra.onResponse;
+
             JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse, args);
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, contextVal);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, onResponseVal, args);
         }
 
         if (!result.has_value())
@@ -2071,16 +2216,20 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
     hctx.endpointId = std::to_string(endpointId);
-    // TODO: populate clusterFeatureMaps from MatterDevice
 
     auto matterDevice = GetDevice(deviceId);
+
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
 
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2104,7 +2253,7 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -2181,12 +2330,17 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
 
     auto matterDevice = GetDevice(deviceId);
 
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
+
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2210,7 +2364,7 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
@@ -2260,12 +2414,17 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
 
     auto matterDevice = GetDevice(deviceId);
 
+    if (matterDevice)
+    {
+        hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
+    }
+
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
     auto *ctx = MQuickJsRuntime::GetSharedContext();
 
     for (const auto *entry : matches)
     {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->handler))
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
         {
             continue;
         }
@@ -2289,7 +2448,7 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
                                                MakeTransientFetcher(deviceId));
         }
 
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->handler, args);
+        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
 
         JS_DeleteGCRef(ctx, &argsRef);
 
