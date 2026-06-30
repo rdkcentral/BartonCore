@@ -142,7 +142,7 @@ namespace barton
          * On success, entry.rooted is set to the GC-tracked storage location (updated by the moving GC);
          * callers must invoke through entry.Fn(), not the raw handler copy.
          */
-        void RootIfValid(JSContext *ctx, SbmdHandlerBase &entry);
+        void RootIfValid(JSContext *ctx, SbmdHandler &entry);
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation

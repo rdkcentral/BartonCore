@@ -68,10 +68,11 @@ namespace barton
     };
 
     /**
-     * Common state shared by every loaded handler declaration: the JS function
-     * reference, its GC-tracked storage location, and any supplement requests.
+     * A loaded handler declaration (resource seed/read/write/execute, or a
+     * device attribute/event/command handler): the JS function reference, its
+     * GC-tracked storage location, and any supplement requests.
      */
-    class SbmdHandlerBase
+    class SbmdHandler
     {
     public:
         JSValue handler = JS_UNDEFINED; // Loaded function reference (valid before activation)
@@ -93,15 +94,6 @@ namespace barton
     };
 
     /**
-     * A resource handler declaration (seed, read, write, or execute).
-     * For simple declarations (just a function), only handler is set.
-     * For object declarations, supplements and handler are both set.
-     */
-    struct SbmdResourceHandler : SbmdHandlerBase
-    {
-    };
-
-    /**
      * A resource declaration within an endpoint.
      */
     struct SbmdResource
@@ -112,10 +104,10 @@ namespace barton
         bool optional = false;
         std::vector<std::string> prerequisites; // Alias names for prerequisite checks
 
-        std::optional<SbmdResourceHandler> seed;
-        std::optional<SbmdResourceHandler> read;
-        std::optional<SbmdResourceHandler> write;
-        std::optional<SbmdResourceHandler> execute;
+        std::optional<SbmdHandler> seed;
+        std::optional<SbmdHandler> read;
+        std::optional<SbmdHandler> write;
+        std::optional<SbmdHandler> execute;
     };
 
     /**
@@ -132,7 +124,7 @@ namespace barton
     /**
      * An attribute/event/command handler registration.
      */
-    struct SbmdDeviceHandler : SbmdHandlerBase
+    struct SbmdDeviceHandler : SbmdHandler
     {
         std::string name;                 // Handler registration name
         std::vector<std::string> aliases; // Alias names this handler matches

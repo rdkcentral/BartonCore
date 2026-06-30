@@ -142,7 +142,7 @@ namespace barton
         return commandDispatch;
     }
 
-    void SbmdDriver::RootIfValid(JSContext *ctx, SbmdHandlerBase &entry)
+    void SbmdDriver::RootIfValid(JSContext *ctx, SbmdHandler &entry)
     {
         entry.rooted = nullptr;
 

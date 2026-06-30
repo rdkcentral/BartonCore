@@ -776,7 +776,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     }
 
     // Determine which handler to use
-    const SbmdResourceHandler *handler = nullptr;
+    const SbmdHandler *handler = nullptr;
     std::optional<std::string> inputValue;
 
     if (strcmp(opType, "read") == 0)

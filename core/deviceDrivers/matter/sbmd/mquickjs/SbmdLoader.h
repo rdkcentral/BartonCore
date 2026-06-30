@@ -139,7 +139,7 @@ namespace barton
         /**
          * Walk a resource handler declaration (simple function or {supplements, handler} object).
          */
-        static std::optional<SbmdResourceHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
+        static std::optional<SbmdHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
 
         /**
          * Walk a device handler array (attributeHandlers, eventHandlers, commandHandlers).
