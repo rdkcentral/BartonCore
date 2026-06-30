@@ -343,9 +343,12 @@ void SpecBasedMatterDeviceDriver::DoSynchronizeDevice(std::forward_list<std::pro
         // must be re-established here or inbound commands from the device will go unhandled.
         device->UnregisterIncomingCommandHandlers();
 
-        for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+        if (driver != nullptr)
         {
-            device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+            for (uint32_t clusterId : driver->GetCommandDispatch().GetRegisteredClusterIds())
+            {
+                device->RegisterIncomingCommandHandler(static_cast<chip::ClusterId>(clusterId));
+            }
         }
     }
 
