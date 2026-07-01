@@ -29,6 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdResultExecutor.h"
+#include "SbmdJsUtil.h"
 #include "SbmdWireContract.h"
 
 #include <string>
@@ -40,87 +41,7 @@ extern "C" {
 
 namespace barton
 {
-    namespace
-    {
-        std::string GetStringProp(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return "";
-            }
-
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
-
-            return str ? std::string(str) : "";
-        }
-
-        uint32_t GetUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return 0;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        std::optional<uint32_t> GetOptUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return std::nullopt;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            auto opt = GetOptUint32Prop(ctx, obj, name);
-
-            if (!opt.has_value())
-            {
-                return std::nullopt;
-            }
-
-            return static_cast<uint16_t>(*opt);
-        }
-
-        uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
-        {
-            JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
-
-            if (JS_IsUndefined(lenVal))
-            {
-                return 0;
-            }
-
-            uint32_t len = 0;
-            JS_ToUint32(ctx, &len, lenVal);
-
-            return len;
-        }
-
-        bool HasProperty(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            return !JS_IsUndefined(val);
-        }
-    } // namespace
+    using namespace mquickjs;
 
     std::optional<ParsedResult> SbmdResultExecutor::Parse(JSContext *ctx, JSValue resultVal)
     {
@@ -225,7 +146,7 @@ namespace barton
             ResultOp::SetTransientData data;
             data.key = GetStringProp(ctx, opVal, SBMD_KEY_KEY);
             data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
-            data.ttlSecs = GetUint32Prop(ctx, opVal, SBMD_KEY_TTL_SECS);
+            data.ttlSecs = GetUint32Prop(ctx, opVal, SBMD_KEY_TTL_SECS, 0);
 
             return ResultOp{std::move(data)};
         }
@@ -264,8 +185,8 @@ namespace barton
         else if (opType == "sendCommand")
         {
             ResultTerminal::SendCommand data;
-            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID);
-            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID);
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID, 0);
             data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // options: { endpointId?, timedInvokeTimeoutMs?, successValue? }
@@ -283,8 +204,8 @@ namespace barton
         else if (opType == "writeAttribute")
         {
             ResultTerminal::WriteAttribute data;
-            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID);
-            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID);
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID, 0);
             data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // options: { endpointId? }
@@ -300,8 +221,8 @@ namespace barton
         else if (opType == "requestCommand")
         {
             ResultTerminal::RequestCommand data;
-            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID);
-            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID);
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID, 0);
             data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // Deferred handler callbacks
@@ -309,7 +230,7 @@ namespace barton
 
             if (!JS_IsUndefined(deferred) && !JS_IsNull(deferred))
             {
-                data.responseCommandId = GetUint32Prop(ctx, deferred, SBMD_KEY_RESPONSE_COMMAND_ID);
+                data.responseCommandId = GetUint32Prop(ctx, deferred, SBMD_KEY_RESPONSE_COMMAND_ID, 0);
                 data.onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
                 data.onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
                 data.timeoutMs = GetOptUint32Prop(ctx, deferred, SBMD_KEY_TIMEOUT_MS);
@@ -330,8 +251,8 @@ namespace barton
         else if (opType == "readAttribute")
         {
             ResultTerminal::ReadAttribute data;
-            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID);
-            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID);
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID, 0);
 
             // Deferred handler callbacks
             JSValue deferred = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_DEFERRED);

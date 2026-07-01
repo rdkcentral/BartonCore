@@ -30,6 +30,7 @@
 
 #include "SbmdBundleLoader.h"
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
 
 #include <string>
 
@@ -43,25 +44,7 @@ extern "C" {
 
 namespace barton
 {
-
-    namespace
-    {
-        /**
-         * Extract mquickjs exception as a string.
-         */
-        std::string GetExceptionString(JSContext *ctx)
-        {
-            JSValue ex = JS_GetException(ctx);
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, ex, &buf);
-            if (str)
-            {
-                return std::string(str);
-            }
-            return "unknown error";
-        }
-
-    } // anonymous namespace
+    using namespace mquickjs;
 
     bool SbmdBundleLoader::LoadBundle(JSContext *ctx)
     {

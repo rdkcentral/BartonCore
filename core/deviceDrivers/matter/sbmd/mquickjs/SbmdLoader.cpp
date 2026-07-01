@@ -30,6 +30,7 @@
 
 #include "SbmdLoader.h"
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -43,250 +44,10 @@ extern "C" {
 
 namespace barton
 {
+    using namespace mquickjs;
+
     namespace
     {
-        std::string GetExceptionString(JSContext *ctx)
-        {
-            JSValue ex = JS_GetException(ctx);
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, ex, &buf);
-
-            if (str)
-            {
-                return std::string(str);
-            }
-
-            return "unknown error";
-        }
-
-        /**
-         * Get a string property from a JS object, or empty string if missing.
-         */
-        std::string GetStringProp(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return "";
-            }
-
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
-
-            return str ? std::string(str) : "";
-        }
-
-        /**
-         * Get a uint32 property from a JS object, or 0 if missing.
-         */
-        uint32_t GetUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return 0;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        /**
-         * Get an optional uint32 property from a JS object.
-         */
-        std::optional<uint32_t> GetOptUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return std::nullopt;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        /**
-         * Get an optional uint16 property from a JS object.
-         */
-        std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            auto opt = GetOptUint32Prop(ctx, obj, name);
-
-            if (!opt.has_value())
-            {
-                return std::nullopt;
-            }
-
-            return static_cast<uint16_t>(*opt);
-        }
-
-        /**
-         * Get the length of a JS array.
-         */
-        uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
-        {
-            JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
-
-            if (JS_IsUndefined(lenVal))
-            {
-                return 0;
-            }
-
-            uint32_t len = 0;
-            JS_ToUint32(ctx, &len, lenVal);
-
-            return len;
-        }
-
-        /**
-         * Read a JS array of strings.
-         */
-        std::vector<std::string> GetStringArray(JSContext *ctx, JSValue arr)
-        {
-            std::vector<std::string> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                JSCStringBuf buf;
-                const char *str = JS_ToCString(ctx, elem, &buf);
-
-                if (str)
-                {
-                    result.emplace_back(str);
-                }
-            }
-
-            return result;
-        }
-
-        /**
-         * Read a JS array of uint16_t values.
-         */
-        std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr)
-        {
-            std::vector<uint16_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem);
-                result.push_back(static_cast<uint16_t>(val));
-            }
-
-            return result;
-        }
-
-        /**
-         * Read a JS array of uint32_t values.
-         */
-        std::vector<uint32_t> GetUint32Array(JSContext *ctx, JSValue arr)
-        {
-            std::vector<uint32_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem);
-                result.push_back(val);
-            }
-
-            return result;
-        }
-
-        /**
-         * Get the keys of a JS object by evaluating Object.keys().
-         * We store the object on a temporary global, evaluate Object.keys(),
-         * then clean up.
-         */
-        std::vector<std::string> GetObjectKeys(JSContext *ctx, JSValue obj)
-        {
-            // Store object as a temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", obj);
-
-            const char *script = "JSON.stringify(Object.keys(__sbmd_tmp))";
-            JSValue result = JS_Eval(ctx, script, strlen(script), "<keys>", JS_EVAL_RETVAL);
-
-            // Clean up temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", JS_UNDEFINED);
-
-            if (JS_IsException(result))
-            {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
-                return {};
-            }
-
-            JSCStringBuf buf;
-            const char *jsonStr = JS_ToCString(ctx, result, &buf);
-
-            if (!jsonStr)
-            {
-                return {};
-            }
-
-            // Parse the JSON array of strings manually (simple format: ["key1","key2",...])
-            std::vector<std::string> keys;
-            std::string json(jsonStr);
-
-            if (json.size() < 2 || json[0] != '[')
-            {
-                return keys;
-            }
-
-            size_t pos = 1;
-
-            while (pos < json.size())
-            {
-                // Skip whitespace and commas
-                while (pos < json.size() && (json[pos] == ' ' || json[pos] == ','))
-                {
-                    pos++;
-                }
-
-                if (pos >= json.size() || json[pos] == ']')
-                {
-                    break;
-                }
-
-                if (json[pos] != '"')
-                {
-                    break;
-                }
-
-                pos++; // skip opening quote
-                std::string key;
-
-                while (pos < json.size() && json[pos] != '"')
-                {
-                    if (json[pos] == '\\' && pos + 1 < json.size())
-                    {
-                        pos++;
-                    }
-
-                    key += json[pos];
-                    pos++;
-                }
-
-                pos++; // skip closing quote
-                keys.push_back(key);
-            }
-
-            return keys;
-        }
-
         /**
          * Find the end of a brace-delimited block starting at the opening brace.
          * Handles nested braces, string literals, and comments.
@@ -772,7 +533,7 @@ namespace barton
     bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
     {
         out.schemaVersion = GetStringProp(ctx, reg, "schemaVersion");
-        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion");
+        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion", 0);
         out.name = GetStringProp(ctx, reg, "name");
 
         if (out.name.empty())
@@ -793,7 +554,7 @@ namespace barton
         if (!JS_IsUndefined(bartonVal) && !JS_IsNull(bartonVal))
         {
             out.barton.deviceClass = GetStringProp(ctx, bartonVal, "deviceClass");
-            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal, "deviceClassVersion");
+            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal, "deviceClassVersion", 0);
         }
 
         // Matter metadata
@@ -826,8 +587,8 @@ namespace barton
 
         if (!JS_IsUndefined(reportingVal) && !JS_IsNull(reportingVal))
         {
-            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "minSecs"));
-            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "maxSecs"));
+            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "minSecs", 0));
+            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "maxSecs", 0));
         }
 
         return true;
@@ -848,7 +609,7 @@ namespace barton
 
             SbmdAlias alias;
             alias.name = name;
-            alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId");
+            alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId", 0);
             alias.attributeId = GetOptUint32Prop(ctx, aliasVal, "attributeId");
             alias.eventId = GetOptUint32Prop(ctx, aliasVal, "eventId");
             alias.commandId = GetOptUint32Prop(ctx, aliasVal, "commandId");
@@ -876,7 +637,7 @@ namespace barton
             SbmdEndpoint endpoint;
             endpoint.id = epId;
             endpoint.profile = GetStringProp(ctx, epVal, "profile");
-            endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion");
+            endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion", 0);
 
             // Extract resources
             JSValue resourcesVal = JS_GetPropertyStr(ctx, epVal, "resources");
