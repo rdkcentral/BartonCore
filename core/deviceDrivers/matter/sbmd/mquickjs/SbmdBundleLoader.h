@@ -61,26 +61,9 @@ namespace barton
          */
         static bool LoadBundle(JSContext *ctx);
 
-        /**
-         * Check if the SBMD bundles are available.
-         *
-         * @return true if the bundles are available (should always be true when
-         *         properly built)
-         */
-        static bool IsAvailable();
-
-        /**
-         * Get the source of the loaded bundles.
-         *
-         * @return "embedded" if loaded from compiled-in source, or "none" if not loaded
-         */
-        static const char *GetSource();
-
     private:
         static bool LoadFromEmbedded(JSContext *ctx);
         static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length, const char *name);
-
-        static const char *source;
     };
 
 } // namespace barton
