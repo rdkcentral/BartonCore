@@ -49,6 +49,23 @@ namespace barton
     namespace
     {
         /**
+         * Reset the __sbmd_registration global to null so the next driver load
+         * starts clean. A failed write would leak stale registration state into
+         * the next load, so log (and clear) any exception it raises.
+         */
+        void ResetRegistration(JSContext *ctx)
+        {
+            JSValue res = JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
+
+            if (JS_IsException(res))
+            {
+                std::string exMsg;
+                MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg);
+                icError("Failed to reset __sbmd_registration for next driver load: %s", exMsg.c_str());
+            }
+        }
+
+        /**
          * Find the end of a brace-delimited block starting at the opening brace.
          * Handles nested braces, string literals, and comments.
          * Returns the position of the closing brace, or std::string::npos on failure.
@@ -193,9 +210,8 @@ namespace barton
         return true;
     }
 
-    std::vector<std::pair<std::string, std::string>> SbmdLoader::ExtractConstants(JSContext *ctx,
-                                                                                     const char *source,
-                                                                                     size_t sourceLen)
+    std::optional<std::vector<std::pair<std::string, std::string>>>
+    SbmdLoader::ExtractConstants(JSContext *ctx, const char *source, size_t sourceLen)
     {
         std::vector<std::pair<std::string, std::string>> constants;
 
@@ -265,8 +281,8 @@ namespace barton
 
         if (found >= end || *found != '{')
         {
-            icWarn("constants: not followed by '{'");
-            return constants;
+            icError("constants: not followed by '{'");
+            return std::nullopt;
         }
 
         // Find matching closing brace
@@ -276,7 +292,7 @@ namespace barton
         if (closePos == std::string::npos)
         {
             icError("Failed to find matching '}' for constants block");
-            return constants;
+            return std::nullopt;
         }
 
         // Extract the block content including braces
@@ -289,7 +305,7 @@ namespace barton
         if (JS_IsException(objVal))
         {
             icError("Failed to evaluate constants block: %s", GetExceptionString(ctx).c_str());
-            return constants;
+            return std::nullopt;
         }
 
         // Get the keys and values
@@ -348,7 +364,7 @@ namespace barton
             else
             {
                 icError("Constants block contains non-primitive value for key '%s'", key.c_str());
-                return {}; // Reject the entire block
+                return std::nullopt; // Reject the entire block
             }
         }
 
@@ -387,7 +403,14 @@ namespace barton
 
         // Pass 1: Extract constants
         auto constants = ExtractConstants(ctx, source, sourceLen);
-        std::string preamble = GenerateConstantsPreamble(constants);
+
+        if (!constants)
+        {
+            icError("Failed to extract constants block from %s", filePath.c_str());
+            return nullptr;
+        }
+
+        std::string preamble = GenerateConstantsPreamble(*constants);
         int preambleLines = CountPreambleLines(preamble);
 
         // Pass 2: Build IIFE-wrapped source with constants preamble
@@ -395,7 +418,7 @@ namespace barton
 
         icDebug("Evaluating driver (%zu bytes, %d constant vars, %d preamble lines)",
                 wrappedSource.size(),
-                (int) constants.size(),
+                (int) constants->size(),
                 preambleLines);
 
         JSValue result = JS_Eval(ctx, wrappedSource.c_str(), wrappedSource.size(), filePath.c_str(), JS_EVAL_REPL);
@@ -406,7 +429,7 @@ namespace barton
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
             MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
+            ResetRegistration(ctx);
             return nullptr;
         }
 
@@ -415,7 +438,7 @@ namespace barton
         if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("Driver evaluation left a pending exception: %s", exMsg.c_str());
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
+            ResetRegistration(ctx);
             return nullptr;
         }
 
@@ -516,7 +539,7 @@ namespace barton
         }
 
         // Reset __sbmd_registration to null for the next driver
-        JS_SetPropertyStr(ctx, global, "__sbmd_registration", JS_NULL);
+        ResetRegistration(ctx);
 
         icDebug("Extracted registration: name=%s, %zu aliases, %zu endpoints, %zu attrHandlers, %zu evtHandlers, "
                 "%zu cmdHandlers",

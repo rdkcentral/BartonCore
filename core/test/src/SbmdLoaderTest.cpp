@@ -31,6 +31,7 @@
 #include "deviceDrivers/matter/sbmd/mquickjs/SbmdLoader.h"
 
 #include <gtest/gtest.h>
+#include <optional>
 #include <string>
 
 extern "C" {
@@ -63,7 +64,7 @@ namespace
             return MQuickJsRuntime::GetSharedContext();
         }
 
-        std::vector<std::pair<std::string, std::string>> ExtractConstants(const char *source)
+        std::optional<std::vector<std::pair<std::string, std::string>>> ExtractConstants(const char *source)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             return SbmdLoader::ExtractConstants(Ctx(), source, strlen(source));
@@ -92,13 +93,14 @@ namespace
             });
         )");
 
-        ASSERT_EQ(constants.size(), 3u);
-        EXPECT_EQ(constants[0].first, "EP_LIGHT");
-        EXPECT_EQ(constants[0].second, "\"1\"");
-        EXPECT_EQ(constants[1].first, "CL_ON_OFF");
-        EXPECT_EQ(constants[1].second, "6");
-        EXPECT_EQ(constants[2].first, "ATTR_ON_OFF");
-        EXPECT_EQ(constants[2].second, "0");
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 3u);
+        EXPECT_EQ((*constants)[0].first, "EP_LIGHT");
+        EXPECT_EQ((*constants)[0].second, "\"1\"");
+        EXPECT_EQ((*constants)[1].first, "CL_ON_OFF");
+        EXPECT_EQ((*constants)[1].second, "6");
+        EXPECT_EQ((*constants)[2].first, "ATTR_ON_OFF");
+        EXPECT_EQ((*constants)[2].second, "0");
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsHexNumbers)
@@ -113,13 +115,14 @@ namespace
             });
         )");
 
-        ASSERT_EQ(constants.size(), 3u);
-        EXPECT_EQ(constants[0].first, "A");
-        EXPECT_EQ(constants[0].second, "255");
-        EXPECT_EQ(constants[1].first, "B");
-        EXPECT_EQ(constants[1].second, "256");
-        EXPECT_EQ(constants[2].first, "C");
-        EXPECT_EQ(constants[2].second, "255");
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 3u);
+        EXPECT_EQ((*constants)[0].first, "A");
+        EXPECT_EQ((*constants)[0].second, "255");
+        EXPECT_EQ((*constants)[1].first, "B");
+        EXPECT_EQ((*constants)[1].second, "256");
+        EXPECT_EQ((*constants)[2].first, "C");
+        EXPECT_EQ((*constants)[2].second, "255");
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsBooleans)
@@ -128,11 +131,12 @@ namespace
             SbmdDriver({ constants: { A: true, B: false } });
         )");
 
-        ASSERT_EQ(constants.size(), 2u);
-        EXPECT_EQ(constants[0].first, "A");
-        EXPECT_EQ(constants[0].second, "true");
-        EXPECT_EQ(constants[1].first, "B");
-        EXPECT_EQ(constants[1].second, "false");
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 2u);
+        EXPECT_EQ((*constants)[0].first, "A");
+        EXPECT_EQ((*constants)[0].second, "true");
+        EXPECT_EQ((*constants)[1].first, "B");
+        EXPECT_EQ((*constants)[1].second, "false");
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsStringsWithEscapes)
@@ -141,11 +145,12 @@ namespace
             SbmdDriver({ constants: { A: "hello \"world\"", B: "back\\slash" } });
         )");
 
-        ASSERT_EQ(constants.size(), 2u);
-        EXPECT_EQ(constants[0].first, "A");
-        EXPECT_EQ(constants[0].second, R"("hello \"world\"")");
-        EXPECT_EQ(constants[1].first, "B");
-        EXPECT_EQ(constants[1].second, R"("back\\slash")");
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 2u);
+        EXPECT_EQ((*constants)[0].first, "A");
+        EXPECT_EQ((*constants)[0].second, R"("hello \"world\"")");
+        EXPECT_EQ((*constants)[1].first, "B");
+        EXPECT_EQ((*constants)[1].second, R"("back\\slash")");
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsEmptyBlock)
@@ -154,7 +159,8 @@ namespace
             SbmdDriver({ constants: {} });
         )");
 
-        EXPECT_TRUE(constants.empty());
+        ASSERT_TRUE(constants.has_value());
+        EXPECT_TRUE(constants->empty());
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsNoConstantsBlock)
@@ -163,7 +169,8 @@ namespace
             SbmdDriver({ name: "test" });
         )");
 
-        EXPECT_TRUE(constants.empty());
+        ASSERT_TRUE(constants.has_value());
+        EXPECT_TRUE(constants->empty());
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsRejectsNonPrimitive)
@@ -172,8 +179,8 @@ namespace
             SbmdDriver({ constants: { A: 1, B: [1, 2] } });
         )");
 
-        // Should reject the entire block since B is an array (non-primitive)
-        EXPECT_TRUE(constants.empty());
+        // Should fail extraction entirely since B is an array (non-primitive)
+        EXPECT_FALSE(constants.has_value());
     }
 
     TEST_F(SbmdLoaderTest, ExtractConstantsWithNestedBraces)
@@ -188,9 +195,10 @@ namespace
             });
         )");
 
-        ASSERT_EQ(constants.size(), 1u);
-        EXPECT_EQ(constants[0].first, "A");
-        EXPECT_EQ(constants[0].second, "1");
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 1u);
+        EXPECT_EQ((*constants)[0].first, "A");
+        EXPECT_EQ((*constants)[0].second, "1");
     }
 
     TEST_F(SbmdLoaderTest, GenerateConstantsPreamble)
