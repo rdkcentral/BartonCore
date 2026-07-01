@@ -112,8 +112,6 @@ namespace barton
          *
          * @param aliases The registration's alias map (name → SbmdAlias)
          * @param handlers The device handler vector (attributeHandlers, eventHandlers, or commandHandlers)
-         * @param aliasElementGetter Function to extract the relevant element ID from an alias
-         *        (e.g. attributeId for attribute dispatch, eventId for event dispatch)
          */
         void Build(const std::unordered_map<std::string, SbmdAlias> &aliases,
                    const std::vector<SbmdDeviceHandler> &handlers);

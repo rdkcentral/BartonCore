@@ -613,10 +613,8 @@ namespace barton
         return static_cast<int>(std::count(preamble.begin(), preamble.end(), '\n'));
     }
 
-    std::unique_ptr<SbmdRegistration> SbmdLoader::LoadDriver(JSContext *ctx,
-                                                                   const std::string &filePath,
-                                                                   const char *source,
-                                                                   size_t sourceLen)
+    std::unique_ptr<SbmdRegistration>
+    SbmdLoader::LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen)
     {
         if (!ctx || !source || sourceLen == 0)
         {
@@ -678,8 +676,7 @@ namespace barton
         return reg;
     }
 
-    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx,
-                                                                           const std::string &filePath)
+    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx, const std::string &filePath)
     {
         JSValue global = JS_GetGlobalObject(ctx);
         JSValue regVal = JS_GetPropertyStr(ctx, global, "__sbmd_registration");
@@ -998,9 +995,7 @@ namespace barton
         return handler;
     }
 
-    bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx,
-                                              JSValue handlersObj,
-                                              std::vector<SbmdDeviceHandler> &out)
+    bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx, JSValue handlersObj, std::vector<SbmdDeviceHandler> &out)
     {
         auto handlerNames = GetObjectKeys(ctx, handlersObj);
 

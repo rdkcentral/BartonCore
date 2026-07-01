@@ -79,10 +79,8 @@ namespace barton
          * @param sourceLen Length of the file contents
          * @return The extracted registration, or nullptr on failure
          */
-        static std::unique_ptr<SbmdRegistration> LoadDriver(JSContext *ctx,
-                                                               const std::string &filePath,
-                                                               const char *source,
-                                                               size_t sourceLen);
+        static std::unique_ptr<SbmdRegistration>
+        LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen);
 
         /**
          * Extract the constants block from a .sbmd.js source text.

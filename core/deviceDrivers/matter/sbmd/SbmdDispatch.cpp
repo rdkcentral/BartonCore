@@ -39,7 +39,7 @@ extern "C" {
 namespace barton
 {
     void SbmdDispatchTable::Build(const std::unordered_map<std::string, SbmdAlias> &aliases,
-                                   const std::vector<SbmdDeviceHandler> &handlers)
+                                  const std::vector<SbmdDeviceHandler> &handlers)
     {
         Clear();
 
