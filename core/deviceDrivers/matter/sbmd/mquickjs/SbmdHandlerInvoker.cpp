@@ -31,6 +31,7 @@
 #include "SbmdHandlerInvoker.h"
 #include "MQuickJsRuntime.h"
 #include "SbmdResultExecutor.h"
+#include "SbmdWireContract.h"
 
 #include <string>
 #include <variant>
@@ -68,13 +69,13 @@ namespace barton
         argsRef.val = args;
 
 
-        JS_SetPropertyStr(ctx, args, "deviceUuid", JS_NewString(ctx, hctx.deviceUuid.c_str()));
-        JS_SetPropertyStr(ctx, args, "endpointId", JS_NewString(ctx, hctx.endpointId.c_str()));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_DEVICE_UUID, JS_NewString(ctx, hctx.deviceUuid.c_str()));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_ENDPOINT_ID, JS_NewString(ctx, hctx.endpointId.c_str()));
 
         // Build clusterFeatureMaps object — attach to args BEFORE populating
         // so that featureMaps is reachable from the GC-rooted args during the loop.
         JSValue featureMaps = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "clusterFeatureMaps", featureMaps);
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_CLUSTER_FEATURE_MAPS, featureMaps);
 
         for (const auto &[clusterId, featureMap] : hctx.clusterFeatureMaps)
         {
@@ -101,13 +102,13 @@ namespace barton
 
         // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "attribute", trigger);
-        JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, "attributeId", JS_NewUint32(ctx, attributeId));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_ATTRIBUTE, trigger);
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_ATTRIBUTE_ID, JS_NewUint32(ctx, attributeId));
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -130,13 +131,13 @@ namespace barton
 
         // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "event", trigger);
-        JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, "eventId", JS_NewUint32(ctx, eventId));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_EVENT, trigger);
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_EVENT_ID, JS_NewUint32(ctx, eventId));
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -159,13 +160,13 @@ namespace barton
 
         // Add trigger info — attach to args first so trigger is reachable from GC root
         JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "command", trigger);
-        JS_SetPropertyStr(ctx, trigger, "clusterId", JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, "commandId", JS_NewUint32(ctx, commandId));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_COMMAND, trigger);
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_COMMAND_ID, JS_NewUint32(ctx, commandId));
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, trigger, "tlvBase64", JS_NewString(ctx, tlvBase64.c_str()));
+            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -187,16 +188,16 @@ namespace barton
 
         // Add resource info — attach to args first so resource is reachable from GC root
         JSValue resource = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "resource", resource);
-        JS_SetPropertyStr(ctx, resource, "resourceId", JS_NewString(ctx, resourceId.c_str()));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_RESOURCE, resource);
+        JS_SetPropertyStr(ctx, resource, SBMD_KEY_RESOURCE_ID, JS_NewString(ctx, resourceId.c_str()));
 
         if (input.has_value())
         {
-            JS_SetPropertyStr(ctx, resource, "input", JS_NewString(ctx, input->c_str()));
+            JS_SetPropertyStr(ctx, resource, SBMD_KEY_INPUT, JS_NewString(ctx, input->c_str()));
         }
         else
         {
-            JS_SetPropertyStr(ctx, resource, "input", JS_NULL);
+            JS_SetPropertyStr(ctx, resource, SBMD_KEY_INPUT, JS_NULL);
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -212,7 +213,7 @@ namespace barton
             return std::nullopt;
         }
 
-        if (JS_StackCheck(ctx, 3))
+        if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
             return std::nullopt;
@@ -260,12 +261,12 @@ namespace barton
         // GC-rooted args.  Subsequent allocations (JS_NewObject, JS_NewString) may
         // trigger GC; without this attachment supObj would be swept.
         JSValue supObj = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, "supplements", supObj);
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_SUPPLEMENTS, supObj);
 
         if (!supplements.attributes.empty())
         {
             JSValue attrsObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, "attributes", attrsObj);
+            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_ATTRIBUTES, attrsObj);
 
             for (const auto &aliasName : supplements.attributes)
             {
@@ -285,7 +286,7 @@ namespace barton
         if (!supplements.resources.empty())
         {
             JSValue resObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, "resources", resObj);
+            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_RESOURCES, resObj);
 
             for (const auto &path : supplements.resources)
             {
@@ -305,7 +306,7 @@ namespace barton
         if (!supplements.persistentData.empty())
         {
             JSValue pdObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, "persistentData", pdObj);
+            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_PERSISTENT_DATA, pdObj);
 
             for (const auto &key : supplements.persistentData)
             {
@@ -325,7 +326,7 @@ namespace barton
         if (!supplements.transientData.empty())
         {
             JSValue tdObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, "transientData", tdObj);
+            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_TRANSIENT_DATA, tdObj);
 
             for (const auto &key : supplements.transientData)
             {
@@ -352,6 +353,10 @@ namespace barton
             if (std::holds_alternative<ResultOp::UpdateResource>(op.data))
             {
                 const auto &ur = std::get<ResultOp::UpdateResource>(op.data);
+
+                // If the op names an endpoint explicitly, write there; otherwise fall back to the
+                // endpoint that triggered this handler. The fallback is the common case: most ops
+                // update a resource on the same endpoint that reported the change.
                 const char *epId = ur.endpoint.has_value() ? ur.endpoint->c_str() : hctx.endpointId.c_str();
 
                 cJSON *meta = nullptr;
@@ -419,27 +424,27 @@ namespace barton
 
 
         JSValue response = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, response, "clusterId", JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, response, "commandId", JS_NewUint32(ctx, commandId));
+        JS_SetPropertyStr(ctx, response, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, response, SBMD_KEY_COMMAND_ID, JS_NewUint32(ctx, commandId));
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, response, "data", JS_NewString(ctx, tlvBase64.c_str()));
+            JS_SetPropertyStr(ctx, response, SBMD_KEY_DATA, JS_NewString(ctx, tlvBase64.c_str()));
         }
         else
         {
-            JS_SetPropertyStr(ctx, response, "data", JS_NULL);
+            JS_SetPropertyStr(ctx, response, SBMD_KEY_DATA, JS_NULL);
         }
 
-        JS_SetPropertyStr(ctx, args, "response", response);
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_RESPONSE, response);
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -462,18 +467,18 @@ namespace barton
 
 
         JSValue attribute = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, attribute, "clusterId", JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, attribute, "attributeId", JS_NewUint32(ctx, attributeId));
-        JS_SetPropertyStr(ctx, attribute, "value", JS_NewString(ctx, tlvBase64.c_str()));
-        JS_SetPropertyStr(ctx, args, "attribute", attribute);
+        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
+        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_ATTRIBUTE_ID, JS_NewUint32(ctx, attributeId));
+        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_VALUE, JS_NewString(ctx, tlvBase64.c_str()));
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_ATTRIBUTE, attribute);
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
@@ -496,27 +501,27 @@ namespace barton
 
 
         JSValue error = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, error, "type", JS_NewString(ctx, errorType.c_str()));
-        JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, errorMessage.c_str()));
+        JS_SetPropertyStr(ctx, error, SBMD_KEY_TYPE, JS_NewString(ctx, errorType.c_str()));
+        JS_SetPropertyStr(ctx, error, SBMD_KEY_MESSAGE, JS_NewString(ctx, errorMessage.c_str()));
 
         if (matterCode >= 0)
         {
-            JS_SetPropertyStr(ctx, error, "matterCode", JS_NewInt32(ctx, matterCode));
+            JS_SetPropertyStr(ctx, error, SBMD_KEY_MATTER_CODE, JS_NewInt32(ctx, matterCode));
         }
         else
         {
-            JS_SetPropertyStr(ctx, error, "matterCode", JS_NULL);
+            JS_SetPropertyStr(ctx, error, SBMD_KEY_MATTER_CODE, JS_NULL);
         }
 
-        JS_SetPropertyStr(ctx, args, "error", error);
+        JS_SetPropertyStr(ctx, args, SBMD_KEY_ERROR, error);
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", handlerContext);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, "handlerContext", JS_NULL);
+            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
         }
 
         JS_DeleteGCRef(ctx, &argsRef);
