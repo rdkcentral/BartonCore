@@ -97,7 +97,8 @@ namespace barton
             }
         }
 
-        // Sort each entry list by priority (Single < Multi)
+        // Sort each specific/multi entry list by priority (Single < Multi). Wildcard entries all
+        // share the same priority, so their per-cluster lists need no sorting.
         for (auto &[key, entries] : specificTable)
         {
             std::stable_sort(entries.begin(), entries.end(), [](const DispatchEntry &a, const DispatchEntry &b) {

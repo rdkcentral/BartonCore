@@ -44,11 +44,20 @@ namespace barton
 
     SbmdDriver::~SbmdDriver()
     {
-        // If still activated at destruction, the GC refs are leaked.
-        // This shouldn't happen in normal operation.
+        // Held-reference cleanup contract:
+        // The handler references held while activated belong to the JSContext used to activate this
+        // driver. They can only be released via ReleaseHandlers (through Deactivate), which requires that
+        // JSContext to still be alive. The destructor deliberately does NOT release them because it has
+        // no access to the JSContext and cannot assume it still exists. Callers are therefore responsible
+        // for invoking Deactivate() before destroying an activated driver; reaching this destructor while
+        // still activated leaks the references (and is reported below).
         if (registration && registration->activated)
         {
             icWarn("driver '%s' destroyed while still activated", registration->name.c_str());
+
+            // Abandon the held references without releasing them: releasing here would touch a
+            // context we cannot assume is still alive. Leaking matches the historical behaviour.
+            VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
         }
     }
 
@@ -74,8 +83,8 @@ namespace barton
         // Replace registration with the fresh one (preserves metadata, gets new handler JSValues)
         registration = std::move(freshReg);
 
-        // GC-root all handler JSValues
-        RootHandlers(ctx);
+        // Hold all handler JSValues alive
+        HoldHandlers(ctx);
 
         // Build dispatch tables from aliases and handlers
         attributeDispatch.Build(registration->aliases, registration->attributeHandlers);
@@ -83,9 +92,8 @@ namespace barton
         commandDispatch.Build(registration->aliases, registration->commandHandlers);
 
         registration->activated = true;
-        icDebug("driver '%s' activated with %zu GC roots, dispatch: %zu attr, %zu event, %zu cmd entries",
+        icDebug("driver '%s' activated, dispatch: %zu attr, %zu event, %zu cmd entries",
                 registration->name.c_str(),
-                gcRefs.size(),
                 attributeDispatch.GetSpecificEntryCount() + attributeDispatch.GetWildcardEntryCount(),
                 eventDispatch.GetSpecificEntryCount() + eventDispatch.GetWildcardEntryCount(),
                 commandDispatch.GetSpecificEntryCount() + commandDispatch.GetWildcardEntryCount());
@@ -103,7 +111,7 @@ namespace barton
 
         icDebug("deactivating driver '%s'", registration->name.c_str());
 
-        UnrootHandlers(ctx);
+        ReleaseHandlers();
 
         attributeDispatch.Clear();
         eventDispatch.Clear();
@@ -142,124 +150,27 @@ namespace barton
         return commandDispatch;
     }
 
-    void SbmdDriver::RootIfValid(JSContext *ctx, SbmdHandler &entry)
+    void SbmdDriver::HoldIfValid(JSContext *ctx, SbmdHandler &entry)
     {
-        entry.rooted = nullptr;
-
         if (JS_IsUndefined(entry.handler))
         {
+            entry.heldFn = SafeJSValue {};
             return;
         }
 
-        auto &ref = gcRefs.emplace_back();
-        JS_AddGCRef(ctx, &ref);
-        ref.val = entry.handler;
-
-        // mquickjs uses a moving GC that updates ref.val (a stable std::list node) on collection but
-        // not the raw 'handler' copy. Point the handler at ref.val so invocation always sees the
-        // relocated function object.
-        entry.rooted = &ref.val;
+        // SafeJSValue keeps the function object alive, so entry.Fn() always returns a valid function.
+        entry.heldFn = SafeJSValue {ctx, entry.handler};
     }
 
-    void SbmdDriver::RootHandlers(JSContext *ctx)
+    void SbmdDriver::HoldHandlers(JSContext *ctx)
     {
-        gcRefs.clear();
-
-        // Root resource handlers across all endpoints
-        for (auto &endpoint : registration->endpoints)
-        {
-            for (auto &resource : endpoint.resources)
-            {
-                if (resource.seed.has_value())
-                {
-                    RootIfValid(ctx, *resource.seed);
-                }
-
-                if (resource.read.has_value())
-                {
-                    RootIfValid(ctx, *resource.read);
-                }
-
-                if (resource.write.has_value())
-                {
-                    RootIfValid(ctx, *resource.write);
-                }
-
-                if (resource.execute.has_value())
-                {
-                    RootIfValid(ctx, *resource.execute);
-                }
-            }
-        }
-
-        // Root device handlers (attribute, event, command)
-        for (auto &handler : registration->attributeHandlers)
-        {
-            RootIfValid(ctx, handler);
-        }
-
-        for (auto &handler : registration->eventHandlers)
-        {
-            RootIfValid(ctx, handler);
-        }
-
-        for (auto &handler : registration->commandHandlers)
-        {
-            RootIfValid(ctx, handler);
-        }
+        VisitHandlers([&](SbmdHandler &entry) { HoldIfValid(ctx, entry); });
     }
 
-    void SbmdDriver::UnrootHandlers(JSContext *ctx)
+    void SbmdDriver::ReleaseHandlers()
     {
-        // Remove all GC roots
-        for (auto &ref : gcRefs)
-        {
-            JS_DeleteGCRef(ctx, &ref);
-        }
-
-        gcRefs.clear();
-
-        // Reset handler JSValues to undefined
-        for (auto &endpoint : registration->endpoints)
-        {
-            for (auto &resource : endpoint.resources)
-            {
-                if (resource.seed.has_value())
-                {
-                    resource.seed->Reset();
-                }
-
-                if (resource.read.has_value())
-                {
-                    resource.read->Reset();
-                }
-
-                if (resource.write.has_value())
-                {
-                    resource.write->Reset();
-                }
-
-                if (resource.execute.has_value())
-                {
-                    resource.execute->Reset();
-                }
-            }
-        }
-
-        for (auto &handler : registration->attributeHandlers)
-        {
-            handler.Reset();
-        }
-
-        for (auto &handler : registration->eventHandlers)
-        {
-            handler.Reset();
-        }
-
-        for (auto &handler : registration->commandHandlers)
-        {
-            handler.Reset();
-        }
+        // Resetting each handler releases its SafeJSValue, dropping the held reference.
+        VisitHandlers([](SbmdHandler &entry) { entry.Reset(); });
     }
 
 } // namespace barton

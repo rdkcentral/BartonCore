@@ -25,7 +25,7 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdResultExecutor"
+#define LOG_TAG     "SbmdResultExecutor"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdResultExecutor.h"
@@ -123,7 +123,7 @@ namespace barton
                 data.metadata = GetStringProp(ctx, opVal, SBMD_KEY_METADATA);
             }
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "setMetadata")
         {
@@ -139,7 +139,7 @@ namespace barton
             data.key = GetStringProp(ctx, opVal, SBMD_KEY_KEY);
             data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "setTransientData")
         {
@@ -148,14 +148,14 @@ namespace barton
             data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
             data.ttlSecs = GetUint32Prop(ctx, opVal, SBMD_KEY_TTL_SECS, 0);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "log")
         {
             ResultOp::Log data;
             data.message = GetStringProp(ctx, opVal, SBMD_KEY_MESSAGE);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else
         {
@@ -180,7 +180,7 @@ namespace barton
             ResultTerminal::Error data;
             data.message = GetStringProp(ctx, termVal, SBMD_KEY_MESSAGE);
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "sendCommand")
         {
@@ -231,10 +231,29 @@ namespace barton
             if (!JS_IsUndefined(deferred) && !JS_IsNull(deferred))
             {
                 data.responseCommandId = GetUint32Prop(ctx, deferred, SBMD_KEY_RESPONSE_COMMAND_ID, 0);
-                data.onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
-                data.onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+
+                JSValue onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
+
+                if (!JS_IsUndefined(onResponse))
+                {
+                    data.onResponse = SafeJSValue {ctx, onResponse};
+                }
+
+                JSValue onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+
+                if (!JS_IsUndefined(onError))
+                {
+                    data.onError = SafeJSValue {ctx, onError};
+                }
+
                 data.timeoutMs = GetOptUint32Prop(ctx, deferred, SBMD_KEY_TIMEOUT_MS);
-                data.context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                JSValue context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                if (!JS_IsUndefined(context))
+                {
+                    data.context = SafeJSValue {ctx, context};
+                }
             }
 
             // options: { endpointId?, timedInvokeTimeoutMs? }
@@ -246,7 +265,7 @@ namespace barton
                 data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, SBMD_KEY_TIMED_INVOKE_TIMEOUT_MS);
             }
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "readAttribute")
         {
@@ -259,10 +278,28 @@ namespace barton
 
             if (!JS_IsUndefined(deferred) && !JS_IsNull(deferred))
             {
-                data.onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
-                data.onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+                JSValue onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
+
+                if (!JS_IsUndefined(onResponse))
+                {
+                    data.onResponse = SafeJSValue {ctx, onResponse};
+                }
+
+                JSValue onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+
+                if (!JS_IsUndefined(onError))
+                {
+                    data.onError = SafeJSValue {ctx, onError};
+                }
+
                 data.timeoutMs = GetOptUint32Prop(ctx, deferred, SBMD_KEY_TIMEOUT_MS);
-                data.context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                JSValue context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                if (!JS_IsUndefined(context))
+                {
+                    data.context = SafeJSValue {ctx, context};
+                }
             }
 
             // options: { endpointId? }

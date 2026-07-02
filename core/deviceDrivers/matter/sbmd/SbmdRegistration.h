@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "SafeJSValue.h"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -69,27 +71,39 @@ namespace barton
 
     /**
      * A loaded handler declaration (resource seed/read/write/execute, or a
-     * device attribute/event/command handler): the JS function reference, its
-     * GC-tracked storage location, and any supplement requests.
+     * device attribute/event/command handler): the JS function reference, the
+     * SafeJSValue that keeps it alive while activated, and any supplement requests.
      */
     class SbmdHandler
     {
     public:
-        JSValue handler = JS_UNDEFINED; // Loaded function reference (valid before activation)
-        // Points at the GC-tracked storage (the JSGCRef::val that JS_AddGCRef roots). mquickjs has a
-        // moving/compacting GC: it updates this location on collection but NOT the raw 'handler' copy
-        // above. Always invoke via Fn() so a GC that relocates the function object is observed.
-        JSValue *rooted = nullptr;
+        SbmdHandler() = default;
+
+        // Move-only: the held reference is single-owner (see SafeJSValue).
+        SbmdHandler(const SbmdHandler &) = delete;
+        SbmdHandler &operator=(const SbmdHandler &) = delete;
+        SbmdHandler(SbmdHandler &&) = default;
+        SbmdHandler &operator=(SbmdHandler &&) = default;
+
+        // Raw function reference captured at load time. This is a deliberately unheld staging slot:
+        // a loaded-but-not-yet-activated registration owns no held references, so it can be moved,
+        // discarded on a failed activation, or destroyed without needing the runtime mutex. Only
+        // valid transiently after load; the driver promotes it into heldFn when activated.
+        JSValue handler = JS_UNDEFINED;
+        // Held function reference. Empty until the driver is activated, then keeps the function alive
+        // until deactivation. SafeJSValue always yields the current function object, so always invoke via Fn().
+        SafeJSValue heldFn;
         SbmdSupplements supplements;
 
-        // Invoke through the GC-tracked slot when rooted, otherwise the raw reference.
-        JSValue Fn() const { return rooted != nullptr ? *rooted : handler; }
+        // Invoke through the held reference when activated, otherwise the raw load-time reference.
+        JSValue Fn() const { return heldFn.HasValue() ? heldFn.Get() : handler; }
 
-        // Return to the unloaded/unrooted state (Intended to be used when handlers are unrooted at deactivation).
+        // Return to the unloaded state (intended for use when a driver is deactivated).
+        // Releasing the held reference must be done with the runtime mutex held.
         void Reset()
         {
             handler = JS_UNDEFINED;
-            rooted = nullptr;
+            heldFn = SafeJSValue {};
         }
     };
 
@@ -164,7 +178,7 @@ namespace barton
     /**
      * Complete registration extracted from a SbmdDriver({...}) call.
      * Metadata fields are always populated. Handler JSValues are only valid
-     * when the driver is activated (GC-rooted).
+     * when the driver is activated (their references are held alive).
      */
     struct SbmdRegistration
     {
@@ -189,7 +203,7 @@ namespace barton
         std::vector<SbmdDeviceHandler> eventHandlers;
         std::vector<SbmdDeviceHandler> commandHandlers;
 
-        // Whether handler JSValues are currently GC-rooted (driver is activated)
+        // Whether handler JSValues are currently held alive (driver is activated)
         bool activated = false;
     };
 

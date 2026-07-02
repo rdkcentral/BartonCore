@@ -37,6 +37,7 @@
 
 #include "../SbmdRegistration.h"
 #include "SbmdResultExecutor.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <functional>
 #include <map>
@@ -97,6 +98,40 @@ namespace barton
     using TransientDataSetter = std::function<void(const std::string &key, const std::string &value, uint32_t ttlSecs)>;
 
     /**
+     * A single resolved supplement: the requested key (alias name, resource path,
+     * or data key) paired with the value that was read for it. A nullopt value
+     * means the source had no entry (unknown alias, cache miss, unset key, or an
+     * expired transient entry).
+     */
+    struct FetchedSupplement
+    {
+        std::string key;
+        std::optional<std::string> value;
+    };
+
+    /**
+     * The result of resolving an SbmdSupplements declaration: one FetchedSupplement
+     * per requested key in each category.
+     *
+     * This is the seam between the two supplement phases. PrefetchSupplements
+     * produces it by running the fetchers (device-service I/O) with no JS context
+     * or runtime mutex held; AddSupplements consumes it, touching only the JS
+     * context to attach the values to an args object.
+     */
+    struct FetchedSupplements
+    {
+        std::vector<FetchedSupplement> attributes;
+        std::vector<FetchedSupplement> resources;
+        std::vector<FetchedSupplement> persistentData;
+        std::vector<FetchedSupplement> transientData;
+
+        bool empty() const
+        {
+            return attributes.empty() && resources.empty() && persistentData.empty() && transientData.empty();
+        }
+    };
+
+    /**
      * Invokes handler functions and parses their results.
      *
      * Usage:
@@ -117,11 +152,11 @@ namespace barton
          * @param tlvBase64 The TLV-encoded attribute value as base64 (may be empty)
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildAttributeArgs(JSContext *ctx,
-                                          const HandlerContext &hctx,
-                                          uint32_t clusterId,
-                                          uint32_t attributeId,
-                                          const std::string &tlvBase64);
+        static SafeJSValue BuildAttributeArgs(JSContext *ctx,
+                                              const HandlerContext &hctx,
+                                              uint32_t clusterId,
+                                              uint32_t attributeId,
+                                              const std::string &tlvBase64);
 
         /**
          * Build an args object for an event handler invocation.
@@ -135,11 +170,11 @@ namespace barton
          * @param tlvBase64 The TLV-encoded event data as base64 (may be empty)
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildEventArgs(JSContext *ctx,
-                                      const HandlerContext &hctx,
-                                      uint32_t clusterId,
-                                      uint32_t eventId,
-                                      const std::string &tlvBase64);
+        static SafeJSValue BuildEventArgs(JSContext *ctx,
+                                          const HandlerContext &hctx,
+                                          uint32_t clusterId,
+                                          uint32_t eventId,
+                                          const std::string &tlvBase64);
 
         /**
          * Build an args object for an unsolicited command handler invocation.
@@ -153,11 +188,11 @@ namespace barton
          * @param tlvBase64 The TLV-encoded command data as base64 (may be empty)
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildCommandArgs(JSContext *ctx,
-                                        const HandlerContext &hctx,
-                                        uint32_t clusterId,
-                                        uint32_t commandId,
-                                        const std::string &tlvBase64);
+        static SafeJSValue BuildCommandArgs(JSContext *ctx,
+                                            const HandlerContext &hctx,
+                                            uint32_t clusterId,
+                                            uint32_t commandId,
+                                            const std::string &tlvBase64);
 
         /**
          * Build an args object for a resource handler (seed/read/write/execute).
@@ -168,10 +203,10 @@ namespace barton
          * @param input The input value (null for seed/read, value for write, arg for execute)
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildResourceArgs(JSContext *ctx,
-                                         const HandlerContext &hctx,
-                                         const std::string &resourceId,
-                                         const std::optional<std::string> &input);
+        static SafeJSValue BuildResourceArgs(JSContext *ctx,
+                                             const HandlerContext &hctx,
+                                             const std::string &resourceId,
+                                             const std::optional<std::string> &input);
 
         /**
          * Call a handler function with the given args object.
@@ -181,7 +216,7 @@ namespace barton
          * @param args The args object (consumed by the call)
          * @return Parsed result chain, or nullopt on failure
          */
-        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx, JSValue handler, JSValue args);
+        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args);
 
         /**
          * Execute the non-terminal ops from a parsed result.
@@ -196,27 +231,44 @@ namespace barton
                                const TransientDataSetter &transientSetter = {});
 
         /**
-         * Add supplements to an args object. Fetches pre-declared attribute,
-         * resource, persistent data, and transient data values and attaches them
-         * as `args.supplements`.
+         * Resolve an SbmdSupplements declaration into fetched values.
          *
-         * If supplements is empty (no declared keys), this is a no-op.
+         * Runs each supplement fetcher and collects the results. This performs
+         * only device-service I/O -- it touches no JS context and acquires no
+         * runtime mutex -- so it is safe (and intended) to call *without* holding
+         * MQuickJsRuntime::GetMutex(). The returned FetchedSupplements is then
+         * handed to AddSupplements under the mutex.
          *
-         * @param ctx JS context (caller holds mutex)
-         * @param args The args object to augment (modified in place)
+         * If supplements is empty (no declared keys), the result is empty.
+         *
          * @param supplements The supplement declarations
          * @param attrFetcher Callback to fetch attribute values by alias name
          * @param resFetcher Callback to fetch resource values by path
          * @param persistFetcher Callback to fetch persistent data values by key
          * @param transientFetcher Callback to fetch transient data values by key
+         * @return The resolved supplement values, one entry per requested key
          */
-        static void AddSupplements(JSContext *ctx,
-                                   JSValue args,
-                                   const SbmdSupplements &supplements,
-                                   const AttributeSupplementFetcher &attrFetcher,
-                                   const ResourceSupplementFetcher &resFetcher,
-                                   const PersistentDataFetcher &persistFetcher,
-                                   const TransientDataFetcher &transientFetcher);
+        static FetchedSupplements PrefetchSupplements(const SbmdSupplements &supplements,
+                                                      const AttributeSupplementFetcher &attrFetcher,
+                                                      const ResourceSupplementFetcher &resFetcher,
+                                                      const PersistentDataFetcher &persistFetcher,
+                                                      const TransientDataFetcher &transientFetcher);
+
+        /**
+         * Attach previously fetched supplements to an args object as
+         * `args.supplements`.
+         *
+         * This only touches the JS context, so the caller must hold
+         * MQuickJsRuntime::GetMutex(). Pair it with PrefetchSupplements, which
+         * gathers the values beforehand without the mutex.
+         *
+         * If fetched is empty (no declared keys), this is a no-op.
+         *
+         * @param ctx JS context (caller holds mutex)
+         * @param args The args object to augment (modified in place)
+         * @param fetched The values produced by PrefetchSupplements
+         */
+        static void AddSupplements(JSContext *ctx, SafeJSValue &args, const FetchedSupplements &fetched);
 
         /**
          * Build an args object for a deferred command response handler.
@@ -231,12 +283,12 @@ namespace barton
          * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildCommandResponseArgs(JSContext *ctx,
-                                                const HandlerContext &hctx,
-                                                uint32_t clusterId,
-                                                uint32_t commandId,
-                                                const std::string &tlvBase64,
-                                                JSValue handlerContext = JS_UNDEFINED);
+        static SafeJSValue BuildCommandResponseArgs(JSContext *ctx,
+                                                    const HandlerContext &hctx,
+                                                    uint32_t clusterId,
+                                                    uint32_t commandId,
+                                                    const std::string &tlvBase64,
+                                                    JSValue handlerContext = JS_UNDEFINED);
 
         /**
          * Build an args object for a deferred attribute read response handler.
@@ -251,12 +303,12 @@ namespace barton
          * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildAttributeReadResponseArgs(JSContext *ctx,
-                                                      const HandlerContext &hctx,
-                                                      uint32_t clusterId,
-                                                      uint32_t attributeId,
-                                                      const std::string &tlvBase64,
-                                                      JSValue handlerContext = JS_UNDEFINED);
+        static SafeJSValue BuildAttributeReadResponseArgs(JSContext *ctx,
+                                                          const HandlerContext &hctx,
+                                                          uint32_t clusterId,
+                                                          uint32_t attributeId,
+                                                          const std::string &tlvBase64,
+                                                          JSValue handlerContext = JS_UNDEFINED);
 
         /**
          * Build an args object for a deferred error handler.
@@ -271,18 +323,18 @@ namespace barton
          * @param handlerContext Optional JS value to set as args.handlerContext
          * @return JS args object, or JS_EXCEPTION on failure
          */
-        static JSValue BuildDeferredErrorArgs(JSContext *ctx,
-                                              const HandlerContext &hctx,
-                                              const std::string &errorType,
-                                              const std::string &errorMessage,
-                                              int32_t matterCode = -1,
-                                              JSValue handlerContext = JS_UNDEFINED);
+        static SafeJSValue BuildDeferredErrorArgs(JSContext *ctx,
+                                                  const HandlerContext &hctx,
+                                                  const std::string &errorType,
+                                                  const std::string &errorMessage,
+                                                  int32_t matterCode = -1,
+                                                  JSValue handlerContext = JS_UNDEFINED);
 
     private:
         /**
          * Build the common base args object with deviceUuid, endpointId, clusterFeatureMaps.
          */
-        static JSValue BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx);
+        static SafeJSValue BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx);
     };
 
 } // namespace barton

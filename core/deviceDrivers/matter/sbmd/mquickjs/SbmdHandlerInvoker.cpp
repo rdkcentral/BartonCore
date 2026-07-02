@@ -32,6 +32,7 @@
 #include "MQuickJsRuntime.h"
 #include "SbmdResultExecutor.h"
 #include "SbmdWireContract.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <string>
 #include <variant>
@@ -58,154 +59,111 @@ extern bool deviceServiceSetMetadata(const char *uri, const char *value);
 
 namespace barton
 {
-    JSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
+    SafeJSValue SbmdHandlerInvoker::BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx)
     {
-        JSValue args = JS_NewObject(ctx);
+        // Root args for the whole build: subsequent allocations (JS_NewString, JS_NewObject)
+        // may trigger the mquickjs moving GC, which would otherwise sweep the unrooted args.
+        SafeJSValue args {ctx, JS_NewObject(ctx)};
 
-        // GC-root args during construction: subsequent allocations (JS_NewString,
-        // JS_NewObject) may trigger mquickjs GC which would sweep the unrooted args.
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
+        args.SetString(SBMD_KEY_DEVICE_UUID, hctx.deviceUuid.c_str());
+        args.SetString(SBMD_KEY_ENDPOINT_ID, hctx.endpointId.c_str());
 
-
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_DEVICE_UUID, JS_NewString(ctx, hctx.deviceUuid.c_str()));
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_ENDPOINT_ID, JS_NewString(ctx, hctx.endpointId.c_str()));
-
-        // Build clusterFeatureMaps object — attach to args BEFORE populating
-        // so that featureMaps is reachable from the GC-rooted args during the loop.
-        JSValue featureMaps = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_CLUSTER_FEATURE_MAPS, featureMaps);
+        // clusterFeatureMaps is created-and-attached atomically, then populated through the
+        // reachable child node.
+        SafeJSValue featureMaps = args.AddObject(SBMD_KEY_CLUSTER_FEATURE_MAPS);
 
         for (const auto &[clusterId, featureMap] : hctx.clusterFeatureMaps)
         {
-            JS_SetPropertyStr(ctx, featureMaps, std::to_string(clusterId).c_str(), JS_NewUint32(ctx, featureMap));
+            featureMaps.SetUint32(std::to_string(clusterId).c_str(), featureMap);
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    JSValue SbmdHandlerInvoker::BuildAttributeArgs(JSContext *ctx,
+    SafeJSValue SbmdHandlerInvoker::BuildAttributeArgs(JSContext *ctx,
+                                                       const HandlerContext &hctx,
+                                                       uint32_t clusterId,
+                                                       uint32_t attributeId,
+                                                       const std::string &tlvBase64)
+    {
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
+
+        SafeJSValue trigger = args.AddObject(SBMD_KEY_ATTRIBUTE);
+        trigger.SetUint32(SBMD_KEY_CLUSTER_ID, clusterId);
+        trigger.SetUint32(SBMD_KEY_ATTRIBUTE_ID, attributeId);
+
+        if (!tlvBase64.empty())
+        {
+            trigger.SetString(SBMD_KEY_TLV_BASE64, tlvBase64.c_str());
+        }
+
+        return args;
+    }
+
+    SafeJSValue SbmdHandlerInvoker::BuildEventArgs(JSContext *ctx,
                                                    const HandlerContext &hctx,
                                                    uint32_t clusterId,
-                                                   uint32_t attributeId,
+                                                   uint32_t eventId,
                                                    const std::string &tlvBase64)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        // Add trigger info — attach to args first so trigger is reachable from GC root
-        JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_ATTRIBUTE, trigger);
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_ATTRIBUTE_ID, JS_NewUint32(ctx, attributeId));
+        SafeJSValue trigger = args.AddObject(SBMD_KEY_EVENT);
+        trigger.SetUint32(SBMD_KEY_CLUSTER_ID, clusterId);
+        trigger.SetUint32(SBMD_KEY_EVENT_ID, eventId);
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
+            trigger.SetString(SBMD_KEY_TLV_BASE64, tlvBase64.c_str());
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    JSValue SbmdHandlerInvoker::BuildEventArgs(JSContext *ctx,
-                                               const HandlerContext &hctx,
-                                               uint32_t clusterId,
-                                               uint32_t eventId,
-                                               const std::string &tlvBase64)
+    SafeJSValue SbmdHandlerInvoker::BuildCommandArgs(JSContext *ctx,
+                                                     const HandlerContext &hctx,
+                                                     uint32_t clusterId,
+                                                     uint32_t commandId,
+                                                     const std::string &tlvBase64)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        // Add trigger info — attach to args first so trigger is reachable from GC root
-        JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_EVENT, trigger);
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_EVENT_ID, JS_NewUint32(ctx, eventId));
+        SafeJSValue trigger = args.AddObject(SBMD_KEY_COMMAND);
+        trigger.SetUint32(SBMD_KEY_CLUSTER_ID, clusterId);
+        trigger.SetUint32(SBMD_KEY_COMMAND_ID, commandId);
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
+            trigger.SetString(SBMD_KEY_TLV_BASE64, tlvBase64.c_str());
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    JSValue SbmdHandlerInvoker::BuildCommandArgs(JSContext *ctx,
-                                                 const HandlerContext &hctx,
-                                                 uint32_t clusterId,
-                                                 uint32_t commandId,
-                                                 const std::string &tlvBase64)
+    SafeJSValue SbmdHandlerInvoker::BuildResourceArgs(JSContext *ctx,
+                                                      const HandlerContext &hctx,
+                                                      const std::string &resourceId,
+                                                      const std::optional<std::string> &input)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        // Add trigger info — attach to args first so trigger is reachable from GC root
-        JSValue trigger = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_COMMAND, trigger);
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, trigger, SBMD_KEY_COMMAND_ID, JS_NewUint32(ctx, commandId));
-
-        if (!tlvBase64.empty())
-        {
-            JS_SetPropertyStr(ctx, trigger, SBMD_KEY_TLV_BASE64, JS_NewString(ctx, tlvBase64.c_str()));
-        }
-
-        JS_DeleteGCRef(ctx, &argsRef);
-
-        return args;
-    }
-
-    JSValue SbmdHandlerInvoker::BuildResourceArgs(JSContext *ctx,
-                                                  const HandlerContext &hctx,
-                                                  const std::string &resourceId,
-                                                  const std::optional<std::string> &input)
-    {
-        JSValue args = BuildBaseArgs(ctx, hctx);
-
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        // Add resource info — attach to args first so resource is reachable from GC root
-        JSValue resource = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_RESOURCE, resource);
-        JS_SetPropertyStr(ctx, resource, SBMD_KEY_RESOURCE_ID, JS_NewString(ctx, resourceId.c_str()));
+        SafeJSValue resource = args.AddObject(SBMD_KEY_RESOURCE);
+        resource.SetString(SBMD_KEY_RESOURCE_ID, resourceId.c_str());
 
         if (input.has_value())
         {
-            JS_SetPropertyStr(ctx, resource, SBMD_KEY_INPUT, JS_NewString(ctx, input->c_str()));
+            resource.SetString(SBMD_KEY_INPUT, input->c_str());
         }
         else
         {
-            JS_SetPropertyStr(ctx, resource, SBMD_KEY_INPUT, JS_NULL);
+            resource.SetNull(SBMD_KEY_INPUT);
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    std::optional<ParsedResult> SbmdHandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, JSValue args)
+    std::optional<ParsedResult>
+    SbmdHandlerInvoker::InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args)
     {
         if (JS_IsUndefined(handler))
         {
@@ -221,7 +179,7 @@ namespace barton
 
 
         // Stack order for JS_Call: arg, func, this
-        JS_PushArg(ctx, args);
+        JS_PushArg(ctx, args.Get());
         JS_PushArg(ctx, handler);
         JS_PushArg(ctx, JS_NULL);
 
@@ -243,105 +201,73 @@ namespace barton
         return SbmdResultExecutor::Parse(ctx, result);
     }
 
-    void SbmdHandlerInvoker::AddSupplements(JSContext *ctx,
-                                            JSValue args,
-                                            const SbmdSupplements &supplements,
-                                            const AttributeSupplementFetcher &attrFetcher,
-                                            const ResourceSupplementFetcher &resFetcher,
-                                            const PersistentDataFetcher &persistFetcher,
-                                            const TransientDataFetcher &transientFetcher)
+    FetchedSupplements SbmdHandlerInvoker::PrefetchSupplements(const SbmdSupplements &supplements,
+                                                               const AttributeSupplementFetcher &attrFetcher,
+                                                               const ResourceSupplementFetcher &resFetcher,
+                                                               const PersistentDataFetcher &persistFetcher,
+                                                               const TransientDataFetcher &transientFetcher)
     {
-        if (supplements.attributes.empty() && supplements.resources.empty() && supplements.persistentData.empty() &&
-            supplements.transientData.empty())
+        FetchedSupplements fetched;
+
+        for (const auto &aliasName : supplements.attributes)
+        {
+            fetched.attributes.push_back({aliasName, attrFetcher(aliasName)});
+        }
+
+        for (const auto &path : supplements.resources)
+        {
+            fetched.resources.push_back({path, resFetcher(path)});
+        }
+
+        for (const auto &key : supplements.persistentData)
+        {
+            fetched.persistentData.push_back({key, persistFetcher(key)});
+        }
+
+        for (const auto &key : supplements.transientData)
+        {
+            fetched.transientData.push_back({key, transientFetcher(key)});
+        }
+
+        return fetched;
+    }
+
+    void SbmdHandlerInvoker::AddSupplements(JSContext *ctx, SafeJSValue &args, const FetchedSupplements &fetched)
+    {
+        if (fetched.empty())
         {
             return;
         }
 
-        // Attach supObj to args immediately so it is reachable from the caller's
-        // GC-rooted args.  Subsequent allocations (JS_NewObject, JS_NewString) may
-        // trigger GC; without this attachment supObj would be swept.
-        JSValue supObj = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_SUPPLEMENTS, supObj);
+        // Nested nodes are created-and-attached atomically via AddObject, then populated
+        // through the reachable child. args is already a SafeJSValue owned by the caller.
+        SafeJSValue supObj = args.AddObject(SBMD_KEY_SUPPLEMENTS);
 
-        if (!supplements.attributes.empty())
-        {
-            JSValue attrsObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_ATTRIBUTES, attrsObj);
-
-            for (const auto &aliasName : supplements.attributes)
+        auto populate = [](SafeJSValue &parent, const char *key, const std::vector<FetchedSupplement> &entries) {
+            if (entries.empty())
             {
-                auto value = attrFetcher(aliasName);
+                return;
+            }
 
-                if (value.has_value())
+            SafeJSValue obj = parent.AddObject(key);
+
+            for (const auto &entry : entries)
+            {
+                if (entry.value.has_value())
                 {
-                    JS_SetPropertyStr(ctx, attrsObj, aliasName.c_str(), JS_NewString(ctx, value->c_str()));
+                    obj.SetString(entry.key.c_str(), entry.value->c_str());
                 }
                 else
                 {
-                    JS_SetPropertyStr(ctx, attrsObj, aliasName.c_str(), JS_NULL);
+                    obj.SetNull(entry.key.c_str());
                 }
             }
-        }
+        };
 
-        if (!supplements.resources.empty())
-        {
-            JSValue resObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_RESOURCES, resObj);
-
-            for (const auto &path : supplements.resources)
-            {
-                auto value = resFetcher(path);
-
-                if (value.has_value())
-                {
-                    JS_SetPropertyStr(ctx, resObj, path.c_str(), JS_NewString(ctx, value->c_str()));
-                }
-                else
-                {
-                    JS_SetPropertyStr(ctx, resObj, path.c_str(), JS_NULL);
-                }
-            }
-        }
-
-        if (!supplements.persistentData.empty())
-        {
-            JSValue pdObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_PERSISTENT_DATA, pdObj);
-
-            for (const auto &key : supplements.persistentData)
-            {
-                auto value = persistFetcher(key);
-
-                if (value.has_value())
-                {
-                    JS_SetPropertyStr(ctx, pdObj, key.c_str(), JS_NewString(ctx, value->c_str()));
-                }
-                else
-                {
-                    JS_SetPropertyStr(ctx, pdObj, key.c_str(), JS_NULL);
-                }
-            }
-        }
-
-        if (!supplements.transientData.empty())
-        {
-            JSValue tdObj = JS_NewObject(ctx);
-            JS_SetPropertyStr(ctx, supObj, SBMD_KEY_TRANSIENT_DATA, tdObj);
-
-            for (const auto &key : supplements.transientData)
-            {
-                auto value = transientFetcher(key);
-
-                if (value.has_value())
-                {
-                    JS_SetPropertyStr(ctx, tdObj, key.c_str(), JS_NewString(ctx, value->c_str()));
-                }
-                else
-                {
-                    JS_SetPropertyStr(ctx, tdObj, key.c_str(), JS_NULL);
-                }
-            }
-        }
+        populate(supObj, SBMD_KEY_ATTRIBUTES, fetched.attributes);
+        populate(supObj, SBMD_KEY_RESOURCES, fetched.resources);
+        populate(supObj, SBMD_KEY_PERSISTENT_DATA, fetched.persistentData);
+        populate(supObj, SBMD_KEY_TRANSIENT_DATA, fetched.transientData);
     }
 
     void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx,
@@ -409,122 +335,96 @@ namespace barton
         }
     }
 
-    JSValue SbmdHandlerInvoker::BuildCommandResponseArgs(JSContext *ctx,
-                                                         const HandlerContext &hctx,
-                                                         uint32_t clusterId,
-                                                         uint32_t commandId,
-                                                         const std::string &tlvBase64,
-                                                         JSValue handlerContext)
+    SafeJSValue SbmdHandlerInvoker::BuildCommandResponseArgs(JSContext *ctx,
+                                                             const HandlerContext &hctx,
+                                                             uint32_t clusterId,
+                                                             uint32_t commandId,
+                                                             const std::string &tlvBase64,
+                                                             JSValue handlerContext)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        JSValue response = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, response, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, response, SBMD_KEY_COMMAND_ID, JS_NewUint32(ctx, commandId));
+        SafeJSValue response = args.AddObject(SBMD_KEY_RESPONSE);
+        response.SetUint32(SBMD_KEY_CLUSTER_ID, clusterId);
+        response.SetUint32(SBMD_KEY_COMMAND_ID, commandId);
 
         if (!tlvBase64.empty())
         {
-            JS_SetPropertyStr(ctx, response, SBMD_KEY_DATA, JS_NewString(ctx, tlvBase64.c_str()));
+            response.SetString(SBMD_KEY_DATA, tlvBase64.c_str());
         }
         else
         {
-            JS_SetPropertyStr(ctx, response, SBMD_KEY_DATA, JS_NULL);
+            response.SetNull(SBMD_KEY_DATA);
         }
-
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_RESPONSE, response);
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
+            args.SetNull(SBMD_KEY_HANDLER_CONTEXT);
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    JSValue SbmdHandlerInvoker::BuildAttributeReadResponseArgs(JSContext *ctx,
-                                                               const HandlerContext &hctx,
-                                                               uint32_t clusterId,
-                                                               uint32_t attributeId,
-                                                               const std::string &tlvBase64,
-                                                               JSValue handlerContext)
+    SafeJSValue SbmdHandlerInvoker::BuildAttributeReadResponseArgs(JSContext *ctx,
+                                                                   const HandlerContext &hctx,
+                                                                   uint32_t clusterId,
+                                                                   uint32_t attributeId,
+                                                                   const std::string &tlvBase64,
+                                                                   JSValue handlerContext)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        JSValue attribute = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_CLUSTER_ID, JS_NewUint32(ctx, clusterId));
-        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_ATTRIBUTE_ID, JS_NewUint32(ctx, attributeId));
-        JS_SetPropertyStr(ctx, attribute, SBMD_KEY_VALUE, JS_NewString(ctx, tlvBase64.c_str()));
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_ATTRIBUTE, attribute);
+        SafeJSValue attribute = args.AddObject(SBMD_KEY_ATTRIBUTE);
+        attribute.SetUint32(SBMD_KEY_CLUSTER_ID, clusterId);
+        attribute.SetUint32(SBMD_KEY_ATTRIBUTE_ID, attributeId);
+        attribute.SetString(SBMD_KEY_VALUE, tlvBase64.c_str());
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
+            args.SetNull(SBMD_KEY_HANDLER_CONTEXT);
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }
 
-    JSValue SbmdHandlerInvoker::BuildDeferredErrorArgs(JSContext *ctx,
-                                                       const HandlerContext &hctx,
-                                                       const std::string &errorType,
-                                                       const std::string &errorMessage,
-                                                       int32_t matterCode,
-                                                       JSValue handlerContext)
+    SafeJSValue SbmdHandlerInvoker::BuildDeferredErrorArgs(JSContext *ctx,
+                                                           const HandlerContext &hctx,
+                                                           const std::string &errorType,
+                                                           const std::string &errorMessage,
+                                                           int32_t matterCode,
+                                                           JSValue handlerContext)
     {
-        JSValue args = BuildBaseArgs(ctx, hctx);
+        SafeJSValue args = BuildBaseArgs(ctx, hctx);
 
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        JSValue error = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, error, SBMD_KEY_TYPE, JS_NewString(ctx, errorType.c_str()));
-        JS_SetPropertyStr(ctx, error, SBMD_KEY_MESSAGE, JS_NewString(ctx, errorMessage.c_str()));
+        SafeJSValue error = args.AddObject(SBMD_KEY_ERROR);
+        error.SetString(SBMD_KEY_TYPE, errorType.c_str());
+        error.SetString(SBMD_KEY_MESSAGE, errorMessage.c_str());
 
         if (matterCode >= 0)
         {
-            JS_SetPropertyStr(ctx, error, SBMD_KEY_MATTER_CODE, JS_NewInt32(ctx, matterCode));
+            error.SetInt32(SBMD_KEY_MATTER_CODE, matterCode);
         }
         else
         {
-            JS_SetPropertyStr(ctx, error, SBMD_KEY_MATTER_CODE, JS_NULL);
+            error.SetNull(SBMD_KEY_MATTER_CODE);
         }
-
-        JS_SetPropertyStr(ctx, args, SBMD_KEY_ERROR, error);
 
         if (!JS_IsUndefined(handlerContext))
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, handlerContext);
+            args.SetValue(SBMD_KEY_HANDLER_CONTEXT, handlerContext);
         }
         else
         {
-            JS_SetPropertyStr(ctx, args, SBMD_KEY_HANDLER_CONTEXT, JS_NULL);
+            args.SetNull(SBMD_KEY_HANDLER_CONTEXT);
         }
-
-        JS_DeleteGCRef(ctx, &argsRef);
 
         return args;
     }

@@ -31,6 +31,7 @@
 #include "matter/sbmd/SbmdDriver.h"
 
 #if defined(BCORE_USE_MQUICKJS)
+#include "matter/sbmd/SafeJSValue.h"
 #include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
 #include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #endif
@@ -62,6 +63,138 @@ using namespace barton;
 using namespace std::chrono_literals;
 
 #define BASE_SBMD_DRIVER_NAME "sbmd-"
+
+namespace
+{
+    /*
+     * Base64-decode a TLV payload into raw bytes.
+     *
+     * tlvBase64 - the base64-encoded TLV string (may be empty).
+     *
+     * Returns std::nullopt on a decode error. On success returns the decoded bytes; an empty input
+     * yields an empty vector (i.e. no payload).
+     */
+    std::optional<std::vector<uint8_t>> DecodeBase64Tlv(const std::string &tlvBase64)
+    {
+        if (tlvBase64.empty())
+        {
+            return std::vector<uint8_t> {};
+        }
+
+        std::vector<uint8_t> decodedTlv(BASE64_MAX_DECODED_LEN(tlvBase64.size()));
+        uint16_t decoded =
+            chip::Base64Decode(tlvBase64.c_str(), static_cast<uint16_t>(tlvBase64.size()), decodedTlv.data());
+
+        if (decoded == UINT16_MAX)
+        {
+            return std::nullopt;
+        }
+
+        decodedTlv.resize(decoded);
+
+        return decodedTlv;
+    }
+
+    /*
+     * Copy the TLV element at the reader into a scratch buffer and base64-encode it.
+     *
+     * reader         - positioned at the TLV element to encode; the element is copied out via
+     *                  TLVWriter::CopyElement. A private copy of the reader is used for each
+     *                  attempt so a retry after a too-small buffer restarts cleanly.
+     * initialBufSize - initial size in bytes of the scratch buffer. Callers pass a small value
+     *                  sized for the common case; the buffer grows on demand from here.
+     * maxBufSize     - upper bound for the scratch buffer. Whenever the copy reports the buffer
+     *                  is too small, the buffer doubles (capped at maxBufSize) and the copy is
+     *                  retried, so large payloads are handled without over-allocating for the
+     *                  common small case.
+     *
+     * Returns std::nullopt if the element could not be copied within maxBufSize bytes or the copy
+     * fails for any other reason. A successfully copied zero-length element yields an empty string;
+     * otherwise the base64-encoded element.
+     */
+    std::optional<std::string>
+    EncodeTlvElementToBase64(chip::TLV::TLVReader &reader, size_t initialBufSize = 2048, size_t maxBufSize = 32768)
+    {
+        size_t bufSize = initialBufSize;
+        bool retryable = true;
+
+        while (retryable)
+        {
+            std::vector<uint8_t> tlvBuf(bufSize);
+            chip::TLV::TLVWriter writer;
+            writer.Init(tlvBuf.data(), static_cast<uint32_t>(tlvBuf.size()));
+
+            // Copy the reader so a retry after a too-small buffer restarts cleanly
+            chip::TLV::TLVReader readerCopy(reader);
+            CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
+
+            if (err == CHIP_NO_ERROR)
+            {
+                uint32_t tlvLen = writer.GetLengthWritten();
+
+                if (tlvLen == 0)
+                {
+                    return std::string {};
+                }
+
+                std::string tlvBase64(BASE64_ENCODED_LEN(tlvLen) + 1, '\0');
+                uint16_t encoded = chip::Base64Encode(tlvBuf.data(), static_cast<uint16_t>(tlvLen), tlvBase64.data());
+                tlvBase64.resize(encoded);
+
+                return tlvBase64;
+            }
+
+            // Retry with a larger buffer only when the copy ran out of room and we can still grow.
+            retryable = (err == CHIP_ERROR_BUFFER_TOO_SMALL || err == CHIP_ERROR_NO_MEMORY) && bufSize < maxBufSize;
+
+            if (retryable)
+            {
+                bufSize *= 2;
+
+                if (bufSize > maxBufSize)
+                {
+                    bufSize = maxBufSize;
+                }
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    /*
+     * RAII guard that destroys a parsed handler result while holding the JS runtime mutex.
+     *
+     * A deferred terminal (requestCommand/readAttribute) carries its onResponse/onError/context
+     * callbacks as SafeJSValues, whose destructor releases a held reference and therefore must run under
+     * MQuickJsRuntime's mutex. The executors normally consume those callbacks (moving them into the
+     * pending operation, or invoking and releasing them), but declaring one of these guards next to
+     * the result reference guarantees any callbacks left over on any exit path — including an early
+     * return inside an executor — are released under the lock. Declare it after the result so it is
+     * destroyed first, emptying the result before the result's own destructor runs.
+     */
+    class ScopedResultRelease
+    {
+    public:
+        explicit ScopedResultRelease(std::optional<ParsedResult> &result) : result(result) {}
+
+        ~ScopedResultRelease()
+        {
+            if (!result.has_value())
+            {
+                return;
+            }
+
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            result.reset();
+        }
+
+        ScopedResultRelease(const ScopedResultRelease &) = delete;
+        ScopedResultRelease &operator=(const ScopedResultRelease &) = delete;
+
+    private:
+        std::optional<ParsedResult> &result;
+    };
+} // namespace
 
 SpecBasedMatterDeviceDriver::SpecBasedMatterDeviceDriver(SbmdDriver *driver) :
     MatterDeviceDriver((BASE_SBMD_DRIVER_NAME + driver->GetRegistration().name).c_str(),
@@ -154,72 +287,23 @@ bool SpecBasedMatterDeviceDriver::AddDevice(std::unique_ptr<MatterDevice> device
                                       chip::ClusterId clusterId,
                                       chip::CommandId commandId,
                                       chip::TLV::TLVReader &reader) {
-        // Encode the incoming command's TLV payload as base64 for HandleCommand.
-        // The buffer must hold the entire command fields struct, which can be
-        // several KB for some commands, so grow on demand until the copy fits.
-        std::string tlvBase64;
-        size_t bufSize = 2048;
-        constexpr size_t maxTlvBufSize = 32768;
+        // Encode the incoming command's TLV payload as base64 for HandleCommand. The helper grows
+        // its scratch buffer on demand, so multi-KB command payloads are handled without dropping.
+        auto tlvBase64 = EncodeTlvElementToBase64(reader);
 
-        while (bufSize <= maxTlvBufSize)
+        if (!tlvBase64.has_value())
         {
-            std::vector<uint8_t> tlvBuf(bufSize);
-            chip::TLV::TLVWriter writer;
-            writer.Init(tlvBuf.data(), static_cast<uint32_t>(tlvBuf.size()));
+            // Drop the command rather than delivering it with an empty payload, which JS handlers
+            // would mis-read as a command with no arguments.
+            icError("Failed to encode command TLV for cluster 0x%x command 0x%x on device %s; dropping command",
+                    clusterId,
+                    commandId,
+                    deviceId.c_str());
 
-            // Copy the reader so a retry after a too-small buffer restarts cleanly
-            chip::TLV::TLVReader readerCopy(reader);
-            CHIP_ERROR err = writer.CopyElement(chip::TLV::AnonymousTag(), readerCopy);
-
-            if (err == CHIP_ERROR_BUFFER_TOO_SMALL || err == CHIP_ERROR_NO_MEMORY)
-            {
-                bufSize *= 2;
-
-                if (bufSize > maxTlvBufSize)
-                {
-                    icError("Command TLV for cluster 0x%x command 0x%x on device %s exceeds the maximum "
-                            "buffer size of %zu bytes; dropping command",
-                            clusterId,
-                            commandId,
-                            deviceId.c_str(),
-                            maxTlvBufSize);
-
-                    return;
-                }
-
-                continue;
-            }
-
-            if (err == CHIP_NO_ERROR)
-            {
-                uint32_t tlvLen = writer.GetLengthWritten();
-
-                if (tlvLen > 0)
-                {
-                    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-                    tlvBase64.resize(maxBase64Len, '\0');
-                    uint16_t encoded =
-                        chip::Base64Encode(tlvBuf.data(), static_cast<uint16_t>(tlvLen), tlvBase64.data());
-                    tlvBase64.resize(encoded);
-                }
-            }
-            else
-            {
-                // Non-retryable copy failure: drop the command rather than delivering it with an
-                // empty payload, which JS handlers would mis-read as a command with no arguments.
-                icError("Failed to copy command TLV for cluster 0x%x command 0x%x on device %s: %s",
-                        clusterId,
-                        commandId,
-                        deviceId.c_str(),
-                        err.AsString());
-
-                return;
-            }
-
-            break;
+            return;
         }
 
-        HandleCommand(deviceId, endpointId, clusterId, commandId, tlvBase64);
+        HandleCommand(deviceId, endpointId, clusterId, commandId, *tlvBase64);
     });
 
     // Register incoming command handlers for clusters in the command dispatch table
@@ -616,35 +700,36 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
         return "";
     }
 
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
-
     HandlerContext hctx;
     hctx.deviceUuid = deviceId;
     hctx.endpointId = endpointId;
 
-    JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
-
-    // GC-root args across AddSupplements (which allocates) and InvokeHandler
-    JSGCRef argsRef {};
-    JS_AddGCRef(ctx, &argsRef);
-    argsRef.val = args;
-
+    // Resolve declared supplements up front (device-service I/O) so the JS mutex is held
+    // only around the JS work below.
+    FetchedSupplements supplements;
 
     if (device != nullptr)
     {
-        SbmdHandlerInvoker::AddSupplements(ctx,
-                                           args,
-                                           resource.seed->supplements,
-                                           MakeAttrFetcher(*device),
-                                           MakeResFetcher(deviceId),
-                                           MakePersistFetcher(deviceId),
-                                           MakeTransientFetcher(deviceId));
+        supplements = SbmdHandlerInvoker::PrefetchSupplements(resource.seed->supplements,
+                                                              MakeAttrFetcher(*device),
+                                                              MakeResFetcher(deviceId),
+                                                              MakePersistFetcher(deviceId),
+                                                              MakeTransientFetcher(deviceId));
     }
 
-    auto result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
+    std::optional<ParsedResult> result;
+    ScopedResultRelease resultRelease {result};
 
-    JS_DeleteGCRef(ctx, &argsRef);
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+        // args keeps its value alive for its whole lifetime, so it survives the allocations in
+        // AddSupplements and the handler call without a separate guard.
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
+    }
 
     if (!result.has_value())
     {
@@ -832,81 +917,28 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     hctx.endpointId = endpointId ? endpointId : "";
     hctx.clusterFeatureMaps = device.GetCachedClusterFeatureMaps();
 
+    // Resolve declared supplements up front (device-service I/O) so the JS mutex is held
+    // only around the JS work below.
+    FetchedSupplements supplements =
+        SbmdHandlerInvoker::PrefetchSupplements(handler->supplements,
+                                                MakeAttrFetcher(device),
+                                                MakeResFetcher(device.GetDeviceId()),
+                                                MakePersistFetcher(device.GetDeviceId()),
+                                                MakeTransientFetcher(device.GetDeviceId()));
+
     // Invoke the handler under the JS mutex
     std::optional<ParsedResult> result;
-
-    // GC roots for a deferred terminal's callbacks. Allocated below if the handler returns a
-    // RequestCommand/ReadAttribute terminal, and attached to that terminal so downstream code
-    // reads GC-current callback values directly from it. Kept here so the roots are released
-    // (under the mutex) once the deferred terminal has been fully executed.
-    std::shared_ptr<DeferredHandlerRoots> deferredRoots;
+    ScopedResultRelease resultRelease {result};
 
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
-
-        // GC-root args across AddSupplements (which allocates) and InvokeHandler
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        SbmdHandlerInvoker::AddSupplements(ctx,
-                                           args,
-                                           handler->supplements,
-                                           MakeAttrFetcher(device),
-                                           MakeResFetcher(device.GetDeviceId()),
-                                           MakePersistFetcher(device.GetDeviceId()),
-                                           MakeTransientFetcher(device.GetDeviceId()));
-
+        // args keeps its value alive for its whole lifetime, so it survives the allocations in
+        // AddSupplements and the handler call without a separate guard.
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
-
-        JS_DeleteGCRef(ctx, &argsRef);
-
-        // If the result has a deferred terminal (RequestCommand or ReadAttribute), root its
-        // callbacks now — while we still hold the mutex and the raw JSValues are current — into
-        // a heap-stable holder that travels with the terminal. The moving GC keeps the holder's
-        // refs current, so ExecuteRequestCommand/ExecuteReadAttribute read live values even
-        // though the JS mutex is released and re-acquired in between.
-        if (result.has_value())
-        {
-            JSValue *onResponse = nullptr;
-            JSValue *onError = nullptr;
-            JSValue *context = nullptr;
-            std::shared_ptr<DeferredHandlerRoots> *rootsSlot = nullptr;
-
-            if (std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data))
-            {
-                auto &cmd = std::get<ResultTerminal::RequestCommand>(result->terminal.data);
-                onResponse = &cmd.onResponse;
-                onError = &cmd.onError;
-                context = &cmd.context;
-                rootsSlot = &cmd.roots;
-            }
-            else if (std::holds_alternative<ResultTerminal::ReadAttribute>(result->terminal.data))
-            {
-                auto &ra = std::get<ResultTerminal::ReadAttribute>(result->terminal.data);
-                onResponse = &ra.onResponse;
-                onError = &ra.onError;
-                context = &ra.context;
-                rootsSlot = &ra.roots;
-            }
-
-            if (onResponse != nullptr &&
-                (!JS_IsUndefined(*onResponse) || !JS_IsUndefined(*onError) || !JS_IsUndefined(*context)))
-            {
-                deferredRoots = std::make_shared<DeferredHandlerRoots>();
-                JS_AddGCRef(ctx, &deferredRoots->onResponse);
-                JS_AddGCRef(ctx, &deferredRoots->onError);
-                JS_AddGCRef(ctx, &deferredRoots->context);
-                deferredRoots->onResponse.val = *onResponse;
-                deferredRoots->onError.val = *onError;
-                deferredRoots->context.val = *context;
-                *rootsSlot = deferredRoots;
-            }
-        }
     }
 
     if (!result.has_value())
@@ -929,22 +961,11 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     executeResponse,
                     exchangeMgr,
                     sessionHandle);
-
-    // Release the deferred-callback GC roots — by now ExecuteRequestCommand has copied the
-    // values into permanent roots, and ExecuteReadAttribute has invoked synchronously.
-    if (deferredRoots)
-    {
-        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
-        JS_DeleteGCRef(ctx, &deferredRoots->onResponse);
-        JS_DeleteGCRef(ctx, &deferredRoots->onError);
-        JS_DeleteGCRef(ctx, &deferredRoots->context);
-    }
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
                                                   MatterDevice &device,
-                                                  const ResultTerminal &terminal,
+                                                  ResultTerminal &terminal,
                                                   const HandlerContext &hctx,
                                                   const char *uri,
                                                   char **readValue,
@@ -983,42 +1004,28 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     {
         const auto &cmd = std::get<ResultTerminal::SendCommand>(terminal.data);
 
-        // Resolve endpoint
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(device, cmd.clusterId, cmd.endpointId);
 
-        if (cmd.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
-        }
-        else if (!device.GetEndpointForCluster(cmd.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             icError("Failed to find endpoint for cluster 0x%x", cmd.clusterId);
             FailOperation(promises);
             return;
         }
 
-        // Decode base64 TLV
-        const uint8_t *tlvBuffer = nullptr;
-        size_t tlvLength = 0;
-        std::unique_ptr<uint8_t[]> decodedTlv;
+        chip::EndpointId endpointId = *endpointOpt;
 
-        if (!cmd.tlvBase64.empty())
+        auto decodedTlv = DecodeBase64Tlv(cmd.tlvBase64);
+
+        if (!decodedTlv.has_value())
         {
-            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
-            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(
-                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
-
-            if (decoded == UINT16_MAX)
-            {
-                icError("Failed to base64 decode TLV for sendCommand");
-                FailOperation(promises);
-                return;
-            }
-
-            tlvBuffer = decodedTlv.get();
-            tlvLength = decoded;
+            icError("Failed to base64 decode TLV for sendCommand");
+            FailOperation(promises);
+            return;
         }
+
+        const uint8_t *tlvBuffer = decodedTlv->empty() ? nullptr : decodedTlv->data();
+        size_t tlvLength = decodedTlv->size();
 
         if (!device.SendCommandFromTlv(promises,
                                        cmd.clusterId,
@@ -1050,20 +1057,18 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     {
         const auto &wa = std::get<ResultTerminal::WriteAttribute>(terminal.data);
 
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(device, wa.clusterId, wa.endpointId);
 
-        if (wa.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
-        }
-        else if (!device.GetEndpointForCluster(wa.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             icError("Failed to find endpoint for cluster 0x%x", wa.clusterId);
             FailOperation(promises);
             return;
         }
 
-        // Decode base64 TLV
+        chip::EndpointId endpointId = *endpointOpt;
+
+        // writeAttribute requires a payload
         if (wa.tlvBase64.empty())
         {
             icError("Empty TLV for writeAttribute");
@@ -1071,12 +1076,9 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
             return;
         }
 
-        size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
-        auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded =
-            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
+        auto decodedTlv = DecodeBase64Tlv(wa.tlvBase64);
 
-        if (decoded == UINT16_MAX)
+        if (!decodedTlv.has_value())
         {
             icError("Failed to base64 decode TLV for writeAttribute");
             FailOperation(promises);
@@ -1087,8 +1089,8 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
                                           endpointId,
                                           wa.clusterId,
                                           wa.attributeId,
-                                          decodedTlv.get(),
-                                          decoded,
+                                          decodedTlv->data(),
+                                          static_cast<uint16_t>(decodedTlv->size()),
                                           exchangeMgr,
                                           sessionHandle,
                                           uri))
@@ -1101,14 +1103,14 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
 
     if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
     {
-        const auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
+        auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
         ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
-        const auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
+        auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
         ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
         return;
     }
@@ -1123,49 +1125,35 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
 
 void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::promise<bool>> &promises,
                                                         MatterDevice &device,
-                                                        const ResultTerminal::RequestCommand &cmd,
+                                                        ResultTerminal::RequestCommand &cmd,
                                                         const HandlerContext &hctx,
                                                         char **readValue,
                                                         char **executeResponse,
                                                         chip::Messaging::ExchangeManager &exchangeMgr,
                                                         const chip::SessionHandle &sessionHandle)
 {
-    // Resolve endpoint
-    chip::EndpointId endpointId = 0;
+    auto endpointOpt = ResolveEndpoint(device, cmd.clusterId, cmd.endpointId);
 
-    if (cmd.endpointId.has_value())
-    {
-        endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
-    }
-    else if (!device.GetEndpointForCluster(cmd.clusterId, endpointId))
+    if (!endpointOpt.has_value())
     {
         icError("Failed to find endpoint for cluster 0x%x (requestCommand)", cmd.clusterId);
         FailOperation(promises);
         return;
     }
 
-    // Decode base64 TLV
-    const uint8_t *tlvBuffer = nullptr;
-    size_t tlvLength = 0;
-    std::unique_ptr<uint8_t[]> decodedTlv;
+    chip::EndpointId endpointId = *endpointOpt;
 
-    if (!cmd.tlvBase64.empty())
+    auto decodedTlv = DecodeBase64Tlv(cmd.tlvBase64);
+
+    if (!decodedTlv.has_value())
     {
-        size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
-        decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded =
-            chip::Base64Decode(cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
-
-        if (decoded == UINT16_MAX)
-        {
-            icError("Failed to base64 decode TLV for requestCommand");
-            FailOperation(promises);
-            return;
-        }
-
-        tlvBuffer = decodedTlv.get();
-        tlvLength = decoded;
+        icError("Failed to base64 decode TLV for requestCommand");
+        FailOperation(promises);
+        return;
     }
+
+    const uint8_t *tlvBuffer = decodedTlv->empty() ? nullptr : decodedTlv->data();
+    size_t tlvLength = decodedTlv->size();
 
     // Create parking promise
     promises.emplace_front();
@@ -1176,8 +1164,6 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     PendingOperation pending;
     pending.id = pendingId;
     pending.parkingPromise = &parkingPromise;
-    pending.clusterId = cmd.clusterId;
-    pending.responseCommandId = cmd.responseCommandId;
     pending.handlerContext = hctx;
     pending.device = GetDevice(device.GetDeviceId());
     pending.exchangeMgr = &exchangeMgr;
@@ -1200,41 +1186,20 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
-    // Record which JS callbacks need rooting before inserting into the map.
-    // JS_AddGCRef registers the *address* of the JSGCRef, so it must not be called
-    // until after the emplace — moving the PendingOperation into the map would
-    // otherwise invalidate the registered address. Note also that JS_AddGCRef
-    // resets ref->val, so values must be assigned AFTER the call.
-    pending.onResponseRooted = !JS_IsUndefined(cmd.onResponse);
-    pending.onErrorRooted = !JS_IsUndefined(cmd.onError);
-    pending.contextRooted = !JS_IsUndefined(cmd.context);
-
+    // The PendingOperation's SafeJSValue callbacks are empty at this point, so moving it into
+    // the map performs no engine work and needs no mutex. The callbacks are transferred afterward,
+    // below, using the stable map-node address.
     auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
     PendingOperation &stored = it->second;
 
-    // GC-root the deferred handlers using the stable map-node addresses so they
-    // survive until we need them.
+    // Move the deferred callbacks (held alive by Parse) into the stable map node under the mutex.
+    // Move-assigning a SafeJSValue re-registers the held reference at the destination address and
+    // clears the source, so the originating terminal ends up empty and destructs safely.
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-        auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-        if (stored.onResponseRooted)
-        {
-            JS_AddGCRef(ctx, &stored.onResponseRef);
-            stored.onResponseRef.val = cmd.roots ? cmd.roots->onResponse.val : cmd.onResponse;
-        }
-
-        if (stored.onErrorRooted)
-        {
-            JS_AddGCRef(ctx, &stored.onErrorRef);
-            stored.onErrorRef.val = cmd.roots ? cmd.roots->onError.val : cmd.onError;
-        }
-
-        if (stored.contextRooted)
-        {
-            JS_AddGCRef(ctx, &stored.contextRef);
-            stored.contextRef.val = cmd.roots ? cmd.roots->context.val : cmd.context;
-        }
+        stored.onResponse = std::move(cmd.onResponse);
+        stored.onError = std::move(cmd.onError);
+        stored.context = std::move(cmd.context);
     }
 
     // Send the command with deferred callbacks
@@ -1261,32 +1226,30 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
 
 void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::promise<bool>> &promises,
                                                        MatterDevice &device,
-                                                       const ResultTerminal::ReadAttribute &ra,
+                                                       ResultTerminal::ReadAttribute &ra,
                                                        const HandlerContext &hctx,
                                                        char **readValue,
                                                        char **executeResponse,
                                                        chip::Messaging::ExchangeManager &exchangeMgr,
                                                        const chip::SessionHandle &sessionHandle)
 {
-    // Resolve endpoint
-    chip::EndpointId endpointId = 0;
+    auto endpointOpt = ResolveEndpoint(device, ra.clusterId, ra.endpointId);
 
-    if (ra.endpointId.has_value())
-    {
-        endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
-    }
-    else if (!device.GetEndpointForCluster(ra.clusterId, endpointId))
+    if (!endpointOpt.has_value())
     {
         icError("Failed to find endpoint for cluster 0x%x (readAttribute)", ra.clusterId);
         FailOperation(promises);
         return;
     }
 
+    chip::EndpointId endpointId = *endpointOpt;
+
     // Read from cache
     chip::TLV::TLVReader reader;
     CHIP_ERROR err = device.GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
 
     std::optional<ParsedResult> result;
+    ScopedResultRelease resultRelease {result};
 
     if (err != CHIP_NO_ERROR)
     {
@@ -1294,18 +1257,19 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
             "Cache miss for cluster 0x%x attr 0x%x (readAttribute): %s", ra.clusterId, ra.attributeId, err.AsString());
 
         // Call onError handler
-        if (!JS_IsUndefined(ra.onError))
+        if (ra.onError.HasValue())
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
-            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
-            JSValue onErrorVal = ra.roots ? ra.roots->onError.val : ra.onError;
+            SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context.Get());
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args);
 
-            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
-                ctx, hctx, "readFailed", "Attribute not in cache", -1, contextVal);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, onErrorVal, args);
+            // Release the callbacks now that they have been consumed.
+            ra.onResponse = SafeJSValue {};
+            ra.onError = SafeJSValue {};
+            ra.context = SafeJSValue {};
         }
 
         if (!result.has_value())
@@ -1317,36 +1281,31 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
     else
     {
         // Encode cached TLV as base64
-        uint8_t tlvBuf[256];
-        chip::TLV::TLVWriter writer;
-        writer.Init(tlvBuf, sizeof(tlvBuf));
+        auto tlvBase64Opt = EncodeTlvElementToBase64(reader, 256);
 
-        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        if (!tlvBase64Opt.has_value())
         {
             icError("Failed to copy cached attribute TLV for readAttribute");
             FailOperation(promises);
             return;
         }
 
-        uint32_t tlvLen = writer.GetLengthWritten();
-        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-        std::string tlvBase64(maxBase64Len, '\0');
-        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-        tlvBase64.resize(encoded);
+        const std::string &tlvBase64 = *tlvBase64Opt;
 
         // Call onResponse handler
-        if (!JS_IsUndefined(ra.onResponse))
+        if (ra.onResponse.HasValue())
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            // Read callbacks from the GC-stable roots (current across the mutex gap) when present.
-            JSValue contextVal = ra.roots ? ra.roots->context.val : ra.context;
-            JSValue onResponseVal = ra.roots ? ra.roots->onResponse.val : ra.onResponse;
+            SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context.Get());
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args);
 
-            JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, contextVal);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, onResponseVal, args);
+            // Release the callbacks now that they have been consumed.
+            ra.onResponse = SafeJSValue {};
+            ra.onError = SafeJSValue {};
+            ra.context = SafeJSValue {};
         }
 
         if (!result.has_value())
@@ -1393,20 +1352,20 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
 
         // Call onError with timeout
         std::optional<ParsedResult> errorResult;
+        ScopedResultRelease errorResultRelease {errorResult};
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            if (pending.onErrorRooted)
+            if (pending.onError.HasValue())
             {
-                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
-                                                                          pending.handlerContext,
-                                                                          "timeout",
-                                                                          "Overall operation deadline exceeded",
-                                                                          -1,
-                                                                          pending.contextRooted ? pending.contextRef.val
-                                                                                                : JS_UNDEFINED);
-                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+                SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                              pending.handlerContext,
+                                                                              "timeout",
+                                                                              "Overall operation deadline exceeded",
+                                                                              -1,
+                                                                              pending.context.Get());
+                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
             }
         }
 
@@ -1420,41 +1379,26 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
         return;
     }
 
-    // Encode response data as base64
+    // Encode response data as base64 (a copy failure or empty element yields an empty payload)
     std::string tlvBase64;
 
     if (data != nullptr)
     {
-        uint8_t tlvBuf[1024];
-        chip::TLV::TLVWriter writer;
-        writer.Init(tlvBuf, sizeof(tlvBuf));
-
-        if (writer.CopyElement(chip::TLV::AnonymousTag(), *data) == CHIP_NO_ERROR)
-        {
-            uint32_t tlvLen = writer.GetLengthWritten();
-            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-            tlvBase64.resize(maxBase64Len, '\0');
-            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-            tlvBase64.resize(encoded);
-        }
+        tlvBase64 = EncodeTlvElementToBase64(*data, 1024).value_or(std::string {});
     }
 
     // Invoke the onResponse handler
     std::optional<ParsedResult> result;
+    ScopedResultRelease resultRelease {result};
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        if (pending.onResponseRooted)
+        if (pending.onResponse.HasValue())
         {
-            JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(ctx,
-                                                                        pending.handlerContext,
-                                                                        path.mClusterId,
-                                                                        path.mCommandId,
-                                                                        tlvBase64,
-                                                                        pending.contextRooted ? pending.contextRef.val
-                                                                                              : JS_UNDEFINED);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+            SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
+                ctx, pending.handlerContext, path.mClusterId, path.mCommandId, tlvBase64, pending.context.Get());
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
         }
     }
 
@@ -1489,20 +1433,20 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
 
     // Call onError handler
     std::optional<ParsedResult> errorResult;
+    ScopedResultRelease errorResultRelease {errorResult};
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-        if (pending.onErrorRooted)
+        if (pending.onError.HasValue())
         {
-            JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
-                                                                      pending.handlerContext,
-                                                                      "commandFailed",
-                                                                      error.AsString(),
-                                                                      static_cast<int32_t>(error.AsInteger()),
-                                                                      pending.contextRooted ? pending.contextRef.val
-                                                                                            : JS_UNDEFINED);
-            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+            SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
+                                                                          pending.handlerContext,
+                                                                          "commandFailed",
+                                                                          error.AsString(),
+                                                                          static_cast<int32_t>(error.AsInteger()),
+                                                                          pending.context.Get());
+            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
         }
     }
 
@@ -1522,7 +1466,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
     CompletePendingOperation(pendingId, false);
 }
 
-void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pending, const ParsedResult &result)
+void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pending, ParsedResult &result)
 {
     uint64_t pendingId = pending.id;
 
@@ -1579,41 +1523,27 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
     {
         const auto &cmd = std::get<ResultTerminal::SendCommand>(result.terminal.data);
 
-        // Resolve endpoint
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(*device, cmd.clusterId, cmd.endpointId);
 
-        if (cmd.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
-        }
-        else if (!device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             icError("Failed to find endpoint for cluster 0x%x in deferred chain", cmd.clusterId);
             CompletePendingOperation(pendingId, false);
             return;
         }
 
-        // Decode base64 TLV
-        const uint8_t *tlvBuffer = nullptr;
-        size_t tlvLength = 0;
-        std::unique_ptr<uint8_t[]> decodedTlv;
+        chip::EndpointId endpointId = *endpointOpt;
 
-        if (!cmd.tlvBase64.empty())
+        auto decodedTlv = DecodeBase64Tlv(cmd.tlvBase64);
+
+        if (!decodedTlv.has_value())
         {
-            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
-            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(
-                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
-
-            if (decoded == UINT16_MAX)
-            {
-                CompletePendingOperation(pendingId, false);
-                return;
-            }
-
-            tlvBuffer = decodedTlv.get();
-            tlvLength = decoded;
+            CompletePendingOperation(pendingId, false);
+            return;
         }
+
+        const uint8_t *tlvBuffer = decodedTlv->empty() ? nullptr : decodedTlv->data();
+        size_t tlvLength = decodedTlv->size();
 
         // Send the command — this resolves immediately via OnDone
         std::forward_list<std::promise<bool>> tempPromises;
@@ -1628,16 +1558,16 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         }
 
         if (!device->SendCommandFromTlv(tempPromises,
-                                     cmd.clusterId,
-                                     cmd.commandId,
-                                     cmd.timedInvokeTimeoutMs,
-                                     endpointId,
-                                     tlvBuffer,
-                                     tlvLength,
-                                     *pending.exchangeMgr,
-                                     session.Value(),
-                                     nullptr,
-                                     pending.executeResponse))
+                                        cmd.clusterId,
+                                        cmd.commandId,
+                                        cmd.timedInvokeTimeoutMs,
+                                        endpointId,
+                                        tlvBuffer,
+                                        tlvLength,
+                                        *pending.exchangeMgr,
+                                        session.Value(),
+                                        nullptr,
+                                        pending.executeResponse))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1649,9 +1579,9 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             *pending.executeResponse = strdup(cmd.successValue.c_str());
         }
 
-        // sendCommand in a deferred chain is fire-and-forget: once the command
-        // is dispatched, complete the parking promise immediately. tempPromises
-        // is abandoned — the SDK's completion acknowledgment is not awaited.
+        // The command was accepted for delivery. Its own promise in tempPromises resolves later
+        // when the exchange completes, but a chained sendCommand does not wait on that result: the
+        // parking promise is completed as success here to signal that the command was dispatched.
         CompletePendingOperation(pendingId, true);
         return;
     }
@@ -1660,17 +1590,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
     {
         const auto &wa = std::get<ResultTerminal::WriteAttribute>(result.terminal.data);
 
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(*device, wa.clusterId, wa.endpointId);
 
-        if (wa.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
-        }
-        else if (!device->GetEndpointForCluster(wa.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             CompletePendingOperation(pendingId, false);
             return;
         }
+
+        chip::EndpointId endpointId = *endpointOpt;
 
         if (wa.tlvBase64.empty())
         {
@@ -1678,12 +1606,9 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             return;
         }
 
-        size_t maxLen = BASE64_MAX_DECODED_LEN(wa.tlvBase64.size());
-        auto decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-        uint16_t decoded =
-            chip::Base64Decode(wa.tlvBase64.c_str(), static_cast<uint16_t>(wa.tlvBase64.size()), decodedTlv.get());
+        auto decodedTlv = DecodeBase64Tlv(wa.tlvBase64);
 
-        if (decoded == UINT16_MAX)
+        if (!decodedTlv.has_value())
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1701,14 +1626,14 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         }
 
         if (!device->WriteAttributeFromTlv(tempPromises,
-                                        endpointId,
-                                        wa.clusterId,
-                                        wa.attributeId,
-                                        decodedTlv.get(),
-                                        decoded,
-                                        *pending.exchangeMgr,
-                                        session.Value(),
-                                        nullptr))
+                                           endpointId,
+                                           wa.clusterId,
+                                           wa.attributeId,
+                                           decodedTlv->data(),
+                                           static_cast<uint16_t>(decodedTlv->size()),
+                                           *pending.exchangeMgr,
+                                           session.Value(),
+                                           nullptr))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1720,95 +1645,43 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
     if (std::holds_alternative<ResultTerminal::RequestCommand>(result.terminal.data))
     {
-        const auto &cmd = std::get<ResultTerminal::RequestCommand>(result.terminal.data);
+        auto &cmd = std::get<ResultTerminal::RequestCommand>(result.terminal.data);
 
-        // Re-arm: release old GC roots, root new handlers
+        // Re-arm: move the new response/error callbacks into the pending operation. The opaque handler
+        // context is established once when the chain first parks and stays constant for the entire
+        // deferred chain, so pending.context is deliberately preserved here; the re-arm terminal's own
+        // context (if any) is left in the result and released with it. Move-assignment releases the
+        // previous callbacks and clears the source; an empty source leaves the corresponding pending
+        // callback empty, matching the prior "delete old, skip new" logic.
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-            if (pending.onResponseRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.onResponseRef);
-                pending.onResponseRooted = false;
-            }
-
-            if (pending.onErrorRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.onErrorRef);
-                pending.onErrorRooted = false;
-            }
-
-            if (pending.contextRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.contextRef);
-                pending.contextRooted = false;
-            }
-
-            if (!JS_IsUndefined(cmd.onResponse))
-            {
-                JS_AddGCRef(ctx, &pending.onResponseRef);
-                pending.onResponseRef.val = cmd.onResponse;
-
-                pending.onResponseRooted = true;
-            }
-
-            if (!JS_IsUndefined(cmd.onError))
-            {
-                JS_AddGCRef(ctx, &pending.onErrorRef);
-                pending.onErrorRef.val = cmd.onError;
-
-                pending.onErrorRooted = true;
-            }
-
-            if (!JS_IsUndefined(cmd.context))
-            {
-                JS_AddGCRef(ctx, &pending.contextRef);
-                pending.contextRef.val = cmd.context;
-
-                pending.contextRooted = true;
-            }
+            pending.onResponse = std::move(cmd.onResponse);
+            pending.onError = std::move(cmd.onError);
         }
 
-        pending.clusterId = cmd.clusterId;
-        pending.responseCommandId = cmd.responseCommandId;
         pending.deferralDepth++;
 
-        // Resolve endpoint
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(*device, cmd.clusterId, cmd.endpointId);
 
-        if (cmd.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
-        }
-        else if (!device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             icError("Failed to find endpoint for cluster 0x%x in deferred re-arm", cmd.clusterId);
             CompletePendingOperation(pendingId, false);
             return;
         }
 
-        // Decode base64 TLV
-        const uint8_t *tlvBuffer = nullptr;
-        size_t tlvLength = 0;
-        std::unique_ptr<uint8_t[]> decodedTlv;
+        chip::EndpointId endpointId = *endpointOpt;
 
-        if (!cmd.tlvBase64.empty())
+        auto decodedTlv = DecodeBase64Tlv(cmd.tlvBase64);
+
+        if (!decodedTlv.has_value())
         {
-            size_t maxLen = BASE64_MAX_DECODED_LEN(cmd.tlvBase64.size());
-            decodedTlv = std::make_unique<uint8_t[]>(maxLen);
-            uint16_t decoded = chip::Base64Decode(
-                cmd.tlvBase64.c_str(), static_cast<uint16_t>(cmd.tlvBase64.size()), decodedTlv.get());
-
-            if (decoded == UINT16_MAX)
-            {
-                CompletePendingOperation(pendingId, false);
-                return;
-            }
-
-            tlvBuffer = decodedTlv.get();
-            tlvLength = decoded;
+            CompletePendingOperation(pendingId, false);
+            return;
         }
+
+        const uint8_t *tlvBuffer = decodedTlv->empty() ? nullptr : decodedTlv->data();
+        size_t tlvLength = decodedTlv->size();
 
         // Send next command with deferred callbacks
         auto session = pending.sessionHandle.Get();
@@ -1845,125 +1718,71 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(result.terminal.data))
     {
-        const auto &ra = std::get<ResultTerminal::ReadAttribute>(result.terminal.data);
+        auto &ra = std::get<ResultTerminal::ReadAttribute>(result.terminal.data);
 
-        // Release old GC roots and root new handlers
+        // Re-arm: move the new response/error callbacks into the pending operation. The opaque handler
+        // context is established once when the chain first parks and stays constant for the entire
+        // deferred chain, so pending.context is deliberately preserved here; the re-arm terminal's own
+        // context (if any) is left in the result and released with it. Move-assignment releases the
+        // previous callbacks and clears the source; an empty source leaves the corresponding pending
+        // callback empty, matching the prior "delete old, skip new" logic.
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-            auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-            if (pending.onResponseRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.onResponseRef);
-                pending.onResponseRooted = false;
-            }
-
-            if (pending.onErrorRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.onErrorRef);
-                pending.onErrorRooted = false;
-            }
-
-            if (pending.contextRooted)
-            {
-                JS_DeleteGCRef(ctx, &pending.contextRef);
-                pending.contextRooted = false;
-            }
-
-            if (!JS_IsUndefined(ra.onResponse))
-            {
-                JS_AddGCRef(ctx, &pending.onResponseRef);
-                pending.onResponseRef.val = ra.onResponse;
-
-                pending.onResponseRooted = true;
-            }
-
-            if (!JS_IsUndefined(ra.onError))
-            {
-                JS_AddGCRef(ctx, &pending.onErrorRef);
-                pending.onErrorRef.val = ra.onError;
-
-                pending.onErrorRooted = true;
-            }
-
-            if (!JS_IsUndefined(ra.context))
-            {
-                JS_AddGCRef(ctx, &pending.contextRef);
-                pending.contextRef.val = ra.context;
-
-                pending.contextRooted = true;
-            }
+            pending.onResponse = std::move(ra.onResponse);
+            pending.onError = std::move(ra.onError);
         }
 
         pending.deferralDepth++;
 
-        // Resolve endpoint
-        chip::EndpointId endpointId = 0;
+        auto endpointOpt = ResolveEndpoint(*device, ra.clusterId, ra.endpointId);
 
-        if (ra.endpointId.has_value())
-        {
-            endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
-        }
-        else if (!device->GetEndpointForCluster(ra.clusterId, endpointId))
+        if (!endpointOpt.has_value())
         {
             CompletePendingOperation(pendingId, false);
             return;
         }
+
+        chip::EndpointId endpointId = *endpointOpt;
 
         // Read from cache
         chip::TLV::TLVReader reader;
         CHIP_ERROR err = device->GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
 
         std::optional<ParsedResult> nextResult;
+        ScopedResultRelease nextResultRelease {nextResult};
 
         if (err != CHIP_NO_ERROR)
         {
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            if (pending.onErrorRooted)
+            if (pending.onError.HasValue())
             {
-                JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(ctx,
-                                                                          pending.handlerContext,
-                                                                          "readFailed",
-                                                                          "Attribute not in cache",
-                                                                          -1,
-                                                                          pending.contextRooted ? pending.contextRef.val
-                                                                                                : JS_UNDEFINED);
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onErrorRef.val, args);
+                SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
+                    ctx, pending.handlerContext, "readFailed", "Attribute not in cache", -1, pending.context.Get());
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
             }
         }
         else
         {
-            uint8_t tlvBuf[256];
-            chip::TLV::TLVWriter writer;
-            writer.Init(tlvBuf, sizeof(tlvBuf));
+            auto tlvBase64Opt = EncodeTlvElementToBase64(reader, 256);
 
-            if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+            if (!tlvBase64Opt.has_value())
             {
                 CompletePendingOperation(pendingId, false);
                 return;
             }
 
-            uint32_t tlvLen = writer.GetLengthWritten();
-            size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-            std::string tlvBase64(maxBase64Len, '\0');
-            uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-            tlvBase64.resize(encoded);
+            const std::string &tlvBase64 = *tlvBase64Opt;
 
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-            if (pending.onResponseRooted)
+            if (pending.onResponse.HasValue())
             {
-                JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
-                    ctx,
-                    pending.handlerContext,
-                    ra.clusterId,
-                    ra.attributeId,
-                    tlvBase64,
-                    pending.contextRooted ? pending.contextRef.val : JS_UNDEFINED);
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponseRef.val, args);
+                SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
+                    ctx, pending.handlerContext, ra.clusterId, ra.attributeId, tlvBase64, pending.context.Get());
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
             }
         }
 
@@ -1976,6 +1795,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         SbmdHandlerInvoker::ExecuteOps(
             pending.handlerContext, nextResult->ops, MakeTransientSetter(pending.handlerContext.deviceUuid));
         ContinueDeferredChain(pending, *nextResult);
+
         return;
     }
 
@@ -2007,34 +1827,20 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
         }
     }
 
-    // Release GC roots
-    ReleasePendingGcRoots(pending);
+    // Release held handler references
+    ReleasePendingHandlers(pending);
 
     pendingOperations.erase(it);
 }
 
-void SpecBasedMatterDeviceDriver::ReleasePendingGcRoots(PendingOperation &pending)
+void SpecBasedMatterDeviceDriver::ReleasePendingHandlers(PendingOperation &pending)
 {
     std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
 
-    if (pending.onResponseRooted)
-    {
-        JS_DeleteGCRef(ctx, &pending.onResponseRef);
-        pending.onResponseRooted = false;
-    }
-
-    if (pending.onErrorRooted)
-    {
-        JS_DeleteGCRef(ctx, &pending.onErrorRef);
-        pending.onErrorRooted = false;
-    }
-
-    if (pending.contextRooted)
-    {
-        JS_DeleteGCRef(ctx, &pending.contextRef);
-        pending.contextRooted = false;
-    }
+    // Move-assigning an empty wrapper releases each held reference under the runtime mutex.
+    pending.onResponse = SafeJSValue {};
+    pending.onError = SafeJSValue {};
+    pending.context = SafeJSValue {};
 }
 
 AttributeSupplementFetcher SpecBasedMatterDeviceDriver::MakeAttrFetcher(MatterDevice &device) const
@@ -2050,16 +1856,18 @@ AttributeSupplementFetcher SpecBasedMatterDeviceDriver::MakeAttrFetcher(MatterDe
         }
 
         const auto &alias = it->second;
-        chip::EndpointId endpointId = 0;
 
-        if (!device.GetEndpointForCluster(alias.clusterId, endpointId))
+        auto endpointOpt = ResolveEndpoint(device, alias.clusterId, std::nullopt);
+
+        if (!endpointOpt.has_value())
         {
             icWarn("no endpoint for cluster 0x%x (supplement '%s')", alias.clusterId, aliasName.c_str());
             return std::nullopt;
         }
 
         chip::TLV::TLVReader reader;
-        CHIP_ERROR err = device.GetCachedAttributeData(endpointId, alias.clusterId, alias.attributeId.value(), reader);
+        CHIP_ERROR err =
+            device.GetCachedAttributeData(*endpointOpt, alias.clusterId, alias.attributeId.value(), reader);
 
         if (err != CHIP_NO_ERROR)
         {
@@ -2070,21 +1878,13 @@ AttributeSupplementFetcher SpecBasedMatterDeviceDriver::MakeAttrFetcher(MatterDe
             return std::nullopt;
         }
 
-        uint8_t tlvBuf[256];
-        chip::TLV::TLVWriter writer;
-        writer.Init(tlvBuf, sizeof(tlvBuf));
+        auto tlvBase64 = EncodeTlvElementToBase64(reader, 256);
 
-        if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+        if (!tlvBase64.has_value())
         {
             icWarn("failed to copy TLV for supplement '%s'", aliasName.c_str());
             return std::nullopt;
         }
-
-        uint32_t tlvLen = writer.GetLengthWritten();
-        size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-        std::string tlvBase64(maxBase64Len, '\0');
-        uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-        tlvBase64.resize(encoded);
 
         return tlvBase64;
     };
@@ -2199,6 +1999,102 @@ TransientDataSetter SpecBasedMatterDeviceDriver::MakeTransientSetter(const std::
     };
 }
 
+std::optional<chip::EndpointId>
+SpecBasedMatterDeviceDriver::ResolveEndpoint(MatterDevice &device,
+                                             uint32_t clusterId,
+                                             const std::optional<uint32_t> &explicitEndpoint)
+{
+    if (explicitEndpoint.has_value())
+    {
+        return static_cast<chip::EndpointId>(explicitEndpoint.value());
+    }
+
+    chip::EndpointId endpointId = 0;
+
+    if (!device.GetEndpointForCluster(clusterId, endpointId))
+    {
+        return std::nullopt;
+    }
+
+    return endpointId;
+}
+
+void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId,
+                                                     const std::vector<const DispatchEntry *> &matches,
+                                                     MatterDevice *matterDevice,
+                                                     const HandlerContext &hctx,
+                                                     uint32_t clusterId,
+                                                     uint32_t elementId,
+                                                     const char *kindLabel,
+                                                     const char *elementNoun,
+                                                     const std::function<SafeJSValue(JSContext *)> &buildArgs)
+{
+    for (const auto *entry : matches)
+    {
+        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
+        {
+            continue;
+        }
+
+        // Resolve declared supplements up front (device-service I/O) so the JS mutex is held
+        // only around the JS work below.
+        FetchedSupplements supplements;
+
+        if (matterDevice)
+        {
+            supplements = SbmdHandlerInvoker::PrefetchSupplements(entry->handler->supplements,
+                                                                  MakeAttrFetcher(*matterDevice),
+                                                                  MakeResFetcher(deviceId),
+                                                                  MakePersistFetcher(deviceId),
+                                                                  MakeTransientFetcher(deviceId));
+        }
+
+        std::optional<ParsedResult> result;
+        ScopedResultRelease resultRelease {result};
+
+        {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            auto *ctx = MQuickJsRuntime::GetSharedContext();
+
+            // args keeps its value alive for its whole lifetime, so it survives the allocations in
+            // AddSupplements and the handler call without a separate guard.
+            SafeJSValue args = buildArgs(ctx);
+            SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
+        }
+
+        if (!result.has_value())
+        {
+            icWarn("%s handler '%s' returned no result for cluster 0x%x %s 0x%x",
+                   kindLabel,
+                   entry->handler->name.c_str(),
+                   clusterId,
+                   elementNoun,
+                   elementId);
+            continue;
+        }
+
+        // Execute ops (updateResource, setMetadata, etc.)
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
+
+        // Device-initiated dispatch consumes only the handler's ops: any outbound terminal
+        // (sendCommand/requestCommand/readAttribute/writeAttribute) is intentionally unsupported
+        // from a device-initiated report path and is ignored here with a warning — no outbound action.
+        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
+        {
+            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
+            icWarn("%s handler '%s' returned error: %s", kindLabel, entry->handler->name.c_str(), err.message.c_str());
+        }
+        else if (!std::holds_alternative<ResultTerminal::Success>(result->terminal.data))
+        {
+            icWarn("%s handler '%s' returned an outbound terminal that is unsupported from a "
+                   "device-initiated report; ignoring (no outbound action taken)",
+                   kindLabel,
+                   entry->handler->name.c_str());
+        }
+    }
+}
+
 void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &deviceId,
                                                         chip::EndpointId endpointId,
                                                         chip::ClusterId clusterId,
@@ -2222,29 +2118,21 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
     // The reader from ClusterStateCache::Get() is positioned at the attribute value
     // element but GetRemainingLength() may be 0 for in-memory cache data.
     // Use TLVWriter::CopyElement to extract the element into a scratch buffer.
-    uint8_t tlvBuf[256]; // Attributes rarely exceed this; grow if needed
-    chip::TLV::TLVWriter writer;
-    writer.Init(tlvBuf, sizeof(tlvBuf));
+    auto tlvBase64Opt = EncodeTlvElementToBase64(reader, 256); // Attributes rarely exceed this
 
-    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    if (!tlvBase64Opt.has_value())
     {
         icWarn("Failed to copy TLV element for cluster 0x%x attribute 0x%x", clusterId, attributeId);
         return;
     }
 
-    uint32_t tlvLen = writer.GetLengthWritten();
-
-    if (tlvLen == 0)
+    if (tlvBase64Opt->empty())
     {
         icDebug("Empty TLV data for attribute 0x%x", attributeId);
         return;
     }
 
-    // Base64 encode the TLV data
-    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-    std::string tlvBase64(maxBase64Len, '\0');
-    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-    tlvBase64.resize(encoded);
+    const std::string &tlvBase64 = *tlvBase64Opt;
 
     // Build handler context
     HandlerContext hctx;
@@ -2258,59 +2146,10 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-    for (const auto *entry : matches)
-    {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
-        {
-            continue;
-        }
-
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
-
-        // GC-root args across AddSupplements (which allocates) and InvokeHandler
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        if (matterDevice)
-        {
-            SbmdHandlerInvoker::AddSupplements(ctx,
-                                               args,
-                                               entry->handler->supplements,
-                                               MakeAttrFetcher(*matterDevice),
-                                               MakeResFetcher(deviceId),
-                                               MakePersistFetcher(deviceId),
-                                               MakeTransientFetcher(deviceId));
-        }
-
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
-
-        JS_DeleteGCRef(ctx, &argsRef);
-
-        if (!result.has_value())
-        {
-            icWarn("Attribute handler '%s' returned no result for cluster 0x%x attr 0x%x",
-                   entry->handler->name.c_str(),
-                   clusterId,
-                   attributeId);
-            continue;
-        }
-
-        // Execute ops (updateResource, setMetadata, etc.)
-        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
-
-        // For attribute handlers, we typically expect a success terminal.
-        // Error terminals are logged but don't abort other handler processing.
-        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
-        {
-            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
-            icWarn("Attribute handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
-        }
-    }
+    DispatchToHandlers(
+        deviceId, matches, matterDevice.get(), hctx, clusterId, attributeId, "Attribute", "attr", [&](JSContext *ctx) {
+            return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+        });
 }
 
 void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
@@ -2333,29 +2172,21 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
     }
 
     // Encode TLV element as base64 for passing to JS handlers
-    uint8_t tlvBuf[1024]; // Events may contain structured data; use larger buffer
-    chip::TLV::TLVWriter writer;
-    writer.Init(tlvBuf, sizeof(tlvBuf));
+    auto tlvBase64Opt = EncodeTlvElementToBase64(reader, 1024); // Events may carry structured data
 
-    if (writer.CopyElement(chip::TLV::AnonymousTag(), reader) != CHIP_NO_ERROR)
+    if (!tlvBase64Opt.has_value())
     {
         icWarn("Failed to copy TLV element for cluster 0x%x event 0x%x", clusterId, eventId);
         return;
     }
 
-    uint32_t tlvLen = writer.GetLengthWritten();
-
-    if (tlvLen == 0)
+    if (tlvBase64Opt->empty())
     {
         icDebug("Empty TLV data for event 0x%x", eventId);
         return;
     }
 
-    // Base64 encode the TLV data
-    size_t maxBase64Len = BASE64_ENCODED_LEN(tlvLen) + 1;
-    std::string tlvBase64(maxBase64Len, '\0');
-    uint16_t encoded = chip::Base64Encode(tlvBuf, static_cast<uint16_t>(tlvLen), tlvBase64.data());
-    tlvBase64.resize(encoded);
+    const std::string &tlvBase64 = *tlvBase64Opt;
 
     // Build handler context
     HandlerContext hctx;
@@ -2369,57 +2200,10 @@ void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-    for (const auto *entry : matches)
-    {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
-        {
-            continue;
-        }
-
-        JSValue args = SbmdHandlerInvoker::BuildEventArgs(ctx, hctx, clusterId, eventId, tlvBase64);
-
-        // GC-root args across AddSupplements (which allocates) and InvokeHandler
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        if (matterDevice)
-        {
-            SbmdHandlerInvoker::AddSupplements(ctx,
-                                               args,
-                                               entry->handler->supplements,
-                                               MakeAttrFetcher(*matterDevice),
-                                               MakeResFetcher(deviceId),
-                                               MakePersistFetcher(deviceId),
-                                               MakeTransientFetcher(deviceId));
-        }
-
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
-
-        JS_DeleteGCRef(ctx, &argsRef);
-
-        if (!result.has_value())
-        {
-            icWarn("Event handler '%s' returned no result for cluster 0x%x event 0x%x",
-                   entry->handler->name.c_str(),
-                   clusterId,
-                   eventId);
-            continue;
-        }
-
-        // Execute ops (updateResource, setMetadata, etc.)
-        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
-
-        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
-        {
-            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
-            icWarn("Event handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
-        }
-    }
+    DispatchToHandlers(
+        deviceId, matches, matterDevice.get(), hctx, clusterId, eventId, "Event", "event", [&](JSContext *ctx) {
+            return SbmdHandlerInvoker::BuildEventArgs(ctx, hctx, clusterId, eventId, tlvBase64);
+        });
 }
 
 void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
@@ -2453,55 +2237,8 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
-    auto *ctx = MQuickJsRuntime::GetSharedContext();
-
-    for (const auto *entry : matches)
-    {
-        if (entry->handler == nullptr || JS_IsUndefined(entry->handler->Fn()))
-        {
-            continue;
-        }
-
-        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
-
-        // GC-root args across AddSupplements (which allocates) and InvokeHandler
-        JSGCRef argsRef {};
-        JS_AddGCRef(ctx, &argsRef);
-        argsRef.val = args;
-
-
-        if (matterDevice)
-        {
-            SbmdHandlerInvoker::AddSupplements(ctx,
-                                               args,
-                                               entry->handler->supplements,
-                                               MakeAttrFetcher(*matterDevice),
-                                               MakeResFetcher(deviceId),
-                                               MakePersistFetcher(deviceId),
-                                               MakeTransientFetcher(deviceId));
-        }
-
-        auto result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
-
-        JS_DeleteGCRef(ctx, &argsRef);
-
-        if (!result.has_value())
-        {
-            icWarn("Command handler '%s' returned no result for cluster 0x%x command 0x%x",
-                   entry->handler->name.c_str(),
-                   clusterId,
-                   commandId);
-            continue;
-        }
-
-        // Execute ops (updateResource, setMetadata, etc.)
-        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops, MakeTransientSetter(deviceId));
-
-        if (std::holds_alternative<ResultTerminal::Error>(result->terminal.data))
-        {
-            const auto &err = std::get<ResultTerminal::Error>(result->terminal.data);
-            icWarn("Command handler '%s' returned error: %s", entry->handler->name.c_str(), err.message.c_str());
-        }
-    }
+    DispatchToHandlers(
+        deviceId, matches, matterDevice.get(), hctx, clusterId, commandId, "Command", "command", [&](JSContext *ctx) {
+            return SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
+        });
 }

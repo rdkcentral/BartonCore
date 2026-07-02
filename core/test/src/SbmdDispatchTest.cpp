@@ -816,7 +816,7 @@ namespace
             HandlerContext hctx;
             hctx.deviceUuid = "test-device";
             hctx.endpointId = "1";
-            JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
+            SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
             auto parsed = SbmdHandlerInvoker::InvokeHandler(Ctx(), results[0]->handler->handler, args);
 
             ASSERT_TRUE(parsed.has_value());

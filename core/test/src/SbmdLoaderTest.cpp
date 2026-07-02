@@ -201,6 +201,45 @@ namespace
         EXPECT_FALSE(constants.has_value());
     }
 
+    TEST_F(SbmdLoaderTest, ExtractConstantsRejectsKeyStartingWithDigit)
+    {
+        auto constants = ExtractConstants(R"(
+            SbmdDriver({ constants: { "1CLUSTER": 6 } });
+        )");
+
+        EXPECT_FALSE(constants.has_value());
+    }
+
+    TEST_F(SbmdLoaderTest, ExtractConstantsRejectsKeyWithHyphen)
+    {
+        auto constants = ExtractConstants(R"(
+            SbmdDriver({ constants: { "on-off": 6 } });
+        )");
+
+        EXPECT_FALSE(constants.has_value());
+    }
+
+    TEST_F(SbmdLoaderTest, ExtractConstantsRejectsKeyWithSpace)
+    {
+        auto constants = ExtractConstants(R"(
+            SbmdDriver({ constants: { "my key": 6 } });
+        )");
+
+        EXPECT_FALSE(constants.has_value());
+    }
+
+    TEST_F(SbmdLoaderTest, ExtractConstantsAcceptsIdentifierWithDollarAndUnderscore)
+    {
+        auto constants = ExtractConstants(R"(
+            SbmdDriver({ constants: { "$_priv1": 6 } });
+        )");
+
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 1u);
+        EXPECT_EQ((*constants)[0].first, "$_priv1");
+        EXPECT_EQ((*constants)[0].second, "6");
+    }
+
     TEST_F(SbmdLoaderTest, ExtractConstantsWithNestedBraces)
     {
         // Ensure we find the right closing brace

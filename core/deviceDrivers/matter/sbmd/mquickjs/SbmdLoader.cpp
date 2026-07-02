@@ -311,8 +311,42 @@ namespace barton
         // Get the keys and values
         auto keys = GetObjectKeys(ctx, objVal);
 
+        // A constant key becomes a `var <key> = <value>;` declaration in the preamble, so it must be
+        // a valid JavaScript identifier (^[A-Za-z_$][A-Za-z0-9_$]*$). Reject anything else with a
+        // clear error rather than emitting a syntactically invalid declaration.
+        auto isValidIdentifier = [](const std::string &name) {
+            if (name.empty())
+            {
+                return false;
+            }
+
+            auto isIdentifierStart = [](char c) { return isalpha(c) || c == '_' || c == '$'; };
+            auto isIdentifierPart = [&](char c) { return isIdentifierStart(c) || isdigit(c); };
+
+            if (!isIdentifierStart(name.front()))
+            {
+                return false;
+            }
+
+            for (size_t i = 1; i < name.size(); i++)
+            {
+                if (!isIdentifierPart(name[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
         for (const auto &key : keys)
         {
+            if (!isValidIdentifier(key))
+            {
+                icError("Constants block key '%s' is not a valid JavaScript identifier", key.c_str());
+                return std::nullopt; // Reject the entire block
+            }
+
             JSValue val = JS_GetPropertyStr(ctx, objVal, key.c_str());
             JSCStringBuf buf;
 
