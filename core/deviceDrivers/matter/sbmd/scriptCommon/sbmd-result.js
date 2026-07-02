@@ -273,7 +273,7 @@
                         t.tlvBase64 = tlv;
                     }
 
-                    if (opts !== undefined)
+                    if (opts !== undefined && opts !== null)
                     {
                         if (opts.responseCommandId !== undefined)
                         {
