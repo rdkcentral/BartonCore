@@ -153,6 +153,24 @@ namespace
         EXPECT_EQ((*constants)[1].second, R"("back\\slash")");
     }
 
+    TEST_F(SbmdLoaderTest, ExtractConstantsControlCharacters)
+    {
+        // Control characters in string constant values must be re-escaped so
+        // the generated 'var' declaration is valid JavaScript.
+        auto constants = ExtractConstants(R"(
+            SbmdDriver({ constants: { A: "hello\nworld", B: "tab\there", C: "cr\rhere" } });
+        )");
+
+        ASSERT_TRUE(constants.has_value());
+        ASSERT_EQ(constants->size(), 3u);
+        EXPECT_EQ((*constants)[0].first, "A");
+        EXPECT_EQ((*constants)[0].second, R"("hello\nworld")");
+        EXPECT_EQ((*constants)[1].first, "B");
+        EXPECT_EQ((*constants)[1].second, R"("tab\there")");
+        EXPECT_EQ((*constants)[2].first, "C");
+        EXPECT_EQ((*constants)[2].second, R"("cr\rhere")");
+    }
+
     TEST_F(SbmdLoaderTest, ExtractConstantsEmptyBlock)
     {
         auto constants = ExtractConstants(R"(

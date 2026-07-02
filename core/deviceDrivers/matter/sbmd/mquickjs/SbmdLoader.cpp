@@ -336,6 +336,18 @@ namespace barton
                         {
                             escaped += "\\\\";
                         }
+                        else if (*p == '\n')
+                        {
+                            escaped += "\\n";
+                        }
+                        else if (*p == '\r')
+                        {
+                            escaped += "\\r";
+                        }
+                        else if (*p == '\t')
+                        {
+                            escaped += "\\t";
+                        }
                         else
                         {
                             escaped += *p;
