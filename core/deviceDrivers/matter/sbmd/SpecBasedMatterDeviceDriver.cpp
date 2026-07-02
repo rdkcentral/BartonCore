@@ -1639,13 +1639,9 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             *pending.executeResponse = strdup(cmd.successValue.c_str());
         }
 
-        // The command was sent. Completion comes via the command's own promise.
-        // The parking promise remains pending until that resolves.
-        // For sendCommand in a chain, we complete the parking promise when the
-        // command completes, which happens via OnDone → promise.set_value(true).
-        // We need to wait for that promise and then complete ours.
-        // Actually, the tempPromises will be resolved when the command completes.
-        // We'll complete the parking promise as success since the command was accepted.
+        // sendCommand in a deferred chain is fire-and-forget: once the command
+        // is dispatched, complete the parking promise immediately. tempPromises
+        // is abandoned — the SDK's completion acknowledgment is not awaited.
         CompletePendingOperation(pendingId, true);
         return;
     }
