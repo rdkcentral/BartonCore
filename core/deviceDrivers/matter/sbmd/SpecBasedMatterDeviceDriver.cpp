@@ -1733,6 +1733,12 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                 pending.onErrorRooted = false;
             }
 
+            if (pending.contextRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.contextRef);
+                pending.contextRooted = false;
+            }
+
             if (!JS_IsUndefined(cmd.onResponse))
             {
                 JS_AddGCRef(ctx, &pending.onResponseRef);
@@ -1747,6 +1753,14 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                 pending.onErrorRef.val = cmd.onError;
 
                 pending.onErrorRooted = true;
+            }
+
+            if (!JS_IsUndefined(cmd.context))
+            {
+                JS_AddGCRef(ctx, &pending.contextRef);
+                pending.contextRef.val = cmd.context;
+
+                pending.contextRooted = true;
             }
         }
 
@@ -1844,6 +1858,12 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                 pending.onErrorRooted = false;
             }
 
+            if (pending.contextRooted)
+            {
+                JS_DeleteGCRef(ctx, &pending.contextRef);
+                pending.contextRooted = false;
+            }
+
             if (!JS_IsUndefined(ra.onResponse))
             {
                 JS_AddGCRef(ctx, &pending.onResponseRef);
@@ -1858,6 +1878,14 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
                 pending.onErrorRef.val = ra.onError;
 
                 pending.onErrorRooted = true;
+            }
+
+            if (!JS_IsUndefined(ra.context))
+            {
+                JS_AddGCRef(ctx, &pending.contextRef);
+                pending.contextRef.val = ra.context;
+
+                pending.contextRooted = true;
             }
         }
 
