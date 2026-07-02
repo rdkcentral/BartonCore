@@ -1179,7 +1179,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.clusterId = cmd.clusterId;
     pending.responseCommandId = cmd.responseCommandId;
     pending.handlerContext = hctx;
-    pending.device = &device;
+    pending.device = GetDevice(device.GetDeviceId());
     pending.exchangeMgr = &exchangeMgr;
     pending.sessionHandle.Grab(sessionHandle);
     pending.readValue = readValue;
@@ -1565,6 +1565,16 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         return;
     }
 
+    // All remaining terminals need the device -- verify it is still alive.
+    auto device = pending.device.lock();
+
+    if (!device)
+    {
+        icError("Device removed while deferred operation %" PRIu64 " was in flight", pendingId);
+        CompletePendingOperation(pendingId, false);
+        return;
+    }
+
     if (std::holds_alternative<ResultTerminal::SendCommand>(result.terminal.data))
     {
         const auto &cmd = std::get<ResultTerminal::SendCommand>(result.terminal.data);
@@ -1576,7 +1586,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
         }
-        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        else if (!device->GetEndpointForCluster(cmd.clusterId, endpointId))
         {
             icError("Failed to find endpoint for cluster 0x%x in deferred chain", cmd.clusterId);
             CompletePendingOperation(pendingId, false);
@@ -1617,17 +1627,17 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             return;
         }
 
-        if (!pending.device->SendCommandFromTlv(tempPromises,
-                                                cmd.clusterId,
-                                                cmd.commandId,
-                                                cmd.timedInvokeTimeoutMs,
-                                                endpointId,
-                                                tlvBuffer,
-                                                tlvLength,
-                                                *pending.exchangeMgr,
-                                                session.Value(),
-                                                nullptr,
-                                                pending.executeResponse))
+        if (!device->SendCommandFromTlv(tempPromises,
+                                     cmd.clusterId,
+                                     cmd.commandId,
+                                     cmd.timedInvokeTimeoutMs,
+                                     endpointId,
+                                     tlvBuffer,
+                                     tlvLength,
+                                     *pending.exchangeMgr,
+                                     session.Value(),
+                                     nullptr,
+                                     pending.executeResponse))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1656,7 +1666,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             endpointId = static_cast<chip::EndpointId>(wa.endpointId.value());
         }
-        else if (!pending.device->GetEndpointForCluster(wa.clusterId, endpointId))
+        else if (!device->GetEndpointForCluster(wa.clusterId, endpointId))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1690,15 +1700,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             return;
         }
 
-        if (!pending.device->WriteAttributeFromTlv(tempPromises,
-                                                   endpointId,
-                                                   wa.clusterId,
-                                                   wa.attributeId,
-                                                   decodedTlv.get(),
-                                                   decoded,
-                                                   *pending.exchangeMgr,
-                                                   session.Value(),
-                                                   nullptr))
+        if (!device->WriteAttributeFromTlv(tempPromises,
+                                        endpointId,
+                                        wa.clusterId,
+                                        wa.attributeId,
+                                        decodedTlv.get(),
+                                        decoded,
+                                        *pending.exchangeMgr,
+                                        session.Value(),
+                                        nullptr))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1771,7 +1781,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             endpointId = static_cast<chip::EndpointId>(cmd.endpointId.value());
         }
-        else if (!pending.device->GetEndpointForCluster(cmd.clusterId, endpointId))
+        else if (!device->GetEndpointForCluster(cmd.clusterId, endpointId))
         {
             icError("Failed to find endpoint for cluster 0x%x in deferred re-arm", cmd.clusterId);
             CompletePendingOperation(pendingId, false);
@@ -1810,7 +1820,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
             return;
         }
 
-        bool sent = pending.device->SendCommandWithCallbacks(
+        bool sent = device->SendCommandWithCallbacks(
             cmd.clusterId,
             cmd.commandId,
             cmd.timedInvokeTimeoutMs,
@@ -1894,7 +1904,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         {
             endpointId = static_cast<chip::EndpointId>(ra.endpointId.value());
         }
-        else if (!pending.device->GetEndpointForCluster(ra.clusterId, endpointId))
+        else if (!device->GetEndpointForCluster(ra.clusterId, endpointId))
         {
             CompletePendingOperation(pendingId, false);
             return;
@@ -1902,7 +1912,7 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         // Read from cache
         chip::TLV::TLVReader reader;
-        CHIP_ERROR err = pending.device->GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
+        CHIP_ERROR err = device->GetCachedAttributeData(endpointId, ra.clusterId, ra.attributeId, reader);
 
         std::optional<ParsedResult> nextResult;
 

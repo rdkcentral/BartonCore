@@ -74,7 +74,7 @@ namespace barton
         HandlerContext handlerContext;
 
         // Context for continuing the chain
-        MatterDevice *device = nullptr;
+        std::weak_ptr<MatterDevice> device;
         chip::Messaging::ExchangeManager *exchangeMgr = nullptr;
         // SessionHolder (not a raw SessionHandle pointer): the deferred chain re-sends
         // commands across later event-loop turns, long after the originating connection
