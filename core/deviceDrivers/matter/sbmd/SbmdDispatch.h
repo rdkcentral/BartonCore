@@ -30,8 +30,8 @@
  * functions based on alias resolution and priority ordering.
  *
  * Priority order (all matching handlers fire):
- *   1. Specific — handler with a single alias resolving to one (clusterId, elementId)
- *   2. Multi   — handler with multiple aliases
+ *   1. Single   — handler with a single alias resolving to one (clusterId, elementId)
+ *   2. Multi    — handler with multiple aliases
  *   3. Wildcard — handler matching any element in a cluster
  *
  * The dispatch table is built at driver activation time from the registration's
@@ -59,9 +59,9 @@ namespace barton
      */
     enum class HandlerPriority
     {
-        Specific, // Single alias → single (clusterId, elementId)
-        Multi,    // Multiple aliases → multiple (clusterId, elementId) pairs
-        Wildcard  // Matches any element in a cluster
+        Single,   // Handler declares exactly one alias
+        Multi,    // Handler declares more than one alias
+        Wildcard  // Alias names no element → matches any element in the cluster
     };
 
     /**
@@ -108,9 +108,17 @@ namespace barton
     {
     public:
         /**
-         * Build a dispatch table from the registration's aliases and a handler vector.
+         * (Re)build the dispatch tables from a set of handlers.
          *
-         * @param aliases The registration's alias map (name → SbmdAlias)
+         * Clears any existing entries, then for each handler resolves its alias
+         * names against @p aliases to concrete (clusterId, elementId) keys and
+         * files it into the matching table:
+         *   - specificTable — aliases that name an element (attribute/event/command)
+         *   - wildcardTable — aliases with no element, matching the whole cluster
+         * Alias names not found in @p aliases are skipped with a warning; entries
+         * under each key are ordered by priority.
+         *
+         * @param aliases  The registration's alias map (name → SbmdAlias)
          * @param handlers The device handler vector (attributeHandlers, eventHandlers, or commandHandlers)
          */
         void Build(const std::unordered_map<std::string, SbmdAlias> &aliases,
@@ -118,7 +126,7 @@ namespace barton
 
         /**
          * Look up all matching handlers for a given (clusterId, elementId),
-         * ordered by priority (specific first, then multi, then wildcard).
+         * ordered by priority (single first, then multi, then wildcard).
          *
          * @param clusterId The Matter cluster ID
          * @param elementId The attribute/event/command ID
@@ -132,12 +140,12 @@ namespace barton
         void Clear();
 
         /**
-         * Get the number of specific+multi entries (for diagnostics).
+         * Get the number of entries in the specific table (single + multi).
          */
         size_t GetSpecificEntryCount() const;
 
         /**
-         * Get the number of wildcard entries (for diagnostics).
+         * Get the number of entries in the wildcard table.
          */
         size_t GetWildcardEntryCount() const;
 
@@ -148,7 +156,7 @@ namespace barton
         std::set<uint32_t> GetRegisteredClusterIds() const;
 
     private:
-        // Specific + multi entries: (clusterId, elementId) → sorted entries
+        // Single + multi entries: (clusterId, elementId) → sorted entries
         std::map<DispatchKey, std::vector<DispatchEntry>> specificTable;
 
         // Wildcard entries: clusterId → sorted entries (match any elementId in that cluster)

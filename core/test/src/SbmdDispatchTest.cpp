@@ -139,7 +139,7 @@ namespace
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 1u);
         EXPECT_EQ(results[0]->handler->name, "onOffHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
     }
 
     TEST_F(SbmdDispatchTableTest, NoMatchReturnsEmpty)
@@ -229,7 +229,7 @@ namespace
         ASSERT_EQ(results.size(), 2u);
         // Specific should come first regardless of registration order
         EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "multiHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Multi);
     }
@@ -253,7 +253,7 @@ namespace
         ASSERT_EQ(results.size(), 2u);
         // Specific first, wildcard second
         EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "wildcardHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Wildcard);
     }
@@ -276,7 +276,7 @@ namespace
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 3u);
         EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "multiHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Multi);
         EXPECT_EQ(results[2]->handler->name, "wildcardHandler");
@@ -889,7 +889,7 @@ namespace
         auto echoResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0);
         ASSERT_EQ(echoResults.size(), 2u);
         EXPECT_EQ(echoResults[0]->handler->name, "handleEcho");
-        EXPECT_EQ(echoResults[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(echoResults[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(echoResults[1]->handler->name, "handleAny");
         EXPECT_EQ(echoResults[1]->priority, HandlerPriority::Wildcard);
 

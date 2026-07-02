@@ -46,8 +46,7 @@ namespace barton
         for (const auto &handler : handlers)
         {
             // Determine priority based on alias count
-            HandlerPriority priority =
-                handler.aliases.size() == 1 ? HandlerPriority::Specific : HandlerPriority::Multi;
+            HandlerPriority priority = handler.aliases.size() == 1 ? HandlerPriority::Single : HandlerPriority::Multi;
 
             DispatchEntry entry;
             entry.handler = &handler;
@@ -89,23 +88,17 @@ namespace barton
                     // Wildcard — no specific element ID, matches all in this cluster
                     wildcardTable[alias.clusterId].push_back(
                         DispatchEntry{entry.handler, HandlerPriority::Wildcard});
-                    continue;
                 }
-
-                DispatchKey key{alias.clusterId, elementId.value()};
-                specificTable[key].push_back(entry);
+                else
+                {
+                    DispatchKey key {alias.clusterId, elementId.value()};
+                    specificTable[key].push_back(entry);
+                }
             }
         }
 
-        // Sort each entry list by priority (Specific < Multi < Wildcard)
+        // Sort each entry list by priority (Single < Multi)
         for (auto &[key, entries] : specificTable)
-        {
-            std::stable_sort(entries.begin(), entries.end(), [](const DispatchEntry &a, const DispatchEntry &b) {
-                return static_cast<int>(a.priority) < static_cast<int>(b.priority);
-            });
-        }
-
-        for (auto &[clusterId, entries] : wildcardTable)
         {
             std::stable_sort(entries.begin(), entries.end(), [](const DispatchEntry &a, const DispatchEntry &b) {
                 return static_cast<int>(a.priority) < static_cast<int>(b.priority);
