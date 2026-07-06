@@ -659,10 +659,9 @@ namespace
 
     TEST_F(SbmdLoaderTest, LoadDriverAfterExtractionFailureSucceeds)
     {
-        // A driver that evaluates (SbmdDriver() is called) but fails extraction
-        // (missing name) must not leave __sbmd_registration set. If it does, the
-        // next LoadDriver call throws "SbmdDriver() called more than once" and
-        // fails, even though the second driver is perfectly valid.
+        // Load a driver that evaluates but fails extraction (no name field),
+        // then verify the next valid driver loads without error. The global
+        // __sbmd_registration must be cleared on failure, not only on success.
         auto bad = LoadDriver(R"(
             SbmdDriver({
                 schemaVersion: "4.0",
