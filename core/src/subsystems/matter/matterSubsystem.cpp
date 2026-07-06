@@ -202,10 +202,10 @@ static gboolean maybeInitMatter(void *context)
 
     if (configRoot.empty())
     {
-        icError("matterConfigRoot is not set");
+        icError("matterConfigRoot is not set (shutdown may have occurred)");
         std::lock_guard<std::mutex> l(subsystemMtx);
         busy = false;
-        return true;
+        return false;
     }
 
     try
@@ -220,24 +220,27 @@ static gboolean maybeInitMatter(void *context)
         else
         {
             scoped_generic char *trustStore = deviceServiceConfigurationGetMatterAttestationTrustStoreDir();
-            std::string attestationTrustStorePath(trustStore);
 
-            if (!Matter::GetInstance().Init(accountId, std::move(attestationTrustStorePath), configRoot))
+            if (trustStore == nullptr || trustStore[0] == '\0')
+            {
+                icError("Matter attestation trust store directory is not configured");
+                initSuccessful = false;
+            }
+            else if (!Matter::GetInstance().Init(accountId, std::string(trustStore), configRoot))
             {
                 initSuccessful = false;
             }
-
-            // FIXME: Matter shouldn't be a singleton with Init() but a properly constructed object.
-
-            // Start() is the final arbiter of truth. If Init() fails, it's presumed Start()
-            // will definitely fail. Once Start()ed, the subsystem is up, and Start() SHOULD NOT be called again.
-            // Start() is internally protected and will warn if already running (instead of aborting in the matter
-            // stack).
-            initSuccessful = Matter::GetInstance().Start();
-
-            if (!initSuccessful)
+            else
             {
-                icError("failed to start Matter interface");
+                // Start() is the final arbiter of truth. Once Start()ed, the subsystem is up,
+                // and Start() SHOULD NOT be called again. Start() is internally protected and
+                // will warn if already running (instead of aborting in the matter stack).
+                initSuccessful = Matter::GetInstance().Start();
+
+                if (!initSuccessful)
+                {
+                    icError("failed to start Matter interface");
+                }
             }
         }
     }
