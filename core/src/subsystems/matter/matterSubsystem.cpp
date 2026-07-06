@@ -178,6 +178,7 @@ static gboolean maybeInitMatter(void *context)
     (void) context;
 
     bool initSuccessful = true;
+    std::string configRoot;
 
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
@@ -190,6 +191,21 @@ static gboolean maybeInitMatter(void *context)
         }
 
         busy = true;
+
+        // Capture matterConfigRoot under the lock to prevent use-after-free
+        // if shutdown runs concurrently.
+        if (matterConfigRoot != nullptr)
+        {
+            configRoot = matterConfigRoot;
+        }
+    }
+
+    if (configRoot.empty())
+    {
+        icError("matterConfigRoot is not set");
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        busy = false;
+        return true;
     }
 
     try
@@ -206,8 +222,7 @@ static gboolean maybeInitMatter(void *context)
             scoped_generic char *trustStore = deviceServiceConfigurationGetMatterAttestationTrustStoreDir();
             std::string attestationTrustStorePath(trustStore);
 
-            if (!Matter::GetInstance().Init(
-                    accountId, std::move(attestationTrustStorePath), std::string(matterConfigRoot)))
+            if (!Matter::GetInstance().Init(accountId, std::move(attestationTrustStorePath), configRoot))
             {
                 initSuccessful = false;
             }
@@ -411,14 +426,14 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
     subsystemInitializedCallback = initializedCallback;
     subsystemDeinitializedCallback = deInitializedCallback;
 
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+    g_free(g_steal_pointer(&matterKVPath));
+    g_free(g_steal_pointer(&matterConfigRoot));
 
     matterConfigRoot = deviceServiceConfigurationGetMatterStorageDir();
 
     if (matterConfigRoot == nullptr)
     {
-        matterConfigRoot = strdup(CHIP_BARTON_CONF_DIR);
+        matterConfigRoot = g_strdup(CHIP_BARTON_CONF_DIR);
     }
 
     matterKVPath = stringBuilder("%s/%s", matterConfigRoot, MATTERKV_FILE_NAME);
@@ -461,8 +476,12 @@ static void matterSubsystemShutdown()
     Matter::GetInstance().Stop();
 
     g_object_unref(g_steal_pointer(&matterMon));
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+
+    {
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        g_free(g_steal_pointer(&matterKVPath));
+        g_free(g_steal_pointer(&matterConfigRoot));
+    }
 
     if (!deviceServiceConfigurationUnregisterAccountIdListener(accountIdChanged))
     {

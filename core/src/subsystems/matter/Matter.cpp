@@ -219,7 +219,11 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     // PosixConfig storage objects (chip_factory.ini, chip_config.ini,
     // chip_counters.ini) are static globals that always use the compile-time
     // paths and cannot be redirected at runtime.
-    mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
+    if (mkdir_p(CHIP_BARTON_CONF_DIR, 0700) != 0)
+    {
+        icError("Failed to create compile-time config directory: %s", CHIP_BARTON_CONF_DIR);
+        return false;
+    }
 
     myFabricId = accountId;
 
