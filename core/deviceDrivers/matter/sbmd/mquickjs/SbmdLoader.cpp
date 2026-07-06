@@ -517,6 +517,15 @@ namespace barton
             return nullptr;
         }
 
+        // RAII guard: reset __sbmd_registration on every exit from this scope,
+        // whether by success or by any early-return failure. Keeping the global
+        // set throughout extraction also anchors regVal as a live GC root.
+        struct ResetGuard
+        {
+            JSContext *ctx;
+            ~ResetGuard() { ResetRegistration(ctx); }
+        } resetGuard {ctx};
+
         auto reg = std::make_unique<SbmdRegistration>();
         reg->filePath = filePath;
 
@@ -583,9 +592,6 @@ namespace barton
                 return nullptr;
             }
         }
-
-        // Reset __sbmd_registration to null for the next driver
-        ResetRegistration(ctx);
 
         icDebug("Extracted registration: name=%s, %zu aliases, %zu endpoints, %zu attrHandlers, %zu evtHandlers, "
                 "%zu cmdHandlers",

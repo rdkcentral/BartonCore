@@ -657,6 +657,39 @@ namespace
         EXPECT_EQ(reg, nullptr);
     }
 
+    TEST_F(SbmdLoaderTest, LoadDriverAfterExtractionFailureSucceeds)
+    {
+        // A driver that evaluates (SbmdDriver() is called) but fails extraction
+        // (missing name) must not leave __sbmd_registration set. If it does, the
+        // next LoadDriver call throws "SbmdDriver() called more than once" and
+        // fails, even though the second driver is perfectly valid.
+        auto bad = LoadDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                constants: {},
+                barton: { deviceClass: "test" },
+                matter: { deviceTypes: [] },
+            });
+        )");
+
+        EXPECT_EQ(bad, nullptr);
+
+        auto good = LoadDriver(R"(
+            SbmdDriver({
+                schemaVersion: "4.0",
+                driverVersion: 1,
+                name: "AfterFailure",
+                constants: {},
+                barton: { deviceClass: "test", deviceClassVersion: 0 },
+                matter: { deviceTypes: [0x0100] },
+            });
+        )");
+
+        ASSERT_NE(good, nullptr);
+        EXPECT_EQ(good->name, "AfterFailure");
+    }
+
     TEST_F(SbmdLoaderTest, ConstantsAvailableInHandlers)
     {
         // Verify that constants injected as var declarations are accessible
