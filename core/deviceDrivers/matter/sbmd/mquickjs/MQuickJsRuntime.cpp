@@ -29,6 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -46,58 +47,44 @@ extern const JSSTDLibraryDef js_stdlib;
 
 namespace barton
 {
+    using namespace mquickjs;
 
-// Static member initialization
-uint8_t *MQuickJsRuntime::memBuffer = nullptr;
-size_t MQuickJsRuntime::memSize = 0;
-JSContext *MQuickJsRuntime::ctx = nullptr;
-std::mutex MQuickJsRuntime::mutex;
-bool MQuickJsRuntime::initialized = false;
-size_t MQuickJsRuntime::peakHeapUsed = 0;
-std::chrono::steady_clock::time_point MQuickJsRuntime::deadline {};
-namespace
-{
-    /**
-     * Extract mquickjs exception as a string.
-     */
-    std::string GetExceptionString(JSContext *ctx)
+    // Static member initialization
+    uint8_t *MQuickJsRuntime::memBuffer = nullptr;
+    size_t MQuickJsRuntime::memSize = 0;
+    JSContext *MQuickJsRuntime::ctx = nullptr;
+    std::mutex MQuickJsRuntime::mutex;
+    bool MQuickJsRuntime::initialized = false;
+    size_t MQuickJsRuntime::peakHeapUsed = 0;
+    std::chrono::steady_clock::time_point MQuickJsRuntime::deadline {};
+
+    namespace
     {
-        JSValue ex = JS_GetException(ctx);
-
-        JSCStringBuf buf;
-        const char *str = JS_ToCString(ctx, ex, &buf);
-        if (str)
+        /**
+         * Interrupt handler for script execution timeout.
+         *
+         * Called periodically by the mquickjs engine during bytecode execution.
+         * Returns non-zero to abort the running script when the deadline has passed.
+         * When no deadline is active (epoch value), always returns 0.
+         */
+        int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
         {
-            return std::string(str);
-        }
-        return "unknown error";
-    }
+            auto currentDeadline = MQuickJsRuntime::GetDeadline();
 
-    /**
-     * Interrupt handler for script execution timeout.
-     *
-     * Called periodically by the mquickjs engine during bytecode execution.
-     * Returns non-zero to abort the running script when the deadline has passed.
-     * When no deadline is active (epoch value), always returns 0.
-     */
-    int ScriptInterruptHandler(JSContext * /*ctx*/, void * /*opaque*/)
-    {
-        auto currentDeadline = MQuickJsRuntime::GetDeadline();
+            // No deadline set, allow script to run uninterrupted
+            if (currentDeadline == std::chrono::steady_clock::time_point {})
+            {
+                return 0;
+            }
 
-        // No deadline set, allow script to run uninterrupted
-        if (currentDeadline == std::chrono::steady_clock::time_point {})
-        {
+            if (std::chrono::steady_clock::now() > currentDeadline)
+            {
+                icError("SBMD script execution timeout: script exceeded the configured time limit");
+                return 1;
+            }
+
             return 0;
         }
-
-        if (std::chrono::steady_clock::now() > currentDeadline)
-        {
-            icError("SBMD script execution timeout: script exceeded the configured time limit");
-            return 1;
-        }
-
-        return 0;
-    }
 
 } // anonymous namespace
 
@@ -286,6 +273,22 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
                         exMsg += " | Stack: ";
                     }
                     exMsg += stackStr;
+                }
+            }
+
+            // Pull name/fileName/lineNumber to help localize throws that carry no
+            // useful stack (e.g. exceptions raised from native bindings).
+            for (const char *prop : {"name", "fileName", "lineNumber"})
+            {
+                JSValue propVal = JS_GetPropertyStr(ctx, pendingEx, prop);
+                JSCStringBuf buf;
+                const char *propStr = JS_ToCString(ctx, propVal, &buf);
+                if (propStr)
+                {
+                    exMsg += " | ";
+                    exMsg += prop;
+                    exMsg += "=";
+                    exMsg += propStr;
                 }
             }
         }

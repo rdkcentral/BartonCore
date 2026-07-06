@@ -1,5 +1,10 @@
 # SBMD Schema Changelog
 
+## v4.0
+
+- First schema for the JavaScript-native driver format: specs are authored as
+  `.sbmd.js` files registered via `SbmdDriver()`, replacing the v3 YAML format
+
 ## v3.0
 
 - Mapper scripts must return `{ value: "..." }` instead of `{ output: "..." }`

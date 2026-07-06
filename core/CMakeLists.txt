@@ -149,81 +149,54 @@ if (BCORE_MATTER)
         ${MATTER_PROVIDER_HEADER_PATHS}
         ${MATTER_DELEGATE_HEADER_PATHS})
 
-    # yaml-cpp for SBMD parser
-    pkg_check_modules(YAMLCPP REQUIRED yaml-cpp)
-    link_directories(${YAMLCPP_LIBRARY_DIRS})
-    list(APPEND XTRA_INCLUDES ${YAMLCPP_INCLUDE_DIRS})
-    list(APPEND XTRA_LIBS yaml-cpp)
     if (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "mquickjs")
         list(APPEND XTRA_LIBS mquickjs)
     elseif (BCORE_MATTER_SBMD_JS_ENGINE STREQUAL "quickjs")
         list(APPEND XTRA_LIBS quickjs)
     endif()
 
-    if (BCORE_MATTER_VALIDATE_SCHEMAS)
-        # SBMD specification validation
-
-        # Validates all .sbmd files against the versioned JSON schemas during build.
-        # SBMD_SCHEMA_DIR points to the top-level schema directory; the validator
-        # recursively searches subdirectories (e.g. v2/, v3/) for a schema file
-        # matching each spec's declared schemaVersion.
-        set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
-        set(SBMD_DTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts")
-        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_specs.py")
-        set(SBMD_STUB_GENERATOR "${CMAKE_SOURCE_DIR}/scripts/ci/generate_sbmd_stubs.py")
-        set(SBMD_STUBS_FILE "${CMAKE_BINARY_DIR}/sbmd-stubs.json")
-
-        # Find Python3
-        find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-        # Collect all .sbmd files for dependency tracking and validation
-        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
-
-        # Collect all schema files recursively so CMake re-runs validation when
-        # any schema changes, including schemas added in new version subdirectories.
-        file(GLOB_RECURSE SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
-
-        # Generate stubs from .d.ts file
-        add_custom_command(
-            OUTPUT ${SBMD_STUBS_FILE}
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_STUB_GENERATOR} ${SBMD_DTS_FILE} ${SBMD_STUBS_FILE}
-            DEPENDS ${SBMD_DTS_FILE} ${SBMD_STUB_GENERATOR}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMENT "Generating SBMD stubs from TypeScript definitions..."
-        )
-
-        # Create a custom target that validates SBMD specs
-        add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
-                    --stubs ${SBMD_STUBS_FILE}
-                    --js-engine ${BCORE_MATTER_SBMD_JS_ENGINE}
-            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_STUBS_FILE} ${SBMD_VALIDATOR}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMENT "Validating SBMD specification files against schema..."
-        )
-    endif()
-
-    # Embed SbmdUtils bundle (always available for SBMD scripts)
-    set(SBMD_UTILS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon/sbmd-utils.js")
-    set(SBMD_UTILS_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdUtilsEmbedded.h")
+    # Embed SBMD bundle (assembled from individual source files)
+    set(SBMD_SCRIPT_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/scriptCommon")
+    set(SBMD_BUNDLE_SOURCES
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-namespace.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-utf8.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-base64.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-tlv.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-result.js"
+        "${SBMD_SCRIPT_COMMON_DIR}/sbmd-cleanup.js"
+    )
+    set(SBMD_ASSEMBLED_BUNDLE "${CMAKE_CURRENT_BINARY_DIR}/sbmd-bundle.js")
+    set(SBMD_BUNDLE_EMBEDDED_HEADER "${CMAKE_CURRENT_BINARY_DIR}/src/SbmdBundleEmbedded.h")
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/embed-js-as-header.py")
 
+    # Concatenate individual source files into one assembled bundle
     add_custom_command(
-        OUTPUT "${SBMD_UTILS_EMBEDDED_HEADER}"
-        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD utilities bundle as C header..."
-        COMMAND python3 "${EMBED_SCRIPT}"
-            --input "${SBMD_UTILS_SOURCE}"
-            --output "${SBMD_UTILS_EMBEDDED_HEADER}"
-            --variable "kSbmdUtilsBundle"
-        DEPENDS "${SBMD_UTILS_SOURCE}" "${EMBED_SCRIPT}"
+        OUTPUT "${SBMD_ASSEMBLED_BUNDLE}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Assembling SBMD bundle from source files..."
+        COMMAND cat ${SBMD_BUNDLE_SOURCES} > "${SBMD_ASSEMBLED_BUNDLE}"
+        DEPENDS ${SBMD_BUNDLE_SOURCES}
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        COMMENT "Generating embedded C header for SBMD utilities bundle"
+        COMMENT "Assembling SBMD bundle from individual source files"
+        VERBATIM
+    )
+
+    # Embed the assembled bundle as a C header
+    add_custom_command(
+        OUTPUT "${SBMD_BUNDLE_EMBEDDED_HEADER}"
+        COMMAND "${CMAKE_COMMAND}" -E echo "Embedding SBMD bundle as C header..."
+        COMMAND python3 "${EMBED_SCRIPT}"
+            --input "${SBMD_ASSEMBLED_BUNDLE}"
+            --output "${SBMD_BUNDLE_EMBEDDED_HEADER}"
+            --variable "kSbmdBundle"
+        DEPENDS "${SBMD_ASSEMBLED_BUNDLE}" "${EMBED_SCRIPT}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        COMMENT "Generating embedded C header for SBMD bundle"
         VERBATIM
     )
 
     # Add header generation as a source dependency
     add_custom_target(generate_sbmd_embedded_headers
-        DEPENDS ${SBMD_UTILS_EMBEDDED_HEADER}
+        DEPENDS ${SBMD_BUNDLE_EMBEDDED_HEADER}
     )
 
     # Include the generated header directory
@@ -231,6 +204,30 @@ if (BCORE_MATTER)
 
     list(APPEND XTRA_LIBS ${BCORE_MATTER_LIB} ${OPENSSL_LINK_LIBRARIES} jsoncpp)
     link_directories(${CMAKE_BINARY_DIR}/matter-install/lib)
+
+    # SBMD v4 specification validation
+    if (BCORE_MATTER_VALIDATE_SCHEMAS)
+        set(SBMD_SCHEMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deviceDrivers/matter/sbmd/schema")
+        set(SBMD_VALIDATOR "${CMAKE_SOURCE_DIR}/scripts/ci/validate_sbmd_v4_specs.py")
+        set(SBMD_EXTRACTOR "${CMAKE_SOURCE_DIR}/scripts/ci/sbmd_extract_registration.js")
+
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        find_program(NODE_EXECUTABLE node REQUIRED)
+
+        file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
+        file(GLOB SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
+
+        if (SBMD_SPEC_FILES)
+            add_custom_target(validate_sbmd_specs ALL
+                COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
+                DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_VALIDATOR} ${SBMD_EXTRACTOR}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                COMMENT "Validating SBMD v4 specification files against schema..."
+            )
+        else()
+            message(STATUS "No SBMD v4 spec files found in ${SBMD_SPECS_DIR}; skipping spec validation")
+        endif()
+    endif()
 endif()
 
 if (BCORE_THREAD)
@@ -255,7 +252,6 @@ if (BCORE_THREAD)
         ${DBUS_LIBRARIES})
 endif()
 
-
 # Observability backend selection
 if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
     file(GLOB inmemoryObsSrc "src/observability/memory/*.c")
@@ -266,6 +262,7 @@ elseif (BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
 else()
     message(FATAL_ERROR "Unknown BCORE_OBSERVABILITY_BACKEND value: '${BCORE_OBSERVABILITY_BACKEND}'. Valid values: memory, none")
 endif()
+
 list(APPEND SOURCES
         ${SOURCES}
         ${zigSubSrc}
@@ -333,7 +330,7 @@ install(TARGETS BartonCore DESTINATION lib)
 
 # Install SBMD driver specification files.
 if (BCORE_MATTER)
-    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd")
+    file(GLOB ALL_SBMD_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
 
     if (ALL_SBMD_FILES)
         install(FILES ${ALL_SBMD_FILES} DESTINATION ${BCORE_MATTER_SBMD_SPECS_DIR})
