@@ -431,8 +431,9 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
 
     matterConfigRoot = deviceServiceConfigurationGetMatterStorageDir();
 
-    if (matterConfigRoot == nullptr)
+    if (matterConfigRoot == nullptr || matterConfigRoot[0] == '\0')
     {
+        g_free(matterConfigRoot);
         matterConfigRoot = g_strdup(CHIP_BARTON_CONF_DIR);
     }
 
@@ -475,7 +476,7 @@ static void matterSubsystemShutdown()
 
     Matter::GetInstance().Stop();
 
-    g_object_unref(g_steal_pointer(&matterMon));
+    g_clear_object(&matterMon);
 
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
