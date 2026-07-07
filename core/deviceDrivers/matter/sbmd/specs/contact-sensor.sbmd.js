@@ -84,7 +84,7 @@ SbmdDriver({
 
                 // StateValue=true means closed (not faulted)
                 return Sbmd.result()
-                    .dataModel.updateResource(RES_FAULTED, value === true ? 'false' : 'true')
+                    .dataModel.updateResource(args.endpointId, RES_FAULTED, (value === true) ? 'false' : 'true')
                     .success();
             }
         }

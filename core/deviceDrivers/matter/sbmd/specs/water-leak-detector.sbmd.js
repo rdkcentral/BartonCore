@@ -84,7 +84,7 @@ SbmdDriver({
 
                 // StateValue=true means water detected (faulted=true)
                 return Sbmd.result()
-                    .dataModel.updateResource(RES_FAULTED, value === true ? 'true' : 'false')
+                    .dataModel.updateResource(args.endpointId, RES_FAULTED, (value === true) ? 'true' : 'false')
                     .success();
             }
         }

@@ -111,7 +111,9 @@ function handleTemperature(args) {
         return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
-    return Sbmd.result().dataModel.updateResource(RES_TEMPERATURE, value.toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
+        .success();
 }
 
 /**

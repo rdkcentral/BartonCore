@@ -100,5 +100,7 @@ function handleHumidity(args) {
     // Matter humidity is in hundredths of percent, convert to whole percent
     var percent = Math.round(value / 100);
 
-    return Sbmd.result().dataModel.updateResource(RES_HUMIDITY, percent.toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString())
+        .success();
 }

@@ -64,7 +64,7 @@ namespace barton
     {
         struct UpdateResource
         {
-            std::optional<std::string> endpoint; // absent = use trigger endpoint
+            std::optional<std::string> endpoint; // absent = device-level resource
             std::string resource;
             std::string value;
             std::optional<std::string> metadata; // JSON string for resource updated event

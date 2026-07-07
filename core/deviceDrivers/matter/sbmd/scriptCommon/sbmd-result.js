@@ -113,7 +113,7 @@
             return {
                 /**
                  * Update a Barton resource value.
-                 * 2-arg: updateResource(resource, value) — uses trigger endpoint
+                 * 2-arg: updateResource(resource, value) — device-level resource
                  * 3-arg: updateResource(endpoint, resource, value)
                  * 4-arg: updateResource(endpoint, resource, value, options)
                  */

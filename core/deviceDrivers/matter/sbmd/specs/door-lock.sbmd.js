@@ -126,7 +126,7 @@ function seedLocked(args) {
     var isLocked = value === 1;
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_LOCKED, isLocked ? 'true' : 'false')
+        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
         .success();
 }
 
@@ -199,6 +199,6 @@ function handleLockState(args) {
     var isLocked = value === 1;
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_LOCKED, isLocked ? 'true' : 'false')
+        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
         .success();
 }

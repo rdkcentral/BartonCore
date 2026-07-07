@@ -419,13 +419,18 @@ namespace
         EXPECT_EQ(g_updateResourceCalls[0].value, "true");
     }
 
-    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceUsesDefaultEndpoint)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceDefaultsToDeviceLevel)
     {
         auto hctx = MakeContext();
 
+        // The handler was triggered on endpoint "1". A no-endpoint update must still
+        // target a device-level resource (NULL endpoint) rather than falling back to
+        // this trigger endpoint.
+        ASSERT_EQ(hctx.endpointId, "1");
+
         std::vector<ResultOp> ops;
         ResultOp::UpdateResource ur;
-        // No endpoint set — should use hctx.endpointId
+        // No endpoint set — the stub records a NULL endpoint as "".
         ur.resource = "isOn";
         ur.value = "false";
         ops.push_back(ResultOp {ur});
@@ -433,7 +438,7 @@ namespace
         SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
-        EXPECT_EQ(g_updateResourceCalls[0].endpointId, "1"); // default from context
+        EXPECT_EQ(g_updateResourceCalls[0].endpointId, ""); // device-level, not the trigger endpoint "1"
     }
 
     TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceWithMetadata)

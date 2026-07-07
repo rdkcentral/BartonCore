@@ -371,7 +371,7 @@ function handleLocalTemperature(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_LOCAL_TEMP, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_LOCAL_TEMP, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -394,7 +394,7 @@ function handleHeatSetpoint(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_HEAT_SETPOINT, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_HEAT_SETPOINT, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -417,7 +417,7 @@ function handleCoolSetpoint(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_COOL_SETPOINT, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_COOL_SETPOINT, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -440,7 +440,7 @@ function handleAbsMinHeat(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_ABS_MIN_HEAT, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_ABS_MIN_HEAT, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -463,7 +463,7 @@ function handleAbsMaxHeat(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_ABS_MAX_HEAT, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_ABS_MAX_HEAT, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -486,7 +486,7 @@ function handleAbsMinCool(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_ABS_MIN_COOL, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_ABS_MIN_COOL, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -509,7 +509,7 @@ function handleAbsMaxCool(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_ABS_MAX_COOL, (neg ? '-' : '') + s)
+        .dataModel.updateResource(args.endpointId, RES_ABS_MAX_COOL, (neg ? '-' : '') + s)
         .success();
 }
 
@@ -538,7 +538,9 @@ function handleCtrlSeqOp(args) {
         return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
     }
 
-    return Sbmd.result().dataModel.updateResource(RES_CTRL_SEQ_OP, seq).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CTRL_SEQ_OP, seq)
+        .success();
 }
 
 /**
@@ -567,7 +569,9 @@ function handleSystemMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result().dataModel.updateResource(RES_SYSTEM_MODE, mode).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_SYSTEM_MODE, mode)
+        .success();
 }
 
 /**
@@ -589,7 +593,9 @@ function handleRunningState(args) {
         state = 'cooling';
     }
 
-    return Sbmd.result().dataModel.updateResource(RES_SYSTEM_STATE, state).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_SYSTEM_STATE, state)
+        .success();
 }
 
 /**
@@ -618,7 +624,9 @@ function handleFanMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result().dataModel.updateResource(RES_FAN_MODE, mode).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_FAN_MODE, mode)
+        .success();
 }
 
 /**
@@ -633,6 +641,6 @@ function handleFanPercentCurrent(args) {
     }
 
     return Sbmd.result()
-        .dataModel.updateResource(RES_FAN_ON, String(value !== 0))
+        .dataModel.updateResource(args.endpointId, RES_FAN_ON, String(value !== 0))
         .success();
 }
