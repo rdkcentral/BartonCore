@@ -153,6 +153,10 @@ SbmdDriver({
             handler: function(args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for LockState');
+                }
+
                 // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
                 var isLocked = value === 1;
 
