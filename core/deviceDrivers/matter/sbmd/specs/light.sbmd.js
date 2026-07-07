@@ -107,7 +107,7 @@ SbmdDriver({
                 isOn: {
                     type: 'boolean',
                     modes: ['read', 'write'],
-                    prerequisites: ['onOff'],
+                    prerequisites: [CL_ON_OFF],
 
                     write: function(args) {
                         var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
@@ -121,7 +121,7 @@ SbmdDriver({
                     type: 'com.icontrol.lightLevel',
                     optional: true,
                     modes: ['read', 'write'],
-                    prerequisites: ['currentLevel'],
+                    prerequisites: [CL_LEVEL],
 
                     write: function(args) {
                         var percent = parseInt(args.resource.input, 10);
