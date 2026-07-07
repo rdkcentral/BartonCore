@@ -77,24 +77,31 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleHumidity: {
-            aliases: ['humidityMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                // 0xFFFF: Matter null for uint16 MeasuredValue
-                if (value === null || value === 0xFFFF) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                // Matter humidity is in hundredths of percent, convert to whole percent
-                var percent = Math.round(value / 100);
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_HUMIDITY, percent.toString())
-                    .success();
-            }
-        }
+        handleHumidity: { aliases: ['humidityMeasuredValue'], handler: handleHumidity }
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Maps Matter RelativeHumidity MeasuredValue (uint16 hundredths of a percent,
+ * cluster 0x0405) to the Barton humidity resource as a whole percent.
+ */
+function handleHumidity(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // 0xFFFF: Matter null for uint16 MeasuredValue
+    if (value === null || value === 0xFFFF) {
+        return Sbmd.result()
+            .error('TLV decode failed for MeasuredValue');
+    }
+
+    // Matter humidity is in hundredths of percent, convert to whole percent
+    var percent = Math.round(value / 100);
+
+    return Sbmd.result()
+        .dataModel.updateResource(RES_HUMIDITY, percent.toString())
+        .success();
+}

@@ -109,12 +109,7 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_ON_OFF],
 
-                    write: function(args) {
-                        var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_ON_OFF, commandId);
-                    },
+                    write: writeIsOn,
                 },
 
                 currentLevel: {
@@ -123,69 +118,95 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_LEVEL],
 
-                    write: function(args) {
-                        var percent = parseInt(args.resource.input, 10);
-
-                        if (isNaN(percent)) {
-                            percent = 0;
-                        }
-
-                        if (percent < 0) {
-                            percent = 0;
-                        }
-
-                        if (percent > 100) {
-                            percent = 100;
-                        }
-
-                        // Convert percentage (0-100) to Matter level (0-254)
-                        var level = Math.round(percent / 100 * 254);
-
-                        var cmdArgs = {
-                            Level: level,
-                            TransitionTime: 0,
-                            OptionsMask: 0,
-                            OptionsOverride: 0,
-                        };
-                        var schema = {
-                            Level: { tag: 0, type: 'uint8' },
-                            TransitionTime: { tag: 1, type: 'uint16' },
-                            OptionsMask: { tag: 2, type: 'uint8' },
-                            OptionsOverride: { tag: 3, type: 'uint8' },
-                        };
-                        var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
-                    },
+                    write: writeCurrentLevel,
                 },
             },
         },
     },
 
     attributeHandlers: {
-        handleOnOff: {
-            aliases: ['onOff'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-                var isOn = (value === true) ? 'true' : 'false';
-
-                return Sbmd.result()
-                    .dataModel.updateResource(args.endpointId, RES_IS_ON, isOn)
-                    .success();
-            },
-        },
-
-        handleCurrentLevel: {
-            aliases: ['currentLevel'],
-            handler: function(args) {
-                var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-                var percent = Math.round(level / 254 * 100);
-
-                return Sbmd.result()
-                    .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
-                    .success();
-            },
-        },
+        handleOnOff: { aliases: ['onOff'], handler: handleOnOff },
+        handleCurrentLevel: { aliases: ['currentLevel'], handler: handleCurrentLevel },
     },
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Writes the Barton isOn value to the Matter On/Off cluster (0x0006) by
+ * invoking the On or Off command.
+ */
+function writeIsOn(args) {
+    var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
+
+    return Sbmd.result()
+        .device.sendCommand(CL_ON_OFF, commandId);
+}
+
+/**
+ * Writes the Barton currentLevel percent (0-100) to the Matter Level Control
+ * cluster (0x0008) via MoveToLevelWithOnOff, converting percent to a Matter
+ * level (0-254). Clamps out-of-range input to 0-100.
+ */
+function writeCurrentLevel(args) {
+    var percent = parseInt(args.resource.input, 10);
+
+    if (isNaN(percent)) {
+        percent = 0;
+    }
+
+    if (percent < 0) {
+        percent = 0;
+    }
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    // Convert percentage (0-100) to Matter level (0-254)
+    var level = Math.round(percent / 100 * 254);
+
+    var cmdArgs = {
+        Level: level,
+        TransitionTime: 0,
+        OptionsMask: 0,
+        OptionsOverride: 0,
+    };
+    var schema = {
+        Level: { tag: 0, type: 'uint8' },
+        TransitionTime: { tag: 1, type: 'uint16' },
+        OptionsMask: { tag: 2, type: 'uint8' },
+        OptionsOverride: { tag: 3, type: 'uint8' },
+    };
+    var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
+
+    return Sbmd.result()
+        .device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
+}
+
+/**
+ * Maps Matter OnOff (bool, cluster 0x0006) reports to the Barton isOn resource.
+ */
+function handleOnOff(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+    var isOn = (value === true) ? 'true' : 'false';
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_IS_ON, isOn)
+        .success();
+}
+
+/**
+ * Maps Matter CurrentLevel (uint8 0-254, cluster 0x0008) reports to the Barton
+ * currentLevel resource as a percent (0-100).
+ */
+function handleCurrentLevel(args) {
+    var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+    var percent = Math.round(level / 254 * 100);
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
+        .success();
+}
