@@ -46,7 +46,7 @@ SbmdDriver({
 
     matter: {
         deviceTypes: [0x0015],
-        revision: 1
+        revision: 2
     },
 
     reporting: {
