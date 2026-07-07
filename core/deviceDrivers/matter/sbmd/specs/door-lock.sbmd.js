@@ -85,10 +85,22 @@ SbmdDriver({
                     type: 'boolean',
                     modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK],
-                    seed: function(args) {
-                        return Sbmd.result()
-                            .dataModel.updateResource(RES_LOCKED, 'true')
-                            .success();
+                    seed: {
+                        supplements: {
+                            attributes: ['lockState']
+                        },
+                        handler: function(args) {
+                            var tlvBase64 = args.supplements.attributes.lockState;
+                            var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+
+                            // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
+                            // If the attribute is not yet cached, defaults to false (unlocked).
+                            var isLocked = value === 1;
+
+                            return Sbmd.result()
+                                .dataModel.updateResource(RES_LOCKED, isLocked ? 'true' : 'false')
+                                .success();
+                        }
                     }
                 },
                 lock: {
