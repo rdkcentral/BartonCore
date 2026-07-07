@@ -53,6 +53,7 @@ SbmdDriver({
         EP: '1',
         RES_LAST_COMMAND: 'lastCommand',
         RES_ECHO_DATA: 'echoData',
+        RES_STATUS: 'status',
     },
 
     barton: {
@@ -100,6 +101,15 @@ SbmdDriver({
                             .success();
                     },
                 },
+                status: {
+                    type: 'com.icontrol.string',
+                    modes: ['read'],
+                    seed: function(args) {
+                        return Sbmd.result()
+                            .dataModel.updateResource(EP, RES_STATUS, '0')
+                            .success();
+                    },
+                },
             },
         },
     },
@@ -109,7 +119,7 @@ SbmdDriver({
             aliases: ['testStatus'],
             handler: function(args) {
                 return Sbmd.result()
-                    .dataModel.updateResource(EP, 'status', String(args.attribute.value))
+                    .dataModel.updateResource(EP, RES_STATUS, String(args.attribute.value))
                     .success();
             },
         },
