@@ -105,7 +105,7 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleLockState: { aliases: ['lockState'], handler: handleLockState }
+        handleLockState: {aliases: ['lockState'], handler: handleLockState}
     }
 });
 
@@ -141,10 +141,9 @@ function executeLock(args) {
     var pinString = args.resource.input;
 
     // 0x01 = PIN credential, 0x80 = COTA
-    if (((featureMap & 0x81) === 0x81) &&
-        pinString && pinString.length > 0) {
+    if ((featureMap & 0x81) === 0x81 && pinString && pinString.length > 0) {
         var schema = {
-            PINCode: { tag: 0, type: 'octstr' }
+            PINCode: {tag: 0, type: 'octstr'}
         };
         var pinBytes = new Uint8Array(pinString.length);
 
@@ -152,11 +151,10 @@ function executeLock(args) {
             pinBytes[i] = pinString.charCodeAt(i);
         }
 
-        tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+        tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
     }
 
-    return Sbmd.result()
-        .device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, {timedInvokeTimeoutMs: 10000});
 }
 
 /**
@@ -170,10 +168,9 @@ function executeUnlock(args) {
     var pinString = args.resource.input;
 
     // 0x01 = PIN credential, 0x80 = COTA
-    if (((featureMap & 0x81) === 0x81) &&
-        pinString && pinString.length > 0) {
+    if ((featureMap & 0x81) === 0x81 && pinString && pinString.length > 0) {
         var schema = {
-            PINCode: { tag: 0, type: 'octstr' }
+            PINCode: {tag: 0, type: 'octstr'}
         };
         var pinBytes = new Uint8Array(pinString.length);
 
@@ -181,11 +178,10 @@ function executeUnlock(args) {
             pinBytes[i] = pinString.charCodeAt(i);
         }
 
-        tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
+        tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
     }
 
-    return Sbmd.result()
-        .device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, {timedInvokeTimeoutMs: 10000});
 }
 
 /**

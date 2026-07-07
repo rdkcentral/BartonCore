@@ -77,7 +77,7 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleTemperature: { aliases: ['tempMeasuredValue'], handler: handleTemperature }
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature}
     }
 });
 
@@ -94,11 +94,8 @@ function handleTemperature(args) {
 
     // -32768 (0x8000): Matter null for int16 MeasuredValue
     if (value === null || value === -32768) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_TEMPERATURE, value.toString()).success();
 }

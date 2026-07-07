@@ -77,7 +77,7 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleHumidity: { aliases: ['humidityMeasuredValue'], handler: handleHumidity }
+        handleHumidity: {aliases: ['humidityMeasuredValue'], handler: handleHumidity}
     }
 });
 
@@ -93,15 +93,12 @@ function handleHumidity(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
     // 0xFFFF: Matter null for uint16 MeasuredValue
-    if (value === null || value === 0xFFFF) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+    if (value === null || value === 0xffff) {
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
     // Matter humidity is in hundredths of percent, convert to whole percent
     var percent = Math.round(value / 100);
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_HUMIDITY, percent.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_HUMIDITY, percent.toString()).success();
 }

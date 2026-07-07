@@ -79,12 +79,12 @@ SbmdDriver({
     attributeHandlers: {
         handleStateValue: {
             aliases: ['stateValue'],
-            handler: function(args) {
+            handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
                 // StateValue=true means closed (not faulted)
                 return Sbmd.result()
-                    .dataModel.updateResource(RES_FAULTED, (value === true) ? 'false' : 'true')
+                    .dataModel.updateResource(RES_FAULTED, value === true ? 'false' : 'true')
                     .success();
             }
         }

@@ -227,18 +227,18 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleLocalTemperature: { aliases: ['localTemperature'], handler: handleLocalTemperature },
-        handleHeatSetpoint: { aliases: ['occupiedHeatingSetpoint'], handler: handleHeatSetpoint },
-        handleCoolSetpoint: { aliases: ['occupiedCoolingSetpoint'], handler: handleCoolSetpoint },
-        handleAbsMinHeat: { aliases: ['absMinHeat'], handler: handleAbsMinHeat },
-        handleAbsMaxHeat: { aliases: ['absMaxHeat'], handler: handleAbsMaxHeat },
-        handleAbsMinCool: { aliases: ['absMinCool'], handler: handleAbsMinCool },
-        handleAbsMaxCool: { aliases: ['absMaxCool'], handler: handleAbsMaxCool },
-        handleCtrlSeqOp: { aliases: ['ctrlSeqOp'], handler: handleCtrlSeqOp },
-        handleSystemMode: { aliases: ['systemMode'], handler: handleSystemMode },
-        handleRunningState: { aliases: ['runningState'], handler: handleRunningState },
-        handleFanMode: { aliases: ['fanMode'], handler: handleFanMode },
-        handleFanPercentCurrent: { aliases: ['fanPercentCurrent'], handler: handleFanPercentCurrent }
+        handleLocalTemperature: {aliases: ['localTemperature'], handler: handleLocalTemperature},
+        handleHeatSetpoint: {aliases: ['occupiedHeatingSetpoint'], handler: handleHeatSetpoint},
+        handleCoolSetpoint: {aliases: ['occupiedCoolingSetpoint'], handler: handleCoolSetpoint},
+        handleAbsMinHeat: {aliases: ['absMinHeat'], handler: handleAbsMinHeat},
+        handleAbsMaxHeat: {aliases: ['absMaxHeat'], handler: handleAbsMaxHeat},
+        handleAbsMinCool: {aliases: ['absMinCool'], handler: handleAbsMinCool},
+        handleAbsMaxCool: {aliases: ['absMaxCool'], handler: handleAbsMaxCool},
+        handleCtrlSeqOp: {aliases: ['ctrlSeqOp'], handler: handleCtrlSeqOp},
+        handleSystemMode: {aliases: ['systemMode'], handler: handleSystemMode},
+        handleRunningState: {aliases: ['runningState'], handler: handleRunningState},
+        handleFanMode: {aliases: ['fanMode'], handler: handleFanMode},
+        handleFanPercentCurrent: {aliases: ['fanPercentCurrent'], handler: handleFanPercentCurrent}
     }
 });
 
@@ -257,8 +257,7 @@ function writeHeatSetpoint(args) {
         return Sbmd.result().error('Invalid temperature value');
     }
 
-    return Sbmd.result()
-        .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_HEATING_SETPOINT, tlvBase64);
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_HEATING_SETPOINT, tlvBase64);
 }
 
 /**
@@ -272,8 +271,7 @@ function writeCoolSetpoint(args) {
         return Sbmd.result().error('Invalid temperature value');
     }
 
-    return Sbmd.result()
-        .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_COOLING_SETPOINT, tlvBase64);
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_COOLING_SETPOINT, tlvBase64);
 }
 
 /**
@@ -283,9 +281,12 @@ function writeCoolSetpoint(args) {
  */
 function writeControlSequenceOfOperation(args) {
     var seqValues = [
-        'coolingOnly', 'coolingWithReheat',
-        'heatingOnly', 'heatingWithReheat',
-        'coolingAndHeatingFourPipes', 'coolingAndHeatingFourPipesWithReheat'
+        'coolingOnly',
+        'coolingWithReheat',
+        'heatingOnly',
+        'heatingWithReheat',
+        'coolingAndHeatingFourPipes',
+        'coolingAndHeatingFourPipesWithReheat'
     ];
     var seqValue = -1;
 
@@ -302,8 +303,7 @@ function writeControlSequenceOfOperation(args) {
 
     var tlvBase64 = Sbmd.Tlv.encode(seqValue, 'enum8');
 
-    return Sbmd.result()
-        .device.writeAttribute(CL_THERMOSTAT, ATTR_CTRL_SEQ_OP, tlvBase64);
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_CTRL_SEQ_OP, tlvBase64);
 }
 
 /**
@@ -312,8 +312,12 @@ function writeControlSequenceOfOperation(args) {
  */
 function writeSystemMode(args) {
     var reverseModeMap = {
-        'off': 0, 'auto': 1, 'cool': 3,
-        'heat': 4, 'precooling': 6, 'fanOnly': 7
+        'off': 0,
+        'auto': 1,
+        'cool': 3,
+        'heat': 4,
+        'precooling': 6,
+        'fanOnly': 7
     };
     var modeValue = reverseModeMap[args.resource.input];
 
@@ -323,8 +327,7 @@ function writeSystemMode(args) {
 
     var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
 
-    return Sbmd.result()
-        .device.writeAttribute(CL_THERMOSTAT, ATTR_SYSTEM_MODE, tlvBase64);
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_SYSTEM_MODE, tlvBase64);
 }
 
 /**
@@ -333,7 +336,9 @@ function writeSystemMode(args) {
  */
 function writeFanMode(args) {
     var reverseModeMap = {
-        'off': 0, 'on': 4, 'auto': 5
+        'off': 0,
+        'on': 4,
+        'auto': 5
     };
     var modeValue = reverseModeMap[args.resource.input];
 
@@ -343,8 +348,7 @@ function writeFanMode(args) {
 
     var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
 
-    return Sbmd.result()
-        .device.writeAttribute(CL_FAN_CONTROL, ATTR_FAN_MODE, tlvBase64);
+    return Sbmd.result().device.writeAttribute(CL_FAN_CONTROL, ATTR_FAN_MODE, tlvBase64);
 }
 
 /**
@@ -521,9 +525,12 @@ function handleCtrlSeqOp(args) {
     }
 
     var seqValues = [
-        'coolingOnly', 'coolingWithReheat',
-        'heatingOnly', 'heatingWithReheat',
-        'coolingAndHeatingFourPipes', 'coolingAndHeatingFourPipesWithReheat'
+        'coolingOnly',
+        'coolingWithReheat',
+        'heatingOnly',
+        'heatingWithReheat',
+        'coolingAndHeatingFourPipes',
+        'coolingAndHeatingFourPipesWithReheat'
     ];
     var seq = seqValues[value];
 
@@ -531,9 +538,7 @@ function handleCtrlSeqOp(args) {
         return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_CTRL_SEQ_OP, seq)
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_CTRL_SEQ_OP, seq).success();
 }
 
 /**
@@ -548,8 +553,13 @@ function handleSystemMode(args) {
     }
 
     var modeMap = {
-        0: 'off', 1: 'auto', 3: 'cool',
-        4: 'heat', 5: 'heat', 6: 'precooling', 7: 'fanOnly'
+        0: 'off',
+        1: 'auto',
+        3: 'cool',
+        4: 'heat',
+        5: 'heat',
+        6: 'precooling',
+        7: 'fanOnly'
     };
     var mode = modeMap[value];
 
@@ -557,9 +567,7 @@ function handleSystemMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_SYSTEM_MODE, mode)
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_SYSTEM_MODE, mode).success();
 }
 
 /**
@@ -575,15 +583,13 @@ function handleRunningState(args) {
 
     var state = 'off';
 
-    if ((value & 0x0001) || (value & 0x0008)) {
+    if (value & 0x0001 || value & 0x0008) {
         state = 'heating';
-    } else if ((value & 0x0002) || (value & 0x0010)) {
+    } else if (value & 0x0002 || value & 0x0010) {
         state = 'cooling';
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_SYSTEM_STATE, state)
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_SYSTEM_STATE, state).success();
 }
 
 /**
@@ -599,7 +605,12 @@ function handleFanMode(args) {
 
     // FanMode: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto
     var modeMap = {
-        0: 'off', 1: 'on', 2: 'on', 3: 'on', 4: 'on', 5: 'auto'
+        0: 'off',
+        1: 'on',
+        2: 'on',
+        3: 'on',
+        4: 'on',
+        5: 'auto'
     };
     var mode = modeMap[value];
 
@@ -607,9 +618,7 @@ function handleFanMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_FAN_MODE, mode)
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_FAN_MODE, mode).success();
 }
 
 /**

@@ -135,11 +135,11 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleAirQuality: { aliases: ['airQualityValue'], handler: handleAirQuality },
-        handleTemperature: { aliases: ['tempMeasuredValue'], handler: handleTemperature },
-        handleHumidity: { aliases: ['humidityMeasuredValue'], handler: handleHumidity },
-        handleCO2: { aliases: ['co2MeasuredValue'], handler: handleCO2 },
-        handlePM25: { aliases: ['pm25MeasuredValue'], handler: handlePM25 }
+        handleAirQuality: {aliases: ['airQualityValue'], handler: handleAirQuality},
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature},
+        handleHumidity: {aliases: ['humidityMeasuredValue'], handler: handleHumidity},
+        handleCO2: {aliases: ['co2MeasuredValue'], handler: handleCO2},
+        handlePM25: {aliases: ['pm25MeasuredValue'], handler: handlePM25}
     }
 });
 
@@ -170,13 +170,10 @@ function handleTemperature(args) {
 
     // -32768 (0x8000): Matter null for int16 MeasuredValue
     if (value === null || value === -32768) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_TEMPERATURE, value.toString()).success();
 }
 
 /**
@@ -187,16 +184,13 @@ function handleHumidity(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
     // 0xFFFF: Matter null for uint16 MeasuredValue
-    if (value === null || value === 0xFFFF) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+    if (value === null || value === 0xffff) {
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
     var percent = Math.round(value / 100);
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_HUMIDITY, percent.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_HUMIDITY, percent.toString()).success();
 }
 
 /**
@@ -211,9 +205,7 @@ function handleCO2(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_CO2, Math.round(value).toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_CO2, Math.round(value).toString()).success();
 }
 
 /**
@@ -228,7 +220,5 @@ function handlePM25(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_PM25, value.toFixed(1))
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_PM25, value.toFixed(1)).success();
 }

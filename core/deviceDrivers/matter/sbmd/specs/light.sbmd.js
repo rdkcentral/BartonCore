@@ -53,54 +53,54 @@ SbmdDriver({
 
         // Resources
         RES_IS_ON: 'isOn',
-        RES_CURRENT_LEVEL: 'currentLevel',
+        RES_CURRENT_LEVEL: 'currentLevel'
     },
 
     barton: {
         deviceClass: 'light',
-        deviceClassVersion: 0,
+        deviceClassVersion: 0
     },
 
     matter: {
         deviceTypes: [
-            0x0100,  // On/Off Light
-            0x010a,  // On/Off Plug-in Unit
-            0x0101,  // Dimmable Light
-            0x010b,  // Dimmable Plug-in Unit
-            0x0102,  // Color Dimmable Light
-            0x0200,  // Color Dimmable Light (alternate)
-            0x010d,  // Extended Color Light
-            0x0210,  // Extended Color Light (alternate)
-            0x010c,  // Color Temperature Light
-            0x0220,  // Color Temperature Light (alternate)
-            0x0103,  // On/Off Light Switch
-            0x0104,  // Dimmable Light Switch
-            0x0105,  // Color Dimmable Light Switch
+            0x0100, // On/Off Light
+            0x010a, // On/Off Plug-in Unit
+            0x0101, // Dimmable Light
+            0x010b, // Dimmable Plug-in Unit
+            0x0102, // Color Dimmable Light
+            0x0200, // Color Dimmable Light (alternate)
+            0x010d, // Extended Color Light
+            0x0210, // Extended Color Light (alternate)
+            0x010c, // Color Temperature Light
+            0x0220, // Color Temperature Light (alternate)
+            0x0103, // On/Off Light Switch
+            0x0104, // Dimmable Light Switch
+            0x0105 // Color Dimmable Light Switch
         ],
         revision: 1,
-        featureClusters: [],
+        featureClusters: []
     },
 
     reporting: {
         minSecs: 1,
-        maxSecs: 3600,
+        maxSecs: 3600
     },
 
     aliases: {
         onOff: {
             clusterId: CL_ON_OFF,
             attributeId: ATTR_ON_OFF,
-            type: 'bool',
+            type: 'bool'
         },
         currentLevel: {
             clusterId: CL_LEVEL,
             attributeId: ATTR_CURRENT_LEVEL,
-            type: 'uint8',
-        },
+            type: 'uint8'
+        }
     },
 
     endpoints: {
-        "1": {
+        '1': {
             profile: 'light',
             profileVersion: 0,
             resources: {
@@ -109,7 +109,7 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_ON_OFF],
 
-                    write: writeIsOn,
+                    write: writeIsOn
                 },
 
                 currentLevel: {
@@ -118,16 +118,16 @@ SbmdDriver({
                     modes: ['read', 'write'],
                     prerequisites: [CL_LEVEL],
 
-                    write: writeCurrentLevel,
-                },
-            },
-        },
+                    write: writeCurrentLevel
+                }
+            }
+        }
     },
 
     attributeHandlers: {
-        handleOnOff: { aliases: ['onOff'], handler: handleOnOff },
-        handleCurrentLevel: { aliases: ['currentLevel'], handler: handleCurrentLevel },
-    },
+        handleOnOff: {aliases: ['onOff'], handler: handleOnOff},
+        handleCurrentLevel: {aliases: ['currentLevel'], handler: handleCurrentLevel}
+    }
 });
 
 // =============================================================================
@@ -139,10 +139,9 @@ SbmdDriver({
  * invoking the On or Off command.
  */
 function writeIsOn(args) {
-    var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
+    var commandId = args.resource.input === 'true' ? CMD_ON : CMD_OFF;
 
-    return Sbmd.result()
-        .device.sendCommand(CL_ON_OFF, commandId);
+    return Sbmd.result().device.sendCommand(CL_ON_OFF, commandId);
 }
 
 /**
@@ -166,24 +165,23 @@ function writeCurrentLevel(args) {
     }
 
     // Convert percentage (0-100) to Matter level (0-254)
-    var level = Math.round(percent / 100 * 254);
+    var level = Math.round((percent / 100) * 254);
 
     var cmdArgs = {
         Level: level,
         TransitionTime: 0,
         OptionsMask: 0,
-        OptionsOverride: 0,
+        OptionsOverride: 0
     };
     var schema = {
-        Level: { tag: 0, type: 'uint8' },
-        TransitionTime: { tag: 1, type: 'uint16' },
-        OptionsMask: { tag: 2, type: 'uint8' },
-        OptionsOverride: { tag: 3, type: 'uint8' },
+        Level: {tag: 0, type: 'uint8'},
+        TransitionTime: {tag: 1, type: 'uint16'},
+        OptionsMask: {tag: 2, type: 'uint8'},
+        OptionsOverride: {tag: 3, type: 'uint8'}
     };
     var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
 
-    return Sbmd.result()
-        .device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
+    return Sbmd.result().device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
 }
 
 /**
@@ -191,11 +189,9 @@ function writeCurrentLevel(args) {
  */
 function handleOnOff(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-    var isOn = (value === true) ? 'true' : 'false';
+    var isOn = value === true ? 'true' : 'false';
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_IS_ON, isOn)
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_IS_ON, isOn).success();
 }
 
 /**
@@ -204,9 +200,7 @@ function handleOnOff(args) {
  */
 function handleCurrentLevel(args) {
     var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-    var percent = Math.round(level / 254 * 100);
+    var percent = Math.round((level / 254) * 100);
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString()).success();
 }

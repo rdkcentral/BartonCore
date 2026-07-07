@@ -47,7 +47,7 @@ SbmdDriver({
     },
 
     matter: {
-        vendorId: 0x117C,
+        vendorId: 0x117c,
         productId: 0x8005,
         deviceTypes: [0x0302, 0x0307]
     },
@@ -90,8 +90,8 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleTemperature: { aliases: ['tempMeasuredValue'], handler: handleTemperature },
-        handleHumidity: { aliases: ['humidityMeasuredValue'], handler: handleHumidity }
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature},
+        handleHumidity: {aliases: ['humidityMeasuredValue'], handler: handleHumidity}
     }
 });
 
@@ -108,13 +108,10 @@ function handleTemperature(args) {
 
     // -32768 (0x8000): Matter null for int16 MeasuredValue
     if (value === null || value === -32768) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(RES_TEMPERATURE, value.toString()).success();
 }
 
 /**
@@ -127,9 +124,8 @@ function handleHumidity(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
     // 0xFFFF: Matter null for uint16 MeasuredValue
-    if (value === null || value === 0xFFFF) {
-        return Sbmd.result()
-            .error('TLV decode failed for MeasuredValue');
+    if (value === null || value === 0xffff) {
+        return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
     // Matter humidity is in hundredths of percent, convert to whole percent
@@ -137,7 +133,5 @@ function handleHumidity(args) {
 
     // Explicit endpoint '1' because the humidity cluster is on device
     // endpoint 2 but the resource is registered on Barton endpoint 1
-    return Sbmd.result()
-        .dataModel.updateResource('1', RES_HUMIDITY, percent.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource('1', RES_HUMIDITY, percent.toString()).success();
 }
