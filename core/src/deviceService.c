@@ -2849,7 +2849,7 @@ void updateResource(const char *deviceUuid,
                    "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
                    __FUNCTION__,
                    deviceUuid,
-                   endpointId,
+                   stringCoalesce(endpointId),
                    resourceId,
                    newValue);
     }

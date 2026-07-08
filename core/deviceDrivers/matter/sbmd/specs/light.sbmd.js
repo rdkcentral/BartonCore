@@ -189,6 +189,11 @@ function writeCurrentLevel(args) {
  */
 function handleOnOff(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for OnOff');
+    }
+
     var isOn = value === true ? 'true' : 'false';
 
     return Sbmd.result().dataModel.updateResource(args.endpointId, RES_IS_ON, isOn).success();
@@ -200,6 +205,11 @@ function handleOnOff(args) {
  */
 function handleCurrentLevel(args) {
     var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (level === null) {
+        return Sbmd.result().error('TLV decode failed for CurrentLevel');
+    }
+
     var percent = Math.round((level / 254) * 100);
 
     return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString()).success();

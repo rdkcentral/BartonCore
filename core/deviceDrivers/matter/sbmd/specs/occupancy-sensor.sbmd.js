@@ -82,6 +82,10 @@ SbmdDriver({
             handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for Occupancy');
+                }
+
                 // Bit 0 of occupancy bitmap = occupied = faulted
                 var occupied = (value & 0x01) !== 0;
 

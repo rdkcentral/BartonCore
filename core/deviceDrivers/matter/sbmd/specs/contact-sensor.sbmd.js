@@ -82,6 +82,10 @@ SbmdDriver({
             handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for StateValue');
+                }
+
                 // StateValue=true means closed (not faulted)
                 return Sbmd.result()
                     .dataModel.updateResource(args.endpointId, RES_FAULTED, (value === true) ? 'false' : 'true')
