@@ -161,6 +161,8 @@ function handlePingCommand(args) {
 function handleWildcardCommand(args) {
     // Wildcard handler records the raw command ID
     return Sbmd.result()
+        .dataModel.updateResource(EP, RES_LAST_COMMAND, 'wildcard')
+        .dataModel.updateResource(EP, RES_ECHO_DATA, String(args.command.commandId))
         .log(
             'wildcard command: clusterId=' +
                 args.command.clusterId +
