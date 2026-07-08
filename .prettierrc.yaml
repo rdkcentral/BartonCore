@@ -30,9 +30,11 @@
 # as Prettier allows. IMPORTANT: Prettier cannot reproduce our Allman brace style
 # -- it always places the opening brace on the same line, and this is a
 # deliberate, non-configurable Prettier design decision. The options below match
-# everything else we control: 4-space indent, 120-column width, single quotes,
-# and no spacing inside object/container literals (mirrors clang-format's
-# SpacesInContainerLiterals: false).
+# everything else we control: 4-space indent, single quotes, and no spacing
+# inside object/container literals (mirrors clang-format's
+# SpacesInContainerLiterals: false). printWidth is 100 for JS -- intentionally
+# narrower than clang-format's 120-column limit -- so fluent Sbmd.result() chains
+# stay multiline instead of collapsing onto a single line.
 
 tabWidth: 4
 useTabs: false

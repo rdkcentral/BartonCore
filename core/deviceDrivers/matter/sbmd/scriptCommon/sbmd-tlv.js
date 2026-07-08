@@ -139,12 +139,14 @@
         // For sizes up to 4 bytes, use existing 32-bit logic.
         if (size <= 4) {
             var value = this.readUint(size);
-            // Sign extend if necessary
-            var signBit = 1 << (size * 8 - 1);
+            // Sign extend if necessary. Use Math.pow rather than "1 << n": JS
+            // bitwise shifts are modulo 32, so "1 << 32" (size == 4) would wrap
+            // to 1 and corrupt int32 sign extension.
+            var signBit = Math.pow(2, size * 8 - 1);
 
-            if (value & signBit) {
+            if (value >= signBit) {
                 // Negative number - sign extend
-                value = value - (1 << (size * 8));
+                value = value - Math.pow(2, size * 8);
             }
 
             return value;
