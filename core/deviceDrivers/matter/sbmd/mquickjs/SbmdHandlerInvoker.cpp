@@ -280,10 +280,10 @@ namespace barton
             {
                 const auto &ur = std::get<ResultOp::UpdateResource>(op.data);
 
-                // If the op names an endpoint explicitly, write there; otherwise fall back to the
-                // endpoint that triggered this handler. The fallback is the common case: most ops
-                // update a resource on the same endpoint that reported the change.
-                const char *epId = ur.endpoint.has_value() ? ur.endpoint->c_str() : hctx.endpointId.c_str();
+                // If the op names an endpoint, update that endpoint resource; otherwise the update
+                // targets a device-level resource (see updateResource: a null endpoint is the
+                // device root).
+                const char *epId = ur.endpoint.has_value() ? ur.endpoint->c_str() : nullptr;
 
                 cJSON *meta = nullptr;
 

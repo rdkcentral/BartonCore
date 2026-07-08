@@ -33,15 +33,12 @@
  * It is not part of the public API and is deleted after assembly.
  */
 
-(function(globalThis)
-{
+(function (globalThis) {
     'use strict';
 
-    globalThis.Sbmd =
-    {
+    globalThis.Sbmd = {
         _internal: {}
     };
-
 })(globalThis);
 
 // Export as a top-level var so mquickjs makes it visible as a global variable.

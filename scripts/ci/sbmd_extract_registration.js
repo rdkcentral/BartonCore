@@ -85,7 +85,7 @@ function extractConstants(src) {
             i += 2;
             while (i < src.length - 1 && !(src[i] === '*' && src[i + 1] === '/')) i++;
             i++;
-        } else if (ch === '\'' || ch === '"' || ch === '`') {
+        } else if (ch === "'" || ch === '"' || ch === '`') {
             const quote = ch;
             i++;
             while (i < src.length && src[i] !== quote) {
@@ -122,7 +122,9 @@ let captured = null;
 // Sbmd stub — all methods return the stub for chaining
 const sbmdStub = {};
 
-function returnStub() { return sbmdStub; }
+function returnStub() {
+    return sbmdStub;
+}
 
 sbmdStub.result = returnStub;
 sbmdStub.log = returnStub;
@@ -133,34 +135,36 @@ sbmdStub.Tlv = {
     encode: () => '',
     decode: () => null,
     encodeStruct: () => '',
-    emptyStruct: () => '',
+    emptyStruct: () => ''
 };
 
 sbmdStub.Base64 = {
     encode: () => '',
-    decode: () => [],
+    decode: () => []
 };
 
 sbmdStub.dataModel = {
     updateResource: returnStub,
-    setMetadata: returnStub,
+    setMetadata: returnStub
 };
 
 sbmdStub.device = {
     sendCommand: returnStub,
     requestCommand: returnStub,
     writeAttribute: returnStub,
-    readAttribute: returnStub,
+    readAttribute: returnStub
 };
 
 sbmdStub.storage = {
     setPersistentData: returnStub,
-    setTransientData: returnStub,
+    setTransientData: returnStub
 };
 
 // Build the sandbox context
 const sandbox = {
-    SbmdDriver: function(reg) { captured = reg; },
+    SbmdDriver: function (reg) {
+        captured = reg;
+    },
     Sbmd: sbmdStub,
     Uint8Array: Uint8Array,
     parseInt: parseInt,
@@ -173,7 +177,7 @@ const sandbox = {
     Number: Number,
     Array: Array,
     Object: Object,
-    console: console,
+    console: console
 };
 
 // Inject constants
@@ -184,7 +188,7 @@ for (const [name, value] of Object.entries(constants)) {
 const context = vm.createContext(sandbox);
 
 try {
-    vm.runInContext(source, context, { filename: path.basename(specPath) });
+    vm.runInContext(source, context, {filename: path.basename(specPath)});
 } catch (e) {
     process.stderr.write('ERROR: Failed to evaluate ' + specPath + ': ' + e.message + '\n');
     process.exit(1);
@@ -199,11 +203,15 @@ if (captured === null) {
 // Serialise to JSON (functions → true)
 // ---------------------------------------------------------------------------
 
-const json = JSON.stringify(captured, function(key, value) {
-    if (typeof value === 'function') {
-        return true;
-    }
-    return value;
-}, 2);
+const json = JSON.stringify(
+    captured,
+    function (key, value) {
+        if (typeof value === 'function') {
+            return true;
+        }
+        return value;
+    },
+    2
+);
 
 process.stdout.write(json + '\n');

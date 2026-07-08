@@ -42,21 +42,17 @@
  * operations after a terminal has been set, the builder throws.
  */
 
-(function(Sbmd)
-{
+(function (Sbmd) {
     'use strict';
 
-    function ResultBuilder()
-    {
+    function ResultBuilder() {
         this._ops = [];
         this._terminal = null;
         this._sealed = false;
     }
 
-    ResultBuilder.prototype._addOp = function(op)
-    {
-        if (this._sealed)
-        {
+    ResultBuilder.prototype._addOp = function (op) {
+        if (this._sealed) {
             throw new Error('Cannot add operations after a terminal');
         }
 
@@ -65,39 +61,33 @@
         return this;
     };
 
-    ResultBuilder.prototype._setTerminal = function(terminal)
-    {
-        if (this._sealed)
-        {
+    ResultBuilder.prototype._setTerminal = function (terminal) {
+        if (this._sealed) {
             throw new Error('Cannot add operations after a terminal');
         }
 
         this._terminal = terminal;
         this._sealed = true;
 
-        return { ops: this._ops, terminal: this._terminal };
+        return {ops: this._ops, terminal: this._terminal};
     };
 
-    ResultBuilder.prototype.log = function(message)
-    {
-        return this._addOp({ op: 'log', message: message });
+    ResultBuilder.prototype.log = function (message) {
+        return this._addOp({op: 'log', message: message});
     };
 
-    ResultBuilder.prototype.success = function(value)
-    {
-        var terminal = { op: 'success' };
+    ResultBuilder.prototype.success = function (value) {
+        var terminal = {op: 'success'};
 
-        if (value !== undefined)
-        {
+        if (value !== undefined) {
             terminal.value = value;
         }
 
         return this._setTerminal(terminal);
     };
 
-    ResultBuilder.prototype.error = function(message)
-    {
-        return this._setTerminal({ op: 'error', message: message });
+    ResultBuilder.prototype.error = function (message) {
+        return this._setTerminal({op: 'error', message: message});
     };
 
     /**
@@ -106,31 +96,25 @@
      * Each method returns the builder for further chaining.
      */
     Object.defineProperty(ResultBuilder.prototype, 'dataModel', {
-        get: function()
-        {
+        get: function () {
             var builder = this;
 
             return {
                 /**
                  * Update a Barton resource value.
-                 * 2-arg: updateResource(resource, value) — uses trigger endpoint
+                 * 2-arg: updateResource(resource, value) — device-level resource
                  * 3-arg: updateResource(endpoint, resource, value)
                  * 4-arg: updateResource(endpoint, resource, value, options)
                  */
-                updateResource: function(a, b, c, d)
-                {
+                updateResource: function (a, b, c, d) {
                     var op;
 
-                    if (c === undefined)
-                    {
-                        op = { op: 'updateResource', resource: a, value: b };
-                    }
-                    else
-                    {
-                        op = { op: 'updateResource', endpoint: a, resource: b, value: c };
+                    if (c === undefined) {
+                        op = {op: 'updateResource', resource: a, value: b};
+                    } else {
+                        op = {op: 'updateResource', endpoint: a, resource: b, value: c};
 
-                        if (d !== undefined)
-                        {
+                        if (d !== undefined) {
                             op.metadata = JSON.stringify(d);
                         }
                     }
@@ -143,8 +127,7 @@
                  * @param {string} name - Metadata key
                  * @param {string} value - Metadata value
                  */
-                setMetadata: function(name, value)
-                {
+                setMetadata: function (name, value) {
                     return builder._addOp({
                         op: 'setMetadata',
                         name: name,
@@ -159,13 +142,11 @@
      * storage namespace — persistent and transient data operations.
      */
     Object.defineProperty(ResultBuilder.prototype, 'storage', {
-        get: function()
-        {
+        get: function () {
             var builder = this;
 
             return {
-                setPersistentData: function(key, value)
-                {
+                setPersistentData: function (key, value) {
                     return builder._addOp({
                         op: 'setPersistentData',
                         key: key,
@@ -173,8 +154,7 @@
                     });
                 },
 
-                setTransientData: function(key, value, ttlSecs)
-                {
+                setTransientData: function (key, value, ttlSecs) {
                     return builder._addOp({
                         op: 'setTransientData',
                         key: key,
@@ -192,8 +172,7 @@
      * requestCommand and readAttribute are deferred terminals (park the operation).
      */
     Object.defineProperty(ResultBuilder.prototype, 'device', {
-        get: function()
-        {
+        get: function () {
             var builder = this;
 
             return {
@@ -204,21 +183,18 @@
                  * @param {string} [tlvBase64] - Optional TLV payload
                  * @param {Object} [options] - endpointId, timedInvokeTimeoutMs
                  */
-                sendCommand: function(clusterId, commandId, tlvBase64, options)
-                {
+                sendCommand: function (clusterId, commandId, tlvBase64, options) {
                     var t = {
                         op: 'sendCommand',
                         clusterId: clusterId,
                         commandId: commandId
                     };
 
-                    if (tlvBase64 !== undefined)
-                    {
+                    if (tlvBase64 !== undefined) {
                         t.tlvBase64 = tlvBase64;
                     }
 
-                    if (options !== undefined)
-                    {
+                    if (options !== undefined) {
                         t.options = options;
                     }
 
@@ -232,8 +208,7 @@
                  * @param {string} tlvBase64
                  * @param {Object} [options] - endpointId
                  */
-                writeAttribute: function(clusterId, attributeId, tlvBase64, options)
-                {
+                writeAttribute: function (clusterId, attributeId, tlvBase64, options) {
                     var t = {
                         op: 'writeAttribute',
                         clusterId: clusterId,
@@ -241,8 +216,7 @@
                         tlvBase64: tlvBase64
                     };
 
-                    if (options !== undefined)
-                    {
+                    if (options !== undefined) {
                         t.options = options;
                     }
 
@@ -256,8 +230,7 @@
                  * @param {string|null} [payload] - Base64-encoded TLV payload
                  * @param {Object} options - { responseCommandId, onResponse, onError, timeoutMs, endpointId, timedInvokeTimeoutMs }
                  */
-                requestCommand: function(clusterId, commandId, payload, options)
-                {
+                requestCommand: function (clusterId, commandId, payload, options) {
                     var opts = options || payload;
                     var tlv = options ? payload : undefined;
 
@@ -268,55 +241,45 @@
                         deferred: {}
                     };
 
-                    if (tlv !== undefined && tlv !== null)
-                    {
+                    if (tlv !== undefined && tlv !== null) {
                         t.tlvBase64 = tlv;
                     }
 
-                    if (opts !== undefined && opts !== null)
-                    {
-                        if (opts.responseCommandId !== undefined)
-                        {
+                    if (opts !== undefined && opts !== null) {
+                        if (opts.responseCommandId !== undefined) {
                             t.deferred.responseCommandId = opts.responseCommandId;
                         }
 
-                        if (opts.onResponse !== undefined)
-                        {
+                        if (opts.onResponse !== undefined) {
                             t.deferred.onResponse = opts.onResponse;
                         }
 
-                        if (opts.onError !== undefined)
-                        {
+                        if (opts.onError !== undefined) {
                             t.deferred.onError = opts.onError;
                         }
 
-                        if (opts.timeoutMs !== undefined)
-                        {
+                        if (opts.timeoutMs !== undefined) {
                             t.deferred.timeoutMs = opts.timeoutMs;
                         }
 
-                        if (opts.context !== undefined)
-                        {
+                        if (opts.context !== undefined) {
                             t.deferred.context = opts.context;
                         }
 
                         var cmdOpts = {};
                         var hasCmdOpts = false;
 
-                        if (opts.endpointId !== undefined)
-                        {
+                        if (opts.endpointId !== undefined) {
                             cmdOpts.endpointId = opts.endpointId;
                             hasCmdOpts = true;
                         }
 
-                        if (opts.timedInvokeTimeoutMs !== undefined)
-                        {
+                        if (opts.timedInvokeTimeoutMs !== undefined) {
                             cmdOpts.timedInvokeTimeoutMs = opts.timedInvokeTimeoutMs;
                             hasCmdOpts = true;
                         }
 
-                        if (hasCmdOpts)
-                        {
+                        if (hasCmdOpts) {
                             t.options = cmdOpts;
                         }
                     }
@@ -330,8 +293,7 @@
                  * @param {number} attributeId
                  * @param {Object} options - { onResponse, onError, timeoutMs, endpointId }
                  */
-                readAttribute: function(clusterId, attributeId, options)
-                {
+                readAttribute: function (clusterId, attributeId, options) {
                     var t = {
                         op: 'readAttribute',
                         clusterId: clusterId,
@@ -339,31 +301,25 @@
                         deferred: {}
                     };
 
-                    if (options !== undefined)
-                    {
-                        if (options.onResponse !== undefined)
-                        {
+                    if (options !== undefined) {
+                        if (options.onResponse !== undefined) {
                             t.deferred.onResponse = options.onResponse;
                         }
 
-                        if (options.onError !== undefined)
-                        {
+                        if (options.onError !== undefined) {
                             t.deferred.onError = options.onError;
                         }
 
-                        if (options.timeoutMs !== undefined)
-                        {
+                        if (options.timeoutMs !== undefined) {
                             t.deferred.timeoutMs = options.timeoutMs;
                         }
 
-                        if (options.context !== undefined)
-                        {
+                        if (options.context !== undefined) {
                             t.deferred.context = options.context;
                         }
 
-                        if (options.endpointId !== undefined)
-                        {
-                            t.options = { endpointId: options.endpointId };
+                        if (options.endpointId !== undefined) {
+                            t.options = {endpointId: options.endpointId};
                         }
                     }
 
@@ -373,12 +329,10 @@
         }
     });
 
-    function createResultBuilder()
-    {
+    function createResultBuilder() {
         return new ResultBuilder();
     }
 
     // Attach result builder to Sbmd namespace
     Sbmd.result = createResultBuilder;
-
 })(globalThis.Sbmd);
