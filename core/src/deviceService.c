@@ -2851,7 +2851,7 @@ void updateResource(const char *deviceUuid,
                    deviceUuid,
                    stringCoalesce(endpointId),
                    resourceId,
-                   newValue);
+                   stringCoalesce(newValue));
     }
 
     icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);
