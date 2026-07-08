@@ -112,7 +112,8 @@ SbmdDriver({
         handleStatus: {
             aliases: ['testStatus'],
             handler: function (args) {
-                return Sbmd.result().dataModel.updateResource(EP, RES_STATUS, String(args.attribute.value)).success();
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+                return Sbmd.result().dataModel.updateResource(EP, RES_STATUS, String(value)).success();
             }
         }
     },

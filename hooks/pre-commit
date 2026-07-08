@@ -23,9 +23,9 @@
 #
 # ------------------------------ tabstop = 4 ----------------------------------
 
-MY_DIR=$(realpath $(dirname $0))
-
 set -e
+
+MY_DIR=$(realpath "$(dirname "$0")")
 
 # Runs all pre-commit hooks
 

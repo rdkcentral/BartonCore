@@ -694,6 +694,13 @@
          */
         decode: function(base64)
         {
+            // A missing or empty payload (e.g. an attribute report that omits the
+            // TLV data) decodes to null rather than throwing.
+            if (base64 === undefined || base64 === null || base64 === '')
+            {
+                return null;
+            }
+
             var bytes = Base64.decode(base64);
             var reader = new TlvReader(bytes);
 
