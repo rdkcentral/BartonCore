@@ -1347,7 +1347,9 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
         // Default to standard when the property is unset or invalid.
         g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
         uint8_t commissioningFlowValue = b_core_property_provider_get_property_as_uint8(
-            propertyProvider, B_CORE_BARTON_MATTER_COMMISSIONING_FLOW, to_underlying(CommissioningFlow::kStandard));
+            propertyProvider,
+            B_CORE_BARTON_MATTER_COMMISSIONING_FLOW,
+            static_cast<uint8_t>(CommissioningFlow::kStandard));
 
         switch (static_cast<CommissioningFlow>(commissioningFlowValue))
         {
