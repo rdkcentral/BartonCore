@@ -212,5 +212,7 @@ function handleCurrentLevel(args) {
 
     var percent = Math.round((level / 254) * 100);
 
-    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
+        .success();
 }

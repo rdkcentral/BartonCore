@@ -94,7 +94,7 @@ function handleHumidity(args) {
 
     // 0xFFFF: Matter null for uint16 MeasuredValue
     if (value === null || value === 0xffff) {
-        return Sbmd.result().error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('MeasuredValue unavailable');
     }
 
     // Matter humidity is in hundredths of percent, convert to whole percent

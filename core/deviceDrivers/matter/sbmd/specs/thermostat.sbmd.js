@@ -257,7 +257,11 @@ function writeHeatSetpoint(args) {
         return Sbmd.result().error('Invalid temperature value');
     }
 
-    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_HEATING_SETPOINT, tlvBase64);
+    return Sbmd.result().device.writeAttribute(
+        CL_THERMOSTAT,
+        ATTR_OCCUPIED_HEATING_SETPOINT,
+        tlvBase64
+    );
 }
 
 /**
@@ -271,7 +275,11 @@ function writeCoolSetpoint(args) {
         return Sbmd.result().error('Invalid temperature value');
     }
 
-    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_COOLING_SETPOINT, tlvBase64);
+    return Sbmd.result().device.writeAttribute(
+        CL_THERMOSTAT,
+        ATTR_OCCUPIED_COOLING_SETPOINT,
+        tlvBase64
+    );
 }
 
 /**
@@ -538,9 +546,7 @@ function handleCtrlSeqOp(args) {
         return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_CTRL_SEQ_OP, seq)
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CTRL_SEQ_OP, seq).success();
 }
 
 /**
@@ -569,9 +575,7 @@ function handleSystemMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_SYSTEM_MODE, mode)
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_SYSTEM_MODE, mode).success();
 }
 
 /**
@@ -624,9 +628,7 @@ function handleFanMode(args) {
         mode = 'unknown';
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_FAN_MODE, mode)
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_FAN_MODE, mode).success();
 }
 
 /**

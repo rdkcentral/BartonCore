@@ -87,21 +87,27 @@ SbmdDriver({
                     type: 'com.icontrol.string',
                     modes: ['read'],
                     seed: function (args) {
-                        return Sbmd.result().dataModel.updateResource(EP, RES_LAST_COMMAND, 'none').success();
+                        return Sbmd.result()
+                            .dataModel.updateResource(EP, RES_LAST_COMMAND, 'none')
+                            .success();
                     }
                 },
                 echoData: {
                     type: 'com.icontrol.string',
                     modes: ['read'],
                     seed: function (args) {
-                        return Sbmd.result().dataModel.updateResource(EP, RES_ECHO_DATA, '').success();
+                        return Sbmd.result()
+                            .dataModel.updateResource(EP, RES_ECHO_DATA, '')
+                            .success();
                     }
                 },
                 status: {
                     type: 'com.icontrol.string',
                     modes: ['read'],
                     seed: function (args) {
-                        return Sbmd.result().dataModel.updateResource(EP, RES_STATUS, '0').success();
+                        return Sbmd.result()
+                            .dataModel.updateResource(EP, RES_STATUS, '0')
+                            .success();
                     }
                 }
             }
@@ -118,7 +124,9 @@ SbmdDriver({
                     return Sbmd.result().error('TLV decode failed for Status');
                 }
 
-                return Sbmd.result().dataModel.updateResource(EP, RES_STATUS, String(value)).success();
+                return Sbmd.result()
+                    .dataModel.updateResource(EP, RES_STATUS, String(value))
+                    .success();
             }
         }
     },
@@ -153,6 +161,11 @@ function handlePingCommand(args) {
 function handleWildcardCommand(args) {
     // Wildcard handler records the raw command ID
     return Sbmd.result()
-        .log('wildcard command: clusterId=' + args.command.clusterId + ' commandId=' + args.command.commandId)
+        .log(
+            'wildcard command: clusterId=' +
+                args.command.clusterId +
+                ' commandId=' +
+                args.command.commandId
+        )
         .success();
 }

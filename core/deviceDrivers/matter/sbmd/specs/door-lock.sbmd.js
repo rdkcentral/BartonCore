@@ -154,7 +154,9 @@ function executeLock(args) {
         tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
     }
 
-    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, {timedInvokeTimeoutMs: 10000});
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, {
+        timedInvokeTimeoutMs: 10000
+    });
 }
 
 /**
@@ -181,7 +183,9 @@ function executeUnlock(args) {
         tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
     }
 
-    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, {timedInvokeTimeoutMs: 10000});
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, {
+        timedInvokeTimeoutMs: 10000
+    });
 }
 
 /**

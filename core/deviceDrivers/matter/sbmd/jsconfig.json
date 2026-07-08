@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": false,
+        "module": "none",
+        "target": "ES2015",
+        "lib": ["ES2015"],
+        "noEmit": true
+    },
+    "include": ["specs/**/*.js", "scriptCommon/sbmd-script.d.ts"]
+}

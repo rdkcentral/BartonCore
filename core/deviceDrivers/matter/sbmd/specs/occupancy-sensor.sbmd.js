@@ -90,7 +90,11 @@ SbmdDriver({
                 var occupied = (value & 0x01) !== 0;
 
                 return Sbmd.result()
-                    .dataModel.updateResource(args.endpointId, RES_FAULTED, occupied ? 'true' : 'false')
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        occupied ? 'true' : 'false'
+                    )
                     .success();
             }
         }

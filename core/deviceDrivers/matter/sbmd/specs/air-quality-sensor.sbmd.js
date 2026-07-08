@@ -176,10 +176,12 @@ function handleTemperature(args) {
 
     // -32768 (0x8000): Matter null for int16 MeasuredValue
     if (value === null || value === -32768) {
-        return Sbmd.result().error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('MeasuredValue unavailable');
     }
 
-    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
+        .success();
 }
 
 /**
@@ -191,12 +193,14 @@ function handleHumidity(args) {
 
     // 0xFFFF: Matter null for uint16 MeasuredValue
     if (value === null || value === 0xffff) {
-        return Sbmd.result().error('TLV decode failed for MeasuredValue');
+        return Sbmd.result().error('MeasuredValue unavailable');
     }
 
     var percent = Math.round(value / 100);
 
-    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString())
+        .success();
 }
 
 /**
@@ -211,7 +215,9 @@ function handleCO2(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CO2, Math.round(value).toString()).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CO2, Math.round(value).toString())
+        .success();
 }
 
 /**
@@ -226,5 +232,7 @@ function handlePM25(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_PM25, value.toFixed(1)).success();
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_PM25, value.toFixed(1))
+        .success();
 }
