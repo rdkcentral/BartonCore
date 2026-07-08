@@ -25,7 +25,7 @@
 
 # Installs git commit hooks.
 
-MY_DIR=$(realpath $(dirname $0))
+MY_DIR=$(realpath "$(dirname "$0")")
 TOP_DIR=${MY_DIR}/..
 
 # Resolve the hooks directory via git rather than assuming ${TOP_DIR}/.git/hooks.
@@ -33,9 +33,16 @@ TOP_DIR=${MY_DIR}/..
 # the hardcoded path does not exist. "git rev-parse --git-path hooks" returns the
 # effective (shared) hooks directory in both a normal clone and a worktree.
 # Resolve it to an absolute path (git may return one relative to ${TOP_DIR}) so
-# the copies below work regardless of the caller's current directory.
-HOOKS_DIR=$(cd "${TOP_DIR}" && realpath -m "$(git rev-parse --git-path hooks)")
+# the copies below work regardless of the caller's current directory. Avoid
+# "realpath -m" (a GNU extension not available on e.g. macOS): make the path
+# absolute manually, create it, then resolve it with plain realpath.
+HOOKS_DIR=$(cd "${TOP_DIR}" && git rev-parse --git-path hooks)
+case "${HOOKS_DIR}" in
+    /*) ;;
+    *) HOOKS_DIR="${TOP_DIR}/${HOOKS_DIR}" ;;
+esac
 mkdir -p "${HOOKS_DIR}"
+HOOKS_DIR=$(realpath "${HOOKS_DIR}")
 
 HOOKS_SUPPORTED=(pre-commit post-checkout)
 

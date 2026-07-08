@@ -113,6 +113,11 @@ SbmdDriver({
             aliases: ['testStatus'],
             handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for Status');
+                }
+
                 return Sbmd.result().dataModel.updateResource(EP, RES_STATUS, String(value)).success();
             }
         }

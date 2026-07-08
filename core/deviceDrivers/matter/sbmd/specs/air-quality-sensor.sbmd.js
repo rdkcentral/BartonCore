@@ -154,6 +154,12 @@ SbmdDriver({
  */
 function handleAirQuality(args) {
     var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // No update when the measurement is unavailable (null)
+    if (value === null) {
+        return Sbmd.result().success();
+    }
+
     var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
 
     return Sbmd.result()
@@ -173,9 +179,7 @@ function handleTemperature(args) {
         return Sbmd.result().error('TLV decode failed for MeasuredValue');
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString()).success();
 }
 
 /**
@@ -192,9 +196,7 @@ function handleHumidity(args) {
 
     var percent = Math.round(value / 100);
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString()).success();
 }
 
 /**
@@ -209,9 +211,7 @@ function handleCO2(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_CO2, Math.round(value).toString())
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CO2, Math.round(value).toString()).success();
 }
 
 /**
@@ -226,7 +226,5 @@ function handlePM25(args) {
         return Sbmd.result().success();
     }
 
-    return Sbmd.result()
-        .dataModel.updateResource(args.endpointId, RES_PM25, value.toFixed(1))
-        .success();
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_PM25, value.toFixed(1)).success();
 }

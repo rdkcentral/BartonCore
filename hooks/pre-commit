@@ -30,7 +30,7 @@ MY_DIR=$(realpath "$(dirname "$0")")
 # Runs all pre-commit hooks
 
 # C/C++: clang-format only the staged diff (hunks). See hooks/format-hooks.
-${MY_DIR}/pre-commit-clang-format
+"${MY_DIR}/pre-commit-clang-format"
 
 # JavaScript: Prettier formats staged *.js files via lint-staged.
-${MY_DIR}/pre-commit-lint-staged
+"${MY_DIR}/pre-commit-lint-staged"
