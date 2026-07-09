@@ -203,6 +203,11 @@ static void setDefaultParameters(BCoreInitializeParamsContainer *params)
         // 0x8001 unless defined in the custom DeviceConfig header (see src/include/platform/CHIPDeviceConfig.h).
         b_core_property_provider_set_property_uint16(propProvider, B_CORE_BARTON_MATTER_PRODUCT_ID, 0x8001);
 
+        // Commissioning flow advertised in the onboarding payload (QR code / manual setup code).
+        // 0 = Standard, 1 = User Action Required, 2 = Custom. Standard is used here; a product that
+        // requires a custom commissioning flow would set this to 2.
+        b_core_property_provider_set_property_uint8(propProvider, B_CORE_BARTON_MATTER_COMMISSIONING_FLOW, 0);
+
         b_core_property_provider_set_property_uint16(
             propProvider, B_CORE_BARTON_MATTER_HARDWARE_VERSION, 1);
 
