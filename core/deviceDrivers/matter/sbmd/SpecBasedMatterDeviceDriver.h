@@ -154,7 +154,7 @@ namespace barton
         std::string InvokeSeedHandler(const std::string &deviceId,
                                       const std::string &endpointId,
                                       const SbmdResource &resource,
-                                      MatterDevice *device = nullptr);
+                                      MatterDevice *device);
 
         /**
          * Find a resource by endpoint ID and resource ID.

@@ -569,6 +569,11 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 
     icDebug("Registering resources for device %s", device->uuid);
 
+    // Resolve the MatterDevice so seed handlers can prefetch declared supplements from the
+    // attribute cache. Without it InvokeSeedHandler skips the prefetch and a seed that reads
+    // args.supplements would see undefined.
+    auto matterDevice = GetDevice(device->uuid);
+
     std::map<std::string, icDeviceEndpoint *> icEndpoints; // endpoint id → created endpoint
 
     for (const auto &endpoint : reg.endpoints)
@@ -638,7 +643,7 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 
             if (resource.seed.has_value())
             {
-                seedValue = InvokeSeedHandler(device->uuid, endpoint.id, resource);
+                seedValue = InvokeSeedHandler(device->uuid, endpoint.id, resource, matterDevice.get());
 
                 if (!seedValue.empty())
                 {
