@@ -35,7 +35,9 @@ from testing.utils.barton_utils import (
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.requires_matterjs
+pytestmark = [
+    pytest.mark.requires_matterjs,
+]
 
 
 def _commission_door_lock(default_environment, matter_door_lock):
@@ -124,9 +126,10 @@ def test_sideband_lock_triggers_barton_update(
 def test_locked_resource_seeded_on_commission(default_environment, matter_door_lock):
     """Verify that the locked resource is seeded with the correct initial value at commission.
 
-    The virtual door lock starts in the locked state. The seedFrom mapper runs inside
-    DoRegisterResources (before DEVICE_ADDED fires), so the value is baked directly into
-    createEndpointResource. Verify by reading the resource value directly after commission.
+    The virtual door lock starts in the locked state. The seed handler runs inside
+    DoRegisterDriverResources (before DEVICE_ADDED fires), so the value is baked
+    directly into createEndpointResource. Verify by reading the resource value
+    directly after commission.
     """
 
     lock = _commission_door_lock(default_environment, matter_door_lock)
@@ -217,13 +220,14 @@ def test_locked_resource_seeded_on_synchronize(default_environment, matter_door_
 
 
 def test_locked_resource_updated_by_event(default_environment, matter_door_lock):
-    """Verify that the locked resource updates when a LockOperation event is received.
+    """Verify that the locked resource updates when the LockState attribute changes.
 
-    Confirm the initial seeded value via direct read (the seedFrom mapper runs inside
-    DoRegisterResources and bakes the value in without emitting RESOURCE_UPDATED), then
-    trigger sideband unlock and verify the resource transitions to "false" via the
-    LockOperation event. Then lock and verify "true".
+    Confirm the initial seeded value via direct read (the seed handler runs inside
+    DoRegisterDriverResources and bakes the value in without emitting RESOURCE_UPDATED),
+    then trigger sideband unlock and verify the resource transitions to "false" via the
+    LockState attribute subscription report. Then lock and verify "true".
     """
+
     lock = _commission_door_lock(default_environment, matter_door_lock)
     client = default_environment.get_client()
 
@@ -238,16 +242,16 @@ def test_locked_resource_updated_by_event(default_environment, matter_door_lock)
     # From here, use event-driven updates via RESOURCE_UPDATED.
     resource_updated_queue = resource_update_listener(client, "locked")
 
-    # Trigger sideband unlock — DoorLockDevice.js emits LockOperation (Unlock) event
+    # Trigger sideband unlock — the device's LockState attribute transitions to Unlocked
     result = matter_door_lock.sideband.send("unlock")
     assert result["lockState"] == "unlocked"
 
-    # Barton should receive a resource update driven by the LockOperation event
+    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "false", timeout=10)
 
-    # Trigger sideband lock — DoorLockDevice.js emits LockOperation (Lock) event
+    # Trigger sideband lock — the device's LockState attribute transitions to Locked
     result = matter_door_lock.sideband.send("lock")
     assert result["lockState"] == "locked"
 
-    # Barton should receive a resource update driven by the LockOperation event
+    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)

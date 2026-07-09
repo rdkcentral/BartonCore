@@ -134,7 +134,7 @@ namespace
     {
         FetchedSupplements fetched = SbmdHandlerInvoker::PrefetchSupplements(
             supplements, attrFetcher, resFetcher, persistFetcher, transientFetcher);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, fetched);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements, fetched);
     }
 
     class SbmdHandlerInvokerTest : public ::testing::Test
@@ -844,6 +844,126 @@ namespace
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
         EXPECT_EQ(g_updateResourceCalls[0].value, "was-null");
+    }
+
+    // ================================================================
+    // Declared-supplement contract: every DECLARED supplement key is
+    // always a defined JS property (its value, or null) at invocation --
+    // never undefined -- even when the prefetch was skipped or a fetch
+    // bug failed to populate it. These drive AddSupplements directly with
+    // a declaration plus empty/partial fetched data to isolate the
+    // contract from the prefetch phase.
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementsPresentWhenPrefetchSkipped)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"lockState"};
+        declared.resources = {"1/locked"};
+        declared.persistentData = {"lastOp"};
+        declared.transientData = {"debounce"};
+
+        // Simulate the prefetch being skipped entirely (e.g. no device available):
+        // fetched is empty, yet every declared key must still be present as null.
+        FetchedSupplements empty;
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, empty);
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        ASSERT_FALSE(JS_IsUndefined(supObj));
+
+        JSValue attrs = JS_GetPropertyStr(Ctx(), supObj, "attributes");
+        ASSERT_FALSE(JS_IsUndefined(attrs));
+        JSValue lockState = JS_GetPropertyStr(Ctx(), attrs, "lockState");
+        EXPECT_FALSE(JS_IsUndefined(lockState));
+        EXPECT_TRUE(JS_IsNull(lockState));
+
+        JSValue res = JS_GetPropertyStr(Ctx(), supObj, "resources");
+        ASSERT_FALSE(JS_IsUndefined(res));
+        JSValue locked = JS_GetPropertyStr(Ctx(), res, "1/locked");
+        EXPECT_FALSE(JS_IsUndefined(locked));
+        EXPECT_TRUE(JS_IsNull(locked));
+
+        JSValue pd = JS_GetPropertyStr(Ctx(), supObj, "persistentData");
+        ASSERT_FALSE(JS_IsUndefined(pd));
+        JSValue lastOp = JS_GetPropertyStr(Ctx(), pd, "lastOp");
+        EXPECT_FALSE(JS_IsUndefined(lastOp));
+        EXPECT_TRUE(JS_IsNull(lastOp));
+
+        JSValue td = JS_GetPropertyStr(Ctx(), supObj, "transientData");
+        ASSERT_FALSE(JS_IsUndefined(td));
+        JSValue debounce = JS_GetPropertyStr(Ctx(), td, "debounce");
+        EXPECT_FALSE(JS_IsUndefined(debounce));
+        EXPECT_TRUE(JS_IsNull(debounce));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementsPresentWhenFetchDropsKey)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"present", "dropped"};
+
+        // Simulate a fetch bug: only one of the two declared keys made it into fetched.
+        FetchedSupplements fetched;
+        fetched.attributes.push_back({"present", std::string("AQ==")});
+
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, fetched);
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        JSValue attrs = JS_GetPropertyStr(Ctx(), supObj, "attributes");
+
+        // The present key carries its value.
+        EXPECT_EQ(GetStringProp(attrs, "present"), "AQ==");
+
+        // The dropped key is still DEFINED as null, never undefined.
+        JSValue dropped = JS_GetPropertyStr(Ctx(), attrs, "dropped");
+        EXPECT_FALSE(JS_IsUndefined(dropped));
+        EXPECT_TRUE(JS_IsNull(dropped));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementSafeInHandlerWhenPrefetchSkipped)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        // Mirrors a seed handler that reads a declared attribute. Even with no fetched
+        // data, args.supplements.attributes.lockState must be null (defined), so the
+        // handler runs without a "cannot read property of undefined" crash.
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  var v = args.supplements.attributes.lockState;"
+                                   "  var out = (v === null) ? 'null' : String(v);"
+                                   "  return Sbmd.result()"
+                                   "    .dataModel.updateResource('1', 'locked', out)"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "locked", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"lockState"};
+
+        FetchedSupplements empty; // prefetch skipped
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, empty);
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].value, "null");
     }
 
     // ================================================================

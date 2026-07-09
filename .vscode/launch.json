@@ -14,9 +14,18 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/reference/barton-core-reference",
-            "args": ["-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
+            "args": [
+                "-b",
+                "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -32,9 +41,19 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/reference/barton-core-reference",
-            "args": ["-z", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
+            "args": [
+                "-z",
+                "-b",
+                "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -50,9 +69,20 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/reference/barton-core-reference",
-            "args": ["-z", "-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
+            "args": [
+                "-z",
+                "-t",
+                "-b",
+                "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -67,10 +97,20 @@
             "name": "(gdb) Reference App No Thread",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/reference/barton-core-reference ",
-            "args": ["-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
+            "program": "${workspaceFolder}/build/reference/barton-core-reference",
+            "args": [
+                "-t",
+                "-b",
+                "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -89,6 +129,12 @@
             "args": ["-m", "-t"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -104,9 +150,20 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/reference/barton-core-reference",
-            "args": ["-z", "-t", "-b", "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"],
+            "args": [
+                "-z",
+                "-t",
+                "-b",
+                "${workspaceFolder}/core/deviceDrivers/matter/sbmd/specs"
+            ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "${workspaceFolder}/build/core:${env:LD_LIBRARY_PATH}"
+                }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [

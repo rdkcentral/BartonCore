@@ -569,6 +569,18 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 
     icDebug("Registering resources for device %s", device->uuid);
 
+    // Resolve the MatterDevice so seed handlers can prefetch declared supplements from the
+    // attribute cache. Without it InvokeSeedHandler skips the prefetch and a seed that reads
+    // a declared supplement receives null (see the supplement contract in AddSupplements).
+    auto matterDevice = GetDevice(device->uuid);
+
+    if (matterDevice == nullptr)
+    {
+        icWarn("Could not resolve MatterDevice for %s during resource registration; seed "
+               "handlers that declare attribute supplements will receive null values",
+               device->uuid);
+    }
+
     std::map<std::string, icDeviceEndpoint *> icEndpoints; // endpoint id → created endpoint
 
     for (const auto &endpoint : reg.endpoints)
@@ -638,7 +650,7 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 
             if (resource.seed.has_value())
             {
-                seedValue = InvokeSeedHandler(device->uuid, endpoint.id, resource);
+                seedValue = InvokeSeedHandler(device->uuid, endpoint.id, resource, matterDevice.get());
 
                 if (!seedValue.empty())
                 {
@@ -727,7 +739,7 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, resource.seed->supplements, supplements);
         result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
     }
 
@@ -937,7 +949,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, handler->supplements, supplements);
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
     }
 
@@ -2059,7 +2071,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
             // AddSupplements and the handler call without a separate guard.
             SafeJSValue args = buildArgs(ctx);
-            SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+            SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
         }
 
