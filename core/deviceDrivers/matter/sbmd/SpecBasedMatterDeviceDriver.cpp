@@ -732,7 +732,7 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, resource.seed->supplements, supplements);
         result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
     }
 
@@ -942,7 +942,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
-        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, handler->supplements, supplements);
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
     }
 
@@ -2064,7 +2064,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
             // AddSupplements and the handler call without a separate guard.
             SafeJSValue args = buildArgs(ctx);
-            SbmdHandlerInvoker::AddSupplements(ctx, args, supplements);
+            SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
             result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
         }
 

@@ -232,9 +232,21 @@ namespace barton
         return fetched;
     }
 
-    void SbmdHandlerInvoker::AddSupplements(JSContext *ctx, SafeJSValue &args, const FetchedSupplements &fetched)
+    void SbmdHandlerInvoker::AddSupplements(JSContext *ctx,
+                                            SafeJSValue &args,
+                                            const SbmdSupplements &declared,
+                                            const FetchedSupplements &fetched)
     {
-        if (fetched.empty())
+        // Contract: every supplement a driver DECLARES is materialized as a JS property on
+        // args.supplements at handler invocation. The declaration -- not the fetched data --
+        // is the source of truth, so a declared key is always defined: it holds the fetched
+        // value when available, otherwise null. This holds even when the prefetch was skipped
+        // (e.g. no device) or a fetch bug failed to populate it. Categories and keys that were
+        // not declared are omitted.
+        bool anyDeclared = !declared.attributes.empty() || !declared.resources.empty() ||
+                           !declared.persistentData.empty() || !declared.transientData.empty();
+
+        if (!anyDeclared)
         {
             return;
         }
@@ -243,31 +255,45 @@ namespace barton
         // through the reachable child. args is already a SafeJSValue owned by the caller.
         SafeJSValue supObj = args.AddObject(SBMD_KEY_SUPPLEMENTS);
 
-        auto populate = [](SafeJSValue &parent, const char *key, const std::vector<FetchedSupplement> &entries) {
-            if (entries.empty())
+        auto populate = [](SafeJSValue &parent,
+                           const char *categoryKey,
+                           const std::vector<std::string> &declaredKeys,
+                           const std::vector<FetchedSupplement> &fetchedEntries) {
+            if (declaredKeys.empty())
             {
                 return;
             }
 
-            SafeJSValue obj = parent.AddObject(key);
+            SafeJSValue obj = parent.AddObject(categoryKey);
 
-            for (const auto &entry : entries)
+            for (const auto &declaredKey : declaredKeys)
             {
-                if (entry.value.has_value())
+                const std::string *value = nullptr;
+
+                for (const auto &entry : fetchedEntries)
                 {
-                    obj.SetString(entry.key.c_str(), entry.value->c_str());
+                    if (entry.key == declaredKey && entry.value.has_value())
+                    {
+                        value = &entry.value.value();
+                        break;
+                    }
+                }
+
+                if (value != nullptr)
+                {
+                    obj.SetString(declaredKey.c_str(), value->c_str());
                 }
                 else
                 {
-                    obj.SetNull(entry.key.c_str());
+                    obj.SetNull(declaredKey.c_str());
                 }
             }
         };
 
-        populate(supObj, SBMD_KEY_ATTRIBUTES, fetched.attributes);
-        populate(supObj, SBMD_KEY_RESOURCES, fetched.resources);
-        populate(supObj, SBMD_KEY_PERSISTENT_DATA, fetched.persistentData);
-        populate(supObj, SBMD_KEY_TRANSIENT_DATA, fetched.transientData);
+        populate(supObj, SBMD_KEY_ATTRIBUTES, declared.attributes, fetched.attributes);
+        populate(supObj, SBMD_KEY_RESOURCES, declared.resources, fetched.resources);
+        populate(supObj, SBMD_KEY_PERSISTENT_DATA, declared.persistentData, fetched.persistentData);
+        populate(supObj, SBMD_KEY_TRANSIENT_DATA, declared.transientData, fetched.transientData);
     }
 
     void SbmdHandlerInvoker::ExecuteOps(const HandlerContext &hctx,

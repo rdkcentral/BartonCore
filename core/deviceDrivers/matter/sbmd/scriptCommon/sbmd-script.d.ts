@@ -227,9 +227,21 @@ interface SbmdHandlerArgsBase {
     /** Feature maps for clusters declared in matter.featureClusters. */
     clusterFeatureMaps: Record<string, number>;
 
-    /** Pre-fetched supplement data, present when supplements are declared. */
+    /**
+     * Pre-fetched supplement data, present when supplements are declared.
+     *
+     * CONTRACT / LINT NOTE: every key a handler DECLARES is always present here
+     * as a defined property -- its fetched value, or `null` when that value was
+     * unavailable (uncached, storage miss, or a fetch that failed to populate).
+     * A declared leaf is therefore NEVER `undefined`, so you may reach through
+     * `args.supplements.<category>` without guarding the shape, BUT you MUST
+     * null-check the leaf value before using it.
+     * 
+     * Only declared categories/keys appear; reading a supplement you did not
+     * declare yields `undefined`, so do not access undeclared supplements.
+     */
     supplements?: {
-        attributes?: Record<string, any>;
+        attributes?: Record<string, string | null>;
         resources?: Record<string, string | null>;
         persistentData?: Record<string, string | null>;
         transientData?: Record<string, string | null>;

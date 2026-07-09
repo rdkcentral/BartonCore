@@ -255,20 +255,28 @@ namespace barton
                                                       const TransientDataFetcher &transientFetcher);
 
         /**
-         * Attach previously fetched supplements to an args object as
-         * `args.supplements`.
+         * Attach declared supplements to an args object as `args.supplements`.
+         *
+         * The declaration is the source of truth: every supplement key a driver
+         * DECLARES is materialized as a defined JS property -- set to its fetched
+         * value when available, otherwise null. A declared key is therefore never
+         * undefined, even when the prefetch was skipped (e.g. no device) or a fetch
+         * bug failed to populate it. Categories and keys that were not declared are
+         * omitted, and if nothing was declared this is a no-op.
          *
          * This only touches the JS context, so the caller must hold
          * MQuickJsRuntime::GetMutex(). Pair it with PrefetchSupplements, which
          * gathers the values beforehand without the mutex.
          *
-         * If fetched is empty (no declared keys), this is a no-op.
-         *
          * @param ctx JS context (caller holds mutex)
          * @param args The args object to augment (modified in place)
-         * @param fetched The values produced by PrefetchSupplements
+         * @param declared The supplement declarations (which keys must exist)
+         * @param fetched The values produced by PrefetchSupplements (best-effort data)
          */
-        static void AddSupplements(JSContext *ctx, SafeJSValue &args, const FetchedSupplements &fetched);
+        static void AddSupplements(JSContext *ctx,
+                                   SafeJSValue &args,
+                                   const SbmdSupplements &declared,
+                                   const FetchedSupplements &fetched);
 
         /**
          * Build an args object for a deferred command response handler.
