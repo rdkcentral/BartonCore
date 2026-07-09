@@ -97,7 +97,7 @@
             "name": "(gdb) Reference App No Thread",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/reference/barton-core-reference ",
+            "program": "${workspaceFolder}/build/reference/barton-core-reference",
             "args": [
                 "-t",
                 "-b",
