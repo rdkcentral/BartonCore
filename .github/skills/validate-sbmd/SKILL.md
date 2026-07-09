@@ -37,7 +37,7 @@ This:
 2. Extracts the `SbmdDriver()` registration object as JSON (functions → `true`)
 3. Validates the JSON against `sbmd-spec-schema-v4.0.json`
 
-This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitions in `sbmd-script.d.ts`. The stubs are used by the validator to check JavaScript against the expected API surface.
+The validator evaluates each `.sbmd.js` file, extracts the `SbmdDriver()` registration object, and validates it against the JSON schema.
 
 ## File Locations
 
