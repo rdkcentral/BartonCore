@@ -236,7 +236,7 @@ interface SbmdHandlerArgsBase {
      * A declared leaf is therefore NEVER `undefined`, so you may reach through
      * `args.supplements.<category>` without guarding the shape, BUT you MUST
      * null-check the leaf value before using it.
-     * 
+     *
      * Only declared categories/keys appear; reading a supplement you did not
      * declare yields `undefined`, so do not access undeclared supplements.
      */

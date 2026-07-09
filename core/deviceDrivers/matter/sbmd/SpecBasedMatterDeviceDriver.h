@@ -150,6 +150,12 @@ namespace barton
 
         /**
          * Invoke a seed handler for a resource. Returns the seed value or empty string.
+         *
+         * @param device Optional. When non-null, used to prefetch the resource's declared
+         *               supplements from the attribute cache before the handler runs. When
+         *               null, the prefetch is skipped and any declared supplements are
+         *               delivered as null (see the supplement contract in
+         *               SbmdHandlerInvoker::AddSupplements).
          */
         std::string InvokeSeedHandler(const std::string &deviceId,
                                       const std::string &endpointId,

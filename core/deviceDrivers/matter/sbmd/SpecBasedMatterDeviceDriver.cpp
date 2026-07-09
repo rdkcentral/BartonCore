@@ -571,8 +571,15 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
 
     // Resolve the MatterDevice so seed handlers can prefetch declared supplements from the
     // attribute cache. Without it InvokeSeedHandler skips the prefetch and a seed that reads
-    // args.supplements would see undefined.
+    // a declared supplement receives null (see the supplement contract in AddSupplements).
     auto matterDevice = GetDevice(device->uuid);
+
+    if (matterDevice == nullptr)
+    {
+        icWarn("Could not resolve MatterDevice for %s during resource registration; seed "
+               "handlers that declare attribute supplements will receive null values",
+               device->uuid);
+    }
 
     std::map<std::string, icDeviceEndpoint *> icEndpoints; // endpoint id → created endpoint
 
