@@ -35,7 +35,9 @@ from testing.utils.barton_utils import (
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.requires_matterjs
+pytestmark = [
+    pytest.mark.requires_matterjs,
+]
 
 
 def _commission_thermostat_with_fan(default_environment, matter_thermostat_with_fan):

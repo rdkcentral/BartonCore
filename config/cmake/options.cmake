@@ -176,6 +176,11 @@ bcore_option(NAME BCORE_BUILD_THIRD_PARTY_BARTON_COMMON
            DESCRIPTION "Build the third-party BartonCommon component"
            ENABLE)
 
+bcore_string_option(NAME BCORE_OBSERVABILITY_BACKEND
+                    DEFINITION BARTON_CONFIG_OBSERVABILITY_BACKEND
+                    DESCRIPTION "Observability backend (none, memory)"
+                    VALUE "memory")
+
 message(STATUS "- - - - - - - - - - - - - - - - ")
 
 message(STATUS "- - - - - - - - - - - - - - - - ")
@@ -285,7 +290,7 @@ macro(bcore_removed_option NAME error)
     endif()
 endmacro()
 
-bcore_removed_option(BCORE_MATTER_USE_MATTERJS "matter.js integration has been removed. Use scriptType 'JavaScript' with SbmdUtils helpers instead.")
+bcore_removed_option(BCORE_MATTER_USE_MATTERJS "matter.js integration has been removed. Use scriptType 'JavaScript' with Sbmd helpers instead.")
 
 # Validate JS engine selection
 if (BCORE_MATTER)
@@ -295,4 +300,9 @@ if (BCORE_MATTER)
         message(FATAL_ERROR "BCORE_MATTER_SBMD_JS_ENGINE='${BCORE_MATTER_SBMD_JS_ENGINE}' is not valid. Must be 'quickjs' or 'mquickjs'.")
     endif()
 
+endif()
+
+# Validate observability backend selection
+if (NOT BCORE_OBSERVABILITY_BACKEND STREQUAL "memory" AND NOT BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
+    message(FATAL_ERROR "BCORE_OBSERVABILITY_BACKEND='${BCORE_OBSERVABILITY_BACKEND}' is not valid. Must be 'memory' or 'none'.")
 endif()
