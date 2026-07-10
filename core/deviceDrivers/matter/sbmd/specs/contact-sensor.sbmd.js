@@ -46,7 +46,7 @@ SbmdDriver({
 
     matter: {
         deviceTypes: [0x0015],
-        revision: 1
+        revision: 2
     },
 
     reporting: {
@@ -79,12 +79,20 @@ SbmdDriver({
     attributeHandlers: {
         handleStateValue: {
             aliases: ['stateValue'],
-            handler: function(args) {
+            handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for StateValue');
+                }
 
                 // StateValue=true means closed (not faulted)
                 return Sbmd.result()
-                    .dataModel.updateResource(RES_FAULTED, (value === true) ? 'false' : 'true')
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        value === true ? 'false' : 'true'
+                    )
                     .success();
             }
         }

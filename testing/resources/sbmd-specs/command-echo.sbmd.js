@@ -41,7 +41,7 @@ SbmdDriver({
 
     constants: {
         // Use a fake cluster ID that won't conflict with real clusters
-        CL_TEST: 0xFFF10000,
+        CL_TEST: 0xfff10000,
 
         // Command IDs
         CMD_ECHO: 0x00,
@@ -53,28 +53,29 @@ SbmdDriver({
         EP: '1',
         RES_LAST_COMMAND: 'lastCommand',
         RES_ECHO_DATA: 'echoData',
+        RES_STATUS: 'status'
     },
 
     barton: {
         deviceClass: 'commandEchoTest',
-        deviceClassVersion: 1,
+        deviceClassVersion: 1
     },
 
     matter: {
-        deviceTypes: [0xFFF10000],
-        defaultTimeoutMs: 15000,
+        deviceTypes: [0xfff10000],
+        defaultTimeoutMs: 15000
     },
 
     reporting: {
         minSecs: 1,
-        maxSecs: 300,
+        maxSecs: 300
     },
 
     aliases: {
-        echoCmd: { clusterId: CL_TEST, commandId: CMD_ECHO },
-        pingCmd: { clusterId: CL_TEST, commandId: CMD_PING },
-        anyTestCmd: { clusterId: CL_TEST },
-        testStatus: { clusterId: CL_TEST, attributeId: ATTR_STATUS, type: 'uint8' },
+        echoCmd: {clusterId: CL_TEST, commandId: CMD_ECHO},
+        pingCmd: {clusterId: CL_TEST, commandId: CMD_PING},
+        anyTestCmd: {clusterId: CL_TEST},
+        testStatus: {clusterId: CL_TEST, attributeId: ATTR_STATUS, type: 'uint8'}
     },
 
     endpoints: {
@@ -85,50 +86,65 @@ SbmdDriver({
                 lastCommand: {
                     type: 'com.icontrol.string',
                     modes: ['read'],
-                    seed: function(args) {
+                    seed: function (args) {
                         return Sbmd.result()
                             .dataModel.updateResource(EP, RES_LAST_COMMAND, 'none')
                             .success();
-                    },
+                    }
                 },
                 echoData: {
                     type: 'com.icontrol.string',
                     modes: ['read'],
-                    seed: function(args) {
+                    seed: function (args) {
                         return Sbmd.result()
                             .dataModel.updateResource(EP, RES_ECHO_DATA, '')
                             .success();
-                    },
+                    }
                 },
-            },
-        },
+                status: {
+                    type: 'com.icontrol.string',
+                    modes: ['read'],
+                    seed: function (args) {
+                        return Sbmd.result()
+                            .dataModel.updateResource(EP, RES_STATUS, '0')
+                            .success();
+                    }
+                }
+            }
+        }
     },
 
     attributeHandlers: {
         handleStatus: {
             aliases: ['testStatus'],
-            handler: function(args) {
+            handler: function (args) {
+                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for Status');
+                }
+
                 return Sbmd.result()
-                    .dataModel.updateResource(EP, 'status', String(args.attribute.value))
+                    .dataModel.updateResource(EP, RES_STATUS, String(value))
                     .success();
-            },
-        },
+            }
+        }
     },
 
     commandHandlers: {
         handleEcho: {
             aliases: ['echoCmd'],
-            handler: handleEchoCommand,
+            handler: handleEchoCommand
         },
         handlePing: {
             aliases: ['pingCmd'],
-            handler: handlePingCommand,
+            handler: handlePingCommand
         },
         handleAnyCommand: {
             aliases: ['anyTestCmd'],
-            handler: handleWildcardCommand,
-        },
-    },
+            handler: handleWildcardCommand
+        }
+    }
 });
 
 function handleEchoCommand(args) {
@@ -139,14 +155,19 @@ function handleEchoCommand(args) {
 }
 
 function handlePingCommand(args) {
-    return Sbmd.result()
-        .dataModel.updateResource(EP, RES_LAST_COMMAND, 'ping')
-        .success();
+    return Sbmd.result().dataModel.updateResource(EP, RES_LAST_COMMAND, 'ping').success();
 }
 
 function handleWildcardCommand(args) {
     // Wildcard handler records the raw command ID
     return Sbmd.result()
-        .log('wildcard command: clusterId=' + args.command.clusterId + ' commandId=' + args.command.commandId)
+        .dataModel.updateResource(EP, RES_LAST_COMMAND, 'wildcard')
+        .dataModel.updateResource(EP, RES_ECHO_DATA, String(args.command.commandId))
+        .log(
+            'wildcard command: clusterId=' +
+                args.command.clusterId +
+                ' commandId=' +
+                args.command.commandId
+        )
         .success();
 }

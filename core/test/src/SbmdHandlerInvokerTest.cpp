@@ -119,6 +119,24 @@ bool deviceServiceSetMetadata(const char *uri, const char *value)
 
 namespace
 {
+    // Test helper mirroring the pre-split AddSupplements(fetchers...) signature:
+    // resolves the declared supplements via PrefetchSupplements, then attaches
+    // them with AddSupplements. Keeps these tests exercising the full
+    // fetch-then-attach path through the two-phase seam.
+    template<typename AttrFetcher, typename ResFetcher, typename PersistFetcher, typename TransientFetcher>
+    void FetchAndAddSupplements(JSContext *ctx,
+                                SafeJSValue &args,
+                                const SbmdSupplements &supplements,
+                                AttrFetcher attrFetcher,
+                                ResFetcher resFetcher,
+                                PersistFetcher persistFetcher,
+                                TransientFetcher transientFetcher)
+    {
+        FetchedSupplements fetched = SbmdHandlerInvoker::PrefetchSupplements(
+            supplements, attrFetcher, resFetcher, persistFetcher, transientFetcher);
+        SbmdHandlerInvoker::AddSupplements(ctx, args, supplements, fetched);
+    }
+
     class SbmdHandlerInvokerTest : public ::testing::Test
     {
     protected:
@@ -210,7 +228,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
         ASSERT_FALSE(JS_IsException(args));
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -229,7 +247,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
 
         JSValue fm = JS_GetPropertyStr(Ctx(), args, "clusterFeatureMaps");
         ASSERT_FALSE(JS_IsUndefined(fm));
@@ -242,7 +260,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "");
 
         JSValue attr = JS_GetPropertyStr(Ctx(), args, "attribute");
         JSValue tlv = JS_GetPropertyStr(Ctx(), attr, "tlvBase64");
@@ -258,7 +276,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         ASSERT_FALSE(JS_IsException(args));
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -277,7 +295,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "dimLevel", std::string("75"));
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "dimLevel", std::string("75"));
         ASSERT_FALSE(JS_IsException(args));
 
         JSValue resource = JS_GetPropertyStr(Ctx(), args, "resource");
@@ -297,7 +315,7 @@ namespace
         JSValue handler = EvalFunc("(function(args) { return Sbmd.result().success(); })");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
@@ -317,7 +335,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
@@ -341,7 +359,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::string("true"));
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::string("true"));
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         ASSERT_TRUE(result.has_value());
@@ -360,7 +378,7 @@ namespace
         JSValue handler = EvalFunc("(function(args) { throw new Error('boom'); })");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
 
         EXPECT_FALSE(result.has_value());
@@ -371,7 +389,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), JS_UNDEFINED, args);
 
         EXPECT_FALSE(result.has_value());
@@ -401,13 +419,18 @@ namespace
         EXPECT_EQ(g_updateResourceCalls[0].value, "true");
     }
 
-    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceUsesDefaultEndpoint)
+    TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceDefaultsToDeviceLevel)
     {
         auto hctx = MakeContext();
 
+        // The handler was triggered on endpoint "1". A no-endpoint update must still
+        // target a device-level resource (NULL endpoint) rather than falling back to
+        // this trigger endpoint.
+        ASSERT_EQ(hctx.endpointId, "1");
+
         std::vector<ResultOp> ops;
         ResultOp::UpdateResource ur;
-        // No endpoint set — should use hctx.endpointId
+        // No endpoint set — the stub records a NULL endpoint as "".
         ur.resource = "isOn";
         ur.value = "false";
         ops.push_back(ResultOp {ur});
@@ -415,7 +438,7 @@ namespace
         SbmdHandlerInvoker::ExecuteOps(hctx, ops);
 
         ASSERT_EQ(g_updateResourceCalls.size(), 1u);
-        EXPECT_EQ(g_updateResourceCalls[0].endpointId, "1"); // default from context
+        EXPECT_EQ(g_updateResourceCalls[0].endpointId, ""); // device-level, not the trigger endpoint "1"
     }
 
     TEST_F(SbmdHandlerInvokerTest, ExecuteOpsUpdateResourceWithMetadata)
@@ -520,7 +543,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AB==");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
 
@@ -543,10 +566,10 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements empty;
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             empty,
@@ -566,12 +589,12 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.attributes = {"onOff", "currentLevel"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -612,12 +635,12 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.resources = {"1/isOn", "firmwareVersion"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -658,13 +681,13 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AQ==");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeArgs(Ctx(), hctx, 6, 0, "AQ==");
 
         SbmdSupplements sup;
         sup.attributes = {"lockState"};
         sup.resources = {"1/locked"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -703,13 +726,13 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.attributes = {"missingAlias"};
         sup.resources = {"1/missingResource"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -745,13 +768,13 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.attributes = {"onOff"};
         sup.resources = {"1/locked"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -800,12 +823,12 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "test", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "test", std::nullopt);
 
         SbmdSupplements sup;
         sup.attributes = {"missing"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -824,6 +847,126 @@ namespace
     }
 
     // ================================================================
+    // Declared-supplement contract: every DECLARED supplement key is
+    // always a defined JS property (its value, or null) at invocation --
+    // never undefined -- even when the prefetch was skipped or a fetch
+    // bug failed to populate it. These drive AddSupplements directly with
+    // a declaration plus empty/partial fetched data to isolate the
+    // contract from the prefetch phase.
+    // ================================================================
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementsPresentWhenPrefetchSkipped)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"lockState"};
+        declared.resources = {"1/locked"};
+        declared.persistentData = {"lastOp"};
+        declared.transientData = {"debounce"};
+
+        // Simulate the prefetch being skipped entirely (e.g. no device available):
+        // fetched is empty, yet every declared key must still be present as null.
+        FetchedSupplements empty;
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, empty);
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        ASSERT_FALSE(JS_IsUndefined(supObj));
+
+        JSValue attrs = JS_GetPropertyStr(Ctx(), supObj, "attributes");
+        ASSERT_FALSE(JS_IsUndefined(attrs));
+        JSValue lockState = JS_GetPropertyStr(Ctx(), attrs, "lockState");
+        EXPECT_FALSE(JS_IsUndefined(lockState));
+        EXPECT_TRUE(JS_IsNull(lockState));
+
+        JSValue res = JS_GetPropertyStr(Ctx(), supObj, "resources");
+        ASSERT_FALSE(JS_IsUndefined(res));
+        JSValue locked = JS_GetPropertyStr(Ctx(), res, "1/locked");
+        EXPECT_FALSE(JS_IsUndefined(locked));
+        EXPECT_TRUE(JS_IsNull(locked));
+
+        JSValue pd = JS_GetPropertyStr(Ctx(), supObj, "persistentData");
+        ASSERT_FALSE(JS_IsUndefined(pd));
+        JSValue lastOp = JS_GetPropertyStr(Ctx(), pd, "lastOp");
+        EXPECT_FALSE(JS_IsUndefined(lastOp));
+        EXPECT_TRUE(JS_IsNull(lastOp));
+
+        JSValue td = JS_GetPropertyStr(Ctx(), supObj, "transientData");
+        ASSERT_FALSE(JS_IsUndefined(td));
+        JSValue debounce = JS_GetPropertyStr(Ctx(), td, "debounce");
+        EXPECT_FALSE(JS_IsUndefined(debounce));
+        EXPECT_TRUE(JS_IsNull(debounce));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementsPresentWhenFetchDropsKey)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"present", "dropped"};
+
+        // Simulate a fetch bug: only one of the two declared keys made it into fetched.
+        FetchedSupplements fetched;
+        fetched.attributes.push_back({"present", std::string("AQ==")});
+
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, fetched);
+
+        JSValue supObj = JS_GetPropertyStr(Ctx(), args, "supplements");
+        JSValue attrs = JS_GetPropertyStr(Ctx(), supObj, "attributes");
+
+        // The present key carries its value.
+        EXPECT_EQ(GetStringProp(attrs, "present"), "AQ==");
+
+        // The dropped key is still DEFINED as null, never undefined.
+        JSValue dropped = JS_GetPropertyStr(Ctx(), attrs, "dropped");
+        EXPECT_FALSE(JS_IsUndefined(dropped));
+        EXPECT_TRUE(JS_IsNull(dropped));
+    }
+
+    TEST_F(SbmdHandlerInvokerTest, DeclaredSupplementSafeInHandlerWhenPrefetchSkipped)
+    {
+        auto hctx = MakeContext();
+
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
+        // Mirrors a seed handler that reads a declared attribute. Even with no fetched
+        // data, args.supplements.attributes.lockState must be null (defined), so the
+        // handler runs without a "cannot read property of undefined" crash.
+        JSValue handler = EvalFunc("(function(args) {"
+                                   "  var v = args.supplements.attributes.lockState;"
+                                   "  var out = (v === null) ? 'null' : String(v);"
+                                   "  return Sbmd.result()"
+                                   "    .dataModel.updateResource('1', 'locked', out)"
+                                   "    .success();"
+                                   "})");
+        ASSERT_FALSE(JS_IsException(handler));
+
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "locked", std::nullopt);
+
+        SbmdSupplements declared;
+        declared.attributes = {"lockState"};
+
+        FetchedSupplements empty; // prefetch skipped
+        SbmdHandlerInvoker::AddSupplements(Ctx(), args, declared, empty);
+
+        auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
+        ASSERT_TRUE(result.has_value());
+
+        SbmdHandlerInvoker::ExecuteOps(hctx, result->ops);
+
+        ASSERT_EQ(g_updateResourceCalls.size(), 1u);
+        EXPECT_EQ(g_updateResourceCalls[0].value, "null");
+    }
+
+    // ================================================================
     // Tests for persistent/transient data supplements
     // ================================================================
 
@@ -833,12 +976,12 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.persistentData = {"lastOp", "counter"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -872,12 +1015,12 @@ namespace
 
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.transientData = {"debounce"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -917,13 +1060,13 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
+        SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(Ctx(), hctx, "isOn", std::nullopt);
 
         SbmdSupplements sup;
         sup.persistentData = {"lastOp"};
         sup.transientData = {"debounce"};
 
-        SbmdHandlerInvoker::AddSupplements(
+        FetchAndAddSupplements(
             Ctx(),
             args,
             sup,
@@ -993,7 +1136,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 42, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 42, "AQID");
 
         // Check base fields
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -1011,7 +1154,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0006, 1, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0006, 1, "");
 
         JSValue response = JS_GetPropertyStr(Ctx(), args, "response");
         ASSERT_FALSE(JS_IsUndefined(response));
@@ -1030,7 +1173,7 @@ namespace
         JSValue context = JS_Eval(Ctx(), "({requestId: 42})", 18, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(context));
 
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
 
         JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
         ASSERT_FALSE(JS_IsUndefined(hc));
@@ -1042,7 +1185,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==");
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
 
@@ -1061,7 +1204,7 @@ namespace
         JSValue context = JS_Eval(Ctx(), "('read-ctx')", 12, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(context));
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==", context);
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "AB==", context);
 
         JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
         ASSERT_FALSE(JS_IsUndefined(hc));
@@ -1073,7 +1216,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args =
+        SafeJSValue args =
             SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "Operation timed out after 5000ms");
 
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -1088,7 +1231,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args =
+        SafeJSValue args =
             SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error 0x00000032");
 
         JSValue error = JS_GetPropertyStr(Ctx(), args, "error");
@@ -1100,7 +1243,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error", 0x32);
+        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "commandFailed", "CHIP Error", 0x32);
 
         JSValue error = JS_GetPropertyStr(Ctx(), args, "error");
         EXPECT_EQ(GetStringProp(error, "type"), "commandFailed");
@@ -1120,7 +1263,7 @@ namespace
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
         // matterCode = -1 means "not available" → should be null
-        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1);
+        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1);
 
         JSValue error = JS_GetPropertyStr(Ctx(), args, "error");
         JSValue mc = JS_GetPropertyStr(Ctx(), error, "matterCode");
@@ -1135,7 +1278,7 @@ namespace
         JSValue context = JS_Eval(Ctx(), "({retryCount: 3})", 18, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(context));
 
-        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1, context);
+        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "timed out", -1, context);
 
         JSValue hc = JS_GetPropertyStr(Ctx(), args, "handlerContext");
         ASSERT_FALSE(JS_IsUndefined(hc));
@@ -1157,7 +1300,7 @@ namespace
         ASSERT_FALSE(JS_IsException(handler));
 
         // Build response args and invoke
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
@@ -1184,7 +1327,7 @@ namespace
         JSValue context = JS_Eval(Ctx(), "({id: 99})", 10, "<test>", JS_EVAL_RETVAL);
         ASSERT_FALSE(JS_IsException(context));
 
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "AQID", context);
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
 
@@ -1206,7 +1349,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "5s elapsed");
+        SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(Ctx(), hctx, "timeout", "5s elapsed");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Error>(result->terminal.data));
@@ -1235,7 +1378,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(Ctx(), hctx, 0x0101, 26, "");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::RequestCommand>(result->terminal.data));
@@ -1259,7 +1402,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "QUJD");
+        SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(Ctx(), hctx, 0x0300, 7, "QUJD");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
@@ -1278,7 +1421,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 0x02, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 0x02, "AQID");
 
         // Check base fields
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -1296,7 +1439,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0006, 0, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0006, 0, "");
 
         JSValue event = JS_GetPropertyStr(Ctx(), args, "event");
         ASSERT_FALSE(JS_IsUndefined(event));
@@ -1320,7 +1463,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 5, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildEventArgs(Ctx(), hctx, 0x0101, 5, "AQID");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));
@@ -1338,7 +1481,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
 
         // Check base fields
         EXPECT_EQ(GetStringProp(args, "deviceUuid"), "test-device-uuid");
@@ -1356,7 +1499,7 @@ namespace
     {
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         auto hctx = MakeContext();
-        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0006, 1, "");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0006, 1, "");
 
         JSValue command = JS_GetPropertyStr(Ctx(), args, "command");
         ASSERT_FALSE(JS_IsUndefined(command));
@@ -1380,7 +1523,7 @@ namespace
                                    "})");
         ASSERT_FALSE(JS_IsException(handler));
 
-        JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
+        SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0x0101, 0x1C, "AQID");
         auto result = SbmdHandlerInvoker::InvokeHandler(Ctx(), handler, args);
         ASSERT_TRUE(result.has_value());
         ASSERT_TRUE(std::holds_alternative<ResultTerminal::Success>(result->terminal.data));

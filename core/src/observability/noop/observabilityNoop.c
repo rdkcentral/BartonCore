@@ -34,6 +34,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* --- init / shutdown / dump --- */
 
@@ -48,7 +49,7 @@ void observabilityShutdown(void)
 
 char *observabilityDumpJson(void)
 {
-    return NULL;
+    return strdup("{\"metrics\":{}}");
 }
 
 /* --- counters --- */
@@ -72,6 +73,11 @@ void observabilityCounterAddWithAttrs(ObservabilityCounter *counter, uint64_t va
 {
     (void) counter;
     (void) value;
+}
+
+ObservabilityCounter *observabilityCounterAcquire(ObservabilityCounter *counter)
+{
+    return counter;
 }
 
 void observabilityCounterRelease(ObservabilityCounter *counter)
@@ -102,6 +108,11 @@ void observabilityGaugeRecordWithAttrs(ObservabilityGauge *gauge, int64_t value,
     (void) value;
 }
 
+ObservabilityGauge *observabilityGaugeAcquire(ObservabilityGauge *gauge)
+{
+    return gauge;
+}
+
 void observabilityGaugeRelease(ObservabilityGauge *gauge)
 {
     (void) gauge;
@@ -128,6 +139,11 @@ void observabilityHistogramRecordWithAttrs(ObservabilityHistogram *histogram, do
 {
     (void) histogram;
     (void) value;
+}
+
+ObservabilityHistogram *observabilityHistogramAcquire(ObservabilityHistogram *histogram)
+{
+    return histogram;
 }
 
 void observabilityHistogramRelease(ObservabilityHistogram *histogram)

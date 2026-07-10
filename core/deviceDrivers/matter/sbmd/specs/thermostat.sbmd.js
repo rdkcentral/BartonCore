@@ -163,31 +163,13 @@ SbmdDriver({
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
-                    write: function(args) {
-                        var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
-
-                        if (tlvBase64 === null) {
-                            return Sbmd.result().error('Invalid temperature value');
-                        }
-
-                        return Sbmd.result()
-                            .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_HEATING_SETPOINT, tlvBase64);
-                    }
+                    write: writeHeatSetpoint
                 },
                 coolSetpoint: {
                     type: 'com.icontrol.temperature',
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
-                    write: function(args) {
-                        var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
-
-                        if (tlvBase64 === null) {
-                            return Sbmd.result().error('Invalid temperature value');
-                        }
-
-                        return Sbmd.result()
-                            .device.writeAttribute(CL_THERMOSTAT, ATTR_OCCUPIED_COOLING_SETPOINT, tlvBase64);
-                    }
+                    write: writeCoolSetpoint
                 },
                 absoluteMinHeatLimit: {
                     type: 'com.icontrol.temperature',
@@ -213,51 +195,13 @@ SbmdDriver({
                     type: 'com.icontrol.tstatCtrlSeqOp',
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
-                    write: function(args) {
-                        var seqValues = [
-                            'coolingOnly', 'coolingWithReheat',
-                            'heatingOnly', 'heatingWithReheat',
-                            'coolingAndHeatingFourPipes', 'coolingAndHeatingFourPipesWithReheat'
-                        ];
-                        var seqValue = -1;
-
-                        for (var i = 0; i < seqValues.length; i++) {
-                            if (seqValues[i] === args.resource.input) {
-                                seqValue = i;
-                                break;
-                            }
-                        }
-
-                        if (seqValue < 0) {
-                            return Sbmd.result().error('Unknown control sequence: ' + args.resource.input);
-                        }
-
-                        var tlvBase64 = Sbmd.Tlv.encode(seqValue, 'enum8');
-
-                        return Sbmd.result()
-                            .device.writeAttribute(CL_THERMOSTAT, ATTR_CTRL_SEQ_OP, tlvBase64);
-                    }
+                    write: writeControlSequenceOfOperation
                 },
                 systemMode: {
                     type: 'com.icontrol.tstatSystemMode',
                     modes: ['read', 'write'],
                     prerequisites: [CL_THERMOSTAT],
-                    write: function(args) {
-                        var reverseModeMap = {
-                            'off': 0, 'auto': 1, 'cool': 3,
-                            'heat': 4, 'precooling': 6, 'fanOnly': 7
-                        };
-                        var modeValue = reverseModeMap[args.resource.input];
-
-                        if (modeValue === undefined) {
-                            return Sbmd.result().error('Unknown system mode: ' + args.resource.input);
-                        }
-
-                        var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
-
-                        return Sbmd.result()
-                            .device.writeAttribute(CL_THERMOSTAT, ATTR_SYSTEM_MODE, tlvBase64);
-                    }
+                    write: writeSystemMode
                 },
                 systemState: {
                     type: 'com.icontrol.tstatSystemState',
@@ -270,21 +214,7 @@ SbmdDriver({
                     optional: true,
                     modes: ['read', 'write'],
                     prerequisites: [CL_FAN_CONTROL],
-                    write: function(args) {
-                        var reverseModeMap = {
-                            'off': 0, 'on': 4, 'auto': 5
-                        };
-                        var modeValue = reverseModeMap[args.resource.input];
-
-                        if (modeValue === undefined) {
-                            return Sbmd.result().error('Unknown fan mode: ' + args.resource.input);
-                        }
-
-                        var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
-
-                        return Sbmd.result()
-                            .device.writeAttribute(CL_FAN_CONTROL, ATTR_FAN_MODE, tlvBase64);
-                    }
+                    write: writeFanMode
                 },
                 fanOn: {
                     type: 'boolean',
@@ -297,261 +227,422 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleLocalTemperature: {
-            aliases: ['localTemperature'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().success();
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_LOCAL_TEMP, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleHeatSetpoint: {
-            aliases: ['occupiedHeatingSetpoint'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed for OccupiedHeatingSetpoint');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_HEAT_SETPOINT, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleCoolSetpoint: {
-            aliases: ['occupiedCoolingSetpoint'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed for OccupiedCoolingSetpoint');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_COOL_SETPOINT, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleAbsMinHeat: {
-            aliases: ['absMinHeat'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_ABS_MIN_HEAT, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleAbsMaxHeat: {
-            aliases: ['absMaxHeat'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_ABS_MAX_HEAT, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleAbsMinCool: {
-            aliases: ['absMinCool'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_ABS_MIN_COOL, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleAbsMaxCool: {
-            aliases: ['absMaxCool'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var neg = value < 0;
-                var s = Math.abs(value).toString();
-
-                while (s.length < (neg ? 3 : 4)) {
-                    s = '0' + s;
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_ABS_MAX_COOL, (neg ? '-' : '') + s)
-                    .success();
-            }
-        },
-        handleCtrlSeqOp: {
-            aliases: ['ctrlSeqOp'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var seqValues = [
-                    'coolingOnly', 'coolingWithReheat',
-                    'heatingOnly', 'heatingWithReheat',
-                    'coolingAndHeatingFourPipes', 'coolingAndHeatingFourPipesWithReheat'
-                ];
-                var seq = seqValues[value];
-
-                if (seq === undefined) {
-                    return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_CTRL_SEQ_OP, seq)
-                    .success();
-            }
-        },
-        handleSystemMode: {
-            aliases: ['systemMode'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var modeMap = {
-                    0: 'off', 1: 'auto', 3: 'cool',
-                    4: 'heat', 5: 'heat', 6: 'precooling', 7: 'fanOnly'
-                };
-                var mode = modeMap[value];
-
-                if (mode === undefined) {
-                    mode = 'unknown';
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_SYSTEM_MODE, mode)
-                    .success();
-            }
-        },
-        handleRunningState: {
-            aliases: ['runningState'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                var state = 'off';
-
-                if ((value & 0x0001) || (value & 0x0008)) {
-                    state = 'heating';
-                } else if ((value & 0x0002) || (value & 0x0010)) {
-                    state = 'cooling';
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_SYSTEM_STATE, state)
-                    .success();
-            }
-        },
-        handleFanMode: {
-            aliases: ['fanMode'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                // FanMode: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto
-                var modeMap = {
-                    0: 'off', 1: 'on', 2: 'on', 3: 'on', 4: 'on', 5: 'auto'
-                };
-                var mode = modeMap[value];
-
-                if (mode === undefined) {
-                    mode = 'unknown';
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_FAN_MODE, mode)
-                    .success();
-            }
-        },
-        handleFanPercentCurrent: {
-            aliases: ['fanPercentCurrent'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().error('TLV decode failed');
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_FAN_ON, String(value !== 0))
-                    .success();
-            }
-        }
+        handleLocalTemperature: {aliases: ['localTemperature'], handler: handleLocalTemperature},
+        handleHeatSetpoint: {aliases: ['occupiedHeatingSetpoint'], handler: handleHeatSetpoint},
+        handleCoolSetpoint: {aliases: ['occupiedCoolingSetpoint'], handler: handleCoolSetpoint},
+        handleAbsMinHeat: {aliases: ['absMinHeat'], handler: handleAbsMinHeat},
+        handleAbsMaxHeat: {aliases: ['absMaxHeat'], handler: handleAbsMaxHeat},
+        handleAbsMinCool: {aliases: ['absMinCool'], handler: handleAbsMinCool},
+        handleAbsMaxCool: {aliases: ['absMaxCool'], handler: handleAbsMaxCool},
+        handleCtrlSeqOp: {aliases: ['ctrlSeqOp'], handler: handleCtrlSeqOp},
+        handleSystemMode: {aliases: ['systemMode'], handler: handleSystemMode},
+        handleRunningState: {aliases: ['runningState'], handler: handleRunningState},
+        handleFanMode: {aliases: ['fanMode'], handler: handleFanMode},
+        handleFanPercentCurrent: {aliases: ['fanPercentCurrent'], handler: handleFanPercentCurrent}
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Writes the Barton heatSetpoint to the Matter OccupiedHeatingSetpoint
+ * attribute (int16, cluster 0x0201). Rejects invalid input.
+ */
+function writeHeatSetpoint(args) {
+    var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
+
+    if (tlvBase64 === null) {
+        return Sbmd.result().error('Invalid temperature value');
+    }
+
+    return Sbmd.result().device.writeAttribute(
+        CL_THERMOSTAT,
+        ATTR_OCCUPIED_HEATING_SETPOINT,
+        tlvBase64
+    );
+}
+
+/**
+ * Writes the Barton coolSetpoint to the Matter OccupiedCoolingSetpoint
+ * attribute (int16, cluster 0x0201). Rejects invalid input.
+ */
+function writeCoolSetpoint(args) {
+    var tlvBase64 = Sbmd.Tlv.encode(args.resource.input, 'int16');
+
+    if (tlvBase64 === null) {
+        return Sbmd.result().error('Invalid temperature value');
+    }
+
+    return Sbmd.result().device.writeAttribute(
+        CL_THERMOSTAT,
+        ATTR_OCCUPIED_COOLING_SETPOINT,
+        tlvBase64
+    );
+}
+
+/**
+ * Writes the Barton controlSequenceOfOperation string to the Matter
+ * ControlSequenceOfOperation attribute (enum8, cluster 0x0201). Rejects unknown
+ * values.
+ */
+function writeControlSequenceOfOperation(args) {
+    var seqValues = [
+        'coolingOnly',
+        'coolingWithReheat',
+        'heatingOnly',
+        'heatingWithReheat',
+        'coolingAndHeatingFourPipes',
+        'coolingAndHeatingFourPipesWithReheat'
+    ];
+    var seqValue = -1;
+
+    for (var i = 0; i < seqValues.length; i++) {
+        if (seqValues[i] === args.resource.input) {
+            seqValue = i;
+            break;
+        }
+    }
+
+    if (seqValue < 0) {
+        return Sbmd.result().error('Unknown control sequence: ' + args.resource.input);
+    }
+
+    var tlvBase64 = Sbmd.Tlv.encode(seqValue, 'enum8');
+
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_CTRL_SEQ_OP, tlvBase64);
+}
+
+/**
+ * Writes the Barton systemMode string to the Matter SystemMode attribute
+ * (enum8, cluster 0x0201). Rejects unknown modes.
+ */
+function writeSystemMode(args) {
+    var reverseModeMap = {
+        'off': 0,
+        'auto': 1,
+        'cool': 3,
+        'heat': 4,
+        'precooling': 6,
+        'fanOnly': 7
+    };
+    var modeValue = reverseModeMap[args.resource.input];
+
+    if (modeValue === undefined) {
+        return Sbmd.result().error('Unknown system mode: ' + args.resource.input);
+    }
+
+    var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
+
+    return Sbmd.result().device.writeAttribute(CL_THERMOSTAT, ATTR_SYSTEM_MODE, tlvBase64);
+}
+
+/**
+ * Writes the Barton fanMode string to the Matter FanMode attribute (enum8, Fan
+ * Control cluster 0x0202). Rejects unknown modes.
+ */
+function writeFanMode(args) {
+    var reverseModeMap = {
+        'off': 0,
+        'on': 4,
+        'auto': 5
+    };
+    var modeValue = reverseModeMap[args.resource.input];
+
+    if (modeValue === undefined) {
+        return Sbmd.result().error('Unknown fan mode: ' + args.resource.input);
+    }
+
+    var tlvBase64 = Sbmd.Tlv.encode(modeValue, 'enum8');
+
+    return Sbmd.result().device.writeAttribute(CL_FAN_CONTROL, ATTR_FAN_MODE, tlvBase64);
+}
+
+/**
+ * Maps Matter LocalTemperature (int16 hundredths of a degree, cluster 0x0201)
+ * to the Barton localTemperature resource, zero-padded to a fixed width.
+ */
+function handleLocalTemperature(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // No update when the reading is unavailable (null)
+    if (value === null) {
+        return Sbmd.result().success();
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_LOCAL_TEMP, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter OccupiedHeatingSetpoint (int16 hundredths of a degree, cluster
+ * 0x0201) to the Barton heatSetpoint resource, zero-padded to a fixed width.
+ */
+function handleHeatSetpoint(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for OccupiedHeatingSetpoint');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_HEAT_SETPOINT, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter OccupiedCoolingSetpoint (int16 hundredths of a degree, cluster
+ * 0x0201) to the Barton coolSetpoint resource, zero-padded to a fixed width.
+ */
+function handleCoolSetpoint(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for OccupiedCoolingSetpoint');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_COOL_SETPOINT, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter AbsMinHeatSetpointLimit (int16, cluster 0x0201) to the Barton
+ * absoluteMinHeatLimit resource, zero-padded to a fixed width.
+ */
+function handleAbsMinHeat(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_ABS_MIN_HEAT, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter AbsMaxHeatSetpointLimit (int16, cluster 0x0201) to the Barton
+ * absoluteMaxHeatLimit resource, zero-padded to a fixed width.
+ */
+function handleAbsMaxHeat(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_ABS_MAX_HEAT, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter AbsMinCoolSetpointLimit (int16, cluster 0x0201) to the Barton
+ * absoluteMinCoolLimit resource, zero-padded to a fixed width.
+ */
+function handleAbsMinCool(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_ABS_MIN_COOL, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter AbsMaxCoolSetpointLimit (int16, cluster 0x0201) to the Barton
+ * absoluteMaxCoolLimit resource, zero-padded to a fixed width.
+ */
+function handleAbsMaxCool(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var neg = value < 0;
+    var s = Math.abs(value).toString();
+
+    while (s.length < (neg ? 3 : 4)) {
+        s = '0' + s;
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_ABS_MAX_COOL, (neg ? '-' : '') + s)
+        .success();
+}
+
+/**
+ * Maps Matter ControlSequenceOfOperation (enum8, cluster 0x0201) to the Barton
+ * controlSequenceOfOperation resource as a string. Rejects unknown values.
+ */
+function handleCtrlSeqOp(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var seqValues = [
+        'coolingOnly',
+        'coolingWithReheat',
+        'heatingOnly',
+        'heatingWithReheat',
+        'coolingAndHeatingFourPipes',
+        'coolingAndHeatingFourPipesWithReheat'
+    ];
+    var seq = seqValues[value];
+
+    if (seq === undefined) {
+        return Sbmd.result().error('Unknown ControlSequenceOfOperation: ' + value);
+    }
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_CTRL_SEQ_OP, seq).success();
+}
+
+/**
+ * Maps Matter SystemMode (enum8, cluster 0x0201) to the Barton systemMode
+ * resource as a string; unknown modes become 'unknown'.
+ */
+function handleSystemMode(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var modeMap = {
+        0: 'off',
+        1: 'auto',
+        3: 'cool',
+        4: 'heat',
+        5: 'heat',
+        6: 'precooling',
+        7: 'fanOnly'
+    };
+    var mode = modeMap[value];
+
+    if (mode === undefined) {
+        mode = 'unknown';
+    }
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_SYSTEM_MODE, mode).success();
+}
+
+/**
+ * Maps Matter ThermostatRunningState (bitmap16, cluster 0x0201) to the Barton
+ * systemState resource (heating/cooling/off) from the active heat/cool bits.
+ */
+function handleRunningState(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    var state = 'off';
+
+    if (value & 0x0001 || value & 0x0008) {
+        state = 'heating';
+    } else if (value & 0x0002 || value & 0x0010) {
+        state = 'cooling';
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_SYSTEM_STATE, state)
+        .success();
+}
+
+/**
+ * Maps Matter FanMode (enum8, Fan Control cluster 0x0202) to the Barton fanMode
+ * resource (off/on/auto); unknown modes become 'unknown'.
+ */
+function handleFanMode(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    // FanMode: 0=Off, 1=Low, 2=Medium, 3=High, 4=On, 5=Auto
+    var modeMap = {
+        0: 'off',
+        1: 'on',
+        2: 'on',
+        3: 'on',
+        4: 'on',
+        5: 'auto'
+    };
+    var mode = modeMap[value];
+
+    if (mode === undefined) {
+        mode = 'unknown';
+    }
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_FAN_MODE, mode).success();
+}
+
+/**
+ * Maps Matter PercentCurrent (uint8, Fan Control cluster 0x0202) to the Barton
+ * fanOn resource as a boolean string (on when non-zero).
+ */
+function handleFanPercentCurrent(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed');
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_FAN_ON, String(value !== 0))
+        .success();
+}

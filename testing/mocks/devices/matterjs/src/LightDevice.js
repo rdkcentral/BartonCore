@@ -32,24 +32,24 @@
  * Can be run directly:  node LightDevice.js --passcode ... --discriminator ...
  */
 
-import { pathToFileURL } from "node:url";
-import { Endpoint } from "@matter/main";
-import { DimmableLightDevice, DimmableLightRequirements } from "@matter/main/devices";
-import { VirtualDevice } from "./VirtualDevice.js";
-import { parseArgs } from "./parseArgs.js";
+import {pathToFileURL} from 'node:url';
+import {Endpoint} from '@matter/main';
+import {DimmableLightDevice, DimmableLightRequirements} from '@matter/main/devices';
+import {VirtualDevice} from './VirtualDevice.js';
+import {parseArgs} from './parseArgs.js';
 
 export class LightDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
-            deviceName: "Virtual Dimmable Light",
-            ...options,
+            deviceName: 'Virtual Dimmable Light',
+            ...options
         });
 
-        this.registerOperation("on", () => this.handleOn());
-        this.registerOperation("off", () => this.handleOff());
-        this.registerOperation("toggle", () => this.handleToggle());
-        this.registerOperation("getState", () => this.handleGetState());
-        this.registerOperation("setIdentifyTime", (params) => this.handleSetIdentifyTime(params));
+        this.registerOperation('on', () => this.handleOn());
+        this.registerOperation('off', () => this.handleOff());
+        this.registerOperation('toggle', () => this.handleToggle());
+        this.registerOperation('getState', () => this.handleGetState());
+        this.registerOperation('setIdentifyTime', (params) => this.handleSetIdentifyTime(params));
     }
 
     getDeviceType() {
@@ -62,20 +62,20 @@ export class LightDevice extends VirtualDevice {
             new Endpoint(
                 DimmableLightDevice.with(
                     DimmableLightRequirements.OnOffServer,
-                    DimmableLightRequirements.LevelControlServer,
+                    DimmableLightRequirements.LevelControlServer
                 ),
                 {
-                    id: "light-ep1",
+                    id: 'light-ep1',
                     onOff: {
-                        onOff: false,
+                        onOff: false
                     },
                     levelControl: {
                         currentLevel: 1,
                         minLevel: 1,
                         maxLevel: 254,
-                        onLevel: 254,
-                    },
-                },
+                        onLevel: 254
+                    }
+                }
             )
         ];
     }
@@ -85,7 +85,7 @@ export class LightDevice extends VirtualDevice {
             agent.onOff.state.onOff = true;
         });
 
-        return { onOff: true };
+        return {onOff: true};
     }
 
     async handleOff() {
@@ -93,7 +93,7 @@ export class LightDevice extends VirtualDevice {
             agent.onOff.state.onOff = false;
         });
 
-        return { onOff: false };
+        return {onOff: false};
     }
 
     async handleToggle() {
@@ -104,7 +104,7 @@ export class LightDevice extends VirtualDevice {
             agent.onOff.state.onOff = newState;
         });
 
-        return { onOff: newState };
+        return {onOff: newState};
     }
 
     async handleGetState() {
@@ -118,12 +118,17 @@ export class LightDevice extends VirtualDevice {
 
         return {
             onOff,
-            currentLevel,
+            currentLevel
         };
     }
 
-    async handleSetIdentifyTime({ identifyTime } = {}) {
-        if (typeof identifyTime !== "number" || !Number.isInteger(identifyTime) || identifyTime < 0 || identifyTime > 65535) {
+    async handleSetIdentifyTime({identifyTime} = {}) {
+        if (
+            typeof identifyTime !== 'number' ||
+            !Number.isInteger(identifyTime) ||
+            identifyTime < 0 ||
+            identifyTime > 65535
+        ) {
             throw new Error(`Invalid identifyTime: ${identifyTime}. Must be a uint16 (0-65535).`);
         }
 
@@ -131,7 +136,7 @@ export class LightDevice extends VirtualDevice {
             agent.identify.state.identifyTime = identifyTime;
         });
 
-        return { identifyTime };
+        return {identifyTime};
     }
 }
 

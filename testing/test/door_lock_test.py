@@ -242,16 +242,16 @@ def test_locked_resource_updated_by_event(default_environment, matter_door_lock)
     # From here, use event-driven updates via RESOURCE_UPDATED.
     resource_updated_queue = resource_update_listener(client, "locked")
 
-    # Trigger sideband unlock — DoorLockDevice.js emits LockOperation (Unlock) event
+    # Trigger sideband unlock — the device's LockState attribute transitions to Unlocked
     result = matter_door_lock.sideband.send("unlock")
     assert result["lockState"] == "unlocked"
 
-    # Barton should receive a resource update driven by the LockOperation event
+    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "false", timeout=10)
 
-    # Trigger sideband lock — DoorLockDevice.js emits LockOperation (Lock) event
+    # Trigger sideband lock — the device's LockState attribute transitions to Locked
     result = matter_door_lock.sideband.send("lock")
     assert result["lockState"] == "locked"
 
-    # Barton should receive a resource update driven by the LockOperation event
+    # Barton receives the LockState attribute report and updates the resource (RESOURCE_UPDATED)
     wait_for_resource_value(resource_updated_queue, "true", timeout=10)

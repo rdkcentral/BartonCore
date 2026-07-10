@@ -43,6 +43,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
@@ -51,6 +52,8 @@
 extern "C" {
 #include <mquickjs/mquickjs.h>
 }
+
+#include "matter/sbmd/SafeJSValue.h"
 
 namespace barton
 {
@@ -61,7 +64,7 @@ namespace barton
     {
         struct UpdateResource
         {
-            std::optional<std::string> endpoint; // absent = use trigger endpoint
+            std::optional<std::string> endpoint; // absent = device-level resource
             std::string resource;
             std::string value;
             std::optional<std::string> metadata; // JSON string for resource updated event
@@ -135,12 +138,13 @@ namespace barton
             std::string tlvBase64;
             std::optional<uint32_t> endpointId;
             std::optional<uint16_t> timedInvokeTimeoutMs;
-            // Deferred fields — stored as JSValues for later handler invocation
+            // Deferred fields — GC-rooted callbacks for later handler invocation.
+            // An empty SafeJSValue (HasValue() == false) means the callback was absent.
             uint32_t responseCommandId;
-            JSValue onResponse = JS_UNDEFINED;
-            JSValue onError = JS_UNDEFINED;
+            SafeJSValue onResponse;
+            SafeJSValue onError;
             std::optional<uint32_t> timeoutMs;
-            JSValue context = JS_UNDEFINED;
+            SafeJSValue context;
         };
 
         struct ReadAttribute
@@ -148,10 +152,12 @@ namespace barton
             uint32_t clusterId;
             uint32_t attributeId;
             std::optional<uint32_t> endpointId;
-            JSValue onResponse = JS_UNDEFINED;
-            JSValue onError = JS_UNDEFINED;
+            // Deferred fields — GC-rooted callbacks for later handler invocation.
+            // An empty SafeJSValue (HasValue() == false) means the callback was absent.
+            SafeJSValue onResponse;
+            SafeJSValue onError;
             std::optional<uint32_t> timeoutMs;
-            JSValue context = JS_UNDEFINED;
+            SafeJSValue context;
         };
 
         using Data = std::variant<Success, Error, SendCommand, WriteAttribute, RequestCommand, ReadAttribute>;

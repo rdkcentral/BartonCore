@@ -77,21 +77,27 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleTemperature: {
-            aliases: ['tempMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                // -32768 (0x8000): Matter null for int16 MeasuredValue
-                if (value === null || value === -32768) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-                    .success();
-            }
-        }
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature}
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Maps Matter Temperature MeasuredValue (int16, cluster 0x0402) to the Barton
+ * temperature resource.
+ */
+function handleTemperature(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // -32768 (0x8000): Matter null for int16 MeasuredValue
+    if (value === null || value === -32768) {
+        return Sbmd.result().error('MeasuredValue unavailable');
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
+        .success();
+}

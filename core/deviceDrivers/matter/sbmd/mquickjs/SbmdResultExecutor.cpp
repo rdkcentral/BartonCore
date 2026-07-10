@@ -25,10 +25,12 @@
  * Created by tlea on 6/12/2026
  */
 
-#define LOG_TAG "SbmdResultExecutor"
+#define LOG_TAG     "SbmdResultExecutor"
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdResultExecutor.h"
+#include "SbmdJsUtil.h"
+#include "SbmdWireContract.h"
 
 #include <string>
 
@@ -39,87 +41,7 @@ extern "C" {
 
 namespace barton
 {
-    namespace
-    {
-        std::string GetStringProp(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return "";
-            }
-
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
-
-            return str ? std::string(str) : "";
-        }
-
-        uint32_t GetUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return 0;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        std::optional<uint32_t> GetOptUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return std::nullopt;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            auto opt = GetOptUint32Prop(ctx, obj, name);
-
-            if (!opt.has_value())
-            {
-                return std::nullopt;
-            }
-
-            return static_cast<uint16_t>(*opt);
-        }
-
-        uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
-        {
-            JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
-
-            if (JS_IsUndefined(lenVal))
-            {
-                return 0;
-            }
-
-            uint32_t len = 0;
-            JS_ToUint32(ctx, &len, lenVal);
-
-            return len;
-        }
-
-        bool HasProperty(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            return !JS_IsUndefined(val);
-        }
-    } // namespace
+    using namespace mquickjs;
 
     std::optional<ParsedResult> SbmdResultExecutor::Parse(JSContext *ctx, JSValue resultVal)
     {
@@ -130,7 +52,7 @@ namespace barton
         }
 
         // Get ops array
-        JSValue opsVal = JS_GetPropertyStr(ctx, resultVal, "ops");
+        JSValue opsVal = JS_GetPropertyStr(ctx, resultVal, SBMD_KEY_OPS);
 
         if (JS_IsUndefined(opsVal) || JS_IsNull(opsVal))
         {
@@ -139,7 +61,7 @@ namespace barton
         }
 
         // Get terminal
-        JSValue termVal = JS_GetPropertyStr(ctx, resultVal, "terminal");
+        JSValue termVal = JS_GetPropertyStr(ctx, resultVal, SBMD_KEY_TERMINAL);
 
         if (JS_IsUndefined(termVal) || JS_IsNull(termVal))
         {
@@ -182,58 +104,58 @@ namespace barton
 
     std::optional<ResultOp> SbmdResultExecutor::ParseOp(JSContext *ctx, JSValue opVal)
     {
-        std::string opType = GetStringProp(ctx, opVal, "op");
+        std::string opType = GetStringProp(ctx, opVal, SBMD_KEY_OP);
 
         if (opType == "updateResource")
         {
             ResultOp::UpdateResource data;
 
-            if (HasProperty(ctx, opVal, "endpoint"))
+            if (HasProperty(ctx, opVal, SBMD_KEY_ENDPOINT))
             {
-                data.endpoint = GetStringProp(ctx, opVal, "endpoint");
+                data.endpoint = GetStringProp(ctx, opVal, SBMD_KEY_ENDPOINT);
             }
 
-            data.resource = GetStringProp(ctx, opVal, "resource");
-            data.value = GetStringProp(ctx, opVal, "value");
+            data.resource = GetStringProp(ctx, opVal, SBMD_KEY_RESOURCE);
+            data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
 
-            if (HasProperty(ctx, opVal, "metadata"))
+            if (HasProperty(ctx, opVal, SBMD_KEY_METADATA))
             {
-                data.metadata = GetStringProp(ctx, opVal, "metadata");
+                data.metadata = GetStringProp(ctx, opVal, SBMD_KEY_METADATA);
             }
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "setMetadata")
         {
             ResultOp::SetMetadata data;
-            data.name = GetStringProp(ctx, opVal, "name");
-            data.value = GetStringProp(ctx, opVal, "value");
+            data.name = GetStringProp(ctx, opVal, SBMD_KEY_NAME);
+            data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "setPersistentData")
         {
             ResultOp::SetPersistentData data;
-            data.key = GetStringProp(ctx, opVal, "key");
-            data.value = GetStringProp(ctx, opVal, "value");
+            data.key = GetStringProp(ctx, opVal, SBMD_KEY_KEY);
+            data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "setTransientData")
         {
             ResultOp::SetTransientData data;
-            data.key = GetStringProp(ctx, opVal, "key");
-            data.value = GetStringProp(ctx, opVal, "value");
-            data.ttlSecs = GetUint32Prop(ctx, opVal, "ttlSecs");
+            data.key = GetStringProp(ctx, opVal, SBMD_KEY_KEY);
+            data.value = GetStringProp(ctx, opVal, SBMD_KEY_VALUE);
+            data.ttlSecs = GetUint32Prop(ctx, opVal, SBMD_KEY_TTL_SECS, 0);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else if (opType == "log")
         {
             ResultOp::Log data;
-            data.message = GetStringProp(ctx, opVal, "message");
+            data.message = GetStringProp(ctx, opVal, SBMD_KEY_MESSAGE);
 
-            return ResultOp{std::move(data)};
+            return ResultOp {std::move(data)};
         }
         else
         {
@@ -244,114 +166,151 @@ namespace barton
 
     std::optional<ResultTerminal> SbmdResultExecutor::ParseTerminal(JSContext *ctx, JSValue termVal)
     {
-        std::string opType = GetStringProp(ctx, termVal, "op");
+        std::string opType = GetStringProp(ctx, termVal, SBMD_KEY_OP);
 
         if (opType == "success")
         {
             ResultTerminal::Success data;
-            data.value = GetStringProp(ctx, termVal, "value");
+            data.value = GetStringProp(ctx, termVal, SBMD_KEY_VALUE);
 
             return ResultTerminal {std::move(data)};
         }
         else if (opType == "error")
         {
             ResultTerminal::Error data;
-            data.message = GetStringProp(ctx, termVal, "message");
+            data.message = GetStringProp(ctx, termVal, SBMD_KEY_MESSAGE);
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "sendCommand")
         {
             ResultTerminal::SendCommand data;
-            data.clusterId = GetUint32Prop(ctx, termVal, "clusterId");
-            data.commandId = GetUint32Prop(ctx, termVal, "commandId");
-            data.tlvBase64 = GetStringProp(ctx, termVal, "tlvBase64");
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID, 0);
+            data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // options: { endpointId?, timedInvokeTimeoutMs?, successValue? }
-            JSValue opts = JS_GetPropertyStr(ctx, termVal, "options");
+            JSValue opts = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_OPTIONS);
 
             if (!JS_IsUndefined(opts) && !JS_IsNull(opts))
             {
-                data.endpointId = GetOptUint32Prop(ctx, opts, "endpointId");
-                data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, "timedInvokeTimeoutMs");
-                data.successValue = GetStringProp(ctx, opts, "successValue");
+                data.endpointId = GetOptUint32Prop(ctx, opts, SBMD_KEY_ENDPOINT_ID);
+                data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, SBMD_KEY_TIMED_INVOKE_TIMEOUT_MS);
+                data.successValue = GetStringProp(ctx, opts, SBMD_KEY_SUCCESS_VALUE);
             }
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "writeAttribute")
         {
             ResultTerminal::WriteAttribute data;
-            data.clusterId = GetUint32Prop(ctx, termVal, "clusterId");
-            data.attributeId = GetUint32Prop(ctx, termVal, "attributeId");
-            data.tlvBase64 = GetStringProp(ctx, termVal, "tlvBase64");
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID, 0);
+            data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // options: { endpointId? }
-            JSValue opts = JS_GetPropertyStr(ctx, termVal, "options");
+            JSValue opts = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_OPTIONS);
 
             if (!JS_IsUndefined(opts) && !JS_IsNull(opts))
             {
-                data.endpointId = GetOptUint32Prop(ctx, opts, "endpointId");
+                data.endpointId = GetOptUint32Prop(ctx, opts, SBMD_KEY_ENDPOINT_ID);
             }
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "requestCommand")
         {
             ResultTerminal::RequestCommand data;
-            data.clusterId = GetUint32Prop(ctx, termVal, "clusterId");
-            data.commandId = GetUint32Prop(ctx, termVal, "commandId");
-            data.tlvBase64 = GetStringProp(ctx, termVal, "tlvBase64");
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.commandId = GetUint32Prop(ctx, termVal, SBMD_KEY_COMMAND_ID, 0);
+            data.tlvBase64 = GetStringProp(ctx, termVal, SBMD_KEY_TLV_BASE64);
 
             // Deferred handler callbacks
-            JSValue deferred = JS_GetPropertyStr(ctx, termVal, "deferred");
+            JSValue deferred = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_DEFERRED);
 
             if (!JS_IsUndefined(deferred) && !JS_IsNull(deferred))
             {
-                data.responseCommandId = GetUint32Prop(ctx, deferred, "responseCommandId");
-                data.onResponse = JS_GetPropertyStr(ctx, deferred, "onResponse");
-                data.onError = JS_GetPropertyStr(ctx, deferred, "onError");
-                data.timeoutMs = GetOptUint32Prop(ctx, deferred, "timeoutMs");
-                data.context = JS_GetPropertyStr(ctx, deferred, "context");
+                data.responseCommandId = GetUint32Prop(ctx, deferred, SBMD_KEY_RESPONSE_COMMAND_ID, 0);
+
+                JSValue onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
+
+                if (!JS_IsUndefined(onResponse))
+                {
+                    data.onResponse = SafeJSValue {ctx, onResponse};
+                }
+
+                JSValue onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+
+                if (!JS_IsUndefined(onError))
+                {
+                    data.onError = SafeJSValue {ctx, onError};
+                }
+
+                data.timeoutMs = GetOptUint32Prop(ctx, deferred, SBMD_KEY_TIMEOUT_MS);
+
+                JSValue context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                if (!JS_IsUndefined(context))
+                {
+                    data.context = SafeJSValue {ctx, context};
+                }
             }
 
             // options: { endpointId?, timedInvokeTimeoutMs? }
-            JSValue opts = JS_GetPropertyStr(ctx, termVal, "options");
+            JSValue opts = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_OPTIONS);
 
             if (!JS_IsUndefined(opts) && !JS_IsNull(opts))
             {
-                data.endpointId = GetOptUint32Prop(ctx, opts, "endpointId");
-                data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, "timedInvokeTimeoutMs");
+                data.endpointId = GetOptUint32Prop(ctx, opts, SBMD_KEY_ENDPOINT_ID);
+                data.timedInvokeTimeoutMs = GetOptUint16Prop(ctx, opts, SBMD_KEY_TIMED_INVOKE_TIMEOUT_MS);
             }
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else if (opType == "readAttribute")
         {
             ResultTerminal::ReadAttribute data;
-            data.clusterId = GetUint32Prop(ctx, termVal, "clusterId");
-            data.attributeId = GetUint32Prop(ctx, termVal, "attributeId");
+            data.clusterId = GetUint32Prop(ctx, termVal, SBMD_KEY_CLUSTER_ID, 0);
+            data.attributeId = GetUint32Prop(ctx, termVal, SBMD_KEY_ATTRIBUTE_ID, 0);
 
             // Deferred handler callbacks
-            JSValue deferred = JS_GetPropertyStr(ctx, termVal, "deferred");
+            JSValue deferred = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_DEFERRED);
 
             if (!JS_IsUndefined(deferred) && !JS_IsNull(deferred))
             {
-                data.onResponse = JS_GetPropertyStr(ctx, deferred, "onResponse");
-                data.onError = JS_GetPropertyStr(ctx, deferred, "onError");
-                data.timeoutMs = GetOptUint32Prop(ctx, deferred, "timeoutMs");
-                data.context = JS_GetPropertyStr(ctx, deferred, "context");
+                JSValue onResponse = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_RESPONSE);
+
+                if (!JS_IsUndefined(onResponse))
+                {
+                    data.onResponse = SafeJSValue {ctx, onResponse};
+                }
+
+                JSValue onError = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_ON_ERROR);
+
+                if (!JS_IsUndefined(onError))
+                {
+                    data.onError = SafeJSValue {ctx, onError};
+                }
+
+                data.timeoutMs = GetOptUint32Prop(ctx, deferred, SBMD_KEY_TIMEOUT_MS);
+
+                JSValue context = JS_GetPropertyStr(ctx, deferred, SBMD_KEY_CONTEXT);
+
+                if (!JS_IsUndefined(context))
+                {
+                    data.context = SafeJSValue {ctx, context};
+                }
             }
 
             // options: { endpointId? }
-            JSValue opts = JS_GetPropertyStr(ctx, termVal, "options");
+            JSValue opts = JS_GetPropertyStr(ctx, termVal, SBMD_KEY_OPTIONS);
 
             if (!JS_IsUndefined(opts) && !JS_IsNull(opts))
             {
-                data.endpointId = GetOptUint32Prop(ctx, opts, "endpointId");
+                data.endpointId = GetOptUint32Prop(ctx, opts, SBMD_KEY_ENDPOINT_ID);
             }
 
-            return ResultTerminal{std::move(data)};
+            return ResultTerminal {std::move(data)};
         }
         else
         {

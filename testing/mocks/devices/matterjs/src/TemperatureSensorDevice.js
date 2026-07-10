@@ -37,52 +37,54 @@
  * Can be run directly:  node TemperatureSensorDevice.js --passcode ... --discriminator ...
  */
 
-import { pathToFileURL } from "node:url";
-import { Endpoint } from "@matter/main";
+import {pathToFileURL} from 'node:url';
+import {Endpoint} from '@matter/main';
 import {
     TemperatureSensorDevice as MatterTemperatureSensorDevice,
-    TemperatureSensorRequirements,
-} from "@matter/main/devices";
-import { VirtualDevice } from "./VirtualDevice.js";
-import { parseArgs } from "./parseArgs.js";
+    TemperatureSensorRequirements
+} from '@matter/main/devices';
+import {VirtualDevice} from './VirtualDevice.js';
+import {parseArgs} from './parseArgs.js';
 
 export class TemperatureSensorDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
-            deviceName: "Virtual Temperature Sensor",
-            ...options,
+            deviceName: 'Virtual Temperature Sensor',
+            ...options
         });
 
-        this.registerOperation("setTemperature", (params) => this.handleSetTemperature(params));
-        this.registerOperation("getState", () => this.handleGetState());
+        this.registerOperation('setTemperature', (params) => this.handleSetTemperature(params));
+        this.registerOperation('getState', () => this.handleGetState());
     }
 
-    getDeviceType() { return 0x0302; }
+    getDeviceType() {
+        return 0x0302;
+    }
 
     createEndpoints() {
         return [
             new Endpoint(
                 MatterTemperatureSensorDevice.with(
-                    TemperatureSensorRequirements.TemperatureMeasurementServer,
+                    TemperatureSensorRequirements.TemperatureMeasurementServer
                 ),
                 {
-                    id: "temperature-ep1",
+                    id: 'temperature-ep1',
                     temperatureMeasurement: {
                         measuredValue: 2550,
                         minMeasuredValue: -4000,
-                        maxMeasuredValue: 12500,
-                    },
-                },
+                        maxMeasuredValue: 12500
+                    }
+                }
             )
         ];
     }
 
-    async handleSetTemperature({ value }) {
+    async handleSetTemperature({value}) {
         await this.endpoints[0].act(async (agent) => {
             agent.temperatureMeasurement.state.measuredValue = value;
         });
 
-        return { measuredValue: value };
+        return {measuredValue: value};
     }
 
     async handleGetState() {
@@ -92,7 +94,7 @@ export class TemperatureSensorDevice extends VirtualDevice {
             temperature = agent.temperatureMeasurement.state.measuredValue;
         });
 
-        return { temperature };
+        return {temperature};
     }
 }
 

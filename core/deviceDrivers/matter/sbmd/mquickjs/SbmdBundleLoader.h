@@ -44,13 +44,7 @@ namespace barton
      * - Tlv: TLV encoding/decoding for Matter types
      * - result(): builder for handler return values
      *
-     * The bundle is assembled at build time from individual source files:
-     *   1. sbmd-namespace.js — creates the Sbmd namespace and _internal
-     *   2. sbmd-utf8.js      — adds Sbmd._internal.Utf8
-     *   3. sbmd-base64.js    — adds Sbmd.Base64
-     *   4. sbmd-tlv.js       — adds Sbmd.Tlv
-     *   5. sbmd-result.js    — adds Sbmd.result() builder
-     *   6. sbmd-cleanup.js   — removes Sbmd._internal
+     * The bundle is assembled at build time from individual source files.
      */
     class SbmdBundleLoader
     {
@@ -67,26 +61,9 @@ namespace barton
          */
         static bool LoadBundle(JSContext *ctx);
 
-        /**
-         * Check if the SBMD bundles are available.
-         *
-         * @return true if the bundles are available (should always be true when
-         *         properly built)
-         */
-        static bool IsAvailable();
-
-        /**
-         * Get the source of the loaded bundles.
-         *
-         * @return "embedded" if loaded from compiled-in source, or "none" if not loaded
-         */
-        static const char *GetSource();
-
     private:
         static bool LoadFromEmbedded(JSContext *ctx);
         static bool ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length, const char *name);
-
-        static const char *source;
     };
 
 } // namespace barton

@@ -125,7 +125,7 @@ namespace
         EXPECT_TRUE(results.empty());
     }
 
-    TEST_F(SbmdDispatchTableTest, SingleSpecificHandler)
+    TEST_F(SbmdDispatchTableTest, SingleAliasHandler)
     {
         std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
@@ -139,7 +139,7 @@ namespace
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 1u);
         EXPECT_EQ(results[0]->handler->name, "onOffHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
     }
 
     TEST_F(SbmdDispatchTableTest, NoMatchReturnsEmpty)
@@ -210,7 +210,7 @@ namespace
         EXPECT_TRUE(table.Lookup(0x0008, 0x0000).empty());
     }
 
-    TEST_F(SbmdDispatchTableTest, PriorityOrderSpecificBeforeMulti)
+    TEST_F(SbmdDispatchTableTest, PriorityOrderSingleBeforeMulti)
     {
         std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
@@ -219,22 +219,22 @@ namespace
         std::vector<SbmdDeviceHandler> handlers;
         // Multi handler registered first
         handlers.push_back(MakeHandler("multiHandler", {"onOff", "currentLevel"}));
-        // Specific handler registered second
-        handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
+        // Single-alias handler registered second
+        handlers.push_back(MakeHandler("singleHandler", {"onOff"}));
 
         SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 2u);
-        // Specific should come first regardless of registration order
-        EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        // Single should come first regardless of registration order
+        EXPECT_EQ(results[0]->handler->name, "singleHandler");
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "multiHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Multi);
     }
 
-    TEST_F(SbmdDispatchTableTest, PriorityOrderSpecificBeforeWildcard)
+    TEST_F(SbmdDispatchTableTest, PriorityOrderSingleBeforeWildcard)
     {
         std::unordered_map<std::string, SbmdAlias> aliases;
         aliases["onOff"] = MakeAttrAlias("onOff", 0x0006, 0x0000);
@@ -243,17 +243,17 @@ namespace
         std::vector<SbmdDeviceHandler> handlers;
         // Wildcard first
         handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
-        // Specific second
-        handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
+        // Single second
+        handlers.push_back(MakeHandler("singleHandler", {"onOff"}));
 
         SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 2u);
-        // Specific first, wildcard second
-        EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        // Single first, wildcard second
+        EXPECT_EQ(results[0]->handler->name, "singleHandler");
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "wildcardHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Wildcard);
     }
@@ -268,15 +268,15 @@ namespace
         std::vector<SbmdDeviceHandler> handlers;
         handlers.push_back(MakeHandler("wildcardHandler", {"anyOnOff"}));
         handlers.push_back(MakeHandler("multiHandler", {"onOff", "currentLevel"}));
-        handlers.push_back(MakeHandler("specificHandler", {"onOff"}));
+        handlers.push_back(MakeHandler("singleHandler", {"onOff"}));
 
         SbmdDispatchTable table;
         table.Build(aliases, handlers);
 
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 3u);
-        EXPECT_EQ(results[0]->handler->name, "specificHandler");
-        EXPECT_EQ(results[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(results[0]->handler->name, "singleHandler");
+        EXPECT_EQ(results[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(results[1]->handler->name, "multiHandler");
         EXPECT_EQ(results[1]->priority, HandlerPriority::Multi);
         EXPECT_EQ(results[2]->handler->name, "wildcardHandler");
@@ -443,7 +443,7 @@ namespace
 
         auto results = table.Lookup(0x0006, 0x0000);
         ASSERT_EQ(results.size(), 2u);
-        // Both are specific, so stable order (registration order preserved)
+        // Both are single-alias, so stable order (registration order preserved)
         EXPECT_EQ(results[0]->handler->name, "handler1");
         EXPECT_EQ(results[1]->handler->name, "handler2");
     }
@@ -816,7 +816,7 @@ namespace
             HandlerContext hctx;
             hctx.deviceUuid = "test-device";
             hctx.endpointId = "1";
-            JSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
+            SafeJSValue args = SbmdHandlerInvoker::BuildCommandArgs(Ctx(), hctx, 0xFFF10000, 0, "AQID");
             auto parsed = SbmdHandlerInvoker::InvokeHandler(Ctx(), results[0]->handler->handler, args);
 
             ASSERT_TRUE(parsed.has_value());
@@ -885,11 +885,11 @@ namespace
             EXPECT_TRUE(driver->Activate(Ctx()));
         }
 
-        // CMD_ECHO should match both specific and wildcard
+        // CMD_ECHO should match both single and wildcard
         auto echoResults = driver->GetCommandDispatch().Lookup(0xFFF10000, 0);
         ASSERT_EQ(echoResults.size(), 2u);
         EXPECT_EQ(echoResults[0]->handler->name, "handleEcho");
-        EXPECT_EQ(echoResults[0]->priority, HandlerPriority::Specific);
+        EXPECT_EQ(echoResults[0]->priority, HandlerPriority::Single);
         EXPECT_EQ(echoResults[1]->handler->name, "handleAny");
         EXPECT_EQ(echoResults[1]->priority, HandlerPriority::Wildcard);
 

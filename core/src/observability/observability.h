@@ -21,8 +21,8 @@
 //
 // ------------------------------ tabstop = 4 ----------------------------------
 
-#ifndef OBSERVABILITY_INIT_H
-#define OBSERVABILITY_INIT_H
+#ifndef OBSERVABILITY_H
+#define OBSERVABILITY_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +37,13 @@ extern "C" {
 int observabilityInit(void);
 
 /**
- * Shut down the observability subsystem and release all instruments.
+ * Shut down the observability subsystem.
+ * Detaches all registered instruments from the registry so they will no
+ * longer appear in observabilityDumpJson() output. Callers that still hold
+ * instrument references may continue to record into them, but those
+ * recordings will be silently discarded (not visible in any future dump).
+ * Instrument memory is not freed here — each instrument must be released
+ * individually via its respective Release function.
  * Safe to call even if init was not called or failed.
  */
 void observabilityShutdown(void);
@@ -54,4 +60,4 @@ char *observabilityDumpJson(void);
 }
 #endif
 
-#endif /* OBSERVABILITY_INIT_H */
+#endif /* OBSERVABILITY_H */

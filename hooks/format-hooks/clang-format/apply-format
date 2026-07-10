@@ -328,7 +328,7 @@ else # Diff-only.
         | "${format_diff_args[@]}" \
             -p1 \
             -style="$style" \
-            -iregex="$exclusions_regex"'.*\.(c|cpp|cxx|cc|h|hpp|m|mm|js|java)' \
+            -iregex="$exclusions_regex"'.*\.(c|cpp|cxx|cc|h|hpp|m|mm|java)' \
             > "$patch_dest"
     # Starting with version 18, clang-format-diff exits with status 1 when there
     # are diffs, but other non-zero statuses indicate errors.

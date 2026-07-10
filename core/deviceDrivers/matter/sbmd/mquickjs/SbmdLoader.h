@@ -79,10 +79,8 @@ namespace barton
          * @param sourceLen Length of the file contents
          * @return The extracted registration, or nullptr on failure
          */
-        static std::unique_ptr<SbmdRegistration> LoadDriver(JSContext *ctx,
-                                                               const std::string &filePath,
-                                                               const char *source,
-                                                               size_t sourceLen);
+        static std::unique_ptr<SbmdRegistration>
+        LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen);
 
         /**
          * Extract the constants block from a .sbmd.js source text.
@@ -94,11 +92,13 @@ namespace barton
          * @param ctx The mquickjs context
          * @param source The file contents
          * @param sourceLen Length of the file contents
-         * @return Vector of (name, value-as-JS-literal) pairs, empty if no constants block
+         * @return An engaged optional holding the (name, value-as-JS-literal) pairs on success
+         *         (an empty vector means there was no constants block, or it was empty);
+         *         std::nullopt if a constants block was present but could not be extracted
+         *         (malformed block, eval failure, or a non-primitive value).
          */
-        static std::vector<std::pair<std::string, std::string>> ExtractConstants(JSContext *ctx,
-                                                                                  const char *source,
-                                                                                  size_t sourceLen);
+        static std::optional<std::vector<std::pair<std::string, std::string>>>
+        ExtractConstants(JSContext *ctx, const char *source, size_t sourceLen);
 
         /**
          * Generate the var declaration preamble from constants pairs.
@@ -139,7 +139,7 @@ namespace barton
         /**
          * Walk a resource handler declaration (simple function or {supplements, handler} object).
          */
-        static std::optional<SbmdResourceHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
+        static std::optional<SbmdHandler> ExtractResourceHandler(JSContext *ctx, JSValue val);
 
         /**
          * Walk a device handler array (attributeHandlers, eventHandlers, commandHandlers).

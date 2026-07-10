@@ -39,6 +39,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <transport/SessionHolder.h>
 #include <unordered_map>
 
 namespace barton
@@ -55,27 +56,23 @@ namespace barton
         uint64_t id = 0;
         std::promise<bool> *parkingPromise = nullptr;
 
-        // GC-rooted deferred handlers (stored in JSGCRef for proper GC management)
-        JSGCRef onResponseRef {};
-        JSGCRef onErrorRef {};
-        bool onResponseRooted = false;
-        bool onErrorRooted = false;
-
-        // Match criteria (for requestCommand responses)
-        uint32_t clusterId = 0;
-        uint32_t responseCommandId = 0;
-
-        // Deferred handler options
-        JSGCRef contextRef {};
-        bool contextRooted = false;
+        // Deferred handlers held alive for the operation's lifetime. An empty SafeJSValue (HasValue() == false)
+        // means the callback was not supplied.
+        SafeJSValue onResponse;
+        SafeJSValue onError;
+        SafeJSValue context;
 
         // Context for handler invocation
         HandlerContext handlerContext;
 
         // Context for continuing the chain
-        MatterDevice *device = nullptr;
+        std::weak_ptr<MatterDevice> device;
         chip::Messaging::ExchangeManager *exchangeMgr = nullptr;
-        const chip::SessionHandle *sessionHandle = nullptr;
+        // SessionHolder (not a raw SessionHandle pointer): the deferred chain re-sends
+        // commands across later event-loop turns, long after the originating connection
+        // callback has returned. The holder keeps a stable, lifetime-tracked reference to
+        // the session and reports release via its bool operator.
+        chip::SessionHolder sessionHandle;
         char **readValue = nullptr;
         char **executeResponse = nullptr;
 
@@ -153,11 +150,17 @@ namespace barton
 
         /**
          * Invoke a seed handler for a resource. Returns the seed value or empty string.
+         *
+         * @param device Optional. When non-null, used to prefetch the resource's declared
+         *               supplements from the attribute cache before the handler runs. When
+         *               null, the prefetch is skipped and any declared supplements are
+         *               delivered as null (see the supplement contract in
+         *               SbmdHandlerInvoker::AddSupplements).
          */
         std::string InvokeSeedHandler(const std::string &deviceId,
                                       const std::string &endpointId,
                                       const SbmdResource &resource,
-                                      MatterDevice *device = nullptr);
+                                      MatterDevice *device);
 
         /**
          * Find a resource by endpoint ID and resource ID.
@@ -183,7 +186,7 @@ namespace barton
          */
         void ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
                              MatterDevice &device,
-                             const ResultTerminal &terminal,
+                             ResultTerminal &terminal,
                              const HandlerContext &hctx,
                              const char *uri,
                              char **readValue,
@@ -197,7 +200,7 @@ namespace barton
          */
         void ExecuteRequestCommand(std::forward_list<std::promise<bool>> &promises,
                                    MatterDevice &device,
-                                   const ResultTerminal::RequestCommand &cmd,
+                                   ResultTerminal::RequestCommand &cmd,
                                    const HandlerContext &hctx,
                                    char **readValue,
                                    char **executeResponse,
@@ -210,7 +213,7 @@ namespace barton
          */
         void ExecuteReadAttribute(std::forward_list<std::promise<bool>> &promises,
                                   MatterDevice &device,
-                                  const ResultTerminal::ReadAttribute &ra,
+                                  ResultTerminal::ReadAttribute &ra,
                                   const HandlerContext &hctx,
                                   char **readValue,
                                   char **executeResponse,
@@ -235,7 +238,7 @@ namespace barton
          * Continue a deferred chain with a new result. Handles the terminal
          * and may re-arm the pending operation or complete it.
          */
-        void ContinueDeferredChain(PendingOperation &pending, const ParsedResult &result);
+        void ContinueDeferredChain(PendingOperation &pending, ParsedResult &result);
 
         /**
          * Complete a pending operation — resolve the parking promise and clean up.
@@ -243,9 +246,9 @@ namespace barton
         void CompletePendingOperation(uint64_t pendingId, bool success);
 
         /**
-         * Release GC roots for a pending operation's JS handlers.
+         * Release the held JS handler references for a pending operation.
          */
-        void ReleasePendingGcRoots(PendingOperation &pending);
+        void ReleasePendingHandlers(PendingOperation &pending);
 
         /**
          * Create an AttributeSupplementFetcher for the given device.
@@ -296,11 +299,19 @@ namespace barton
             std::chrono::steady_clock::time_point expiry;
         };
 
-        /** Per-device transient storage: deviceUuid → (key → entry) */
+        /**
+         * Per-device transient storage: deviceUuid → (key → entry).
+         *
+         * Thread-confinement invariant: this map (along with pendingOperations, nextPendingId, and
+         * skippedOptionalResources) is only accessed from the Matter/CHIP event-loop thread. All
+         * mutation and lookup happens inside handler dispatch and deferred-operation callbacks, which
+         * are serialized onto that single thread, so no additional locking is required. Do not touch
+         * these members from other threads.
+         */
         std::unordered_map<std::string, std::unordered_map<std::string, TransientEntry>> transientStore;
 
         /**
-         * Handle a attribute report via the dispatch tables.
+         * Handle an attribute report via the dispatch tables.
          * Called from MatterDevice::CacheCallback via the AttributeCallback.
          */
         void HandleAttributeReport(const std::string &deviceId,
@@ -308,7 +319,6 @@ namespace barton
                                    chip::ClusterId clusterId,
                                    chip::AttributeId attributeId,
                                    chip::TLV::TLVReader &reader);
-
         /**
          * Handle an event report via the dispatch tables.
          * Called from MatterDevice::CacheCallback via the EventCallback.
@@ -320,8 +330,8 @@ namespace barton
                          chip::TLV::TLVReader &reader);
 
         /**
-         * Handle an unsolicited command via the dispatch tables.
-         * Called when a command response does not match any pending requestCommand.
+         * Handle an incoming (server-side) command via the dispatch tables.
+         * Called from MatterDevice::IncomingCommandHandler via the CommandCallback.
          */
         void HandleCommand(const std::string &deviceId,
                            chip::EndpointId endpointId,
@@ -329,14 +339,58 @@ namespace barton
                            uint32_t commandId,
                            const std::string &tlvBase64);
 
+        /*
+         * Shared device-initiated dispatch loop for attribute/event/command reports. Iterates the
+         * matched handlers under the JS mutex, holds the args alive, adds supplements, invokes each handler,
+         * executes its non-terminal ops, and logs (but takes no outbound action on) error or other
+         * non-success terminals.
+         *
+         * deviceId     - UUID of the reporting device (used for supplement fetchers and op execution).
+         * matches      - the dispatch entries whose handlers should run for this report.
+         * matterDevice - device used to fetch attribute supplements, or nullptr to skip supplements.
+         * hctx         - handler context passed to op execution.
+         * clusterId    - the cluster id of the report, used in log messages.
+         * elementId    - the attribute/event/command id of the report, used in log messages.
+         * kindLabel    - human-readable kind for log messages (e.g. "Attribute"/"Event"/"Command").
+         * elementNoun  - short noun for log messages (e.g. "attr"/"event"/"command").
+         * buildArgs    - builds the per-handler args object for the given JSContext.
+         */
+        void DispatchToHandlers(const std::string &deviceId,
+                                const std::vector<const DispatchEntry *> &matches,
+                                MatterDevice *matterDevice,
+                                const HandlerContext &hctx,
+                                uint32_t clusterId,
+                                uint32_t elementId,
+                                const char *kindLabel,
+                                const char *elementNoun,
+                                const std::function<SafeJSValue(JSContext *)> &buildArgs);
+
+        /*
+         * Resolve the target endpoint for a cluster operation: use the explicit endpoint if the
+         * terminal specified one, otherwise ask the device to map the cluster to an endpoint. Static
+         * because it needs friend access to MatterDevice::GetEndpointForCluster.
+         *
+         * device           - the device whose endpoint mapping is queried when no explicit endpoint is
+         *                     given.
+         * clusterId        - the cluster whose endpoint is being resolved.
+         * explicitEndpoint - the endpoint explicitly requested by the terminal, if any.
+         *
+         * Returns the resolved endpoint id, or std::nullopt if no endpoint could be resolved (the
+         * caller decides how to log/fail).
+         */
+        static std::optional<chip::EndpointId>
+        ResolveEndpoint(MatterDevice &device, uint32_t clusterId, const std::optional<uint32_t> &explicitEndpoint);
+
         std::optional<uint8_t> ConvertModesToBitmask(const std::vector<std::string> &modes);
 
         /** Map of device ID to set of resource keys (endpointId:resourceId) for optional resources that failed
-         * configuration */
+         * prerequisite checks. Matter-thread-confined (see transientStore). */
         std::map<std::string, std::set<std::string>> skippedOptionalResources;
 
-        /** Active deferred operations indexed by unique ID */
+        /** Active deferred operations indexed by unique ID. Matter-thread-confined (see transientStore). */
         std::map<uint64_t, PendingOperation> pendingOperations;
+
+        /** Monotonic ID source for pendingOperations. Matter-thread-confined (see transientStore). */
         uint64_t nextPendingId = 1;
 
         friend class TestableSpecBasedMatterDeviceDriver;

@@ -40,9 +40,18 @@
       "description": "Named references to Matter cluster attributes, events, or commands.",
       "additionalProperties": { "$ref": "#/$defs/alias" }
     },
-    "barton": { "$ref": "#/$defs/barton" },
-    "matter": { "$ref": "#/$defs/matter" },
-    "reporting": { "$ref": "#/$defs/reporting" },
+    "barton": {
+      "$ref": "#/$defs/barton",
+      "description": "Barton device-model metadata (device class and version) for this driver."
+    },
+    "matter": {
+      "$ref": "#/$defs/matter",
+      "description": "Matter matching criteria that determine which devices this driver handles."
+    },
+    "reporting": {
+      "$ref": "#/$defs/reporting",
+      "description": "Default Matter attribute reporting intervals for this driver's subscriptions."
+    },
     "resources": {
       "type": "object",
       "description": "Device-level resource declarations keyed by resource name.",
@@ -113,6 +122,7 @@
 
     "barton": {
       "type": "object",
+      "description": "Barton device-model metadata describing how this driver's devices are classified within Barton.",
       "required": ["deviceClass", "deviceClassVersion"],
       "additionalProperties": false,
       "properties": {
@@ -130,6 +140,7 @@
 
     "matter": {
       "type": "object",
+      "description": "Matter matching criteria and options that determine which devices this driver binds to.",
       "required": ["deviceTypes"],
       "additionalProperties": false,
       "properties": {
@@ -168,6 +179,7 @@
 
     "reporting": {
       "type": "object",
+      "description": "Default Matter attribute reporting configuration (minimum and maximum intervals) for this driver's subscriptions.",
       "required": ["minSecs", "maxSecs"],
       "additionalProperties": false,
       "properties": {

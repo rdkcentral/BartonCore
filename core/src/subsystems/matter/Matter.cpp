@@ -219,7 +219,11 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     // PosixConfig storage objects (chip_factory.ini, chip_config.ini,
     // chip_counters.ini) are static globals that always use the compile-time
     // paths and cannot be redirected at runtime.
-    mkdir_p(CHIP_BARTON_CONF_DIR, 0700);
+    if (mkdir_p(CHIP_BARTON_CONF_DIR, 0700) != 0)
+    {
+        icError("Failed to create compile-time config directory: %s", CHIP_BARTON_CONF_DIR);
+        return false;
+    }
 
     myFabricId = accountId;
 
@@ -1355,10 +1359,53 @@ bool Matter::OpenCommissioningWindow(chip::NodeId nodeId,
 
     if (nodeId == 0)
     {
+        // This is the local node ("us"), so the onboarding payload must carry our own identity: vendor id,
+        // product id, and commissioning flow. Vendor id and product id come from the DeviceInstanceInfoProvider,
+        // the same source the SDK uses for the DNS-SD TXT record and onboarding codes.
+        if (DeviceLayer::GetDeviceInstanceInfoProvider()->GetVendorId(setupPayload.vendorID) != CHIP_NO_ERROR)
+        {
+            icError("Failed to get vendor id from DeviceInstanceInfoProvider");
+            return false;
+        }
+
+        if (DeviceLayer::GetDeviceInstanceInfoProvider()->GetProductId(setupPayload.productID) != CHIP_NO_ERROR)
+        {
+            icError("Failed to get product id from DeviceInstanceInfoProvider");
+            return false;
+        }
+
+        // The commissioning flow (standard/user-action-required/custom) is Barton configuration; the Matter SDK
+        // provides no source for it (it is not part of the DNS-SD TXT record and has no provider/config hook).
+        // Default to standard when the property is unset or invalid.
+        g_autoptr(BCorePropertyProvider) propertyProvider = deviceServiceConfigurationGetPropertyProvider();
+        uint8_t commissioningFlowValue = b_core_property_provider_get_property_as_uint8(
+            propertyProvider,
+            B_CORE_BARTON_MATTER_COMMISSIONING_FLOW,
+            static_cast<uint8_t>(CommissioningFlow::kStandard));
+
+        switch (static_cast<CommissioningFlow>(commissioningFlowValue))
+        {
+            case CommissioningFlow::kStandard:
+            case CommissioningFlow::kUserActionRequired:
+            case CommissioningFlow::kCustom:
+                setupPayload.commissioningFlow = static_cast<CommissioningFlow>(commissioningFlowValue);
+                break;
+            default:
+                icWarn("Invalid commissioning flow value %" PRIu8 " configured; defaulting to standard",
+                       commissioningFlowValue);
+                setupPayload.commissioningFlow = CommissioningFlow::kStandard;
+                break;
+        }
+
         success = OpenLocalCommissioningWindow(discriminator, timeoutSecs, setupPayload);
     }
     else
     {
+        // TODO: This opens a commissioning window on a *remote* device, so the onboarding payload should
+        // report that device's vendor id, product id, and commissioning flow rather than ours. We do not
+        // currently have those values for the remote device, so vendor id, product id, and commissioning
+        // flow are left as zeros. This assumes the standard commissioning flow, which allows zeros for
+        // those three fields.
         chip::DeviceLayer::PlatformMgr().LockChipStack();
 
         success = CHIP_NO_ERROR == Controller::AutoCommissioningWindowOpener::OpenCommissioningWindow(

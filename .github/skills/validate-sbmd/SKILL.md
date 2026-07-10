@@ -37,7 +37,7 @@ This:
 2. Extracts the `SbmdDriver()` registration object as JSON (functions → `true`)
 3. Validates the JSON against `sbmd-spec-schema-v4.0.json`
 
-This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitions in `sbmd-script.d.ts`. The stubs are used by the validator to check JavaScript against the expected API surface.
+The validator evaluates each `.sbmd.js` file, extracts the `SbmdDriver()` registration object, and validates it against the JSON schema.
 
 ## File Locations
 
@@ -45,7 +45,7 @@ This regenerates `build/sbmd-stubs.json` from the TypeScript interface definitio
 |------|----------|
 | SBMD spec files | `core/deviceDrivers/matter/sbmd/specs/*.sbmd.js` |
 | JSON schema | `core/deviceDrivers/matter/sbmd/schema/sbmd-spec-schema-v4.0.json` |
-| TypeScript definitions | `core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts` |
+| TypeScript definitions (editor tooling only — not used by the validator) | `core/deviceDrivers/matter/sbmd/scriptCommon/sbmd-script.d.ts` |
 | Validation script | `scripts/ci/validate_sbmd_v4_specs.py` |
 | Extraction harness | `scripts/ci/sbmd_extract_registration.js` |
 
@@ -63,4 +63,4 @@ If `python3` or validation dependencies are not found:
 
 1. Check if `/.dockerenv` exists
 2. If it does NOT exist, stop and tell the user: **"Validation tools are not available. Please run inside the BartonCore development container."**
-3. If it does exist, ensure the project has been built at least once (stubs are generated during build)
+3. If it does exist, ensure the validator's dependencies are installed: Node.js (used to extract the `SbmdDriver()` registration object) and the `jsonschema` Python package (used to validate it against the schema)

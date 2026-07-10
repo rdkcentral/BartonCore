@@ -85,81 +85,124 @@ SbmdDriver({
                     type: 'boolean',
                     modes: ['read'],
                     prerequisites: [CL_DOOR_LOCK],
-                    seed: function(args) {
-                        return Sbmd.result()
-                            .dataModel.updateResource(RES_LOCKED, 'true')
-                            .success();
+                    seed: {
+                        supplements: {
+                            attributes: ['lockState']
+                        },
+                        handler: seedLocked
                     }
                 },
                 lock: {
                     type: 'function',
-                    execute: function(args) {
-                        var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
-                        var tlvBase64 = null;
-                        var pinString = args.resource.input;
-
-                        // 0x01 = PIN credential, 0x80 = COTA
-                        if (((featureMap & 0x81) === 0x81) &&
-                            pinString && pinString.length > 0) {
-                            var schema = {
-                                PINCode: { tag: 0, type: 'octstr' }
-                            };
-                            var pinBytes = new Uint8Array(pinString.length);
-
-                            for (var i = 0; i < pinString.length; i++) {
-                                pinBytes[i] = pinString.charCodeAt(i);
-                            }
-
-                            tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
-                        }
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
-                    }
+                    execute: executeLock
                 },
                 unlock: {
                     type: 'function',
-                    execute: function(args) {
-                        var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
-                        var tlvBase64 = null;
-                        var pinString = args.resource.input;
-
-                        // 0x01 = PIN credential, 0x80 = COTA
-                        if (((featureMap & 0x81) === 0x81) &&
-                            pinString && pinString.length > 0) {
-                            var schema = {
-                                PINCode: { tag: 0, type: 'octstr' }
-                            };
-                            var pinBytes = new Uint8Array(pinString.length);
-
-                            for (var i = 0; i < pinString.length; i++) {
-                                pinBytes[i] = pinString.charCodeAt(i);
-                            }
-
-                            tlvBase64 = Sbmd.Tlv.encodeStruct({ PINCode: pinBytes }, schema);
-                        }
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, { timedInvokeTimeoutMs: 10000 });
-                    }
+                    execute: executeUnlock
                 }
             }
         }
     },
 
     attributeHandlers: {
-        handleLockState: {
-            aliases: ['lockState'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
-                var isLocked = value === 1;
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_LOCKED, isLocked ? 'true' : 'false')
-                    .success();
-            }
-        }
+        handleLockState: {aliases: ['lockState'], handler: handleLockState}
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Seeds the Barton locked resource from the cached Matter LockState attribute
+ * (cluster 0x0101). Defaults to unlocked when the attribute is not yet cached.
+ */
+function seedLocked(args) {
+    var tlvBase64 = args.supplements.attributes.lockState;
+    var value = tlvBase64 !== null ? Sbmd.Tlv.decode(tlvBase64) : null;
+
+    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
+    // If the attribute is not yet cached, defaults to false (unlocked).
+    var isLocked = value === 1;
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
+        .success();
+}
+
+/**
+ * Invokes the Matter LockDoor command (cluster 0x0101), attaching a PIN
+ * credential when the device requires one (PIN + COTA features) and input is
+ * provided.
+ */
+function executeLock(args) {
+    var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
+    var tlvBase64 = null;
+    var pinString = args.resource.input;
+
+    // 0x01 = PIN credential, 0x80 = COTA
+    if ((featureMap & 0x81) === 0x81 && pinString && pinString.length > 0) {
+        var schema = {
+            PINCode: {tag: 0, type: 'octstr'}
+        };
+        var pinBytes = new Uint8Array(pinString.length);
+
+        for (var i = 0; i < pinString.length; i++) {
+            pinBytes[i] = pinString.charCodeAt(i);
+        }
+
+        tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
+    }
+
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_LOCK_DOOR, tlvBase64, {
+        timedInvokeTimeoutMs: 10000
+    });
+}
+
+/**
+ * Invokes the Matter UnlockDoor command (cluster 0x0101), attaching a PIN
+ * credential when the device requires one (PIN + COTA features) and input is
+ * provided.
+ */
+function executeUnlock(args) {
+    var featureMap = args.clusterFeatureMaps[CL_DOOR_LOCK] || 0;
+    var tlvBase64 = null;
+    var pinString = args.resource.input;
+
+    // 0x01 = PIN credential, 0x80 = COTA
+    if ((featureMap & 0x81) === 0x81 && pinString && pinString.length > 0) {
+        var schema = {
+            PINCode: {tag: 0, type: 'octstr'}
+        };
+        var pinBytes = new Uint8Array(pinString.length);
+
+        for (var i = 0; i < pinString.length; i++) {
+            pinBytes[i] = pinString.charCodeAt(i);
+        }
+
+        tlvBase64 = Sbmd.Tlv.encodeStruct({PINCode: pinBytes}, schema);
+    }
+
+    return Sbmd.result().device.sendCommand(CL_DOOR_LOCK, CMD_UNLOCK_DOOR, tlvBase64, {
+        timedInvokeTimeoutMs: 10000
+    });
+}
+
+/**
+ * Maps Matter LockState (enum, cluster 0x0101) reports to the Barton locked
+ * resource; locked only when LockState is Locked (1).
+ */
+function handleLockState(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for LockState');
+    }
+
+    // LockState: 0=NotFullyLocked, 1=Locked, 2=Unlocked, 3=Unlatched
+    var isLocked = value === 1;
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_LOCKED, isLocked ? 'true' : 'false')
+        .success();
+}
