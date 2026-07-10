@@ -238,6 +238,17 @@ void b_core_client_dependencies_ready(BCoreClient *self);
 BCoreStatus *b_core_client_get_status(BCoreClient *self);
 
 /**
+ * b_core_client_get_telemetry
+ * @self: the BCoreClient instance.
+ *
+ * @brief Get a JSON dump of all registered observability metrics.
+ *
+ * Returns: (transfer full) (nullable): gchar* - JSON string with metrics, or NULL if unavailable.
+ * Free with g_free().
+ */
+gchar *b_core_client_get_telemetry(BCoreClient *self);
+
+/**
  * b_core_client_discover_start
  * @deviceClasses: (element-type utf8): a list of device classes to discover
  * @filters: (element-type utf8): an optional list of device filters to perform the filter check once device discoverd

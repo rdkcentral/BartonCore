@@ -2836,8 +2836,6 @@ void deviceServiceUpdateEndpoint(icDevice *device, icDeviceEndpoint *endpoint)
     }
 }
 
-// Used to notify watchers when an resource changes
-// Used by device drivers when they need to update the resource for one of their devices
 void updateResource(const char *deviceUuid,
                     const char *endpointId,
                     const char *resourceId,
@@ -2851,9 +2849,9 @@ void updateResource(const char *deviceUuid,
                    "%s: deviceUuid=%s, endpointId=%s, resourceId=%s, newValue=%s",
                    __FUNCTION__,
                    deviceUuid,
-                   endpointId,
+                   stringCoalesce(endpointId),
                    resourceId,
-                   newValue);
+                   stringCoalesce(newValue));
     }
 
     icDeviceResource *resource = deviceServiceGetResourceByIdInternal(deviceUuid, endpointId, resourceId, false);

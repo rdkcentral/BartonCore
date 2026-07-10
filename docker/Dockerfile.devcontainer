@@ -52,4 +52,9 @@ RUN ln -sf /usr/bin/python3 /usr/bin/python
 ENV ASAN_OPTIONS=verify_asan_link_order=0
 
 ENV OPENSPEC_TELEMETRY=0
+
 RUN npm install -g @fission-ai/openspec@v1.4.1
+
+# Formatting tooling for the pre-commit hook: Prettier formats the JavaScript SBMD
+# drivers (see .prettierrc.yaml) and lint-staged runs it over staged files.
+RUN npm install -g prettier@3.3.3 lint-staged@15.2.10
