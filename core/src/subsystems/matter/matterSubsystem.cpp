@@ -247,6 +247,7 @@ static gboolean maybeInitMatter(void *context)
     catch (const runtime_error &e)
     {
         icError("failed to initialize/start Matter interface: %s", e.what());
+        initSuccessful = false;
     }
 
     subsystemMtx.lock();
