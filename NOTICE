@@ -57,3 +57,7 @@ scripts/build-matterjs-clusters.sh
 Code borrowed from: https://github.com/tpisto/pasm/blob/master/lib/pasm/helpers.js
 Copyright (c) 2012 Tommi Pisto
 Licensed under the MIT License
+
+core/deviceDrivers/matter/sbmd/scriptCommomn/sbmd-utf8.js
+Copyright (c) 2020 Erik Fortune
+Licensed under the MIT License

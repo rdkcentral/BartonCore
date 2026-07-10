@@ -99,6 +99,10 @@
          * Encode a JavaScript string to UTF-8 bytes
          * @param {string} str - String to encode
          * @returns {Uint8Array} UTF-8 encoded bytes
+         *
+         * Some code from:
+         * Copyright (c) 2020 Erik Fortune
+         * Licensed under the MIT License
          */
         encode: function (str) {
             var bytes = [];
