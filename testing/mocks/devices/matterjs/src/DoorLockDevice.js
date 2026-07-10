@@ -32,12 +32,12 @@
  * Can be run directly:  node DoorLockDevice.js --passcode ... --discriminator ...
  */
 
-import { pathToFileURL } from "node:url";
-import { Endpoint } from "@matter/main";
-import { DoorLockDevice as MatterDoorLockDevice, DoorLockRequirements } from "@matter/main/devices";
-import { DoorLock } from "@matter/main/clusters";
-import { VirtualDevice } from "./VirtualDevice.js";
-import { parseArgs } from "./parseArgs.js";
+import {pathToFileURL} from 'node:url';
+import {Endpoint} from '@matter/main';
+import {DoorLockDevice as MatterDoorLockDevice, DoorLockRequirements} from '@matter/main/devices';
+import {DoorLock} from '@matter/main/clusters';
+import {VirtualDevice} from './VirtualDevice.js';
+import {parseArgs} from './parseArgs.js';
 
 /**
  * Extends the default DoorLockServer to emit LockOperation events when Matter
@@ -53,7 +53,7 @@ class DoorLockServerWithEvents extends DoorLockRequirements.DoorLockServer {
             operationSource: DoorLock.OperationSource.Remote,
             userIndex: null,
             fabricIndex: null,
-            sourceNode: null,
+            sourceNode: null
         });
     }
 
@@ -64,7 +64,7 @@ class DoorLockServerWithEvents extends DoorLockRequirements.DoorLockServer {
             operationSource: DoorLock.OperationSource.Remote,
             userIndex: null,
             fabricIndex: null,
-            sourceNode: null,
+            sourceNode: null
         });
     }
 }
@@ -72,15 +72,15 @@ class DoorLockServerWithEvents extends DoorLockRequirements.DoorLockServer {
 export class DoorLockDevice extends VirtualDevice {
     constructor(options = {}) {
         super({
-            deviceName: "Virtual Door Lock",
-            ...options,
+            deviceName: 'Virtual Door Lock',
+            ...options
         });
 
         this.initialLockState = DoorLock.LockState.Locked;
 
-        this.registerOperation("lock", () => this.handleLock());
-        this.registerOperation("unlock", () => this.handleUnlock());
-        this.registerOperation("getState", () => this.handleGetState());
+        this.registerOperation('lock', () => this.handleLock());
+        this.registerOperation('unlock', () => this.handleUnlock());
+        this.registerOperation('getState', () => this.handleGetState());
     }
 
     getDeviceType() {
@@ -88,24 +88,26 @@ export class DoorLockDevice extends VirtualDevice {
         return 0x000a;
     }
 
-    createEndpoints()
-    {
-        return [new Endpoint(MatterDoorLockDevice.with(DoorLockServerWithEvents), {
-            id: "doorlock-ep1",
-            doorLock: {
-                       lockState: this.initialLockState,
-                       lockType: DoorLock.LockType.DeadBolt,
-                       actuatorEnabled: true,
-                       operatingMode: DoorLock.OperatingMode.Normal,
-                       supportedOperatingModes: {
-                    normal: true,
-                    vacation: true,
-                    privacy: true,
-                    noRemoteLockUnlock: true,
-                    passage: true,
-                    alwaysSet: 2047,
-                }, },
-        })];
+    createEndpoints() {
+        return [
+            new Endpoint(MatterDoorLockDevice.with(DoorLockServerWithEvents), {
+                id: 'doorlock-ep1',
+                doorLock: {
+                    lockState: this.initialLockState,
+                    lockType: DoorLock.LockType.DeadBolt,
+                    actuatorEnabled: true,
+                    operatingMode: DoorLock.OperatingMode.Normal,
+                    supportedOperatingModes: {
+                        normal: true,
+                        vacation: true,
+                        privacy: true,
+                        noRemoteLockUnlock: true,
+                        passage: true,
+                        alwaysSet: 2047
+                    }
+                }
+            })
+        ];
     }
 
     async handleLock() {
@@ -117,13 +119,13 @@ export class DoorLockDevice extends VirtualDevice {
                     operationSource: DoorLock.OperationSource.ProprietaryRemote,
                     userIndex: null,
                     fabricIndex: null,
-                    sourceNode: null,
+                    sourceNode: null
                 },
-                agent.context,
+                agent.context
             );
         });
 
-        return { lockState: "locked" };
+        return {lockState: 'locked'};
     }
 
     async handleUnlock() {
@@ -135,13 +137,13 @@ export class DoorLockDevice extends VirtualDevice {
                     operationSource: DoorLock.OperationSource.ProprietaryRemote,
                     userIndex: null,
                     fabricIndex: null,
-                    sourceNode: null,
+                    sourceNode: null
                 },
-                agent.context,
+                agent.context
             );
         });
 
-        return { lockState: "unlocked" };
+        return {lockState: 'unlocked'};
     }
 
     /**
@@ -153,12 +155,10 @@ export class DoorLockDevice extends VirtualDevice {
      * Pass lockState: "unlocked" to simulate a state change that occurred while
      * Barton was in comm-fail.  If omitted the lock remains in its current state.
      */
-    async handleComeOnline({ lockState } = {}) {
+    async handleComeOnline({lockState} = {}) {
         if (this.endpoints && this.endpoints[0] && lockState !== undefined) {
             const targetState =
-                lockState === "unlocked"
-                    ? DoorLock.LockState.Unlocked
-                    : DoorLock.LockState.Locked;
+                lockState === 'unlocked' ? DoorLock.LockState.Unlocked : DoorLock.LockState.Locked;
 
             await this.endpoints[0].act(async (agent) => {
                 agent.doorLock.state.lockState = targetState;
@@ -175,19 +175,18 @@ export class DoorLockDevice extends VirtualDevice {
             const state = agent.doorLock.state;
             const lockStateValue = state.lockState;
 
-            switch (lockStateValue)
-            {
+            switch (lockStateValue) {
                 case DoorLock.LockState.Locked:
-                    lockState = "locked";
+                    lockState = 'locked';
                     break;
                 case DoorLock.LockState.Unlocked:
-                    lockState = "unlocked";
+                    lockState = 'unlocked';
                     break;
                 case DoorLock.LockState.Unlatched:
-                    lockState = "unlatched";
+                    lockState = 'unlatched';
                     break;
                 default:
-                    lockState = "notFullyLocked";
+                    lockState = 'notFullyLocked';
                     break;
             }
         });
@@ -195,7 +194,7 @@ export class DoorLockDevice extends VirtualDevice {
         return {
             lockState,
             users: [],
-            pinCodes: [],
+            pinCodes: []
         };
     }
 }

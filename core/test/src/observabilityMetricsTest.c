@@ -35,6 +35,7 @@
 #include "observability/observabilityMetrics.h"
 
 #include <cjson/cJSON.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,10 +82,12 @@ static void test_counter_add(void **state)
     assert_non_null(root);
 
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *counter = cJSON_GetObjectItem(metrics, "test.counter");
     assert_non_null(counter);
 
     cJSON *type = cJSON_GetObjectItem(counter, "type");
+    assert_non_null(type);
     assert_string_equal(cJSON_GetStringValue(type), "counter");
 
     cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");
@@ -103,16 +106,22 @@ static void test_counter_with_attrs(void **state)
     (void) state;
 
     ObservabilityCounter *c = observabilityCounterCreate("test.counter.attrs", "Counter with attrs", "1");
+    assert_non_null(c);
 
     observabilityCounterAddWithAttrs(c, 1, "driver", "light", NULL);
     observabilityCounterAddWithAttrs(c, 2, "driver", "light", NULL);
     observabilityCounterAddWithAttrs(c, 10, "driver", "lock", NULL);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *counter = cJSON_GetObjectItem(metrics, "test.counter.attrs");
+    assert_non_null(counter);
     cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");
+    assert_non_null(dataPoints);
 
     /* Should have two data points: one for driver=light, one for driver=lock */
     assert_int_equal(cJSON_GetArraySize(dataPoints), 2);
@@ -151,6 +160,36 @@ static void test_counter_with_attrs(void **state)
     observabilityCounterRelease(c);
 }
 
+static void test_counter_attrs_order_insensitive(void **state)
+{
+    (void) state;
+
+    ObservabilityCounter *c = observabilityCounterCreate("test.counter.order", "Order test", "1");
+    assert_non_null(c);
+
+    /* Add with attrs in one order, then in reverse order — should merge into one data point */
+    observabilityCounterAddWithAttrs(c, 1, "a", "1", "b", "2", NULL);
+    observabilityCounterAddWithAttrs(c, 1, "b", "2", "a", "1", NULL);
+
+    char *json = observabilityDumpJson();
+    assert_non_null(json);
+    cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
+    cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
+    cJSON *counter = cJSON_GetObjectItem(metrics, "test.counter.order");
+    assert_non_null(counter);
+    cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");
+    assert_non_null(dataPoints);
+
+    assert_int_equal(cJSON_GetArraySize(dataPoints), 1);
+    assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(cJSON_GetArrayItem(dataPoints, 0), "value")), 2);
+
+    cJSON_Delete(root);
+    free(json);
+    observabilityCounterRelease(c);
+}
+
 static void test_counter_null_safe(void **state)
 {
     (void) state;
@@ -159,6 +198,10 @@ static void test_counter_null_safe(void **state)
     observabilityCounterAdd(NULL, 5);
     observabilityCounterAddWithAttrs(NULL, 5, "key", "val", NULL);
     observabilityCounterRelease(NULL);
+
+    /* NULL or empty name must return NULL, not crash */
+    assert_null(observabilityCounterCreate(NULL, "desc", "1"));
+    assert_null(observabilityCounterCreate("", "desc", "1"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,9 +219,13 @@ static void test_gauge_record(void **state)
     observabilityGaugeRecord(g, 50);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *gauge = cJSON_GetObjectItem(metrics, "test.gauge");
+    assert_non_null(gauge);
 
     cJSON *type = cJSON_GetObjectItem(gauge, "type");
     assert_string_equal(cJSON_GetStringValue(type), "gauge");
@@ -208,10 +255,15 @@ static void test_gauge_with_attrs(void **state)
     observabilityGaugeRecordWithAttrs(g, 99, "device", "def456", NULL);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *gauge = cJSON_GetObjectItem(metrics, "test.gauge.attrs");
+    assert_non_null(gauge);
     cJSON *dataPoints = cJSON_GetObjectItem(gauge, "dataPoints");
+    assert_non_null(dataPoints);
 
     assert_int_equal(cJSON_GetArraySize(dataPoints), 2);
 
@@ -227,6 +279,10 @@ static void test_gauge_null_safe(void **state)
     observabilityGaugeRecord(NULL, 5);
     observabilityGaugeRecordWithAttrs(NULL, 5, "key", "val", NULL);
     observabilityGaugeRelease(NULL);
+
+    /* NULL or empty name must return NULL, not crash */
+    assert_null(observabilityGaugeCreate(NULL, "desc", "1"));
+    assert_null(observabilityGaugeCreate("", "desc", "1"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -245,9 +301,13 @@ static void test_histogram_record(void **state)
     observabilityHistogramRecord(h, 3.0);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *histogram = cJSON_GetObjectItem(metrics, "test.histogram");
+    assert_non_null(histogram);
 
     cJSON *type = cJSON_GetObjectItem(histogram, "type");
     assert_string_equal(cJSON_GetStringValue(type), "histogram");
@@ -257,9 +317,9 @@ static void test_histogram_record(void **state)
 
     cJSON *dp = cJSON_GetArrayItem(dataPoints, 0);
     assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "count")), 3);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "sum")) == 6.0);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "min")) == 1.0);
-    assert_true(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "max")) == 3.0);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "sum")) - 6.0) < 1e-9);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "min")) - 1.0) < 1e-9);
+    assert_true(fabs(cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "max")) - 3.0) < 1e-9);
 
     /* Verify buckets exist */
     cJSON *buckets = cJSON_GetObjectItem(dp, "buckets");
@@ -275,7 +335,7 @@ static void test_histogram_bucket_distribution(void **state)
     (void) state;
 
     ObservabilityHistogram *h = observabilityHistogramCreate("test.histogram.buckets", "Bucket test", "ms");
-
+    assert_non_null(h);
     /* Record values that span multiple buckets:
      * Bounds: 0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000
      * Value 0 -> bucket[0] (le=0)
@@ -291,21 +351,29 @@ static void test_histogram_bucket_distribution(void **state)
     observabilityHistogramRecord(h, 99999.0);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *histogram = cJSON_GetObjectItem(metrics, "test.histogram.buckets");
+    assert_non_null(histogram);
     cJSON *dataPoints = cJSON_GetObjectItem(histogram, "dataPoints");
+    assert_non_null(dataPoints);
     cJSON *dp = cJSON_GetArrayItem(dataPoints, 0);
+    assert_non_null(dp);
 
     assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "count")), 5);
 
     /* Check that the overflow bucket has the 99999 value */
     cJSON *buckets = cJSON_GetObjectItem(dp, "buckets");
+    assert_non_null(buckets);
     int numBuckets = cJSON_GetArraySize(buckets);
+    assert_true(numBuckets > 0);
     cJSON *lastBucket = cJSON_GetArrayItem(buckets, numBuckets - 1);
+    assert_non_null(lastBucket);
     assert_string_equal(cJSON_GetStringValue(cJSON_GetObjectItem(lastBucket, "le")), "+Inf");
     assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(lastBucket, "count")), 1);
-
     cJSON_Delete(root);
     free(json);
     observabilityHistogramRelease(h);
@@ -322,10 +390,15 @@ static void test_histogram_with_attrs(void **state)
     observabilityHistogramRecordWithAttrs(h, 15.0, "op", "read", NULL);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
     cJSON *histogram = cJSON_GetObjectItem(metrics, "test.histogram.attrs");
+    assert_non_null(histogram);
     cJSON *dataPoints = cJSON_GetObjectItem(histogram, "dataPoints");
+    assert_non_null(dataPoints);
 
     /* Two distinct attribute sets: op=read and op=write */
     assert_int_equal(cJSON_GetArraySize(dataPoints), 2);
@@ -342,6 +415,96 @@ static void test_histogram_null_safe(void **state)
     observabilityHistogramRecord(NULL, 5.0);
     observabilityHistogramRecordWithAttrs(NULL, 5.0, "key", "val", NULL);
     observabilityHistogramRelease(NULL);
+
+    /* NULL or empty name must return NULL, not crash */
+    assert_null(observabilityHistogramCreate(NULL, "desc", "1"));
+    assert_null(observabilityHistogramCreate("", "desc", "1"));
+}
+
+/* ------------------------------------------------------------------ */
+/* Release tests                                                      */
+/* ------------------------------------------------------------------ */
+
+static void test_counter_release_removes_from_dump(void **state)
+{
+    (void) state;
+
+    ObservabilityCounter *c = observabilityCounterCreate("release.counter", "Release test", "1");
+    assert_non_null(c);
+
+    observabilityCounterAdd(c, 1);
+    observabilityCounterRelease(c);
+
+    char *json = observabilityDumpJson();
+    assert_non_null(json);
+
+    cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
+
+    cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_null(cJSON_GetObjectItem(metrics, "release.counter"));
+
+    cJSON_Delete(root);
+    free(json);
+}
+
+/* ------------------------------------------------------------------ */
+/* Acquire / refcount tests                                           */
+/* ------------------------------------------------------------------ */
+
+static void test_counter_acquire_keeps_alive(void **state)
+{
+    (void) state;
+
+    ObservabilityCounter *c = observabilityCounterCreate("acquire.counter", "Acquire test", "1");
+    assert_non_null(c);
+
+    /* Acquiring an additional reference must return the same handle */
+    ObservabilityCounter *c2 = observabilityCounterAcquire(c);
+    assert_ptr_equal(c, c2);
+
+    observabilityCounterAdd(c, 7);
+
+    /* Dropping the first reference must NOT free the instrument while a second
+     * reference is still held — it must remain visible and usable. */
+    observabilityCounterRelease(c);
+
+    char *json = observabilityDumpJson();
+    assert_non_null(json);
+    cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
+    cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    cJSON *counter = cJSON_GetObjectItem(metrics, "acquire.counter");
+    assert_non_null(counter);
+
+    cJSON *dataPoints = cJSON_GetObjectItem(counter, "dataPoints");
+    cJSON *dp = cJSON_GetArrayItem(dataPoints, 0);
+    assert_int_equal((int) cJSON_GetNumberValue(cJSON_GetObjectItem(dp, "value")), 7);
+
+    cJSON_Delete(root);
+    free(json);
+
+    /* Dropping the last reference frees it and removes it from the dump. */
+    observabilityCounterRelease(c2);
+
+    json = observabilityDumpJson();
+    assert_non_null(json);
+    root = cJSON_Parse(json);
+    assert_non_null(root);
+    metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_null(cJSON_GetObjectItem(metrics, "acquire.counter"));
+
+    cJSON_Delete(root);
+    free(json);
+}
+
+static void test_acquire_null_safe(void **state)
+{
+    (void) state;
+
+    assert_null(observabilityCounterAcquire(NULL));
+    assert_null(observabilityGaugeAcquire(NULL));
+    assert_null(observabilityHistogramAcquire(NULL));
 }
 
 /* ------------------------------------------------------------------ */
@@ -362,7 +525,7 @@ static void test_dump_empty(void **state)
     assert_non_null(metrics);
 
     /* No instruments registered in this test, so metrics should be empty */
-    assert_null(metrics->child);
+    assert_int_equal(cJSON_GetArraySize(metrics), 0);
 
     cJSON_Delete(root);
     free(json);
@@ -375,14 +538,20 @@ static void test_dump_multiple_instruments(void **state)
     ObservabilityCounter *c = observabilityCounterCreate("multi.counter", "counter", "1");
     ObservabilityGauge *g = observabilityGaugeCreate("multi.gauge", "gauge", "bytes");
     ObservabilityHistogram *h = observabilityHistogramCreate("multi.histogram", "histogram", "ms");
+    assert_non_null(c);
+    assert_non_null(g);
+    assert_non_null(h);
 
     observabilityCounterAdd(c, 1);
     observabilityGaugeRecord(g, 42);
     observabilityHistogramRecord(h, 5.0);
 
     char *json = observabilityDumpJson();
+    assert_non_null(json);
     cJSON *root = cJSON_Parse(json);
+    assert_non_null(root);
     cJSON *metrics = cJSON_GetObjectItem(root, "metrics");
+    assert_non_null(metrics);
 
     assert_non_null(cJSON_GetObjectItem(metrics, "multi.counter"));
     assert_non_null(cJSON_GetObjectItem(metrics, "multi.gauge"));
@@ -417,6 +586,7 @@ int main(void)
         /* Counter */
         cmocka_unit_test_setup_teardown(test_counter_add, setup, teardown),
         cmocka_unit_test_setup_teardown(test_counter_with_attrs, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_counter_attrs_order_insensitive, setup, teardown),
         cmocka_unit_test_setup_teardown(test_counter_null_safe, setup, teardown),
         /* Gauge */
         cmocka_unit_test_setup_teardown(test_gauge_record, setup, teardown),
@@ -427,6 +597,11 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_histogram_bucket_distribution, setup, teardown),
         cmocka_unit_test_setup_teardown(test_histogram_with_attrs, setup, teardown),
         cmocka_unit_test_setup_teardown(test_histogram_null_safe, setup, teardown),
+        /* Release */
+        cmocka_unit_test_setup_teardown(test_counter_release_removes_from_dump, setup, teardown),
+        /* Acquire / refcount */
+        cmocka_unit_test_setup_teardown(test_counter_acquire_keeps_alive, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_acquire_null_safe, setup, teardown),
         /* JSON dump */
         cmocka_unit_test_setup_teardown(test_dump_empty, setup, teardown),
         cmocka_unit_test_setup_teardown(test_dump_multiple_instruments, setup, teardown),

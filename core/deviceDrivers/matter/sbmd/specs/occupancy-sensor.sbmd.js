@@ -79,14 +79,22 @@ SbmdDriver({
     attributeHandlers: {
         handleOccupancy: {
             aliases: ['occupancy'],
-            handler: function(args) {
+            handler: function (args) {
                 var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
 
+                if (value === null) {
+                    return Sbmd.result().error('TLV decode failed for Occupancy');
+                }
+
                 // Bit 0 of occupancy bitmap = occupied = faulted
-                var occupied = ((value & 0x01) !== 0);
+                var occupied = (value & 0x01) !== 0;
 
                 return Sbmd.result()
-                    .dataModel.updateResource(RES_FAULTED, occupied ? 'true' : 'false')
+                    .dataModel.updateResource(
+                        args.endpointId,
+                        RES_FAULTED,
+                        occupied ? 'true' : 'false'
+                    )
                     .success();
             }
         }

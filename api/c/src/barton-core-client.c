@@ -40,6 +40,7 @@
 #include "icTypes/icLinkedList.h"
 #include "observability/observability.h"
 #include "icTypes/icLinkedListFuncs.h"
+#include "observability/observability.h"
 
 #ifdef BARTON_CONFIG_ZIGBEE
 #include "private/subsystems/zigbee/zigbeeSubsystem.h"

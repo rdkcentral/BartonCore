@@ -47,7 +47,7 @@ SbmdDriver({
     },
 
     matter: {
-        vendorId: 0x117C,
+        vendorId: 0x117c,
         productId: 0x8005,
         deviceTypes: [0x0302, 0x0307]
     },
@@ -90,42 +90,50 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleTemperature: {
-            aliases: ['tempMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                // -32768 (0x8000): Matter null for int16 MeasuredValue
-                if (value === null || value === -32768) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-                    .success();
-            }
-        },
-        handleHumidity: {
-            aliases: ['humidityMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                // 0xFFFF: Matter null for uint16 MeasuredValue
-                if (value === null || value === 0xFFFF) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                // Matter humidity is in hundredths of percent, convert to whole percent
-                var percent = Math.round(value / 100);
-
-                // Explicit endpoint '1' because the humidity cluster is on device
-                // endpoint 2 but the resource is registered on Barton endpoint 1
-                return Sbmd.result()
-                    .dataModel.updateResource('1', RES_HUMIDITY, percent.toString())
-                    .success();
-            }
-        }
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature},
+        handleHumidity: {aliases: ['humidityMeasuredValue'], handler: handleHumidity}
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Maps Matter Temperature MeasuredValue (int16, cluster 0x0402) to the Barton
+ * temperature resource.
+ */
+function handleTemperature(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // -32768 (0x8000): Matter null for int16 MeasuredValue
+    if (value === null || value === -32768) {
+        return Sbmd.result().error('MeasuredValue unavailable');
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
+        .success();
+}
+
+/**
+ * Maps Matter RelativeHumidity MeasuredValue (uint16 hundredths of a percent,
+ * cluster 0x0405) to the Barton humidity resource as a whole percent. Writes
+ * explicitly to Barton endpoint '1' because the humidity cluster lives on device
+ * endpoint 2.
+ */
+function handleHumidity(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // 0xFFFF: Matter null for uint16 MeasuredValue
+    if (value === null || value === 0xffff) {
+        return Sbmd.result().error('MeasuredValue unavailable');
+    }
+
+    // Matter humidity is in hundredths of percent, convert to whole percent
+    var percent = Math.round(value / 100);
+
+    // Explicit endpoint '1' because the humidity cluster is on device
+    // endpoint 2 but the resource is registered on Barton endpoint 1
+    return Sbmd.result().dataModel.updateResource('1', RES_HUMIDITY, percent.toString()).success();
+}

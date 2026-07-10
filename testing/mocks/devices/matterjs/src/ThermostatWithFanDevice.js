@@ -33,28 +33,31 @@
  * Can be run directly:  node ThermostatWithFanDevice.js --passcode ... --discriminator ...
  */
 
-import { pathToFileURL } from "node:url";
-import { ThermostatDevice as MatterThermostatDevice, ThermostatRequirements } from "@matter/main/devices";
-import { FanControlServer } from "@matter/main/behaviors/fan-control";
-import { FanControl } from "@matter/main/clusters";
-import { ThermostatDevice } from "./ThermostatDevice.js";
-import { parseArgs } from "./parseArgs.js";
+import {pathToFileURL} from 'node:url';
+import {
+    ThermostatDevice as MatterThermostatDevice,
+    ThermostatRequirements
+} from '@matter/main/devices';
+import {FanControlServer} from '@matter/main/behaviors/fan-control';
+import {FanControl} from '@matter/main/clusters';
+import {ThermostatDevice} from './ThermostatDevice.js';
+import {parseArgs} from './parseArgs.js';
 
 export class ThermostatWithFanDevice extends ThermostatDevice {
     constructor(options = {}) {
         super({
-            deviceName: "Virtual Thermostat With Fan",
-            ...options,
+            deviceName: 'Virtual Thermostat With Fan',
+            ...options
         });
 
-        this.registerOperation("setFanMode", (params) => this.handleSetFanMode(params));
-        this.registerOperation("getFanState", () => this.handleGetFanState());
+        this.registerOperation('setFanMode', (params) => this.handleSetFanMode(params));
+        this.registerOperation('getFanState', () => this.handleGetFanState());
     }
 
     getDeviceTypeDefinition() {
         return MatterThermostatDevice.with(
-            ThermostatRequirements.ThermostatServer.with("Heating", "Cooling", "AutoMode"),
-            FanControlServer.with("MultiSpeed", "Auto"),
+            ThermostatRequirements.ThermostatServer.with('Heating', 'Cooling', 'AutoMode'),
+            FanControlServer.with('MultiSpeed', 'Auto')
         );
     }
 
@@ -68,7 +71,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
             percentCurrent: 0,
             speedMax: 3,
             speedSetting: 0,
-            speedCurrent: 0,
+            speedCurrent: 0
         };
 
         return config;
@@ -84,7 +87,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
             high: FanControl.FanMode.High,
             on: FanControl.FanMode.On,
             auto: FanControl.FanMode.Auto,
-            smart: FanControl.FanMode.Smart,
+            smart: FanControl.FanMode.Smart
         };
 
         const modeValue = modeMap[mode];
@@ -97,7 +100,7 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
             agent.fanControl.state.fanMode = modeValue;
         });
 
-        return { fanMode: mode };
+        return {fanMode: mode};
     }
 
     async handleGetFanState() {
@@ -107,19 +110,19 @@ export class ThermostatWithFanDevice extends ThermostatDevice {
             const fan = agent.fanControl.state;
 
             const modeNames = {
-                [FanControl.FanMode.Off]: "off",
-                [FanControl.FanMode.Low]: "low",
-                [FanControl.FanMode.Medium]: "medium",
-                [FanControl.FanMode.High]: "high",
-                [FanControl.FanMode.On]: "on",
-                [FanControl.FanMode.Auto]: "auto",
-                [FanControl.FanMode.Smart]: "smart",
+                [FanControl.FanMode.Off]: 'off',
+                [FanControl.FanMode.Low]: 'low',
+                [FanControl.FanMode.Medium]: 'medium',
+                [FanControl.FanMode.High]: 'high',
+                [FanControl.FanMode.On]: 'on',
+                [FanControl.FanMode.Auto]: 'auto',
+                [FanControl.FanMode.Smart]: 'smart'
             };
 
             state = {
                 fanMode: modeNames[fan.fanMode] || fan.fanMode.toString(),
                 percentSetting: fan.percentSetting,
-                percentCurrent: fan.percentCurrent,
+                percentCurrent: fan.percentCurrent
             };
         });
 

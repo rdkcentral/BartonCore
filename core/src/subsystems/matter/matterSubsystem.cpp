@@ -178,6 +178,7 @@ static gboolean maybeInitMatter(void *context)
     (void) context;
 
     bool initSuccessful = true;
+    std::string configRoot;
 
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
@@ -190,6 +191,21 @@ static gboolean maybeInitMatter(void *context)
         }
 
         busy = true;
+
+        // Capture matterConfigRoot under the lock to prevent use-after-free
+        // if shutdown runs concurrently.
+        if (matterConfigRoot != nullptr)
+        {
+            configRoot = matterConfigRoot;
+        }
+    }
+
+    if (configRoot.empty())
+    {
+        icError("matterConfigRoot is not set (shutdown may have occurred)");
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        busy = false;
+        return false;
     }
 
     try
@@ -204,31 +220,34 @@ static gboolean maybeInitMatter(void *context)
         else
         {
             scoped_generic char *trustStore = deviceServiceConfigurationGetMatterAttestationTrustStoreDir();
-            std::string attestationTrustStorePath(trustStore);
 
-            if (!Matter::GetInstance().Init(
-                    accountId, std::move(attestationTrustStorePath), std::string(matterConfigRoot)))
+            if (trustStore == nullptr || trustStore[0] == '\0')
+            {
+                icError("Matter attestation trust store directory is not configured");
+                initSuccessful = false;
+            }
+            else if (!Matter::GetInstance().Init(accountId, std::string(trustStore), configRoot))
             {
                 initSuccessful = false;
             }
-
-            // FIXME: Matter shouldn't be a singleton with Init() but a properly constructed object.
-
-            // Start() is the final arbiter of truth. If Init() fails, it's presumed Start()
-            // will definitely fail. Once Start()ed, the subsystem is up, and Start() SHOULD NOT be called again.
-            // Start() is internally protected and will warn if already running (instead of aborting in the matter
-            // stack).
-            initSuccessful = Matter::GetInstance().Start();
-
-            if (!initSuccessful)
+            else
             {
-                icError("failed to start Matter interface");
+                // Start() is the final arbiter of truth. Once Start()ed, the subsystem is up,
+                // and Start() SHOULD NOT be called again. Start() is internally protected and
+                // will warn if already running (instead of aborting in the matter stack).
+                initSuccessful = Matter::GetInstance().Start();
+
+                if (!initSuccessful)
+                {
+                    icError("failed to start Matter interface");
+                }
             }
         }
     }
     catch (const runtime_error &e)
     {
         icError("failed to initialize/start Matter interface: %s", e.what());
+        initSuccessful = false;
     }
 
     subsystemMtx.lock();
@@ -411,14 +430,15 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
     subsystemInitializedCallback = initializedCallback;
     subsystemDeinitializedCallback = deInitializedCallback;
 
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+    g_free(g_steal_pointer(&matterKVPath));
+    g_free(g_steal_pointer(&matterConfigRoot));
 
     matterConfigRoot = deviceServiceConfigurationGetMatterStorageDir();
 
-    if (matterConfigRoot == nullptr)
+    if (matterConfigRoot == nullptr || matterConfigRoot[0] == '\0')
     {
-        matterConfigRoot = strdup(CHIP_BARTON_CONF_DIR);
+        g_free(matterConfigRoot);
+        matterConfigRoot = g_strdup(CHIP_BARTON_CONF_DIR);
     }
 
     matterKVPath = stringBuilder("%s/%s", matterConfigRoot, MATTERKV_FILE_NAME);
@@ -460,9 +480,13 @@ static void matterSubsystemShutdown()
 
     Matter::GetInstance().Stop();
 
-    g_object_unref(g_steal_pointer(&matterMon));
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+    g_clear_object(&matterMon);
+
+    {
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        g_free(g_steal_pointer(&matterKVPath));
+        g_free(g_steal_pointer(&matterConfigRoot));
+    }
 
     if (!deviceServiceConfigurationUnregisterAccountIdListener(accountIdChanged))
     {

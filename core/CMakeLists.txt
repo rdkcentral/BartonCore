@@ -217,12 +217,16 @@ if (BCORE_MATTER)
         file(GLOB SBMD_SPEC_FILES CONFIGURE_DEPENDS "${SBMD_SPECS_DIR}/*.sbmd.js")
         file(GLOB SBMD_SCHEMA_FILES CONFIGURE_DEPENDS "${SBMD_SCHEMA_DIR}/*.json")
 
-        add_custom_target(validate_sbmd_specs ALL
-            COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
-            DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_VALIDATOR} ${SBMD_EXTRACTOR}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            COMMENT "Validating SBMD v4 specification files against schema..."
-        )
+        if (SBMD_SPEC_FILES)
+            add_custom_target(validate_sbmd_specs ALL
+                COMMAND ${Python3_EXECUTABLE} ${SBMD_VALIDATOR} ${SBMD_SCHEMA_DIR} ${SBMD_SPEC_FILES}
+                DEPENDS ${SBMD_SPEC_FILES} ${SBMD_SCHEMA_FILES} ${SBMD_VALIDATOR} ${SBMD_EXTRACTOR}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                COMMENT "Validating SBMD v4 specification files against schema..."
+            )
+        else()
+            message(STATUS "No SBMD v4 spec files found in ${SBMD_SPECS_DIR}; skipping spec validation")
+        endif()
     endif()
 endif()
 
@@ -249,12 +253,14 @@ if (BCORE_THREAD)
 endif()
 
 # Observability backend selection
-if (BCORE_OBSERVABILITY_BACKEND STREQUAL "inmemory")
-    file(GLOB inmemoryObsSrc "src/observability/inmemory/*.c")
+if (BCORE_OBSERVABILITY_BACKEND STREQUAL "memory")
+    file(GLOB inmemoryObsSrc "src/observability/memory/*.c")
     list(APPEND SOURCES ${inmemoryObsSrc})
-else()
+elseif (BCORE_OBSERVABILITY_BACKEND STREQUAL "none")
     file(GLOB noopObsSrc "src/observability/noop/*.c")
     list(APPEND SOURCES ${noopObsSrc})
+else()
+    message(FATAL_ERROR "Unknown BCORE_OBSERVABILITY_BACKEND value: '${BCORE_OBSERVABILITY_BACKEND}'. Valid values: memory, none")
 endif()
 
 list(APPEND SOURCES

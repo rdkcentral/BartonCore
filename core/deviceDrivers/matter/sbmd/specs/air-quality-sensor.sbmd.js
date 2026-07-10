@@ -135,76 +135,104 @@ SbmdDriver({
     },
 
     attributeHandlers: {
-        handleAirQuality: {
-            aliases: ['airQualityValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-                var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_AIR_QUALITY, levels[value] || 'unknown')
-                    .success();
-            }
-        },
-        handleTemperature: {
-            aliases: ['tempMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null || value === -32768) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_TEMPERATURE, value.toString())
-                    .success();
-            }
-        },
-        handleHumidity: {
-            aliases: ['humidityMeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null || value === 0xFFFF) {
-                    return Sbmd.result()
-                        .error('TLV decode failed for MeasuredValue');
-                }
-
-                var percent = Math.round(value / 100);
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_HUMIDITY, percent.toString())
-                    .success();
-            }
-        },
-        handleCO2: {
-            aliases: ['co2MeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().success();
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_CO2, Math.round(value).toString())
-                    .success();
-            }
-        },
-        handlePM25: {
-            aliases: ['pm25MeasuredValue'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-
-                if (value === null) {
-                    return Sbmd.result().success();
-                }
-
-                return Sbmd.result()
-                    .dataModel.updateResource(RES_PM25, value.toFixed(1))
-                    .success();
-            }
-        }
+        handleAirQuality: {aliases: ['airQualityValue'], handler: handleAirQuality},
+        handleTemperature: {aliases: ['tempMeasuredValue'], handler: handleTemperature},
+        handleHumidity: {aliases: ['humidityMeasuredValue'], handler: handleHumidity},
+        handleCO2: {aliases: ['co2MeasuredValue'], handler: handleCO2},
+        handlePM25: {aliases: ['pm25MeasuredValue'], handler: handlePM25}
     }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Maps Matter AirQuality (cluster 0x005b) enum reports to the Barton airQuality
+ * resource, translating the enum ordinal (0-6) to a level string; unknown values
+ * fall back to 'unknown'.
+ */
+function handleAirQuality(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // No update when the measurement is unavailable (null)
+    if (value === null) {
+        return Sbmd.result().success();
+    }
+
+    var levels = ['unknown', 'good', 'fair', 'moderate', 'poor', 'veryPoor', 'extremelyPoor'];
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_AIR_QUALITY, levels[value] || 'unknown')
+        .success();
+}
+
+/**
+ * Maps Matter Temperature MeasuredValue (int16, cluster 0x0402) to the Barton
+ * temperature resource.
+ */
+function handleTemperature(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // -32768 (0x8000): Matter null for int16 MeasuredValue
+    if (value === null || value === -32768) {
+        return Sbmd.result().error('MeasuredValue unavailable');
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_TEMPERATURE, value.toString())
+        .success();
+}
+
+/**
+ * Maps Matter RelativeHumidity MeasuredValue (uint16 hundredths of a percent,
+ * cluster 0x0405) to the Barton humidity resource as a whole percent.
+ */
+function handleHumidity(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // 0xFFFF: Matter null for uint16 MeasuredValue
+    if (value === null || value === 0xffff) {
+        return Sbmd.result().error('MeasuredValue unavailable');
+    }
+
+    var percent = Math.round(value / 100);
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_HUMIDITY, percent.toString())
+        .success();
+}
+
+/**
+ * Maps Matter CarbonDioxideConcentration MeasuredValue (float, cluster 0x040d)
+ * to the Barton co2Concentration resource, rounded to a whole number.
+ */
+function handleCO2(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // No update when the measurement is unavailable (null)
+    if (value === null) {
+        return Sbmd.result().success();
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CO2, Math.round(value).toString())
+        .success();
+}
+
+/**
+ * Maps Matter Pm25Concentration MeasuredValue (float, cluster 0x042a) to the
+ * Barton pm25Concentration resource with one decimal place.
+ */
+function handlePM25(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    // No update when the measurement is unavailable (null)
+    if (value === null) {
+        return Sbmd.result().success();
+    }
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_PM25, value.toFixed(1))
+        .success();
+}

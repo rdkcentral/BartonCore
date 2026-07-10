@@ -30,6 +30,7 @@
 
 #include "SbmdBundleLoader.h"
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
 
 #include <string>
 
@@ -38,38 +39,12 @@ extern "C" {
 #include <mquickjs/mquickjs.h>
 }
 
-// Try to include the embedded bundle header if it was generated
-#if __has_include("SbmdBundleEmbedded.h")
+// Generated at build time.
 #include "SbmdBundleEmbedded.h"
-#define HAS_EMBEDDED_BUNDLE 1
-#else
-#define HAS_EMBEDDED_BUNDLE 0
-#endif
 
 namespace barton
 {
-
-    // Static member initialization
-    const char *SbmdBundleLoader::source = "none";
-
-    namespace
-    {
-        /**
-         * Extract mquickjs exception as a string.
-         */
-        std::string GetExceptionString(JSContext *ctx)
-        {
-            JSValue ex = JS_GetException(ctx);
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, ex, &buf);
-            if (str)
-            {
-                return std::string(str);
-            }
-            return "unknown error";
-        }
-
-    } // anonymous namespace
+    using namespace mquickjs;
 
     bool SbmdBundleLoader::LoadBundle(JSContext *ctx)
     {
@@ -82,7 +57,6 @@ namespace barton
         // Load from embedded bundle
         if (LoadFromEmbedded(ctx))
         {
-            source = "embedded";
             icInfo("SBMD bundle loaded from embedded");
             return true;
         }
@@ -91,23 +65,8 @@ namespace barton
         return false;
     }
 
-    bool SbmdBundleLoader::IsAvailable()
-    {
-#if HAS_EMBEDDED_BUNDLE
-        return true;
-#else
-        return false;
-#endif
-    }
-
-    const char *SbmdBundleLoader::GetSource()
-    {
-        return source;
-    }
-
     bool SbmdBundleLoader::LoadFromEmbedded(JSContext *ctx)
     {
-#if HAS_EMBEDDED_BUNDLE
         icDebug("Attempting to load SBMD bundle from embedded source...");
 
         if (!ExecuteBundle(ctx, kSbmdBundle, kSbmdBundleSize, "sbmd-bundle"))
@@ -116,11 +75,6 @@ namespace barton
         }
 
         return true;
-#else
-        (void) ctx;
-        icDebug("Embedded SBMD bundle not available");
-        return false;
-#endif
     }
 
     bool SbmdBundleLoader::ExecuteBundle(JSContext *ctx, const char *bundleSource, size_t length, const char *name)

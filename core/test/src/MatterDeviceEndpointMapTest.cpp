@@ -269,24 +269,22 @@ namespace
 
     TEST_F(VendorProductClaimTest, VendorProductMatch)
     {
-        auto *drv = MakeVendorDriver(kTestVendorId, kTestProductId,
-                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        auto *drv =
+            MakeVendorDriver(kTestVendorId, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
         SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_TRUE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongProductIdFails)
     {
-        auto *drv = MakeVendorDriver(kTestVendorId, 0x9999,
-                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        auto *drv = MakeVendorDriver(kTestVendorId, 0x9999, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
         SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
 
     TEST_F(VendorProductClaimTest, WrongVendorIdFails)
     {
-        auto *drv = MakeVendorDriver(0x0001, kTestProductId,
-                                     {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
+        auto *drv = MakeVendorDriver(0x0001, kTestProductId, {kTemperatureSensorDeviceType, kHumiditySensorDeviceType});
         SpecBasedMatterDeviceDriver driver(drv);
         EXPECT_FALSE(driver.ClaimDevice(cache.get()));
     }
@@ -314,14 +312,15 @@ namespace
     protected:
         std::vector<std::unique_ptr<SbmdDriver>> drivers;
 
-        SbmdDriver *MakeDriverWithEndpoints(std::vector<SbmdEndpoint> endpoints)
+        template<typename... Endpoints>
+        SbmdDriver *MakeDriverWithEndpoints(Endpoints &&...endpoints)
         {
             auto reg = std::make_unique<SbmdRegistration>();
             reg->name = "profile-version-test";
             reg->barton.deviceClass = "testClass";
             reg->barton.deviceClassVersion = 1;
             reg->matter.deviceTypes = {0x0100};
-            reg->endpoints = std::move(endpoints);
+            (reg->endpoints.push_back(std::forward<Endpoints>(endpoints)), ...);
             drivers.push_back(std::make_unique<SbmdDriver>(std::move(reg), ""));
 
             return drivers.back().get();
@@ -335,13 +334,13 @@ namespace
         ep.profile = "doorLock";
         ep.profileVersion = 3;
 
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints(std::move(ep)));
         DeviceDriver *dd = driver.GetDriver();
 
         ASSERT_NE(dd->endpointProfileVersions, nullptr);
 
-        auto *version = static_cast<uint8_t *>(
-            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        auto *version =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
         ASSERT_NE(version, nullptr);
         EXPECT_EQ(*version, 3);
     }
@@ -358,25 +357,25 @@ namespace
         ep2.profile = "sensor";
         ep2.profileVersion = 5;
 
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep1, ep2}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints(std::move(ep1), std::move(ep2)));
         DeviceDriver *dd = driver.GetDriver();
 
         ASSERT_NE(dd->endpointProfileVersions, nullptr);
 
-        auto *lightVersion = static_cast<uint8_t *>(
-            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("light"), 6));
+        auto *lightVersion =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("light"), 6));
         ASSERT_NE(lightVersion, nullptr);
         EXPECT_EQ(*lightVersion, 2);
 
-        auto *sensorVersion = static_cast<uint8_t *>(
-            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("sensor"), 7));
+        auto *sensorVersion =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("sensor"), 7));
         ASSERT_NE(sensorVersion, nullptr);
         EXPECT_EQ(*sensorVersion, 5);
     }
 
     TEST_F(ProfileVersionReconfigTest, NoEndpointsLeavesProfileVersionsNull)
     {
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints());
         DeviceDriver *dd = driver.GetDriver();
 
         EXPECT_EQ(dd->endpointProfileVersions, nullptr);
@@ -391,17 +390,16 @@ namespace
         ep.profile = "doorLock";
         ep.profileVersion = 3;
 
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints(std::move(ep)));
         DeviceDriver *dd = driver.GetDriver();
 
         // Simulate a persisted endpoint with the old profile version
         uint8_t persistedProfileVersion = 2;
 
-        auto *expectedVersion = static_cast<uint8_t *>(
-            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        auto *expectedVersion =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
         ASSERT_NE(expectedVersion, nullptr);
-        EXPECT_NE(persistedProfileVersion, *expectedVersion)
-            << "Profile version mismatch should be detectable";
+        EXPECT_NE(persistedProfileVersion, *expectedVersion) << "Profile version mismatch should be detectable";
     }
 
     TEST_F(ProfileVersionReconfigTest, VersionMatchDoesNotTriggerReconfiguration)
@@ -411,14 +409,14 @@ namespace
         ep.profile = "doorLock";
         ep.profileVersion = 3;
 
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints(std::move(ep)));
         DeviceDriver *dd = driver.GetDriver();
 
         // Persisted endpoint matches the driver's expected version
         uint8_t persistedProfileVersion = 3;
 
-        auto *expectedVersion = static_cast<uint8_t *>(
-            hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
+        auto *expectedVersion =
+            static_cast<uint8_t *>(hashMapGet(dd->endpointProfileVersions, const_cast<char *>("doorLock"), 9));
         ASSERT_NE(expectedVersion, nullptr);
         EXPECT_EQ(persistedProfileVersion, *expectedVersion)
             << "Matching profile versions should not trigger reconfiguration";
@@ -528,7 +526,7 @@ namespace
         ep.profile = "doorLock";
         ep.profileVersion = 7;
 
-        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints({ep}));
+        SpecBasedMatterDeviceDriver driver(MakeDriverWithEndpoints(std::move(ep)));
         DeviceDriver *dd = driver.GetDriver();
 
         // The hashmap stores the version the driver expects
@@ -548,14 +546,14 @@ namespace
         epV1.profile = "doorLock";
         epV1.profileVersion = 1;
 
-        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithEndpoints({epV1}));
+        SpecBasedMatterDeviceDriver driverV1(MakeDriverWithEndpoints(std::move(epV1)));
 
         SbmdEndpoint epV2;
         epV2.id = "1";
         epV2.profile = "doorLock";
         epV2.profileVersion = 2;
 
-        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithEndpoints({epV2}));
+        SpecBasedMatterDeviceDriver driverV2(MakeDriverWithEndpoints(std::move(epV2)));
 
         auto *v1 = static_cast<uint8_t *>(
             hashMapGet(driverV1.GetDriver()->endpointProfileVersions, const_cast<char *>("doorLock"), 9));

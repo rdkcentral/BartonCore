@@ -53,139 +53,166 @@ SbmdDriver({
 
         // Resources
         RES_IS_ON: 'isOn',
-        RES_CURRENT_LEVEL: 'currentLevel',
+        RES_CURRENT_LEVEL: 'currentLevel'
     },
 
     barton: {
         deviceClass: 'light',
-        deviceClassVersion: 0,
+        deviceClassVersion: 0
     },
 
     matter: {
         deviceTypes: [
-            0x0100,  // On/Off Light
-            0x010a,  // On/Off Plug-in Unit
-            0x0101,  // Dimmable Light
-            0x010b,  // Dimmable Plug-in Unit
-            0x0102,  // Color Dimmable Light
-            0x0200,  // Color Dimmable Light (alternate)
-            0x010d,  // Extended Color Light
-            0x0210,  // Extended Color Light (alternate)
-            0x010c,  // Color Temperature Light
-            0x0220,  // Color Temperature Light (alternate)
-            0x0103,  // On/Off Light Switch
-            0x0104,  // Dimmable Light Switch
-            0x0105,  // Color Dimmable Light Switch
+            0x0100, // On/Off Light
+            0x010a, // On/Off Plug-in Unit
+            0x0101, // Dimmable Light
+            0x010b, // Dimmable Plug-in Unit
+            0x0102, // Color Dimmable Light
+            0x0200, // Color Dimmable Light (alternate)
+            0x010d, // Extended Color Light
+            0x0210, // Extended Color Light (alternate)
+            0x010c, // Color Temperature Light
+            0x0220, // Color Temperature Light (alternate)
+            0x0103, // On/Off Light Switch
+            0x0104, // Dimmable Light Switch
+            0x0105 // Color Dimmable Light Switch
         ],
         revision: 1,
-        featureClusters: [],
+        featureClusters: []
     },
 
     reporting: {
         minSecs: 1,
-        maxSecs: 3600,
+        maxSecs: 3600
     },
 
     aliases: {
         onOff: {
             clusterId: CL_ON_OFF,
             attributeId: ATTR_ON_OFF,
-            type: 'bool',
+            type: 'bool'
         },
         currentLevel: {
             clusterId: CL_LEVEL,
             attributeId: ATTR_CURRENT_LEVEL,
-            type: 'uint8',
-        },
+            type: 'uint8'
+        }
     },
 
     endpoints: {
-        "1": {
+        '1': {
             profile: 'light',
             profileVersion: 0,
             resources: {
                 isOn: {
                     type: 'boolean',
                     modes: ['read', 'write'],
-                    prerequisites: ['onOff'],
+                    prerequisites: [CL_ON_OFF],
 
-                    write: function(args) {
-                        var commandId = (args.resource.input === 'true') ? CMD_ON : CMD_OFF;
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_ON_OFF, commandId);
-                    },
+                    write: writeIsOn
                 },
 
                 currentLevel: {
                     type: 'com.icontrol.lightLevel',
                     optional: true,
                     modes: ['read', 'write'],
-                    prerequisites: ['currentLevel'],
+                    prerequisites: [CL_LEVEL],
 
-                    write: function(args) {
-                        var percent = parseInt(args.resource.input, 10);
-
-                        if (isNaN(percent)) {
-                            percent = 0;
-                        }
-
-                        if (percent < 0) {
-                            percent = 0;
-                        }
-
-                        if (percent > 100) {
-                            percent = 100;
-                        }
-
-                        // Convert percentage (0-100) to Matter level (0-254)
-                        var level = Math.round(percent / 100 * 254);
-
-                        var cmdArgs = {
-                            Level: level,
-                            TransitionTime: 0,
-                            OptionsMask: 0,
-                            OptionsOverride: 0,
-                        };
-                        var schema = {
-                            Level: { tag: 0, type: 'uint8' },
-                            TransitionTime: { tag: 1, type: 'uint16' },
-                            OptionsMask: { tag: 2, type: 'uint8' },
-                            OptionsOverride: { tag: 3, type: 'uint8' },
-                        };
-                        var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
-
-                        return Sbmd.result()
-                            .device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
-                    },
-                },
-            },
-        },
+                    write: writeCurrentLevel
+                }
+            }
+        }
     },
 
     attributeHandlers: {
-        handleOnOff: {
-            aliases: ['onOff'],
-            handler: function(args) {
-                var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-                var isOn = (value === true) ? 'true' : 'false';
-
-                return Sbmd.result()
-                    .dataModel.updateResource(args.endpointId, RES_IS_ON, isOn)
-                    .success();
-            },
-        },
-
-        handleCurrentLevel: {
-            aliases: ['currentLevel'],
-            handler: function(args) {
-                var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
-                var percent = Math.round(level / 254 * 100);
-
-                return Sbmd.result()
-                    .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
-                    .success();
-            },
-        },
-    },
+        handleOnOff: {aliases: ['onOff'], handler: handleOnOff},
+        handleCurrentLevel: {aliases: ['currentLevel'], handler: handleCurrentLevel}
+    }
 });
+
+// =============================================================================
+// Handler Implementations
+// =============================================================================
+
+/**
+ * Writes the Barton isOn value to the Matter On/Off cluster (0x0006) by
+ * invoking the On or Off command.
+ */
+function writeIsOn(args) {
+    var commandId = args.resource.input === 'true' ? CMD_ON : CMD_OFF;
+
+    return Sbmd.result().device.sendCommand(CL_ON_OFF, commandId);
+}
+
+/**
+ * Writes the Barton currentLevel percent (0-100) to the Matter Level Control
+ * cluster (0x0008) via MoveToLevelWithOnOff, converting percent to a Matter
+ * level (0-254). Clamps out-of-range input to 0-100.
+ */
+function writeCurrentLevel(args) {
+    var percent = parseInt(args.resource.input, 10);
+
+    if (isNaN(percent)) {
+        percent = 0;
+    }
+
+    if (percent < 0) {
+        percent = 0;
+    }
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    // Convert percentage (0-100) to Matter level (0-254)
+    var level = Math.round((percent / 100) * 254);
+
+    var cmdArgs = {
+        Level: level,
+        TransitionTime: 0,
+        OptionsMask: 0,
+        OptionsOverride: 0
+    };
+    var schema = {
+        Level: {tag: 0, type: 'uint8'},
+        TransitionTime: {tag: 1, type: 'uint16'},
+        OptionsMask: {tag: 2, type: 'uint8'},
+        OptionsOverride: {tag: 3, type: 'uint8'}
+    };
+    var tlvBase64 = Sbmd.Tlv.encodeStruct(cmdArgs, schema);
+
+    return Sbmd.result().device.sendCommand(CL_LEVEL, CMD_MOVE_TO_LEVEL_WITH_ON_OFF, tlvBase64);
+}
+
+/**
+ * Maps Matter OnOff (bool, cluster 0x0006) reports to the Barton isOn resource.
+ */
+function handleOnOff(args) {
+    var value = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (value === null) {
+        return Sbmd.result().error('TLV decode failed for OnOff');
+    }
+
+    var isOn = value === true ? 'true' : 'false';
+
+    return Sbmd.result().dataModel.updateResource(args.endpointId, RES_IS_ON, isOn).success();
+}
+
+/**
+ * Maps Matter CurrentLevel (uint8 0-254, cluster 0x0008) reports to the Barton
+ * currentLevel resource as a percent (0-100).
+ */
+function handleCurrentLevel(args) {
+    var level = Sbmd.Tlv.decode(args.attribute.tlvBase64);
+
+    if (level === null) {
+        return Sbmd.result().error('TLV decode failed for CurrentLevel');
+    }
+
+    var percent = Math.round((level / 254) * 100);
+
+    return Sbmd.result()
+        .dataModel.updateResource(args.endpointId, RES_CURRENT_LEVEL, percent.toString())
+        .success();
+}

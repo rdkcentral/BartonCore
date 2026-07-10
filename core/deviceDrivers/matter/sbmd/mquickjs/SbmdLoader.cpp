@@ -30,6 +30,7 @@
 
 #include "SbmdLoader.h"
 #include "MQuickJsRuntime.h"
+#include "SbmdJsUtil.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -43,248 +44,25 @@ extern "C" {
 
 namespace barton
 {
+    using namespace mquickjs;
+
     namespace
     {
-        std::string GetExceptionString(JSContext *ctx)
-        {
-            JSValue ex = JS_GetException(ctx);
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, ex, &buf);
-
-            if (str)
-            {
-                return std::string(str);
-            }
-
-            return "unknown error";
-        }
-
         /**
-         * Get a string property from a JS object, or empty string if missing.
+         * Reset the __sbmd_registration global to null so the next driver load
+         * starts clean. A failed write would leak stale registration state into
+         * the next load, so log (and clear) any exception it raises.
          */
-        std::string GetStringProp(JSContext *ctx, JSValue obj, const char *name)
+        void ResetRegistration(JSContext *ctx)
         {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
+            JSValue res = JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
 
-            if (JS_IsUndefined(val) || JS_IsNull(val))
+            if (JS_IsException(res))
             {
-                return "";
+                std::string exMsg;
+                MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg);
+                icError("Failed to reset __sbmd_registration for next driver load: %s", exMsg.c_str());
             }
-
-            JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
-
-            return str ? std::string(str) : "";
-        }
-
-        /**
-         * Get a uint32 property from a JS object, or 0 if missing.
-         */
-        uint32_t GetUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return 0;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        /**
-         * Get an optional uint32 property from a JS object.
-         */
-        std::optional<uint32_t> GetOptUint32Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
-
-            if (JS_IsUndefined(val) || JS_IsNull(val))
-            {
-                return std::nullopt;
-            }
-
-            uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
-
-            return result;
-        }
-
-        /**
-         * Get an optional uint16 property from a JS object.
-         */
-        std::optional<uint16_t> GetOptUint16Prop(JSContext *ctx, JSValue obj, const char *name)
-        {
-            auto opt = GetOptUint32Prop(ctx, obj, name);
-
-            if (!opt.has_value())
-            {
-                return std::nullopt;
-            }
-
-            return static_cast<uint16_t>(*opt);
-        }
-
-        /**
-         * Get the length of a JS array.
-         */
-        uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
-        {
-            JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
-
-            if (JS_IsUndefined(lenVal))
-            {
-                return 0;
-            }
-
-            uint32_t len = 0;
-            JS_ToUint32(ctx, &len, lenVal);
-
-            return len;
-        }
-
-        /**
-         * Read a JS array of strings.
-         */
-        std::vector<std::string> GetStringArray(JSContext *ctx, JSValue arr)
-        {
-            std::vector<std::string> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                JSCStringBuf buf;
-                const char *str = JS_ToCString(ctx, elem, &buf);
-
-                if (str)
-                {
-                    result.emplace_back(str);
-                }
-            }
-
-            return result;
-        }
-
-        /**
-         * Read a JS array of uint16_t values.
-         */
-        std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr)
-        {
-            std::vector<uint16_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem);
-                result.push_back(static_cast<uint16_t>(val));
-            }
-
-            return result;
-        }
-
-        /**
-         * Read a JS array of uint32_t values.
-         */
-        std::vector<uint32_t> GetUint32Array(JSContext *ctx, JSValue arr)
-        {
-            std::vector<uint32_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
-
-            for (uint32_t i = 0; i < len; i++)
-            {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
-                uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem);
-                result.push_back(val);
-            }
-
-            return result;
-        }
-
-        /**
-         * Get the keys of a JS object by evaluating Object.keys().
-         * We store the object on a temporary global, evaluate Object.keys(),
-         * then clean up.
-         */
-        std::vector<std::string> GetObjectKeys(JSContext *ctx, JSValue obj)
-        {
-            // Store object as a temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", obj);
-
-            const char *script = "JSON.stringify(Object.keys(__sbmd_tmp))";
-            JSValue result = JS_Eval(ctx, script, strlen(script), "<keys>", JS_EVAL_RETVAL);
-
-            // Clean up temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", JS_UNDEFINED);
-
-            if (JS_IsException(result))
-            {
-                MQuickJsRuntime::CheckAndClearPendingException(ctx);
-                return {};
-            }
-
-            JSCStringBuf buf;
-            const char *jsonStr = JS_ToCString(ctx, result, &buf);
-
-            if (!jsonStr)
-            {
-                return {};
-            }
-
-            // Parse the JSON array of strings manually (simple format: ["key1","key2",...])
-            std::vector<std::string> keys;
-            std::string json(jsonStr);
-
-            if (json.size() < 2 || json[0] != '[')
-            {
-                return keys;
-            }
-
-            size_t pos = 1;
-
-            while (pos < json.size())
-            {
-                // Skip whitespace and commas
-                while (pos < json.size() && (json[pos] == ' ' || json[pos] == ','))
-                {
-                    pos++;
-                }
-
-                if (pos >= json.size() || json[pos] == ']')
-                {
-                    break;
-                }
-
-                if (json[pos] != '"')
-                {
-                    break;
-                }
-
-                pos++; // skip opening quote
-                std::string key;
-
-                while (pos < json.size() && json[pos] != '"')
-                {
-                    if (json[pos] == '\\' && pos + 1 < json.size())
-                    {
-                        pos++;
-                    }
-
-                    key += json[pos];
-                    pos++;
-                }
-
-                pos++; // skip closing quote
-                keys.push_back(key);
-            }
-
-            return keys;
         }
 
         /**
@@ -432,9 +210,8 @@ namespace barton
         return true;
     }
 
-    std::vector<std::pair<std::string, std::string>> SbmdLoader::ExtractConstants(JSContext *ctx,
-                                                                                     const char *source,
-                                                                                     size_t sourceLen)
+    std::optional<std::vector<std::pair<std::string, std::string>>>
+    SbmdLoader::ExtractConstants(JSContext *ctx, const char *source, size_t sourceLen)
     {
         std::vector<std::pair<std::string, std::string>> constants;
 
@@ -504,8 +281,8 @@ namespace barton
 
         if (found >= end || *found != '{')
         {
-            icWarn("constants: not followed by '{'");
-            return constants;
+            icError("constants: not followed by '{'");
+            return std::nullopt;
         }
 
         // Find matching closing brace
@@ -515,7 +292,7 @@ namespace barton
         if (closePos == std::string::npos)
         {
             icError("Failed to find matching '}' for constants block");
-            return constants;
+            return std::nullopt;
         }
 
         // Extract the block content including braces
@@ -528,14 +305,48 @@ namespace barton
         if (JS_IsException(objVal))
         {
             icError("Failed to evaluate constants block: %s", GetExceptionString(ctx).c_str());
-            return constants;
+            return std::nullopt;
         }
 
         // Get the keys and values
         auto keys = GetObjectKeys(ctx, objVal);
 
+        // A constant key becomes a `var <key> = <value>;` declaration in the preamble, so it must be
+        // a valid JavaScript identifier (^[A-Za-z_$][A-Za-z0-9_$]*$). Reject anything else with a
+        // clear error rather than emitting a syntactically invalid declaration.
+        auto isValidIdentifier = [](const std::string &name) {
+            if (name.empty())
+            {
+                return false;
+            }
+
+            auto isIdentifierStart = [](char c) { return isalpha(c) || c == '_' || c == '$'; };
+            auto isIdentifierPart = [&](char c) { return isIdentifierStart(c) || isdigit(c); };
+
+            if (!isIdentifierStart(name.front()))
+            {
+                return false;
+            }
+
+            for (size_t i = 1; i < name.size(); i++)
+            {
+                if (!isIdentifierPart(name[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
         for (const auto &key : keys)
         {
+            if (!isValidIdentifier(key))
+            {
+                icError("Constants block key '%s' is not a valid JavaScript identifier", key.c_str());
+                return std::nullopt; // Reject the entire block
+            }
+
             JSValue val = JS_GetPropertyStr(ctx, objVal, key.c_str());
             JSCStringBuf buf;
 
@@ -558,6 +369,18 @@ namespace barton
                         else if (*p == '\\')
                         {
                             escaped += "\\\\";
+                        }
+                        else if (*p == '\n')
+                        {
+                            escaped += "\\n";
+                        }
+                        else if (*p == '\r')
+                        {
+                            escaped += "\\r";
+                        }
+                        else if (*p == '\t')
+                        {
+                            escaped += "\\t";
                         }
                         else
                         {
@@ -587,7 +410,7 @@ namespace barton
             else
             {
                 icError("Constants block contains non-primitive value for key '%s'", key.c_str());
-                return {}; // Reject the entire block
+                return std::nullopt; // Reject the entire block
             }
         }
 
@@ -613,10 +436,8 @@ namespace barton
         return static_cast<int>(std::count(preamble.begin(), preamble.end(), '\n'));
     }
 
-    std::unique_ptr<SbmdRegistration> SbmdLoader::LoadDriver(JSContext *ctx,
-                                                                   const std::string &filePath,
-                                                                   const char *source,
-                                                                   size_t sourceLen)
+    std::unique_ptr<SbmdRegistration>
+    SbmdLoader::LoadDriver(JSContext *ctx, const std::string &filePath, const char *source, size_t sourceLen)
     {
         if (!ctx || !source || sourceLen == 0)
         {
@@ -628,7 +449,14 @@ namespace barton
 
         // Pass 1: Extract constants
         auto constants = ExtractConstants(ctx, source, sourceLen);
-        std::string preamble = GenerateConstantsPreamble(constants);
+
+        if (!constants)
+        {
+            icError("Failed to extract constants block from %s", filePath.c_str());
+            return nullptr;
+        }
+
+        std::string preamble = GenerateConstantsPreamble(*constants);
         int preambleLines = CountPreambleLines(preamble);
 
         // Pass 2: Build IIFE-wrapped source with constants preamble
@@ -636,7 +464,7 @@ namespace barton
 
         icDebug("Evaluating driver (%zu bytes, %d constant vars, %d preamble lines)",
                 wrappedSource.size(),
-                (int) constants.size(),
+                (int) constants->size(),
                 preambleLines);
 
         JSValue result = JS_Eval(ctx, wrappedSource.c_str(), wrappedSource.size(), filePath.c_str(), JS_EVAL_REPL);
@@ -647,7 +475,7 @@ namespace barton
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
             MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
+            ResetRegistration(ctx);
             return nullptr;
         }
 
@@ -656,7 +484,7 @@ namespace barton
         if (MQuickJsRuntime::CheckAndClearPendingException(ctx, &exMsg))
         {
             icError("Driver evaluation left a pending exception: %s", exMsg.c_str());
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_registration", JS_NULL);
+            ResetRegistration(ctx);
             return nullptr;
         }
 
@@ -678,8 +506,7 @@ namespace barton
         return reg;
     }
 
-    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx,
-                                                                           const std::string &filePath)
+    std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx, const std::string &filePath)
     {
         JSValue global = JS_GetGlobalObject(ctx);
         JSValue regVal = JS_GetPropertyStr(ctx, global, "__sbmd_registration");
@@ -689,6 +516,15 @@ namespace barton
             icError("No SbmdDriver() call found in %s (no __sbmd_registration)", filePath.c_str());
             return nullptr;
         }
+
+        // RAII guard: reset __sbmd_registration on every exit from this scope,
+        // whether by success or by any early-return failure. Keeping the global
+        // set throughout extraction also anchors regVal as a live GC root.
+        struct ResetGuard
+        {
+            JSContext *ctx;
+            ~ResetGuard() { ResetRegistration(ctx); }
+        } resetGuard {ctx};
 
         auto reg = std::make_unique<SbmdRegistration>();
         reg->filePath = filePath;
@@ -757,9 +593,6 @@ namespace barton
             }
         }
 
-        // Reset __sbmd_registration to null for the next driver
-        JS_SetPropertyStr(ctx, global, "__sbmd_registration", JS_NULL);
-
         icDebug("Extracted registration: name=%s, %zu aliases, %zu endpoints, %zu attrHandlers, %zu evtHandlers, "
                 "%zu cmdHandlers",
                 reg->name.c_str(),
@@ -775,7 +608,7 @@ namespace barton
     bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
     {
         out.schemaVersion = GetStringProp(ctx, reg, "schemaVersion");
-        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion");
+        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion", 0);
         out.name = GetStringProp(ctx, reg, "name");
 
         if (out.name.empty())
@@ -796,7 +629,7 @@ namespace barton
         if (!JS_IsUndefined(bartonVal) && !JS_IsNull(bartonVal))
         {
             out.barton.deviceClass = GetStringProp(ctx, bartonVal, "deviceClass");
-            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal, "deviceClassVersion");
+            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal, "deviceClassVersion", 0);
         }
 
         // Matter metadata
@@ -829,8 +662,8 @@ namespace barton
 
         if (!JS_IsUndefined(reportingVal) && !JS_IsNull(reportingVal))
         {
-            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "minSecs"));
-            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "maxSecs"));
+            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "minSecs", 0));
+            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "maxSecs", 0));
         }
 
         return true;
@@ -851,7 +684,7 @@ namespace barton
 
             SbmdAlias alias;
             alias.name = name;
-            alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId");
+            alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId", 0);
             alias.attributeId = GetOptUint32Prop(ctx, aliasVal, "attributeId");
             alias.eventId = GetOptUint32Prop(ctx, aliasVal, "eventId");
             alias.commandId = GetOptUint32Prop(ctx, aliasVal, "commandId");
@@ -879,7 +712,7 @@ namespace barton
             SbmdEndpoint endpoint;
             endpoint.id = epId;
             endpoint.profile = GetStringProp(ctx, epVal, "profile");
-            endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion");
+            endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion", 0);
 
             // Extract resources
             JSValue resourcesVal = JS_GetPropertyStr(ctx, epVal, "resources");
@@ -966,9 +799,9 @@ namespace barton
         return true;
     }
 
-    std::optional<SbmdResourceHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
+    std::optional<SbmdHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
     {
-        SbmdResourceHandler handler;
+        SbmdHandler handler;
 
         if (JS_IsFunction(ctx, val))
         {
@@ -998,9 +831,7 @@ namespace barton
         return handler;
     }
 
-    bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx,
-                                              JSValue handlersObj,
-                                              std::vector<SbmdDeviceHandler> &out)
+    bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx, JSValue handlersObj, std::vector<SbmdDeviceHandler> &out)
     {
         auto handlerNames = GetObjectKeys(ctx, handlersObj);
 

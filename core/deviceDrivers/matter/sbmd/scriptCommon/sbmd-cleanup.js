@@ -28,10 +28,8 @@
  * implementation details between sub-parts during assembly.
  */
 
-(function(Sbmd)
-{
+(function (Sbmd) {
     'use strict';
 
     delete Sbmd._internal;
-
 })(globalThis.Sbmd);

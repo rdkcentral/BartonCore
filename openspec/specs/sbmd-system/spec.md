@@ -29,6 +29,11 @@ The `SpecBasedMatterDeviceDriver` SHALL dispatch Barton resource operations to v
 - **WHEN** a Barton read operation is performed on a resource with a `read` handler
 - **THEN** the driver resolves supplements, calls the handler, and returns the result value
 
+#### Scenario: Execute handler auto-sets EXECUTABLE mode
+- **WHEN** a resource declares an `execute` handler
+- **THEN** the runtime SHALL set `RESOURCE_MODE_EXECUTABLE` on that resource regardless of whether `"execute"` appears in its `modes` array
+- **AND** explicitly including `"execute"` in `modes` SHALL be accepted and treated as equivalent
+
 #### Scenario: Attribute report dispatches to attribute handler
 - **WHEN** a Matter attribute report arrives matching a registered `attributeHandler`
 - **THEN** the driver calls the handler and executes the result chain (e.g., resource updates)

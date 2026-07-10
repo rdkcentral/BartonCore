@@ -485,6 +485,7 @@ explicitly opted out of:
 |---|---|---|
 | `"read"` | off | Resource is readable. |
 | `"write"` | off | Resource is writable. |
+| `"execute"` | off | Resource is executable. The runtime automatically sets this when an `execute` handler is declared, so including it in `modes` is valid but redundant. |
 | `"dynamic"` | **on** | Resource value can be updated by device-side handlers (attribute/event/command handlers). Opt out with `"static"`. |
 | `"emitEvents"` | **on** | Resource emits Barton events when its value changes. Opt out with `"noEvents"`. |
 | `"lazySaveNext"` | off | Defer persistence to the next save cycle instead of saving immediately on change. |
@@ -504,8 +505,10 @@ modes: ["read", "write", "static", "noEvents"]
 modes: ["read", "noEvents"]
 ```
 
-Resources with `type: "function"` do not use `modes` — they are always
-execute-only.
+Resources with `type: "function"` are always executable — the runtime
+automatically sets `RESOURCE_MODE_EXECUTABLE` from the `execute` handler,
+so `modes` is not needed. You may still include opt-out modes such as
+`"static"` or `"noEvents"` if the defaults are not appropriate.
 
 **Seed vs Read**
 
@@ -1964,7 +1967,7 @@ function handleLockEventCatchAll(args) {
 // ---------------------------------------------------------------------------
 
 function handleGetCredentialStatusResponse(args) {
-  var response = args.response.data;
+  var response = args.command.data;
   var credRules = args.supplements.attributes.credentialRulesSupport;
 
   return Sbmd.result()

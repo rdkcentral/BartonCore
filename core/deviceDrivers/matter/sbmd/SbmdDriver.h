@@ -27,9 +27,9 @@
  * A SBMD driver instance with activate/deactivate lifecycle.
  *
  * Lifecycle:
- *   1. Load: Parse .sbmd.js file, extract metadata. Handlers are NOT rooted.
- *   2. Activate: Re-evaluate file, GC-root handler JSValues. Ready for dispatch.
- *   3. Deactivate: Release GC roots, clear handlers. Back to metadata-only.
+ *   1. Load: Parse .sbmd.js file, extract metadata. Handler references are not held alive.
+ *   2. Activate: Re-evaluate file, hold handler JSValues alive. Ready for dispatch.
+ *   3. Deactivate: Release held references, clear handlers. Back to metadata-only.
  *
  * The source text is retained so the file can be re-evaluated on activation.
  * The mquickjs context is shared across all drivers — activation requires
@@ -41,7 +41,6 @@
 #include "SbmdDispatch.h"
 #include "SbmdRegistration.h"
 
-#include <list>
 #include <memory>
 #include <string>
 
@@ -58,8 +57,8 @@ namespace barton
          * Create a driver from a loaded registration and its source text.
          *
          * The registration should come from SbmdLoader::LoadDriver(). Its handler
-         * JSValues are present but NOT GC-rooted — they are only valid until the next
-         * GC cycle. Call Activate() to root them.
+         * JSValues are present but not yet held alive — they are only valid transiently.
+         * Call Activate() to hold them alive.
          *
          * @param registration The extracted registration (takes ownership)
          * @param source The .sbmd.js file contents (retained for re-activation)
@@ -75,9 +74,9 @@ namespace barton
         SbmdDriver &operator=(SbmdDriver &&) = default;
 
         /**
-         * Activate the driver — re-evaluate the .sbmd.js file and GC-root all handler JSValues.
+         * Activate the driver — re-evaluate the .sbmd.js file and hold all handler JSValues alive.
          *
-         * After activation, handler functions can be called safely across GC cycles.
+         * After activation, handler functions can be called safely for the driver's active lifetime.
          * Caller must hold MQuickJsRuntime::GetMutex().
          *
          * @param ctx The mquickjs context
@@ -86,7 +85,7 @@ namespace barton
         bool Activate(JSContext *ctx);
 
         /**
-         * Deactivate the driver — release all GC roots and clear handler JSValues.
+         * Deactivate the driver — release all held handler references and clear handler JSValues.
          *
          * After deactivation, only metadata is available. The driver can be re-activated later.
          * Caller must hold MQuickJsRuntime::GetMutex().
@@ -96,7 +95,7 @@ namespace barton
         void Deactivate(JSContext *ctx);
 
         /**
-         * Whether the driver is currently activated (handlers are GC-rooted).
+         * Whether the driver is currently activated (handler references are held alive).
          */
         bool IsActivated() const;
 
@@ -128,25 +127,72 @@ namespace barton
 
     private:
         /**
-         * Walk the registration and GC-root all handler JSValues.
+         * Invoke fn(SbmdHandler&) for every handler in the registration: each resource's
+         * seed/read/write/execute plus the attribute/event/command handler vectors.
          */
-        void RootHandlers(JSContext *ctx);
+        template<typename Fn>
+        void VisitHandlers(Fn &&fn)
+        {
+            for (auto &endpoint : registration->endpoints)
+            {
+                for (auto &resource : endpoint.resources)
+                {
+                    if (resource.seed.has_value())
+                    {
+                        fn(*resource.seed);
+                    }
+
+                    if (resource.read.has_value())
+                    {
+                        fn(*resource.read);
+                    }
+
+                    if (resource.write.has_value())
+                    {
+                        fn(*resource.write);
+                    }
+
+                    if (resource.execute.has_value())
+                    {
+                        fn(*resource.execute);
+                    }
+                }
+            }
+
+            for (auto &handler : registration->attributeHandlers)
+            {
+                fn(handler);
+            }
+
+            for (auto &handler : registration->eventHandlers)
+            {
+                fn(handler);
+            }
+
+            for (auto &handler : registration->commandHandlers)
+            {
+                fn(handler);
+            }
+        }
 
         /**
-         * Walk the GC ref list, unroot all, clear the list, and reset handler JSValues.
+         * Walk the registration and hold all handler JSValues alive.
          */
-        void UnrootHandlers(JSContext *ctx);
+        void HoldHandlers(JSContext *ctx);
 
         /**
-         * Add a GC root for a handler JSValue if it is not JS_UNDEFINED.
+         * Release every handler's held reference and reset it to the unloaded state.
          */
-        void RootIfValid(JSContext *ctx, JSValue &handler);
+        void ReleaseHandlers();
+
+        /**
+         * Hold a handler's JSValue alive if it is not JS_UNDEFINED. On success the handler's
+         * heldFn SafeJSValue keeps it alive; callers must invoke through entry.Fn(), not the raw copy.
+         */
+        void HoldIfValid(JSContext *ctx, SbmdHandler &entry);
 
         std::unique_ptr<SbmdRegistration> registration;
         std::string source; // Retained for re-activation
-
-        // GC roots — stable addresses via std::list (vector would invalidate on realloc)
-        std::list<JSGCRef> gcRefs;
 
         // Dispatch tables — built at activation, cleared at deactivation
         SbmdDispatchTable attributeDispatch;

@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "SafeJSValue.h"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -68,14 +70,41 @@ namespace barton
     };
 
     /**
-     * A resource handler declaration (seed, read, write, or execute).
-     * For simple declarations (just a function), only handler is set.
-     * For object declarations, supplements and handler are both set.
+     * A loaded handler declaration (resource seed/read/write/execute, or a
+     * device attribute/event/command handler): the JS function reference, the
+     * SafeJSValue that keeps it alive while activated, and any supplement requests.
      */
-    struct SbmdResourceHandler
+    class SbmdHandler
     {
-        JSValue handler = JS_UNDEFINED; // GC-rooted function reference
+    public:
+        SbmdHandler() = default;
+
+        // Move-only: the held reference is single-owner (see SafeJSValue).
+        SbmdHandler(const SbmdHandler &) = delete;
+        SbmdHandler &operator=(const SbmdHandler &) = delete;
+        SbmdHandler(SbmdHandler &&) = default;
+        SbmdHandler &operator=(SbmdHandler &&) = default;
+
+        // Raw function reference captured at load time. This is a deliberately unheld staging slot:
+        // a loaded-but-not-yet-activated registration owns no held references, so it can be moved,
+        // discarded on a failed activation, or destroyed without needing the runtime mutex. Only
+        // valid transiently after load; the driver promotes it into heldFn when activated.
+        JSValue handler = JS_UNDEFINED;
+        // Held function reference. Empty until the driver is activated, then keeps the function alive
+        // until deactivation. SafeJSValue always yields the current function object, so always invoke via Fn().
+        SafeJSValue heldFn;
         SbmdSupplements supplements;
+
+        // Invoke through the held reference when activated, otherwise the raw load-time reference.
+        JSValue Fn() const { return heldFn.HasValue() ? heldFn.Get() : handler; }
+
+        // Return to the unloaded state (intended for use when a driver is deactivated).
+        // Releasing the held reference must be done with the runtime mutex held.
+        void Reset()
+        {
+            handler = JS_UNDEFINED;
+            heldFn = SafeJSValue {};
+        }
     };
 
     /**
@@ -89,10 +118,10 @@ namespace barton
         bool optional = false;
         std::vector<std::string> prerequisites; // Alias names for prerequisite checks
 
-        std::optional<SbmdResourceHandler> seed;
-        std::optional<SbmdResourceHandler> read;
-        std::optional<SbmdResourceHandler> write;
-        std::optional<SbmdResourceHandler> execute;
+        std::optional<SbmdHandler> seed;
+        std::optional<SbmdHandler> read;
+        std::optional<SbmdHandler> write;
+        std::optional<SbmdHandler> execute;
     };
 
     /**
@@ -109,12 +138,10 @@ namespace barton
     /**
      * An attribute/event/command handler registration.
      */
-    struct SbmdDeviceHandler
+    struct SbmdDeviceHandler : SbmdHandler
     {
-        std::string name;                    // Handler registration name
-        std::vector<std::string> aliases;    // Alias names this handler matches
-        JSValue handler = JS_UNDEFINED;      // GC-rooted function reference
-        SbmdSupplements supplements;
+        std::string name;                 // Handler registration name
+        std::vector<std::string> aliases; // Alias names this handler matches
     };
 
     /**
@@ -151,7 +178,7 @@ namespace barton
     /**
      * Complete registration extracted from a SbmdDriver({...}) call.
      * Metadata fields are always populated. Handler JSValues are only valid
-     * when the driver is activated (GC-rooted).
+     * when the driver is activated (their references are held alive).
      */
     struct SbmdRegistration
     {
@@ -176,7 +203,7 @@ namespace barton
         std::vector<SbmdDeviceHandler> eventHandlers;
         std::vector<SbmdDeviceHandler> commandHandlers;
 
-        // Whether handler JSValues are currently GC-rooted (driver is activated)
+        // Whether handler JSValues are currently held alive (driver is activated)
         bool activated = false;
     };
 

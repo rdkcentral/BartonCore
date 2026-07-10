@@ -685,7 +685,7 @@ void MatterDevice::CacheCallback::OnSubscriptionEstablished(chip::SubscriptionId
     icDebug("OnSubscriptionEstablished for device %s, subscription ID: %u",
                device->deviceId.c_str(), aSubscriptionId);
 
-    // Now that subscription is established, compute and cache feature maps for scripts
+    // Now that subscription is established, compute and cache feature maps
     device->UpdateCachedFeatureMaps();
 }
 

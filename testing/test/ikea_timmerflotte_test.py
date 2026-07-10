@@ -82,7 +82,7 @@ def test_commission_timmerflotte(
         ],
     )
 
-    # Virtual device defaults: temperature = 2550 (25.50°C), humidity = 5000 (50.00%)
+    # Virtual device defaults: temperature = 2550 (25.50°C), humidity = 5000 (50.00%) -> 50 whole percent
     wait_for_resource_value(temp_queue, "2550")
     wait_for_resource_value(hum_queue, "50")
 

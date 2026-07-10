@@ -119,9 +119,9 @@ The Matter KVS lives at `<storage-dir>/matter/`, so deleting the storage directo
 
 ### Matter: Shared `.ini` Config Files
 
-The Matter SDK's PosixConfig storage objects (`chip_factory.ini`, `chip_config.ini`, `chip_counters.ini`) are `static` globals that always write to the compile-time path `~/.brtn-ds/matter/`. These files are **shared** across all concurrent sessions and cannot be redirected at runtime without Matter SDK changes. The main KVS (`matterkv`) IS properly isolated per session.
+The Matter SDK's PosixConfig storage objects (`chip_factory.ini`, `chip_config.ini`, `chip_counters.ini`) are `static` globals that always write to the compile-time config directory (`CHIP_BARTON_CONF_DIR`, commonly `~/.brtn-ds/matter/`). These files are **shared** across all concurrent sessions and cannot be redirected at runtime without Matter SDK changes. The main KVS (`matterkv`) IS properly isolated per session.
 
-In practice, the `.ini` files rarely cause conflicts between concurrent sessions. If you encounter issues, stop all sessions, delete `~/.brtn-ds/matter/chip_*.ini`, and restart.
+In practice, the `.ini` files rarely cause conflicts between concurrent sessions. If you encounter issues, stop all sessions, delete the `chip_*.ini` files from the compile-time config directory, and restart.
 
 ### Matter: Missing CLI Flags
 
