@@ -58,6 +58,8 @@ extern "C" {
 #include "matter/MatterDriverFactory.h"
 #include "matterSubsystem.h"
 
+#include CHIP_PROJECT_CONFIG_INCLUDE
+
 using namespace barton;
 using namespace std;
 
@@ -176,6 +178,7 @@ static gboolean maybeInitMatter(void *context)
     (void) context;
 
     bool initSuccessful = true;
+    std::string configRoot;
 
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
@@ -188,6 +191,21 @@ static gboolean maybeInitMatter(void *context)
         }
 
         busy = true;
+
+        // Capture matterConfigRoot under the lock to prevent use-after-free
+        // if shutdown runs concurrently.
+        if (matterConfigRoot != nullptr)
+        {
+            configRoot = matterConfigRoot;
+        }
+    }
+
+    if (configRoot.empty())
+    {
+        icError("matterConfigRoot is not set (shutdown may have occurred)");
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        busy = false;
+        return false;
     }
 
     try
@@ -202,30 +220,34 @@ static gboolean maybeInitMatter(void *context)
         else
         {
             scoped_generic char *trustStore = deviceServiceConfigurationGetMatterAttestationTrustStoreDir();
-            std::string attestationTrustStorePath(trustStore);
 
-            if (!Matter::GetInstance().Init(accountId, std::move(attestationTrustStorePath)))
+            if (trustStore == nullptr || trustStore[0] == '\0')
+            {
+                icError("Matter attestation trust store directory is not configured");
+                initSuccessful = false;
+            }
+            else if (!Matter::GetInstance().Init(accountId, std::string(trustStore), configRoot))
             {
                 initSuccessful = false;
             }
-
-            // FIXME: Matter shouldn't be a singleton with Init() but a properly constructed object.
-
-            // Start() is the final arbiter of truth. If Init() fails, it's presumed Start()
-            // will definitely fail. Once Start()ed, the subsystem is up, and Start() SHOULD NOT be called again.
-            // Start() is internally protected and will warn if already running (instead of aborting in the matter
-            // stack).
-            initSuccessful = Matter::GetInstance().Start();
-
-            if (!initSuccessful)
+            else
             {
-                icError("failed to start Matter interface");
+                // Start() is the final arbiter of truth. Once Start()ed, the subsystem is up,
+                // and Start() SHOULD NOT be called again. Start() is internally protected and
+                // will warn if already running (instead of aborting in the matter stack).
+                initSuccessful = Matter::GetInstance().Start();
+
+                if (!initSuccessful)
+                {
+                    icError("failed to start Matter interface");
+                }
             }
         }
     }
     catch (const runtime_error &e)
     {
         icError("failed to initialize/start Matter interface: %s", e.what());
+        initSuccessful = false;
     }
 
     subsystemMtx.lock();
@@ -243,21 +265,21 @@ static gboolean maybeInitMatter(void *context)
 
 /**
  * @brief Wrapper callback for maybeInitMatter that handles exponential backoff scheduling.
- * 
+ *
  * This function is called by the GLib main loop timer source. It attempts to initialize Matter,
  * and if initialization fails, it schedules the next retry with an exponentially increasing delay.
- * 
+ *
  * @param context unused context pointer
  * @return FALSE to indicate the timer source should be removed
  */
 static gboolean maybeInitMatterWithBackoff(void *context)
 {
     bool needsRetry = maybeInitMatter(context);
-    
+
     if (needsRetry)
     {
         std::lock_guard<std::mutex> l(subsystemMtx);
-        
+
         // Check if initialization succeeded between the call and acquiring the lock
         // (e.g., via accountIdChanged callback)
         if (initialized)
@@ -265,28 +287,27 @@ static gboolean maybeInitMatterWithBackoff(void *context)
             // Initialization succeeded, no need to retry
             return false;
         }
-        
+
         // Increment retry attempts and calculate new backoff delay (both protected by lock)
         retryAttempts++;
         guint currentRetryAttempt = retryAttempts;
         guint newBackoffDelay = calculateBackoffDelay(currentRetryAttempt);
-        
-        icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", 
-                currentRetryAttempt, newBackoffDelay);
-        
+
+        icDebug("Matter init failed, scheduling retry attempt %u in %u seconds", currentRetryAttempt, newBackoffDelay);
+
         // Create a new timer source with the new backoff delay
         g_autoptr(GSource) newSource = g_timeout_source_new(newBackoffDelay * 1000);
         g_source_set_priority(newSource, G_PRIORITY_DEFAULT);
         g_source_set_callback(newSource, maybeInitMatterWithBackoff, nullptr, nullptr);
         g_source_set_name(newSource, "maybeInitMatter");
-        
+
         // Attach to the current context and update sourceId
         // Note: The old source is automatically removed by GLib when this callback returns false
         // The mutex protection ensures shutdown can't interfere with this atomic operation
         GMainContext *currentContext = g_main_context_get_thread_default();
         sourceId = g_source_attach(newSource, currentContext);
     }
-    
+
     return false; // Always return false to remove the current source
 }
 
@@ -319,7 +340,7 @@ static void matterInitLoopThreadFunc()
         // but we explicitly reset it here so that if this thread is ever restarted after
         // a previous run, the backoff sequence starts from the initial delay again.
         retryAttempts = 0;
-        
+
         // Create a one-shot timer source for the first scheduled retry with backoff
         // Note: The immediate synchronous maybeInitMatter call above is not counted as a retry attempt
         // This first scheduled retry uses retryAttempts=0
@@ -409,15 +430,15 @@ static bool matterSubsystemInitialize(subsystemInitializedFunc initializedCallba
     subsystemInitializedCallback = initializedCallback;
     subsystemDeinitializedCallback = deInitializedCallback;
 
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+    g_free(g_steal_pointer(&matterKVPath));
+    g_free(g_steal_pointer(&matterConfigRoot));
 
     matterConfigRoot = deviceServiceConfigurationGetMatterStorageDir();
 
-    if (matterConfigRoot == nullptr)
+    if (matterConfigRoot == nullptr || matterConfigRoot[0] == '\0')
     {
-        icError("Matter config directory not set and is required for the Matter subsystem.");
-        return false;
+        g_free(matterConfigRoot);
+        matterConfigRoot = g_strdup(CHIP_BARTON_CONF_DIR);
     }
 
     matterKVPath = stringBuilder("%s/%s", matterConfigRoot, MATTERKV_FILE_NAME);
@@ -459,9 +480,13 @@ static void matterSubsystemShutdown()
 
     Matter::GetInstance().Stop();
 
-    g_object_unref(g_steal_pointer(&matterMon));
-    free(g_steal_pointer(&matterKVPath));
-    free(g_steal_pointer(&matterConfigRoot));
+    g_clear_object(&matterMon);
+
+    {
+        std::lock_guard<std::mutex> l(subsystemMtx);
+        g_free(g_steal_pointer(&matterKVPath));
+        g_free(g_steal_pointer(&matterConfigRoot));
+    }
 
     if (!deviceServiceConfigurationUnregisterAccountIdListener(accountIdChanged))
     {
@@ -701,7 +726,7 @@ static void accountIdChanged(const gchar *accountId)
     subsystemMtx.lock();
     retryAttempts = 0;
     subsystemMtx.unlock();
-    
+
     std::thread matterInitThread = std::thread(maybeInitMatter, nullptr);
     matterInitThread.detach();
 }
