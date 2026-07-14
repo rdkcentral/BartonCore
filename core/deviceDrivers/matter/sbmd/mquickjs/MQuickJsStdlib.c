@@ -106,6 +106,34 @@ static JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 }
 
 /*
+ * Date constructor compatibility shim.
+ *
+ * Newer generated mqjs_stdlib.h references js_date_constructor, but some
+ * mquickjs builds do not export an internal implementation symbol. Provide
+ * the constructor here so the generated stdlib table can always bind it.
+ */
+static JSValue js_date_constructor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    double epochMs;
+
+    if (argc > 0)
+    {
+        if (JS_ToNumber(ctx, &epochMs, argv[0]) != 0)
+        {
+            return JS_EXCEPTION;
+        }
+    }
+    else
+    {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        epochMs = (double) tv.tv_sec * 1000.0 + (double) tv.tv_usec / 1000.0;
+    }
+
+    return JS_NewDate(ctx, epochMs);
+}
+
+/*
  * Date.now() implementation - returns current time in milliseconds.
  */
 static JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)

@@ -23,6 +23,7 @@
 
 #include "SbmdJsUtil.h"
 #include "MQuickJsRuntime.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <cstring>
 
@@ -32,45 +33,47 @@ namespace barton
     {
         std::string GetStringProp(JSContext *ctx, JSValue obj, const char *name)
         {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
+            // Root the property value: JS_ToCString may allocate and relocate objects (moving GC),
+            // which would invalidate a raw JSValue held here.
+            SafeJSValue val(ctx, JS_GetPropertyStr(ctx, obj, name));
 
-            if (JS_IsUndefined(val) || JS_IsNull(val))
+            if (JS_IsUndefined(val.Get()) || JS_IsNull(val.Get()))
             {
                 return "";
             }
 
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, val, &buf);
+            const char *str = JS_ToCString(ctx, val.Get(), &buf);
 
             return str ? std::string(str) : "";
         }
 
         uint32_t GetUint32Prop(JSContext *ctx, JSValue obj, const char *name, uint32_t defaultValue)
         {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
+            SafeJSValue val(ctx, JS_GetPropertyStr(ctx, obj, name));
 
-            if (JS_IsUndefined(val) || JS_IsNull(val))
+            if (JS_IsUndefined(val.Get()) || JS_IsNull(val.Get()))
             {
                 return defaultValue;
             }
 
             uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
+            JS_ToUint32(ctx, &result, val.Get());
 
             return result;
         }
 
         std::optional<uint32_t> GetOptUint32Prop(JSContext *ctx, JSValue obj, const char *name)
         {
-            JSValue val = JS_GetPropertyStr(ctx, obj, name);
+            SafeJSValue val(ctx, JS_GetPropertyStr(ctx, obj, name));
 
-            if (JS_IsUndefined(val) || JS_IsNull(val))
+            if (JS_IsUndefined(val.Get()) || JS_IsNull(val.Get()))
             {
                 return std::nullopt;
             }
 
             uint32_t result = 0;
-            JS_ToUint32(ctx, &result, val);
+            JS_ToUint32(ctx, &result, val.Get());
 
             return result;
         }
@@ -89,15 +92,15 @@ namespace barton
 
         uint32_t GetArrayLength(JSContext *ctx, JSValue arr)
         {
-            JSValue lenVal = JS_GetPropertyStr(ctx, arr, "length");
+            SafeJSValue lenVal(ctx, JS_GetPropertyStr(ctx, arr, "length"));
 
-            if (JS_IsUndefined(lenVal))
+            if (JS_IsUndefined(lenVal.Get()))
             {
                 return 0;
             }
 
             uint32_t len = 0;
-            JS_ToUint32(ctx, &len, lenVal);
+            JS_ToUint32(ctx, &len, lenVal.Get());
 
             return len;
         }
@@ -111,14 +114,15 @@ namespace barton
 
         std::vector<std::string> GetStringArray(JSContext *ctx, JSValue arr)
         {
+            SafeJSValue rootedArray(ctx, arr);
             std::vector<std::string> result;
-            uint32_t len = GetArrayLength(ctx, arr);
+            uint32_t len = GetArrayLength(ctx, rootedArray.Get());
 
             for (uint32_t i = 0; i < len; i++)
             {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
+                SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, rootedArray.Get(), i));
                 JSCStringBuf buf;
-                const char *str = JS_ToCString(ctx, elem, &buf);
+                const char *str = JS_ToCString(ctx, elem.Get(), &buf);
 
                 if (str)
                 {
@@ -131,12 +135,13 @@ namespace barton
 
         std::vector<uint16_t> GetUint16Array(JSContext *ctx, JSValue arr)
         {
+            SafeJSValue rootedArray(ctx, arr);
             std::vector<uint16_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
+            uint32_t len = GetArrayLength(ctx, rootedArray.Get());
 
             for (uint32_t i = 0; i < len; i++)
             {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
+                JSValue elem = JS_GetPropertyUint32(ctx, rootedArray.Get(), i);
                 uint32_t val = 0;
                 JS_ToUint32(ctx, &val, elem);
                 result.push_back(static_cast<uint16_t>(val));
@@ -147,12 +152,13 @@ namespace barton
 
         std::vector<uint32_t> GetUint32Array(JSContext *ctx, JSValue arr)
         {
+            SafeJSValue rootedArray(ctx, arr);
             std::vector<uint32_t> result;
-            uint32_t len = GetArrayLength(ctx, arr);
+            uint32_t len = GetArrayLength(ctx, rootedArray.Get());
 
             for (uint32_t i = 0; i < len; i++)
             {
-                JSValue elem = JS_GetPropertyUint32(ctx, arr, i);
+                JSValue elem = JS_GetPropertyUint32(ctx, rootedArray.Get(), i);
                 uint32_t val = 0;
                 JS_ToUint32(ctx, &val, elem);
                 result.push_back(val);
@@ -167,27 +173,29 @@ namespace barton
             JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", obj);
 
             const char *script = "Object.keys(__sbmd_tmp)";
-            JSValue keysArr = JS_Eval(ctx, script, strlen(script), "<keys>", JS_EVAL_RETVAL);
+            SafeJSValue keysArr(ctx, JS_Eval(ctx, script, strlen(script), "<keys>", JS_EVAL_RETVAL));
 
             // Clean up temp global
             JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", JS_UNDEFINED);
 
-            if (JS_IsException(keysArr))
+            if (JS_IsException(keysArr.Get()))
             {
                 MQuickJsRuntime::CheckAndClearPendingException(ctx);
                 return {};
             }
 
             // Object.keys() already returns a JS array of strings
-            return GetStringArray(ctx, keysArr);
+            return GetStringArray(ctx, keysArr.Get());
         }
 
         std::string GetExceptionString(JSContext *ctx)
         {
-            JSValue ex = JS_GetException(ctx);
+            // Root the exception: JS_ToCString may allocate and relocate objects (moving GC), which
+            // would invalidate a raw JSValue held here.
+            SafeJSValue ex(ctx, JS_GetException(ctx));
 
             JSCStringBuf buf;
-            const char *str = JS_ToCString(ctx, ex, &buf);
+            const char *str = JS_ToCString(ctx, ex.Get(), &buf);
 
             if (str)
             {

@@ -31,6 +31,7 @@
 #include "SbmdLoader.h"
 #include "MQuickJsRuntime.h"
 #include "SbmdJsUtil.h"
+#include "matter/sbmd/SafeJSValue.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -300,16 +301,16 @@ namespace barton
 
         // Evaluate as an object literal: ({...})
         std::string evalExpr = "(" + block + ")";
-        JSValue objVal = JS_Eval(ctx, evalExpr.c_str(), evalExpr.size(), "<constants>", JS_EVAL_RETVAL);
+        SafeJSValue objVal(ctx, JS_Eval(ctx, evalExpr.c_str(), evalExpr.size(), "<constants>", JS_EVAL_RETVAL));
 
-        if (JS_IsException(objVal))
+        if (JS_IsException(objVal.Get()))
         {
             icError("Failed to evaluate constants block: %s", GetExceptionString(ctx).c_str());
             return std::nullopt;
         }
 
         // Get the keys and values
-        auto keys = GetObjectKeys(ctx, objVal);
+        auto keys = GetObjectKeys(ctx, objVal.Get());
 
         // A constant key becomes a `var <key> = <value>;` declaration in the preamble, so it must be
         // a valid JavaScript identifier (^[A-Za-z_$][A-Za-z0-9_$]*$). Reject anything else with a
@@ -347,12 +348,13 @@ namespace barton
                 return std::nullopt; // Reject the entire block
             }
 
-            JSValue val = JS_GetPropertyStr(ctx, objVal, key.c_str());
+            JSValue valRaw = JS_GetPropertyStr(ctx, objVal.Get(), key.c_str());
+            SafeJSValue val(ctx, valRaw);
             JSCStringBuf buf;
 
-            if (JS_IsString(ctx, val))
+            if (JS_IsString(ctx, val.Get()))
             {
-                const char *str = JS_ToCString(ctx, val, &buf);
+                const char *str = JS_ToCString(ctx, val.Get(), &buf);
 
                 if (str)
                 {
@@ -392,19 +394,19 @@ namespace barton
                     constants.emplace_back(key, escaped);
                 }
             }
-            else if (JS_IsNumber(ctx, val))
+            else if (JS_IsNumber(ctx, val.Get()))
             {
-                const char *str = JS_ToCString(ctx, val, &buf);
+                const char *str = JS_ToCString(ctx, val.Get(), &buf);
 
                 if (str)
                 {
                     constants.emplace_back(key, std::string(str));
                 }
             }
-            else if (JS_IsBool(val))
+            else if (JS_IsBool(val.Get()))
             {
                 int boolVal = 0;
-                JS_ToInt32(ctx, &boolVal, val);
+                JS_ToInt32(ctx, &boolVal, val.Get());
                 constants.emplace_back(key, boolVal ? "true" : "false");
             }
             else
@@ -467,9 +469,10 @@ namespace barton
                 (int) constants->size(),
                 preambleLines);
 
-        JSValue result = JS_Eval(ctx, wrappedSource.c_str(), wrappedSource.size(), filePath.c_str(), JS_EVAL_REPL);
+        SafeJSValue result(ctx,
+                           JS_Eval(ctx, wrappedSource.c_str(), wrappedSource.size(), filePath.c_str(), JS_EVAL_REPL));
 
-        if (JS_IsException(result))
+        if (JS_IsException(result.Get()))
         {
             std::string msg = GetExceptionString(ctx);
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
@@ -508,10 +511,10 @@ namespace barton
 
     std::unique_ptr<SbmdRegistration> SbmdLoader::ExtractRegistration(JSContext *ctx, const std::string &filePath)
     {
-        JSValue global = JS_GetGlobalObject(ctx);
-        JSValue regVal = JS_GetPropertyStr(ctx, global, "__sbmd_registration");
+        SafeJSValue global(ctx, JS_GetGlobalObject(ctx));
+        SafeJSValue regVal(ctx, JS_GetPropertyStr(ctx, global.Get(), "__sbmd_registration"));
 
-        if (JS_IsUndefined(regVal) || JS_IsNull(regVal))
+        if (JS_IsUndefined(regVal.Get()) || JS_IsNull(regVal.Get()))
         {
             icError("No SbmdDriver() call found in %s (no __sbmd_registration)", filePath.c_str());
             return nullptr;
@@ -529,18 +532,18 @@ namespace barton
         auto reg = std::make_unique<SbmdRegistration>();
         reg->filePath = filePath;
 
-        if (!ExtractMetadata(ctx, regVal, *reg))
+        if (!ExtractMetadata(ctx, regVal.Get(), *reg))
         {
             icError("Failed to extract metadata from %s", filePath.c_str());
             return nullptr;
         }
 
         // Extract aliases
-        JSValue aliasesVal = JS_GetPropertyStr(ctx, regVal, "aliases");
+        SafeJSValue aliasesVal(ctx, JS_GetPropertyStr(ctx, regVal.Get(), "aliases"));
 
-        if (!JS_IsUndefined(aliasesVal) && !JS_IsNull(aliasesVal))
+        if (!JS_IsUndefined(aliasesVal.Get()) && !JS_IsNull(aliasesVal.Get()))
         {
-            if (!ExtractAliases(ctx, aliasesVal, *reg))
+            if (!ExtractAliases(ctx, aliasesVal.Get(), *reg))
             {
                 icError("Failed to extract aliases from %s", filePath.c_str());
                 return nullptr;
@@ -548,11 +551,11 @@ namespace barton
         }
 
         // Extract endpoints
-        JSValue endpointsVal = JS_GetPropertyStr(ctx, regVal, "endpoints");
+        SafeJSValue endpointsVal(ctx, JS_GetPropertyStr(ctx, regVal.Get(), "endpoints"));
 
-        if (!JS_IsUndefined(endpointsVal) && !JS_IsNull(endpointsVal))
+        if (!JS_IsUndefined(endpointsVal.Get()) && !JS_IsNull(endpointsVal.Get()))
         {
-            if (!ExtractEndpoints(ctx, endpointsVal, *reg))
+            if (!ExtractEndpoints(ctx, endpointsVal.Get(), *reg))
             {
                 icError("Failed to extract endpoints from %s", filePath.c_str());
                 return nullptr;
@@ -560,33 +563,33 @@ namespace barton
         }
 
         // Extract device-initiated message handlers
-        JSValue attrHandlers = JS_GetPropertyStr(ctx, regVal, "attributeHandlers");
+        SafeJSValue attrHandlers(ctx, JS_GetPropertyStr(ctx, regVal.Get(), "attributeHandlers"));
 
-        if (!JS_IsUndefined(attrHandlers) && !JS_IsNull(attrHandlers))
+        if (!JS_IsUndefined(attrHandlers.Get()) && !JS_IsNull(attrHandlers.Get()))
         {
-            if (!ExtractDeviceHandlers(ctx, attrHandlers, reg->attributeHandlers))
+            if (!ExtractDeviceHandlers(ctx, attrHandlers.Get(), reg->attributeHandlers))
             {
                 icError("Failed to extract attributeHandlers from %s", filePath.c_str());
                 return nullptr;
             }
         }
 
-        JSValue evtHandlers = JS_GetPropertyStr(ctx, regVal, "eventHandlers");
+        SafeJSValue evtHandlers(ctx, JS_GetPropertyStr(ctx, regVal.Get(), "eventHandlers"));
 
-        if (!JS_IsUndefined(evtHandlers) && !JS_IsNull(evtHandlers))
+        if (!JS_IsUndefined(evtHandlers.Get()) && !JS_IsNull(evtHandlers.Get()))
         {
-            if (!ExtractDeviceHandlers(ctx, evtHandlers, reg->eventHandlers))
+            if (!ExtractDeviceHandlers(ctx, evtHandlers.Get(), reg->eventHandlers))
             {
                 icError("Failed to extract eventHandlers from %s", filePath.c_str());
                 return nullptr;
             }
         }
 
-        JSValue cmdHandlers = JS_GetPropertyStr(ctx, regVal, "commandHandlers");
+        SafeJSValue cmdHandlers(ctx, JS_GetPropertyStr(ctx, regVal.Get(), "commandHandlers"));
 
-        if (!JS_IsUndefined(cmdHandlers) && !JS_IsNull(cmdHandlers))
+        if (!JS_IsUndefined(cmdHandlers.Get()) && !JS_IsNull(cmdHandlers.Get()))
         {
-            if (!ExtractDeviceHandlers(ctx, cmdHandlers, reg->commandHandlers))
+            if (!ExtractDeviceHandlers(ctx, cmdHandlers.Get(), reg->commandHandlers))
             {
                 icError("Failed to extract commandHandlers from %s", filePath.c_str());
                 return nullptr;
@@ -607,9 +610,11 @@ namespace barton
 
     bool SbmdLoader::ExtractMetadata(JSContext *ctx, JSValue reg, SbmdRegistration &out)
     {
-        out.schemaVersion = GetStringProp(ctx, reg, "schemaVersion");
-        out.driverVersion = GetUint32Prop(ctx, reg, "driverVersion", 0);
-        out.name = GetStringProp(ctx, reg, "name");
+        SafeJSValue regObj(ctx, reg);
+
+        out.schemaVersion = GetStringProp(ctx, regObj.Get(), "schemaVersion");
+        out.driverVersion = GetUint32Prop(ctx, regObj.Get(), "driverVersion", 0);
+        out.name = GetStringProp(ctx, regObj.Get(), "name");
 
         if (out.name.empty())
         {
@@ -624,46 +629,46 @@ namespace barton
         }
 
         // Barton metadata
-        JSValue bartonVal = JS_GetPropertyStr(ctx, reg, "barton");
+        SafeJSValue bartonVal(ctx, JS_GetPropertyStr(ctx, regObj.Get(), "barton"));
 
-        if (!JS_IsUndefined(bartonVal) && !JS_IsNull(bartonVal))
+        if (!JS_IsUndefined(bartonVal.Get()) && !JS_IsNull(bartonVal.Get()))
         {
-            out.barton.deviceClass = GetStringProp(ctx, bartonVal, "deviceClass");
-            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal, "deviceClassVersion", 0);
+            out.barton.deviceClass = GetStringProp(ctx, bartonVal.Get(), "deviceClass");
+            out.barton.deviceClassVersion = GetUint32Prop(ctx, bartonVal.Get(), "deviceClassVersion", 0);
         }
 
         // Matter metadata
-        JSValue matterVal = JS_GetPropertyStr(ctx, reg, "matter");
+        SafeJSValue matterVal(ctx, JS_GetPropertyStr(ctx, regObj.Get(), "matter"));
 
-        if (!JS_IsUndefined(matterVal) && !JS_IsNull(matterVal))
+        if (!JS_IsUndefined(matterVal.Get()) && !JS_IsNull(matterVal.Get()))
         {
-            JSValue deviceTypes = JS_GetPropertyStr(ctx, matterVal, "deviceTypes");
+            SafeJSValue deviceTypes(ctx, JS_GetPropertyStr(ctx, matterVal.Get(), "deviceTypes"));
 
-            if (!JS_IsUndefined(deviceTypes))
+            if (!JS_IsUndefined(deviceTypes.Get()))
             {
-                out.matter.deviceTypes = GetUint16Array(ctx, deviceTypes);
+                out.matter.deviceTypes = GetUint16Array(ctx, deviceTypes.Get());
             }
 
-            out.matter.revision = GetOptUint32Prop(ctx, matterVal, "revision");
-            out.matter.vendorId = GetOptUint16Prop(ctx, matterVal, "vendorId");
-            out.matter.productId = GetOptUint16Prop(ctx, matterVal, "productId");
-            out.matter.defaultTimeoutMs = GetOptUint32Prop(ctx, matterVal, "defaultTimeoutMs");
+            out.matter.revision = GetOptUint32Prop(ctx, matterVal.Get(), "revision");
+            out.matter.vendorId = GetOptUint16Prop(ctx, matterVal.Get(), "vendorId");
+            out.matter.productId = GetOptUint16Prop(ctx, matterVal.Get(), "productId");
+            out.matter.defaultTimeoutMs = GetOptUint32Prop(ctx, matterVal.Get(), "defaultTimeoutMs");
 
-            JSValue featureClusters = JS_GetPropertyStr(ctx, matterVal, "featureClusters");
+            SafeJSValue featureClusters(ctx, JS_GetPropertyStr(ctx, matterVal.Get(), "featureClusters"));
 
-            if (!JS_IsUndefined(featureClusters))
+            if (!JS_IsUndefined(featureClusters.Get()))
             {
-                out.matter.featureClusters = GetUint32Array(ctx, featureClusters);
+                out.matter.featureClusters = GetUint32Array(ctx, featureClusters.Get());
             }
         }
 
         // Reporting
-        JSValue reportingVal = JS_GetPropertyStr(ctx, reg, "reporting");
+        SafeJSValue reportingVal(ctx, JS_GetPropertyStr(ctx, regObj.Get(), "reporting"));
 
-        if (!JS_IsUndefined(reportingVal) && !JS_IsNull(reportingVal))
+        if (!JS_IsUndefined(reportingVal.Get()) && !JS_IsNull(reportingVal.Get()))
         {
-            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "minSecs", 0));
-            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal, "maxSecs", 0));
+            out.reporting.minSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal.Get(), "minSecs", 0));
+            out.reporting.maxSecs = static_cast<uint16_t>(GetUint32Prop(ctx, reportingVal.Get(), "maxSecs", 0));
         }
 
         return true;
@@ -671,24 +676,28 @@ namespace barton
 
     bool SbmdLoader::ExtractAliases(JSContext *ctx, JSValue aliasesObj, SbmdRegistration &out)
     {
-        auto keys = GetObjectKeys(ctx, aliasesObj);
+        // Root the incoming object and every intermediate handle: mquickjs uses a moving GC, so a
+        // raw JSValue held across an allocating call (GetObjectKeys / JS_GetPropertyStr) becomes a
+        // stale pointer once the collector relocates it.
+        SafeJSValue rootedAliases(ctx, aliasesObj);
+        auto keys = GetObjectKeys(ctx, rootedAliases.Get());
 
         for (const auto &name : keys)
         {
-            JSValue aliasVal = JS_GetPropertyStr(ctx, aliasesObj, name.c_str());
+            SafeJSValue aliasVal(ctx, JS_GetPropertyStr(ctx, rootedAliases.Get(), name.c_str()));
 
-            if (JS_IsUndefined(aliasVal) || JS_IsNull(aliasVal))
+            if (JS_IsUndefined(aliasVal.Get()) || JS_IsNull(aliasVal.Get()))
             {
                 continue;
             }
 
             SbmdAlias alias;
             alias.name = name;
-            alias.clusterId = GetUint32Prop(ctx, aliasVal, "clusterId", 0);
-            alias.attributeId = GetOptUint32Prop(ctx, aliasVal, "attributeId");
-            alias.eventId = GetOptUint32Prop(ctx, aliasVal, "eventId");
-            alias.commandId = GetOptUint32Prop(ctx, aliasVal, "commandId");
-            alias.type = GetStringProp(ctx, aliasVal, "type");
+            alias.clusterId = GetUint32Prop(ctx, aliasVal.Get(), "clusterId", 0);
+            alias.attributeId = GetOptUint32Prop(ctx, aliasVal.Get(), "attributeId");
+            alias.eventId = GetOptUint32Prop(ctx, aliasVal.Get(), "eventId");
+            alias.commandId = GetOptUint32Prop(ctx, aliasVal.Get(), "commandId");
+            alias.type = GetStringProp(ctx, aliasVal.Get(), "type");
 
             out.aliases[name] = std::move(alias);
         }
@@ -698,95 +707,98 @@ namespace barton
 
     bool SbmdLoader::ExtractEndpoints(JSContext *ctx, JSValue endpointsObj, SbmdRegistration &out)
     {
-        auto endpointIds = GetObjectKeys(ctx, endpointsObj);
+        // Root the incoming object and every intermediate handle so they survive the GC
+        // relocations triggered by the many allocating property reads below.
+        SafeJSValue rootedEndpoints(ctx, endpointsObj);
+        auto endpointIds = GetObjectKeys(ctx, rootedEndpoints.Get());
 
         for (const auto &epId : endpointIds)
         {
-            JSValue epVal = JS_GetPropertyStr(ctx, endpointsObj, epId.c_str());
+            SafeJSValue epVal(ctx, JS_GetPropertyStr(ctx, rootedEndpoints.Get(), epId.c_str()));
 
-            if (JS_IsUndefined(epVal) || JS_IsNull(epVal))
+            if (JS_IsUndefined(epVal.Get()) || JS_IsNull(epVal.Get()))
             {
                 continue;
             }
 
             SbmdEndpoint endpoint;
             endpoint.id = epId;
-            endpoint.profile = GetStringProp(ctx, epVal, "profile");
-            endpoint.profileVersion = GetUint32Prop(ctx, epVal, "profileVersion", 0);
+            endpoint.profile = GetStringProp(ctx, epVal.Get(), "profile");
+            endpoint.profileVersion = GetUint32Prop(ctx, epVal.Get(), "profileVersion", 0);
 
             // Extract resources
-            JSValue resourcesVal = JS_GetPropertyStr(ctx, epVal, "resources");
+            SafeJSValue resourcesVal(ctx, JS_GetPropertyStr(ctx, epVal.Get(), "resources"));
 
-            if (!JS_IsUndefined(resourcesVal) && !JS_IsNull(resourcesVal))
+            if (!JS_IsUndefined(resourcesVal.Get()) && !JS_IsNull(resourcesVal.Get()))
             {
-                auto resourceIds = GetObjectKeys(ctx, resourcesVal);
+                auto resourceIds = GetObjectKeys(ctx, resourcesVal.Get());
 
                 for (const auto &resId : resourceIds)
                 {
-                    JSValue resVal = JS_GetPropertyStr(ctx, resourcesVal, resId.c_str());
+                    SafeJSValue resVal(ctx, JS_GetPropertyStr(ctx, resourcesVal.Get(), resId.c_str()));
 
-                    if (JS_IsUndefined(resVal) || JS_IsNull(resVal))
+                    if (JS_IsUndefined(resVal.Get()) || JS_IsNull(resVal.Get()))
                     {
                         continue;
                     }
 
                     SbmdResource resource;
                     resource.id = resId;
-                    resource.type = GetStringProp(ctx, resVal, "type");
+                    resource.type = GetStringProp(ctx, resVal.Get(), "type");
 
                     // Modes array
-                    JSValue modesVal = JS_GetPropertyStr(ctx, resVal, "modes");
+                    SafeJSValue modesVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "modes"));
 
-                    if (!JS_IsUndefined(modesVal))
+                    if (!JS_IsUndefined(modesVal.Get()))
                     {
-                        resource.modes = GetStringArray(ctx, modesVal);
+                        resource.modes = GetStringArray(ctx, modesVal.Get());
                     }
 
                     // Optional flag
-                    JSValue optVal = JS_GetPropertyStr(ctx, resVal, "optional");
+                    SafeJSValue optVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "optional"));
 
-                    if (JS_IsBool(optVal))
+                    if (JS_IsBool(optVal.Get()))
                     {
                         int boolVal = 0;
-                        JS_ToInt32(ctx, &boolVal, optVal);
+                        JS_ToInt32(ctx, &boolVal, optVal.Get());
                         resource.optional = (boolVal != 0);
                     }
 
                     // Prerequisites
-                    JSValue prereqVal = JS_GetPropertyStr(ctx, resVal, "prerequisites");
+                    SafeJSValue prereqVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "prerequisites"));
 
-                    if (!JS_IsUndefined(prereqVal) && !JS_IsNull(prereqVal))
+                    if (!JS_IsUndefined(prereqVal.Get()) && !JS_IsNull(prereqVal.Get()))
                     {
-                        resource.prerequisites = GetStringArray(ctx, prereqVal);
+                        resource.prerequisites = GetStringArray(ctx, prereqVal.Get());
                     }
 
                     // Resource handlers
-                    JSValue seedVal = JS_GetPropertyStr(ctx, resVal, "seed");
+                    SafeJSValue seedVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "seed"));
 
-                    if (!JS_IsUndefined(seedVal) && !JS_IsNull(seedVal))
+                    if (!JS_IsUndefined(seedVal.Get()) && !JS_IsNull(seedVal.Get()))
                     {
-                        resource.seed = ExtractResourceHandler(ctx, seedVal);
+                        resource.seed = ExtractResourceHandler(ctx, seedVal.Get());
                     }
 
-                    JSValue readVal = JS_GetPropertyStr(ctx, resVal, "read");
+                    SafeJSValue readVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "read"));
 
-                    if (!JS_IsUndefined(readVal) && !JS_IsNull(readVal))
+                    if (!JS_IsUndefined(readVal.Get()) && !JS_IsNull(readVal.Get()))
                     {
-                        resource.read = ExtractResourceHandler(ctx, readVal);
+                        resource.read = ExtractResourceHandler(ctx, readVal.Get());
                     }
 
-                    JSValue writeVal = JS_GetPropertyStr(ctx, resVal, "write");
+                    SafeJSValue writeVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "write"));
 
-                    if (!JS_IsUndefined(writeVal) && !JS_IsNull(writeVal))
+                    if (!JS_IsUndefined(writeVal.Get()) && !JS_IsNull(writeVal.Get()))
                     {
-                        resource.write = ExtractResourceHandler(ctx, writeVal);
+                        resource.write = ExtractResourceHandler(ctx, writeVal.Get());
                     }
 
-                    JSValue execVal = JS_GetPropertyStr(ctx, resVal, "execute");
+                    SafeJSValue execVal(ctx, JS_GetPropertyStr(ctx, resVal.Get(), "execute"));
 
-                    if (!JS_IsUndefined(execVal) && !JS_IsNull(execVal))
+                    if (!JS_IsUndefined(execVal.Get()) && !JS_IsNull(execVal.Get()))
                     {
-                        resource.execute = ExtractResourceHandler(ctx, execVal);
+                        resource.execute = ExtractResourceHandler(ctx, execVal.Get());
                     }
 
                     endpoint.resources.push_back(std::move(resource));
@@ -801,31 +813,36 @@ namespace barton
 
     std::optional<SbmdHandler> SbmdLoader::ExtractResourceHandler(JSContext *ctx, JSValue val)
     {
+        SafeJSValue rootedVal(ctx, val);
         SbmdHandler handler;
 
-        if (JS_IsFunction(ctx, val))
+        if (JS_IsFunction(ctx, rootedVal.Get()))
         {
-            // Simple form: just a function reference
-            handler.handler = val;
+            // Simple form: just a function reference. Root it immediately (heldFn) so it survives
+            // the GC relocations triggered while the rest of the driver is extracted; the raw
+            // handler slot is only valid transiently and callers must invoke via Fn().
+            handler.handler = rootedVal.Get();
+            handler.heldFn = SafeJSValue {ctx, rootedVal.Get()};
             return handler;
         }
 
         // Object form: { supplements: {...}, handler: fn }
-        JSValue handlerVal = JS_GetPropertyStr(ctx, val, "handler");
+        SafeJSValue handlerVal(ctx, JS_GetPropertyStr(ctx, rootedVal.Get(), "handler"));
 
-        if (!JS_IsFunction(ctx, handlerVal))
+        if (!JS_IsFunction(ctx, handlerVal.Get()))
         {
             icError("Resource handler object missing 'handler' function");
             return std::nullopt;
         }
 
-        handler.handler = handlerVal;
+        handler.handler = handlerVal.Get();
+        handler.heldFn = SafeJSValue {ctx, handlerVal.Get()};
 
-        JSValue supplementsVal = JS_GetPropertyStr(ctx, val, "supplements");
+        SafeJSValue supplementsVal(ctx, JS_GetPropertyStr(ctx, rootedVal.Get(), "supplements"));
 
-        if (!JS_IsUndefined(supplementsVal) && !JS_IsNull(supplementsVal))
+        if (!JS_IsUndefined(supplementsVal.Get()) && !JS_IsNull(supplementsVal.Get()))
         {
-            handler.supplements = ExtractSupplements(ctx, supplementsVal);
+            handler.supplements = ExtractSupplements(ctx, supplementsVal.Get());
         }
 
         return handler;
@@ -833,13 +850,14 @@ namespace barton
 
     bool SbmdLoader::ExtractDeviceHandlers(JSContext *ctx, JSValue handlersObj, std::vector<SbmdDeviceHandler> &out)
     {
-        auto handlerNames = GetObjectKeys(ctx, handlersObj);
+        SafeJSValue rootedHandlers(ctx, handlersObj);
+        auto handlerNames = GetObjectKeys(ctx, rootedHandlers.Get());
 
         for (const auto &name : handlerNames)
         {
-            JSValue handlerObj = JS_GetPropertyStr(ctx, handlersObj, name.c_str());
+            SafeJSValue handlerObj(ctx, JS_GetPropertyStr(ctx, rootedHandlers.Get(), name.c_str()));
 
-            if (JS_IsUndefined(handlerObj) || JS_IsNull(handlerObj))
+            if (JS_IsUndefined(handlerObj.Get()) || JS_IsNull(handlerObj.Get()))
             {
                 continue;
             }
@@ -848,30 +866,32 @@ namespace barton
             dh.name = name;
 
             // Handler function
-            JSValue handlerVal = JS_GetPropertyStr(ctx, handlerObj, "handler");
+            SafeJSValue handlerVal(ctx, JS_GetPropertyStr(ctx, handlerObj.Get(), "handler"));
 
-            if (!JS_IsFunction(ctx, handlerVal))
+            if (!JS_IsFunction(ctx, handlerVal.Get()))
             {
                 icError("Device handler '%s' missing 'handler' function", name.c_str());
                 return false;
             }
 
-            dh.handler = handlerVal;
+            // Root the function immediately (heldFn) so it survives later extraction allocations.
+            dh.handler = handlerVal.Get();
+            dh.heldFn = SafeJSValue {ctx, handlerVal.Get()};
 
             // Aliases
-            JSValue aliasesVal = JS_GetPropertyStr(ctx, handlerObj, "aliases");
+            SafeJSValue aliasesVal(ctx, JS_GetPropertyStr(ctx, handlerObj.Get(), "aliases"));
 
-            if (!JS_IsUndefined(aliasesVal) && !JS_IsNull(aliasesVal))
+            if (!JS_IsUndefined(aliasesVal.Get()) && !JS_IsNull(aliasesVal.Get()))
             {
-                dh.aliases = GetStringArray(ctx, aliasesVal);
+                dh.aliases = GetStringArray(ctx, aliasesVal.Get());
             }
 
             // Supplements
-            JSValue supplementsVal = JS_GetPropertyStr(ctx, handlerObj, "supplements");
+            SafeJSValue supplementsVal(ctx, JS_GetPropertyStr(ctx, handlerObj.Get(), "supplements"));
 
-            if (!JS_IsUndefined(supplementsVal) && !JS_IsNull(supplementsVal))
+            if (!JS_IsUndefined(supplementsVal.Get()) && !JS_IsNull(supplementsVal.Get()))
             {
-                dh.supplements = ExtractSupplements(ctx, supplementsVal);
+                dh.supplements = ExtractSupplements(ctx, supplementsVal.Get());
             }
 
             out.push_back(std::move(dh));
@@ -882,34 +902,35 @@ namespace barton
 
     SbmdSupplements SbmdLoader::ExtractSupplements(JSContext *ctx, JSValue supplementsObj)
     {
+        SafeJSValue rootedSupplements(ctx, supplementsObj);
         SbmdSupplements supplements;
 
-        JSValue attrsVal = JS_GetPropertyStr(ctx, supplementsObj, "attributes");
+        SafeJSValue attrsVal(ctx, JS_GetPropertyStr(ctx, rootedSupplements.Get(), "attributes"));
 
-        if (!JS_IsUndefined(attrsVal) && !JS_IsNull(attrsVal))
+        if (!JS_IsUndefined(attrsVal.Get()) && !JS_IsNull(attrsVal.Get()))
         {
-            supplements.attributes = GetStringArray(ctx, attrsVal);
+            supplements.attributes = GetStringArray(ctx, attrsVal.Get());
         }
 
-        JSValue resVal = JS_GetPropertyStr(ctx, supplementsObj, "resources");
+        SafeJSValue resVal(ctx, JS_GetPropertyStr(ctx, rootedSupplements.Get(), "resources"));
 
-        if (!JS_IsUndefined(resVal) && !JS_IsNull(resVal))
+        if (!JS_IsUndefined(resVal.Get()) && !JS_IsNull(resVal.Get()))
         {
-            supplements.resources = GetStringArray(ctx, resVal);
+            supplements.resources = GetStringArray(ctx, resVal.Get());
         }
 
-        JSValue persistVal = JS_GetPropertyStr(ctx, supplementsObj, "persistentData");
+        SafeJSValue persistVal(ctx, JS_GetPropertyStr(ctx, rootedSupplements.Get(), "persistentData"));
 
-        if (!JS_IsUndefined(persistVal) && !JS_IsNull(persistVal))
+        if (!JS_IsUndefined(persistVal.Get()) && !JS_IsNull(persistVal.Get()))
         {
-            supplements.persistentData = GetStringArray(ctx, persistVal);
+            supplements.persistentData = GetStringArray(ctx, persistVal.Get());
         }
 
-        JSValue transientVal = JS_GetPropertyStr(ctx, supplementsObj, "transientData");
+        SafeJSValue transientVal(ctx, JS_GetPropertyStr(ctx, rootedSupplements.Get(), "transientData"));
 
-        if (!JS_IsUndefined(transientVal) && !JS_IsNull(transientVal))
+        if (!JS_IsUndefined(transientVal.Get()) && !JS_IsNull(transientVal.Get()))
         {
-            supplements.transientData = GetStringArray(ctx, transientVal);
+            supplements.transientData = GetStringArray(ctx, transientVal.Get());
         }
 
         return supplements;

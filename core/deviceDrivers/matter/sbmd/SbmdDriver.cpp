@@ -29,6 +29,7 @@
 #define logFmt(fmt) "(%s): " fmt, __func__
 
 #include "SbmdDriver.h"
+#include "mquickjs/MQuickJsRuntime.h"
 #include "mquickjs/SbmdLoader.h"
 
 extern "C" {
@@ -44,19 +45,22 @@ namespace barton
 
     SbmdDriver::~SbmdDriver()
     {
-        // Held-reference cleanup contract:
-        // The handler references held while activated belong to the JSContext used to activate this
-        // driver. They can only be released via ReleaseHandlers (through Deactivate), which requires that
-        // JSContext to still be alive. The destructor deliberately does NOT release them because it has
-        // no access to the JSContext and cannot assume it still exists. Callers are therefore responsible
-        // for invoking Deactivate() before destroying an activated driver; reaching this destructor while
-        // still activated leaks the references (and is reported below).
+        // Handler references are rooted (as GC roots) at extraction/activation time, so even a
+        // loaded-but-never-activated registration can still own roots here.
         if (registration && registration->activated)
         {
             icWarn("driver '%s' destroyed while still activated", registration->name.c_str());
+        }
 
-            // Abandon the held references without releasing them: releasing here would touch a
-            // context we cannot assume is still alive. Leaking matches the historical behaviour.
+        // A SafeJSValue holds a GC root as an intrusive node whose address is registered with the
+        // collector. Detaching abandons the node WITHOUT unlinking it, so if we detach here the node
+        // stays linked in the GC root list while its backing memory (this registration) is freed --
+        // the next collection then walks a dangling node and crashes. So detach only when the shared
+        // context is already gone (runtime shut down): then the GC list no longer exists and calling
+        // JS_DeleteGCRef would instead touch a dead context. While the context is alive, do nothing
+        // and let the member SafeJSValue destructors properly unlink each root via JS_DeleteGCRef.
+        if (registration && MQuickJsRuntime::GetSharedContext() == nullptr)
+        {
             VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
         }
     }
@@ -152,6 +156,14 @@ namespace barton
 
     void SbmdDriver::HoldIfValid(JSContext *ctx, SbmdHandler &entry)
     {
+        // Handlers are rooted at extraction time, so heldFn is normally already valid here. Keep
+        // that root rather than re-holding from the raw handler slot, which may have gone stale
+        // after GC relocations during extraction.
+        if (entry.heldFn.HasValue())
+        {
+            return;
+        }
+
         if (JS_IsUndefined(entry.handler))
         {
             entry.heldFn = SafeJSValue {};
