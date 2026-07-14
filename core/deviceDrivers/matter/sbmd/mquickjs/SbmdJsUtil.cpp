@@ -158,9 +158,9 @@ namespace barton
 
             for (uint32_t i = 0; i < len; i++)
             {
-                JSValue elem = JS_GetPropertyUint32(ctx, rootedArray.Get(), i);
+                SafeJSValue elem(ctx, JS_GetPropertyUint32(ctx, rootedArray.Get(), i));
                 uint32_t val = 0;
-                JS_ToUint32(ctx, &val, elem);
+                JS_ToUint32(ctx, &val, elem.Get());
                 result.push_back(val);
             }
 
