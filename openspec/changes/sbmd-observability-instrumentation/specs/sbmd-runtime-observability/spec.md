@@ -1,18 +1,22 @@
 ## ADDED Requirements
 
 ### Requirement: JS heap pool utilization tracking
-The SBMD runtime SHALL periodically sample the mquickjs heap and record pool utilization as a histogram named `sbmd.js.heap.used_bytes`. The sample period SHALL be configurable at CMake time via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` (default: 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain gauges for current free bytes (`sbmd.js.heap.free_bytes`) and free block count (`sbmd.js.heap.free_blocks`) updated with each sample.
+The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram named `sbmd.js.heap.used_bytes` using a hybrid sampling strategy: (1) in-activity captures from `SbmdHandlerInvoker::InvokeHandler` after each `JS_Call` while the JS mutex is held, and (2) idle background captures from a thread that fires only when no handler activity has occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds (configurable at CMake time, default 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain gauges for current free bytes (`sbmd.js.heap.free_bytes`) and free block count (`sbmd.js.heap.free_blocks`) updated with each sample.
 
-#### Scenario: Heap utilization sampled periodically
-- **WHEN** the mquickjs runtime is initialized and drivers are loaded
-- **THEN** `sbmd.js.heap.used_bytes` histogram contains at least one observation after `SbmdMetrics::ForceSnapshot()` is called
+#### Scenario: Heap utilization captured during handler invocation
+- **WHEN** a JS handler is invoked via `InvokeHandler`
+- **THEN** `sbmd.js.heap.used_bytes` histogram gains one observation attributed to that invocation
+
+#### Scenario: Heap utilization captured during idle period
+- **WHEN** no handler invocations have occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds
+- **THEN** the idle background thread records one observation to `sbmd.js.heap.used_bytes`
 
 #### Scenario: Arena size recorded at initialization
 - **WHEN** `MQuickJsRuntime::Initialize(N)` is called
 - **THEN** the `sbmd.js.heap.arena_bytes` gauge records the value `N`
 
 #### Scenario: Free block count reflects fragmentation
-- **WHEN** `SbmdMetrics::ForceSnapshot()` is called after JS handler invocations
+- **WHEN** `MQuickJsRuntime::ForceSnapshot()` is called after JS handler invocations
 - **THEN** `sbmd.js.heap.free_blocks` gauge is updated with the current free block count from `JS_GetMemoryUsage`
 
 ### Requirement: Peak heap watermark gauge
@@ -23,10 +27,10 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recordin
 - **THEN** `sbmd.js.heap.peak_bytes` reflects the highest value observed, never decreasing
 
 ### Requirement: Force snapshot API
-The system SHALL provide a `SbmdMetrics::ForceSnapshot()` public static function that synchronously samples heap stats and records one observation to each pool health metric. This function SHALL be callable without holding the JS mutex (it acquires it internally). The periodic sampler thread SHALL use this function for its loop body.
+The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static function that synchronously samples heap stats, records one observation to each pool health metric, and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). The system SHALL also provide `MQuickJsRuntime::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
 
 #### Scenario: ForceSnapshot produces an immediate observation
-- **WHEN** `SbmdMetrics::ForceSnapshot()` is called
+- **WHEN** `MQuickJsRuntime::ForceSnapshot()` is called
 - **THEN** `sbmd.js.heap.used_bytes` observation count increases by one
 
 ### Requirement: Per-invocation heap delta tracking
@@ -133,7 +137,7 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.deferred.in_flight` represen
 - **THEN** `sbmd.deferred.in_flight` gauge decrements back toward zero
 
 ### Requirement: Deferred operation total duration tracking
-The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` with attributes `"driver"` and `"op_type"` (the originating operation type from `PendingOperation.origOpType`). Duration includes device round-trip time.
+The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` with attributes `"driver"` and `"op_type"` (the originating operation type from `pending.operationCtx.opType`). Duration includes device round-trip time.
 
 #### Scenario: Total duration includes device round-trip
 - **WHEN** a deferred operation completes after a device response
@@ -164,13 +168,13 @@ The SBMD runtime SHALL count deferred operations terminated because they reached
 - **WHEN** a deferred operation re-arms 10 times and `ContinueDeferredChain` rejects the next re-arm
 - **THEN** `sbmd.deferred.max_depth` counter increments for that driver
 
-### Requirement: SbmdMetrics lifecycle
-The `SbmdMetrics` class SHALL provide `Initialize()` and `Shutdown()` static functions. `Initialize()` SHALL create all metric instruments. `Shutdown()` SHALL release all metric handles. `SbmdMetrics::Initialize()` SHALL be called by `SbmdFactory::RegisterDriversFromDirectory` after `MQuickJsRuntime::Initialize()` succeeds. `SbmdMetrics::Shutdown()` SHALL be called by `SbmdFactory` or the subsystem shutdown path.
+### Requirement: Subsystem metrics initialization
+Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL provide `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. All four `InitializeMetrics()` calls SHALL be made by `SbmdFactory::RegisterDriversFromDirectory` after `MQuickJsRuntime::Initialize()` succeeds. The corresponding `ShutdownMetrics()` calls SHALL be made in the subsystem shutdown path.
 
 #### Scenario: Metrics available after initialization
-- **WHEN** `SbmdMetrics::Initialize()` is called
-- **THEN** `SbmdMetrics::ForceSnapshot()` and all recording functions operate without error
+- **WHEN** all four `InitializeMetrics()` calls complete
+- **THEN** `MQuickJsRuntime::ForceSnapshot()` and all recording functions operate without error
 
 #### Scenario: Recording before initialization is safe
-- **WHEN** a recording function is called before `SbmdMetrics::Initialize()`
+- **WHEN** a recording function is called before its module's `InitializeMetrics()`
 - **THEN** the call is silently ignored without crashing
