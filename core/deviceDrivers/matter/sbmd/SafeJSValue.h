@@ -208,11 +208,14 @@ namespace barton
          */
         void SetUint32(const char *key, uint32_t v)
         {
-            // Build the new value in its own statement: under the moving GC, allocating it inside the
-            // JS_SetPropertyStr(...) argument list could relocate *this* while the parent handle Get()
-            // has already been evaluated (unspecified argument order), passing a stale parent.
-            JSValue value = JS_NewUint32(ctx, v);
-            JS_SetPropertyStr(ctx, Get(), key, value);
+#if defined(BCORE_USE_MQUICKJS)
+            // Root the newly-created value across JS_SetPropertyStr(): that call can allocate and
+            // trigger GC, and mquickjs does not scan raw C locals.
+            SafeJSValue value(ctx, JS_NewUint32(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewUint32(ctx, v));
+#endif
         }
 
         /*
@@ -223,8 +226,12 @@ namespace barton
          */
         void SetInt32(const char *key, int32_t v)
         {
-            JSValue value = JS_NewInt32(ctx, v);
-            JS_SetPropertyStr(ctx, Get(), key, value);
+#if defined(BCORE_USE_MQUICKJS)
+            SafeJSValue value(ctx, JS_NewInt32(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewInt32(ctx, v));
+#endif
         }
 
         /*
@@ -235,8 +242,12 @@ namespace barton
          */
         void SetString(const char *key, const char *v)
         {
-            JSValue value = JS_NewString(ctx, v);
-            JS_SetPropertyStr(ctx, Get(), key, value);
+#if defined(BCORE_USE_MQUICKJS)
+            SafeJSValue value(ctx, JS_NewString(ctx, v));
+            JS_SetPropertyStr(ctx, Get(), key, value.Get());
+#elif defined(BCORE_USE_QUICKJS)
+            JS_SetPropertyStr(ctx, Get(), key, JS_NewString(ctx, v));
+#endif
         }
 
         /*
