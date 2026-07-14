@@ -26,11 +26,12 @@
 set -e
 
 help() {
-    echo "Usage: $0 [-h] [-c <dir>] [-s] [-a]"
+    echo "Usage: $0 [-h] [-c <dir>] [-s] [-a] [-t]"
     echo "  -h  Display help"
     echo "  -c  Matter configuration directory"
     echo "  -s  Build with stack smash protection"
     echo "  -a  Build with address sanitizer"
+    echo "  -t  Build with Matter message tracing support (developer feature)"
 }
 
 MY_DIR=$(realpath $(dirname $0))
@@ -42,12 +43,13 @@ MATTER_REF=$(cat ${MY_DIR}/matter-version)
 
 BUILD_WITH_STACK_SMASH_PROTECTION=""
 BUILD_WITH_SANITIZER=""
+BUILD_WITH_MESSAGE_TRACING=""
 MATTER_CONF_DIR=""
 
 # Prevent building Java bits which we don't need/use. I couldn't find a better way.
 unset JAVA_HOME
 
-while getopts ":hc:sa" option; do
+while getopts ":hc:sat" option; do
     case $option in
     h)
         help
@@ -61,6 +63,9 @@ while getopts ":hc:sa" option; do
         ;;
     a)
         BUILD_WITH_SANITIZER="-a"
+        ;;
+    t)
+        BUILD_WITH_MESSAGE_TRACING="-t"
         ;;
     esac
 done
@@ -83,7 +88,7 @@ else
     ./scripts/checkout_submodules.py --shallow --platform linux
 
     git am ${MY_DIR}/third_party/matter/barton-library/patches/*.patch || (git am --abort && git reset --hard ${MATTER_REF} && exit 1)
-    ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER}
+    ${MY_DIR}/third_party/matter/barton-library/linux/build.sh -o ${MATTER_INSTALL_DIR} -c ${MATTER_CONF_DIR} ${BUILD_WITH_STACK_SMASH_PROTECTION} ${BUILD_WITH_SANITIZER} ${BUILD_WITH_MESSAGE_TRACING}
 
     cd ${MATTER_BUILD_DIR}
     git reset --hard ${MATTER_REF}
