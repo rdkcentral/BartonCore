@@ -83,6 +83,11 @@ extern "C" {
 
 #include <platform/Linux/KeyValueStoreManagerImpl.h>
 
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+#include <tracing/json/json_tracing.h>
+#include <tracing/registry.h>
+#endif
+
 #include <lib/support/TestGroupData.h>
 
 #include <lib/core/NodeId.h>
@@ -162,6 +167,13 @@ namespace
     std::optional<ThreadBorderRouterManagement::ServerInstance> threadBorderRouterManagementServer;
     EndpointId threadBorderRouterManagementServerEndpointId = UINT16_MAX;
 #endif // ZCL_USING_THREAD_BORDER_ROUTER_MANAGEMENT_CLUSTER_SERVER
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Developer-only Matter message trace backend. Emits every inbound/outbound
+    // Matter message (hex + fully-decoded TLV) as a JSON record via ChipLog.
+    // Registered in Matter::Init() and unregistered in Matter::StackThreadProc().
+    chip::Tracing::Json::JsonBackend matterMessageTraceBackend;
+#endif
 } // namespace
 
 Matter::Matter() : groupDataProvider(kMaxGroupsPerFabric, kMaxGroupKeysPerFabric)
@@ -255,6 +267,16 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
         icError("InitChipStack failed: %s", err.AsString());
         return false;
     }
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Developer feature: register the SDK-wide Matter message trace backend. Every
+    // inbound/outbound Matter message is logged (hex + fully-decoded TLV) as a JSON
+    // record via ChipLog. Unregistered in StackThreadProc() once the event loop stops.
+    // WARNING: this is high volume and will noticeably slow the stack; it is gated
+    // behind BCORE_MATTER_MESSAGE_TRACING and intended for debugging only.
+    icWarn("Matter message tracing is ENABLED (developer feature). Expect verbose, high-volume logging.");
+    chip::Tracing::Register(matterMessageTraceBackend);
+#endif
 
     if (!GetBartonDeviceInstanceInfoProvider().ValidateProperties())
     {
@@ -445,6 +467,11 @@ void Matter::StackThreadProc()
     chip::DeviceLayer::PlatformMgr().RunEventLoop();
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+#ifdef BARTON_CONFIG_MATTER_MESSAGE_TRACING
+    // Backends MUST be unregistered before exit, with the Matter stack lock held.
+    chip::Tracing::Unregister(matterMessageTraceBackend);
+#endif
 
     auto &server = chip::Server::GetInstance();
     server.Shutdown();
