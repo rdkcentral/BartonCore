@@ -106,11 +106,8 @@ static JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 }
 
 /*
- * Date constructor compatibility shim.
- *
- * Newer generated mqjs_stdlib.h references js_date_constructor, but some
- * mquickjs builds do not export an internal implementation symbol. Provide
- * the constructor here so the generated stdlib table can always bind it.
+ * Compatibility function for generated mqjs_stdlib.h entries that reference
+ * js_date_constructor. Accepts an optional epoch-ms argument.
  */
 static JSValue js_date_constructor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 {

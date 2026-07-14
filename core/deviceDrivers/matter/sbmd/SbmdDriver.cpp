@@ -52,21 +52,19 @@ namespace barton
             icWarn("driver '%s' destroyed while still activated", registration->name.c_str());
         }
 
-        // A SafeJSValue holds a GC root as an intrusive node whose address is registered with the
-        // collector. Detaching abandons the node WITHOUT unlinking it, so if we detach here the node
-        // stays linked in the GC root list while its backing memory (this registration) is freed --
-        // the next collection then walks a dangling node and crashes. So detach only when the shared
-        // JS_DeleteGCRef would instead touch a dead context. When the context is alive, release all
-        // held roots under the runtime mutex so the subsequent SafeJSValue member destructors are no-ops.
+        // Clear held roots while holding the runtime mutex when the shared context is alive.
+        // If the context is already gone, detach so SafeJSValue destructors do not call JS_DeleteGCRef
+        // on a dead context.
         if (registration)
         {
+            std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+
             if (MQuickJsRuntime::GetSharedContext() == nullptr)
             {
                 VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
             }
             else
             {
-                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                 VisitHandlers([](SbmdHandler &entry) { entry.heldFn = SafeJSValue {}; });
             }
         }

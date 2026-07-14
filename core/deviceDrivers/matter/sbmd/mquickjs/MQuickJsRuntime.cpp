@@ -232,10 +232,7 @@ bool MQuickJsRuntime::CheckAndClearPendingException(JSContext *ctx, std::string 
         return false;
     }
 
-    // mquickjs uses a moving/compacting GC: every JS allocation (including each JS_GetPropertyStr /
-    // JS_ToCString below) can relocate live objects, invalidating any raw JSValue held in a C
-    // local. Root the exception so it stays valid across the multiple property reads used to build
-    // the diagnostic message; otherwise the second and later reads dereference a stale pointer.
+    // Root the exception across property reads/conversions; mquickjs can relocate unrooted JSValues.
     SafeJSValue pendingEx(ctx, pendingExRaw);
 
     // Extract exception message if caller wants it
