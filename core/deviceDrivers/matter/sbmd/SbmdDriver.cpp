@@ -56,12 +56,19 @@ namespace barton
         // collector. Detaching abandons the node WITHOUT unlinking it, so if we detach here the node
         // stays linked in the GC root list while its backing memory (this registration) is freed --
         // the next collection then walks a dangling node and crashes. So detach only when the shared
-        // context is already gone (runtime shut down): then the GC list no longer exists and calling
-        // JS_DeleteGCRef would instead touch a dead context. While the context is alive, do nothing
-        // and let the member SafeJSValue destructors properly unlink each root via JS_DeleteGCRef.
-        if (registration && MQuickJsRuntime::GetSharedContext() == nullptr)
+        // JS_DeleteGCRef would instead touch a dead context. When the context is alive, release all
+        // held roots under the runtime mutex so the subsequent SafeJSValue member destructors are no-ops.
+        if (registration)
         {
-            VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
+            if (MQuickJsRuntime::GetSharedContext() == nullptr)
+            {
+                VisitHandlers([](SbmdHandler &entry) { entry.heldFn.Detach(); });
+            }
+            else
+            {
+                std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+                VisitHandlers([](SbmdHandler &entry) { entry.heldFn = SafeJSValue {}; });
+            }
         }
     }
 
