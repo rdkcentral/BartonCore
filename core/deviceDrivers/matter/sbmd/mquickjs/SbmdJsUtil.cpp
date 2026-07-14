@@ -169,14 +169,19 @@ namespace barton
 
         std::vector<std::string> GetObjectKeys(JSContext *ctx, JSValue obj)
         {
+            // Root the global object and input object: JS_SetPropertyStr/JS_Eval can allocate and
+            // trigger mquickjs's moving GC, which would relocate raw JSValue arguments mid-call.
+            SafeJSValue rootedGlobal(ctx, JS_GetGlobalObject(ctx));
+            SafeJSValue rootedObj(ctx, obj);
+
             // Store object as a temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", obj);
+            JS_SetPropertyStr(ctx, rootedGlobal.Get(), "__sbmd_tmp", rootedObj.Get());
 
             const char *script = "Object.keys(__sbmd_tmp)";
             SafeJSValue keysArr(ctx, JS_Eval(ctx, script, strlen(script), "<keys>", JS_EVAL_RETVAL));
 
             // Clean up temp global
-            JS_SetPropertyStr(ctx, JS_GetGlobalObject(ctx), "__sbmd_tmp", JS_UNDEFINED);
+            JS_SetPropertyStr(ctx, rootedGlobal.Get(), "__sbmd_tmp", JS_UNDEFINED);
 
             if (JS_IsException(keysArr.Get()))
             {
