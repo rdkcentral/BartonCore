@@ -38,6 +38,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed 1 MB arena with a s
 ## Non-Goals
 
 - **Implicit GC count + duration**: requires an additional mquickjs patch (GC callback mechanism). Deferred to follow-on change pending coordination with ongoing mquickjs work.
+- **GC root list size gauge** (`sbmd.js.gc_roots`): requires a mquickjs patch to expose the internal GC root list count (e.g., `JS_GetGCRootCount`). Measures engine-level root list growth from any source — not just `SafeJSValue` misuse — making it a more complete leak signal than a BartonCore-side counter. Deferred to follow-on pending the mquickjs patch.
 - **Explicit GC tracking** (`gc()` call sites): no call sites currently exist in production code. Deferred to follow-on.
 - **`deviceId` attribute on metrics**: useful for isolating per-device failures but adds unbounded cardinality. Deferred to follow-on when attribute indexing strategy is clearer.
 - **Per-device-instance heap cost**: not tractable — the JS arena has no per-device partitioning. Deferred to follow-on for further investigation.
