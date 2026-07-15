@@ -32,6 +32,8 @@
 #include "system/SystemClock.h"
 #include "zap-generated/gen_config.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 #define LOG_TAG     "Matter"
 #define logFmt(fmt) "(%s): " fmt, __func__
@@ -106,7 +108,9 @@ extern "C" {
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
 
-#define BLE_CONTROLLER_ADAPTER_ID               0
+#define BLE_CONTROLLER_ADAPTER_ID_DEFAULT       0
+#define BLE_CONTROLLER_ADAPTER_ID_ENV           "BARTON_BLE_ADAPTER_ID"
+#define BLE_CONTROLLER_ADAPTER_ID_FILE          "/var/run/otbr-dbus/ble_adapter_id"
 #define BLE_CONTROLLER_DEVICE_NAME              BARTON_CONFIG_MATTER_BLE_CONTROLLER_DEVICE_NAME
 
 #define LOCAL_NODE_ID_SYSTEM_PROPERTY_NAME      "localMatterNodeId"
@@ -332,7 +336,7 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
     }
 
     chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName(BLE_CONTROLLER_DEVICE_NAME);
-    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(BLE_CONTROLLER_ADAPTER_ID, true);
+    chip::DeviceLayer::Internal::BLEMgrImpl().ConfigureBle(ResolveBleAdapterId(), true);
     chip::DeviceLayer::ConnectivityMgr().SetBLEAdvertisingEnabled(false);
 
 #if CHIP_ENABLE_OPENTHREAD
@@ -346,6 +350,53 @@ bool Matter::Init(uint64_t accountId, std::string &&attestationTrustStorePath, c
 #endif // CHIP_ENABLE_OPENTHREAD
 
     return result;
+}
+
+uint32_t Matter::ResolveBleAdapterId()
+{
+    uint32_t adapterId = BLE_CONTROLLER_ADAPTER_ID_DEFAULT;
+    const char *env = getenv(BLE_CONTROLLER_ADAPTER_ID_ENV);
+
+    if (env != nullptr)
+    {
+        char *endPtr = nullptr;
+        unsigned long val = strtoul(env, &endPtr, 10);
+
+        if (endPtr != env && *endPtr == '\0')
+        {
+            adapterId = static_cast<uint32_t>(val);
+            icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_ENV);
+        }
+        else
+        {
+            icWarn("Invalid %s value '%s', using default hci%u", BLE_CONTROLLER_ADAPTER_ID_ENV, env, adapterId);
+        }
+
+        return adapterId;
+    }
+
+    FILE *f = fopen(BLE_CONTROLLER_ADAPTER_ID_FILE, "r");
+
+    if (f != nullptr)
+    {
+        char buf[16];
+
+        if (fgets(buf, sizeof(buf), f) != nullptr)
+        {
+            char *endPtr = nullptr;
+            unsigned long val = strtoul(buf, &endPtr, 10);
+
+            if (endPtr != buf)
+            {
+                adapterId = static_cast<uint32_t>(val);
+                icInfo("Using BLE adapter hci%u from %s", adapterId, BLE_CONTROLLER_ADAPTER_ID_FILE);
+            }
+        }
+
+        fclose(f);
+    }
+
+    return adapterId;
 }
 
 bool Matter::Start()

@@ -7,7 +7,8 @@
     "initializeCommand": "docker/setupDockerEnv.sh",
     "dockerComposeFile": [
         "../docker/compose.yaml",
-        "../docker/compose.devcontainer.yaml"
+        "../docker/compose.devcontainer.yaml",
+        "../docker/compose.otbr-radio.yaml"
     ],
     "service": "barton",
 
@@ -53,7 +54,11 @@
         // when loaded via GObject introspection in Python. Without this, VS Code's pytest
         // discovery crashes because ASAN kills the process. This is harmless for non-ASAN
         // processes — they simply ignore the option.
-        "ASAN_OPTIONS": "verify_asan_link_order=0"
+        "ASAN_OPTIONS": "verify_asan_link_order=0",
+
+        // Disable debuginfod URL lookups — GDB hangs trying to download symbols from
+        // the Ubuntu debuginfod server when this is set.
+        "DEBUGINFOD_URLS": ""
     },
 
     // specify the non-root user to use in the container
@@ -112,5 +117,10 @@
     },
 
     // script for further VSC customization after the container is created
-    "postCreateCommand": ".devcontainer/setup.sh"
+    "postCreateCommand": ".devcontainer/setup.sh",
+
+    // Set up IPv6 routes to Thread devices via the otbr-radio container.
+    // Runs on every container start (not just creation) so routes survive
+    // restarts.  Harmless no-op when otbr-radio is not running.
+    "postStartCommand": "docker/setup-thread-routes.sh"
 }
