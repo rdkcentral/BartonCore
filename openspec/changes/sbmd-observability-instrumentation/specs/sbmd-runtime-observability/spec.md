@@ -27,14 +27,14 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recordin
 - **THEN** `sbmd.js.heap.peak_bytes` reflects the highest value observed, never decreasing
 
 ### Requirement: Force snapshot API
-The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static function that synchronously samples heap stats, records one observation to each pool health metric, and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). The system SHALL also provide `MQuickJsRuntime::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
+The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static function that synchronously samples heap stats, adds one observation to the `sbmd.js.heap.used_bytes` histogram, updates the `sbmd.js.heap.free_bytes` and `sbmd.js.heap.peak_bytes` gauges with current values, and calls `TickleSampler()` to reset the idle thread's timer. This function SHALL be callable without holding the JS mutex (it acquires it internally). The system SHALL also provide `MQuickJsRuntime::TickleSampler()`, which notifies the idle background thread to reset its sleep timer without taking a snapshot. The idle background thread SHALL use `ForceSnapshot()` when its idle timer expires.
 
 #### Scenario: ForceSnapshot produces an immediate observation
 - **WHEN** `MQuickJsRuntime::ForceSnapshot()` is called
 - **THEN** `sbmd.js.heap.used_bytes` observation count increases by one
 
 ### Requirement: Per-invocation heap delta tracking
-The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before` around the `JS_Call` in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"` and `"op_type"` attributes.
+The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before` around the `JS_Call` in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
 
 #### Scenario: Heap delta recorded per invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler` with a `driverName` and `opType`
@@ -45,7 +45,7 @@ The SBMD runtime SHALL record the net heap allocation of each JS handler invocat
 - **THEN** `sbmd.handler.heap_delta_bytes` records a negative value, which is valid
 
 ### Requirement: Handler invocation duration tracking
-The SBMD runtime SHALL record the wall-clock duration of each JS handler invocation as a histogram named `sbmd.handler.duration_ms`. Duration SHALL be measured from immediately before `JS_PushArg` to immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"` and `"op_type"` attributes.
+The SBMD runtime SHALL record the wall-clock duration of each JS handler invocation as a histogram named `sbmd.handler.duration_ms`. Duration SHALL be measured from immediately before `JS_PushArg` to immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
 
 #### Scenario: Duration recorded for each invocation
 - **WHEN** a JS handler is invoked with a driver name and op type
@@ -56,7 +56,7 @@ The SBMD runtime SHALL record the wall-clock duration of each JS handler invocat
 - **THEN** `sbmd.handler.duration_ms` still records the elapsed duration for that invocation
 
 ### Requirement: Handler invocation outcome tracking
-The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, and `"outcome"`. Valid outcome values are: `"success"` (handler returned a valid result), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). The counter SHALL be incremented in `SbmdHandlerInvoker::InvokeHandler` for the first four outcomes; `"error"` SHALL be incremented at the `ResultTerminal::Error` handling site.
+The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, `"resource_id"` (omitted for attribute/event handler invocations), and `"outcome"`. Valid outcome values are: `"success"` (handler returned a valid result), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). The counter SHALL be incremented in `SbmdHandlerInvoker::InvokeHandler` for the first four outcomes; `"error"` SHALL be incremented at the `ResultTerminal::Error` handling site.
 
 #### Scenario: Success outcome counted
 - **WHEN** a JS handler invocation returns a success terminal
@@ -90,7 +90,7 @@ The SBMD runtime SHALL record the time a request spends waiting to acquire the J
 - **THEN** `sbmd.js.mutex.wait_ms` records an observation close to zero
 
 ### Requirement: Driver load cost tracking
-The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clock time to evaluate and activate its `.sbmd.js` file as a gauge named `sbmd.driver.load.duration_ms` with attribute `"driver"`, and the net heap bytes consumed during load and activation as a gauge named `sbmd.driver.load.heap_bytes` with attribute `"driver"`. Both SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`.
+The SBMD runtime SHALL record, for each successfully loaded driver: the wall-clock time to evaluate and activate its `.sbmd.js` file as a histogram named `sbmd.driver.load.duration_ms` with attribute `"driver"`, and the net heap bytes consumed during load and activation as a histogram named `sbmd.driver.load.heap_bytes` with attribute `"driver"`. Both SHALL be recorded once per driver at startup in `SbmdFactory::RegisterDriversFromDirectory`.
 
 #### Scenario: Load duration recorded per driver
 - **WHEN** a `.sbmd.js` file is successfully loaded and activated
@@ -137,14 +137,14 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.deferred.in_flight` represen
 - **THEN** `sbmd.deferred.in_flight` gauge decrements back toward zero
 
 ### Requirement: Deferred operation total duration tracking
-The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` with attributes `"driver"` and `"op_type"` (the originating operation type from `pending.operationCtx.opType`). Duration includes device round-trip time.
+The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` with attributes `"driver"`, `"op_type"` (the originating operation type from `pending.operationCtx.opType`), and `"resource_id"` (the originating resource from `pending.operationCtx.resourceId`). Duration includes device round-trip time.
 
 #### Scenario: Total duration includes device round-trip
 - **WHEN** a deferred operation completes after a device response
 - **THEN** `sbmd.deferred.duration_ms` records a value greater than the JS execution time alone
 
 ### Requirement: Deferral depth distribution tracking
-The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` with attributes `"driver"` and `"op_type"`. Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
+The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` with attributes `"driver"`, `"op_type"`, and `"resource_id"`. Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
 
 #### Scenario: Single round-trip records depth zero
 - **WHEN** a deferred operation resolves after one device response
@@ -155,14 +155,14 @@ The SBMD runtime SHALL record the deferral depth at completion of each deferred 
 - **THEN** `sbmd.deferred.depth` records 2 for that driver
 
 ### Requirement: Deferred operation timeout counting
-The SBMD runtime SHALL count deferred operations that exceed their configured `overallDeadline` using a counter named `sbmd.deferred.timeout` with attributes `"driver"` and `"op_type"`. The deadline is set at operation start from `cmd.timeoutMs` if present, otherwise `driver.defaultTimeoutMs` if set, otherwise `PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS` (30 s).
+The SBMD runtime SHALL count deferred operations that exceed their configured `overallDeadline` using a counter named `sbmd.deferred.timeout` with attributes `"driver"`, `"op_type"`, and `"resource_id"`. The deadline is set at operation start from `cmd.timeoutMs` if present, otherwise `driver.defaultTimeoutMs` if set, otherwise `PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS` (30 s).
 
 #### Scenario: Timeout counted when deadline exceeded
 - **WHEN** a deferred operation's `overallDeadline` is exceeded before a device response arrives
 - **THEN** `sbmd.deferred.timeout` counter increments for that driver
 
 ### Requirement: Deferred operation max-depth-exceeded counting
-The SBMD runtime SHALL count deferred operations terminated because they reached `MAX_DEFERRAL_DEPTH` (10) using a counter named `sbmd.deferred.max_depth` with attributes `"driver"` and `"op_type"`.
+The SBMD runtime SHALL count deferred operations terminated because they reached `MAX_DEFERRAL_DEPTH` (10) using a counter named `sbmd.deferred.max_depth` with attributes `"driver"`, `"op_type"`, and `"resource_id"`.
 
 #### Scenario: Max depth counter increments on depth limit
 - **WHEN** a deferred operation re-arms 10 times and `ContinueDeferredChain` rejects the next re-arm

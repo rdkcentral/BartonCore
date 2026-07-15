@@ -14,14 +14,14 @@
 
 ## 3. SbmdHandlerInvoker — per-invocation instrumentation
 
-- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `ShutdownMetrics()`, and `RecordOutcomeError(const char *driver, const char *opType)` static functions
-- [ ] 3.1 Define `SbmdOperationContext` struct in `SbmdHandlerInvoker.h` with fields `const char *driverName = nullptr`, `const char *opType = nullptr`, and `std::chrono::steady_clock::time_point startTime`; extend `SbmdHandlerInvoker::InvokeHandler` with `const SbmdOperationContext *opCtx = nullptr` (backwards-compatible)
+- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `ShutdownMetrics()`, and `RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)` static functions
+- [ ] 3.1 Define `OperationContext` struct in `SbmdHandlerInvoker.h` with fields `const char *driverName = nullptr`, `const char *opType = nullptr`, `const char *resourceId = nullptr`, and `std::chrono::steady_clock::time_point startTime`; extend `SbmdHandlerInvoker::InvokeHandler` with `const OperationContext *opCtx = nullptr` (backwards-compatible)
 - [ ] 3.2 Capture `heap_used` from `JS_GetMemoryUsage` and `steady_clock::now()` immediately before `JS_PushArg` / `JS_Call`
-- [ ] 3.3 Capture end time and `heap_used` after `JS_Call` returns; record `durationMs` and `heapDelta` to `SbmdHandlerInvoker`'s histogram handles; increment the `sbmd.handler.outcome` counter with the resolved outcome value; call `MQuickJsRuntime::RecordHeapSnapshot(ctx)` to update pool health gauges while the JS mutex is still held; then call `MQuickJsRuntime::TickleSampler()` to notify the idle thread
+- [ ] 3.3 Capture end time and `heap_used` after `JS_Call` returns; record `durationMs` and `heapDelta` to `SbmdHandlerInvoker`'s histogram handles; increment the `sbmd.handler.outcome` counter with the resolved outcome value; call `MQuickJsRuntime::RecordHeapSnapshot(ctx)` to update pool health metrics (`sbmd.js.heap.used_bytes` histogram and `sbmd.js.heap.free_bytes`/`peak_bytes` gauges) while the JS mutex is still held; then call `MQuickJsRuntime::TickleSampler()` to notify the idle thread
 - [ ] 3.4 Distinguish timeout from exception in outcome: check if `steady_clock::now() > GetDeadline()` (or use a flag set before `ClearDeadline()`) to emit `"timeout"` vs `"exception"`
-- [ ] 3.5 Update `InvokeHandler` call sites in `SpecBasedMatterDeviceDriver`: synchronous paths (`HandleResourceOp`) stack-allocate `SbmdOperationContext{driver, opType, steady_clock::now()}` and pass `&opCtx`; deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`) pass `&pending.operationCtx` (the persistent context initialized in task 5.2)
+- [ ] 3.5 Update `InvokeHandler` call sites in `SpecBasedMatterDeviceDriver`: synchronous paths (`HandleResourceOp`) stack-allocate `OperationContext` with `driverName`, `opType`, `resourceId` (from `resource->id`), and `startTime = steady_clock::now()`, then pass `&opCtx`; deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`) pass `&pending.operationCtx` (the persistent context initialized in task 5.2)
 - [ ] 3.6 Add mutex wait timing to `HandleResourceOp` and the attribute/event handler paths: `auto t0 = steady_clock::now()` before `lock_guard`, call `MQuickJsRuntime::RecordMutexWait(elapsed(t0))` after lock acquired
-- [ ] 3.7 At each `ResultTerminal::Error` handling site in `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain`, call `SbmdHandlerInvoker::RecordOutcomeError(driverName, opType)` to emit `sbmd.handler.outcome{outcome="error"}`
+- [ ] 3.7 At each `ResultTerminal::Error` handling site in `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain`, call `SbmdHandlerInvoker::RecordOutcomeError(driverName, opType, resourceId)` to emit `sbmd.handler.outcome{outcome="error"}`
 
 ## 4. SbmdFactory — driver load instrumentation
 
@@ -35,12 +35,12 @@
 ## 5. SpecBasedMatterDeviceDriver — deferred operation instrumentation
 
 - [ ] 5.0 Add `sbmd.deferred.in_flight`, `sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, and `sbmd.deferred.max_depth` metric handles as private static members of `SpecBasedMatterDeviceDriver`; add `static void InitializeMetrics()` and `ShutdownMetrics()` static functions
-- [ ] 5.1 Add `SbmdOperationContext operationCtx` field to `PendingOperation` struct
-- [ ] 5.2 Initialize `pending.operationCtx` in `ExecuteRequestCommand` alongside `overallDeadline`: set `operationCtx.driverName`, `operationCtx.opType` (the originating op, e.g., `"write"`), and `operationCtx.startTime = steady_clock::now()`
+- [ ] 5.1 Add `OperationContext operationCtx` field to `PendingOperation` struct
+- [ ] 5.2 Initialize `pending.operationCtx` in `ExecuteRequestCommand` alongside `overallDeadline`: set `operationCtx.driverName`, `operationCtx.opType` (the originating op, e.g., `"write"`), `operationCtx.resourceId` (from `resource->id`), and `operationCtx.startTime = steady_clock::now()`
 - [ ] 5.3 Increment `sbmd.deferred.in_flight` gauge in `ExecuteRequestCommand` after `pendingOperations.emplace` succeeds
-- [ ] 5.4 In `CompletePendingOperation`, compute `elapsed(pending.operationCtx.startTime)` and record `durationMs` and `depth` to `SpecBasedMatterDeviceDriver`'s deferred histogram handles with `pending.operationCtx.driverName` and `pending.operationCtx.opType` attributes; decrement `sbmd.deferred.in_flight` — all before erasing from map
-- [ ] 5.5 In `HandleDeferredCommandResponse` at the `now() > overallDeadline` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.timeout` counter with `pending.operationCtx.driverName` and `pending.operationCtx.opType` attributes before calling `CompletePendingOperation`
-- [ ] 5.6 In `ContinueDeferredChain` at the `deferralDepth >= MAX_DEFERRAL_DEPTH` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.max_depth` counter with `pending.operationCtx.driverName` and `pending.operationCtx.opType` attributes before calling `CompletePendingOperation`
+- [ ] 5.4 In `CompletePendingOperation`, compute `elapsed(pending.operationCtx.startTime)` and record `durationMs` and `depth` to `SpecBasedMatterDeviceDriver`'s deferred histogram handles with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes; decrement `sbmd.deferred.in_flight` — all before erasing from map
+- [ ] 5.5 In `HandleDeferredCommandResponse` at the `now() > overallDeadline` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.timeout` counter with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes before calling `CompletePendingOperation`
+- [ ] 5.6 In `ContinueDeferredChain` at the `deferralDepth >= MAX_DEFERRAL_DEPTH` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.max_depth` counter with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes before calling `CompletePendingOperation`
 
 ## 6. JS exception event tracking
 
@@ -54,7 +54,7 @@
 - [ ] 7.2 Write a minimal test driver JS string (inline, no file) and load it via `SbmdLoader::LoadDriver` for use across tests
 - [ ] 7.3 Test: `ForceSnapshot` produces pool health histogram observation — call `MQuickJsRuntime::ForceSnapshot()`, parse `observabilityDumpJson()`, assert `sbmd.js.heap.used_bytes` count >= 1
 - [ ] 7.4 Test: arena size gauge recorded at init — assert `sbmd.js.heap.arena_bytes` value equals 512*1024
-- [ ] 7.5 Test: handler duration histogram populated — invoke a handler, assert `sbmd.handler.duration_ms` count increased and value > 0
+- [ ] 7.5 Test: handler duration histogram populated — invoke a handler, assert `sbmd.handler.duration_ms` count increased and sum > 0
 - [ ] 7.6 Test: heap delta histogram populated — invoke a handler, assert `sbmd.handler.heap_delta_bytes` count increased
 - [ ] 7.7 Test: success outcome counter increments on happy path
 - [ ] 7.8 Test: exception outcome counter increments when handler throws

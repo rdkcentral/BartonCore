@@ -36,18 +36,19 @@ Metric handles (histograms, gauges, counters) are private static members of the 
 
 **Cross-module recording:** Two cases require cross-module calls:
 - `sbmd.handler.outcome{outcome="error"}` is detected in `SpecBasedMatterDeviceDriver` after `InvokeHandler` returns, but the handle lives in `SbmdHandlerInvoker`. `SbmdHandlerInvoker` exposes `static void RecordOutcomeError(const char *driver, const char *opType)`.
-- `sbmd.js.mutex.wait_ms` is measured in `HandleResourceOp` (`SpecBasedMatterDeviceDriver`), `sbmd.js.heap.*` pool health gauges are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(JSContext *ctx)` (requires caller to hold the JS mutex).
+- `sbmd.js.mutex.wait_ms` is measured in `HandleResourceOp` (`SpecBasedMatterDeviceDriver`), `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(JSContext *ctx)` (requires caller to hold the JS mutex).
 
 **Why not create instruments inline at each call site?** Instrument creation has overhead and the observability spec requires a handle to persist for the lifetime of measurements. Handles are created once in `InitializeMetrics()` and persist until `ShutdownMetrics()`.
 
 ### Decision 2: `SbmdHandlerInvoker::InvokeHandler` invocation context parameter
 
-`InvokeHandler` is extended with a single optional parameter: `const SbmdOperationContext *opCtx = nullptr`. `SbmdOperationContext` is a plain struct defined in `SbmdHandlerInvoker.h`:
+`InvokeHandler` is extended with a single optional parameter: `const OperationContext *opCtx = nullptr`. `OperationContext` is a plain struct defined in `SbmdHandlerInvoker.h`:
 
 ```cpp
-struct SbmdOperationContext {
+struct OperationContext {
     const char *driverName = nullptr;
-    const char *opType = nullptr;   // originating op type (e.g., "write", "execute")
+    const char *opType = nullptr;     // originating op type (e.g., "write", "execute")
+    const char *resourceId = nullptr; // resource ID for resource ops; null for attribute/event handlers
     std::chrono::steady_clock::time_point startTime;
     // extensible: add fields here without touching InvokeHandler's signature again
 };
@@ -55,7 +56,7 @@ struct SbmdOperationContext {
 
 All existing callers compile unchanged (null default). **Two distinct calling patterns:**
 
-- **Synchronous ops** (`HandleResourceOp`): caller stack-allocates `SbmdOperationContext{driver, opType, steady_clock::now()}` and passes `&opCtx`. Lifetime is that single call.
+- **Synchronous ops** (`HandleResourceOp`): caller stack-allocates `OperationContext` with `driverName`, `opType`, `resourceId` (from `resource->id`), and `startTime = steady_clock::now()`, and passes `&opCtx`. Lifetime is that single call.
 - **Deferred ops** (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`): caller passes `&pending.operationCtx` — the same object initialized when the `PendingOperation` was created and alive for the entire deferred chain.
 
 **Why a struct rather than individual parameters?** A single stable context slot avoids an ever-growing signature as requirements evolve. New fields are added to the struct without touching `InvokeHandler`'s signature or any call site. The context also carries natural operation-scope lifetime semantics: for deferred operations it is the same object from `ExecuteRequestCommand` through `CompletePendingOperation`, enabling `CompletePendingOperation` to read `startTime` from the same context that was active during every `InvokeHandler` call in the chain.
@@ -69,7 +70,7 @@ All existing callers compile unchanged (null default). **Two distinct calling pa
 
 Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths:
 
-**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health gauges using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
+**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes` gauges) using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
 **Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and re-checks `samplerShouldStop` without taking a snapshot.
 
@@ -96,9 +97,9 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
 
 **Thread startup/shutdown:** The thread is started at the end of `MQuickJsRuntime::Initialize()`. In `Shutdown()`, `samplerShouldStop` is set to `true` and `TickleSampler()` is called to wake the thread immediately before joining.
 
-### Decision 4: `PendingOperation` extended with `SbmdOperationContext`
+### Decision 4: `PendingOperation` extended with `OperationContext`
 
-A `SbmdOperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` alongside `overallDeadline` with the driver name, originating op type, and `startTime = steady_clock::now()`. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverName` / `pending.operationCtx.opType` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
+An `OperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` alongside `overallDeadline` with the driver name, originating op type, resource ID, and `startTime = steady_clock::now()`. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
 
 **Why `CompletePendingOperation` rather than each individual exit site?** There are ~15 `CompletePendingOperation` call sites. Recording in the single callee avoids duplicating metric logic and ensures no exit path is missed.
 
@@ -108,6 +109,7 @@ A `SbmdOperationContext operationCtx` field is added to `PendingOperation`. It i
 |---|---|---|
 | `"driver"` | driver name string (e.g., `"door-lock"`) | all per-driver metrics |
 | `"op_type"` | `"read"` / `"write"` / `"execute"` / `"attribute_report"` / `"event"` | invocation, outcome, deferred |
+| `"resource_id"` | resource ID string (e.g., `"isOn"`); omitted for attribute/event handlers | `sbmd.handler.*`, `sbmd.deferred.*` |
 | `"outcome"` | `"success"` / `"exception"` / `"timeout"` / `"stack_overflow"` / `"error"` | outcome counter |
 | `"reason"` | `"file_read"` / `"eval_failed"` / `"activation_failed"` | driver load failure counter |
 | `"phase"` | `"init"` / `"loading"` | JS exception event counter |
@@ -141,7 +143,7 @@ core/deviceDrivers/matter/sbmd/
 │                                            InvokeHandler extended
 │
 ├── SbmdFactory.cpp                          ← driver load metrics
-└── SpecBasedMatterDeviceDriver.cpp          ← deferred op metrics; PendingOperation.operationCtx (SbmdOperationContext)
+└── SpecBasedMatterDeviceDriver.cpp          ← deferred op metrics; PendingOperation.operationCtx (OperationContext)
 ```
 
 ## Risks / Trade-offs
@@ -158,3 +160,4 @@ core/deviceDrivers/matter/sbmd/
 
 - **Sample period default**: 30 s is a reasonable default but untested in production. Should `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` be a runtime-configurable property instead of a compile-time CMake option? (Deferred — compile-time is fine for now.)
 - **Integration test simulated device**: does the existing matter.js virtual device infrastructure support triggering a deferred command path deterministically? Needs verification during implementation.
+- **`JS_MEMUSAGE_WALK_HEAP` in dev/Docker builds**: enabling this flag in the mquickjs dev build would give real `heap_free_blocks` data (currently always 0 without it). Walk overhead is unknown — a temporary `sbmd.js.memusage_walk_ms` histogram could be added in dev builds to measure it before deciding whether to enable it in production builds. Deferred pending investigation.
