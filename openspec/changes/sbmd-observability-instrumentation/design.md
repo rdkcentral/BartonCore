@@ -12,7 +12,7 @@ This design covers how to wire the observability API into the SBMD runtime witho
 - Instrument all meaningful SBMD runtime events using the existing observability API
 - Each module instruments itself; metric handles live in the module that records them
 - Provide a synchronous `ForceSnapshot()` API for on-demand telemetry and tests (usable without holding the JS mutex)
-- Attribute per-driver and per-operation-type metrics using the `"driver"` and `"op_type"` attribute keys
+- Attribute per-driver and per-operation-type metrics using the `"driver"`, `"op_type"`, and `"resource_id"` attribute keys
 - Test all metric wiring using the real mquickjs runtime (no mocking required)
 
 **Non-Goals:**
@@ -35,8 +35,8 @@ Metric handles (histograms, gauges, counters) are private static members of the 
 | `SpecBasedMatterDeviceDriver` | `sbmd.deferred.*` |
 
 **Cross-module recording:** Two cases require cross-module calls:
-- `sbmd.handler.outcome{outcome="error"}` is detected in `SpecBasedMatterDeviceDriver` after `InvokeHandler` returns, but the handle lives in `SbmdHandlerInvoker`. `SbmdHandlerInvoker` exposes `static void RecordOutcomeError(const char *driver, const char *opType)`.
-- `sbmd.js.mutex.wait_ms` is measured in `HandleResourceOp` (`SpecBasedMatterDeviceDriver`), `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(JSContext *ctx)` (requires caller to hold the JS mutex).
+- `sbmd.handler.outcome{outcome="error"}` is detected in `SpecBasedMatterDeviceDriver` after `InvokeHandler` returns, but the handle lives in `SbmdHandlerInvoker`. `SbmdHandlerInvoker` exposes `static void RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)`.
+- `sbmd.js.mutex.wait_ms` is measured at every mutex acquisition site in `SpecBasedMatterDeviceDriver` — `HandleResourceOp`, the attribute/event handler paths, and the deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`). `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(JSContext *ctx)` (requires caller to hold the JS mutex).
 
 **Why not create instruments inline at each call site?** Instrument creation has overhead and the observability spec requires a handle to persist for the lifetime of measurements. Handles are created once in `InitializeMetrics()` and persist until `ShutdownMetrics()`.
 
@@ -72,7 +72,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes` gauges) using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and re-checks `samplerShouldStop` without taking a snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_for` returns before the timeout, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: continue waiting without resetting the timer or taking a snapshot. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.
@@ -83,16 +83,19 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **`MQuickJsRuntime::ForceSnapshot()`** is a public synchronous function that acquires the JS mutex, calls `RecordHeapSnapshot`, releases the mutex, and calls `TickleSampler()`. Used in unit tests and available for on-demand telemetry. Any snapshot from any path resets the idle timer.
 
-**`MQuickJsRuntime::TickleSampler()`** notifies the background thread's condition variable (`samplerCv`) to reset its idle timer. Calls `samplerCv.notify_one()` *without* acquiring `samplerCvMutex` — the standard C++ idiom; only the waiter needs the lock. Safe to call from any context including while holding the JS mutex.
+**`MQuickJsRuntime::TickleSampler()`** notifies the background thread's condition variable (`samplerCv`) to reset its idle timer. Atomically increments `tickleSeq` then calls `samplerCv.notify_one()` — both *without* acquiring `samplerCvMutex`. The atomic increment is the mechanism by which the idle thread distinguishes a real tickle from a spurious wakeup (see below); `notify_one()` without the lock is the standard C++ idiom since only the waiter needs it. Avoiding the lock in `TickleSampler()` also prevents a lock-ordering deadlock: the idle thread can hold `samplerCvMutex` while calling `ForceSnapshot()` (which acquires the JS mutex), so `TickleSampler()` — called while holding the JS mutex — must never acquire `samplerCvMutex`. Safe to call from any context including while holding the JS mutex.
 
 ```
 InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_Call                                    loop:
-  → JS_GetMemoryUsage                            cv.wait_for(SAMPLE_PERIOD_MS)
-  → record sbmd.handler.*                        if timed_out (true idle):
-  → RecordHeapSnapshot(ctx) ← pool health          ForceSnapshot()
-  → TickleSampler()  ← reset idle timer        // woken early by TickleSampler:
-                                               //   no snapshot, reset and wait
+  → JS_GetMemoryUsage                            if samplerShouldStop: exit
+  → record sbmd.handler.*                        seq = tickleSeq
+  → RecordHeapSnapshot(ctx) ← pool health        cv.wait_for(SAMPLE_PERIOD_MS)
+  → TickleSampler()  ← increments tickleSeq      if timed_out: ForceSnapshot()
+                                               //   real tickle (tickleSeq != seq):
+                                               //     no snapshot, reset timer
+                                               //   spurious (tickleSeq == seq):
+                                               //     no snapshot, keep waiting
 ```
 
 **Thread startup/shutdown:** The thread is started at the end of `MQuickJsRuntime::Initialize()`. In `Shutdown()`, `samplerShouldStop` is set to `true` and `TickleSampler()` is called to wake the thread immediately before joining.
@@ -108,8 +111,8 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 | Attribute key | Value type | Used on |
 |---|---|---|
 | `"driver"` | driver name string (e.g., `"door-lock"`) | all per-driver metrics |
-| `"op_type"` | `"read"` / `"write"` / `"execute"` / `"attribute_report"` / `"event"` | invocation, outcome, deferred |
-| `"resource_id"` | resource ID string (e.g., `"isOn"`); omitted for attribute/event handlers | `sbmd.handler.*`, `sbmd.deferred.*` |
+| `"op_type"` | `"read"` / `"write"` / `"execute"` / `"attribute_report"` / `"event"` | invocation, outcome, per-operation deferred metrics |
+| `"resource_id"` | resource ID string (e.g., `"isOn"`); omitted for attribute/event handlers | `sbmd.handler.*`, `sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth` |
 | `"outcome"` | `"success"` / `"exception"` / `"timeout"` / `"stack_overflow"` / `"error"` | outcome counter |
 | `"reason"` | `"file_read"` / `"eval_failed"` / `"activation_failed"` | driver load failure counter |
 | `"phase"` | `"init"` / `"loading"` | JS exception event counter |
@@ -154,7 +157,7 @@ core/deviceDrivers/matter/sbmd/
 
 - **Non-uniform sampling in `sbmd.js.heap.used_bytes`** → Observation rate is proportional to handler call rate plus one sample per idle period, so percentiles are activity-weighted rather than time-weighted. On a busy system, high percentiles reflect heap under load; on an idle system, most observations reflect the settled idle baseline. `sbmd.js.heap.peak_bytes` and the histogram's `min`/`max` fields are sampling-independent and remain reliable regardless of workload. Percentiles should be interpreted with the deployment's activity level in mind.
 
-- **Heap delta sign** → If implicit GC fires during an invocation, `heap_used` may drop. The delta will be negative, which is valid and informative. Negative observations are recorded in the histogram's underflow bucket. This is expected behavior, not a bug.
+- **Heap delta sign** → If implicit GC fires during an invocation, `heap_used` may drop. The delta will be negative, which is valid and informative. Negative values satisfy `value <= 0` on the first bucket comparison and are counted in the `le=0` bucket (the lowest bound in the histogram). This is expected behavior, not a bug.
 
 - **mquickjs changes conflict risk** → Another developer is actively modifying mquickjs. The `InvokeHandler` changes and `MQuickJsRuntime` sampler thread are in BartonCore C++, not mquickjs itself, so conflicts are unlikely. Coordination is only needed if the other dev changes `JSMemoryUsage` struct layout.
 
