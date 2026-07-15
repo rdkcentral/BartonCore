@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: JS heap pool utilization tracking
-The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram named `sbmd.js.heap.used_bytes` using a hybrid sampling strategy: (1) in-activity captures from `SbmdHandlerInvoker::InvokeHandler` after each `JS_Call` while the JS mutex is held, and (2) idle background captures from a thread that fires only when no handler activity has occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds (configurable at CMake time, default 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain gauges for current free bytes (`sbmd.js.heap.free_bytes`) and free block count (`sbmd.js.heap.free_blocks`) updated with each sample.
+The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram named `sbmd.js.heap.used_bytes` using a hybrid sampling strategy: (1) in-activity captures from `SbmdHandlerInvoker::InvokeHandler` after each `JS_Call` while the JS mutex is held, and (2) idle background captures from a thread that fires only when no handler activity has occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds (configurable at CMake time, default 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain a gauge named `sbmd.js.heap.free_bytes` (sourced from `usage.free_size` — the gap between the heap top and the stack bottom) updated with each snapshot.
 
 #### Scenario: Heap utilization captured during handler invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler`
@@ -15,12 +15,12 @@ The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram name
 - **WHEN** `MQuickJsRuntime::Initialize(N)` is called
 - **THEN** the `sbmd.js.heap.arena_bytes` gauge records the value `N`
 
-#### Scenario: Free block count reflects fragmentation
-- **WHEN** `MQuickJsRuntime::ForceSnapshot()` is called after JS handler invocations
-- **THEN** `sbmd.js.heap.free_blocks` gauge is updated with the current free block count from `JS_GetMemoryUsage`
+#### Scenario: Free bytes reflects remaining capacity
+- **WHEN** a heap snapshot is taken (via `InvokeHandler` or `ForceSnapshot()`)
+- **THEN** `sbmd.js.heap.free_bytes` gauge records the current `usage.free_size` value (gap between heap top and stack bottom)
 
 ### Requirement: Peak heap watermark gauge
-The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest net heap utilization (`heap_used - heap_free_blocks`) observed since `MQuickJsRuntime::Initialize()`. The gauge SHALL be updated whenever `MQuickJsRuntime::LogMemoryUsage` updates the internal `peakHeapUsed` tracking.
+The SBMD runtime SHALL maintain a gauge named `sbmd.js.heap.peak_bytes` recording the highest value of `usage.heap_used` observed since `MQuickJsRuntime::Initialize()`. (`JS_MEMUSAGE_WALK_HEAP` is not set, so `usage.heap_free_blocks` is always 0; `heap_used` is used directly as the high-water mark of heap expansion.) The gauge SHALL be updated with each heap snapshot.
 
 #### Scenario: Peak watermark monotonically increases
 - **WHEN** successive JS handler invocations allocate progressively more memory
@@ -52,7 +52,7 @@ The SBMD runtime SHALL record the wall-clock duration of each JS handler invocat
 - **THEN** `sbmd.handler.duration_ms` gains one observation greater than zero
 
 #### Scenario: Timeout invocations are recorded
-- **WHEN** a JS handler exceeds the 5000 ms execution deadline and is interrupted
+- **WHEN** a JS handler exceeds the `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS` execution deadline and is interrupted
 - **THEN** `sbmd.handler.duration_ms` still records the elapsed duration for that invocation
 
 ### Requirement: Handler invocation outcome tracking
@@ -67,7 +67,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 - **THEN** `sbmd.handler.outcome` counter for `outcome="exception"` increments by one
 
 #### Scenario: Timeout outcome counted
-- **WHEN** a JS handler exceeds the 5000 ms deadline and the interrupt handler fires
+- **WHEN** a JS handler exceeds the `BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS` deadline and the interrupt handler fires
 - **THEN** `sbmd.handler.outcome` counter for `outcome="timeout"` increments by one
 
 #### Scenario: Stack overflow outcome counted

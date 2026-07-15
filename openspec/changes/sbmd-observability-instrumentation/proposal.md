@@ -27,7 +27,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed 1 MB arena with a s
 ## Impact
 
 - **Affected code**: `core/deviceDrivers/matter/sbmd/` (SbmdHandlerInvoker, SbmdFactory, SpecBasedMatterDeviceDriver, MQuickJsRuntime)
-- **New file**: none (metric handles and initialization are added to existing modules)
+- **New files**: `core/test/src/SbmdObservabilityTest.cpp` (GTest unit tests); new pytest test in `testing/test/`. Metric handles and initialization are added to existing production modules — no new production source files.
 - **Struct change**: `PendingOperation` gains `SbmdOperationContext operationCtx` field (carries driver name, originating op type, and start time)
 - **API change**: `SbmdHandlerInvoker::InvokeHandler` gains a single optional `const SbmdOperationContext *opCtx = nullptr` parameter; new `SbmdOperationContext` struct defined in `SbmdHandlerInvoker.h` (backwards-compatible)
 - **CMake flag**: `BCORE_OBSERVABILITY_BACKEND` must be `memory` (default) for metrics to be recorded; `none` backend silently no-ops all calls — no conditional compilation required at call sites
