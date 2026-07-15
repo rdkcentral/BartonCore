@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: JS heap pool utilization tracking
-The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram named `sbmd.js.heap.used_bytes` using a hybrid sampling strategy: (1) in-activity captures from `SbmdHandlerInvoker::InvokeHandler` after each `JS_Call` while the JS mutex is held, and (2) idle background captures from a thread that fires only when no handler activity has occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds (configurable at CMake time, default 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain a gauge named `sbmd.js.heap.free_bytes` (sourced from `usage.free_size` — the gap between the heap top and the stack bottom) updated with each snapshot.
+The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram named `sbmd.js.heap.used_bytes` using a hybrid sampling strategy: (1) in-activity captures from `SbmdHandlerInvoker::InvokeHandler` after each `JS_Call` while the JS mutex is held, and (2) idle background captures from a thread that fires only when no handler activity has occurred for `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option, default 30000 ms). The runtime SHALL also record the fixed arena size once at initialization as a gauge named `sbmd.js.heap.arena_bytes`, and SHALL maintain a gauge named `sbmd.js.heap.free_bytes` (sourced from `usage.free_size` — the gap between the heap top and the stack bottom) updated with each snapshot.
 
 #### Scenario: Heap utilization captured during handler invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler`
 - **THEN** `sbmd.js.heap.used_bytes` histogram gains one observation attributed to that invocation
 
 #### Scenario: Heap utilization captured during idle period
-- **WHEN** no handler invocations have occurred for `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds
+- **WHEN** no handler invocations have occurred for `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds
 - **THEN** the idle background thread records one observation to `sbmd.js.heap.used_bytes`
 
 #### Scenario: Arena size recorded at initialization

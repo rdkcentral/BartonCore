@@ -29,7 +29,7 @@ Metric handles (histograms, gauges, counters) are private static members of the 
 
 | Module | Metric handles owned |
 |---|---|
-| `MQuickJsRuntime` | `sbmd.js.heap.*`, `sbmd.js.heap.peak_bytes`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception` |
+| `MQuickJsRuntime` | `sbmd.js.heap.*`, `sbmd.js.mutex.wait_ms`, `sbmd.js.exception` |
 | `SbmdHandlerInvoker` | `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, `sbmd.handler.outcome` |
 | `SbmdFactory` | `sbmd.driver.load.*`, `sbmd.driver.registered.count` |
 | `SpecBasedMatterDeviceDriver` | `sbmd.deferred.*` |
@@ -71,7 +71,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health gauges using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and waits again without taking a snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and waits again without taking a snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.

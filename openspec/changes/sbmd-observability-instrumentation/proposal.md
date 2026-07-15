@@ -5,7 +5,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed 1 MB arena with a s
 ## What Changes
 
 - **Distributed metric instrumentation**: metric handles are owned by the module that records them. `MQuickJsRuntime` gains heap metrics and `ForceSnapshot()`; `SbmdHandlerInvoker` gains invocation and outcome metrics; `SbmdFactory` gains driver load metrics; `SpecBasedMatterDeviceDriver` gains deferred operation metrics.
-- **Periodic memory sampler** in `MQuickJsRuntime`: a background thread snapshots heap stats at a configurable interval.
+- **Hybrid heap sampler** in `MQuickJsRuntime`: pool health metrics are captured in-activity (after every `InvokeHandler` call) and by a background thread that fires only after a configurable idle period with no handler activity.
 - **Per-invocation instrumentation** in `SbmdHandlerInvoker::InvokeHandler`: measures duration, heap delta, and outcome for every JS handler call. Signature extended with a single optional `const SbmdOperationContext *opCtx = nullptr` parameter; the struct is extensible without further signature changes and carries natural operation-scope lifetime for deferred chains.
 - **Driver load instrumentation** in `SbmdFactory::RegisterDriversFromDirectory`: measures memory cost and wall-clock time for loading and activating each `.sbmd.js` file.
 - **Deferred operation instrumentation** in `SpecBasedMatterDeviceDriver`: tracks in-flight count, total duration (attributed by driver and originating op type), deferral depth, timeout events, and max-depth-exceeded events. Adds `SbmdOperationContext operationCtx` field to `PendingOperation` struct.
@@ -31,7 +31,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed 1 MB arena with a s
 - **Struct change**: `PendingOperation` gains `SbmdOperationContext operationCtx` field (carries driver name, originating op type, and start time)
 - **API change**: `SbmdHandlerInvoker::InvokeHandler` gains a single optional `const SbmdOperationContext *opCtx = nullptr` parameter; new `SbmdOperationContext` struct defined in `SbmdHandlerInvoker.h` (backwards-compatible)
 - **CMake flag**: `BCORE_OBSERVABILITY_BACKEND` must be `memory` (default) for metrics to be recorded; `none` backend silently no-ops all calls — no conditional compilation required at call sites
-- **CMake option**: new `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` option (default 30000) controlling the periodic heap sampler interval
+- **CMake option**: new `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` option (default 30000, compiled as `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) controlling the hybrid heap sampler idle period
 - **Dependencies**: existing `observabilityMetrics.h` API; no new external dependencies
 - **Tests**: new GTest file `core/test/src/SbmdObservabilityTest.cpp`; new pytest test in `testing/test/`
 
