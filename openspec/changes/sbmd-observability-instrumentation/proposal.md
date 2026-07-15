@@ -1,6 +1,6 @@
 ## Why
 
-The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed 1 MB arena with a single shared JS context, making it a natural resource bottleneck. Today, nothing is measured: memory pressure, handler latency, GC activity, deferred operation health, and driver load cost are all invisible. Instrumenting the SBMD runtime with the existing observability API gives operators and developers the data needed to diagnose performance issues, detect failures, and understand system health.
+The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed-size arena (configurable via `BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES`, default 1 MB) with a single shared JS context, making it a natural resource bottleneck. Today, nothing is measured: memory pressure, handler latency, GC activity, deferred operation health, and driver load cost are all invisible. Instrumenting the SBMD runtime with the existing observability API gives operators and developers the data needed to diagnose performance issues, detect failures, and understand system health.
 
 ## What Changes
 
