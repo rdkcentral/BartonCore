@@ -71,7 +71,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health gauges using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and waits again without taking a snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When woken early by `TickleSampler()`, it resets the timer and re-checks `samplerShouldStop` without taking a snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.
@@ -126,7 +126,7 @@ A `SbmdOperationContext operationCtx` field is added to `PendingOperation`. It i
 
 **Integration tests** (`testing/test/`): Deferred operation metrics require real Matter command round-trips. A pytest test commissions a simulated device, triggers a write operation that exercises the deferred path, then calls `b_core_client_get_telemetry()` and asserts the expected deferred metrics appear.
 
-**Periodic sampler in tests**: Tests call `MQuickJsRuntime::ForceSnapshot()` directly rather than waiting for the background thread. This avoids time-dependent test flakiness entirely.
+**Heap sampler in tests**: Tests call `MQuickJsRuntime::ForceSnapshot()` directly rather than waiting for the background thread. This avoids time-dependent test flakiness entirely.
 
 ## Component diagram
 
@@ -150,7 +150,7 @@ core/deviceDrivers/matter/sbmd/
 
 - **`JS_GetMemoryUsage` overhead inside `InvokeHandler`** → Called twice per invocation (before + after `JS_Call`). `JS_MEMUSAGE_WALK_HEAP` is not set — the call is an O(1) struct read with no heap walk. As a consequence, `usage.heap_free_blocks` is always 0 (per the mquickjs patch implementation); `sbmd.js.heap.free_bytes` therefore maps to `usage.free_size` (the gap between heap top and stack bottom), not to `heap_free_blocks`. Overhead is negligible.
 
-- **Heap delta sign** → If implicit GC fires during an invocation, `heap_used` may drop. The delta will be negative, which is valid and informative. Histograms accept negative values (the OTel SDK default buckets go below zero). This is expected behavior, not a bug.
+- **Heap delta sign** → If implicit GC fires during an invocation, `heap_used` may drop. The delta will be negative, which is valid and informative. Negative observations are recorded in the histogram's underflow bucket. This is expected behavior, not a bug.
 
 - **mquickjs changes conflict risk** → Another developer is actively modifying mquickjs. The `InvokeHandler` changes and `MQuickJsRuntime` sampler thread are in BartonCore C++, not mquickjs itself, so conflicts are unlikely. Coordination is only needed if the other dev changes `JSMemoryUsage` struct layout.
 

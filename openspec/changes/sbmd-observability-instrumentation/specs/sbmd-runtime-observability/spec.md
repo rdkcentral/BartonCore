@@ -155,7 +155,7 @@ The SBMD runtime SHALL record the deferral depth at completion of each deferred 
 - **THEN** `sbmd.deferred.depth` records 2 for that driver
 
 ### Requirement: Deferred operation timeout counting
-The SBMD runtime SHALL count deferred operations that exceed the 30 s overall deadline using a counter named `sbmd.deferred.timeout` with attributes `"driver"` and `"op_type"`.
+The SBMD runtime SHALL count deferred operations that exceed their configured `overallDeadline` using a counter named `sbmd.deferred.timeout` with attributes `"driver"` and `"op_type"`. The deadline is set at operation start from `cmd.timeoutMs` if present, otherwise `driver.defaultTimeoutMs` if set, otherwise `PendingOperation::DEFAULT_OVERALL_TIMEOUT_MS` (30 s).
 
 #### Scenario: Timeout counted when deadline exceeded
 - **WHEN** a deferred operation's `overallDeadline` is exceeded before a device response arrives

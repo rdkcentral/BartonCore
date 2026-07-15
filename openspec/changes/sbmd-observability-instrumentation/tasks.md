@@ -8,7 +8,7 @@
 
 - [ ] 2.0 Add heap metric handles (`sbmd.js.heap.used_bytes`, `sbmd.js.heap.arena_bytes`, `sbmd.js.heap.free_bytes`, `sbmd.js.heap.peak_bytes`), `sbmd.js.mutex.wait_ms`, and `sbmd.js.exception` as private static members of `MQuickJsRuntime`; add `static void InitializeMetrics()`, `ShutdownMetrics()`, `ForceSnapshot()`, `RecordHeapSnapshot(JSContext *ctx)`, `TickleSampler()`, `RecordMutexWait(double ms)`, and `RecordJsException(const char *phase, const char *driver)` static functions
 - [ ] 2.1 Add `static std::thread periodicSamplerThread`, `static std::atomic<bool> samplerShouldStop`, `static std::condition_variable samplerCv`, and `static std::mutex samplerCvMutex` to `MQuickJsRuntime`
-- [ ] 2.2 Start idle sampler thread at end of `MQuickJsRuntime::Initialize()`: loop waits on `samplerCv` for up to `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` ms; on natural timeout calls `ForceSnapshot()`; on early wakeup (tickled by activity) resets the timer without taking a snapshot
+- [ ] 2.2 Start idle sampler thread at end of `MQuickJsRuntime::Initialize()`: loop checks `samplerShouldStop` and exits if set; otherwise waits on `samplerCv` for up to `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` ms; on natural timeout calls `ForceSnapshot()`; on early wakeup (tickled by activity or shutdown) resets the timer without taking a snapshot, then re-checks `samplerShouldStop`
 - [ ] 2.3 In `MQuickJsRuntime::Shutdown()`, set `samplerShouldStop = true`, call `TickleSampler()` to wake the thread immediately, then join `periodicSamplerThread` before `JS_FreeContext`
 - [ ] 2.4 Record `sbmd.js.heap.arena_bytes` gauge once at end of `MQuickJsRuntime::Initialize()` after context is created
 
