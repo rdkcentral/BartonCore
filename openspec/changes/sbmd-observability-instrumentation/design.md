@@ -36,7 +36,7 @@ Metric handles (histograms, gauges, counters) are private static members of the 
 
 **Cross-module recording:** Two cases require cross-module calls:
 - `sbmd.handler.outcome{outcome="error"}` is detected in `SpecBasedMatterDeviceDriver` after `InvokeHandler` returns, but the handle lives in `SbmdHandlerInvoker`. `SbmdHandlerInvoker` exposes `static void RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)`.
-- `sbmd.js.mutex.wait_ms` is measured at every mutex acquisition site in `SpecBasedMatterDeviceDriver` — `HandleResourceOp`, the attribute/event handler paths, and the deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`). `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(JSContext *ctx)` (requires caller to hold the JS mutex).
+- `sbmd.js.mutex.wait_ms` is measured at every mutex acquisition site in `SpecBasedMatterDeviceDriver` — `HandleResourceOp`, the attribute/event handler paths, and the deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`). `sbmd.js.heap.*` pool health metrics are recorded from `SbmdHandlerInvoker::InvokeHandler`, and `sbmd.js.exception` is recorded from `SbmdLoader` and `SbmdBundleLoader`. All three sets of handles live in `MQuickJsRuntime`, which exposes `static void RecordMutexWait(double ms)`, `static void RecordJsException(const char *phase, const char *driver)`, and `static void RecordHeapSnapshot(const JSMemoryUsage &usage)` (requires caller to hold the JS mutex).
 
 **Why not create instruments inline at each call site?** Instrument creation has overhead and the observability spec requires a handle to persist for the lifetime of measurements. Handles are created once in `InitializeMetrics()` and persist until `ShutdownMetrics()`.
 
@@ -70,7 +70,7 @@ All existing callers compile unchanged (null default). **Two distinct calling pa
 
 Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths:
 
-**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes` gauges) using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
+**In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes` gauges) using the `JSMemoryUsage` struct already captured by the post-`JS_Call` `JS_GetMemoryUsage` call — no additional JS engine call is needed. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
 **Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
 
@@ -79,7 +79,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 - In-activity-only: misses the idle baseline, which reveals slow leaks and steady-state overhead between bursts.
 - Hybrid: busy systems capture pool health on every invocation and the background thread rarely fires; idle systems rely on the background timer for baseline captures. The tickle mechanism prevents the background thread from taking a redundant snapshot right after a burst of activity.
 
-**`MQuickJsRuntime::RecordHeapSnapshot(JSContext *ctx)`** records the current `JS_GetMemoryUsage` output to the pool health instruments. Requires the caller to hold the JS mutex. Called from `InvokeHandler`.
+**`MQuickJsRuntime::RecordHeapSnapshot(const JSMemoryUsage &usage)`** records the provided `JSMemoryUsage` data to the pool health instruments. Requires the caller to hold the JS mutex. Called from `InvokeHandler` with the `usage_after` struct already captured around `JS_Call`; called from `ForceSnapshot()` with a freshly read struct.
 
 **`MQuickJsRuntime::ForceSnapshot()`** is a public synchronous function that acquires the JS mutex, calls `RecordHeapSnapshot`, releases the mutex, and calls `TickleSampler()`. Used in unit tests and available for on-demand telemetry. Any snapshot from any path resets the idle timer.
 
@@ -90,7 +90,7 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_Call                                    loop:
   → JS_GetMemoryUsage                            if samplerShouldStop: exit
   → record sbmd.handler.*                        deadline = now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS)
-  → RecordHeapSnapshot(ctx) ← pool health        seq = tickleSeq
+  → RecordHeapSnapshot(usage_after) ← pool health  seq = tickleSeq
   → TickleSampler()  ← increments tickleSeq      cv.wait_until(deadline)
                                                if timed_out: ForceSnapshot()
                                                //   real tickle (tickleSeq != seq):
@@ -142,7 +142,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 core/deviceDrivers/matter/sbmd/
 │
 ├── mquickjs/
-│   ├── MQuickJsRuntime.cpp                  ← heap metrics, ForceSnapshot(), RecordHeapSnapshot(),
+│   ├── MQuickJsRuntime.cpp                  ← heap metrics, ForceSnapshot(), RecordHeapSnapshot(JSMemoryUsage&),
 │   │                                        RecordMutexWait(), RecordJsException(), TickleSampler();
 │   │                                        in-activity + idle sampling
 │   └── SbmdHandlerInvoker.cpp               ← invocation/outcome metrics, RecordOutcomeError();
