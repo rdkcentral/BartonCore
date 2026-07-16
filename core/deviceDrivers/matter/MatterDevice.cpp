@@ -405,7 +405,12 @@ bool MatterDevice::SendCommandFromTlv(std::forward_list<std::promise<bool>> &pro
     }
 
     bool isTimedRequest = timedInvokeTimeoutMs.has_value();
-    auto commandSender = std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest);
+
+    // Allow large (TCP) payloads when the session supports them so large commands do not fail
+    // to serialize against the MRP/UDP single-message limit.
+    bool allowLargePayload = sessionHandle->AllowsLargePayload();
+    auto commandSender =
+        std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest, false, allowLargePayload);
 
     if (!commandSender)
     {
@@ -531,7 +536,13 @@ bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
     }
 
     bool isTimedRequest = timedInvokeTimeoutMs.has_value();
-    auto commandSender = std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest);
+
+    // Allow large (TCP) payloads when the session supports them. Without this the CommandSender
+    // caps its buffer at the MRP/UDP single-message limit (~1280 bytes), which makes large
+    // commands such as a WebRTC ProvideOffer SDP fail to serialize.
+    bool allowLargePayload = sessionHandle->AllowsLargePayload();
+    auto commandSender =
+        std::make_unique<chip::app::CommandSender>(this, &exchangeMgr, isTimedRequest, false, allowLargePayload);
 
     if (!commandSender)
     {
@@ -564,6 +575,10 @@ bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
 
     if (err != CHIP_NO_ERROR)
     {
+        icError("Failed to enter TLV container for deferred command cluster 0x%x cmd 0x%x: %s",
+                clusterId,
+                commandId,
+                err.AsString());
         return false;
     }
 
@@ -573,12 +588,22 @@ bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
 
         if (err != CHIP_NO_ERROR)
         {
+            // A buffer-too-small/no-memory error here typically means the payload exceeds what the
+            // session's transport allows (e.g. a large SDP over an MRP/UDP session that is not
+            // large-payload capable). Establishing the session with a large-payload (TCP) transport
+            // resolves it.
+            icError("Failed to copy TLV element for deferred command cluster 0x%x cmd 0x%x "
+                    "(payload may exceed the session's transport limit): %s",
+                    clusterId,
+                    commandId,
+                    err.AsString());
             return false;
         }
     }
 
     if (err != CHIP_END_OF_TLV)
     {
+        icError("Malformed TLV for deferred command cluster 0x%x cmd 0x%x: %s", clusterId, commandId, err.AsString());
         return false;
     }
 
@@ -589,6 +614,13 @@ bool MatterDevice::SendCommandWithCallbacks(chip::ClusterId clusterId,
 
     if (err != CHIP_NO_ERROR)
     {
+        // As with CopyElement above, this commonly indicates the payload exceeds the session's
+        // transport limit; a large-payload (TCP) session is required for oversized commands.
+        icError("Failed to finish deferred command cluster 0x%x cmd 0x%x "
+                "(payload may exceed the session's transport limit): %s",
+                clusterId,
+                commandId,
+                err.AsString());
         return false;
     }
 

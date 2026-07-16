@@ -190,7 +190,11 @@ namespace barton
          * @return true When all work has successfully completed
          * @return false
          */
-        bool ConnectAndExecute(const std::string &deviceId, connect_work_cb &&work, uint16_t timeoutSeconds);
+        bool ConnectAndExecute(const std::string &deviceId,
+                               connect_work_cb &&work,
+                               uint16_t timeoutSeconds,
+                               chip::TransportPayloadCapability transportPayloadCapability =
+                                   chip::TransportPayloadCapability::kLargePayloadWithMRPFallback);
 
         /**
          * @brief Used by ConnectAndExecute to abort a connection attempt. This guarantees
