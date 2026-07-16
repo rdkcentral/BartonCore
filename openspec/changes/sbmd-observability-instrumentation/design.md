@@ -25,7 +25,7 @@ This design covers how to wire the observability API into the SBMD runtime witho
 
 ### Decision 1: Distributed metric ownership
 
-Metric handles (histograms, gauges, counters) are private static members of the module that records them. Each module provides `static void InitializeMetrics()` and `ShutdownMetrics()` functions. `SbmdFactory::RegisterDriversFromDirectory` calls all four `InitializeMetrics()` functions after `MQuickJsRuntime::Initialize()` succeeds.
+Metric handles (histograms, gauges, counters) are private static members of the module that records them. Each module provides `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. `SbmdFactory::RegisterDriversFromDirectory` calls all four `InitializeMetrics()` functions after `MQuickJsRuntime::Initialize()` succeeds.
 
 | Module | Metric handles owned |
 |---|---|
@@ -72,7 +72,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 
 **In-activity path:** At the end of every `InvokeHandler` call, while the JS mutex is already held by the caller, `MQuickJsRuntime::RecordHeapSnapshot(ctx)` updates the pool health metrics (`sbmd.js.heap.used_bytes` histogram and `free_bytes`/`peak_bytes` gauges) using the same `JS_GetMemoryUsage` data already captured for the heap delta histogram. `InvokeHandler` then calls `MQuickJsRuntime::TickleSampler()` to notify the idle thread to reset its timer.
 
-**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_for` returns before the timeout, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: continue waiting without resetting the timer or taking a snapshot. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
+**Idle background path:** A `std::thread` in `MQuickJsRuntime` waits on a condition variable with a `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` timeout (set via `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` CMake option). At the top of each loop iteration it checks `samplerShouldStop` and exits if set. It calls `ForceSnapshot()` only when the wait times out naturally — meaning no `InvokeHandler` activity has occurred for the full idle period. When `wait_until` returns before the deadline, it compares the current `tickleSeq` to the value recorded at the start of the wait. If they differ, a real tickle occurred: reset the timer and re-check `samplerShouldStop` without taking a snapshot. If they are equal, the wakeup was spurious: call `wait_until` again with the same absolute deadline (not a fresh `wait_for`) so that only the remaining time is consumed, not a full new period. This ensures spurious wakeups cannot indefinitely delay an idle-period snapshot.
 
 **Why two paths rather than either alone?**
 - Periodic-only: on low-traffic systems (e.g., 20% active, 80% idle), most captures reflect idle-state heap; behavior during activity is sampled at most once per interval.
@@ -89,9 +89,10 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_Call                                    loop:
   → JS_GetMemoryUsage                            if samplerShouldStop: exit
-  → record sbmd.handler.*                        seq = tickleSeq
-  → RecordHeapSnapshot(ctx) ← pool health        cv.wait_for(SAMPLE_PERIOD_MS)
-  → TickleSampler()  ← increments tickleSeq      if timed_out: ForceSnapshot()
+  → record sbmd.handler.*                        deadline = now() + SAMPLE_PERIOD_MS
+  → RecordHeapSnapshot(ctx) ← pool health        seq = tickleSeq
+  → TickleSampler()  ← increments tickleSeq      cv.wait_until(deadline)
+                                               if timed_out: ForceSnapshot()
                                                //   real tickle (tickleSeq != seq):
                                                //     no snapshot, reset timer
                                                //   spurious (tickleSeq == seq):
