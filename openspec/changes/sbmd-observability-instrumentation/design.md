@@ -118,6 +118,8 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 | `"reason"` | `"file_read"` / `"eval_failed"` / `"activation_failed"` | driver load failure counter |
 | `"phase"` | `"init"` / `"loading"` | JS exception event counter |
 
+**Note on `"driver"` for `sbmd.js.exception`:** The attribute is omitted entirely for `"init"`-phase exceptions (no driver context); it is set to the filename stem for `"loading"`-phase exceptions. Empty string and placeholder values are not used.
+
 **Note on `"op_type"` for deferred invocations:** All `InvokeHandler` calls in a deferred chain — initial invocation and all callbacks — carry the same `opCtx->opType` from `pending.operationCtx`, which holds the originating operation type (e.g., `"write"` or `"execute"`). There are no `"deferred_response"` or `"deferred_error"` op type values; the originating type is used throughout, making it straightforward to aggregate total handler cost for a given operation type without joining separate deferred buckets.
 
 `deviceId` is explicitly deferred (see Non-Goals). The team consensus: include it in a follow-on when attribute indexing strategy for the backend is clearer.

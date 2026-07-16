@@ -119,7 +119,7 @@ The SBMD runtime SHALL count driver load failures using a counter named `sbmd.dr
 - **THEN** `sbmd.driver.load.failure` counter for `reason="activation_failed"` increments for that driver
 
 ### Requirement: JS exception event tracking
-The SBMD runtime SHALL count JS exception events during lifecycle phases using a counter named `sbmd.js.exception` with attributes `"driver"` (if known) and `"phase"`. Valid phase values are: `"init"` (exception during runtime/polyfill initialization) and `"loading"` (exception during driver script evaluation). Handler-phase exceptions are captured by `sbmd.handler.outcome{outcome="exception"}` and are not recorded here.
+The SBMD runtime SHALL count JS exception events during lifecycle phases using a counter named `sbmd.js.exception` with attributes `"driver"` and `"phase"`. The `"driver"` attribute SHALL be set to the driver's filename stem when known (loading phase) and SHALL be omitted entirely when not known (init phase); implementations MUST NOT record an empty string or placeholder value. Valid phase values are: `"init"` (exception during runtime/polyfill initialization) and `"loading"` (exception during driver script evaluation). Handler-phase exceptions are captured by `sbmd.handler.outcome{outcome="exception"}` and are not recorded here.
 
 #### Scenario: Loading phase exception counted
 - **WHEN** a driver's `.sbmd.js` evaluation throws a JS exception
