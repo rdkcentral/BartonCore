@@ -911,7 +911,10 @@ void MatterDeviceDriver::AbortDeviceConnectionAttempt(chip::Callback::Callback<O
     });
 }
 
-bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_work_cb &&work, uint16_t timeoutSeconds)
+bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId,
+                                           connect_work_cb &&work,
+                                           uint16_t timeoutSeconds,
+                                           chip::TransportPayloadCapability transportPayloadCapability)
 {
     icDebug();
 
@@ -948,19 +951,33 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     chip::Callback::Callback<OnDeviceConnected> successCb(OnMatterDeviceConnectionSuccess,
                                                           static_cast<void *>(&workWrapper));
 
-    // SDK event size limitations prevent directly capturing too many objects.
+    // SDK event size limitations (LambdaBridge caps captures at 24 bytes) prevent directly
+    // capturing too many objects. Bundle everything the scheduled task needs into a single
+    // local context and capture just a pointer to it. The context outlives the async task
+    // because this function blocks on connectFuture until the work completes or times out.
     // connectPromise is directly pointed at in failCb.mContext, so it is indirectly
     // captured via failCb.
+    struct ConnectScheduleContext
+    {
+        chip::NodeId nodeId;
+        chip::Callback::Callback<OnDeviceConnected> *successCb;
+        chip::Callback::Callback<OnDeviceConnectionFailure> *failCb;
+        chip::TransportPayloadCapability transportPayloadCapability;
+    };
 
-    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&deviceId, &successCb, &failCb]() {
-        auto nodeId = Subsystem::Matter::UuidToNodeId(deviceId);
+    ConnectScheduleContext scheduleContext {
+        Subsystem::Matter::UuidToNodeId(deviceId), &successCb, &failCb, transportPayloadCapability};
 
+    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&scheduleContext]() {
         CHIP_ERROR getConnectedErr =
-            Matter::GetInstance().GetCommissioner()->GetConnectedDevice(nodeId, &successCb, &failCb);
+            Matter::GetInstance().GetCommissioner()->GetConnectedDevice(scheduleContext.nodeId,
+                                                                        scheduleContext.successCb,
+                                                                        scheduleContext.failCb,
+                                                                        scheduleContext.transportPayloadCapability);
         if (getConnectedErr != CHIP_NO_ERROR)
         {
             icError("Failed to start device connection: %s", getConnectedErr.AsString());
-            static_cast<std::promise<bool> *>(failCb.mContext)->set_value(false);
+            static_cast<std::promise<bool> *>(scheduleContext.failCb->mContext)->set_value(false);
         }
     });
 
