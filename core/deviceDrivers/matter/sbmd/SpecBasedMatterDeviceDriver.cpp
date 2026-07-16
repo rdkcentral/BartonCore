@@ -36,6 +36,7 @@
 #include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 #endif
 
+#include <algorithm>
 #include <app/ConcreteAttributePath.h>
 #include <cinttypes>
 #include <lib/core/TLVReader.h>
@@ -545,6 +546,11 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         {
             bitmask |= RESOURCE_MODE_SENSITIVE;
         }
+        else if (mode == "volatile")
+        {
+            // Caching policy (CACHING_POLICY_NEVER) is applied separately in
+            // DoRegisterDriverResources; this mode contributes no access bit.
+        }
         else
         {
             icError("Unsupported resource mode: %s", mode.c_str());
@@ -641,8 +647,12 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
             // Resources without explicit read handlers are updated via attribute subscriptions,
             // so use CACHING_POLICY_ALWAYS to return the DB-cached value on read.
             // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
+            // The 'volatile' mode also forces CACHING_POLICY_NEVER so updateResource emits an event on
+            // every call (no value-change suppression), which event-only signaling resources rely on.
+            bool isVolatile =
+                std::find(resource.modes.begin(), resource.modes.end(), "volatile") != resource.modes.end();
             ResourceCachingPolicy cachingPolicy =
-                resource.read.has_value() ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
+                (resource.read.has_value() || isVolatile) ? CACHING_POLICY_NEVER : CACHING_POLICY_ALWAYS;
 
             // Seed initial value if there's a seed handler
             const char *initialValue = nullptr;

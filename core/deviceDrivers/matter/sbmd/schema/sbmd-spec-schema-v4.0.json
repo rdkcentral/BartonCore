@@ -253,9 +253,9 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive"]
+            "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive", "volatile"]
           },
-          "description": "Access modes controlling resource behavior."
+          "description": "Access modes controlling resource behavior. 'volatile' disables value caching (CACHING_POLICY_NEVER) so updateResource emits an event on every call, even when the value is unchanged."
         },
         "prerequisites": {
           "type": "array",
