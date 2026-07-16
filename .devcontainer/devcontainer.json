@@ -11,6 +11,17 @@
     ],
     "service": "barton",
 
+    // Forward the camera reference app's HTTP media server (`cs`). The app connects to the
+    // camera over WebRTC in-container (direct UDP, no TURN) and serves the video as fragmented
+    // MP4 over this port; it opens in VS Code's embedded Simple Browser (an editor tab).
+    "forwardPorts": [8088],
+    "portsAttributes": {
+        "8088": {
+            "label": "Camera stream",
+            "onAutoForward": "openPreview"
+        }
+    },
+
     // keep the local path of our tree the same within the container
     "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
     "workspaceFolder": "${localWorkspaceFolder}",
@@ -41,6 +52,22 @@
         "GIT_PS1_SHOWSTASHSTATE": "1",
         "GIT_PS1_SHOWCOLORHINTS": "true",
         "PROMPT_COMMAND": "${localEnv:PROMPT_COMMAND}",
+
+        // X11 display. Dev Containers already bridges the developer's display to the
+        // container's :0 socket (it sets REMOTE_CONTAINERS_DISPLAY_SOCK=/tmp/.X11-unix/X0
+        // but does not export DISPLAY). Setting it here lets GUI/GStreamer apps — e.g. the
+        // camera reference app's autovideosink — render straight to the developer's screen
+        // with no VNC bridge or URL. Harmless when no host X server is present: GUI apps
+        // simply fail to open the display, and non-GUI processes ignore it.
+        "DISPLAY": ":0",
+
+        // Force GStreamer's autovideosink to choose the software ximagesink here. The
+        // forwarded X display (:0 above) only supports basic X drawing, not OpenGL/Xv, so
+        // GPU sinks like glimagesink fail over the tunnel. This is a limitation of the
+        // VS Code remote devcontainer environment, NOT of reference-app environments in
+        // general — real reference devices have a local GPU and should let autovideosink
+        // pick a hardware sink — so the constraint lives here rather than in the app.
+        "GST_PLUGIN_FEATURE_RANK": "ximagesink:MAX",
 
         // see `docker/setupDockerEnv.sh` for more details on these custom PATHs
         // NOTE: do not add a custom PATH here without first defining it in setupDockerEnv.sh
