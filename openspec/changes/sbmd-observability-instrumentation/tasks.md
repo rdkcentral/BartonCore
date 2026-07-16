@@ -1,7 +1,7 @@
 ## 1. Startup and shutdown wiring
 
 - [ ] 1.1 Add CMake option `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` (default 30000, compiled definition `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) to `config/cmake/options.cmake`
-- [ ] 1.2 In `SbmdFactory::RegisterDriversFromDirectory`, call `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so the `sbmd.js.exception` handle is live for init-phase exceptions; after `MQuickJsRuntime::Initialize()` succeeds, call `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (these functions are added in tasks 2.0, 3.0, 4.0, and 5.0 respectively)
+- [ ] 1.2 In `SbmdFactory::RegisterDriversFromDirectory`, call `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so the `sbmd.js.exception` handle is live for init-phase exceptions; after `MQuickJsRuntime::Initialize()` succeeds, call `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (these functions are added in tasks 3.0, 4.0, and 5.0 respectively)
 - [ ] 1.3 Wire the corresponding `ShutdownMetrics()` calls into the subsystem shutdown path that already calls `MQuickJsRuntime::Shutdown()`; identify the correct call site during implementation
 
 ## 2. MQuickJsRuntime — hybrid heap sampler

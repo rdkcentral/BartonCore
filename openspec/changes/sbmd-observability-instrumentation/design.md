@@ -91,7 +91,7 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_GetMemoryUsage                            if samplerShouldStop: exit
   → record sbmd.handler.*                        deadline = now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS)
   → RecordHeapSnapshot(usage_after) ← pool health  seq = tickleSeq
-  → TickleSampler()  ← increments tickleSeq      cv.wait_until(deadline)
+  → TickleSampler()  ← increments tickleSeq      cv.wait_until(lock, deadline)
                                                if timed_out: ForceSnapshot()
                                                //   real tickle (tickleSeq != seq):
                                                //     no snapshot, reset timer
@@ -142,7 +142,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 core/deviceDrivers/matter/sbmd/
 │
 ├── mquickjs/
-│   ├── MQuickJsRuntime.cpp                  ← heap metrics, ForceSnapshot(), RecordHeapSnapshot(JSMemoryUsage&),
+│   ├── MQuickJsRuntime.cpp                  ← heap metrics, ForceSnapshot(), RecordHeapSnapshot(const JSMemoryUsage &),
 │   │                                        RecordMutexWait(), RecordJsException(), TickleSampler();
 │   │                                        in-activity + idle sampling
 │   └── SbmdHandlerInvoker.cpp               ← invocation/outcome metrics, RecordOutcomeError();
