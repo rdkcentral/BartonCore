@@ -5,7 +5,7 @@ The SBMD runtime SHALL record mquickjs heap pool utilization as a histogram name
 
 #### Scenario: Heap utilization captured during handler invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler`
-- **THEN** `sbmd.js.heap.used_bytes` histogram gains one observation attributed to that invocation
+- **THEN** `sbmd.js.heap.used_bytes` histogram gains one observation of the current heap utilization
 
 #### Scenario: Heap utilization captured during idle period
 - **WHEN** no handler invocations have occurred for `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` milliseconds
@@ -79,7 +79,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 - **THEN** `sbmd.handler.outcome` counter for `outcome="error"` increments by one
 
 ### Requirement: JS mutex wait time tracking
-The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point a call to `lock_guard<mutex>(MQuickJsRuntime::GetMutex())` begins until the mutex is acquired, in all code paths that acquire the mutex for handler invocation.
+The SBMD runtime SHALL record the time a request spends waiting to acquire the JS runtime mutex as a histogram named `sbmd.js.mutex.wait_ms`. This SHALL be measured from the point a call to `std::lock_guard<std::mutex>(MQuickJsRuntime::GetMutex())` begins until the mutex is acquired, in all code paths that acquire the mutex for handler invocation.
 
 #### Scenario: Mutex wait recorded on contention
 - **WHEN** two threads attempt to invoke SBMD handlers concurrently

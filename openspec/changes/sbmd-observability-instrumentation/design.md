@@ -99,7 +99,7 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
                                                //     no snapshot, keep waiting
 ```
 
-**Thread startup/shutdown:** The thread is started at the end of `MQuickJsRuntime::Initialize()`. In `Shutdown()`, `samplerShouldStop` is set to `true` and `TickleSampler()` is called to wake the thread immediately before joining.
+**Thread startup/shutdown:** The thread is started at the end of `MQuickJsRuntime::Initialize()`. In `Shutdown()`, `samplerShouldStop` is set to `true` and `TickleSampler()` is called to wake the thread immediately, then `periodicSamplerThread` is joined — guarded with `joinable()` to avoid `std::terminate` if `Initialize()` failed before the thread was started.
 
 ### Decision 4: `PendingOperation` extended with `OperationContext`
 
