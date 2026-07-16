@@ -34,6 +34,9 @@ set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/matter-install" CACHE PATH "Path to M
 
 set(BCORE_GEN_GIR ON CACHE BOOL "Gir generation")
 
+# Build the reference app's camera stream command (GStreamer WebRTC) in the dev platform.
+set(BCORE_REFERENCE_CAMERA_SUPPORT ON CACHE BOOL "Enable reference app camera support")
+
 # Matter settings
 include(${CMAKE_SOURCE_DIR}/config/cmake/modules/BCoreMatterHelper.cmake)
 

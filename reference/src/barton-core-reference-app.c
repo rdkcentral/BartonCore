@@ -33,6 +33,9 @@
 #include "eventHandler.h"
 #include "matterCategory.h"
 #include "threadCategory.h"
+#ifdef BCORE_REFERENCE_CAMERA_SUPPORT
+#include "cameraCategory.h"
+#endif
 #include "provider/barton-core-property-provider.h"
 #include "reference-network-credentials-provider.h"
 #include <icLog/logging.h>
@@ -79,6 +82,9 @@ static void buildCategories()
     categories = g_list_append(categories, buildCoreCategory());
     categories = g_list_append(categories, buildMatterCategory());
     categories = g_list_append(categories, buildThreadCategory());
+#ifdef BCORE_REFERENCE_CAMERA_SUPPORT
+    categories = g_list_append(categories, buildCameraCategory());
+#endif
 }
 
 static void destroyCategories()

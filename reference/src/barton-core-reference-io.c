@@ -65,6 +65,16 @@ typedef struct ioAsyncContext
     const GMainLoop *mainLoop;
     bool showingPrompt;  // Used for state when not using linenoise
     GTimer *promptTimer; // Used for state when not using linenoise
+
+    // The log/command output pipe is drained by a dedicated thread running its own
+    // GMainContext/GMainLoop so output keeps draining even while the main loop is blocked
+    // inside a synchronous command.  termLock serializes every terminal write and all
+    // linenoise state shared between the main thread and the drain thread.
+    GMainContext *logContext;
+    GMainLoop *logLoop;
+    GThread *logThread;
+    GMutex termLock;
+    bool editActive; // true while linenoise is actively editing at the prompt
 } ioAsyncContext;
 
 static void ioShutdown(void)
@@ -122,18 +132,39 @@ static void outputLineReady(GObject *inputStream, GAsyncResult *res, ioAsyncCont
     g_autofree gchar *line = g_data_input_stream_read_line_finish_utf8(dataInputStream, res, &size, &error);
     if (line != NULL)
     {
-        // Got some output so to print so take care of sending it out to the terminal while also manipulating the prompt
-        // so as to not interfere
+        // Got some output to print so take care of sending it out to the terminal while also manipulating the prompt
+        // so as to not interfere.  This runs on the logging-drain thread, so termLock serializes terminal access with
+        // the main thread's linenoise editing.
+        g_mutex_lock(&data->termLock);
 
         if (data->useLinenoise)
         {
-            linenoiseHide(&data->ls);
-        }
+            // Clear the prompt line before printing so log output never lands on top of it.  Only do this
+            // when the main thread is actually editing at the prompt; while a synchronous command is running
+            // linenoise editing has been stopped (terminal is in cooked mode) and we just print the line.
+            if (data->editActive)
+            {
+                linenoiseHide(&data->ls);
+            }
 
-        if (data->useLinenoise)
-        {
             printf("%s\n", line);
-            linenoiseShow(&data->ls);
+
+            // Redrawing the prompt after every single line makes a fast burst of log output unreadable -- the
+            // "barton-core> " prompt flashes between every line.  Only redraw it when there is typed input to
+            // preserve, or when the output has gone quiet (no more lines waiting to be drained), so a quiescent
+            // prompt still reappears once the logs stop.
+            if (data->editActive)
+            {
+                GInputStream *baseInputStream =
+                    g_filter_input_stream_get_base_stream(G_FILTER_INPUT_STREAM(dataInputStream));
+                gboolean moreOutputWaiting =
+                    g_pollable_input_stream_is_readable(G_POLLABLE_INPUT_STREAM(baseInputStream));
+
+                if (data->ls.len > 0 || !moreOutputWaiting)
+                {
+                    linenoiseShow(&data->ls);
+                }
+            }
         }
         else
         {
@@ -155,10 +186,18 @@ static void outputLineReady(GObject *inputStream, GAsyncResult *res, ioAsyncCont
                 g_timer_start(data->promptTimer);
             }
         }
+
+        // The reemitted log lines must be flushed explicitly. When stdout is not an interactive TTY
+        // (redirected to a file or pipe) it is fully buffered, so without this flush log output is
+        // delayed or lost until the buffer fills.
+        fflush(stdout);
+
+        g_mutex_unlock(&data->termLock);
+
         g_data_input_stream_read_line_async(
             dataInputStream, G_PRIORITY_DEFAULT, NULL, (GAsyncReadyCallback) outputLineReady, data);
     }
-    else
+    else if (error != NULL)
     {
         fprintf(stderr, "Error reading line: %s", error->message);
     }
@@ -171,11 +210,20 @@ static gboolean linenoiseInputReady(GObject *pollableStream, ioAsyncContext *dat
     // Sanity check to ensure there is actually something to read
     if (g_pollable_input_stream_is_readable(G_POLLABLE_INPUT_STREAM(pollableStream)))
     {
-        // Check if we have a full line or if we are still waiting for more input
+        // Check if we have a full line or if we are still waiting for more input.  linenoiseEditFeed echoes input
+        // to the terminal, so it is serialized with the logging-drain thread via termLock.
+        g_mutex_lock(&data->termLock);
         char *line = linenoiseEditFeed(&data->ls);
+        g_mutex_unlock(&data->termLock);
+
         if (line != linenoiseEditMore)
         {
+            g_mutex_lock(&data->termLock);
             linenoiseEditStop(&data->ls);
+            // Editing has stopped while we dispatch the command, so the drain thread must not touch the prompt.
+            data->editActive = false;
+            g_mutex_unlock(&data->termLock);
+
             if (line == NULL)
             {
                 // Ctrl-C/Ctrl-D
@@ -187,6 +235,8 @@ static gboolean linenoiseInputReady(GObject *pollableStream, ioAsyncContext *dat
                 // new line ensures the prompt is at the left margin.
                 emitOutput("\n");
             }
+            // The command callback is intentionally invoked WITHOUT termLock held: it may block for a long time and
+            // its output flows back through the pipe, which the drain thread must be free to print.
             if (!data->callback(line, data->userData))
             {
                 // If the callback returns false it means we are done and should exit
@@ -194,7 +244,10 @@ static gboolean linenoiseInputReady(GObject *pollableStream, ioAsyncContext *dat
             }
             if (retVal != G_SOURCE_REMOVE)
             {
+                g_mutex_lock(&data->termLock);
                 linenoiseStartRead(data);
+                data->editActive = true;
+                g_mutex_unlock(&data->termLock);
             }
             else
             {
@@ -255,6 +308,7 @@ static void inputReady(GObject *inputStream, GAsyncResult *res, ioAsyncContext *
 
 static gboolean checkDisplayPrompt(ioAsyncContext *data)
 {
+    g_mutex_lock(&data->termLock);
     if (!data->showingPrompt && g_timer_elapsed(data->promptTimer, NULL) > .5)
     {
         printf(PROMPT "%s", data->buf);
@@ -262,6 +316,7 @@ static gboolean checkDisplayPrompt(ioAsyncContext *data)
         g_timer_stop(data->promptTimer);
         data->showingPrompt = true;
     }
+    g_mutex_unlock(&data->termLock);
     return G_SOURCE_CONTINUE;
 }
 
@@ -273,7 +328,45 @@ static void destroyAsyncContext(ioAsyncContext *data)
         {
             g_timer_destroy(data->promptTimer);
         }
+        if (data->logLoop != NULL)
+        {
+            g_main_loop_unref(data->logLoop);
+        }
+        if (data->logContext != NULL)
+        {
+            g_main_context_unref(data->logContext);
+        }
+        g_mutex_clear(&data->termLock);
     }
+}
+
+// Entry point for the dedicated logging-drain thread.  It runs its own GMainContext/GMainLoop so the output pipe keeps
+// being drained no matter what the main thread is doing, which prevents logging threads from stalling on a full pipe
+// while a synchronous command blocks the main loop.
+static gpointer loggingThreadFunc(gpointer userData)
+{
+    ioAsyncContext *data = (ioAsyncContext *) userData;
+
+    g_main_context_push_thread_default(data->logContext);
+
+    mutexLock(&mtx);
+    int localOutputReceivePipe = outputReceivePipe;
+    mutexUnlock(&mtx);
+
+    // Created on this thread (with logContext thread-default) so the read source and every re-armed read attach to the
+    // logging context rather than the main one.
+    g_autoptr(GDataInputStream) outputStream =
+        g_data_input_stream_new(g_unix_input_stream_new(localOutputReceivePipe, FALSE));
+    g_data_input_stream_read_line_async(
+        outputStream, G_PRIORITY_DEFAULT, NULL, (GAsyncReadyCallback) outputLineReady, data);
+
+    g_main_loop_run(data->logLoop);
+
+    g_main_context_pop_thread_default(data->logContext);
+
+    g_atomic_rc_box_release_full(data, (GDestroyNotify) destroyAsyncContext);
+
+    return NULL;
 }
 
 void barton_core_reference_io_process(bool useLinenoise, processLineCallback callback, void *userData)
@@ -290,21 +383,20 @@ void barton_core_reference_io_process(bool useLinenoise, processLineCallback cal
     asyncContext->callback = callback;
     asyncContext->userData = userData;
     asyncContext->mainLoop = loop;
-    mutexLock(&mtx);
-    int localOutputReceivePipe = outputReceivePipe;
-    mutexUnlock(&mtx);
+    g_mutex_init(&asyncContext->termLock);
 
-    // Setup reading from the output fd
-    g_autoptr(GDataInputStream) outputStream =
-        g_data_input_stream_new(g_unix_input_stream_new(localOutputReceivePipe, FALSE));
-    g_data_input_stream_read_line_async(
-        outputStream, G_PRIORITY_DEFAULT, NULL, (GAsyncReadyCallback) outputLineReady, asyncContext);
+    // The log/command output pipe is drained on its own GMainContext/GMainLoop, run by a dedicated thread (started
+    // below).  Because that loop is scheduled independently of this (main) loop, output keeps draining even while the
+    // main loop is blocked inside a synchronous command, so logging threads never stall on a full pipe.
+    asyncContext->logContext = g_main_context_new();
+    asyncContext->logLoop = g_main_loop_new(asyncContext->logContext, FALSE);
 
     // Setup reading from stdin
     g_autoptr(GInputStream) inputStream = NULL;
     if (useLinenoise && linenoiseStartRead(asyncContext))
     {
         linenoiseStartRead(asyncContext);
+        asyncContext->editActive = true;
         inputStream = g_unix_input_stream_new(asyncContext->ls.ifd, FALSE);
         GSource *source = g_pollable_input_stream_create_source(G_POLLABLE_INPUT_STREAM(inputStream), NULL);
         g_source_set_name(source, "linenoise");
@@ -338,8 +430,16 @@ void barton_core_reference_io_process(bool useLinenoise, processLineCallback cal
         g_source_set_callback(source, (GSourceFunc) checkDisplayPrompt, asyncContext, NULL);
     }
 
+    // Start the dedicated logging-drain thread.  It takes its own reference on the shared context.
+    asyncContext->logThread = g_thread_new("logging-io", loggingThreadFunc, g_atomic_rc_box_acquire(asyncContext));
+
     // We will block until one of the async callbacks tells us to quit because the user chose to exit
     g_main_loop_run(loop);
+
+    // Stop the logging-drain loop and wait for its thread before tearing down shared state
+    g_main_loop_quit(asyncContext->logLoop);
+    g_thread_join(asyncContext->logThread);
+
     g_main_loop_unref(loop);
 
     g_atomic_rc_box_release_full(asyncContext, (GDestroyNotify) destroyAsyncContext);
@@ -353,6 +453,35 @@ static void emitToPipe(int fd, const gchar *str)
     }
 }
 
+// Prefix each non-empty line of an emitted message with a logger-style
+// "YYYY-MM-DD HH:MM:SS.mmm : " timestamp so emitted output interleaves consistently with the
+// structured log lines that share this pipe. Empty lines (e.g. a bare prompt-reset "\n") are
+// passed through unstamped. Caller owns the returned string.
+static gchar *emitApplyTimestamps(const gchar *msg)
+{
+    g_autoptr(GDateTime) now = g_date_time_new_now_local();
+    g_autofree gchar *base = g_date_time_format(now, "%Y-%m-%d %H:%M:%S");
+    g_autofree gchar *prefix = g_strdup_printf("%s.%03d : ", base, g_date_time_get_microsecond(now) / 1000);
+    g_auto(GStrv) lines = g_strsplit(msg, "\n", -1);
+    GString *out = g_string_new(NULL);
+
+    for (gsize i = 0; lines[i] != NULL; i++)
+    {
+        if (lines[i][0] != '\0')
+        {
+            g_string_append(out, prefix);
+            g_string_append(out, lines[i]);
+        }
+
+        if (lines[i + 1] != NULL)
+        {
+            g_string_append_c(out, '\n');
+        }
+    }
+
+    return g_string_free(out, FALSE);
+}
+
 void emitOutput(const char *format, ...)
 {
     va_list args;
@@ -362,8 +491,9 @@ void emitOutput(const char *format, ...)
     {
         // Could create another pipe pair and seperate logging and output.  This would be useful as it could give the
         // option of silencing the logging output.
+        g_autofree gchar *stamped = emitApplyTimestamps(str);
         int localSendPipe = getDebugLoggerFileDescriptor();
-        emitToPipe(localSendPipe, str);
+        emitToPipe(localSendPipe, stamped);
     }
     va_end(args);
 }
@@ -376,8 +506,9 @@ void emitError(const char *format, ...)
     if (str)
     {
         // Could create another pipe pair and have it go to stderr
+        g_autofree gchar *stamped = emitApplyTimestamps(str);
         int localSendPipe = getDebugLoggerFileDescriptor();
-        emitToPipe(localSendPipe, str);
+        emitToPipe(localSendPipe, stamped);
     }
     va_end(args);
 }
