@@ -302,113 +302,50 @@
 
     "attributeHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "attributeId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single attribute ID or '*' wildcard. Mutually exclusive with attributeIds."
-        },
-        "attributeIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple attribute IDs. Mutually exclusive with attributeId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "eventHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "eventId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single event ID or '*' wildcard. Mutually exclusive with eventIds."
-        },
-        "eventIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple event IDs. Mutually exclusive with eventId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     },
 
     "commandHandler": {
       "type": "object",
-      "required": ["handler"],
+      "required": ["handler", "aliases"],
       "additionalProperties": false,
       "properties": {
         "aliases": {
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "Alias names to match. Mutually exclusive with clusterId."
-        },
-        "clusterId": {
-          "type": "number",
-          "description": "Cluster to match. Mutually exclusive with aliases."
-        },
-        "commandId": {
-          "oneOf": [
-            { "type": "number" },
-            { "const": "*" }
-          ],
-          "description": "Single command ID or '*' wildcard. Mutually exclusive with commandIds."
-        },
-        "commandIds": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 1,
-          "description": "Multiple command IDs. Mutually exclusive with commandId."
+          "description": "Alias names to match."
         },
         "supplements": { "$ref": "#/$defs/supplements" },
         "handler": { "$ref": "#/$defs/functionRef" }
-      },
-      "oneOf": [
-        { "required": ["aliases"] },
-        { "required": ["clusterId"] }
-      ]
+      }
     }
   }
 }

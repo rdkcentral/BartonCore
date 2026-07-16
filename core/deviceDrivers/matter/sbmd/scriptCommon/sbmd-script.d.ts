@@ -180,32 +180,22 @@ interface SbmdResource {
 // =============================================================================
 
 interface SbmdAttributeHandler {
-    /** Alias names to match. Mutually exclusive with clusterId. */
-    aliases?: string[];
-    /** Cluster to match. Mutually exclusive with aliases. */
-    clusterId?: number;
-    /** Single attribute ID or "*" wildcard. */
-    attributeId?: number | "*";
-    /** Multiple attribute IDs. */
-    attributeIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
 
 interface SbmdEventHandler {
-    aliases?: string[];
-    clusterId?: number;
-    eventId?: number | "*";
-    eventIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
 
 interface SbmdCommandHandler {
-    aliases?: string[];
-    clusterId?: number;
-    commandId?: number | "*";
-    commandIds?: number[];
+    /** Alias names to match. */
+    aliases: string[];
     supplements?: SbmdSupplements;
     handler: SbmdHandlerFunction;
 }
