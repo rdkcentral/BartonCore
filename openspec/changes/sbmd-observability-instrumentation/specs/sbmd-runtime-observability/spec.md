@@ -169,7 +169,7 @@ The SBMD runtime SHALL count deferred operations terminated because they reached
 - **THEN** `sbmd.deferred.max_depth` counter increments for that driver
 
 ### Requirement: Subsystem metrics initialization
-Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL provide `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. All four `InitializeMetrics()` calls SHALL be made by `SbmdFactory::RegisterDriversFromDirectory` after `MQuickJsRuntime::Initialize()` succeeds. The corresponding `ShutdownMetrics()` calls SHALL be made in the subsystem shutdown path.
+Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL provide `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. `MQuickJsRuntime::InitializeMetrics()` SHALL be called by `SbmdFactory::RegisterDriversFromDirectory` before `MQuickJsRuntime::Initialize()`, so that the `sbmd.js.exception{phase="init"}` counter is live for exceptions that occur during initialization. The remaining three `InitializeMetrics()` calls (`SbmdHandlerInvoker`, `SbmdFactory`, `SpecBasedMatterDeviceDriver`) SHALL be made after `MQuickJsRuntime::Initialize()` succeeds. The corresponding `ShutdownMetrics()` calls SHALL be made in the subsystem shutdown path.
 
 #### Scenario: Metrics available after initialization
 - **WHEN** all four `InitializeMetrics()` calls complete

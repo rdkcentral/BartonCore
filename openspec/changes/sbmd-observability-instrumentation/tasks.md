@@ -1,7 +1,7 @@
 ## 1. Startup and shutdown wiring
 
 - [ ] 1.1 Add CMake option `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` (default 30000, compiled definition `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) to `config/cmake/options.cmake`
-- [ ] 1.2 In `SbmdFactory::RegisterDriversFromDirectory`, after `MQuickJsRuntime::Initialize()` succeeds, call `MQuickJsRuntime::InitializeMetrics()`, `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (these functions are added in tasks 2.0, 3.0, 4.0, and 5.0 respectively)
+- [ ] 1.2 In `SbmdFactory::RegisterDriversFromDirectory`, call `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so the `sbmd.js.exception` handle is live for init-phase exceptions; after `MQuickJsRuntime::Initialize()` succeeds, call `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (these functions are added in tasks 2.0, 3.0, 4.0, and 5.0 respectively)
 - [ ] 1.3 Wire the corresponding `ShutdownMetrics()` calls into the subsystem shutdown path that already calls `MQuickJsRuntime::Shutdown()`; identify the correct call site during implementation
 
 ## 2. MQuickJsRuntime — hybrid heap sampler
@@ -50,7 +50,7 @@
 
 ## 7. Unit tests — SbmdObservabilityTest.cpp
 
-- [ ] 7.1 Create `core/test/src/SbmdObservabilityTest.cpp` with `SetUpTestSuite` calling `MQuickJsRuntime::Initialize(512*1024)`, then all four `InitializeMetrics()` calls per task 1.2, then `SbmdBundleLoader::LoadBundle` and `SbmdLoader::InjectCaptureFunction`
+- [ ] 7.1 Create `core/test/src/SbmdObservabilityTest.cpp` with `SetUpTestSuite` calling `MQuickJsRuntime::InitializeMetrics()` first, then `MQuickJsRuntime::Initialize(512*1024)`, then `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (per task 1.2 ordering), then `SbmdBundleLoader::LoadBundle` and `SbmdLoader::InjectCaptureFunction`
 - [ ] 7.2 Write a minimal test driver JS string (inline, no file) and load it via `SbmdLoader::LoadDriver` for use across tests
 - [ ] 7.3 Test: `ForceSnapshot` produces pool health histogram observation — call `MQuickJsRuntime::ForceSnapshot()`, parse `observabilityDumpJson()`, assert `sbmd.js.heap.used_bytes` count >= 1
 - [ ] 7.4 Test: arena size gauge recorded at init — assert `sbmd.js.heap.arena_bytes` value equals 512*1024

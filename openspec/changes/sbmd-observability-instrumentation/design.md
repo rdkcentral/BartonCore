@@ -25,7 +25,7 @@ This design covers how to wire the observability API into the SBMD runtime witho
 
 ### Decision 1: Distributed metric ownership
 
-Metric handles (histograms, gauges, counters) are private static members of the module that records them. Each module provides `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. `SbmdFactory::RegisterDriversFromDirectory` calls all four `InitializeMetrics()` functions after `MQuickJsRuntime::Initialize()` succeeds.
+Metric handles (histograms, gauges, counters) are private static members of the module that records them. Each module provides `static void InitializeMetrics()` and `static void ShutdownMetrics()` functions. `SbmdFactory::RegisterDriversFromDirectory` calls `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so that the `sbmd.js.exception` counter is live for init-phase exceptions; the remaining three `InitializeMetrics()` calls are made after `MQuickJsRuntime::Initialize()` succeeds.
 
 | Module | Metric handles owned |
 |---|---|
@@ -124,7 +124,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 
 ### Decision 6: Testing strategy
 
-**Unit tests** (`core/test/src/SbmdObservabilityTest.cpp`): The existing SBMD GTest suite already uses a real mquickjs runtime (`MQuickJsRuntime::Initialize(512 * 1024)` in `SetUpTestSuite`). The new test file follows the same pattern, calling all four `InitializeMetrics()` functions in `SetUpTestSuite`. Tests invoke handlers via `SbmdHandlerInvoker::InvokeHandler`, then call `observabilityDumpJson()` and parse the JSON to assert:
+**Unit tests** (`core/test/src/SbmdObservabilityTest.cpp`): The existing SBMD GTest suite already uses a real mquickjs runtime (`MQuickJsRuntime::Initialize(512 * 1024)` in `SetUpTestSuite`). The new test file follows the same pattern, calling `MQuickJsRuntime::InitializeMetrics()` first (before `MQuickJsRuntime::Initialize()`), then the remaining three `InitializeMetrics()` calls after `Initialize()` succeeds, per the Decision 1 ordering. Tests invoke handlers via `SbmdHandlerInvoker::InvokeHandler`, then call `observabilityDumpJson()` and parse the JSON to assert:
 - Observation count increased (wiring is correct)
 - Duration > 0 (timing is working)
 - Heap delta is within a plausible range
