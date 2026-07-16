@@ -151,9 +151,10 @@ interface SbmdResource {
 
     /**
      * Access modes: "read", "write", "dynamic" (default on), "static" (opts out of dynamic),
-     * "emitEvents" (default on), "noEvents", "lazySaveNext", "sensitive".
+     * "emitEvents" (default on), "noEvents", "lazySaveNext", "sensitive", "volatile" (disables
+     * value caching).
      */
-    modes?: Array<"read" | "write" | "dynamic" | "static" | "emitEvents" | "noEvents" | "lazySaveNext" | "sensitive">;
+    modes?: Array<"read" | "write" | "dynamic" | "static" | "emitEvents" | "noEvents" | "lazySaveNext" | "sensitive" | "volatile">;
 
     /** Alias names or cluster IDs that must be present before creating this resource. */
     prerequisites?: Array<string | number>;
