@@ -2,7 +2,7 @@
 
 SBMDv4 runs all device driver JavaScript through a single shared mquickjs context — a pre-allocated, fixed-size arena (configurable via `BARTON_CONFIG_MQUICKJS_MEMSIZE_BYTES`, default 1 MB) protected by a single mutex. Every resource read/write/execute, attribute report, and event goes through `SbmdHandlerInvoker::InvokeHandler`, which is called with this mutex already held by the caller. Because all drivers compete for the same runtime, the JS context is the primary resource bottleneck of the SBMD subsystem.
 
-The existing observability infrastructure (`core/src/observability/`) provides counter, gauge, and histogram instruments with a JSON dump API. It is fully implemented but has zero call sites in production code today.
+The existing observability infrastructure (`core/src/observability/`) provides counter, gauge, and histogram instruments with a JSON dump API. The dump API (`observabilityDumpJson()`) is already called in production (e.g., `b_core_client_get_telemetry()`), but the metric-recording call sites — `observabilityCounterAdd`, `observabilityGaugeRecord`, `observabilityHistogramRecord` — have zero production callers today.
 
 This design covers how to wire the observability API into the SBMD runtime without modifying the observability infrastructure itself.
 
