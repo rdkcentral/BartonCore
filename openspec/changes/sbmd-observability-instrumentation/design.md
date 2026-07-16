@@ -61,9 +61,9 @@ All existing callers compile unchanged (null default). **Two distinct calling pa
 
 **Why a struct rather than individual parameters?** A single stable context slot avoids an ever-growing signature as requirements evolve. New fields are added to the struct without touching `InvokeHandler`'s signature or any call site. The context also carries natural operation-scope lifetime semantics: for deferred operations it is the same object from `ExecuteRequestCommand` through `CompletePendingOperation`, enabling `CompletePendingOperation` to read `startTime` from the same context that was active during every `InvokeHandler` call in the chain.
 
-**What is measured around `JS_Call`:**
-- `steady_clock::now()` before and after → invocation duration histogram
-- `JS_GetMemoryUsage` before and after → heap delta histogram
+**What is measured (window: immediately before `JS_PushArg` through immediately after `JS_Call` returns):**
+- `steady_clock::now()` before `JS_PushArg` and after `JS_Call` → invocation duration histogram
+- `JS_GetMemoryUsage` before `JS_PushArg` and after `JS_Call` → heap delta histogram (includes argument-marshalling allocations)
 - Exception / timeout / stack overflow distinction → outcome counter
 
 ### Decision 3: Hybrid sampling — in-activity captures + tickleable idle thread
@@ -156,7 +156,7 @@ core/deviceDrivers/matter/sbmd/
 
 - **In-activity heap snapshot overhead** → `RecordHeapSnapshot` is called at the end of every `InvokeHandler` invocation while the mutex is held. It reads the same `JS_GetMemoryUsage` struct already captured for the heap delta calculation — no additional JS engine work. Overhead is negligible.
 
-- **`JS_GetMemoryUsage` overhead inside `InvokeHandler`** → Called twice per invocation (before + after `JS_Call`). `JS_MEMUSAGE_WALK_HEAP` is not set — the call is an O(1) struct read with no heap walk. As a consequence, `usage.heap_free_blocks` is always 0 (per the mquickjs patch implementation); `sbmd.js.heap.free_bytes` therefore maps to `usage.free_size` (the gap between heap top and stack bottom), not to `heap_free_blocks`. Overhead is negligible.
+- **`JS_GetMemoryUsage` overhead inside `InvokeHandler`** → Called twice per invocation (before `JS_PushArg` and after `JS_Call` returns). `JS_MEMUSAGE_WALK_HEAP` is not set — the call is an O(1) struct read with no heap walk. As a consequence, `usage.heap_free_blocks` is always 0 (per the mquickjs patch implementation); `sbmd.js.heap.free_bytes` therefore maps to `usage.free_size` (the gap between heap top and stack bottom), not to `heap_free_blocks`. Overhead is negligible.
 
 - **Non-uniform sampling in `sbmd.js.heap.used_bytes`** → Observation rate is proportional to handler call rate plus one sample per idle period, so percentiles are activity-weighted rather than time-weighted. On a busy system, high percentiles reflect heap under load; on an idle system, most observations reflect the settled idle baseline. `sbmd.js.heap.peak_bytes` and the histogram's `min`/`max` fields are not skewed by sampling frequency the way percentiles are, but they still only reflect what was actually observed — heap spikes that occur between snapshots can be missed. Percentiles should be interpreted with the deployment's activity level in mind.
 

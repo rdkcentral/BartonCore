@@ -34,7 +34,7 @@ The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static func
 - **THEN** `sbmd.js.heap.used_bytes` observation count increases by one
 
 ### Requirement: Per-invocation heap delta tracking
-The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before` around the `JS_Call` in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
+The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before`, measured from immediately before `JS_PushArg` through immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler` (the same window as `sbmd.handler.duration_ms`), so that argument-marshalling allocations are included. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
 
 #### Scenario: Heap delta recorded per invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler` with a `driverName` and `opType`
