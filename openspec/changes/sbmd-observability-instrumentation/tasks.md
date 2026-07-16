@@ -6,7 +6,7 @@
 
 ## 2. MQuickJsRuntime — hybrid heap sampler
 
-- [ ] 2.0 Add heap metric handles (`sbmd.js.heap.used_bytes`, `sbmd.js.heap.arena_bytes`, `sbmd.js.heap.free_bytes`, `sbmd.js.heap.peak_bytes`), `sbmd.js.mutex.wait_ms`, and `sbmd.js.exception` as private static members of `MQuickJsRuntime`; add `static void InitializeMetrics()`, `ShutdownMetrics()`, `ForceSnapshot()`, `RecordHeapSnapshot(JSContext *ctx)`, `TickleSampler()`, `RecordMutexWait(double ms)`, and `RecordJsException(const char *phase, const char *driver)` static functions
+- [ ] 2.0 Add heap metric handles (`sbmd.js.heap.used_bytes`, `sbmd.js.heap.arena_bytes`, `sbmd.js.heap.free_bytes`, `sbmd.js.heap.peak_bytes`), `sbmd.js.mutex.wait_ms`, and `sbmd.js.exception` as private static members of `MQuickJsRuntime`; add `static void InitializeMetrics()`, `static void ShutdownMetrics()`, `static void ForceSnapshot()`, `static void RecordHeapSnapshot(JSContext *ctx)`, `static void TickleSampler()`, `static void RecordMutexWait(double ms)`, and `static void RecordJsException(const char *phase, const char *driver)`
 - [ ] 2.1 Add `static std::thread periodicSamplerThread`, `static std::atomic<bool> samplerShouldStop`, `static std::atomic<uint64_t> tickleSeq`, `static std::condition_variable samplerCv`, and `static std::mutex samplerCvMutex` to `MQuickJsRuntime`
 - [ ] 2.2 Start idle sampler thread at end of `MQuickJsRuntime::Initialize()`: loop checks `samplerShouldStop` and exits if set; otherwise records the current `tickleSeq` value, then waits on `samplerCv` for up to `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS` ms; on natural timeout calls `ForceSnapshot()`; on early wakeup compares the current `tickleSeq` to the recorded value — if changed a real tickle occurred (reset timer, re-check `samplerShouldStop`), if unchanged the wakeup was spurious (continue waiting without resetting the timer or taking a snapshot)
 - [ ] 2.3 In `MQuickJsRuntime::Shutdown()`, set `samplerShouldStop = true`, call `TickleSampler()` to wake the thread immediately, then join `periodicSamplerThread` before `JS_FreeContext`
@@ -14,7 +14,7 @@
 
 ## 3. SbmdHandlerInvoker — per-invocation instrumentation
 
-- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `ShutdownMetrics()`, and `RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)` static functions
+- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `static void ShutdownMetrics()`, and `static void RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)`
 - [ ] 3.1 Define `OperationContext` struct in `SbmdHandlerInvoker.h` with fields `const char *driverName = nullptr`, `const char *opType = nullptr`, `const char *resourceId = nullptr`, and `std::chrono::steady_clock::time_point startTime`; extend `SbmdHandlerInvoker::InvokeHandler` with `const OperationContext *opCtx = nullptr` (backwards-compatible)
 - [ ] 3.2 Capture `heap_used` from `JS_GetMemoryUsage` and `steady_clock::now()` immediately before `JS_PushArg` / `JS_Call`
 - [ ] 3.3 Capture end time and `heap_used` after `JS_Call` returns; record `durationMs` and `heapDelta` to `SbmdHandlerInvoker`'s histogram handles; increment the `sbmd.handler.outcome` counter with the resolved outcome value; call `MQuickJsRuntime::RecordHeapSnapshot(ctx)` to update pool health metrics (`sbmd.js.heap.used_bytes` histogram and `sbmd.js.heap.free_bytes`/`peak_bytes` gauges) while the JS mutex is still held; then call `MQuickJsRuntime::TickleSampler()` to notify the idle thread
@@ -25,7 +25,7 @@
 
 ## 4. SbmdFactory — driver load instrumentation
 
-- [ ] 4.0 Add `sbmd.driver.load.duration_ms`, `sbmd.driver.load.heap_bytes`, `sbmd.driver.load.failure`, and `sbmd.driver.registered.count` metric handles as private static members of `SbmdFactory`; add `static void InitializeMetrics()` and `ShutdownMetrics()` static functions
+- [ ] 4.0 Add `sbmd.driver.load.duration_ms`, `sbmd.driver.load.heap_bytes`, `sbmd.driver.load.failure`, and `sbmd.driver.registered.count` metric handles as private static members of `SbmdFactory`; add `static void InitializeMetrics()` and `static void ShutdownMetrics()`
 - [ ] 4.1 In `RegisterDriversFromDirectory`, capture `heap_used` and `steady_clock::now()` before `SbmdLoader::LoadDriver` call (inside existing `lock_guard`)
 - [ ] 4.2 Capture end time and `heap_used` after `sbmdDriver->Activate(ctx)` succeeds; record `durationMs` and `heapDelta` to `SbmdFactory`'s `sbmd.driver.load.duration_ms` and `sbmd.driver.load.heap_bytes` handles with the `"driver"` attribute
 - [ ] 4.3 `SbmdFactory::InitializeMetrics()` is called as part of the startup sequence in task 1.2; ensure it runs before the driver load loop begins
@@ -34,7 +34,7 @@
 
 ## 5. SpecBasedMatterDeviceDriver — deferred operation instrumentation
 
-- [ ] 5.0 Add `sbmd.deferred.in_flight`, `sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, and `sbmd.deferred.max_depth` metric handles as private static members of `SpecBasedMatterDeviceDriver`; add `static void InitializeMetrics()` and `ShutdownMetrics()` static functions
+- [ ] 5.0 Add `sbmd.deferred.in_flight`, `sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, and `sbmd.deferred.max_depth` metric handles as private static members of `SpecBasedMatterDeviceDriver`; add `static void InitializeMetrics()` and `static void ShutdownMetrics()`
 - [ ] 5.1 Add `OperationContext operationCtx` field to `PendingOperation` struct
 - [ ] 5.2 Initialize `pending.operationCtx` in `ExecuteRequestCommand` alongside `overallDeadline`: set `operationCtx.driverName`, `operationCtx.opType` (the originating op, e.g., `"write"`), `operationCtx.resourceId` (from `resource->id`), and `operationCtx.startTime = steady_clock::now()`
 - [ ] 5.3 Increment `sbmd.deferred.in_flight` gauge in `ExecuteRequestCommand` after `pendingOperations.emplace` succeeds
