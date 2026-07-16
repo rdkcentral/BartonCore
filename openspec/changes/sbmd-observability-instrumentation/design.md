@@ -89,7 +89,7 @@ Pool health metrics (`sbmd.js.heap.*`) are recorded from two complementary paths
 InvokeHandler (JS mutex held by caller):     Idle background thread:
   → JS_Call                                    loop:
   → JS_GetMemoryUsage                            if samplerShouldStop: exit
-  → record sbmd.handler.*                        deadline = now() + SAMPLE_PERIOD_MS
+  → record sbmd.handler.*                        deadline = now() + std::chrono::milliseconds(BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS)
   → RecordHeapSnapshot(ctx) ← pool health        seq = tickleSeq
   → TickleSampler()  ← increments tickleSeq      cv.wait_until(deadline)
                                                if timed_out: ForceSnapshot()
