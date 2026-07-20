@@ -911,10 +911,7 @@ void MatterDeviceDriver::AbortDeviceConnectionAttempt(chip::Callback::Callback<O
     });
 }
 
-bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId,
-                                           connect_work_cb &&work,
-                                           uint16_t timeoutSeconds,
-                                           chip::TransportPayloadCapability transportPayloadCapability)
+bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_work_cb &&work, uint16_t timeoutSeconds)
 {
     icDebug();
 
@@ -951,39 +948,28 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId,
     chip::Callback::Callback<OnDeviceConnected> successCb(OnMatterDeviceConnectionSuccess,
                                                           static_cast<void *>(&workWrapper));
 
-    // SDK event size limitations (LambdaBridge caps captures at 24 bytes) prevent directly
-    // capturing too many objects. Bundle everything the scheduled task needs into a single
-    // local context and capture just a pointer to it. The context outlives the async task
-    // because this function blocks on connectFuture until the work completes or times out.
-    // connectPromise is directly pointed at in failCb.mContext, so it is indirectly
-    // captured via failCb.
-    struct ConnectScheduleContext
-    {
-        chip::NodeId nodeId;
-        chip::Callback::Callback<OnDeviceConnected> *successCb;
-        chip::Callback::Callback<OnDeviceConnectionFailure> *failCb;
-        chip::TransportPayloadCapability transportPayloadCapability;
-    };
+    // Initiate the connection on the Matter thread. GetConnectedDevice is non-blocking (it starts
+    // the connection and returns immediately; successCb/failCb fire later), so run it synchronously
+    // under RunOnMatterSync rather than deferring it with ScheduleLambda. Running it synchronously
+    // guarantees the connection is never initiated after ConnectAndExecute has returned, so a
+    // timed-out call can never later invoke GetConnectedDevice with dangling callback pointers.
+    // RunOnMatterSync blocks until the work returns, keeping the by-reference captures (including
+    // the stack-owned callbacks) alive for its whole duration, and its std::function work is not
+    // subject to the LambdaBridge 24-byte capture limit that applies to ScheduleLambda directly.
+    chip::NodeId nodeId = Subsystem::Matter::UuidToNodeId(deviceId);
+    // Seed with an error so that if RunOnMatterSync fails to schedule the work (e.g. the stack goes
+    // down between the IsRunning() check above and this call), getConnectedErr stays non-OK and we
+    // fail fast below instead of waiting out the full connect timeout on a promise that would never
+    // be satisfied.
+    CHIP_ERROR getConnectedErr = CHIP_ERROR_INCORRECT_STATE;
 
-    ConnectScheduleContext scheduleContext {
-        Subsystem::Matter::UuidToNodeId(deviceId), &successCb, &failCb, transportPayloadCapability};
-
-    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&scheduleContext]() {
-        CHIP_ERROR getConnectedErr =
-            Matter::GetInstance().GetCommissioner()->GetConnectedDevice(scheduleContext.nodeId,
-                                                                        scheduleContext.successCb,
-                                                                        scheduleContext.failCb,
-                                                                        scheduleContext.transportPayloadCapability);
-        if (getConnectedErr != CHIP_NO_ERROR)
-        {
-            icError("Failed to start device connection: %s", getConnectedErr.AsString());
-            static_cast<std::promise<bool> *>(scheduleContext.failCb->mContext)->set_value(false);
-        }
+    RunOnMatterSync([&]() {
+        getConnectedErr = Matter::GetInstance().GetCommissioner()->GetConnectedDevice(nodeId, &successCb, &failCb);
     });
 
-    if (err != CHIP_NO_ERROR)
+    if (getConnectedErr != CHIP_NO_ERROR)
     {
-        icError("Failed to schedule connect task: %s", err.AsString());
+        icError("Failed to start device connection: %s", getConnectedErr.AsString());
         return false;
     }
 

@@ -121,13 +121,14 @@ std::future<bool> DeviceDataCache::Start()
         [](intptr_t arg) {
             auto *self = reinterpret_cast<DeviceDataCache *>(arg);
 
-            if (self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
+            CHIP_ERROR err =
+                self->controller->GetConnectedDevice(barton::Subsystem::Matter::UuidToNodeId(self->deviceUuid),
                                                      &self->mOnDeviceConnectedCallback,
-                                                     &self->mOnDeviceConnectionFailureCallback,
-                                                     chip::TransportPayloadCapability::kLargePayloadWithMRPFallback) !=
-                CHIP_NO_ERROR)
+                                                     &self->mOnDeviceConnectionFailureCallback);
+
+            if (err != CHIP_NO_ERROR)
             {
-                icError("Failed to start device connection");
+                icError("Failed to start device connection: %s", err.AsString());
                 std::lock_guard<std::mutex> lock(self->startupPromiseMutex);
                 if (self->startupPromise)
                 {
