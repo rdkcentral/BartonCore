@@ -101,6 +101,7 @@ target_include_directories(mquickjs
 
 target_compile_definitions(mquickjs PRIVATE
     _GNU_SOURCE
+    DEBUG_GC
 )
 
 target_compile_options(mquickjs PRIVATE

@@ -106,6 +106,31 @@ static JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 }
 
 /*
+ * Compatibility function for generated mqjs_stdlib.h entries that reference
+ * js_date_constructor. Accepts an optional epoch-ms argument.
+ */
+static JSValue js_date_constructor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
+{
+    double epochMs;
+
+    if (argc > 0)
+    {
+        if (JS_ToNumber(ctx, &epochMs, argv[0]) != 0)
+        {
+            return JS_EXCEPTION;
+        }
+    }
+    else
+    {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        epochMs = (double) tv.tv_sec * 1000.0 + (double) tv.tv_usec / 1000.0;
+    }
+
+    return JS_NewDate(ctx, epochMs);
+}
+
+/*
  * Date.now() implementation - returns current time in milliseconds.
  */
 static JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)

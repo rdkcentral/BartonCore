@@ -94,3 +94,29 @@ for more information on these PATHs and how to set them.
    1. For debugging pure python: `run <path-to-python-file>`
    2. For debugging a pytest `run -m pytest <path-to-python-file>`. NOTE: If Barton has been compiled with Address Sanitizer,
       you must set the LD_PRELOAD variable first with `set env LD_PRELOAD=<path-to-libasan.so>`.
+
+## Matter Message Tracing
+
+For debugging the Matter stack, Barton can log every inbound and outbound Matter message as a JSON
+record (hex payload plus fully-decoded TLV) through the normal ChipLog output. This is a
+developer-only feature: it is off by default, very high volume, and will noticeably slow the stack.
+Do not enable it in production.
+
+Enabling it is a single build option:
+
+```
+./build.sh -DBCORE_MATTER_MESSAGE_TRACING=ON
+```
+
+When this option is ON, CMake automatically builds the Matter library with tracing support
+(passing `-t` to `build-matter.sh`) and compiles the trace backend into the core. If a Matter build
+already exists under `build/matter` (built without tracing), delete it first so it is rebuilt:
+
+```
+rm -rf build/matter build/matter-install
+./build.sh -DBCORE_MATTER_MESSAGE_TRACING=ON
+```
+
+When enabled, Barton logs a warning at startup and the per-message JSON trace records appear inline
+with the rest of the logs. Turn the feature off again with `./build.sh -d -DBCORE_MATTER_MESSAGE_TRACING=OFF`
+(and delete `build/matter` to drop tracing support from the library).
