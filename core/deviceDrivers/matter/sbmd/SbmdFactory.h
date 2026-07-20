@@ -61,9 +61,11 @@ namespace barton
         static void InitializeMetrics();
 
         /**
-         * Release all metric handles owned by SbmdFactory.
+         * Release all metric handles owned by SbmdFactory and reset runtime
+         * state so that a subsequent RegisterDrivers() call re-initializes
+         * metrics correctly.
          */
-        static void ShutdownMetrics();
+        void ShutdownMetrics();
 
     private:
         SbmdFactory() = default;

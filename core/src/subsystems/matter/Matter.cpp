@@ -508,7 +508,7 @@ bool Matter::Stop()
 
     // Shut down SBMD observability metric handles
     SpecBasedMatterDeviceDriver::ShutdownMetrics();
-    SbmdFactory::ShutdownMetrics();
+    SbmdFactory::Instance().ShutdownMetrics();
     SbmdHandlerInvoker::ShutdownMetrics();
     MQuickJsRuntime::ShutdownMetrics();
 

@@ -527,6 +527,13 @@ namespace barton
 
     void MQuickJsRuntime::ShutdownMetrics()
     {
+        // Unregister the GC callback so no further invocations fire against
+        // the now-released metric handles.
+        if (ctx)
+        {
+            JS_SetGCCallback(ctx, nullptr, nullptr);
+        }
+
         observabilityHistogramRelease(heapUsedHisto);
         heapUsedHisto = nullptr;
         observabilityGaugeRelease(heapArenaGauge);

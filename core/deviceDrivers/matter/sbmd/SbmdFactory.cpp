@@ -195,8 +195,6 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
             {
                 icDebug("Loading SBMD driver: %s", entry.path().c_str());
 
-                auto loadStart = std::chrono::steady_clock::now();
-
                 // Read file contents
                 std::ifstream file(entry.path(), std::ios::binary | std::ios::ate);
 
@@ -224,6 +222,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 }
 
                 // Load the driver registration under the JS mutex
+                auto loadStart = std::chrono::steady_clock::now();
                 std::unique_ptr<SbmdRegistration> registration;
                 JSMemoryUsage usageBefore = {};
                 {
@@ -332,4 +331,5 @@ void SbmdFactory::ShutdownMetrics()
     driverLoadHeapDeltaHisto = nullptr;
     observabilityGaugeRelease(registeredDriversGauge);
     registeredDriversGauge = nullptr;
+    runtimeReady = false;
 }

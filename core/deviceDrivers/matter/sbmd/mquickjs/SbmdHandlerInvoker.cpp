@@ -567,7 +567,7 @@ namespace barton
             return;
         }
 
-        if (driver || opType)
+        if (driver || opType || resourceId)
         {
             if (resourceId)
             {
