@@ -159,8 +159,13 @@ namespace barton
         URL.prototype.toString = function() { return this.href; };
         globalThis.URL = URL;
     )";
-        JSValue urlResult = JS_Eval(ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL);
-        if (JS_IsException(urlResult))
+        bool polyfillFailed = false;
+        {
+            SafeJSValue urlResult(ctx, JS_Eval(ctx, urlPolyfill, strlen(urlPolyfill), "<url-polyfill>", JS_EVAL_REPL));
+            polyfillFailed = JS_IsException(urlResult.Get());
+        }
+
+        if (polyfillFailed)
         {
             icError("Failed to install URL polyfill: %s", GetExceptionString(ctx).c_str());
             RecordJsException("init", nullptr);
@@ -222,16 +227,14 @@ namespace barton
 
                 while (true)
                 {
-                    auto result = samplerCv.wait_until(
-                        lock, deadline, []() { return samplerShouldStop.load(std::memory_order_relaxed); });
+                    auto status = samplerCv.wait_until(lock, deadline);
 
-                    if (samplerShouldStop.load(std::memory_order_relaxed) || result)
+                    if (samplerShouldStop.load(std::memory_order_relaxed))
                     {
                         return;
                     }
 
-                    // result==false means either timeout or deadline passed without predicate
-                    if (clock::now() >= deadline)
+                    if (status == std::cv_status::timeout)
                     {
                         // Idle period elapsed — take a snapshot
                         lock.unlock();

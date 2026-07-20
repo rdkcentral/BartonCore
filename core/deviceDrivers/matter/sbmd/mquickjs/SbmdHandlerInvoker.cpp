@@ -203,7 +203,8 @@ namespace barton
         JS_PushArg(ctx, JS_NULL);
 
         // Arm the execution timeout
-        MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() + std::chrono::milliseconds(5000));
+        MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::now() +
+                                     std::chrono::milliseconds(BARTON_CONFIG_SBMD_SCRIPT_TIMEOUT_MS));
 
         JSValue result = JS_Call(ctx, 1);
 

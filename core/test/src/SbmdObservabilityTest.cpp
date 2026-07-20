@@ -41,6 +41,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -71,27 +72,27 @@ using namespace barton;
 
 namespace
 {
+    using CJsonPtr = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+
     // Parse observabilityDumpJson() and return the cJSON object for a named metric.
-    // Caller owns the returned cJSON object (call cJSON_Delete).
-    cJSON *GetMetricJson(const std::string &name)
+    CJsonPtr GetMetricJson(const std::string &name)
     {
-        char *raw = observabilityDumpJson();
+        std::unique_ptr<char, decltype(&free)> raw(observabilityDumpJson(), free);
 
         if (!raw)
         {
-            return nullptr;
+            return CJsonPtr(nullptr, cJSON_Delete);
         }
 
-        cJSON *root = cJSON_Parse(raw);
-        free(raw);
+        CJsonPtr root(cJSON_Parse(raw.get()), cJSON_Delete);
 
         if (!root)
         {
-            return nullptr;
+            return CJsonPtr(nullptr, cJSON_Delete);
         }
 
         // JSON structure: { "metrics": { "metric.name": { ... } } }
-        cJSON *metrics = cJSON_GetObjectItemCaseSensitive(root, "metrics");
+        cJSON *metrics = cJSON_GetObjectItemCaseSensitive(root.get(), "metrics");
         cJSON *entry = nullptr;
 
         if (metrics)
@@ -104,15 +105,13 @@ namespace
             }
         }
 
-        cJSON_Delete(root);
-
-        return entry;
+        return CJsonPtr(entry, cJSON_Delete);
     }
 
     // Return the sum of all data_points[].sum values for a given metric.
     double GetHistogramSum(const std::string &metricName)
     {
-        cJSON *metric = GetMetricJson(metricName);
+        auto metric = GetMetricJson(metricName);
 
         if (!metric)
         {
@@ -120,7 +119,7 @@ namespace
         }
 
         double total = 0.0;
-        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric, "dataPoints");
+        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric.get(), "dataPoints");
 
         if (cJSON_IsArray(points))
         {
@@ -137,15 +136,13 @@ namespace
             }
         }
 
-        cJSON_Delete(metric);
-
         return total;
     }
 
     // Return the total count of observations across all data_points for a histogram.
     int64_t GetHistogramCount(const std::string &metricName)
     {
-        cJSON *metric = GetMetricJson(metricName);
+        auto metric = GetMetricJson(metricName);
 
         if (!metric)
         {
@@ -153,7 +150,7 @@ namespace
         }
 
         int64_t total = 0;
-        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric, "dataPoints");
+        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric.get(), "dataPoints");
 
         if (cJSON_IsArray(points))
         {
@@ -170,15 +167,13 @@ namespace
             }
         }
 
-        cJSON_Delete(metric);
-
         return total;
     }
 
     // Return the sum of all data_points[].value values for a gauge.
     double GetGaugeValue(const std::string &metricName)
     {
-        cJSON *metric = GetMetricJson(metricName);
+        auto metric = GetMetricJson(metricName);
 
         if (!metric)
         {
@@ -186,7 +181,7 @@ namespace
         }
 
         double total = 0.0;
-        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric, "dataPoints");
+        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric.get(), "dataPoints");
 
         if (cJSON_IsArray(points))
         {
@@ -202,8 +197,6 @@ namespace
                 }
             }
         }
-
-        cJSON_Delete(metric);
 
         return total;
     }
@@ -211,7 +204,7 @@ namespace
     // Return the total count of all data_points[].value increments for a counter.
     double GetCounterValue(const std::string &metricName)
     {
-        cJSON *metric = GetMetricJson(metricName);
+        auto metric = GetMetricJson(metricName);
 
         if (!metric)
         {
@@ -219,7 +212,7 @@ namespace
         }
 
         double total = 0.0;
-        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric, "dataPoints");
+        cJSON *points = cJSON_GetObjectItemCaseSensitive(metric.get(), "dataPoints");
 
         if (cJSON_IsArray(points))
         {
@@ -235,8 +228,6 @@ namespace
                 }
             }
         }
-
-        cJSON_Delete(metric);
 
         return total;
     }
