@@ -13,11 +13,12 @@ SDP) without breaking connections to UDP-only devices.
 - OperationalSessionSetup: establish over TCP when supportsTcpServer, else
   leave the default MRP/UDP transport.
 ---
- src/app/OperationalSessionSetup.cpp   |  9 +++++++++
- src/controller/CHIPDeviceController.h |  4 ++--
- src/transport/SessionManager.cpp      | 20 +++++++++++++++++++-
- src/transport/SessionManager.h        |  5 ++++-
- 4 files changed, 34 insertions(+), 4 deletions(-)
+ src/app/OperationalSessionSetup.cpp          |  9 +++++++++
+ src/controller/CHIPDeviceController.h        |  4 ++--
+ src/protocols/secure_channel/CASESession.cpp | 18 ++++++++++++++++++
+ src/transport/SessionManager.cpp             | 20 +++++++++++++++++++-
+ src/transport/SessionManager.h               |  5 ++++-
+ 5 files changed, 52 insertions(+), 4 deletions(-)
 
 diff --git a/src/app/OperationalSessionSetup.cpp b/src/app/OperationalSessionSetup.cpp
 index 5135e158..718a1f3a 100644
@@ -61,6 +62,35 @@ index bd530b87..91bf7c34 100644
      {
          VerifyOrReturnError(mState == State::Initialized, CHIP_ERROR_INCORRECT_STATE);
          mSystemState->CASESessionMgr()->FindOrEstablishSession(ScopedNodeId(peerNodeId, GetFabricIndex()), onConnection,
+diff --git a/src/protocols/secure_channel/CASESession.cpp b/src/protocols/secure_channel/CASESession.cpp
+index ad6ce283..aab315f0 100644
+--- a/src/protocols/secure_channel/CASESession.cpp
++++ b/src/protocols/secure_channel/CASESession.cpp
+@@ -540,6 +540,24 @@ CHIP_ERROR CASESession::EstablishSession(SessionManager & sessionManager, Fabric
+     {
+ #if INET_CONFIG_ENABLE_TCP_ENDPOINT
+         err = sessionManager.TCPConnect(peerAddress, nullptr, mPeerConnState);
++        if (err == CHIP_ERROR_NO_MEMORY)
++        {
++            // The active TCP connection pool is exhausted. Rather than failing the connection,
++            // gracefully fall back to establishing the CASE session over UDP/MRP. TCPConnect
++            // rejects before allocating any connection state in this case, so mPeerConnState is
++            // left untouched. Point both the unauthenticated session (which carries the Sigma
++            // exchange) and the secure session at the UDP transport so subsequent messages route
++            // over MRP instead of TCP.
++            ChipLogProgress(SecureChannel,
++                            "TCP connection pool exhausted; falling back to UDP for CASE session to "
++                            "0x" ChipLogFormatX64,
++                            ChipLogValueX64(mPeerNodeId));
++            peerAddress.SetTransportType(Transport::Type::kUdp);
++            mExchangeCtxt.Value()->GetSessionHandle()->AsUnauthenticatedSession()->SetPeerAddress(peerAddress);
++            mSecureSessionHolder->AsSecureSession()->SetPeerAddress(peerAddress);
++            MATTER_LOG_METRIC_BEGIN(kMetricDeviceCASESessionSigma1);
++            err = SendSigma1();
++        }
+         SuccessOrExit(err);
+ #else
+         err = CHIP_ERROR_NOT_IMPLEMENTED;
 diff --git a/src/transport/SessionManager.cpp b/src/transport/SessionManager.cpp
 index ecd67f8a..bfc3da37 100644
 --- a/src/transport/SessionManager.cpp
