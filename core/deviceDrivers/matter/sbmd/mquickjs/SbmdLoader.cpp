@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <cstring>
+#include <filesystem>
 #include <string>
 
 extern "C" {
@@ -476,6 +477,8 @@ namespace barton
         {
             std::string msg = GetExceptionString(ctx);
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
+            std::string stem = std::filesystem::path(filePath).stem().string();
+            MQuickJsRuntime::RecordJsException("loading", stem.c_str());
             MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
             ResetRegistration(ctx);

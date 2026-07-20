@@ -39,6 +39,7 @@
 #include "SbmdResultExecutor.h"
 #include "matter/sbmd/SafeJSValue.h"
 
+#include <chrono>
 #include <functional>
 #include <map>
 #include <optional>
@@ -47,6 +48,10 @@
 
 extern "C" {
 #include <mquickjs/mquickjs.h>
+}
+
+extern "C" {
+#include "observability/observabilityMetrics.h"
 }
 
 namespace barton
@@ -129,6 +134,18 @@ namespace barton
         {
             return attributes.empty() && resources.empty() && persistentData.empty() && transientData.empty();
         }
+    };
+
+    /**
+     * Context describing the operation being invoked.
+     * Carried through InvokeHandler to tag observability metrics.
+     */
+    struct OperationContext
+    {
+        const char *driverName = nullptr; // SBMD driver filename stem
+        const char *opType = nullptr;     // "read", "write", "execute", "seed", "attribute", "event", "command", ...
+        const char *resourceId = nullptr; // resource/attribute/command ID (may be nullptr)
+        std::chrono::steady_clock::time_point startTime {}; // time before mutex acquisition
     };
 
     /**
@@ -216,7 +233,10 @@ namespace barton
          * @param args The args object (consumed by the call)
          * @return Parsed result chain, or nullopt on failure
          */
-        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx, JSValue handler, const SafeJSValue &args);
+        static std::optional<ParsedResult> InvokeHandler(JSContext *ctx,
+                                                         JSValue handler,
+                                                         const SafeJSValue &args,
+                                                         const OperationContext *opCtx = nullptr);
 
         /**
          * Execute the non-terminal ops from a parsed result.
@@ -338,11 +358,38 @@ namespace barton
                                                   int32_t matterCode = -1,
                                                   JSValue handlerContext = JS_UNDEFINED);
 
+        /**
+         * Initialize all metric handles owned by SbmdHandlerInvoker.
+         */
+        static void InitializeMetrics();
+
+        /**
+         * Release all metric handles owned by SbmdHandlerInvoker.
+         */
+        static void ShutdownMetrics();
+
+        /**
+         * Record a handler outcome counter increment.
+         * Omits "resource_id" attribute when resourceId is nullptr (e.g. attribute/event handlers).
+         * Null-checks the handle and returns silently if called before InitializeMetrics().
+         * @param driver     Driver filename stem (may be nullptr)
+         * @param opType     Operation type string (may be nullptr)
+         * @param resourceId Resource/attribute/command ID (may be nullptr)
+         * @param outcome    "success", "exception", "timeout", "stack_overflow", or "error"
+         */
+        static void
+        RecordOutcomeError(const char *driver, const char *opType, const char *resourceId, const char *outcome);
+
     private:
         /**
          * Build the common base args object with deviceUuid, endpointId, clusterFeatureMaps.
          */
         static SafeJSValue BuildBaseArgs(JSContext *ctx, const HandlerContext &hctx);
+
+        // Observability metric handles
+        static ObservabilityHistogram *handlerDurationHisto;
+        static ObservabilityHistogram *heapDeltaHisto;
+        static ObservabilityCounter *handlerOutcomeCounter;
     };
 
 } // namespace barton

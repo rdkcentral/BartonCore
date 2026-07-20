@@ -102,6 +102,9 @@ extern "C" {
 #include "AccessControlDelegate.h"
 #include "ThreadBorderRouterManagementDelegate.h"
 #include "matter/sbmd/SbmdFactory.h"
+#include "matter/sbmd/SpecBasedMatterDeviceDriver.h"
+#include "matter/sbmd/mquickjs/MQuickJsRuntime.h"
+#include "matter/sbmd/mquickjs/SbmdHandlerInvoker.h"
 
 #define CONNECT_DEVICE_TIMEOUT_SECONDS          15
 #define DISCOVER_ON_NETWORK_DEVICE_TIMEOUT_SECS 1
@@ -502,6 +505,12 @@ bool Matter::Stop()
     chip::Access::SetAccessControl(accessControl);
 
     state.store(State::stopped);
+
+    // Shut down SBMD observability metric handles
+    SpecBasedMatterDeviceDriver::ShutdownMetrics();
+    SbmdFactory::ShutdownMetrics();
+    SbmdHandlerInvoker::ShutdownMetrics();
+    MQuickJsRuntime::ShutdownMetrics();
 
     return true;
 }

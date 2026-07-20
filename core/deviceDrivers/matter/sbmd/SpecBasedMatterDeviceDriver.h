@@ -42,6 +42,10 @@
 #include <transport/SessionHolder.h>
 #include <unordered_map>
 
+extern "C" {
+#include "observability/observabilityMetrics.h"
+}
+
 namespace barton
 {
     /**
@@ -81,12 +85,25 @@ namespace barton
         uint32_t deferralDepth = 0;
         static constexpr uint32_t MAX_DEFERRAL_DEPTH = 10;
         static constexpr uint32_t DEFAULT_OVERALL_TIMEOUT_MS = 30000;
+
+        // Observability context for metrics
+        OperationContext operationCtx;
     };
 
     class SpecBasedMatterDeviceDriver : public MatterDeviceDriver
     {
     public:
         SpecBasedMatterDeviceDriver(SbmdDriver *driver);
+
+        /**
+         * Initialize all metric handles owned by SpecBasedMatterDeviceDriver.
+         */
+        static void InitializeMetrics();
+
+        /**
+         * Release all metric handles owned by SpecBasedMatterDeviceDriver.
+         */
+        static void ShutdownMetrics();
 
         std::vector<uint16_t> GetSupportedDeviceTypes() override;
 
@@ -192,7 +209,9 @@ namespace barton
                              char **readValue,
                              char **executeResponse,
                              chip::Messaging::ExchangeManager &exchangeMgr,
-                             const chip::SessionHandle &sessionHandle);
+                             const chip::SessionHandle &sessionHandle,
+                             const char *opType = nullptr,
+                             const char *resourceId = nullptr);
 
         /**
          * Execute a requestCommand deferred terminal.
@@ -205,7 +224,9 @@ namespace barton
                                    char **readValue,
                                    char **executeResponse,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
-                                   const chip::SessionHandle &sessionHandle);
+                                   const chip::SessionHandle &sessionHandle,
+                                   const char *opType = nullptr,
+                                   const char *resourceId = nullptr);
 
         /**
          * Execute a readAttribute deferred terminal.
@@ -394,5 +415,12 @@ namespace barton
         uint64_t nextPendingId = 1;
 
         friend class TestableSpecBasedMatterDeviceDriver;
+
+        // Observability metric handles (static — shared across all driver instances)
+        static ObservabilityCounter *deferredTimeoutCounter;
+        static ObservabilityCounter *deferralMaxDepthCounter;
+        static ObservabilityGauge *deferredInFlightGauge;
+        static ObservabilityHistogram *deferredDurationHisto;
+        static ObservabilityHistogram *deferralDepthHisto;
     };
 } // namespace barton

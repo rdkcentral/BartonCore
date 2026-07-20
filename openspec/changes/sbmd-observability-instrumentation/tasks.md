@@ -1,6 +1,6 @@
 ## 1. Startup and shutdown wiring
 
-- [ ] 1.1 Add CMake option `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` (default 30000, compiled definition `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) to `config/cmake/options.cmake`
+- [x] 1.1 Add CMake option `BCORE_SBMD_METRICS_SAMPLE_PERIOD_MS` (default 30000, compiled definition `BARTON_CONFIG_SBMD_METRICS_SAMPLE_PERIOD_MS`) to `config/cmake/options.cmake`
 - [ ] 1.2 In `SbmdFactory::RegisterDriversFromDirectory`, call `MQuickJsRuntime::InitializeMetrics()` **before** `MQuickJsRuntime::Initialize()` so the `sbmd.js.exception` handle is live for init-phase exceptions; after `MQuickJsRuntime::Initialize()` succeeds, call `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (these functions are added in tasks 3.0, 4.0, and 5.0 respectively)
 - [ ] 1.3 Wire the corresponding `ShutdownMetrics()` calls into the subsystem shutdown path that already calls `MQuickJsRuntime::Shutdown()`; identify the correct call site during implementation
 
@@ -14,14 +14,14 @@
 
 ## 3. SbmdHandlerInvoker — per-invocation instrumentation
 
-- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `static void ShutdownMetrics()`, and `static void RecordOutcomeError(const char *driver, const char *opType, const char *resourceId)`; `RecordOutcomeError` must null-check its handle and return silently if called before `InitializeMetrics()`
+- [ ] 3.0 Add `sbmd.handler.duration_ms`, `sbmd.handler.heap_delta_bytes`, and `sbmd.handler.outcome` metric handles as private static members of `SbmdHandlerInvoker`; add `static void InitializeMetrics()`, `static void ShutdownMetrics()`, and `static void RecordOutcomeError(const char *driver, const char *opType, const char *resourceId, const char *outcome)`; `RecordOutcomeError` must null-check its handle and return silently if called before `InitializeMetrics()`; when `resourceId` is non-null emit a `"resource_id"` attribute, otherwise omit it entirely
 - [ ] 3.1 Define `OperationContext` struct in `SbmdHandlerInvoker.h` with fields `const char *driverName = nullptr`, `const char *opType = nullptr`, `const char *resourceId = nullptr`, and `std::chrono::steady_clock::time_point startTime`; extend `SbmdHandlerInvoker::InvokeHandler` with `const OperationContext *opCtx = nullptr` (backwards-compatible)
 - [ ] 3.2 Capture `heap_used` from `JS_GetMemoryUsage` and `steady_clock::now()` immediately before `JS_PushArg` / `JS_Call`
-- [ ] 3.3 Capture end time and `heap_used` after `JS_Call` returns; record `durationMs` and `heapDelta` to `SbmdHandlerInvoker`'s histogram handles; increment the `sbmd.handler.outcome` counter with the resolved outcome value; call `MQuickJsRuntime::RecordHeapSnapshot(usageAfter)` — passing the already-captured post-`JS_Call` `JSMemoryUsage` struct — to update pool health metrics (`sbmd.js.heap.used_bytes` histogram and `sbmd.js.heap.free_bytes`/`peak_bytes` gauges) while the JS mutex is still held; then call `MQuickJsRuntime::TickleSampler()` to notify the idle thread
-- [ ] 3.4 Distinguish timeout from exception in outcome: check if `steady_clock::now() > MQuickJsRuntime::GetDeadline()` (or use a flag set before `MQuickJsRuntime::ClearDeadline()`) to emit `"timeout"` vs `"exception"`
+- [ ] 3.3 Capture end time and `heap_used` after `JS_Call` returns; record `durationMs` and `heapDelta` to `SbmdHandlerInvoker`'s histogram handles — include `"resource_id"` attribute (from `opCtx->resourceId`) when non-null, omit it for attribute/event invocations where it is `nullptr`; increment the `sbmd.handler.outcome` counter via `RecordOutcomeError(driver, opType, resourceId, outcome)` with the resolved outcome value; call `MQuickJsRuntime::RecordHeapSnapshot(usageAfter)` — passing the already-captured post-`JS_Call` `JSMemoryUsage` struct — to update pool health metrics (`sbmd.js.heap.used_bytes` histogram and `sbmd.js.heap.free_bytes`/`peak_bytes` gauges) while the JS mutex is still held; then call `MQuickJsRuntime::TickleSampler()` to notify the idle thread
+- [ ] 3.4 Distinguish timeout from exception in outcome: check if `steady_clock::now() > MQuickJsRuntime::GetDeadline()` (or use a flag set before `MQuickJsRuntime::ClearDeadline()`) to emit `"timeout"` vs `"exception"`; additionally, emit `"stack_overflow"` if `JS_StackCheck` fails before the call (increment the counter before returning `std::nullopt`)
 - [ ] 3.5 Update `InvokeHandler` call sites in `SpecBasedMatterDeviceDriver`: synchronous paths (`HandleResourceOp`) stack-allocate `OperationContext` with `driverName`, `opType`, `resourceId` (from `resource->id`), and `startTime = steady_clock::now()`, then pass `&opCtx`; deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`) pass `&pending.operationCtx` (the persistent context initialized in task 5.2)
 - [ ] 3.6 Add mutex wait timing to `HandleResourceOp`, the attribute/event handler paths, and all deferred callback paths (`HandleDeferredCommandResponse`, `HandleDeferredCommandError`, `ContinueDeferredChain`): `auto t0 = steady_clock::now()` before `std::lock_guard<std::mutex>`, call `MQuickJsRuntime::RecordMutexWait(elapsed(t0))` after lock acquired
-- [ ] 3.7 At each `ResultTerminal::Error` handling site in `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain`, call `SbmdHandlerInvoker::RecordOutcomeError(driverName, opType, resourceId)` to emit `sbmd.handler.outcome{outcome="error"}`
+- [ ] 3.7 At each `ResultTerminal::Error` handling site in `SpecBasedMatterDeviceDriver::ExecuteTerminal` and `ContinueDeferredChain`, call `SbmdHandlerInvoker::RecordOutcomeError(driverName, opType, resourceId, "error")` to emit `sbmd.handler.outcome{outcome="error"}`; `opType` and `resourceId` are available as parameters in `ExecuteTerminal` and via `pending.operationCtx` in `ContinueDeferredChain`
 
 ## 4. SbmdFactory — driver load instrumentation
 
@@ -38,7 +38,7 @@
 - [ ] 5.1 Add `OperationContext operationCtx` field to `PendingOperation` struct
 - [ ] 5.2 Initialize `pending.operationCtx` in `ExecuteRequestCommand` alongside `overallDeadline`: set `operationCtx.driverName`, `operationCtx.opType` (the originating op, e.g., `"write"`), `operationCtx.resourceId` (from `resource->id`), and `operationCtx.startTime = steady_clock::now()`
 - [ ] 5.3 Increment `sbmd.deferred.in_flight` gauge in `ExecuteRequestCommand` after `pendingOperations.emplace` succeeds
-- [ ] 5.4 In `CompletePendingOperation`, compute `elapsed(pending.operationCtx.startTime)` and record `durationMs` and `depth` to `SpecBasedMatterDeviceDriver`'s deferred histogram handles with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes; decrement `sbmd.deferred.in_flight` — all before erasing from map
+- [ ] 5.4 In `CompletePendingOperation`, compute `elapsed(pending.operationCtx.startTime)` and record `durationMs` and `depth` to `SpecBasedMatterDeviceDriver`'s deferred histogram handles using `observabilityHistogramRecordWithAttrs` with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes (use empty string for any nullptr field); decrement `sbmd.deferred.in_flight` — all before erasing from map
 - [ ] 5.5 In `HandleDeferredCommandResponse` at the `now() > overallDeadline` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.timeout` counter with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes before calling `CompletePendingOperation`
 - [ ] 5.6 In `ContinueDeferredChain` at the `deferralDepth >= MAX_DEFERRAL_DEPTH` branch, increment `SpecBasedMatterDeviceDriver`'s `sbmd.deferred.max_depth` counter with `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` attributes before calling `CompletePendingOperation`
 
@@ -50,7 +50,7 @@
 
 ## 7. Unit tests — SbmdObservabilityTest.cpp
 
-- [ ] 7.1 Create `core/test/src/SbmdObservabilityTest.cpp` with `SetUpTestSuite` calling `MQuickJsRuntime::InitializeMetrics()` first, then `MQuickJsRuntime::Initialize(512*1024)`, then `SbmdHandlerInvoker::InitializeMetrics()`, `SbmdFactory::InitializeMetrics()`, and `SpecBasedMatterDeviceDriver::InitializeMetrics()` (per task 1.2 ordering), then `SbmdBundleLoader::LoadBundle` and `SbmdLoader::InjectCaptureFunction`
+- [ ] 7.1 Create `core/test/src/SbmdObservabilityTest.cpp` with `SetUpTestSuite` calling `MQuickJsRuntime::InitializeMetrics()` first, then `MQuickJsRuntime::Initialize(512*1024)`, then `SbmdHandlerInvoker::InitializeMetrics()` (per task 1.2 ordering); `SbmdFactory::InitializeMetrics()` and `SpecBasedMatterDeviceDriver::InitializeMetrics()` are NOT called in this unit test because those modules' source files are not linked (they pull in Matter SDK symbols unavailable in unit-test builds); the startup ordering requirement from task 1.2 is validated by production code and integration tests instead
 - [ ] 7.2 Write a minimal test driver JS string (inline, no file) and load it via `SbmdLoader::LoadDriver` for use across tests
 - [ ] 7.3 Test: `ForceSnapshot` produces pool health histogram observation — call `MQuickJsRuntime::ForceSnapshot()`, parse `observabilityDumpJson()`, assert `sbmd.js.heap.used_bytes` count >= 1
 - [ ] 7.4 Test: arena size gauge recorded at init — assert `sbmd.js.heap.arena_bytes` value equals 512*1024
@@ -65,7 +65,19 @@
 - [ ] 7.13 Test: loading-phase exception counter increments — call `SbmdLoader::LoadDriver` with syntactically invalid JS; assert `sbmd.js.exception{phase="loading"}` increments by one
 - [ ] 7.14 Test: registered driver count gauge records correct value — call `SbmdFactory::RegisterDriversFromDirectory` with a temp directory containing N valid `.sbmd.js` test files; assert `sbmd.driver.registered.count` gauge equals N (task 4.5 records this gauge inside `RegisterDriversFromDirectory`, not inside `SbmdLoader::LoadDriver`)
 
-## 8. Integration tests — deferred operation metrics
+## 8. GC instrumentation — mquickjs patch + BartonCore wiring
+
+- [ ] 8.1 Create `docker/patches/mquickjs/0003-add-gc-callback-and-root-count.patch`: adds `JSGCCallback *gc_callback` and `void *gc_opaque` fields to `JSContext`; adds `JS_SetGCCallback()` that stores the callback; modifies `JS_GC()` to call the callback before and after `JS_GC2(ctx, TRUE)`; adds `JS_GetGCRootCount()` that walks both `top_gc_ref` (push/pop stack) and `last_gc_ref` (add/delete list); adds `JSGCCallback` typedef and declarations to `mquickjs.h`
+- [ ] 8.2 Rebuild and reinstall mquickjs in dev container using the patched source so that `JS_SetGCCallback` and `JS_GetGCRootCount` are available for linking
+- [ ] 8.3 Add static metric handles to `MQuickJsRuntime`: `gcCountCounter` (`ObservabilityCounter*`), `gcDurationHisto` (`ObservabilityHistogram*`), `gcRootsGauge` (`ObservabilityGauge*`), and `gcCallback` (static `void GCCallback(JSContext*, int, void*)`)
+- [ ] 8.4 In `MQuickJsRuntime::InitializeMetrics()`: create `sbmd.js.gc.count` counter, `sbmd.js.gc.duration_ms` histogram, and `sbmd.js.gc_roots` gauge; in `ShutdownMetrics()` release all three handles and call `JS_SetGCCallback(ctx, nullptr, nullptr)`
+- [ ] 8.5 In `MQuickJsRuntime::Initialize()`: after context creation, call `JS_SetGCCallback(ctx, &MQuickJsRuntime::GCCallback, nullptr)`
+- [ ] 8.6 Implement `MQuickJsRuntime::GCCallback(ctx, is_end, opaque)`: on `is_end == 0` save `steady_clock::now()` to a static `time_point`; on `is_end == 1` compute elapsed ms, call `observabilityCounterAdd(gcCountCounter, 1)` and `observabilityHistogramRecord(gcDurationHisto, elapsed_ms)`
+- [ ] 8.7 In `MQuickJsRuntime::RecordHeapSnapshot()`: call `observabilityGaugeRecord(gcRootsGauge, JS_GetGCRootCount(ctx))` at each snapshot (both in-activity and idle captures)
+- [ ] 8.8 Test: `GcCountIncrements` — acquire JS mutex, call `JS_GC(ctx)`, release; assert `sbmd.js.gc.count` increased by one
+- [ ] 8.9 Test: `GcRootsGaugeHasValue` — after driver load (SafeJSValue objects live), call `ForceSnapshot()`; assert `sbmd.js.gc_roots` gauge value > 0
+
+## 9. Integration tests — deferred operation metrics
 
 - [ ] 8.1 Verify the matter.js virtual device framework supports triggering a deferred command path (a write or execute that returns `requestCommand`) deterministically with a simulated device
 - [ ] 8.2 Write pytest test: commission simulated device, trigger one deferred operation, call `b_core_client_get_telemetry()`, parse JSON, assert `sbmd.deferred.in_flight` was nonzero during op and `sbmd.deferred.duration_ms` has one observation after completion

@@ -34,7 +34,7 @@ The system SHALL provide a `MQuickJsRuntime::ForceSnapshot()` public static func
 - **THEN** `sbmd.js.heap.used_bytes` observation count increases by one
 
 ### Requirement: Per-invocation heap delta tracking
-The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before`, measured from immediately before `JS_PushArg` through immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler` (the same window as `sbmd.handler.duration_ms`), so that argument-marshalling allocations are included. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
+The SBMD runtime SHALL record the net heap allocation of each JS handler invocation as a histogram named `sbmd.handler.heap_delta_bytes`. The delta SHALL be computed as `heap_used_after - heap_used_before`, measured from immediately before `JS_PushArg` through immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler` (the same window as `sbmd.handler.duration_ms`), so that argument-marshalling allocations are included. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` SHALL be included when `opCtx->resourceId` is non-null and SHALL be omitted for attribute/event handler invocations where it is `nullptr`.
 
 #### Scenario: Heap delta recorded per invocation
 - **WHEN** a JS handler is invoked via `InvokeHandler` with a `driverName` and `opType`
@@ -45,7 +45,7 @@ The SBMD runtime SHALL record the net heap allocation of each JS handler invocat
 - **THEN** `sbmd.handler.heap_delta_bytes` records a negative value, which is valid
 
 ### Requirement: Handler invocation duration tracking
-The SBMD runtime SHALL record the wall-clock duration of each JS handler invocation as a histogram named `sbmd.handler.duration_ms`. Duration SHALL be measured from immediately before `JS_PushArg` to immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` is omitted for attribute/event handler invocations.
+The SBMD runtime SHALL record the wall-clock duration of each JS handler invocation as a histogram named `sbmd.handler.duration_ms`. Duration SHALL be measured from immediately before `JS_PushArg` to immediately after `JS_Call` returns in `SbmdHandlerInvoker::InvokeHandler`. The histogram SHALL support `"driver"`, `"op_type"`, and `"resource_id"` attributes; `"resource_id"` SHALL be included when `opCtx->resourceId` is non-null and SHALL be omitted for attribute/event handler invocations where it is `nullptr`.
 
 #### Scenario: Duration recorded for each invocation
 - **WHEN** a JS handler is invoked with a driver name and op type
@@ -56,7 +56,7 @@ The SBMD runtime SHALL record the wall-clock duration of each JS handler invocat
 - **THEN** `sbmd.handler.duration_ms` still records the elapsed duration for that invocation
 
 ### Requirement: Handler invocation outcome tracking
-The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, `"resource_id"` (omitted for attribute/event handler invocations), and `"outcome"`. Valid outcome values are: `"success"` (handler returned a valid result), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). The counter SHALL be incremented in `SbmdHandlerInvoker::InvokeHandler` for the first four outcomes; `"error"` SHALL be incremented at the `ResultTerminal::Error` handling site.
+The SBMD runtime SHALL count handler invocation outcomes using a counter named `sbmd.handler.outcome` with attributes `"driver"`, `"op_type"`, `"resource_id"` (omitted for attribute/event handler invocations where `resourceId` is `nullptr`), and `"outcome"`. Valid outcome values are: `"success"` (handler returned a valid result), `"exception"` (JS exception thrown, not a timeout), `"timeout"` (script execution deadline exceeded), `"stack_overflow"` (JS_StackCheck failed before call), and `"error"` (handler returned a ResultTerminal::Error). The counter SHALL be incremented via `SbmdHandlerInvoker::RecordOutcomeError(driver, opType, resourceId, outcome)` — from `InvokeHandler` for the first four outcomes (success, exception, timeout, stack_overflow) and from the `ResultTerminal::Error` handling sites in `ExecuteTerminal` and `ContinueDeferredChain` for the `"error"` outcome. `RecordOutcomeError` SHALL include the `"resource_id"` attribute only when `resourceId` is non-null, allowing attribute/event handler call sites to pass `nullptr` to omit it.
 
 #### Scenario: Success outcome counted
 - **WHEN** a JS handler invocation returns a success terminal
@@ -72,7 +72,7 @@ The SBMD runtime SHALL count handler invocation outcomes using a counter named `
 
 #### Scenario: Stack overflow outcome counted
 - **WHEN** `JS_StackCheck` returns nonzero before a handler call
-- **THEN** `sbmd.handler.outcome` counter for `outcome="stack_overflow"` increments by one
+- **THEN** `sbmd.handler.outcome` counter for `outcome="stack_overflow"` increments by one before `InvokeHandler` returns `std::nullopt`
 
 #### Scenario: Error outcome counted
 - **WHEN** a JS handler returns a `ResultTerminal::Error`
@@ -137,14 +137,14 @@ The SBMD runtime SHALL maintain a gauge named `sbmd.deferred.in_flight` represen
 - **THEN** `sbmd.deferred.in_flight` gauge decrements back toward zero
 
 ### Requirement: Deferred operation total duration tracking
-The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` with attributes `"driver"`, `"op_type"` (the originating operation type from `pending.operationCtx.opType`), and `"resource_id"` (the originating resource from `pending.operationCtx.resourceId`). Duration includes device round-trip time.
+The SBMD runtime SHALL record the total wall-clock duration of each deferred operation — from initial `ExecuteRequestCommand` to `CompletePendingOperation` — as a histogram named `sbmd.deferred.duration_ms` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"` (from `pending.operationCtx.opType`), and `"resource_id"` (from `pending.operationCtx.resourceId`); use an empty string for any nullptr field. Duration includes device round-trip time.
 
 #### Scenario: Total duration includes device round-trip
 - **WHEN** a deferred operation completes after a device response
 - **THEN** `sbmd.deferred.duration_ms` records a value greater than the JS execution time alone
 
 ### Requirement: Deferral depth distribution tracking
-The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` with attributes `"driver"`, `"op_type"`, and `"resource_id"`. Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
+The SBMD runtime SHALL record the deferral depth at completion of each deferred operation as a histogram named `sbmd.deferred.depth` using `observabilityHistogramRecordWithAttrs` with attributes `"driver"`, `"op_type"`, and `"resource_id"` (use empty string for any nullptr field). Depth 0 means the operation resolved after one round-trip; depth N means the operation re-armed N times.
 
 #### Scenario: Single round-trip records depth zero
 - **WHEN** a deferred operation resolves after one device response
@@ -178,3 +178,28 @@ Each instrumented module (`MQuickJsRuntime`, `SbmdHandlerInvoker`, `SbmdFactory`
 #### Scenario: Recording before initialization is safe
 - **WHEN** a recording function is called before its module's `InitializeMetrics()`
 - **THEN** the call is silently ignored without crashing
+
+### Requirement: GC cycle count tracking
+The SBMD runtime SHALL count GC cycles using a counter named `sbmd.js.gc.count`. The counter SHALL increment by one each time the mquickjs garbage collector completes a cycle. In production, all cycles are allocator-triggered (implicit); the callback also fires for explicit `JS_GC()` calls, which appear only in tests. The counter is incremented in the `is_end == 1` phase of the `JS_SetGCCallback` callback registered by `MQuickJsRuntime::Initialize()`.
+
+#### Scenario: GC cycle increments counter
+- **WHEN** a GC cycle completes (via explicit `JS_GC()` call or allocator trigger)
+- **THEN** `sbmd.js.gc.count` increments by one
+
+### Requirement: GC cycle duration tracking
+The SBMD runtime SHALL record the duration of each GC cycle as a histogram named `sbmd.js.gc.duration_ms`. Duration is measured from the `is_end == 0` callback (GC starting) to the `is_end == 1` callback (GC finished), in milliseconds. Each completed GC cycle produces exactly one histogram observation.
+
+#### Scenario: GC duration recorded per cycle
+- **WHEN** a GC cycle completes
+- **THEN** `sbmd.js.gc.duration_ms` gains one observation with a non-negative value
+
+### Requirement: GC root list size tracking
+The SBMD runtime SHALL maintain a gauge named `sbmd.js.gc_roots` reflecting the total number of live GC roots currently registered on the JS context via `JS_PushGCRef` (push/pop stack) and `JS_AddGCRef` (add/delete list), as returned by `JS_GetGCRootCount()`. The gauge SHALL be updated with each call to `MQuickJsRuntime::RecordHeapSnapshot()` (both in-activity and idle captures). A monotonically growing gauge value indicates GC root leaks from any source — `SafeJSValue` misuse, direct `JSValue` usage, or other root registrations.
+
+#### Scenario: GC root count reflects live roots
+- **WHEN** `MQuickJsRuntime::RecordHeapSnapshot()` is called with live `SafeJSValue` objects held
+- **THEN** `sbmd.js.gc_roots` gauge records a value greater than zero
+
+#### Scenario: GC root count is stable after driver teardown
+- **WHEN** all `SafeJSValue` objects for a driver are destroyed and a snapshot is taken
+- **THEN** `sbmd.js.gc_roots` gauge does not increase relative to its pre-load value

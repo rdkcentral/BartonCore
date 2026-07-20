@@ -11,6 +11,7 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed-size arena (configu
 - **Deferred operation instrumentation** in `SpecBasedMatterDeviceDriver`: tracks in-flight count, total duration (attributed by driver, originating op type, and resource ID), deferral depth, timeout events, and max-depth-exceeded events. Adds `OperationContext operationCtx` field to `PendingOperation` struct.
 - **JS exception event counter** capturing exceptions during driver loading and runtime initialization phases.
 - **Driver load failure counter** capturing all failure modes in the driver registration loop.
+- **GC instrumentation** via a new mquickjs patch (`0003-add-gc-callback-and-root-count.patch`): adds `JS_SetGCCallback` (fired before/after every GC cycle; in production all cycles are allocator-triggered, but the callback also fires for explicit `JS_GC()` calls used in tests) and `JS_GetGCRootCount` (returns live GC root count across both the push/pop stack and the add/delete list). `MQuickJsRuntime` uses these to record `sbmd.js.gc.count` (counter), `sbmd.js.gc.duration_ms` (histogram), and `sbmd.js.gc_roots` (gauge).
 - **Unit tests** (GTest): exercise all metric wiring against the real mquickjs runtime using `observabilityDumpJson()` to assert observations.
 - **Integration tests** (pytest): verify deferred operation metrics end-to-end via `b_core_client_get_telemetry()`.
 
@@ -37,8 +38,6 @@ The SBMDv4 JavaScript runtime (mquickjs) runs inside a fixed-size arena (configu
 
 ## Non-Goals
 
-- **Implicit GC count + duration**: requires an additional mquickjs patch (GC callback mechanism). Deferred to follow-on change pending coordination with ongoing mquickjs work.
-- **GC root list size gauge** (`sbmd.js.gc_roots`): requires a mquickjs patch to expose the internal GC root list count (e.g., `JS_GetGCRootCount`). Measures engine-level root list growth from any source — not just `SafeJSValue` misuse — making it a more complete leak signal than a BartonCore-side counter. Deferred to follow-on pending the mquickjs patch.
 - **Explicit GC tracking** (`gc()` call sites): no call sites currently exist in production code. Deferred to follow-on.
 - **`deviceId` attribute on metrics**: useful for isolating per-device failures but adds unbounded cardinality. Deferred to follow-on when attribute indexing strategy is clearer.
 - **Per-device-instance heap cost**: not tractable — the JS arena has no per-device partitioning. Deferred to follow-on for further investigation.
