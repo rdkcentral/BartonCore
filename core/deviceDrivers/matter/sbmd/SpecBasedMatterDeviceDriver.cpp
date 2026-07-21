@@ -530,6 +530,12 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
+        else if (mode == "dynamic" || mode == "emitEvents")
+        {
+            // Both are enabled by default (see the initial bitmask). Accept them as explicit
+            // no-ops so specs that list these default-on modes (valid per the schema and typings)
+            // register successfully instead of failing with "Unsupported resource mode".
+        }
         else if (mode == "static")
         {
             bitmask &= ~(RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE);
