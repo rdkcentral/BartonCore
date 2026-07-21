@@ -948,25 +948,30 @@ bool MatterDeviceDriver::ConnectAndExecute(const std::string &deviceId, connect_
     chip::Callback::Callback<OnDeviceConnected> successCb(OnMatterDeviceConnectionSuccess,
                                                           static_cast<void *>(&workWrapper));
 
-    // SDK event size limitations prevent directly capturing too many objects.
-    // connectPromise is directly pointed at in failCb.mContext, so it is indirectly
-    // captured via failCb.
+    // Initiate the connection on the Matter thread. GetConnectedDevice is non-blocking (it starts
+    // the connection and returns immediately; successCb/failCb fire later). RunOnMatterSync marshals
+    // this onto the Matter thread (via ScheduleLambda) but blocks until it has run, so
+    // GetConnectedDevice is guaranteed to execute before ConnectAndExecute can proceed or time out.
+    // That ordering is the point: unlike a bare ScheduleLambda whose deferred work could run *after*
+    // ConnectAndExecute has returned, the connection is never initiated once we are past this call,
+    // so a timed-out call can never later invoke GetConnectedDevice with dangling callback pointers.
+    // Blocking here also keeps the by-reference captures (including the stack-owned callbacks) alive
+    // for the whole call, and RunOnMatterSync's std::function work is not subject to the LambdaBridge
+    // 24-byte capture limit that applies to using ScheduleLambda directly.
+    chip::NodeId nodeId = Subsystem::Matter::UuidToNodeId(deviceId);
+    // Seed with an error so that if RunOnMatterSync fails to schedule the work (e.g. the stack goes
+    // down between the IsRunning() check above and this call), getConnectedErr stays non-OK and we
+    // fail fast below instead of waiting out the full connect timeout on a promise that would never
+    // be satisfied.
+    CHIP_ERROR getConnectedErr = CHIP_ERROR_INCORRECT_STATE;
 
-    auto err = chip::DeviceLayer::SystemLayer().ScheduleLambda([&deviceId, &successCb, &failCb]() {
-        auto nodeId = Subsystem::Matter::UuidToNodeId(deviceId);
-
-        CHIP_ERROR getConnectedErr =
-            Matter::GetInstance().GetCommissioner()->GetConnectedDevice(nodeId, &successCb, &failCb);
-        if (getConnectedErr != CHIP_NO_ERROR)
-        {
-            icError("Failed to start device connection: %s", getConnectedErr.AsString());
-            static_cast<std::promise<bool> *>(failCb.mContext)->set_value(false);
-        }
+    RunOnMatterSync([&]() {
+        getConnectedErr = Matter::GetInstance().GetCommissioner()->GetConnectedDevice(nodeId, &successCb, &failCb);
     });
 
-    if (err != CHIP_NO_ERROR)
+    if (getConnectedErr != CHIP_NO_ERROR)
     {
-        icError("Failed to schedule connect task: %s", err.AsString());
+        icError("Failed to start device connection: %s", getConnectedErr.AsString());
         return false;
     }
 

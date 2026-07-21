@@ -1,0 +1,153 @@
+From c899104f1093461e52a36d0718f5a579132ae6fb Mon Sep 17 00:00:00 2001
+From: Christian Leithner <christian_leithner@comcast.com>
+Date: Wed, 15 Jul 2026 18:20:09 +0000
+Subject: [PATCH] transport: add kLargePayloadWithMRPFallback capability
+
+Add a TransportPayloadCapability that prefers a large-payload (TCP) session
+but transparently falls back to MRP/UDP when the peer does not advertise TCP
+server support, instead of failing the connection like kLargePayload does.
+This lets a controller request TCP for potentially large payloads (e.g. WebRTC
+SDP) without breaking connections to UDP-only devices.
+
+- SessionManager: match/return an existing TCP session, else an MRP session.
+- OperationalSessionSetup: establish over TCP when supportsTcpServer, else
+  leave the default MRP/UDP transport.
+---
+ src/app/OperationalSessionSetup.cpp          |  9 +++++++++
+ src/controller/CHIPDeviceController.h        |  4 ++--
+ src/protocols/secure_channel/CASESession.cpp | 18 ++++++++++++++++++
+ src/transport/SessionManager.cpp             | 20 +++++++++++++++++++-
+ src/transport/SessionManager.h               |  5 ++++-
+ 5 files changed, 52 insertions(+), 4 deletions(-)
+
+diff --git a/src/app/OperationalSessionSetup.cpp b/src/app/OperationalSessionSetup.cpp
+index 5135e158..718a1f3a 100644
+--- a/src/app/OperationalSessionSetup.cpp
++++ b/src/app/OperationalSessionSetup.cpp
+@@ -329,6 +329,15 @@ CHIP_ERROR OperationalSessionSetup::EstablishConnection(const ResolveResult & re
+             return CHIP_ERROR_INTERNAL;
+         }
+     }
++    else if (mTransportPayloadCapability == TransportPayloadCapability::kLargePayloadWithMRPFallback)
++    {
++        // Prefer TCP for potentially large payloads, but tolerate peers without TCP support by
++        // silently falling back to the default MRP/UDP transport rather than failing the connect.
++        if (result.supportsTcpServer)
++        {
++            mDeviceAddress.SetTransportType(chip::Transport::Type::kTcp);
++        }
++    }
+ #endif
+ 
+     mCASEClient = mClientPool->Allocate();
+diff --git a/src/controller/CHIPDeviceController.h b/src/controller/CHIPDeviceController.h
+index bd530b87..91bf7c34 100644
+--- a/src/controller/CHIPDeviceController.h
++++ b/src/controller/CHIPDeviceController.h
+@@ -256,7 +256,7 @@ public:
+     virtual CHIP_ERROR
+     GetConnectedDevice(NodeId peerNodeId, Callback::Callback<OnDeviceConnected> * onConnection,
+                        Callback::Callback<OnDeviceConnectionFailure> * onFailure,
+-                       TransportPayloadCapability transportPayloadCapability = TransportPayloadCapability::kMRPPayload)
++                       TransportPayloadCapability transportPayloadCapability = TransportPayloadCapability::kLargePayloadWithMRPFallback)
+     {
+         VerifyOrReturnError(mState == State::Initialized, CHIP_ERROR_INCORRECT_STATE);
+         mSystemState->CASESessionMgr()->FindOrEstablishSession(ScopedNodeId(peerNodeId, GetFabricIndex()), onConnection, onFailure,
+@@ -284,7 +284,7 @@ public:
+     CHIP_ERROR
+     GetConnectedDevice(NodeId peerNodeId, Callback::Callback<OnDeviceConnected> * onConnection,
+                        chip::Callback::Callback<OperationalSessionSetup::OnSetupFailure> * onSetupFailure,
+-                       TransportPayloadCapability transportPayloadCapability = TransportPayloadCapability::kMRPPayload)
++                       TransportPayloadCapability transportPayloadCapability = TransportPayloadCapability::kLargePayloadWithMRPFallback)
+     {
+         VerifyOrReturnError(mState == State::Initialized, CHIP_ERROR_INCORRECT_STATE);
+         mSystemState->CASESessionMgr()->FindOrEstablishSession(ScopedNodeId(peerNodeId, GetFabricIndex()), onConnection,
+diff --git a/src/protocols/secure_channel/CASESession.cpp b/src/protocols/secure_channel/CASESession.cpp
+index ad6ce283..aab315f0 100644
+--- a/src/protocols/secure_channel/CASESession.cpp
++++ b/src/protocols/secure_channel/CASESession.cpp
+@@ -540,6 +540,24 @@ CHIP_ERROR CASESession::EstablishSession(SessionManager & sessionManager, Fabric
+     {
+ #if INET_CONFIG_ENABLE_TCP_ENDPOINT
+         err = sessionManager.TCPConnect(peerAddress, nullptr, mPeerConnState);
++        if (err == CHIP_ERROR_NO_MEMORY)
++        {
++            // The active TCP connection pool is exhausted. Rather than failing the connection,
++            // gracefully fall back to establishing the CASE session over UDP/MRP. TCPConnect
++            // rejects before allocating any connection state in this case, so mPeerConnState is
++            // left untouched. Point both the unauthenticated session (which carries the Sigma
++            // exchange) and the secure session at the UDP transport so subsequent messages route
++            // over MRP instead of TCP.
++            ChipLogProgress(SecureChannel,
++                            "TCP connection pool exhausted; falling back to UDP for CASE session to "
++                            "0x" ChipLogFormatX64,
++                            ChipLogValueX64(mPeerNodeId));
++            peerAddress.SetTransportType(Transport::Type::kUdp);
++            mExchangeCtxt.Value()->GetSessionHandle()->AsUnauthenticatedSession()->SetPeerAddress(peerAddress);
++            mSecureSessionHolder->AsSecureSession()->SetPeerAddress(peerAddress);
++            MATTER_LOG_METRIC_BEGIN(kMetricDeviceCASESessionSigma1);
++            err = SendSigma1();
++        }
+         SuccessOrExit(err);
+ #else
+         err = CHIP_ERROR_NOT_IMPLEMENTED;
+diff --git a/src/transport/SessionManager.cpp b/src/transport/SessionManager.cpp
+index ecd67f8a..bfc3da37 100644
+--- a/src/transport/SessionManager.cpp
++++ b/src/transport/SessionManager.cpp
+@@ -1251,7 +1251,8 @@ Optional<SessionHandle> SessionManager::FindSecureSessionForNode(ScopedNodeId pe
+             (!type.HasValue() || type.Value() == session->GetSecureSessionType()))
+         {
+             if (transportPayloadCapability == TransportPayloadCapability::kMRPOrTCPCompatiblePayload ||
+-                transportPayloadCapability == TransportPayloadCapability::kLargePayload)
++                transportPayloadCapability == TransportPayloadCapability::kLargePayload ||
++                transportPayloadCapability == TransportPayloadCapability::kLargePayloadWithMRPFallback)
+             {
+ #if INET_CONFIG_ENABLE_TCP_ENDPOINT
+                 // Set up a TCP transport based session as standby
+@@ -1294,6 +1295,23 @@ Optional<SessionHandle> SessionManager::FindSecureSessionForNode(ScopedNodeId pe
+ 
+         return Optional<SessionHandle>::Missing();
+     }
++
++    if (transportPayloadCapability == TransportPayloadCapability::kLargePayloadWithMRPFallback)
++    {
++        // Prefer a TCP session for potentially large payloads, but fall back to an MRP session when
++        // TCP is unavailable (e.g. the peer does not support a TCP server).
++        if (tcpSession != nullptr)
++        {
++            return MakeOptional<SessionHandle>(*tcpSession);
++        }
++
++        if (mrpSession != nullptr)
++        {
++            return MakeOptional<SessionHandle>(*mrpSession);
++        }
++
++        return Optional<SessionHandle>::Missing();
++    }
+ #endif // INET_CONFIG_ENABLE_TCP_ENDPOINT
+ 
+     return mrpSession != nullptr ? MakeOptional<SessionHandle>(*mrpSession) : Optional<SessionHandle>::Missing();
+diff --git a/src/transport/SessionManager.h b/src/transport/SessionManager.h
+index 84fbc183..3462cf1a 100644
+--- a/src/transport/SessionManager.h
++++ b/src/transport/SessionManager.h
+@@ -71,10 +71,13 @@ enum class TransportPayloadCapability : uint8_t
+     kLargePayload,             // Transport needs to handle payloads larger than the single IPv6
+                                // packet, as supported by MRP. The transport of choice, in this
+                                // case, is TCP.
+-    kMRPOrTCPCompatiblePayload // This option provides the ability to use MRP
++    kMRPOrTCPCompatiblePayload, // This option provides the ability to use MRP
+                                // as the preferred transport, but use a large
+                                // payload transport if that is already
+                                // available.
++    kLargePayloadWithMRPFallback // Prefer a large-payload (TCP) transport, establishing one when the
++                                 // peer advertises TCP server support, but fall back to MRP/UDP when
++                                 // it does not. Unlike kLargePayload this never fails on non-TCP peers.
+ };
+ /**
+  * @brief
+-- 
+2.43.0
+
