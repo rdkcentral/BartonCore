@@ -584,9 +584,9 @@ namespace barton
 
             JS_GetMemoryUsage(ctx, &usage, 0);
             gcRootCount = JS_GetGCRootCount(ctx);
+            RecordHeapSnapshot(usage, gcRootCount);
         }
 
-        RecordHeapSnapshot(usage, gcRootCount);
         TickleSampler();
     }
 

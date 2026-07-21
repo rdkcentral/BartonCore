@@ -199,6 +199,8 @@ namespace barton
 
         /**
          * Record pool health metrics from an already-captured JSMemoryUsage struct.
+         * Must be called while holding GetMutex(): protects the non-atomic
+         * peakHeapRecorded member from concurrent reads/writes.
          * @param usage      Pre-captured memory usage (via JS_GetMemoryUsage).
          * @param gcRootCount GC root count at the time of capture (via JS_GetGCRootCount).
          *                   Must be captured while holding GetMutex().

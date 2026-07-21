@@ -958,9 +958,10 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     opCtx.startTime = t0;
 
     {
+        auto tLock = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         MQuickJsRuntime::RecordMutexWait(
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tLock).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
