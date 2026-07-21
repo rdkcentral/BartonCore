@@ -530,11 +530,19 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
-        else if (mode == "dynamic" || mode == "emitEvents")
+        else if (mode == "dynamic")
         {
-            // Both are enabled by default (see the initial bitmask). Accept them as explicit
-            // no-ops so specs that list these default-on modes (valid per the schema and typings)
-            // register successfully instead of failing with "Unsupported resource mode".
+            // Enabled by default in the initial bitmask. Setting the bits explicitly (rather than
+            // treating this as a no-op) lets a spec re-enable dynamic behavior by listing "dynamic"
+            // after "static", since modes are applied in order.
+            bitmask |= RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE;
+        }
+        else if (mode == "emitEvents")
+        {
+            // Enabled by default in the initial bitmask. Setting the bit explicitly lets a spec
+            // re-enable events by listing "emitEvents" after "noEvents", since modes are applied in
+            // order.
+            bitmask |= RESOURCE_MODE_EMIT_EVENTS;
         }
         else if (mode == "static")
         {
@@ -655,7 +663,11 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
             // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
             // The 'volatile' mode also forces CACHING_POLICY_NEVER so that, for a resource that emits
             // events, updateResource delivers an event on every call (no value-change suppression) even
-            // when the value is unchanged. Event-only signaling resources rely on this.
+            // when the value is unchanged. CACHING_POLICY_NEVER also means updateResource does not
+            // persist the value (or dateOfLastSyncMillis) to the device DB, and readable resources are
+            // served from the driver rather than the DB cache. 'volatile' is therefore intended for
+            // event-only signaling resources and should not be applied to subscription-backed state
+            // resources whose reads rely on the DB-cached value.
             bool isVolatile =
                 std::find(resource.modes.begin(), resource.modes.end(), "volatile") != resource.modes.end();
             ResourceCachingPolicy cachingPolicy =
