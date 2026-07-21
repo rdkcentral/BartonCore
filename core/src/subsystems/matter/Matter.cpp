@@ -506,6 +506,10 @@ bool Matter::Stop()
 
     state.store(State::stopped);
 
+    // Stop the SBMD JS runtime -- joins the background heap sampler thread before
+    // the metric handles it uses are released below.
+    MQuickJsRuntime::Shutdown();
+
     // Shut down SBMD observability metric handles
     SpecBasedMatterDeviceDriver::ShutdownMetrics();
     SbmdFactory::Instance().ShutdownMetrics();
