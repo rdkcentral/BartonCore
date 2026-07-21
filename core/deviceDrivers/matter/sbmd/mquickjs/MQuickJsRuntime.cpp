@@ -507,6 +507,11 @@ namespace barton
 
     void MQuickJsRuntime::InitializeMetrics()
     {
+        if (heapUsedHisto)
+        {
+            return;
+        }
+
         heapUsedHisto = observabilityHistogramCreate(
             "sbmd.js.heap.used_bytes", "Distribution of mquickjs heap bytes in use at each handler invocation", "By");
         heapArenaGauge =

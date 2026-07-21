@@ -273,9 +273,15 @@ namespace barton
             return std::nullopt;
         }
 
-        RecordOutcomeError(outDriver, outOpType, outResourceId, "success");
+        auto parsed = SbmdResultExecutor::Parse(ctx, result);
 
-        return SbmdResultExecutor::Parse(ctx, result);
+        if (parsed.has_value())
+        {
+            bool isError = std::holds_alternative<ResultTerminal::Error>(parsed->terminal.data);
+            RecordOutcomeError(outDriver, outOpType, outResourceId, isError ? "error" : "success");
+        }
+
+        return parsed;
     }
 
     FetchedSupplements SbmdHandlerInvoker::PrefetchSupplements(const SbmdSupplements &supplements,

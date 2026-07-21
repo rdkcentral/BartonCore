@@ -1028,8 +1028,6 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     {
         const auto &err = std::get<ResultTerminal::Error>(terminal.data);
         icError("Handler returned error: %s", err.message.c_str());
-        SbmdHandlerInvoker::RecordOutcomeError(
-            driver ? driver->GetRegistration().name.c_str() : nullptr, opType, resourceId, "error");
         FailOperation(promises);
         return;
     }
@@ -1227,12 +1225,19 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.operationCtx.resourceId = resourceId;
     pending.operationCtx.startTime = std::chrono::steady_clock::now();
 
-    observabilityGaugeRecord(deferredInFlightGauge, static_cast<int64_t>(pendingOperations.size()) + 1);
-
     // The PendingOperation's SafeJSValue callbacks are empty at this point, so moving it into
     // the map performs no engine work and needs no mutex. The callbacks are transferred afterward,
     // below, using the stable map-node address.
     auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
+
+    if (!inserted)
+    {
+        icError("Duplicate pending operation ID %" PRIu64 ", cannot register deferred operation", pendingId);
+        FailOperation(promises);
+        return;
+    }
+
+    observabilityGaugeRecord(deferredInFlightGauge, static_cast<int64_t>(pendingOperations.size()));
     PendingOperation &stored = it->second;
 
     // Move the deferred callbacks (held alive by Parse) into the stable map node under the mutex.
@@ -1576,8 +1581,6 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
     {
         const auto &err = std::get<ResultTerminal::Error>(result.terminal.data);
         icError("Deferred handler returned error: %s", err.message.c_str());
-        SbmdHandlerInvoker::RecordOutcomeError(
-            pending.operationCtx.driverName, pending.operationCtx.opType, pending.operationCtx.resourceId, "error");
         CompletePendingOperation(pendingId, false);
         return;
     }
