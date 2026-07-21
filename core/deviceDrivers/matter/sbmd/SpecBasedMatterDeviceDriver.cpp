@@ -647,8 +647,9 @@ bool SpecBasedMatterDeviceDriver::DoRegisterDriverResources(icDevice *device)
             // Resources without explicit read handlers are updated via attribute subscriptions,
             // so use CACHING_POLICY_ALWAYS to return the DB-cached value on read.
             // Resources with explicit read handlers use CACHING_POLICY_NEVER so the driver is called.
-            // The 'volatile' mode also forces CACHING_POLICY_NEVER so updateResource emits an event on
-            // every call (no value-change suppression), which event-only signaling resources rely on.
+            // The 'volatile' mode also forces CACHING_POLICY_NEVER so that, for a resource that emits
+            // events, updateResource delivers an event on every call (no value-change suppression) even
+            // when the value is unchanged. Event-only signaling resources rely on this.
             bool isVolatile =
                 std::find(resource.modes.begin(), resource.modes.end(), "volatile") != resource.modes.end();
             ResourceCachingPolicy cachingPolicy =
