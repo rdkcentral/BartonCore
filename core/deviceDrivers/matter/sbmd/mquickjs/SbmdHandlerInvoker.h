@@ -142,9 +142,9 @@ namespace barton
      */
     struct OperationContext
     {
-        const char *driverName = nullptr; // SBMD driver filename stem
-        const char *opType = nullptr;     // "read", "write", "execute", "seed", "attribute", "event", "command", ...
-        const char *resourceId = nullptr; // resource/attribute/command ID (may be nullptr)
+        std::string driverName; // Driver filename stem for metric attributes (e.g., "door-lock")
+        std::string opType;     // "read", "write", "execute", "seed", "attribute", "event", "command", ...
+        std::string resourceId; // resource ID for the related resource (empty when not applicable)
         std::chrono::steady_clock::time_point startTime {}; // time before mutex acquisition
     };
 
@@ -370,11 +370,11 @@ namespace barton
 
         /**
          * Record a handler outcome counter increment.
-         * Omits "resource_id" attribute when resourceId is nullptr (e.g. attribute/event handlers).
+         * Omits "resource_id" attribute when resourceId is nullptr (e.g. non-resource ops).
          * Null-checks the handle and returns silently if called before InitializeMetrics().
          * @param driver     Driver filename stem (may be nullptr)
          * @param opType     Operation type string (may be nullptr)
-         * @param resourceId Resource/attribute/command ID (may be nullptr)
+         * @param resourceId Resource ID (may be nullptr)
          * @param outcome    "success", "exception", "timeout", "stack_overflow", or "error"
          */
         static void

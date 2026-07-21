@@ -57,6 +57,7 @@ extern "C" {
 
 #include <subsystems/matter/Matter.h>
 
+#include <filesystem>
 #include <lib/support/Base64.h>
 
 using namespace barton;
@@ -949,8 +950,14 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    auto t0 = std::chrono::steady_clock::now();
+    OperationContext opCtx;
+    opCtx.driverName = driver ? driver->GetDriverStem() : "";
+    opCtx.opType = opType;
+    opCtx.resourceId = resourceId;
+    opCtx.startTime = t0;
+
     {
-        auto t0 = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
         MQuickJsRuntime::RecordMutexWait(
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
@@ -960,12 +967,6 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
         SbmdHandlerInvoker::AddSupplements(ctx, args, handler->supplements, supplements);
-
-        OperationContext opCtx;
-        opCtx.driverName = driver ? driver->GetRegistration().name.c_str() : nullptr;
-        opCtx.opType = opType;
-        opCtx.resourceId = resourceId;
-        opCtx.startTime = t0;
         result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args, &opCtx);
     }
 
@@ -989,8 +990,7 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     executeResponse,
                     exchangeMgr,
                     sessionHandle,
-                    opType,
-                    resourceId);
+                    &opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
@@ -1002,8 +1002,7 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
                                                   char **executeResponse,
                                                   chip::Messaging::ExchangeManager &exchangeMgr,
                                                   const chip::SessionHandle &sessionHandle,
-                                                  const char *opType,
-                                                  const char *resourceId)
+                                                  const OperationContext *opCtx)
 {
     if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
     {
@@ -1137,14 +1136,14 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     {
         auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
         ExecuteRequestCommand(
-            promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opType, resourceId);
+            promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
         auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
-        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
@@ -1164,8 +1163,7 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
                                                         char **executeResponse,
                                                         chip::Messaging::ExchangeManager &exchangeMgr,
                                                         const chip::SessionHandle &sessionHandle,
-                                                        const char *opType,
-                                                        const char *resourceId)
+                                                        const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, cmd.clusterId, cmd.endpointId);
 
@@ -1220,9 +1218,16 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
 
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
-    pending.operationCtx.driverName = driver ? driver->GetRegistration().name.c_str() : nullptr;
-    pending.operationCtx.opType = opType;
-    pending.operationCtx.resourceId = resourceId;
+
+    if (opCtx != nullptr)
+    {
+        pending.operationCtx = *opCtx;
+    }
+    else if (driver != nullptr)
+    {
+        pending.operationCtx.driverName = driver->GetDriverStem();
+    }
+
     pending.operationCtx.startTime = std::chrono::steady_clock::now();
 
     // The PendingOperation's SafeJSValue callbacks are empty at this point, so moving it into
@@ -1279,7 +1284,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                                                        char **readValue,
                                                        char **executeResponse,
                                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                                       const chip::SessionHandle &sessionHandle)
+                                                       const chip::SessionHandle &sessionHandle,
+                                                       const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, ra.clusterId, ra.endpointId);
 
@@ -1312,7 +1318,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                 ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1348,7 +1354,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                 ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1376,7 +1382,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                     readValue,
                     executeResponse,
                     exchangeMgr,
-                    sessionHandle);
+                    sessionHandle,
+                    opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
@@ -1400,11 +1407,11 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
         observabilityCounterAddWithAttrs(deferredTimeoutCounter,
                                          1,
                                          "driver",
-                                         pending.operationCtx.driverName ? pending.operationCtx.driverName : "",
+                                         pending.operationCtx.driverName.c_str(),
                                          "op_type",
-                                         pending.operationCtx.opType ? pending.operationCtx.opType : "",
+                                         pending.operationCtx.opType.c_str(),
                                          "resource_id",
-                                         pending.operationCtx.resourceId ? pending.operationCtx.resourceId : "",
+                                         pending.operationCtx.resourceId.c_str(),
                                          nullptr);
 
         // Call onError with timeout
@@ -1546,11 +1553,11 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         observabilityCounterAddWithAttrs(deferralMaxDepthCounter,
                                          1,
                                          "driver",
-                                         pending.operationCtx.driverName ? pending.operationCtx.driverName : "",
+                                         pending.operationCtx.driverName.c_str(),
                                          "op_type",
-                                         pending.operationCtx.opType ? pending.operationCtx.opType : "",
+                                         pending.operationCtx.opType.c_str(),
                                          "resource_id",
-                                         pending.operationCtx.resourceId ? pending.operationCtx.resourceId : "",
+                                         pending.operationCtx.resourceId.c_str(),
                                          nullptr);
         CompletePendingOperation(pendingId, false);
         return;
@@ -1901,9 +1908,9 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     double durationMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - pending.operationCtx.startTime)
             .count();
-    const char *driverAttr = pending.operationCtx.driverName ? pending.operationCtx.driverName : "";
-    const char *opTypeAttr = pending.operationCtx.opType ? pending.operationCtx.opType : "";
-    const char *resourceAttr = pending.operationCtx.resourceId ? pending.operationCtx.resourceId : "";
+    const char *driverAttr = pending.operationCtx.driverName.c_str();
+    const char *opTypeAttr = pending.operationCtx.opType.c_str();
+    const char *resourceAttr = pending.operationCtx.resourceId.c_str();
     observabilityHistogramRecordWithAttrs(deferredDurationHisto,
                                           durationMs,
                                           "driver",
@@ -2175,7 +2182,7 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
             SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
 
             OperationContext opCtx;
-            opCtx.driverName = driver ? driver->GetRegistration().name.c_str() : nullptr;
+            opCtx.driverName = driver ? driver->GetDriverStem() : "";
             opCtx.opType = elementNoun;
             opCtx.startTime = t0;
             result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);

@@ -185,9 +185,9 @@ namespace barton
         if (JS_StackCheck(ctx, 3)) // args, handler, this
         {
             icError("stack overflow before handler call");
-            RecordOutcomeError(opCtx && opCtx->driverName ? opCtx->driverName : nullptr,
-                               opCtx && opCtx->opType ? opCtx->opType : nullptr,
-                               opCtx && opCtx->resourceId ? opCtx->resourceId : nullptr,
+            RecordOutcomeError(opCtx ? opCtx->driverName.c_str() : nullptr,
+                               opCtx ? opCtx->opType.c_str() : nullptr,
+                               (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr,
                                "stack_overflow");
             return std::nullopt;
         }
@@ -221,9 +221,9 @@ namespace barton
         double heapDelta = static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
 
         // Extract context fields once — used for histogram attrs and outcome counter below.
-        const char *outDriver = opCtx && opCtx->driverName ? opCtx->driverName : nullptr;
-        const char *outOpType = opCtx && opCtx->opType ? opCtx->opType : nullptr;
-        const char *outResourceId = opCtx && opCtx->resourceId ? opCtx->resourceId : nullptr;
+        const char *outDriver = opCtx ? opCtx->driverName.c_str() : nullptr;
+        const char *outOpType = opCtx ? opCtx->opType.c_str() : nullptr;
+        const char *outResourceId = (opCtx && !opCtx->resourceId.empty()) ? opCtx->resourceId.c_str() : nullptr;
 
         // Record duration and heap-delta histograms.
         // Both histograms use the same attribute set, so share one lambda.

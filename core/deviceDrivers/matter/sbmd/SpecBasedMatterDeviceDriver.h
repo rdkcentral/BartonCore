@@ -210,8 +210,7 @@ namespace barton
                              char **executeResponse,
                              chip::Messaging::ExchangeManager &exchangeMgr,
                              const chip::SessionHandle &sessionHandle,
-                             const char *opType = nullptr,
-                             const char *resourceId = nullptr);
+                             const OperationContext *opCtx = nullptr);
 
         /**
          * Execute a requestCommand deferred terminal.
@@ -225,8 +224,7 @@ namespace barton
                                    char **executeResponse,
                                    chip::Messaging::ExchangeManager &exchangeMgr,
                                    const chip::SessionHandle &sessionHandle,
-                                   const char *opType = nullptr,
-                                   const char *resourceId = nullptr);
+                                   const OperationContext *opCtx = nullptr);
 
         /**
          * Execute a readAttribute deferred terminal.
@@ -239,7 +237,8 @@ namespace barton
                                   char **readValue,
                                   char **executeResponse,
                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                  const chip::SessionHandle &sessionHandle);
+                                  const chip::SessionHandle &sessionHandle,
+                                  const OperationContext *opCtx = nullptr);
 
         /**
          * Handle a deferred command response. Called from MatterDevice::OnResponse

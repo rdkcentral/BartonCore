@@ -40,10 +40,12 @@
 
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <gtest/gtest.h>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 extern "C" {
 #include <cjson/cJSON.h>
@@ -466,6 +468,41 @@ TEST_F(SbmdObservabilityTest, LoadingPhaseExceptionCounterIncrements)
     EXPECT_EQ(reg, nullptr);
 
     double countAfter = GetCounterValue("sbmd.js.exception");
+    EXPECT_GT(countAfter, countBefore);
+}
+
+// Task 7.12: mutex wait histogram populated — hold the JS mutex on a background
+// thread to create real contention, then measure elapsed wait on the main thread
+// and call RecordMutexWait directly (same pattern used in production code).
+TEST_F(SbmdObservabilityTest, MutexWaitHistogramPopulated)
+{
+    int64_t countBefore = GetHistogramCount("sbmd.js.mutex.wait_ms");
+
+    // Hold the mutex on a background thread for a short but measurable time.
+    std::promise<void> holdingMutex;
+    std::promise<void> releaseSignal;
+
+    std::thread holder([&]() {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        holdingMutex.set_value();          // signal that the lock is held
+        releaseSignal.get_future().wait(); // wait for main thread to release us
+    });
+
+    // Wait until the background thread holds the lock, then measure contention.
+    holdingMutex.get_future().wait();
+
+    auto t0 = std::chrono::steady_clock::now();
+    releaseSignal.set_value(); // release the background thread
+
+    {
+        std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        double waitMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        MQuickJsRuntime::RecordMutexWait(waitMs);
+    }
+
+    holder.join();
+
+    int64_t countAfter = GetHistogramCount("sbmd.js.mutex.wait_ms");
     EXPECT_GT(countAfter, countBefore);
 }
 

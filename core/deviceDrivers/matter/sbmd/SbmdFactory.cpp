@@ -191,6 +191,9 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 continue;
             }
 
+            // Clean driver name for metric attributes: strip the .sbmd.js double extension
+            std::string driverStem = DriverStemFromPath(entry.path().string());
+
             try
             {
                 icDebug("Loading SBMD driver: %s", entry.path().c_str());
@@ -202,7 +205,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 {
                     icError("Failed to open SBMD driver: %s", entry.path().c_str());
                     observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", stem.string().c_str(), "reason", "file_read", nullptr);
+                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
                     allRegistered = false;
                     continue;
                 }
@@ -216,7 +219,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 {
                     icError("Failed to read SBMD driver: %s", entry.path().c_str());
                     observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", stem.string().c_str(), "reason", "file_read", nullptr);
+                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "file_read", nullptr);
                     allRegistered = false;
                     continue;
                 }
@@ -237,7 +240,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 {
                     icError("Failed to load SBMD driver: %s", entry.path().c_str());
                     observabilityCounterAddWithAttrs(
-                        driverLoadFailureCounter, 1, "driver", stem.string().c_str(), "reason", "eval_failed", nullptr);
+                        driverLoadFailureCounter, 1, "driver", driverStem.c_str(), "reason", "eval_failed", nullptr);
                     allRegistered = false;
                     continue;
                 }
@@ -256,7 +259,7 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                         observabilityCounterAddWithAttrs(driverLoadFailureCounter,
                                                          1,
                                                          "driver",
-                                                         stem.string().c_str(),
+                                                         driverStem.c_str(),
                                                          "reason",
                                                          "activation_failed",
                                                          nullptr);
@@ -283,11 +286,11 @@ void SbmdFactory::RegisterDriversFromDirectory(const std::string &dirPath, bool 
                 double loadDurationMs =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count();
                 observabilityHistogramRecordWithAttrs(
-                    driverLoadDurationHisto, loadDurationMs, "driver", stem.string().c_str(), nullptr);
+                    driverLoadDurationHisto, loadDurationMs, "driver", driverStem.c_str(), nullptr);
                 double heapDelta =
                     static_cast<double>(usageAfter.heap_used) - static_cast<double>(usageBefore.heap_used);
                 observabilityHistogramRecordWithAttrs(
-                    driverLoadHeapDeltaHisto, heapDelta, "driver", stem.string().c_str(), nullptr);
+                    driverLoadHeapDeltaHisto, heapDelta, "driver", driverStem.c_str(), nullptr);
 
                 icInfo("Successfully registered SBMD driver: %s", entry.path().filename().c_str());
             }

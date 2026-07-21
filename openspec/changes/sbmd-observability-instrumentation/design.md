@@ -51,9 +51,9 @@ All five `sbmd.handler.outcome` outcome values — `"success"`, `"exception"`, `
 
 ```cpp
 struct OperationContext {
-    const char *driverName = nullptr;
-    const char *opType = nullptr;     // originating op type (e.g., "write", "execute")
-    const char *resourceId = nullptr; // resource ID for resource ops; null for attribute/event handlers
+    std::string driverName;  // computed from filePath at assignment time
+    std::string opType;      // originating op type (e.g., "write", "execute")
+    std::string resourceId;  // resource ID for the operation (empty when not applicable)
     std::chrono::steady_clock::time_point startTime;
     // extensible: add fields here without touching InvokeHandler's signature again
 };
@@ -108,7 +108,7 @@ InvokeHandler (JS mutex held by caller):     Idle background thread:
 
 ### Decision 4: `PendingOperation` extended with `OperationContext`
 
-An `OperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` alongside `overallDeadline` with the driver name, originating op type, resource ID, and `startTime = steady_clock::now()`. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
+An `OperationContext operationCtx` field is added to `PendingOperation`. It is initialized in `ExecuteRequestCommand` by copying from the `const OperationContext *opCtx` threaded in from `HandleResourceOp` via `ExecuteTerminal` (with `driverName` falling back to `driver->GetDriverStem()` when `opCtx` is null); `startTime` is always set fresh to `steady_clock::now()` at the moment the deferred op is registered. `CompletePendingOperation` — the single convergence point for all deferred op exits — reads `pending.operationCtx.startTime` to compute total duration and uses `pending.operationCtx.driverName`, `pending.operationCtx.opType`, and `pending.operationCtx.resourceId` as attributes on all deferred lifecycle metrics (`sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth`).
 
 **Why `CompletePendingOperation` rather than each individual exit site?** There are ~15 `CompletePendingOperation` call sites. Recording in the single callee avoids duplicating metric logic and ensures no exit path is missed.
 
@@ -125,7 +125,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 
 **Note on `"driver"` for `sbmd.js.exception`:** The attribute is omitted entirely for `"init"`-phase exceptions (no driver context); it is set to the filename stem for `"loading"`-phase exceptions. Empty string and placeholder values are not used.
 
-**Note on `"op_type"` for deferred invocations:** All `InvokeHandler` calls in a deferred chain — initial invocation and all callbacks — carry the same `opCtx->opType` from `pending.operationCtx`, which holds the originating operation type (e.g., `"write"` or `"execute"`). There are no `"deferred_response"` or `"deferred_error"` op type values; the originating type is used throughout, making it straightforward to aggregate total handler cost for a given operation type without joining separate deferred buckets.
+**Note on `"op_type"` for deferred invocations:** All `InvokeHandler` calls in a deferred chain — initial invocation and all callbacks — carry the same `opCtx->opType` from `pending.operationCtx`, which holds the originating operation type (e.g., `"write"` or `"execute"`). There are no `"deferred_response"` or `"deferred_error"` op type values; the originating type is used throughout, making it straightforward to aggregate total handler cost for a given operation type without joining separate deferred buckets. `ExecuteReadAttribute` (the inline synchronous path for `readAttribute` terminals) propagates the same `opCtx` pointer from its caller through its own `InvokeHandler` calls and any recursive `ExecuteTerminal` invocation, ensuring consistent attribution even when a `readAttribute` terminal is chained before a `requestCommand`.
 
 `deviceId` is explicitly deferred (see Non-Goals). The team consensus: include it in a follow-on when attribute indexing strategy for the backend is clearer.
 

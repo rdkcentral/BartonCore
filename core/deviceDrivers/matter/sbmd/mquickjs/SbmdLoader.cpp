@@ -33,6 +33,7 @@
 #include "SbmdJsUtil.h"
 #include "matter/sbmd/SafeJSValue.h"
 
+#include "../SbmdDriver.h"
 #include <algorithm>
 #include <cinttypes>
 #include <cstring>
@@ -477,7 +478,7 @@ namespace barton
         {
             std::string msg = GetExceptionString(ctx);
             icError("Failed to evaluate driver %s: %s", filePath.c_str(), msg.c_str());
-            std::string stem = std::filesystem::path(filePath).stem().string();
+            std::string stem = DriverStemFromPath(filePath);
             MQuickJsRuntime::RecordJsException("loading", stem.c_str());
             MQuickJsRuntime::LogMemoryUsage("driver-eval-failed", IC_LOG_ERROR, true);
             // Reset registration in case SbmdDriver() was called before the error
