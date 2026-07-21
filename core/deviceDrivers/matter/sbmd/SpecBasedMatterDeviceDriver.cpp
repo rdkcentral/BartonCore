@@ -530,19 +530,13 @@ std::optional<uint8_t> SpecBasedMatterDeviceDriver::ConvertModesToBitmask(const 
         {
             bitmask |= RESOURCE_MODE_EXECUTABLE;
         }
-        else if (mode == "dynamic")
+        else if (mode == "dynamic" || mode == "emitEvents")
         {
-            // Enabled by default in the initial bitmask. Setting the bits explicitly (rather than
-            // treating this as a no-op) lets a spec re-enable dynamic behavior by listing "dynamic"
-            // after "static", since modes are applied in order.
-            bitmask |= RESOURCE_MODE_DYNAMIC | RESOURCE_MODE_DYNAMIC_CAPABLE;
-        }
-        else if (mode == "emitEvents")
-        {
-            // Enabled by default in the initial bitmask. Setting the bit explicitly lets a spec
-            // re-enable events by listing "emitEvents" after "noEvents", since modes are applied in
-            // order.
-            bitmask |= RESOURCE_MODE_EMIT_EVENTS;
+            // Both are enabled by default (see the initial bitmask). Accept them as explicit
+            // no-ops so specs that list these default-on modes register successfully. Contradictory
+            // combinations with their opt-out counterparts ("static"/"noEvents") are rejected at
+            // spec-validation time by the schema's modes constraint, so no runtime resolution is
+            // needed here.
         }
         else if (mode == "static")
         {

@@ -255,7 +255,13 @@
             "type": "string",
             "enum": ["read", "write", "dynamic", "static", "emitEvents", "noEvents", "lazySaveNext", "sensitive", "volatile"]
           },
-          "description": "Access modes controlling resource behavior. 'volatile' disables value caching (CACHING_POLICY_NEVER) so that, for a resource that emits events, updateResource delivers an event on every call even when the value is unchanged. CACHING_POLICY_NEVER also stops persisting the last value/dateOfLastSyncMillis to the device DB, so 'volatile' is intended for event-only signaling resources, not subscription-backed state resources whose reads rely on the DB-cached value."
+          "not": {
+            "anyOf": [
+              { "allOf": [{ "contains": { "const": "static" } }, { "contains": { "const": "dynamic" } }] },
+              { "allOf": [{ "contains": { "const": "noEvents" } }, { "contains": { "const": "emitEvents" } }] }
+            ]
+          },
+          "description": "Access modes controlling resource behavior. 'static'/'dynamic' and 'noEvents'/'emitEvents' are mutually exclusive (each pair's members default on/off, so listing both is contradictory). 'volatile' disables value caching (CACHING_POLICY_NEVER) so that, for a resource that emits events, updateResource delivers an event on every call even when the value is unchanged. CACHING_POLICY_NEVER also stops persisting the last value/dateOfLastSyncMillis to the device DB, so 'volatile' is intended for event-only signaling resources, not subscription-backed state resources whose reads rely on the DB-cached value."
         },
         "prerequisites": {
           "type": "array",
