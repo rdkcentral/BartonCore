@@ -43,25 +43,6 @@ unreachable from a process that never reached READY_FOR_DEVICE_OPERATION.
 import json
 from pathlib import Path
 
-import pytest
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_any_datapoint(metrics, metric_name):
-    """Return the first datapoint in *metric_name*, or None if absent."""
-    metric = metrics.get(metric_name)
-
-    if metric is None:
-        return None
-
-    dps = metric.get("dataPoints", [])
-
-    return dps[0] if dps else None
-
 
 # ---------------------------------------------------------------------------
 # Tests

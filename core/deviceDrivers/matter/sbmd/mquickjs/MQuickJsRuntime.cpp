@@ -79,6 +79,7 @@ namespace barton
     std::condition_variable MQuickJsRuntime::samplerCv;
     std::mutex MQuickJsRuntime::samplerCvMutex;
     int64_t MQuickJsRuntime::peakHeapRecorded = 0;
+    std::atomic<bool> MQuickJsRuntime::scriptInterruptFired {false};
 
     namespace
     {
@@ -102,6 +103,7 @@ namespace barton
             if (std::chrono::steady_clock::now() > currentDeadline)
             {
                 icError("SBMD script execution timeout: script exceeded the configured time limit");
+                MQuickJsRuntime::RecordInterrupt();
                 return 1;
             }
 
@@ -492,6 +494,7 @@ namespace barton
 
     void MQuickJsRuntime::SetDeadline(std::chrono::steady_clock::time_point value)
     {
+        scriptInterruptFired.store(false, std::memory_order_relaxed);
         deadline = value;
     }
 
@@ -503,6 +506,16 @@ namespace barton
     std::chrono::steady_clock::time_point MQuickJsRuntime::GetDeadline()
     {
         return deadline;
+    }
+
+    void MQuickJsRuntime::RecordInterrupt()
+    {
+        scriptInterruptFired.store(true, std::memory_order_relaxed);
+    }
+
+    bool MQuickJsRuntime::WasInterrupted()
+    {
+        return scriptInterruptFired.load(std::memory_order_relaxed);
     }
 
     void MQuickJsRuntime::InitializeMetrics()

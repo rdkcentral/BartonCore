@@ -208,8 +208,7 @@ namespace barton
 
         JSValue result = JS_Call(ctx, 1);
 
-        // Capture the deadline before clearing it (needed for timeout detection)
-        auto deadlineAtCall = MQuickJsRuntime::GetDeadline();
+        bool interrupted = MQuickJsRuntime::WasInterrupted();
         MQuickJsRuntime::ClearDeadline();
 
         // Capture post-call state
@@ -266,9 +265,7 @@ namespace barton
             icError("handler threw exception: %s", err.c_str());
 
             // Distinguish timeout from handler exception
-            bool isTimeout = (std::chrono::steady_clock::now() > deadlineAtCall) &&
-                             (deadlineAtCall != std::chrono::steady_clock::time_point {});
-            RecordOutcomeError(outDriver, outOpType, outResourceId, isTimeout ? "timeout" : "exception");
+            RecordOutcomeError(outDriver, outOpType, outResourceId, interrupted ? "timeout" : "exception");
 
             return std::nullopt;
         }

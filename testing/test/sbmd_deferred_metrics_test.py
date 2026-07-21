@@ -47,7 +47,6 @@ metric state.
 """
 
 import json
-import logging
 
 import pytest
 from testing.utils.barton_utils import (
@@ -56,8 +55,6 @@ from testing.utils.barton_utils import (
     resource_uri,
     wait_for_resource_value,
 )
-
-logger = logging.getLogger(__name__)
 
 pytestmark = [
     pytest.mark.requires_matterjs,

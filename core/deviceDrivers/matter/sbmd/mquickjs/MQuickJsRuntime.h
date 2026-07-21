@@ -165,6 +165,21 @@ namespace barton
          */
         static std::chrono::steady_clock::time_point GetDeadline();
 
+        /**
+         * Mark that the script interrupt handler fired (deadline exceeded).
+         *
+         * Called exclusively from ScriptInterruptHandler when it returns 1.
+         * Must not be called from any other context.
+         */
+        static void RecordInterrupt();
+
+        /**
+         * Return whether the interrupt handler has fired since the last SetDeadline call.
+         *
+         * @return true if ScriptInterruptHandler fired for the current JS_Call
+         */
+        static bool WasInterrupted();
+
         // ----------------------------------------------------------------
         // Observability
         // ----------------------------------------------------------------
@@ -230,6 +245,7 @@ namespace barton
         static bool initialized;
         static size_t peakHeapUsed;
         static std::chrono::steady_clock::time_point deadline;
+        static std::atomic<bool> scriptInterruptFired;
 
         // Observability — metric handles
         static ObservabilityHistogram *heapUsedHisto;

@@ -740,15 +740,23 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    OperationContext opCtx;
+    opCtx.driverName = driver->GetDriverStem();
+    opCtx.opType = "seed";
+    opCtx.resourceId = resource.id;
+
     {
+        auto tLock = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        MQuickJsRuntime::RecordMutexWait(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tLock).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
         SbmdHandlerInvoker::AddSupplements(ctx, args, resource.seed->supplements, supplements);
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args, &opCtx);
     }
 
     if (!result.has_value())
