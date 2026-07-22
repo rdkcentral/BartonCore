@@ -64,6 +64,13 @@ using namespace std::chrono_literals;
 
 #define BASE_SBMD_DRIVER_NAME "sbmd-"
 
+// Observability metric handles
+ObservabilityCounter *SpecBasedMatterDeviceDriver::deferredTimeoutCounter = nullptr;
+ObservabilityCounter *SpecBasedMatterDeviceDriver::deferralMaxDepthCounter = nullptr;
+ObservabilityGauge *SpecBasedMatterDeviceDriver::deferredInFlightGauge = nullptr;
+ObservabilityHistogram *SpecBasedMatterDeviceDriver::deferredDurationHisto = nullptr;
+ObservabilityHistogram *SpecBasedMatterDeviceDriver::deferralDepthHisto = nullptr;
+
 namespace
 {
     /*
@@ -732,15 +739,23 @@ std::string SpecBasedMatterDeviceDriver::InvokeSeedHandler(const std::string &de
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    OperationContext opCtx;
+    opCtx.driverName = driver->GetDriverStem();
+    opCtx.opType = "seed";
+    opCtx.resourceId = resource.id;
+
     {
+        auto tLock = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        MQuickJsRuntime::RecordMutexWait(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tLock).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resource.id, std::nullopt);
         SbmdHandlerInvoker::AddSupplements(ctx, args, resource.seed->supplements, supplements);
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, resource.seed->Fn(), args, &opCtx);
     }
 
     if (!result.has_value())
@@ -942,15 +957,25 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
 
+    auto t0 = std::chrono::steady_clock::now();
+    OperationContext opCtx;
+    opCtx.driverName = driver ? driver->GetDriverStem() : "";
+    opCtx.opType = opType;
+    opCtx.resourceId = resourceId;
+    opCtx.startTime = t0;
+
     {
+        auto tLock = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        MQuickJsRuntime::RecordMutexWait(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tLock).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         // args keeps its value alive for its whole lifetime, so it survives the allocations in
         // AddSupplements and the handler call without a separate guard.
         SafeJSValue args = SbmdHandlerInvoker::BuildResourceArgs(ctx, hctx, resourceId, inputValue);
         SbmdHandlerInvoker::AddSupplements(ctx, args, handler->supplements, supplements);
-        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args);
+        result = SbmdHandlerInvoker::InvokeHandler(ctx, handler->Fn(), args, &opCtx);
     }
 
     if (!result.has_value())
@@ -972,7 +997,8 @@ void SpecBasedMatterDeviceDriver::HandleResourceOp(std::forward_list<std::promis
                     readValue,
                     executeResponse,
                     exchangeMgr,
-                    sessionHandle);
+                    sessionHandle,
+                    &opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise<bool>> &promises,
@@ -983,7 +1009,8 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
                                                   char **readValue,
                                                   char **executeResponse,
                                                   chip::Messaging::ExchangeManager &exchangeMgr,
-                                                  const chip::SessionHandle &sessionHandle)
+                                                  const chip::SessionHandle &sessionHandle,
+                                                  const OperationContext *opCtx)
 {
     if (std::holds_alternative<ResultTerminal::Success>(terminal.data))
     {
@@ -1116,14 +1143,15 @@ void SpecBasedMatterDeviceDriver::ExecuteTerminal(std::forward_list<std::promise
     if (std::holds_alternative<ResultTerminal::RequestCommand>(terminal.data))
     {
         auto &cmd = std::get<ResultTerminal::RequestCommand>(terminal.data);
-        ExecuteRequestCommand(promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        ExecuteRequestCommand(
+            promises, device, cmd, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
     if (std::holds_alternative<ResultTerminal::ReadAttribute>(terminal.data))
     {
         auto &ra = std::get<ResultTerminal::ReadAttribute>(terminal.data);
-        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle);
+        ExecuteReadAttribute(promises, device, ra, hctx, readValue, executeResponse, exchangeMgr, sessionHandle, opCtx);
         return;
     }
 
@@ -1142,7 +1170,8 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
                                                         char **readValue,
                                                         char **executeResponse,
                                                         chip::Messaging::ExchangeManager &exchangeMgr,
-                                                        const chip::SessionHandle &sessionHandle)
+                                                        const chip::SessionHandle &sessionHandle,
+                                                        const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, cmd.clusterId, cmd.endpointId);
 
@@ -1198,10 +1227,30 @@ void SpecBasedMatterDeviceDriver::ExecuteRequestCommand(std::forward_list<std::p
     pending.overallDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(overallMs);
     pending.deferralDepth = 0;
 
+    if (opCtx != nullptr)
+    {
+        pending.operationCtx = *opCtx;
+    }
+    else if (driver != nullptr)
+    {
+        pending.operationCtx.driverName = driver->GetDriverStem();
+    }
+
+    pending.operationCtx.startTime = std::chrono::steady_clock::now();
+
     // The PendingOperation's SafeJSValue callbacks are empty at this point, so moving it into
     // the map performs no engine work and needs no mutex. The callbacks are transferred afterward,
     // below, using the stable map-node address.
     auto [it, inserted] = pendingOperations.emplace(pendingId, std::move(pending));
+
+    if (!inserted)
+    {
+        icError("Duplicate pending operation ID %" PRIu64 ", cannot register deferred operation", pendingId);
+        FailOperation(promises);
+        return;
+    }
+
+    observabilityGaugeRecord(deferredInFlightGauge, static_cast<int64_t>(pendingOperations.size()));
     PendingOperation &stored = it->second;
 
     // Move the deferred callbacks (held alive by Parse) into the stable map node under the mutex.
@@ -1243,7 +1292,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                                                        char **readValue,
                                                        char **executeResponse,
                                                        chip::Messaging::ExchangeManager &exchangeMgr,
-                                                       const chip::SessionHandle &sessionHandle)
+                                                       const chip::SessionHandle &sessionHandle,
+                                                       const OperationContext *opCtx)
 {
     auto endpointOpt = ResolveEndpoint(device, ra.clusterId, ra.endpointId);
 
@@ -1276,7 +1326,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                 ctx, hctx, "readFailed", "Attribute not in cache", -1, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onError.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1312,7 +1362,7 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
 
             SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                 ctx, hctx, ra.clusterId, ra.attributeId, tlvBase64, ra.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, ra.onResponse.Get(), args, opCtx);
 
             // Release the callbacks now that they have been consumed.
             ra.onResponse = SafeJSValue {};
@@ -1340,7 +1390,8 @@ void SpecBasedMatterDeviceDriver::ExecuteReadAttribute(std::forward_list<std::pr
                     readValue,
                     executeResponse,
                     exchangeMgr,
-                    sessionHandle);
+                    sessionHandle,
+                    opCtx);
 }
 
 void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pendingId,
@@ -1361,12 +1412,24 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     if (std::chrono::steady_clock::now() > pending.overallDeadline)
     {
         icWarn("Deferred operation %" PRIu64 " exceeded overall deadline", pendingId);
+        observabilityCounterAddWithAttrs(deferredTimeoutCounter,
+                                         1,
+                                         "driver",
+                                         pending.operationCtx.driverName.c_str(),
+                                         "op_type",
+                                         pending.operationCtx.opType.c_str(),
+                                         "resource_id",
+                                         pending.operationCtx.resourceId.c_str(),
+                                         nullptr);
 
         // Call onError with timeout
         std::optional<ParsedResult> errorResult;
         ScopedResultRelease errorResultRelease {errorResult};
         {
+            auto t0 = std::chrono::steady_clock::now();
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            MQuickJsRuntime::RecordMutexWait(
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
@@ -1377,7 +1440,8 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
                                                                               "Overall operation deadline exceeded",
                                                                               -1,
                                                                               pending.context.Get());
-                errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+                errorResult =
+                    SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
             }
         }
 
@@ -1403,14 +1467,17 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandResponse(uint64_t pending
     std::optional<ParsedResult> result;
     ScopedResultRelease resultRelease {result};
     {
+        auto t0 = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        MQuickJsRuntime::RecordMutexWait(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onResponse.HasValue())
         {
             SafeJSValue args = SbmdHandlerInvoker::BuildCommandResponseArgs(
                 ctx, pending.handlerContext, path.mClusterId, path.mCommandId, tlvBase64, pending.context.Get());
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args, &pending.operationCtx);
         }
     }
 
@@ -1447,7 +1514,10 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
     std::optional<ParsedResult> errorResult;
     ScopedResultRelease errorResultRelease {errorResult};
     {
+        auto t0 = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+        MQuickJsRuntime::RecordMutexWait(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         auto *ctx = MQuickJsRuntime::GetSharedContext();
 
         if (pending.onError.HasValue())
@@ -1458,7 +1528,7 @@ void SpecBasedMatterDeviceDriver::HandleDeferredCommandError(uint64_t pendingId,
                                                                           error.AsString(),
                                                                           static_cast<int32_t>(error.AsInteger()),
                                                                           pending.context.Get());
-            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+            errorResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
         }
     }
 
@@ -1488,6 +1558,15 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
         icError("Deferred operation %" PRIu64 " exceeded max deferral depth (%u)",
                 pendingId,
                 PendingOperation::MAX_DEFERRAL_DEPTH);
+        observabilityCounterAddWithAttrs(deferralMaxDepthCounter,
+                                         1,
+                                         "driver",
+                                         pending.operationCtx.driverName.c_str(),
+                                         "op_type",
+                                         pending.operationCtx.opType.c_str(),
+                                         "resource_id",
+                                         pending.operationCtx.resourceId.c_str(),
+                                         nullptr);
         CompletePendingOperation(pendingId, false);
         return;
     }
@@ -1765,14 +1844,17 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
         if (err != CHIP_NO_ERROR)
         {
+            auto t0 = std::chrono::steady_clock::now();
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            MQuickJsRuntime::RecordMutexWait(
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onError.HasValue())
             {
                 SafeJSValue args = SbmdHandlerInvoker::BuildDeferredErrorArgs(
                     ctx, pending.handlerContext, "readFailed", "Attribute not in cache", -1, pending.context.Get());
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args);
+                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onError.Get(), args, &pending.operationCtx);
             }
         }
         else
@@ -1787,14 +1869,18 @@ void SpecBasedMatterDeviceDriver::ContinueDeferredChain(PendingOperation &pendin
 
             const std::string &tlvBase64 = *tlvBase64Opt;
 
+            auto t0 = std::chrono::steady_clock::now();
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            MQuickJsRuntime::RecordMutexWait(
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             if (pending.onResponse.HasValue())
             {
                 SafeJSValue args = SbmdHandlerInvoker::BuildAttributeReadResponseArgs(
                     ctx, pending.handlerContext, ra.clusterId, ra.attributeId, tlvBase64, pending.context.Get());
-                nextResult = SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args);
+                nextResult =
+                    SbmdHandlerInvoker::InvokeHandler(ctx, pending.onResponse.Get(), args, &pending.operationCtx);
             }
         }
 
@@ -1825,6 +1911,33 @@ void SpecBasedMatterDeviceDriver::CompletePendingOperation(uint64_t pendingId, b
     }
 
     PendingOperation &pending = it->second;
+
+    // Record deferred operation metrics before releasing the operation
+    double durationMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - pending.operationCtx.startTime)
+            .count();
+    const char *driverAttr = pending.operationCtx.driverName.c_str();
+    const char *opTypeAttr = pending.operationCtx.opType.c_str();
+    const char *resourceAttr = pending.operationCtx.resourceId.c_str();
+    observabilityHistogramRecordWithAttrs(deferredDurationHisto,
+                                          durationMs,
+                                          "driver",
+                                          driverAttr,
+                                          "op_type",
+                                          opTypeAttr,
+                                          "resource_id",
+                                          resourceAttr,
+                                          nullptr);
+    observabilityHistogramRecordWithAttrs(deferralDepthHisto,
+                                          static_cast<double>(pending.deferralDepth),
+                                          "driver",
+                                          driverAttr,
+                                          "op_type",
+                                          opTypeAttr,
+                                          "resource_id",
+                                          resourceAttr,
+                                          nullptr);
+    observabilityGaugeRecord(deferredInFlightGauge, static_cast<int64_t>(pendingOperations.size()) - 1);
 
     // Resolve the parking promise
     if (pending.parkingPromise != nullptr)
@@ -2065,14 +2178,22 @@ void SpecBasedMatterDeviceDriver::DispatchToHandlers(const std::string &deviceId
         ScopedResultRelease resultRelease {result};
 
         {
+            auto t0 = std::chrono::steady_clock::now();
             std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
+            MQuickJsRuntime::RecordMutexWait(
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
             auto *ctx = MQuickJsRuntime::GetSharedContext();
 
             // args keeps its value alive for its whole lifetime, so it survives the allocations in
             // AddSupplements and the handler call without a separate guard.
             SafeJSValue args = buildArgs(ctx);
             SbmdHandlerInvoker::AddSupplements(ctx, args, entry->handler->supplements, supplements);
-            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args);
+
+            OperationContext opCtx;
+            opCtx.driverName = driver ? driver->GetDriverStem() : "";
+            opCtx.opType = elementNoun;
+            opCtx.startTime = t0;
+            result = SbmdHandlerInvoker::InvokeHandler(ctx, entry->handler->Fn(), args, &opCtx);
         }
 
         if (!result.has_value())
@@ -2158,10 +2279,17 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    DispatchToHandlers(
-        deviceId, matches, matterDevice.get(), hctx, clusterId, attributeId, "Attribute", "attr", [&](JSContext *ctx) {
-            return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
-        });
+    DispatchToHandlers(deviceId,
+                       matches,
+                       matterDevice.get(),
+                       hctx,
+                       clusterId,
+                       attributeId,
+                       "Attribute",
+                       "attribute_report",
+                       [&](JSContext *ctx) {
+                           return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+                       });
 }
 
 void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,
@@ -2253,4 +2381,34 @@ void SpecBasedMatterDeviceDriver::HandleCommand(const std::string &deviceId,
         deviceId, matches, matterDevice.get(), hctx, clusterId, commandId, "Command", "command", [&](JSContext *ctx) {
             return SbmdHandlerInvoker::BuildCommandArgs(ctx, hctx, clusterId, commandId, tlvBase64);
         });
+}
+
+void SpecBasedMatterDeviceDriver::InitializeMetrics()
+{
+    deferredTimeoutCounter = observabilityCounterCreate(
+        "sbmd.deferred.timeout", "Number of deferred operations that exceeded the overall deadline", "1");
+    deferralMaxDepthCounter = observabilityCounterCreate(
+        "sbmd.deferred.max_depth", "Number of deferred operations that hit MAX_DEFERRAL_DEPTH", "1");
+    deferredInFlightGauge =
+        observabilityGaugeCreate("sbmd.deferred.in_flight", "Number of deferred operations currently in flight", "1");
+    deferredDurationHisto =
+        observabilityHistogramCreate("sbmd.deferred.duration_ms",
+                                     "Total wall-clock duration of a deferred operation from start to completion",
+                                     "ms");
+    deferralDepthHisto = observabilityHistogramCreate(
+        "sbmd.deferred.depth", "Deferral depth at which a deferred operation completed", "1");
+}
+
+void SpecBasedMatterDeviceDriver::ShutdownMetrics()
+{
+    observabilityCounterRelease(deferredTimeoutCounter);
+    deferredTimeoutCounter = nullptr;
+    observabilityCounterRelease(deferralMaxDepthCounter);
+    deferralMaxDepthCounter = nullptr;
+    observabilityGaugeRelease(deferredInFlightGauge);
+    deferredInFlightGauge = nullptr;
+    observabilityHistogramRelease(deferredDurationHisto);
+    deferredDurationHisto = nullptr;
+    observabilityHistogramRelease(deferralDepthHisto);
+    deferralDepthHisto = nullptr;
 }

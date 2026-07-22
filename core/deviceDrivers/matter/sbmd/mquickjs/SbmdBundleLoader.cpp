@@ -102,6 +102,7 @@ namespace barton
         if (JS_IsException(result))
         {
             icError("Failed to execute SBMD %s bundle: %s", name, GetExceptionString(ctx).c_str());
+            MQuickJsRuntime::RecordJsException("init", nullptr);
             {
                 std::lock_guard<std::mutex> lock(MQuickJsRuntime::GetMutex());
                 MQuickJsRuntime::LogMemoryUsage("sbmd-bundle-load-failed", IC_LOG_ERROR, true);
