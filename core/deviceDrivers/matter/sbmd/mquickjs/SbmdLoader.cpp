@@ -33,7 +33,7 @@
 #include "SbmdJsUtil.h"
 #include "matter/sbmd/SafeJSValue.h"
 
-#include "../SbmdDriver.h"
+#include "matter/sbmd/SbmdDriver.h"
 #include <algorithm>
 #include <cinttypes>
 #include <cstring>

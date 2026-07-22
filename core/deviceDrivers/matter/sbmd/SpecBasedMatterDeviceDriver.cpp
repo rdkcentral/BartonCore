@@ -2280,10 +2280,17 @@ void SpecBasedMatterDeviceDriver::HandleAttributeReport(const std::string &devic
         hctx.clusterFeatureMaps = matterDevice->GetCachedClusterFeatureMaps();
     }
 
-    DispatchToHandlers(
-        deviceId, matches, matterDevice.get(), hctx, clusterId, attributeId, "Attribute", "attr", [&](JSContext *ctx) {
-            return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
-        });
+    DispatchToHandlers(deviceId,
+                       matches,
+                       matterDevice.get(),
+                       hctx,
+                       clusterId,
+                       attributeId,
+                       "Attribute",
+                       "attribute_report",
+                       [&](JSContext *ctx) {
+                           return SbmdHandlerInvoker::BuildAttributeArgs(ctx, hctx, clusterId, attributeId, tlvBase64);
+                       });
 }
 
 void SpecBasedMatterDeviceDriver::HandleEvent(const std::string &deviceId,

@@ -117,7 +117,7 @@ An `OperationContext operationCtx` field is added to `PendingOperation`. It is i
 | Attribute key | Value type | Used on |
 |---|---|---|
 | `"driver"` | driver name string (e.g., `"door-lock"`) | all per-driver metrics |
-| `"op_type"` | `"read"` / `"write"` / `"execute"` / `"attribute_report"` / `"event"` | invocation, outcome, per-operation deferred metrics |
+| `"op_type"` | `"read"` / `"write"` / `"execute"` / `"attribute_report"` / `"event"` / `"command"` / `"seed"` | invocation, outcome, per-operation deferred metrics |
 | `"resource_id"` | resource ID string (e.g., `"isOn"`); omitted for attribute/event handlers | `sbmd.handler.*`, `sbmd.deferred.duration_ms`, `sbmd.deferred.depth`, `sbmd.deferred.timeout`, `sbmd.deferred.max_depth` |
 | `"outcome"` | `"success"` / `"exception"` / `"timeout"` / `"stack_overflow"` / `"error"` | outcome counter |
 | `"reason"` | `"file_read"` / `"eval_failed"` / `"activation_failed"` | driver load failure counter |

@@ -60,7 +60,7 @@ pytestmark = [
     pytest.mark.requires_matterjs,
 ]
 
-_DRIVER_NAME = "Deferred Command Test"
+_DRIVER_NAME = "deferred-command-test"
 _OP_TYPE = "execute"
 
 
@@ -129,7 +129,7 @@ def test_deferred_duration_and_in_flight_metrics(
     )
     assert (
         dp is not None
-    ), "sbmd.deferred.duration_ms datapoint for Deferred Command Test/execute/toggle not found in telemetry"
+    ), "sbmd.deferred.duration_ms datapoint for deferred-command-test/execute/toggle not found in telemetry"
     assert (
         dp["count"] == 1
     ), f"Expected 1 duration observation for deferred toggle, got {dp['count']}"
@@ -184,7 +184,7 @@ def test_deferred_depth_zero_for_single_round_trip(
     )
     assert (
         dp is not None
-    ), "sbmd.deferred.depth datapoint for Deferred Command Test/execute/toggle not found in telemetry"
+    ), "sbmd.deferred.depth datapoint for deferred-command-test/execute/toggle not found in telemetry"
     assert (
         dp["count"] == 1
     ), f"Expected 1 depth observation for single-round-trip toggle, got {dp['count']}"
